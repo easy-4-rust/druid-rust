@@ -903,3 +903,168 @@ fn test_statement_property_all_variants() {
     }
     assert_eq!(events.len(), 21);
 }
+
+// ── Driver trait test (covers driver.rs 0% → target >50%) ──
+
+/// Driver trait: name() returns driver identifier.
+#[test]
+fn test_driver_name() {
+    struct MockDriver;
+    #[async_trait::async_trait]
+    impl druid_core::Driver for MockDriver {
+        fn name(&self) -> &str { "mock-pg" }
+        async fn connect(&self, _: &str) -> Result<Box<dyn druid_core::Connection>, druid_core::DruidError> {
+            struct M; #[async_trait::async_trait]
+            impl druid_core::Connection for M {
+                async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+                async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+                async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+            }
+            Ok(Box::new(M))
+        }
+    }
+    let d = MockDriver;
+    assert_eq!(d.name(), "mock-pg");
+}
+
+/// Driver trait: connect_with_auth default delegates to connect.
+#[tokio::test]
+async fn test_driver_connect_with_auth_default() {
+    struct MockDriver;
+    #[async_trait::async_trait]
+    impl druid_core::Driver for MockDriver {
+        fn name(&self) -> &str { "mock" }
+        async fn connect(&self, url: &str) -> Result<Box<dyn druid_core::Connection>, druid_core::DruidError> {
+            struct M(String);
+            #[async_trait::async_trait]
+            impl druid_core::Connection for M {
+                async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+                async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+                async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                fn driver_name(&self) -> &str { &self.0 }
+            }
+            Ok(Box::new(M(url.to_string())))
+        }
+    }
+    let d = MockDriver;
+    // Default connect_with_auth delegates to connect
+    let conn = d.connect_with_auth("postgres://localhost", "user", "pass").await.unwrap();
+    assert_eq!(conn.driver_name(), "postgres://localhost");
+}
+
+// ── AdminState test (covers admin_state.rs 0% → 100%) ──
+
+#[test]
+fn test_admin_state_new() {
+    let s = druid_admin::AdminState::new("main", "postgres");
+    assert_eq!(s.pool_name, "main");
+    assert_eq!(s.driver_name, "postgres");
+}
+
+#[test]
+fn test_admin_state_clone() {
+    let s = druid_admin::AdminState::new("test", "mysql");
+    let s2 = s.clone();
+    assert_eq!(s2.pool_name, "test");
+    assert_eq!(s2.driver_name, "mysql");
+}
+
+#[test]
+fn test_admin_state_debug() {
+    let s = druid_admin::AdminState::new("x", "y");
+    let debug = format!("{:?}", s);
+    assert!(debug.contains("x"));
+    assert!(debug.contains("y"));
+}
+
+#[test]
+fn test_endpoint_list() {
+    let list = druid_admin::endpoint_list();
+    assert!(list.contains("/druid/api/datasources"));
+    assert!(list.contains("/druid/api/sql/top"));
+    assert!(list.contains("/metrics"));
+}
+
+
+// ── PooledConnection coverage boost ──
+
+#[tokio::test]
+async fn test_pooled_connection_exec_delegates() {
+    let conn = Box::new(MockConnForPool) as Box<dyn druid_core::Connection>;
+    let mut pooled = druid_core::PooledConnection::new(conn, 1, Box::new(|_, _| {}));
+    let r = pooled.exec("SELECT 1", vec![]).await.unwrap();
+    assert_eq!(r.rows_affected, 42);
+}
+
+#[tokio::test]
+async fn test_pooled_connection_fetch_delegates() {
+    let conn = Box::new(MockConnForPool) as Box<dyn druid_core::Connection>;
+    let mut pooled = druid_core::PooledConnection::new(conn, 1, Box::new(|_, _| {}));
+    let rows = pooled.fetch("SELECT 1", vec![]).await.unwrap();
+    assert_eq!(rows.len(), 2);
+}
+
+#[tokio::test]
+async fn test_pooled_connection_transaction_ops() {
+    let conn = Box::new(MockConnForPool) as Box<dyn druid_core::Connection>;
+    let mut pooled = druid_core::PooledConnection::new(conn, 1, Box::new(|_, _| {}));
+    pooled.begin().await.unwrap();
+    pooled.commit().await.unwrap();
+    pooled.begin().await.unwrap();
+    pooled.rollback().await.unwrap();
+    pooled.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_pooled_connection_driver_name() {
+    let conn = Box::new(MockConnForPool) as Box<dyn druid_core::Connection>;
+    let pooled = druid_core::PooledConnection::new(conn, 1, Box::new(|_, _| {}));
+    assert_eq!(pooled.driver_name(), "mock");
+}
+
+#[test]
+fn test_pooled_connection_id() {
+    let conn = Box::new(MockConnForPool) as Box<dyn druid_core::Connection>;
+    let pooled = druid_core::PooledConnection::new(conn, 99, Box::new(|_, _| {}));
+    assert_eq!(pooled.id(), 99);
+}
+
+#[tokio::test]
+async fn test_pooled_connection_drop_returns() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    let returned = Arc::new(AtomicBool::new(false));
+    let r2 = Arc::clone(&returned);
+    let conn = Box::new(MockConnForPool) as Box<dyn druid_core::Connection>;
+    let _pooled = druid_core::PooledConnection::new(conn, 1, Box::new(move |_, _| {
+        r2.store(true, Ordering::SeqCst);
+    }));
+    drop(_pooled);
+    assert!(returned.load(Ordering::SeqCst), "drop should invoke return_fn");
+}
+
+// Helper struct for pool tests
+struct MockConnForPool;
+#[async_trait::async_trait]
+impl druid_core::Connection for MockConnForPool {
+    async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> {
+        Ok(druid_core::ExecResult { rows_affected: 42, last_insert_id: None, row_count: None })
+    }
+    async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> {
+        Ok(vec![druid_core::Row::new(vec![druid_core::Value::Int(1)]), druid_core::Row::new(vec![druid_core::Value::Int(2)])])
+    }
+    async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    fn driver_name(&self) -> &str { "mock" }
+}
