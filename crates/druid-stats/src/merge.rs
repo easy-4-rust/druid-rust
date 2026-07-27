@@ -89,14 +89,8 @@ impl MergedSqlStat {
         self.execute_count.fetch_add(1, Ordering::Relaxed);
         self.total_time_ns.fetch_add(nanos, Ordering::Relaxed);
 
-        // CAS 更新 max（使用 compare_exchange strong 避免 spurious failure 分支）
-        let mut current = self.max_time_ns.load(Ordering::Relaxed);
-        while nanos > current {
-            match self.max_time_ns.compare_exchange(current, nanos, Ordering::Relaxed, Ordering::Relaxed) {
-                Ok(_) => break,
-                Err(actual) => current = actual,
-            }
-        }
+        // 原子 max 更新（fetch_max 无分支，消除 CAS match 分支）
+        self.max_time_ns.fetch_max(nanos, Ordering::Relaxed);
 
         if !ok {
             self.error_count.fetch_add(1, Ordering::Relaxed);
