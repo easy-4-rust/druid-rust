@@ -109,3 +109,180 @@ fn test_value_display_all_variants() {
     assert_eq!(format!("{}", Value::String("hello".into())), "'hello'");
     assert_eq!(format!("{}", Value::Bytes(vec![1, 2, 3])), "<3 bytes>");
 }
+
+// ── DruidJava Connection transaction semantics ──
+
+/// DruidJava: begin() opens a transaction (DruidPooledConnection.beginTransaction).
+#[tokio::test]
+async fn test_connection_begin() {
+    struct MockConn { tx_active: bool }
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { self.tx_active = true; Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { self.tx_active = false; Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { self.tx_active = false; Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let mut c = MockConn { tx_active: false };
+    assert!(!c.tx_active);
+    c.begin().await.unwrap();
+    assert!(c.tx_active);
+    c.commit().await.unwrap();
+    assert!(!c.tx_active);
+}
+
+/// DruidJava: rollback() aborts transaction.
+#[tokio::test]
+async fn test_connection_rollback() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let mut c = MockConn;
+    c.begin().await.unwrap();
+    c.rollback().await.unwrap(); // Should succeed
+}
+
+/// DruidJava: set_savepoint() returns Savepoint with id.
+#[tokio::test]
+async fn test_connection_savepoint_default_not_supported() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let mut c = MockConn;
+    // Default impl returns Err
+    let result = c.set_savepoint().await;
+    assert!(result.is_err());
+}
+
+/// DruidJava: rollback(Savepoint) default not supported.
+#[tokio::test]
+async fn test_connection_rollback_to_default_not_supported() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let mut c = MockConn;
+    let sp = druid_core::Savepoint { id: 1, name: Some("sp1".into()) };
+    assert!(c.rollback_to(&sp).await.is_err());
+}
+
+/// DruidJava: abort() closes connection.
+#[tokio::test]
+async fn test_connection_abort_closes() {
+    struct MockConn { closed: bool }
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { self.closed = true; Ok(()) }
+    }
+    let mut c = MockConn { closed: false };
+    assert!(!c.closed);
+    c.abort().await.unwrap();
+    assert!(c.closed); // Default impl calls close()
+}
+
+/// DruidJava: isClosed() returns connection state.
+#[test]
+fn test_connection_is_closed_default() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let c = MockConn;
+    assert!(!c.is_closed());
+}
+
+/// DruidJava: getAutoCommit / setAutoCommit defaults.
+#[test]
+fn test_connection_auto_commit_defaults() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let c = MockConn;
+    // DruidJava default: autoCommit = true
+    assert!(c.auto_commit());
+    assert!(!c.read_only());
+    // DruidJava: TRANSACTION_READ_COMMITTED = 2
+    assert_eq!(c.transaction_isolation(), 2);
+    assert!(c.catalog().is_none());
+    assert!(c.schema().is_none());
+    assert_eq!(c.driver_name(), "");
+}
+
+/// DruidJava: ExecResult fields.
+#[test]
+fn test_exec_result_default() {
+    let r = druid_core::ExecResult::default();
+    assert_eq!(r.rows_affected, 0);
+    assert!(r.last_insert_id.is_none());
+    assert!(r.row_count.is_none());
+}
+
+/// DruidJava: Savepoint struct.
+#[test]
+fn test_savepoint_fields() {
+    let sp = druid_core::Savepoint { id: 42, name: Some("sp1".into()) };
+    assert_eq!(sp.id, 42);
+    assert_eq!(sp.name.as_deref(), Some("sp1"));
+
+    let sp2 = druid_core::Savepoint { id: 1, name: None };
+    assert_eq!(sp2.id, 1);
+    assert!(sp2.name.is_none());
+}
+
+/// DruidJava: ConnectionState default values.
+#[test]
+fn test_connection_state_defaults() {
+    let s = druid_core::ConnState::default();
+    assert!(s.auto_commit);
+    assert!(!s.read_only);
+    assert_eq!(s.transaction_isolation, 2); // READ_COMMITTED
+    assert!(s.catalog.is_none());
+    assert!(s.schema.is_none());
+}

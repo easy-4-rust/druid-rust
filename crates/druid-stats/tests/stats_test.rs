@@ -129,7 +129,7 @@ async fn test_stat_filter_as_after_filter() {
     };
 
     // ok execution
-    filter.after(&ctx, &Ok(ExecResult { rows_affected: 1, last_insert_id: None }), Duration::from_millis(5)).await;
+    filter.after(&ctx, &Ok(ExecResult { rows_affected: 1, last_insert_id: None, row_count: None }), Duration::from_millis(5)).await;
 
     // error execution
     filter.after(&ctx, &Err(DruidError::Other("fail".into())), Duration::from_millis(10)).await;

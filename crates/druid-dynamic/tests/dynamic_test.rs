@@ -19,7 +19,7 @@ impl MockConnection {
 impl Connection for MockConnection {
     async fn exec(&mut self, _sql: &str, _p: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
-        Ok(ExecResult { rows_affected: 1, last_insert_id: None })
+        Ok(ExecResult { rows_affected: 1, last_insert_id: None, row_count: None })
     }
     async fn fetch(&mut self, _sql: &str, _p: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
     async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }

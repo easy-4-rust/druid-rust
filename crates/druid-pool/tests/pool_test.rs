@@ -24,7 +24,7 @@ impl MockConnection {
 impl Connection for MockConnection {
     async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
-        Ok(ExecResult { rows_affected: 1, last_insert_id: Some(1) })
+        Ok(ExecResult { rows_affected: 1, last_insert_id: Some(1), row_count: None })
     }
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])

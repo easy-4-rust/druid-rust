@@ -26,6 +26,7 @@ pub use config::{PoolConfig, PoolConfigBuilder};
 pub use connection::{Connection, ExecResult, Row};
 pub use connection_factory::ConnectionFactory;
 pub use connection_holder::{ConnectionHolder, ConnectionState};
+pub use connection::{ConnState, Savepoint};
 pub use driver::Driver;
 pub use error::DruidError;
 pub use exception_sorter::{ExceptionSorter, MySqlExceptionSorter, NullExceptionSorter, PgExceptionSorter};
