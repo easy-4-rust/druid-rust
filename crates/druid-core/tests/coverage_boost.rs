@@ -421,3 +421,84 @@ async fn test_after_filter_all_defaults() {
     let f = F;
     f.after_connection_close().await;
 }
+
+// ── ConnectionExt: mock that REUSES default implementations ──
+// This mock does NOT override get_holdability, set_holdability, etc.
+// so the default trait impl bodies are actually executed.
+
+struct DefaultConnExt;
+#[async_trait::async_trait]
+impl Connection for DefaultConnExt {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+}
+
+// Only implement ConnectionExt for non-async methods (use defaults)
+#[async_trait::async_trait]
+impl ConnectionExt for DefaultConnExt {
+    // Use ALL default implementations - don't override anything!
+    async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> {
+        Err(DruidError::Other("not implemented".into()))
+    }
+    async fn prepare_statement(&mut self, sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+        Err(DruidError::Other("not implemented".into()))
+    }
+    async fn prepare_call(&mut self, sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+        Err(DruidError::Other("not implemented".into()))
+    }
+}
+
+#[tokio::test]
+async fn test_default_impls_exercised() {
+    let mut c = DefaultConnExt;
+    // These call the DEFAULT implementations in the trait
+    assert!(c.get_meta_data().is_none());
+    assert_eq!(c.get_database_product_name(), None);
+    assert_eq!(c.get_database_product_version(), None);
+    assert_eq!(c.get_driver_major_version(), 0);
+    assert_eq!(c.get_driver_minor_version(), 0);
+    assert_eq!(c.get_holdability(), 1);
+    let _ = c.set_holdability(1).await;
+    let _ = c.set_client_info("k", "v").await;
+    assert_eq!(c.get_client_info("k"), None);
+    let _ = c.clear_warnings().await;
+    assert_eq!(c.native_sql("SELECT 1").await.unwrap(), "SELECT 1");
+    let _ = c.set_network_timeout(std::time::Duration::from_secs(5)).await;
+    assert_eq!(c.get_network_timeout(), 0);
+    assert_eq!(c.get_type_map(), None);
+    let _ = c.set_type_map(std::collections::HashMap::new()).await;
+}
+
+// ── PooledConnection: exercise Drop return_fn path ──
+#[tokio::test]
+async fn test_pooled_connection_drop_exercise() {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+    
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    }
+    let counter = Arc::new(AtomicU64::new(0));
+    let c = counter.clone();
+    let conn = Box::new(MockConn) as Box<dyn Connection>;
+    {
+        let pc = PooledConnection::new(conn, 1, Box::new(move |_, _| {
+            c.fetch_add(1, Ordering::Relaxed);
+        }));
+        // Drop triggers return_fn
+    }
+    assert_eq!(counter.load(Ordering::Relaxed), 1);
+}
