@@ -56,10 +56,11 @@ impl Wall {
                 }
                 self.check_table_factor(&table.relation, v);
             }
-            Statement::Insert { .. } => {
+            Statement::Insert(insert) => {
                 if !self.config.insert_allow {
                     v.push(WallViolation::SyntaxError("INSERT not allowed".into()));
                 }
+                self.check_object_name(&insert.table_name, v);
             }
             Statement::Drop { object_type, names, .. } => {
                 if *object_type == ObjectType::Table {
