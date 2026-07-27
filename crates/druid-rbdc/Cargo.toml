@@ -1,0 +1,22 @@
+[package]
+name         = "druid-rbdc"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "druid-rust rbdc adapter: bridges the rbatis rbdc::Connection trait into druid-core"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid-core = { path = "../druid-core" }
+druid-pool = { path = "../druid-pool" }
+async-trait = { workspace = true }
+tokio      = { workspace = true }
+thiserror  = { workspace = true }
+
+# NOTE: rbdc is not yet a workspace dependency. It will be added once the
+# adapter is wired to the actual rbdc trait surface (planned for V2).
+# rbdc        = { version = "4", default-features = false }

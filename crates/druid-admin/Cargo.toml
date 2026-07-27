@@ -1,0 +1,24 @@
+[package]
+name         = "druid-admin"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "druid-rust admin: axum-based HTTP endpoints that expose datasource, SQL, wall and /metrics"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid-core    = { path = "../druid-core" }
+druid-pool    = { path = "../druid-pool" }
+druid-stats   = { path = "../druid-stats" }
+druid-dynamic = { path = "../druid-dynamic" }
+tokio         = { workspace = true }
+axum          = { workspace = true }
+tower         = { workspace = true }
+prometheus    = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+thiserror     = { workspace = true }

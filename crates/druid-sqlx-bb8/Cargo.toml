@@ -1,0 +1,20 @@
+[package]
+name         = "druid-sqlx-bb8"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "druid-rust sqlx + bb8 adapter: builds druid-pool on top of sqlx Pool via bb8 manager"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid-core = { path = "../druid-core" }
+druid-pool = { path = "../druid-pool" }
+sqlx       = { workspace = true }
+bb8        = { workspace = true }
+async-trait = { workspace = true }
+tokio      = { workspace = true }
+thiserror  = { workspace = true }

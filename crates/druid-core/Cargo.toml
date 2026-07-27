@@ -1,0 +1,15 @@
+[package]
+name         = "druid-core"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "druid-rust core traits: Connection, Driver, Pool, Filter — zero-dependency abstraction layer"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Intentionally empty — druid-core must not depend on any driver, parser or
+# async runtime. It only exposes trait contracts.

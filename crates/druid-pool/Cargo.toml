@@ -1,0 +1,19 @@
+[package]
+name         = "druid-pool"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "druid-rust connection pool: HikariCP-style pool that consumes druid-core traits; driver-agnostic"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid-core = { path = "../druid-core" }
+tokio      = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+fastrand   = { workspace = true }
+thiserror  = { workspace = true }

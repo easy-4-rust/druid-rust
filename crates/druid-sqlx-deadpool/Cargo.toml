@@ -1,0 +1,20 @@
+[package]
+name         = "druid-sqlx-deadpool"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.75"
+license      = "Apache-2.0"
+description  = "druid-rust sqlx + deadpool adapter: builds druid-pool on top of sqlx Pool via deadpool manager"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid-core = { path = "../druid-core" }
+druid-pool = { path = "../druid-pool" }
+sqlx       = { workspace = true }
+deadpool   = { workspace = true }
+async-trait = { workspace = true }
+tokio      = { workspace = true }
+thiserror  = { workspace = true }
