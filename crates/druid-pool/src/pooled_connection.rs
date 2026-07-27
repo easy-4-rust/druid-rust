@@ -34,13 +34,13 @@ impl DruidPoolConnection {
 
     pub async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         let start = Instant::now();
-        if let Some(ref fc) = self.filter_chain {
+        if let Some(fc) = &self.filter_chain {
             let mut ctx = ExecContext { sql, params: &params, data_source: "", start, fingerprint: None };
             fc.before_execute(&mut ctx).await?;
         }
         let result = self.conn.as_mut().expect("taken").exec(sql, params).await;
         let elapsed = start.elapsed();
-        if let Some(ref fc) = self.filter_chain {
+        if let Some(fc) = &self.filter_chain {
             let ctx = ExecContext { sql, params: &[], data_source: "", start, fingerprint: None };
             fc.after_execute(&ctx, &result, elapsed).await;
         }
