@@ -40,6 +40,7 @@
 22. 测试、验证与架构验收
 23. 风险、技术债与实施路线
 24. 附录
+25. 示意代码集
 
 ---
 
@@ -1203,6 +1204,476 @@ flowchart LR
 | 版本 | 日期 | 变更 | 作者 | 评审 |
 | :--- | :--- | :--- | :--- | :--- |
 | V1.0.0-DESIGN | 2026-07-27 | 初始架构基线（设计阶段） | druid-rust maintainers | 待评审 |
+
+---
+
+## 25. 示意代码集
+
+> **重要声明**：本节所有 Mermaid 图与 Rust 代码片段均为 `[设计草图]`，
+> 仅用于传达架构意图。crate 名、模块路径、trait 签名、配置键与
+> 错误枚举在 Phase 1 落地前都可能调整。**不要**将这些片段复制到生产
+> 代码或对外 API 文档。
+
+### 25.1 整体组件装配（一个画面看清全部 crate 的接线）
+
+```mermaid
+flowchart LR
+    APP["下游应用"]
+    subgraph "druid-rust 横切层"
+        CORE["druid-core<br/>trait 契约"]
+        POOL["druid-pool<br/>调度器 + 装饰器挂载"]
+        SQL["druid-sql<br/>AST + Wall + 参数化"]
+        STATS["druid-stats<br/>SQL 合并 + 直方图 + /metrics"]
+        DYN["druid-dynamic<br/>ArcSwap + SqlHint"]
+        ADMIN["druid-admin<br/>axum HTTP"]
+    end
+    subgraph "驱动适配层"
+        RBDC["druid-rbdc"]
+        SQLXDP["druid-sqlx-deadpool"]
+        SQLXB8["druid-sqlx-bb8"]
+    end
+    DB[("数据库")]
+
+    APP --> POOL
+    POOL --> CORE
+    POOL --> SQL
+    POOL --> STATS
+    DYN --> POOL
+    DYN --> SQL
+    ADMIN --> DYN
+    ADMIN --> STATS
+    ADMIN --> POOL
+
+    RBDC -. 实现 .-> CORE
+    RBDC -. 注入 factory .-> POOL
+    SQLXDP -. 实现 .-> CORE
+    SQLXDP -. 注入 factory .-> POOL
+    SQLXB8 -. 实现 .-> CORE
+    SQLXB8 -. 注入 factory .-> POOL
+
+    RBDC --> DB
+    SQLXDP --> DB
+    SQLXB8 --> DB
+```
+
+### 25.2 装饰器挂载时序图（druid-rust 的核心拦截机制）
+
+> 设计意图：druid-rust **不修改**底层 pool，只在 pool 返回的 connection 上
+> 套一层 `DecoratedConnection`，filter 链就挂在这层。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as 用户代码
+    participant P as DruidPool
+    participant F as FilterChain
+    participant D as DecoratedConnection
+    participant R as Raw Connection<br/>(rbdc / sqlx / bb8)
+
+    U->>P: pool.get()
+    P->>R: factory.create()
+    R-->>P: raw conn
+    P->>D: wrap(raw, FilterChain)
+    D-->>P: PooledConnection (持有 D)
+    P-->>U: PooledConnection
+
+    U->>D: conn.fetch(sql, params)
+    D->>F: chain.before_execute(ctx)
+    loop 每个 BeforeFilter
+        F->>F: filter.before(ctx)
+        alt 任一 filter 抛 Err
+            F-->>D: Err(WallViolation)
+            D-->>U: Err
+        end
+    end
+    F-->>D: Ok
+    D->>R: raw.fetch(sql, params)
+    R-->>D: rows / result
+    D->>F: chain.after_execute(ctx, &mut result)
+    loop 每个 AfterFilter（反向）
+        F->>F: filter.after(ctx, result, elapsed)
+        Note over F: panic 必须 catch_unwind<br/>不影响主链
+    end
+    F-->>D: 透传 result
+    D-->>U: result
+    Note over U,D: PooledConnection::drop
+    D->>P: 归还（或失效则关闭）
+    P->>P: 入 idle 队列
+```
+
+### 25.3 ArcSwap 热切换时序图（V3 能力）
+
+> 设计意图：`ArcSwap::store` 是原子操作，旧 `Arc<DataSourceGroup>` 在
+> 引用计数归零前不会被释放，因此**切换期间不会出现"半态"**。
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Ops as 运维 / 配置中心
+    participant D as DynamicDataSource
+    participant AS as ArcSwap&lt;DataSourceGroup&gt;
+    participant New as 新 Pool
+    participant Old as 旧 Pool
+    participant App as 应用请求
+
+    Ops->>D: switch("main_v2")
+    D->>New: build_pool(cfg_v2) + warmup()
+    New-->>D: ready
+    D->>AS: store(Arc::new(new_group))
+    Note over AS: 此刻 store 是原子的<br/>旧 group 不会被同时看到
+
+    par 并发请求 A
+        App->>D: route(SqlHint::Write)
+        D->>AS: load()
+        AS-->>D: Arc&lt;new_group&gt;
+        D->>New: master.get()
+        New-->>App: PooledConnection
+    and 并发请求 B
+        App->>D: route(SqlHint::Write)
+        D->>AS: load()
+        AS-->>D: Arc&lt;new_group&gt;
+        D->>New: master.get()
+        New-->>App: PooledConnection
+    end
+
+    Note over Old: 旧 group 的 Arc 引用计数 = 0<br/>自动 drop，旧 pool 的连接<br/>在归还时正常关闭
+```
+
+### 25.4 Wall 拦截流程图（V1 核心安全能力）
+
+> 设计意图：Wall 在 `BeforeFilter` 阶段执行，**SQL 不进入 `Connection::exec`**
+> 即被拒绝，避免污染执行路径。
+
+```mermaid
+flowchart TD
+    S["SQL 文本进入 FilterChain"]
+    P["druid-sql::SqlParser::parse<br/>(走 sqlparser-rs AST)"]
+    AST["ParsedStmt<br/>(kinds/tables/functions/has_where/...)"]
+    W["druid-sql::Wall::check"]
+    D{"逐条规则匹配"}
+    V1["DROP 拒绝"]
+    V2["TRUNCATE 拒绝"]
+    V3["UPDATE 无 WHERE → 拒绝"]
+    V4["DELETE 无 WHERE → 拒绝"]
+    V5["deny_tables 命中 → 拒绝"]
+    V6["deny_functions 命中 → 拒绝"]
+    V7["join_depth 超限 → 拒绝"]
+    OK["放行"]
+    ERR["Err(Vec&lt;WallViolation&gt;)"]
+
+    S --> P --> AST --> W --> D
+    D -->|DROP| V1 --> ERR
+    D -->|TRUNCATE| V2 --> ERR
+    D -->|UPDATE| V3 --> ERR
+    D -->|DELETE| V4 --> ERR
+    D -->|deny_tables| V5 --> ERR
+    D -->|deny_functions| V6 --> ERR
+    D -->|join_depth| V7 --> ERR
+    D -->|通过| OK
+```
+
+### 25.5 SQL 合并与指纹（V2 统计核心）
+
+```mermaid
+flowchart LR
+    SQL["SELECT * FROM t WHERE id = 1 AND name = 'a'"]
+    PAR["druid-sql::Parameterizer::parameterize<br/>(基于 sqlparser AST)"]
+    TPL["SELECT * FROM t WHERE id = ? AND name = ?"]
+    FP["druid-sql::fingerprint<br/>xxh3(template)"]
+    KEY["u64 指纹"]
+    CACHE["moka::sync::Cache&lt;u64, Arc&lt;MergedSqlStat&gt;&gt;"]
+    HIT["复用 MergedSqlStat"]
+    NEW["插入新 MergedSqlStat"]
+    REC["record(execute_count, total_ns, max_ns, ok)"]
+
+    SQL --> PAR --> TPL --> FP --> KEY
+    KEY -->|hit| CACHE --> HIT --> REC
+    KEY -->|miss| CACHE --> NEW --> REC
+```
+
+### 25.6 Filter panic 隔离（`catch_unwind` 边界）
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Chain as FilterChain
+    participant F1 as Filter A
+    participant F2 as Filter B (panic!)
+    participant F3 as Filter C
+    participant Conn
+
+    App->>Chain: after_execute(ctx, &mut result)
+    loop 反向遍历
+        Chain->>F3: catch_unwind(after) — OK
+        Chain->>F2: catch_unwind(after) — RecoverErr
+        Note over Chain: 记录 F2.panic_count++<br/>告警但不传播
+        Chain->>F1: catch_unwind(after) — OK
+    end
+    Chain-->>App: 透传 result
+    App->>Conn: 继续使用 result
+
+    Note over App,Conn: panic 不会破坏主链<br/>druid-stats 记录 filter_panics_total{filter="B"}
+```
+
+### 25.7 Rust 示意代码集（每个模块一段）
+
+> 以下 6 段均标 `[设计草图]`，签名与 crate 路径随时可能变化。
+
+#### 25.7.1 `druid-core` 入口（trait 契约）
+
+```rust
+// [设计草图] — crates/druid-core/src/lib.rs
+#![forbid(unsafe_code)]
+
+use std::future::Future;
+use std::pin::Pin;
+
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+pub mod error;
+pub mod value;
+pub mod pool;
+pub mod connection;
+pub mod filter;
+
+pub use error::Error;
+pub use value::Value;
+pub use connection::{Connection, Row, ExecResult};
+pub use pool::{Pool, PooledConnection, PoolState, ConnectionFactory};
+pub use filter::{BeforeFilter, AfterFilter, ExecContext};
+```
+
+#### 25.7.2 `druid-sql` AST 适配层
+
+```rust
+// [设计草图] — crates/druid-sql/src/ast/mod.rs
+use sqlparser::{dialect::Dialect, parser::Parser, ast::Statement};
+
+pub enum StmtKind {
+    Select,
+    Insert,
+    Update { has_where: bool },
+    Delete { has_where: bool },
+    Create, Alter, Drop, Truncate,
+    Other(String),
+}
+
+pub struct ParsedStmt {
+    pub kind: StmtKind,
+    pub tables: Vec<String>,
+    pub functions: Vec<String>,
+    pub has_where: bool,
+    pub join_depth: u32,
+    pub is_read_only: bool,
+}
+
+pub struct SqlParser { dialect: Box<dyn Dialect> }
+
+impl SqlParser {
+    pub fn new(driver: &str) -> Self { /* 按 driver 选方言 */ Self { /* */ } }
+    pub fn parse(&self, sql: &str) -> Result<Vec<ParsedStmt>, ParseError> {
+        let ast = Parser::parse_sql(&*self.dialect, sql)?;
+        Ok(ast.iter().map(convert_statement).collect())
+    }
+}
+
+fn convert_statement(stmt: &Statement) -> ParsedStmt { /* sqlparser AST → ParsedStmt */ unimplemented!() }
+```
+
+#### 25.7.3 `druid-pool` 装饰器挂载
+
+```rust
+// [设计草图] — crates/druid-pool/src/inner.rs
+use std::time::{Duration, Instant};
+use parking_lot::Mutex;
+use tokio::sync::Notify;
+use druid_core::{BoxFuture, Connection, ConnectionFactory, Error, PooledConnection};
+
+pub struct PoolInner {
+    factory: Box<dyn ConnectionFactory>,
+    idle: Mutex<VecDeque<IdleConn>>,
+    waiter: Notify,
+    config: PoolConfig,
+}
+
+impl PoolInner {
+    pub async fn acquire(&self, timeout: Duration) -> Result<PooledConnection, Error> {
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(mut conn) = self.idle.lock().pop_front() {
+                if self.factory.validate(&mut conn).await.is_ok() {
+                    return Ok(self.wrap(conn));
+                }
+                continue;
+            }
+            if self.can_grow() {
+                match self.factory.create().await {
+                    Ok(c) => return Ok(self.wrap(c)),
+                    Err(_) if !self.idle.lock().is_empty() => continue,
+                    Err(e) => return Err(e),
+                }
+            }
+            match tokio::time::timeout_at(deadline.into(), self.waiter.notified()).await {
+                Ok(_) => continue,
+                Err(_) => return Err(Error::AcquireTimeout),
+            }
+        }
+    }
+
+    fn wrap(&self, conn: Box<dyn Connection>) -> PooledConnection {
+        // 关键：挂上 FilterChain + ConnectionHolder + 泄漏检测
+        PooledConnection::new(conn, self.config.clone(), /* filter_chain */)
+    }
+}
+```
+
+#### 25.7.4 `druid-stats` SQL 合并
+
+```rust
+// [设计草图] — crates/druid-stats/src/merge.rs
+use std::sync::Arc;
+use std::time::Duration;
+use moka::sync::Cache;
+use druid_sql::{fingerprint::fingerprint, parameterize::Parameterizer};
+use druid_core::Value;
+
+pub struct SqlMerger {
+    parameterizer: Parameterizer,
+    cache: Cache<u64, Arc<MergedSqlStat>>,
+}
+
+impl SqlMerger {
+    pub fn record(&self, sql: &str, _params: &[Value], elapsed: Duration, ok: bool) {
+        let tmpl = match self.parameterizer.parameterize(sql) {
+            Ok(p) => p.template,
+            Err(_) => sql.to_string(),
+        };
+        let fp = fingerprint(&tmpl);
+        let stat = self.cache.get_with(fp, || Arc::new(MergedSqlStat::new(tmpl, fp)));
+        stat.record(elapsed, ok);
+    }
+}
+
+pub struct MergedSqlStat {
+    pub sql: String,
+    pub fingerprint: u64,
+    pub execute_count: AtomicU64,
+    pub total_time_ns: AtomicU64,
+    pub max_time_ns: AtomicU64,
+    pub error_count: AtomicU64,
+    pub histogram: Histogram,
+}
+```
+
+#### 25.7.5 `druid-dynamic` 多数据源
+
+```rust
+// [设计草图] — crates/druid-dynamic/src/lib.rs
+use std::sync::Arc;
+use arc_swap::ArcSwap;
+use dashmap::DashMap;
+use druid_core::{Error, Pool, PooledConnection};
+
+pub enum SqlHint { Read, Write, Auto(&'static str) }
+
+pub struct DataSourceGroup {
+    pub master: Arc<dyn Pool>,
+    pub slaves: Vec<Arc<dyn Pool>>,
+    pub load_balancer: Arc<dyn LoadBalancer>,
+}
+
+pub struct DynamicDataSource {
+    current: ArcSwap<DataSourceGroup>,
+    registry: DashMap<&'static str, DataSourceConfig>,
+}
+
+impl DynamicDataSource {
+    pub async fn route(&self, hint: SqlHint) -> Result<PooledConnection, Error> {
+        let g = self.current.load();   // lock-free
+        match hint {
+            SqlHint::Write => g.master.get().await,
+            SqlHint::Read  => g.load_balancer.pick(&g.slaves).get().await,
+            SqlHint::Auto(_) => Err(Error::NotSupported("Auto hint deferred to V3+")), // 占位
+        }
+    }
+
+    pub async fn switch(&self, name: &'static str) -> Result<(), Error> {
+        let cfg = self.registry.get(name).ok_or(Error::NotFound)?.clone();
+        let new_pool = cfg.build_pool().await?;
+        new_pool.warmup().await?;
+        self.current.store(Arc::new(DataSourceGroup {
+            master: new_pool,
+            slaves: vec![],
+            load_balancer: Arc::new(RoundRobin),
+        }));
+        Ok(())
+    }
+}
+```
+
+#### 25.7.6 `druid-admin` axum 路由
+
+```rust
+// [设计草图] — crates/druid-admin/src/lib.rs
+use std::sync::Arc;
+use axum::{routing::get, Router, Json, extract::State};
+
+#[derive(Clone)]
+pub struct AdminState {
+    pub dynamic: Arc<DynamicDataSource>,
+    pub stats: Arc<Vec<Arc<StatsCollector>>>,
+}
+
+pub fn router(state: AdminState) -> Router {
+    Router::new()
+        .route("/druid/index.html",       get(index_html))
+        .route("/druid/api/datasources",  get(list_datasources))
+        .route("/druid/api/sql/top",      get(top_sql))
+        .route("/druid/api/sql/slow",     get(slow_sql))
+        .route("/druid/api/wall",         get(wall_log))
+        .route("/druid/api/active",       get(active_connections))
+        .route("/metrics",                get(prom_exporter))
+        .with_state(state)
+}
+
+async fn list_datasources(State(s): State<AdminState>) -> Json<Value> {
+    Json(serde_json::json!({ "sources": s.dynamic.snapshot() }))
+}
+```
+
+### 25.8 与 Cargo crate 的对应关系
+
+| 本节示意代码 | 对应 crate | 对应 manifest |
+| :--- | :--- | :--- |
+| §25.7.1 | `druid-core` | `[dependencies] 暂无` |
+| §25.7.2 | `druid-sql` | `sqlparser`、`druid-core` |
+| §25.7.3 | `druid-pool` | `tokio`、`parking_lot`、`druid-core` |
+| §25.7.4 | `druid-stats` | `moka`、`druid-sql`、`druid-core` |
+| §25.7.5 | `druid-dynamic` | `arc-swap`、`dashmap`、`druid-pool` |
+| §25.7.6 | `druid-admin` | `axum`、`druid-dynamic`、`druid-stats` |
+
+### 25.9 引用关系图（示意代码之间的依赖）
+
+```mermaid
+graph LR
+    S25_71["§25.7.1<br/>druid-core"]
+    S25_72["§25.7.2<br/>druid-sql"]
+    S25_73["§25.7.3<br/>druid-pool"]
+    S25_74["§25.7.4<br/>druid-stats"]
+    S25_75["§25.7.5<br/>druid-dynamic"]
+    S25_76["§25.7.6<br/>druid-admin"]
+
+    S25_72 --> S25_71
+    S25_73 --> S25_71
+    S25_74 --> S25_71
+    S25_74 --> S25_72
+    S25_75 --> S25_71
+    S25_75 --> S25_72
+    S25_75 --> S25_73
+    S25_76 --> S25_73
+    S25_76 --> S25_74
+    S25_76 --> S25_75
+```
 
 ---
 

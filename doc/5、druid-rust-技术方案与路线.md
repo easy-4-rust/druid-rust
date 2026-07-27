@@ -140,12 +140,31 @@ gantt
 | 默认 features | 改变默认 feature 是破坏性变更 |
 | trait 扩展 | 仅允许向后兼容的新增方法（默认实现） |
 
-## 7. 一致性自检清单
+## 7. 关键流程图交叉引用
+
+以下时序图与示意代码块定义在根目录架构文档中，本文件不重复维护，避免
+内容漂移：
+
+| 主题 | 位置 | 适用读者 |
+| :--- | :--- | :--- |
+| 整体组件装配（9 crate 接线） | [架构文档 §25.1](../druid-rust-Architecture.zh_CN.md) | 全体 |
+| 装饰器挂载时序图 | [架构文档 §25.2](../druid-rust-Architecture.zh_CN.md) | 开发者 |
+| ArcSwap 热切换时序图 | [架构文档 §25.3](../druid-rust-Architecture.zh_CN.md) | V3 开发者 |
+| Wall 拦截流程图 | [架构文档 §25.4](../druid-rust-Architecture.zh_CN.md) | 安全 / V1 |
+| SQL 合并与指纹 | [架构文档 §25.5](../druid-rust-Architecture.zh_CN.md) | V2 / SRE |
+| Filter panic 隔离 | [架构文档 §25.6](../druid-rust-Architecture.zh_CN.md) | 全体 |
+| 6 段 Rust 示意代码 | [架构文档 §25.7](../druid-rust-Architecture.zh_CN.md) | 开发者 |
+
+> **维护规则**：上述图与代码块以根架构文档 §25 为唯一来源；本文件
+> 仅保留引用，不复制粘贴。如发现内容不一致，以 §25 为准并修正本表。
+
+## 8. 一致性自检清单
 
 - [ ] 技术栈与 [架构文档](../druid-rust-Architecture.zh_CN.md) §3 一致。
 - [ ] ADR 与 [架构文档 §6](../druid-rust-Architecture.zh_CN.md) 描述一致。
 - [ ] 阶段路线与 [6、版本规划](6、druid-rust-产品与版本规划.md) 节奏一致。
 - [ ] 回滚点与 [4、可行性分析](4、druid-rust-技术与可行性分析.md) 风险登记对应。
+- [ ] 关键流程图引用与 [架构文档 §25](../druid-rust-Architecture.zh_CN.md) 内容一致。
 
 ---
 
