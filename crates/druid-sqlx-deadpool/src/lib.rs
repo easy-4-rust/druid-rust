@@ -1,10 +1,19 @@
-//! `druid-sqlx-deadpool` — adapter that builds `druid-pool` on top of
-//! [`sqlx`](https://github.com/launchbadge/sqlx) connections managed by
-//! [`deadpool`](https://github.com/bikeshedder/deadpool).
+//! druid-rust sqlx + deadpool adapter: builds druid-pool on top of sqlx Pool via deadpool manager.
 //!
-//! **Status: design-stage.** The `SqlxDeadpoolFactory` and
-//! `DruidSqlxDeadpoolPool` types are planned; see
-//! `druid-rust-Architecture.zh_CN.md` ADR-001 and
-//! `doc/5、druid-rust-技术方案与路线.md` §3.
+//! **Status: design-stage placeholder.**
+//! See ADR-001 in druid-rust-Architecture.zh_CN.md.
 
-#![doc = "druid-sqlx-deadpool: design-stage placeholder."]
+/// sqlx-deadpool connection adapter (planned for V2).
+///
+/// Will implement `druid_core::ConnectionFactory` using deadpool's managed pool.
+pub struct SqlxDeadpoolAdapter {
+    _placeholder: (),
+}
+
+impl SqlxDeadpoolAdapter {
+    pub fn new() -> Self { Self { _placeholder: () } }
+}
+
+impl Default for SqlxDeadpoolAdapter {
+    fn default() -> Self { Self::new() }
+}

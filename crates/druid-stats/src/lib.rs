@@ -1,8 +1,11 @@
-//! `druid-stats` — SQL merge statistics, percentile histograms, Prometheus
-//! exporter and StatFilter implementation.
+//! druid-stats — SQL 合并统计、百分位直方图、Prometheus 导出。
 //!
-//! **Status: design-stage.** The merge key (parameterized SQL fingerprint),
-//! the histogram backing store and the exporter endpoints are planned; see
-//! `druid-rust-Architecture.zh_CN.md` §12 and `doc/10、druid-rust-功能菜单与版本规划.md`.
+//! 对应 Druid Java 的 `com.alibaba.druid.stat` 包。
 
-#![doc = "druid-stats: design-stage placeholder."]
+pub mod collector;
+pub mod merge;
+pub mod stat_filter;
+
+pub use collector::StatsCollector;
+pub use merge::{MergedSqlStat, SqlMerger, fingerprint, parameterize};
+pub use stat_filter::StatFilter;

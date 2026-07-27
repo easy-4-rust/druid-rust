@@ -11,5 +11,11 @@ publish      = false
 workspace = true
 
 [dependencies]
-# Intentionally empty — druid-core must not depend on any driver, parser or
-# async runtime. It only exposes trait contracts.
+async-trait = { workspace = true }
+thiserror   = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+uuid        = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }

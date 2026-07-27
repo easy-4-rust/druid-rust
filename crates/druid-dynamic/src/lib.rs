@@ -1,8 +1,13 @@
-//! `druid-dynamic` — multi-datasource routing and lock-free hot switching via
-//! `arc-swap`, including read/write splitting and load balancer abstractions.
+//! druid-rust 多数据源：ArcSwap 热切换、读写分离、负载均衡。
 //!
-//! **Status: design-stage.** The `DynamicDataSource`, `DataSourceGroup` and
-//! `SqlHint` types described in `druid-rust-Architecture.zh_CN.md` §10 are not
-//! yet implemented.
+//! 对应 Druid Java 的 `com.alibaba.druid.pool.ha` 包。
 
-#![doc = "druid-dynamic: design-stage placeholder."]
+pub mod datasource_group;
+pub mod dynamic_datasource;
+pub mod load_balancer;
+pub mod sql_hint;
+
+pub use datasource_group::DataSourceGroup;
+pub use dynamic_datasource::DynamicDataSource;
+pub use load_balancer::{LoadBalancer, RandomBalancer, RoundRobinBalancer};
+pub use sql_hint::SqlHint;

@@ -1,9 +1,19 @@
-//! `druid-sqlx-bb8` — adapter that builds `druid-pool` on top of
-//! [`sqlx`](https://github.com/launchbadge/sqlx) connections managed by
-//! [`bb8`](https://github.com/djcouchy/bb8).
+//! druid-rust sqlx + bb8 adapter: builds druid-pool on top of sqlx Pool via bb8 manager.
 //!
-//! **Status: design-stage.** The `SqlxBb8Factory` and `DruidSqlxBb8Pool` types
-//! are planned; see `druid-rust-Architecture.zh_CN.md` ADR-001 and
-//! `doc/5、druid-rust-技术方案与路线.md` §3.
+//! **Status: design-stage placeholder.**
+//! See ADR-001 in druid-rust-Architecture.zh_CN.md.
 
-#![doc = "druid-sqlx-bb8: design-stage placeholder."]
+/// sqlx-bb8 connection adapter (planned for V2).
+///
+/// Will implement `druid_core::ConnectionFactory` using bb8's pool manager.
+pub struct SqlxBb8Adapter {
+    _placeholder: (),
+}
+
+impl SqlxBb8Adapter {
+    pub fn new() -> Self { Self { _placeholder: () } }
+}
+
+impl Default for SqlxBb8Adapter {
+    fn default() -> Self { Self::new() }
+}

@@ -303,6 +303,14 @@ dependencies = [
 [[package]]
 name = "druid-core"
 version = "0.0.0-design"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "druid-dynamic"
@@ -314,6 +322,7 @@ dependencies = [
  "druid-core",
  "druid-pool",
  "druid-sql",
+ "fastrand",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -324,6 +333,7 @@ version = "0.0.0-design"
 dependencies = [
  "async-trait",
  "druid-core",
+ "druid-sql",
  "fastrand",
  "parking_lot",
  "thiserror 1.0.69",
@@ -380,6 +390,7 @@ dependencies = [
 name = "druid-stats"
 version = "0.0.0-design"
 dependencies = [
+ "async-trait",
  "dashmap",
  "druid-core",
  "druid-sql",

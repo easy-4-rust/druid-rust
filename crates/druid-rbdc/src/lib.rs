@@ -1,10 +1,20 @@
-//! `druid-rbdc` — adapter that bridges the [`rbdc`](https://github.com/rbatis/rbatis)
-//! connection abstraction into the `druid-core` trait surface, then plugs the
-//! resulting `ConnectionFactory` into `druid-pool`.
+//! druid-rust rbdc adapter: bridges rbdc connection into druid-core traits.
 //!
-//! **Status: design-stage.** The `rbdc` dependency will be introduced in V2
-//! once `druid-core` exposes its public traits; see
-//! `doc/V1/4、druid-rust-功能与界面规划-V1.md` and `druid-rust-Architecture.zh_CN.md`
-//! ADR-001.
+//! **Status: design-stage placeholder.** The rbdc dependency is deferred to V2.
+//! See ADR-001 in druid-rust-Architecture.zh_CN.md.
 
-#![doc = "druid-rbdc: design-stage placeholder."]
+/// rbdc connection adapter (planned for V2).
+///
+/// Will implement `druid_core::Connection` for `rbdc::db::Connection`.
+pub struct RbdcAdapter {
+    _placeholder: (),
+}
+
+impl RbdcAdapter {
+    /// Create a new adapter placeholder.
+    pub fn new() -> Self { Self { _placeholder: () } }
+}
+
+impl Default for RbdcAdapter {
+    fn default() -> Self { Self::new() }
+}

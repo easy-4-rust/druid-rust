@@ -17,3 +17,6 @@ async-trait = { workspace = true }
 parking_lot = { workspace = true }
 fastrand   = { workspace = true }
 thiserror  = { workspace = true }
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+druid-sql = { path = "../druid-sql" }

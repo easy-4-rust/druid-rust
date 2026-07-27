@@ -20,3 +20,7 @@ parking_lot = { workspace = true }
 prometheus = { workspace = true }
 tracing    = { workspace = true }
 thiserror  = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
