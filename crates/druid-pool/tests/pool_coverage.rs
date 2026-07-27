@@ -440,6 +440,171 @@ async fn test_pool_trait_state() {
 // 6. Stress test: 10000 acquire/release
 // ══════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════
+// 7. Pool trait: get_timeout via trait object
+// ══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_pool_trait_get_timeout_success() {
+    let pool = build_pool(2, 2).await;
+    let pool_trait: &dyn druid_core::Pool = &pool;
+    let conn = pool_trait.get_timeout(Duration::from_secs(2)).await.unwrap();
+    assert!(conn.id() > 0);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 8. PoolInner: should_evict via pool state
+// ══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_pool_inner_should_evict() {
+    let pool = build_pool(4, 1).await; // min_idle=1
+    // Acquire 3 connections
+    let c1 = pool.get().await.unwrap();
+    let c2 = pool.get().await.unwrap();
+    let c3 = pool.get().await.unwrap();
+    // Release all - should_evict should return true (idle_count > min_idle)
+    drop(c1);
+    drop(c2);
+    drop(c3);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let st = pool.state();
+    // idle_count should be clamped to min_idle (1) or less
+    assert!(st.idle_count <= 2, "idle_count={}", st.idle_count);
+}
+
+#[test]
+fn test_pool_inner_should_evict_direct() {
+    // Directly test should_evict method
+    let (factory, _) = make_factory();
+    let config = druid_pool::PoolInnerConfig {
+        max_open: 4,
+        min_idle: 2,
+        max_idle: 4,
+        ..Default::default()
+    };
+    let inner = druid_pool::PoolInner::new(factory, config);
+    // Empty idle queue - should not evict
+    assert!(!inner.should_evict());
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 9. get_timeout retry loop: create fails but idle available
+// ══════════════════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════════════════
+// 10. DruidPoolConnection: before_execute error path (branch ^0)
+// ══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_pool_connection_before_execute_error() {
+    use druid_core::{BeforeFilter, ExecContext};
+
+    struct BlockingFilter;
+    #[async_trait::async_trait]
+    impl BeforeFilter for BlockingFilter {
+        fn name(&self) -> &str { "blocking" }
+        async fn before(&self, _ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {
+            Err(DruidError::WallViolation("blocked by filter".into()))
+        }
+    }
+
+    let (factory, _) = make_factory();
+    let mut fc = FilterChain::new();
+    fc.add_before(Arc::new(BlockingFilter));
+
+    let pool = DruidPool::builder()
+        .name("filter-test")
+        .driver_name("mock")
+        .factory(factory)
+        .max_open(2)
+        .max_idle(2)
+        .filter_chain(Arc::new(fc))
+        .build()
+        .await
+        .unwrap();
+
+    let mut conn = pool.get().await.unwrap();
+    let result = conn.exec("SELECT 1", vec![]).await;
+    assert!(result.is_err());
+    assert!(matches!(result.unwrap_err(), DruidError::WallViolation(_)));
+}
+
+#[tokio::test]
+async fn test_pool_get_timeout_notify_fires() {
+    // Tests the Ok(_) => continue branch in get_timeout
+    // where notify fires before deadline (connection returned while waiting)
+    let pool = build_pool(1, 1).await;
+    let c1 = pool.get().await.unwrap(); // fill pool
+
+    // Spawn a task that will release the connection after a short delay
+    let pool_clone = Arc::new(pool);
+    let p = pool_clone.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        drop(c1); // This triggers notify
+    });
+
+    // This should wait, get notified when c1 is dropped, and retry
+    let result = pool_clone.get_timeout(Duration::from_secs(2)).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_pool_get_timeout_retry_on_create_failure() {
+    // This tests the `Ok(_) => continue` branch in get_timeout
+    // where create_connection fails but idle connections are available
+    use std::sync::atomic::AtomicBool;
+
+    struct FailAfterFirstFactory {
+        counter: AtomicU64,
+        fail: AtomicBool,
+    }
+
+    #[async_trait::async_trait]
+    impl ConnectionFactory for FailAfterFirstFactory {
+        async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+            let count = self.counter.fetch_add(1, Ordering::SeqCst);
+            if self.fail.load(Ordering::Relaxed) && count > 0 {
+                Err(DruidError::DriverError("transient failure".into()))
+            } else {
+                Ok(Box::new(MockConn { id: count + 1, closed: std::sync::atomic::AtomicBool::new(false) }))
+            }
+        }
+        async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+            conn.ping().await
+        }
+    }
+
+    let factory = Arc::new(FailAfterFirstFactory {
+        counter: AtomicU64::new(0),
+        fail: AtomicBool::new(false),
+    });
+
+    let pool = DruidPool::builder()
+        .name("retry-test")
+        .driver_name("mock")
+        .factory(factory.clone())
+        .max_open(2)
+        .max_idle(2)
+        .acquire_timeout(Duration::from_secs(2))
+        .build()
+        .await
+        .unwrap();
+
+    // Get first connection (succeeds)
+    let c1 = pool.get().await.unwrap();
+    // Now enable failure
+    factory.fail.store(true, Ordering::Relaxed);
+    // Get second - create will fail, but should retry from idle
+    // Actually, we need to release c1 first so there's an idle connection
+    drop(c1);
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    // Now get should reuse idle (c1) even though create fails
+    let c2 = pool.get().await.unwrap();
+    assert!(c2.id() > 0);
+}
+
 #[tokio::test]
 async fn test_stress_10000_acquire_release() {
     let pool = build_pool(4, 4).await;

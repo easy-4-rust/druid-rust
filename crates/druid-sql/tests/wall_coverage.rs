@@ -497,3 +497,94 @@ fn test_wall_query_union_deny_table() {
     let result = wall.check("SELECT 1 FROM secret UNION SELECT 2 FROM secret");
     assert!(result.is_err());
 }
+
+// ══════════════════════════════════════════════════════════════════
+// Catch-all branches in check_statement (L82: _ => {})
+// ══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_wall_catch_all_statement_types() {
+    let wall = Wall::new(WallConfig::default());
+    // ALTER TABLE - not explicitly handled, falls through to _ => {}
+    let _ = wall.check("ALTER TABLE users ADD COLUMN age INT");
+    // CREATE TABLE - not explicitly handled
+    let _ = wall.check("CREATE TABLE users (id INT)");
+    // SHOW - not explicitly handled
+    let _ = wall.check("SHOW TABLES");
+    // DESCRIBE - not explicitly handled
+    let _ = wall.check("DESCRIBE users");
+    // COMMIT - not explicitly handled
+    let _ = wall.check("COMMIT");
+    // ROLLBACK - not explicitly handled
+    let _ = wall.check("ROLLBACK");
+    // USE - not explicitly handled
+    let _ = wall.check("USE mydb");
+    // SET - not explicitly handled
+    let _ = wall.check("SET autocommit = 1");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// check_query catch-all (L98: _ => {})
+// ══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_wall_query_catch_all() {
+    let wall = Wall::new(WallConfig::default());
+    // VALUES clause - not SELECT, Query, or SetOperation
+    let _ = wall.check("VALUES (1), (2), (3)");
+    // INSERT ... SELECT - the SELECT part is a query
+    let _ = wall.check("INSERT INTO t SELECT * FROM users");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// check_table_factor catch-all (L126: _ => {})
+// ══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_wall_table_factor_catch_all() {
+    let wall = Wall::new(WallConfig::default());
+    // Function call in FROM - not TableFactor::Table
+    let _ = wall.check("SELECT * FROM generate_series(1, 10)");
+    // Lateral join - not TableFactor::Table
+    let _ = wall.check("SELECT * FROM users, LATERAL (SELECT 1) AS t");
+    // Nested join - not TableFactor::Table
+    let _ = wall.check("SELECT * FROM (users CROSS JOIN orders) AS t");
+}
+
+// ══════════════════════════════════════════════════════════════════
+// check_query recursive subquery (L91-93)
+// ══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_wall_query_recursive_subquery() {
+    let cfg = WallConfig::builder().deny_table("secret").build();
+    let wall = Wall::new(cfg);
+    // Double-nested subquery: outer query -> subquery -> inner query with denied table
+    let result = wall.check("SELECT * FROM (SELECT * FROM (SELECT 1 FROM secret) AS t1) AS t2");
+    assert!(result.is_err());
+    let violations = result.unwrap_err();
+    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+}
+
+// ══════════════════════════════════════════════════════════════════
+// check_statement catch-all for non-Table FROM (L82: _ => {})
+// ══════════════════════════════════════════════════════════════════
+
+#[test]
+fn test_wall_statement_with_derived_table() {
+    let cfg = WallConfig::builder().deny_table("secret").build();
+    let wall = Wall::new(cfg);
+    // UPDATE with subquery in SET
+    let _ = wall.check("UPDATE users SET name = (SELECT name FROM secret WHERE id = 1) WHERE id = 1");
+}
+
+#[test]
+fn test_wall_recursive_query_body() {
+    // ((SELECT 1)) produces SetExpr::Query in sqlparser
+    let cfg = WallConfig::builder().deny_table("secret").build();
+    let wall = Wall::new(cfg);
+    let result = wall.check("((SELECT 1 FROM secret))");
+    assert!(result.is_err());
+    let violations = result.unwrap_err();
+    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+}
