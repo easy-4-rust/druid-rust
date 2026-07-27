@@ -18,7 +18,7 @@ pub(crate) struct IdleConn {
 }
 
 /// 连接池内部状态。
-pub(crate) struct PoolInner {
+pub struct PoolInner {
     pub factory: Arc<dyn ConnectionFactory>,
     pub config: crate::config::PoolInnerConfig,
     pub idle: parking_lot::Mutex<VecDeque<IdleConn>>,

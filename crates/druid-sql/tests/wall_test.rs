@@ -89,7 +89,7 @@ fn test_wall_config_builder_defaults() {
     assert!(!config.truncate_allow);        // 默认拒绝 TRUNCATE
     assert!(config.update_must_have_where); // UPDATE 必须有 WHERE
     assert!(config.delete_must_have_where); // DELETE 必须有 WHERE
-    assert!(config.select_all_allow);       // SELECT * 默认允许
+    assert!(config.select_all_column_allow);       // SELECT * 默认允许
     assert!(config.insert_allow);           // INSERT 默认允许
 }
 

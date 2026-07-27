@@ -8,7 +8,7 @@ use std::time::Duration;
 
 /// 池内部配置（运行时使用）。
 #[derive(Clone)]
-pub(crate) struct PoolInnerConfig {
+pub struct PoolInnerConfig {
     pub max_open: usize,
     pub min_idle: usize,
     pub max_idle: usize,

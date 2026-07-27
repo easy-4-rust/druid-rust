@@ -203,3 +203,46 @@ async fn test_pool_close() {
     let result = pool.get().await;
     assert!(result.is_err());
 }
+
+// ── Additional coverage for pooled_connection ──
+
+#[tokio::test]
+async fn test_pooled_connection_fetch() {
+    let pool = build_pool(2, 2).await;
+    let mut conn = pool.get().await.unwrap();
+    let rows = conn.fetch("SELECT 1", vec![]).await.unwrap();
+    assert_eq!(rows.len(), 1);
+}
+
+#[tokio::test]
+async fn test_pooled_connection_ping() {
+    let pool = build_pool(2, 2).await;
+    let mut conn = pool.get().await.unwrap();
+    conn.ping().await.unwrap();
+}
+
+#[tokio::test]
+async fn test_pooled_connection_driver_name() {
+    let pool = build_pool(2, 2).await;
+    let conn = pool.get().await.unwrap();
+    assert_eq!(conn.driver_name(), "mock");
+}
+
+#[tokio::test]
+async fn test_pooled_connection_id() {
+    let pool = build_pool(2, 2).await;
+    let conn = pool.get().await.unwrap();
+    assert!(conn.id() > 0);
+}
+
+#[test]
+fn test_pooled_connection_into_core() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    rt.block_on(async {
+        let pool = build_pool(2, 2).await;
+        let conn = pool.get().await.unwrap();
+        let core_conn = conn.into_core();
+        // into_core consumes DruidPoolConnection, returns CorePooledConnection
+        assert!(core_conn.id() > 0);
+    });
+}
