@@ -546,6 +546,36 @@ async fn test_pool_connection_drop_after_take() {
     // `if let Some(conn) = self.conn.take()` in Drop.
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 12. DruidPoolConnection: filter_chain = None (branch ^0 on lines 37, 43)
+// ══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_pool_connection_no_filter_chain() {
+    // Create a pool WITHOUT a filter chain to trigger the false branch
+    // of `if let Some(ref fc) = self.filter_chain`
+    let pool = DruidPool::builder()
+        .name("no-filter")
+        .driver_name("mock")
+        .factory(Arc::new(MockFactory {
+            counter: Arc::new(AtomicU64::new(0)),
+        }))
+        .max_open(2)
+        .max_idle(2)
+        .acquire_timeout(Duration::from_secs(2))
+        .build()
+        .await
+        .unwrap();
+
+    // Verify no filter chain
+    assert!(pool.filter_chain().is_none());
+
+    let mut conn = pool.get().await.unwrap();
+    // exec with no filter chain should skip the if-let block
+    let result = conn.exec("SELECT 1", vec![]).await.unwrap();
+    assert_eq!(result.rows_affected, 1);
+}
+
 #[tokio::test]
 async fn test_pool_get_timeout_notify_fires() {
     // Tests the Ok(_) => continue branch in get_timeout
