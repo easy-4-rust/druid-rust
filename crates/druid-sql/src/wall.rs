@@ -116,8 +116,14 @@ impl Wall {
     }
 
     fn check_table_factor(&self, factor: &TableFactor, v: &mut Vec<WallViolation>) {
-        if let TableFactor::Table { name, .. } = factor {
-            self.check_object_name(name, v);
+        match factor {
+            TableFactor::Table { name, .. } => {
+                self.check_object_name(name, v);
+            }
+            TableFactor::Derived { subquery, .. } => {
+                self.check_query(subquery, v);
+            }
+            _ => {}
         }
     }
 
