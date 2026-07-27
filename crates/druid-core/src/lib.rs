@@ -31,6 +31,7 @@ pub use driver::Driver;
 pub use error::DruidError;
 pub use exception_sorter::{ExceptionSorter, MySqlExceptionSorter, NullExceptionSorter, PgExceptionSorter};
 pub use filter::{AfterFilter, BeforeFilter, ExecContext};
+pub use filter::{ConnectionEvent, StatementEvent, ResultSetEvent};
 pub use filter_chain::FilterChain;
 pub use pool::Pool;
 pub use pool_state::PoolState;

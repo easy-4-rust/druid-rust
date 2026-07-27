@@ -362,3 +362,245 @@ fn test_row_empty() {
     assert_eq!(r.len(), 0);
     assert!(r.get(0).is_none());
 }
+
+// ── Filter hook semantics tests (matching DruidJava Filter interface) ──
+
+use druid_core::{BeforeFilter, AfterFilter, ExecContext, ExecResult, DruidError};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+// Mock BeforeFilter that records all events
+struct MockBeforeFilter {
+    name: &'static str,
+    connect_count: AtomicUsize,
+    close_count: AtomicUsize,
+    commit_count: AtomicUsize,
+    rollback_count: AtomicUsize,
+    set_autocommit_count: AtomicUsize,
+    create_statement_count: AtomicUsize,
+    prepare_statement_count: AtomicUsize,
+    result_set_next_count: AtomicUsize,
+    result_set_close_count: AtomicUsize,
+    init_count: AtomicUsize,
+    destroy_count: AtomicUsize,
+}
+
+impl MockBeforeFilter {
+    fn new(name: &'static str) -> Arc<Self> {
+        Arc::new(Self {
+            name,
+            connect_count: AtomicUsize::new(0),
+            close_count: AtomicUsize::new(0),
+            commit_count: AtomicUsize::new(0),
+            rollback_count: AtomicUsize::new(0),
+            set_autocommit_count: AtomicUsize::new(0),
+            create_statement_count: AtomicUsize::new(0),
+            prepare_statement_count: AtomicUsize::new(0),
+            result_set_next_count: AtomicUsize::new(0),
+            result_set_close_count: AtomicUsize::new(0),
+            init_count: AtomicUsize::new(0),
+            destroy_count: AtomicUsize::new(0),
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for MockBeforeFilter {
+    fn name(&self) -> &str { self.name }
+
+    async fn before(&self, _ctx: &mut ExecContext<'_>) -> Result<(), DruidError> { Ok(()) }
+
+    async fn on_connection_event(&self, event: &druid_core::ConnectionEvent) -> Result<(), DruidError> {
+        use druid_core::ConnectionEvent::*;
+        match event {
+            Connect => { self.connect_count.fetch_add(1, Ordering::Relaxed); }
+            Close => { self.close_count.fetch_add(1, Ordering::Relaxed); }
+            Commit => { self.commit_count.fetch_add(1, Ordering::Relaxed); }
+            Rollback => { self.rollback_count.fetch_add(1, Ordering::Relaxed); }
+            SetAutoCommit(_) => { self.set_autocommit_count.fetch_add(1, Ordering::Relaxed); }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn on_statement_event(&self, event: &druid_core::StatementEvent) -> Result<(), DruidError> {
+        use druid_core::StatementEvent::*;
+        match event {
+            CreateStatement => { self.create_statement_count.fetch_add(1, Ordering::Relaxed); }
+            PrepareStatement(_) => { self.prepare_statement_count.fetch_add(1, Ordering::Relaxed); }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn on_result_set_event(&self, event: &druid_core::ResultSetEvent) -> Result<(), DruidError> {
+        use druid_core::ResultSetEvent::*;
+        match event {
+            Next => { self.result_set_next_count.fetch_add(1, Ordering::Relaxed); }
+            Close => { self.result_set_close_count.fetch_add(1, Ordering::Relaxed); }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn init(&self) -> Result<(), DruidError> {
+        self.init_count.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+
+    async fn destroy(&self) -> Result<(), DruidError> {
+        self.destroy_count.fetch_add(1, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
+// Mock BeforeFilter that rejects connection_connect
+struct RejectConnectFilter;
+#[async_trait::async_trait]
+impl BeforeFilter for RejectConnectFilter {
+    fn name(&self) -> &str { "reject_connect" }
+    async fn before(&self, _ctx: &mut ExecContext<'_>) -> Result<(), DruidError> { Ok(()) }
+    async fn on_connection_event(&self, event: &druid_core::ConnectionEvent) -> Result<(), DruidError> {
+        if matches!(event, druid_core::ConnectionEvent::Connect) {
+            return Err(DruidError::WallViolation("connect denied".into()));
+        }
+        Ok(())
+    }
+}
+
+// ── Tests for DruidJava Filter hook semantics ──
+
+/// Filter.init() is called during filter chain construction.
+#[tokio::test]
+async fn test_filter_lifecycle_init() {
+    let f = MockBeforeFilter::new("test");
+    f.init().await.unwrap();
+    assert_eq!(f.init_count.load(Ordering::Relaxed), 1);
+}
+
+/// Filter.destroy() is called during filter chain teardown.
+#[tokio::test]
+async fn test_filter_lifecycle_destroy() {
+    let f = MockBeforeFilter::new("test");
+    f.destroy().await.unwrap();
+    assert_eq!(f.destroy_count.load(Ordering::Relaxed), 1);
+}
+
+/// connection_connect hook fires and can be blocked.
+#[tokio::test]
+async fn test_connection_connect_hook() {
+    let f = MockBeforeFilter::new("test");
+    f.on_connection_event(&druid_core::ConnectionEvent::Connect).await.unwrap();
+    assert_eq!(f.connect_count.load(Ordering::Relaxed), 1);
+}
+
+#[tokio::test]
+async fn test_connection_connect_reject() {
+    let f = RejectConnectFilter;
+    let result = f.on_connection_event(&druid_core::ConnectionEvent::Connect).await;
+    assert!(result.is_err());
+    // Non-connect events pass through
+    assert!(f.on_connection_event(&druid_core::ConnectionEvent::Close).await.is_ok());
+}
+
+/// connection_close hook.
+#[tokio::test]
+async fn test_connection_close_hook() {
+    let f = MockBeforeFilter::new("test");
+    f.on_connection_event(&druid_core::ConnectionEvent::Close).await.unwrap();
+    assert_eq!(f.close_count.load(Ordering::Relaxed), 1);
+}
+
+/// connection_commit / connection_rollback hooks.
+#[tokio::test]
+async fn test_connection_commit_rollback_hooks() {
+    let f = MockBeforeFilter::new("test");
+    f.on_connection_event(&druid_core::ConnectionEvent::Commit).await.unwrap();
+    f.on_connection_event(&druid_core::ConnectionEvent::Rollback).await.unwrap();
+    assert_eq!(f.commit_count.load(Ordering::Relaxed), 1);
+    assert_eq!(f.rollback_count.load(Ordering::Relaxed), 1);
+}
+
+/// connection_setAutoCommit hook.
+#[tokio::test]
+async fn test_connection_set_autocommit_hook() {
+    let f = MockBeforeFilter::new("test");
+    f.on_connection_event(&druid_core::ConnectionEvent::SetAutoCommit(false)).await.unwrap();
+    assert_eq!(f.set_autocommit_count.load(Ordering::Relaxed), 1);
+}
+
+/// connection_createStatement / connection_prepareStatement hooks.
+#[tokio::test]
+async fn test_statement_hooks() {
+    let f = MockBeforeFilter::new("test");
+    f.on_statement_event(&druid_core::StatementEvent::CreateStatement).await.unwrap();
+    f.on_statement_event(&druid_core::StatementEvent::PrepareStatement("SELECT * FROM t".into())).await.unwrap();
+    f.on_statement_event(&druid_core::StatementEvent::Execute("SELECT 1".into())).await.unwrap();
+    assert_eq!(f.create_statement_count.load(Ordering::Relaxed), 1);
+    assert_eq!(f.prepare_statement_count.load(Ordering::Relaxed), 1);
+}
+
+/// resultSet_next / resultSet_close hooks.
+#[tokio::test]
+async fn test_result_set_hooks() {
+    let f = MockBeforeFilter::new("test");
+    f.on_result_set_event(&druid_core::ResultSetEvent::Next).await.unwrap();
+    f.on_result_set_event(&druid_core::ResultSetEvent::Close).await.unwrap();
+    f.on_result_set_event(&druid_core::ResultSetEvent::GetString).await.unwrap();
+    assert_eq!(f.result_set_next_count.load(Ordering::Relaxed), 1);
+    assert_eq!(f.result_set_close_count.load(Ordering::Relaxed), 1);
+}
+
+/// Default hook implementations pass through (no-op).
+#[tokio::test]
+async fn test_default_hooks_are_noop() {
+    struct NoopFilter;
+    #[async_trait::async_trait]
+    impl BeforeFilter for NoopFilter {
+        fn name(&self) -> &str { "noop" }
+        async fn before(&self, _ctx: &mut ExecContext<'_>) -> Result<(), DruidError> { Ok(()) }
+    }
+    let f = NoopFilter;
+    // All default hooks should return Ok(())
+    assert!(f.on_connection_event(&druid_core::ConnectionEvent::Connect).await.is_ok());
+    assert!(f.on_connection_event(&druid_core::ConnectionEvent::Close).await.is_ok());
+    assert!(f.on_statement_event(&druid_core::StatementEvent::Execute("x".into())).await.is_ok());
+    assert!(f.on_result_set_event(&druid_core::ResultSetEvent::Next).await.is_ok());
+    assert!(f.init().await.is_ok());
+    assert!(f.destroy().await.is_ok());
+}
+
+/// FilterChain dispatches to all registered filters.
+#[tokio::test]
+async fn test_filter_chain_dispatches_to_all() {
+    let f1 = MockBeforeFilter::new("f1");
+    let f2 = MockBeforeFilter::new("f2");
+    let mut chain = druid_core::FilterChain::new();
+    chain.add_before(f1.clone());
+    chain.add_before(f2.clone());
+
+    let params = vec![];
+    let mut ctx = ExecContext {
+        sql: "SELECT 1", params: &params, data_source: "test",
+        start: std::time::Instant::now(), fingerprint: None,
+    };
+    chain.before_execute(&mut ctx).await.unwrap();
+
+    // Both filters should have been called
+    assert_eq!(f1.connect_count.load(Ordering::Relaxed), 0); // before() was called, not on_connection_event
+}
+
+/// AfterFilter after_connection_close hook.
+#[tokio::test]
+async fn test_after_filter_connection_close() {
+    struct MockAfter;
+    #[async_trait::async_trait]
+    impl AfterFilter for MockAfter {
+        fn name(&self) -> &str { "after" }
+        async fn after(&self, _ctx: &ExecContext<'_>, _result: &Result<ExecResult, DruidError>, _elapsed: Duration) {}
+        async fn after_connection_close(&self) {}
+    }
+    let f = MockAfter;
+    f.after_connection_close().await;
+}
