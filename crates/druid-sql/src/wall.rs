@@ -4,7 +4,7 @@
 
 use crate::wall_config::WallConfig;
 use crate::wall_violation::WallViolation;
-use sqlparser::ast::*;
+use sqlparser::ast::{Statement, SetExpr, Select, SelectItem, TableFactor, ObjectType, FromTable, Query, ObjectName};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
