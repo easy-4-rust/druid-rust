@@ -397,3 +397,26 @@ fn test_merged_sql_stat_cas_retry_concurrent() {
     assert_eq!(stat.execute_count(), 500);
     assert!(stat.max_time_ms() >= 4990.0);
 }
+
+#[test]
+fn test_merged_sql_stat_cas_retry_direct() {
+    // Force CAS retry by pre-setting max_time_ns to a value,
+    // then having multiple threads try to update it simultaneously
+    use std::sync::atomic::AtomicU64;
+    let stat = Arc::new(MergedSqlStat::new("SELECT 1".into(), 12345));
+    // Pre-set max_time_ns to a non-zero value
+    stat.max_time_ns.store(1000, std::sync::atomic::Ordering::Relaxed);
+    let mut handles = vec![];
+    // Many threads all trying to set a larger value - forces CAS contention
+    for i in 0..1000 {
+        let stat = stat.clone();
+        handles.push(std::thread::spawn(move || {
+            stat.record(Duration::from_millis((i + 1) * 100), true);
+        }));
+    }
+    for h in handles {
+        h.join().unwrap();
+    }
+    assert_eq!(stat.execute_count(), 1000);
+    assert!(stat.max_time_ms() >= 100_000.0);
+}

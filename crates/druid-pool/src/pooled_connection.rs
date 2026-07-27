@@ -32,18 +32,28 @@ impl DruidPoolConnection {
 
     pub fn id(&self) -> u64 { self.id }
 
+    async fn run_before_filter(&self, sql: &str, params: &[Value], start: Instant) -> Result<(), DruidError> {
+        let fc = match &self.filter_chain {
+            Some(fc) => fc,
+            None => return Ok(()),
+        };
+        let mut ctx = ExecContext { sql, params, data_source: "", start, fingerprint: None };
+        fc.before_execute(&mut ctx).await
+    }
+
+    fn run_after_filter(&self, sql: &str, result: &Result<ExecResult, DruidError>, elapsed: Duration) {
+        if let Some(fc) = &self.filter_chain {
+            let ctx = ExecContext { sql, params: &[], data_source: "", start: Instant::now(), fingerprint: None };
+            fc.after_execute(&ctx, result, elapsed);
+        }
+    }
+
     pub async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         let start = Instant::now();
-        if let Some(fc) = &self.filter_chain {
-            let mut ctx = ExecContext { sql, params: &params, data_source: "", start, fingerprint: None };
-            fc.before_execute(&mut ctx).await?;
-        }
+        self.run_before_filter(sql, &params, start).await?;
         let result = self.conn.as_mut().expect("taken").exec(sql, params).await;
         let elapsed = start.elapsed();
-        if let Some(fc) = &self.filter_chain {
-            let ctx = ExecContext { sql, params: &[], data_source: "", start, fingerprint: None };
-            fc.after_execute(&ctx, &result, elapsed).await;
-        }
+        self.run_after_filter(sql, &result, elapsed);
         result
     }
 
