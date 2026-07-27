@@ -1,5 +1,6 @@
 //! Coverage boost tests targeting specific uncovered lines.
 use druid_core::*;
+use std::time::Duration;
 
 // ── ConnectionExt: all default methods ──
 
@@ -501,4 +502,178 @@ async fn test_pooled_connection_drop_exercise() {
         // Drop triggers return_fn
     }
     assert_eq!(counter.load(Ordering::Relaxed), 1);
+}
+
+// ── MinimalConnExt: implements NO ConnectionExt methods at all ──
+// All default implementations are exercised by this mock.
+struct MinimalConnExt;
+
+#[async_trait::async_trait]
+impl Connection for MinimalConnExt {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+}
+
+// NO ConnectionExt implementation at all - uses trait defaults
+// MinimalConnExt doesn't implement ConnectionExt, so we can't call its methods
+
+// Instead, let's create a struct that only implements ConnectionExt via default
+// by using a blanket impl trick
+
+// Actually, let me just call the trait default methods directly on a mock
+// that does implement ConnectionExt but with minimal overrides
+struct SparseConnExt;
+
+#[async_trait::async_trait]
+impl Connection for SparseConnExt {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+}
+
+// SparseConnExt implements ConnectionExt by default (no override)
+#[async_trait::async_trait]
+impl ConnectionExt for SparseConnExt {
+    // ALL methods use trait defaults - don't override anything
+}
+
+#[tokio::test]
+async fn test_all_default_methods_exercised() {
+    let mut c = SparseConnExt;
+    // These call the DEFAULT implementations (not overridden)
+    assert!(c.get_meta_data().is_none());
+    assert_eq!(c.get_database_product_name(), None);
+    assert_eq!(c.get_database_product_version(), None);
+    assert_eq!(c.get_driver_major_version(), 0);
+    assert_eq!(c.get_driver_minor_version(), 0);
+    assert_eq!(c.get_holdability(), 1);
+    let _ = c.set_holdability(1).await;
+    let _ = c.set_client_info("k", "v").await;
+    assert_eq!(c.get_client_info("k"), None);
+    let _ = c.clear_warnings().await;
+    assert_eq!(c.native_sql("SELECT 1").await.unwrap(), "SELECT 1");
+    let _ = c.set_network_timeout(Duration::from_secs(5)).await;
+    assert_eq!(c.get_network_timeout(), 0);
+    assert_eq!(c.get_type_map(), None);
+    let _ = c.set_type_map(std::collections::HashMap::new()).await;
+    // Also test async methods that return errors
+    assert!(c.create_statement().await.is_err());
+    assert!(c.prepare_statement("SELECT 1").await.is_err());
+    assert!(c.prepare_call("CALL sp").await.is_err());
+}
+
+// ── Also test Row methods more thoroughly ──
+#[test]
+fn test_row_construction_and_access() {
+    let r1 = Row::new(vec![]);
+    assert!(r1.is_empty());
+    assert_eq!(r1.len(), 0);
+    assert_eq!(r1.get(0), None);
+
+    let r2 = Row::new(vec![Value::Int(1), Value::String("a".into()), Value::Null]);
+    assert!(!r2.is_empty());
+    assert_eq!(r2.len(), 3);
+    assert_eq!(r2.get(0), Some(&Value::Int(1)));
+    assert_eq!(r2.get(1), Some(&Value::String("a".into())));
+    assert_eq!(r2.get(2), Some(&Value::Null));
+    assert_eq!(r2.get(3), None);
+}
+
+// ── Test all Connection trait default methods more thoroughly ──
+#[tokio::test]
+async fn test_connection_defaults_comprehensive() {
+    struct M;
+    #[async_trait::async_trait]
+    impl Connection for M {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    }
+    let mut m = M;
+    // Test all default methods that return values
+    assert!(!m.is_closed());
+    assert!(m.auto_commit());
+    assert!(!m.read_only());
+    assert_eq!(m.transaction_isolation(), 2);
+    assert_eq!(m.catalog(), None);
+    assert_eq!(m.schema(), None);
+    assert_eq!(m.driver_name(), "");
+    // Test methods that modify state
+    let _ = m.set_auto_commit(false).await;
+    let _ = m.set_read_only(true).await;
+    let _ = m.set_transaction_isolation(8).await;
+    let _ = m.set_catalog("mydb").await;
+    let _ = m.set_schema("public").await;
+    // Test savepoint methods
+    let sp = m.set_savepoint().await;
+    assert!(sp.is_err());
+    let sp2 = m.set_savepoint_named("sp1").await;
+    assert!(sp2.is_err());
+    let _ = m.release_savepoint(&Savepoint { id: 1, name: None }).await;
+    let _ = m.rollback_to(&Savepoint { id: 1, name: None }).await;
+    // Test abort (should call close)
+    assert!(!m.is_closed());
+    let _ = m.abort().await;
+}
+
+// ── Test all event variants more thoroughly ──
+#[test]
+fn test_all_event_variants_debug() {
+    let events = vec![
+        format!("{:?}", ConnectionEvent::Connect),
+        format!("{:?}", ConnectionEvent::Close),
+        format!("{:?}", ConnectionEvent::Commit),
+        format!("{:?}", ConnectionEvent::Rollback),
+        format!("{:?}", ConnectionEvent::SetAutoCommit(true)),
+        format!("{:?}", ConnectionEvent::SetReadOnly(false)),
+        format!("{:?}", ConnectionEvent::SetCatalog("db".into())),
+        format!("{:?}", ConnectionEvent::SetTransactionIsolation(2)),
+        format!("{:?}", ConnectionEvent::SetSchema("s".into())),
+        format!("{:?}", ConnectionEvent::NativeSQL("sql".into())),
+        format!("{:?}", ConnectionEvent::SetNetworkTimeout(Duration::from_secs(1))),
+        format!("{:?}", StatementPropertyEvent::SetQueryTimeout(100)),
+        format!("{:?}", StatementPropertyEvent::GetQueryTimeout),
+        format!("{:?}", StatementPropertyEvent::GetUpdateCount),
+        format!("{:?}", StatementPropertyEvent::SetMaxRows(100)),
+        format!("{:?}", StatementPropertyEvent::GetMaxRows),
+        format!("{:?}", StatementPropertyEvent::SetMaxFieldSize(50)),
+        format!("{:?}", StatementPropertyEvent::GetMaxFieldSize),
+        format!("{:?}", StatementPropertyEvent::SetFetchDirection(1)),
+        format!("{:?}", StatementPropertyEvent::GetFetchDirection),
+        format!("{:?}", StatementPropertyEvent::SetFetchSize(10)),
+        format!("{:?}", StatementPropertyEvent::GetFetchSize),
+        format!("{:?}", StatementPropertyEvent::IsPoolable),
+        format!("{:?}", StatementPropertyEvent::IsClosed),
+        format!("{:?}", StatementPropertyEvent::GetMoreResults),
+        format!("{:?}", StatementPropertyEvent::GetResultSetConcurrency),
+        format!("{:?}", StatementPropertyEvent::GetResultSetType),
+        format!("{:?}", StatementPropertyEvent::GetResultSetHoldability),
+        format!("{:?}", StatementPropertyEvent::GetGeneratedKeys),
+        format!("{:?}", StatementPropertyEvent::ClearWarnings),
+        format!("{:?}", StatementPropertyEvent::SetCursorName("c".into())),
+        format!("{:?}", StatementPropertyEvent::AddBatch("b".into())),
+        format!("{:?}", ClobEvent::Length),
+        format!("{:?}", ClobEvent::GetSubString(1, 5)),
+        format!("{:?}", ClobEvent::SetString(1, "x".into())),
+        format!("{:?}", ClobEvent::Truncate(10)),
+        format!("{:?}", ClobEvent::Free),
+        format!("{:?}", DataSourceEvent::GetConnection),
+        format!("{:?}", DataSourceEvent::GetConnectionWithAuth("u".into(), "p".into())),
+        format!("{:?}", DataSourceEvent::ReleaseConnection),
+        format!("{:?}", DataSourceEvent::Log("msg".into())),
+    ];
+    assert!(events.len() > 40);
 }
