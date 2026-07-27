@@ -1,10 +1,28 @@
-//! PLANNED_BLOCKED: sqlx-deadpool dependency deferred to V2. See ADR-001.
-#![allow(dead_code)]
+//! 对应 Java 类：DruidDataSource（sqlx-deadpool adapter）
+//! 来源文件：core/src/main/java/com/alibaba/druid/pool/DruidDataSource.java
+//!
+//! sqlx + deadpool 连接适配器。
 
-pub struct SqlxDeadpoolAdapter { _placeholder: () }
-impl SqlxDeadpoolAdapter {
-    pub fn new() -> Self { Self { _placeholder: () } }
+use druid_core::{Connection, ConnectionFactory, DruidError};
+
+/// sqlx-deadpool 连接适配器。
+pub struct SqlxDeadpoolAdapter {
+    url: String,
 }
-impl Default for SqlxDeadpoolAdapter {
-    fn default() -> Self { Self::new() }
+
+impl SqlxDeadpoolAdapter {
+    pub fn new(url: impl Into<String>) -> Self {
+        Self { url: url.into() }
+    }
+}
+
+#[async_trait::async_trait]
+impl ConnectionFactory for SqlxDeadpoolAdapter {
+    async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+        Err(DruidError::DriverError("sqlx-deadpool adapter: connection creation not yet implemented".into()))
+    }
+
+    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+        conn.ping().await
+    }
 }

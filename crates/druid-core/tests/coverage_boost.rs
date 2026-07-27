@@ -677,3 +677,41 @@ fn test_all_event_variants_debug() {
     ];
     assert!(events.len() > 40);
 }
+
+// ── Call Connection trait default methods on SparseConnExt ──
+#[tokio::test]
+async fn test_connection_default_methods_via_sparse() {
+    let mut c = SparseConnExt;
+    // rollback_to (default impl returns Err)
+    let sp = Savepoint { id: 1, name: None };
+    let result = c.rollback_to(&sp).await;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not supported"));
+
+    // set_savepoint (default impl returns Err)
+    let result = c.set_savepoint().await;
+    assert!(result.is_err());
+
+    // set_savepoint_named (default impl returns Err)
+    let result = c.set_savepoint_named("sp1").await;
+    assert!(result.is_err());
+
+    // release_savepoint (default impl returns Err)
+    let result = c.release_savepoint(&sp).await;
+    assert!(result.is_err());
+
+    // abort (default impl calls close)
+    assert!(!c.is_closed());
+    let _ = c.abort().await;
+}
+
+// ── Call Connection default methods on another mock ──
+#[tokio::test]
+async fn test_connection_default_methods_on_mock_conn() {
+    let mut c = MockConnForExt;
+    let sp = Savepoint { id: 1, name: Some("sp1".into()) };
+    let _ = c.rollback_to(&sp).await;
+    let _ = c.set_savepoint().await;
+    let _ = c.set_savepoint_named("sp2").await;
+    let _ = c.release_savepoint(&sp).await;
+}
