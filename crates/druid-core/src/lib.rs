@@ -24,14 +24,15 @@ pub mod wrapper;
 
 pub use config::{PoolConfig, PoolConfigBuilder};
 pub use connection::{Connection, ExecResult, Row};
+pub use connection::{ConnState, Savepoint, StatementType, MetaData, ConnectionExt};
 pub use connection_factory::ConnectionFactory;
 pub use connection_holder::{ConnectionHolder, ConnectionState};
-pub use connection::{ConnState, Savepoint};
 pub use driver::Driver;
 pub use error::DruidError;
 pub use exception_sorter::{ExceptionSorter, MySqlExceptionSorter, NullExceptionSorter, PgExceptionSorter};
 pub use filter::{AfterFilter, BeforeFilter, ExecContext};
 pub use filter::{ConnectionEvent, StatementEvent, ResultSetEvent};
+pub use filter::{StatementPropertyEvent, ClobEvent, DataSourceEvent, ExtendedFilter};
 pub use filter_chain::FilterChain;
 pub use pool::Pool;
 pub use pool_state::PoolState;

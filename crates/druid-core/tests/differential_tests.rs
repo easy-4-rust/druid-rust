@@ -604,3 +604,302 @@ async fn test_after_filter_connection_close() {
     let f = MockAfter;
     f.after_connection_close().await;
 }
+
+// ── ConnectionExt trait tests (V2+ JDBC methods) ──
+
+use druid_core::*;
+
+/// Test MetaData struct creation and fields.
+#[test]
+fn test_metadata_defaults() {
+    let m = MetaData::default();
+    assert!(m.database_product_name.is_empty());
+    assert!(m.database_product_version.is_empty());
+    assert!(m.driver_name.is_empty());
+    assert_eq!(m.driver_major_version, 0);
+    assert_eq!(m.driver_minor_version, 0);
+}
+
+#[test]
+fn test_metadata_fields() {
+    let m = MetaData {
+        database_product_name: "PostgreSQL".into(),
+        database_product_version: "15.0".into(),
+        driver_name: "druid-rust-pg".into(),
+        driver_version: "0.1.0".into(),
+        driver_major_version: 0,
+        driver_minor_version: 1,
+    };
+    assert_eq!(m.database_product_name, "PostgreSQL");
+    assert_eq!(m.driver_major_version, 0);
+}
+
+/// Test StatementType enum.
+#[test]
+fn test_statement_type_variants() {
+    let s = StatementType::Statement;
+    assert!(matches!(s, StatementType::Statement));
+
+    let s = StatementType::PreparedStatement("SELECT 1".into());
+    assert!(matches!(s, StatementType::PreparedStatement(_)));
+
+    let s = StatementType::CallableStatement("call sp()".into());
+    assert!(matches!(s, StatementType::CallableStatement(_)));
+}
+
+/// Test ConnectionExt default methods (all return Err or default).
+#[tokio::test]
+async fn test_connection_ext_defaults() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    }
+    #[async_trait::async_trait]
+    impl ConnectionExt for MockConn {
+        async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> {
+            Err(DruidError::Other("not implemented".into()))
+        }
+        async fn prepare_statement(&mut self, sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+            let _ = sql;
+            Err(DruidError::Other("not implemented".into()))
+        }
+        async fn prepare_call(&mut self, sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+            let _ = sql;
+            Err(DruidError::Other("not implemented".into()))
+        }
+        async fn native_sql(&self, sql: &str) -> Result<String, DruidError> { Ok(sql.to_string()) }
+        async fn clear_warnings(&mut self) -> Result<(), DruidError> { Ok(()) }
+        fn get_meta_data(&self) -> Option<&MetaData> { None }
+        fn get_database_product_name(&self) -> Option<&str> { None }
+        fn get_driver_major_version(&self) -> i32 { 0 }
+        fn get_driver_minor_version(&self) -> i32 { 0 }
+        fn get_holdability(&self) -> i32 { 1 }
+        async fn set_holdability(&mut self, _: i32) -> Result<(), DruidError> { Ok(()) }
+        async fn set_client_info(&mut self, _: &str, _: &str) -> Result<(), DruidError> { Ok(()) }
+        fn get_client_info(&self, _: &str) -> Option<String> { None }
+        async fn set_network_timeout(&mut self, _: std::time::Duration) -> Result<(), DruidError> { Ok(()) }
+        fn get_network_timeout(&self) -> i32 { 0 }
+        fn get_type_map(&self) -> Option<std::collections::HashMap<String, String>> { None }
+        async fn set_type_map(&mut self, _: std::collections::HashMap<String, String>) -> Result<(), DruidError> { Ok(()) }
+    }
+    let mut c = MockConn;
+
+    // Test all default methods
+    assert!(c.create_statement().await.is_err());
+    assert!(c.prepare_statement("SELECT 1").await.is_err());
+    assert!(c.prepare_call("call sp()").await.is_err());
+    assert!(c.get_meta_data().is_none());
+    assert!(c.get_database_product_name().is_none());
+    assert_eq!(c.get_driver_major_version(), 0);
+    assert_eq!(c.get_driver_minor_version(), 0);
+    assert_eq!(c.get_holdability(), 1);
+    c.set_holdability(1).await.unwrap();
+    c.set_client_info("key", "val").await.unwrap();
+    assert!(c.get_client_info("key").is_none());
+    c.clear_warnings().await.unwrap();
+    assert_eq!(c.native_sql("SELECT 1").await.unwrap(), "SELECT 1");
+    c.set_network_timeout(std::time::Duration::from_secs(10)).await.unwrap();
+    assert_eq!(c.get_network_timeout(), 0);
+    assert!(c.get_type_map().is_none());
+    c.set_type_map(std::collections::HashMap::new()).await.unwrap();
+}
+
+/// Test ConnectionExt with real implementation.
+#[tokio::test]
+async fn test_connection_ext_with_metadata() {
+    struct RealConn { meta: MetaData }
+    #[async_trait::async_trait]
+    impl Connection for RealConn {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    }
+    #[async_trait::async_trait]
+    impl ConnectionExt for RealConn {
+        async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> { Err(DruidError::Other("n/a".into())) }
+        async fn prepare_statement(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> { Err(DruidError::Other("n/a".into())) }
+        async fn prepare_call(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> { Err(DruidError::Other("n/a".into())) }
+        async fn native_sql(&self, sql: &str) -> Result<String, DruidError> { Ok(sql.to_string()) }
+        async fn clear_warnings(&mut self) -> Result<(), DruidError> { Ok(()) }
+        fn get_meta_data(&self) -> Option<&MetaData> { Some(&self.meta) }
+        fn get_database_product_name(&self) -> Option<&str> { Some(&self.meta.database_product_name) }
+        fn get_driver_major_version(&self) -> i32 { self.meta.driver_major_version }
+        fn get_holdability(&self) -> i32 { 1 }
+        async fn set_holdability(&mut self, _: i32) -> Result<(), DruidError> { Ok(()) }
+        async fn set_client_info(&mut self, _: &str, _: &str) -> Result<(), DruidError> { Ok(()) }
+        fn get_client_info(&self, _: &str) -> Option<String> { None }
+        async fn set_network_timeout(&mut self, _: std::time::Duration) -> Result<(), DruidError> { Ok(()) }
+        fn get_network_timeout(&self) -> i32 { 0 }
+        fn get_type_map(&self) -> Option<std::collections::HashMap<String, String>> { None }
+        async fn set_type_map(&mut self, _: std::collections::HashMap<String, String>) -> Result<(), DruidError> { Ok(()) }
+    }
+
+    let mut c = RealConn {
+        meta: MetaData {
+            database_product_name: "PostgreSQL".into(),
+            driver_major_version: 0,
+            ..MetaData::default()
+        },
+    };
+    assert!(c.get_meta_data().is_some());
+    assert_eq!(c.get_database_product_name(), Some("PostgreSQL"));
+    assert_eq!(c.get_driver_major_version(), 0);
+}
+
+// ── ExtendedFilter tests ──
+
+/// ExtendedFilter default hooks pass through.
+#[tokio::test]
+async fn test_extended_filter_default_hooks() {
+    struct NoopExtended;
+    #[async_trait::async_trait]
+    impl ExtendedFilter for NoopExtended {
+        async fn on_statement_property_event(&self, _: &StatementPropertyEvent) -> Result<(), DruidError> { Ok(()) }
+        async fn on_clob_event(&self, _: &ClobEvent) -> Result<(), DruidError> { Ok(()) }
+        async fn on_datasource_event(&self, _: &DataSourceEvent) -> Result<(), DruidError> { Ok(()) }
+    }
+    let f = NoopExtended;
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetQueryTimeout).await.is_ok());
+    assert!(f.on_clob_event(&ClobEvent::Length).await.is_ok());
+    assert!(f.on_datasource_event(&DataSourceEvent::GetConnection).await.is_ok());
+    assert!(!f.is_wrapper_for("anything"));
+}
+
+/// ExtendedFilter with real implementations.
+#[tokio::test]
+async fn test_extended_filter_real_impl() {
+    struct StatsFilter {
+        query_count: AtomicUsize,
+        clob_length_count: AtomicUsize,
+        get_connection_count: AtomicUsize,
+    }
+    #[async_trait::async_trait]
+    impl ExtendedFilter for StatsFilter {
+        async fn on_statement_property_event(&self, event: &StatementPropertyEvent) -> Result<(), DruidError> {
+            match event {
+                StatementPropertyEvent::GetQueryTimeout => {
+                    self.query_count.fetch_add(1, Ordering::Relaxed);
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+        async fn on_clob_event(&self, event: &ClobEvent) -> Result<(), DruidError> {
+            match event {
+                ClobEvent::Length => {
+                    self.clob_length_count.fetch_add(1, Ordering::Relaxed);
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+        async fn on_datasource_event(&self, event: &DataSourceEvent) -> Result<(), DruidError> {
+            match event {
+                DataSourceEvent::GetConnection => {
+                    self.get_connection_count.fetch_add(1, Ordering::Relaxed);
+                }
+                _ => {}
+            }
+            Ok(())
+        }
+    }
+
+    let f = StatsFilter {
+        query_count: AtomicUsize::new(0),
+        clob_length_count: AtomicUsize::new(0),
+        get_connection_count: AtomicUsize::new(0),
+    };
+    f.on_statement_property_event(&StatementPropertyEvent::GetQueryTimeout).await.unwrap();
+    f.on_statement_property_event(&StatementPropertyEvent::SetQueryTimeout(100)).await.unwrap();
+    f.on_clob_event(&ClobEvent::Length).await.unwrap();
+    f.on_datasource_event(&DataSourceEvent::GetConnection).await.unwrap();
+    f.on_datasource_event(&DataSourceEvent::ReleaseConnection).await.unwrap();
+    assert_eq!(f.query_count.load(Ordering::Relaxed), 1);
+    assert_eq!(f.clob_length_count.load(Ordering::Relaxed), 1);
+    assert_eq!(f.get_connection_count.load(Ordering::Relaxed), 1);
+}
+
+/// StatementPropertyEvent Display/debug.
+#[test]
+fn test_statement_property_event_debug() {
+    let e = StatementPropertyEvent::SetQueryTimeout(1000);
+    assert!(format!("{:?}", e).contains("SetQueryTimeout"));
+
+    let e = StatementPropertyEvent::GetQueryTimeout;
+    assert!(format!("{:?}", e).contains("GetQueryTimeout"));
+
+    let e = StatementPropertyEvent::AddBatch("batch".into());
+    assert!(format!("{:?}", e).contains("AddBatch"));
+}
+
+/// ClobEvent variants.
+#[test]
+fn test_clob_event_variants() {
+    let e = ClobEvent::Length;
+    assert!(matches!(e, ClobEvent::Length));
+    let e = ClobEvent::GetSubString(1, 10);
+    assert!(matches!(e, ClobEvent::GetSubString(_, _)));
+    let e = ClobEvent::SetString(1, "hello".into());
+    assert!(matches!(e, ClobEvent::SetString(_, _)));
+    let e = ClobEvent::Truncate(100);
+    assert!(matches!(e, ClobEvent::Truncate(_)));
+    let e = ClobEvent::Free;
+    assert!(matches!(e, ClobEvent::Free));
+}
+
+/// DataSourceEvent variants.
+#[test]
+fn test_datasource_event_variants() {
+    let e = DataSourceEvent::GetConnection;
+    assert!(matches!(e, DataSourceEvent::GetConnection));
+    let e = DataSourceEvent::GetConnectionWithAuth("user".into(), "pass".into());
+    assert!(matches!(e, DataSourceEvent::GetConnectionWithAuth(_, _)));
+    let e = DataSourceEvent::ReleaseConnection;
+    assert!(matches!(e, DataSourceEvent::ReleaseConnection));
+    let e = DataSourceEvent::Log("test".into());
+    assert!(matches!(e, DataSourceEvent::Log(_)));
+}
+
+/// StatementPropertyEvent all variants.
+#[test]
+fn test_statement_property_all_variants() {
+    let events = vec![
+        StatementPropertyEvent::SetQueryTimeout(100),
+        StatementPropertyEvent::GetQueryTimeout,
+        StatementPropertyEvent::GetUpdateCount,
+        StatementPropertyEvent::SetMaxRows(1000),
+        StatementPropertyEvent::GetMaxRows,
+        StatementPropertyEvent::SetMaxFieldSize(256),
+        StatementPropertyEvent::GetMaxFieldSize,
+        StatementPropertyEvent::SetFetchDirection(1002),
+        StatementPropertyEvent::GetFetchDirection,
+        StatementPropertyEvent::SetFetchSize(10),
+        StatementPropertyEvent::GetFetchSize,
+        StatementPropertyEvent::IsPoolable,
+        StatementPropertyEvent::IsClosed,
+        StatementPropertyEvent::GetMoreResults,
+        StatementPropertyEvent::GetResultSetConcurrency,
+        StatementPropertyEvent::GetResultSetType,
+        StatementPropertyEvent::GetResultSetHoldability,
+        StatementPropertyEvent::GetGeneratedKeys,
+        StatementPropertyEvent::ClearWarnings,
+        StatementPropertyEvent::SetCursorName("c1".into()),
+        StatementPropertyEvent::AddBatch("batch".into()),
+    ];
+    // All should format without panicking
+    for e in &events {
+        let _ = format!("{:?}", e);
+    }
+    assert_eq!(events.len(), 21);
+}

@@ -5,6 +5,7 @@
 
 use crate::error::DruidError;
 use crate::value::Value;
+use std::time::Duration;
 
 /// 执行结果，对应 Druid Java 的 Statement 执行返回值。
 #[derive(Debug, Clone, Default)]
@@ -173,4 +174,107 @@ pub trait Connection: Send + Sync {
     // ── 驱动信息 ────────────────────────────────────────────────
     /// 返回驱动名称（如 "postgres"、"mysql"）。
     fn driver_name(&self) -> &str { "" }
+}
+
+// ── 扩展方法（V2+ 阶段）───────────────────────────────────────
+
+/// Statement 类型，替代 JDBC Statement/PreparedStatement/CallableStatement。
+///
+/// DruidJava 中 Statement/PreparedStatement/CallableStatement 是独立类型，
+/// Rust 中合并为一个 trait，通过 variant 区分。
+#[derive(Debug, Clone)]
+pub enum StatementType {
+    /// Statement（对应 Connection.createStatement()）
+    Statement,
+    /// PreparedStatement（对应 Connection.prepareStatement(sql)）
+    PreparedStatement(String),
+    /// CallableStatement（对应 Connection.prepareCall(sql)）
+    CallableStatement(String),
+}
+
+/// 数据源元数据（简化版，对应 DatabaseMetaData）。
+#[derive(Debug, Clone, Default)]
+pub struct MetaData {
+    /// 数据库产品名称
+    pub database_product_name: String,
+    /// 数据库版本
+    pub database_product_version: String,
+    /// 驱动名称
+    pub driver_name: String,
+    /// 驱动版本
+    pub driver_version: String,
+    /// 驱动主版本号
+    pub driver_major_version: i32,
+    /// 驱动次版本号
+    pub driver_minor_version: i32,
+}
+
+/// 扩展连接方法（V2+ 实现）。
+///
+/// 这些方法对应 DruidJava Connection 中的 Statement 创建和元数据查询。
+/// 在 V1 阶段提供默认实现，V2 由适配器完善。
+#[async_trait::async_trait]
+pub trait ConnectionExt: Connection {
+    /// 创建 Statement（对应 Connection.createStatement()）。
+    async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> {
+        // 默认实现：返回自身引用（非真正 Statement）
+        Err(DruidError::Other("createStatement not implemented".into()))
+    }
+
+    /// 创建 PreparedStatement（对应 Connection.prepareStatement(sql)）。
+    async fn prepare_statement(&mut self, sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+        let _ = sql;
+        Err(DruidError::Other("prepareStatement not implemented".into()))
+    }
+
+    /// 创建 CallableStatement（对应 Connection.prepareCall(sql)）。
+    async fn prepare_call(&mut self, sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+        let _ = sql;
+        Err(DruidError::Other("prepareCall not implemented".into()))
+    }
+
+    /// 获取元数据（对应 Connection.getMetaData()）。
+    fn get_meta_data(&self) -> Option<&MetaData> { None }
+
+    /// 获取数据库产品名称（对应 Connection.getDatabaseProductName()）。
+    fn get_database_product_name(&self) -> Option<&str> { None }
+
+    /// 获取数据库版本（对应 Connection.getDatabaseProductVersion()）。
+    fn get_database_product_version(&self) -> Option<&str> { None }
+
+    /// 获取驱动主版本号（对应 Connection.getDriverMajorVersion()）。
+    fn get_driver_major_version(&self) -> i32 { 0 }
+
+    /// 获取驱动次版本号（对应 Connection.getDriverMinorVersion()）。
+    fn get_driver_minor_version(&self) -> i32 { 0 }
+
+    /// 获取保持性（对应 Connection.getHoldability()）。
+    fn get_holdability(&self) -> i32 { 1 } // HOLD_CURSORS_OVER_COMMIT
+
+    /// 设置保持性（对应 Connection.setHoldability(int)）。
+    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), DruidError> { Ok(()) }
+
+    /// 设置客户端信息（对应 Connection.setClientInfo(String, String)）。
+    async fn set_client_info(&mut self, _name: &str, _value: &str) -> Result<(), DruidError> { Ok(()) }
+
+    /// 获取客户端信息（对应 Connection.getClientInfo(String)）。
+    fn get_client_info(&self, _name: &str) -> Option<String> { None }
+
+    /// 清除警告（对应 Connection.clearWarnings()）。
+    async fn clear_warnings(&mut self) -> Result<(), DruidError> { Ok(()) }
+
+    /// 原生 SQL（对应 Connection.nativeSQL(String)）。
+    async fn native_sql(&self, sql: &str) -> Result<String, DruidError> { Ok(sql.to_string()) }
+
+    /// 设置网络超时（对应 Connection.setNetworkTimeout(Executor, int)）。
+    async fn set_network_timeout(&mut self, _timeout: Duration) -> Result<(), DruidError> { Ok(()) }
+
+    /// 获取网络超时（对应 Connection.getNetworkTimeout()）。
+    fn get_network_timeout(&self) -> i32 { 0 }
+
+    /// 获取类型映射（对应 Connection.getTypeMap()）。
+    fn get_type_map(&self) -> Option<std::collections::HashMap<String, String>> { None }
+
+    /// 设置类型映射（对应 Connection.setTypeMap(Map)）。
+    async fn set_type_map(&mut self, _map: std::collections::HashMap<String, String>) -> Result<(), DruidError> { Ok(()) }
 }

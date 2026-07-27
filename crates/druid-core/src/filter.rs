@@ -170,3 +170,110 @@ pub trait AfterFilter: Send + Sync {
     /// 连接关闭后置（对应 Filter.connection_close after）。
     async fn after_connection_close(&self) {}
 }
+
+// ── 扩展事件枚举（V2+ 阶段）────────────────────────────────────
+
+/// Statement 属性查询/设置事件，对应 DruidJava 的 statement_set* / statement_get* hook。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatementPropertyEvent {
+    /// 设置查询超时（对应 statement_setQueryTimeout）
+    SetQueryTimeout(i32),
+    /// 获取查询超时（对应 statement_getQueryTimeout）
+    GetQueryTimeout,
+    /// 获取更新计数（对应 statement_getUpdateCount）
+    GetUpdateCount,
+    /// 设置最大行数（对应 statement_setMaxRows）
+    SetMaxRows(i32),
+    /// 获取最大行数（对应 statement_getMaxRows）
+    GetMaxRows,
+    /// 设置最大字段大小（对应 statement_setMaxFieldSize）
+    SetMaxFieldSize(i32),
+    /// 获取最大字段大小（对应 statement_getMaxFieldSize）
+    GetMaxFieldSize,
+    /// 设置获取方向（对应 statement_setFetchDirection）
+    SetFetchDirection(i32),
+    /// 获取获取方向（对应 statement_getFetchDirection）
+    GetFetchDirection,
+    /// 设置获取大小（对应 statement_setFetchSize）
+    SetFetchSize(i32),
+    /// 获取获取大小（对应 statement_getFetchSize）
+    GetFetchSize,
+    /// 检查是否池化（对应 statement_isPoolable）
+    IsPoolable,
+    /// 检查是否关闭（对应 statement_isClosed）
+    IsClosed,
+    /// 获取更多结果（对应 statement_getMoreResults）
+    GetMoreResults,
+    /// 获取结果集并发性（对应 statement_getResultSetConcurrency）
+    GetResultSetConcurrency,
+    /// 获取结果集类型（对应 statement_getResultSetType）
+    GetResultSetType,
+    /// 获取结果集保持性（对应 statement_getResultSetHoldability）
+    GetResultSetHoldability,
+    /// 获取生成的键（对应 statement_getGeneratedKeys）
+    GetGeneratedKeys,
+    /// 清除警告（对应 statement_clearWarnings）
+    ClearWarnings,
+    /// 重命名结果集（对应 statement_setCursorName）
+    SetCursorName(String),
+    /// 添加批次（对应 statement_addBatch）
+    AddBatch(String),
+}
+
+/// Clob 事件，对应 DruidJava 的 clob_* hook。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClobEvent {
+    /// 获取长度（对应 clob_length）
+    Length,
+    /// 获取子串（对应 clob_getSubString）
+    GetSubString(i64, i32),
+    /// 设置字符串（对应 clob_setString）
+    SetString(i64, String),
+    /// 截断（对应 clob_truncate）
+    Truncate(i64),
+    /// 释放（对应 clob_free）
+    Free,
+}
+
+/// DataSource 级别事件，对应 DruidJava 的 dataSource_* hook。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DataSourceEvent {
+    /// 获取连接（对应 dataSource_getConnection）
+    GetConnection,
+    /// 获取连接带认证（对应 dataSource_getConnection(user, pass)）
+    GetConnectionWithAuth(String, String),
+    /// 释放连接（对应 dataSource_releaseConnection）
+    ReleaseConnection,
+    /// 日志记录（对应 dataSource_log）
+    Log(String),
+}
+
+// ── 扩展 BeforeFilter（V2+ 阶段）────────────────────────────
+
+/// 扩展 Filter hook（V2+ 阶段），覆盖 DruidJava 的全部 384 个 hook 中的
+/// statement 属性、clob 和 dataSource 级别事件。
+#[async_trait::async_trait]
+pub trait ExtendedFilter: Send + Sync {
+    /// Statement 属性事件。
+    async fn on_statement_property_event(&self, _event: &StatementPropertyEvent) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// Clob 事件。
+    async fn on_clob_event(&self, _event: &ClobEvent) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// DataSource 级别事件。
+    async fn on_datasource_event(&self, _event: &DataSourceEvent) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// 过滤器配置（对应 Filter.configFromProperties）。
+    async fn config_from_properties(&mut self, _properties: &std::collections::HashMap<String, String>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// 过滤器是否匹配给定接口（对应 Filter.isWrapperFor）。
+    fn is_wrapper_for(&self, _type_name: &str) -> bool { false }
+}
