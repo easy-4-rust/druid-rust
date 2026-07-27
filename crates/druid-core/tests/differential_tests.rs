@@ -210,3 +210,155 @@ fn test_row_ops() {
     assert_eq!(r.get(0), Some(&Value::Int(1)));
     assert!(r.get(2).is_none());
 }
+
+// ── Driver trait test ──
+#[tokio::test]
+async fn test_driver_connect() {
+    struct MockDriver;
+    #[async_trait::async_trait]
+    impl druid_core::Driver for MockDriver {
+        fn name(&self) -> &str { "test-db" }
+        async fn connect(&self, url: &str) -> Result<Box<dyn druid_core::Connection>, druid_core::DruidError> {
+            struct MockConn;
+            #[async_trait::async_trait]
+            impl druid_core::Connection for MockConn {
+                async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+                async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+                async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+                async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+            }
+            Ok(Box::new(MockConn))
+        }
+    }
+    let driver = MockDriver;
+    assert_eq!(driver.name(), "test-db");
+    let mut conn = driver.connect("postgres://localhost").await.unwrap();
+    conn.ping().await.unwrap();
+}
+
+// ── ValidConnectionChecker test ──
+#[tokio::test]
+async fn test_ping_connection_checker() {
+    struct MockConn;
+    #[async_trait::async_trait]
+    impl druid_core::Connection for MockConn {
+        async fn exec(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<druid_core::ExecResult, druid_core::DruidError> { Ok(druid_core::ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<druid_core::Value>) -> Result<Vec<druid_core::Row>, druid_core::DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
+    }
+    let checker = druid_core::PingConnectionChecker;
+    let mut conn = Box::new(MockConn) as Box<dyn druid_core::Connection>;
+    assert!(checker.is_valid(&mut conn).await);
+}
+
+// ── Error Display + From tests ──
+#[test]
+fn test_error_display_variants() {
+    assert_eq!(format!("{}", druid_core::DruidError::PoolClosed), "connection pool is closed");
+    assert_eq!(format!("{}", druid_core::DruidError::AcquireTimeout), "acquire connection timed out");
+    assert_eq!(format!("{}", druid_core::DruidError::PoolExhausted), "connection pool exhausted");
+    assert!(format!("{}", druid_core::DruidError::ValidationFailed("x".into())).contains("x"));
+    assert!(format!("{}", druid_core::DruidError::ConnectionLeaked { id: 1, held_for: std::time::Duration::from_secs(10) }).contains("1"));
+    assert!(format!("{}", druid_core::DruidError::ConnectionDiscarded).contains("discarded"));
+    assert!(format!("{}", druid_core::DruidError::DriverError("x".into())).contains("x"));
+    assert!(format!("{}", druid_core::DruidError::SqlParseError("x".into())).contains("x"));
+    assert!(format!("{}", druid_core::DruidError::WallViolation("x".into())).contains("x"));
+    assert!(format!("{}", druid_core::DruidError::DataSourceNotFound("x".into())).contains("x"));
+    assert!(format!("{}", druid_core::DruidError::Other("x".into())).contains("x"));
+}
+
+#[test]
+fn test_error_from_string() {
+    let e: druid_core::DruidError = "test".into();
+    assert!(matches!(e, druid_core::DruidError::Other(_)));
+    let e2: druid_core::DruidError = String::from("test2").into();
+    assert!(matches!(e2, druid_core::DruidError::Other(_)));
+}
+
+#[test]
+fn test_error_source() {
+    let e = druid_core::DruidError::Other("x".into());
+    assert!(std::error::Error::source(&e).is_none());
+}
+
+// ── PoolConfig Builder thorough test ──
+#[test]
+fn test_pool_config_builder_all_fields() {
+    let c = PoolConfig::builder()
+        .name("test")
+        .url("postgres://localhost")
+        .driver_name("postgres")
+        .username("user")
+        .password("pass")
+        .max_open(20)
+        .min_idle(5)
+        .initial_size(10)
+        .acquire_timeout(std::time::Duration::from_secs(10))
+        .max_lifetime(std::time::Duration::from_secs(600))
+        .eviction_interval(std::time::Duration::from_secs(30))
+        .min_evictable_idle(std::time::Duration::from_secs(60))
+        .test_on_borrow(true)
+        .test_on_return(true)
+        .validation_query("SELECT 1")
+        .keep_alive(true)
+        .leak_detection(true)
+        .leak_threshold(std::time::Duration::from_secs(60))
+        .pool_prepared_statements(true)
+        .default_auto_commit(false)
+        .break_after_acquire_failure(true)
+        .connection_error_retry_attempts(3)
+        .async_close_connection(true)
+        .slow_sql_threshold(std::time::Duration::from_millis(500))
+        .build();
+    assert_eq!(c.name, "test");
+    assert_eq!(c.url, "postgres://localhost");
+    assert_eq!(c.driver_name, "postgres");
+    assert_eq!(c.max_open, 20);
+    assert_eq!(c.min_idle, 5);
+    assert_eq!(c.initial_size, 10);
+    assert!(c.test_on_borrow);
+    assert!(c.test_on_return);
+    assert!(c.validation_query.is_some());
+    assert!(c.keep_alive);
+    assert!(c.leak_detection);
+    assert!(c.pool_prepared_statements);
+    assert_eq!(c.default_auto_commit, Some(false));
+    assert!(c.break_after_acquire_failure);
+    assert_eq!(c.connection_error_retry_attempts, 3);
+    assert!(c.async_close_connection);
+}
+
+// ── Value From impls ──
+#[test]
+fn test_value_from_conversions() {
+    let v: druid_core::Value = true.into();
+    assert_eq!(v, druid_core::Value::Bool(true));
+    let v: druid_core::Value = 42i64.into();
+    assert_eq!(v, druid_core::Value::Int(42));
+    let v: druid_core::Value = 42i32.into();
+    assert_eq!(v, druid_core::Value::Int(42));
+    let v: druid_core::Value = 3.14f64.into();
+    assert_eq!(v, druid_core::Value::Float(3.14));
+    let v: druid_core::Value = String::from("hi").into();
+    assert_eq!(v, druid_core::Value::String("hi".into()));
+    let v: druid_core::Value = "hi".into();
+    assert_eq!(v, druid_core::Value::String("hi".into()));
+    let v: druid_core::Value = vec![1u8, 2u8].into();
+    assert_eq!(v, druid_core::Value::Bytes(vec![1, 2]));
+}
+
+// ── Row extended tests ──
+#[test]
+fn test_row_empty() {
+    let r = druid_core::Row::new(vec![]);
+    assert!(r.is_empty());
+    assert_eq!(r.len(), 0);
+    assert!(r.get(0).is_none());
+}
