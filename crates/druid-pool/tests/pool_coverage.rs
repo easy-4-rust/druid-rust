@@ -530,6 +530,22 @@ async fn test_pool_connection_before_execute_error() {
     assert!(matches!(result.unwrap_err(), DruidError::WallViolation(_)));
 }
 
+// ══════════════════════════════════════════════════════════════════
+// 11. DruidPoolConnection: Drop after take (branch ^0 on line 72)
+// ══════════════════════════════════════════════════════════════════
+
+#[tokio::test]
+async fn test_pool_connection_drop_after_take() {
+    let pool = build_pool(2, 2).await;
+    let conn = pool.get().await.unwrap();
+    // into_core takes the connection, leaving conn=None
+    let core = conn.into_core();
+    assert!(core.id() > 0);
+    // The original DruidPoolConnection was consumed by into_core,
+    // so Drop won't find conn. This tests the false branch of
+    // `if let Some(conn) = self.conn.take()` in Drop.
+}
+
 #[tokio::test]
 async fn test_pool_get_timeout_notify_fires() {
     // Tests the Ok(_) => continue branch in get_timeout
