@@ -1068,3 +1068,172 @@ impl druid_core::Connection for MockConnForPool {
     async fn close(&mut self) -> Result<(), druid_core::DruidError> { Ok(()) }
     fn driver_name(&self) -> &str { "mock" }
 }
+
+// ── ConnectionExt default method coverage (targeting all 12 methods) ──
+
+use druid_core::*;
+
+#[tokio::test]
+async fn test_connection_ext_set_holdability_default() {
+    struct M; #[async_trait::async_trait]
+    impl Connection for M {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
+        async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+        async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    }
+    #[async_trait::async_trait]
+    impl ConnectionExt for M {
+        async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> { Err(DruidError::Other("n/a".into())) }
+        async fn prepare_statement(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> { Err(DruidError::Other("n/a".into())) }
+        async fn prepare_call(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> { Err(DruidError::Other("n/a".into())) }
+        async fn native_sql(&self, sql: &str) -> Result<String, DruidError> { Ok(sql.to_string()) }
+        async fn clear_warnings(&mut self) -> Result<(), DruidError> { Ok(()) }
+        fn get_meta_data(&self) -> Option<&MetaData> { None }
+        fn get_database_product_name(&self) -> Option<&str> { None }
+        fn get_database_product_version(&self) -> Option<&str> { None }
+        fn get_driver_major_version(&self) -> i32 { 0 }
+        fn get_driver_minor_version(&self) -> i32 { 0 }
+        fn get_holdability(&self) -> i32 { 1 }
+        async fn set_holdability(&mut self, _: i32) -> Result<(), DruidError> { Ok(()) }
+        async fn set_client_info(&mut self, _: &str, _: &str) -> Result<(), DruidError> { Ok(()) }
+        fn get_client_info(&self, _: &str) -> Option<String> { None }
+        async fn set_network_timeout(&mut self, _: std::time::Duration) -> Result<(), DruidError> { Ok(()) }
+        fn get_network_timeout(&self) -> i32 { 0 }
+        fn get_type_map(&self) -> Option<std::collections::HashMap<String, String>> { None }
+        async fn set_type_map(&mut self, _: std::collections::HashMap<String, String>) -> Result<(), DruidError> { Ok(()) }
+    }
+    let mut c = M;
+    // Test every default method
+    c.set_holdability(1).await.unwrap();
+    c.set_client_info("key", "val").await.unwrap();
+    assert!(c.get_client_info("key").is_none());
+    c.clear_warnings().await.unwrap();
+    c.set_network_timeout(std::time::Duration::from_secs(10)).await.unwrap();
+    assert_eq!(c.get_network_timeout(), 0);
+    assert!(c.get_type_map().is_none());
+    c.set_type_map(std::collections::HashMap::new()).await.unwrap();
+    assert_eq!(c.get_database_product_version(), None);
+    assert_eq!(c.get_driver_minor_version(), 0);
+    assert_eq!(c.get_holdability(), 1);
+}
+
+// ── ExtendedFilter default method coverage ──
+
+#[tokio::test]
+async fn test_extended_filter_all_default_hooks() {
+    struct M; #[async_trait::async_trait]
+    impl ExtendedFilter for M {
+        async fn on_statement_property_event(&self, _: &StatementPropertyEvent) -> Result<(), DruidError> { Ok(()) }
+        async fn on_clob_event(&self, _: &ClobEvent) -> Result<(), DruidError> { Ok(()) }
+        async fn on_datasource_event(&self, _: &DataSourceEvent) -> Result<(), DruidError> { Ok(()) }
+    }
+    let f = M;
+    // All event types through default hooks
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::SetQueryTimeout(100)).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetQueryTimeout).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetUpdateCount).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::SetMaxRows(100)).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetMaxRows).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::SetMaxFieldSize(50)).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetMaxFieldSize).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::SetFetchDirection(1)).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetFetchDirection).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::SetFetchSize(10)).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetFetchSize).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::IsPoolable).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::IsClosed).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetMoreResults).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetResultSetConcurrency).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetResultSetType).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetResultSetHoldability).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::GetGeneratedKeys).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::ClearWarnings).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::SetCursorName("c1".into())).await.is_ok());
+    assert!(f.on_statement_property_event(&StatementPropertyEvent::AddBatch("b".into())).await.is_ok());
+
+    assert!(f.on_clob_event(&ClobEvent::Length).await.is_ok());
+    assert!(f.on_clob_event(&ClobEvent::GetSubString(1, 5)).await.is_ok());
+    assert!(f.on_clob_event(&ClobEvent::SetString(1, "x".into())).await.is_ok());
+    assert!(f.on_clob_event(&ClobEvent::Truncate(10)).await.is_ok());
+    assert!(f.on_clob_event(&ClobEvent::Free).await.is_ok());
+
+    assert!(f.on_datasource_event(&DataSourceEvent::GetConnection).await.is_ok());
+    assert!(f.on_datasource_event(&DataSourceEvent::GetConnectionWithAuth("u".into(), "p".into())).await.is_ok());
+    assert!(f.on_datasource_event(&DataSourceEvent::ReleaseConnection).await.is_ok());
+    assert!(f.on_datasource_event(&DataSourceEvent::Log("test".into())).await.is_ok());
+
+    // is_wrapper_for default
+    assert!(!f.is_wrapper_for("any"));
+}
+
+// ── Filter default hooks through before_execute ──
+
+#[tokio::test]
+async fn test_before_filter_default_hooks_all_event_types() {
+    struct M; #[async_trait::async_trait]
+    impl BeforeFilter for M {
+        fn name(&self) -> &str { "m" }
+        async fn before(&self, _: &mut ExecContext<'_>) -> Result<(), DruidError> { Ok(()) }
+        // All hooks use default no-op implementations
+    }
+    let f = M;
+    // connection events
+    assert!(f.on_connection_event(&ConnectionEvent::Connect).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::Close).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::Commit).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::Rollback).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::SetAutoCommit(true)).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::GetAutoCommit).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::SetReadOnly(true)).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::GetReadOnly).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::SetCatalog("db".into())).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::GetCatalog).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::SetTransactionIsolation(2)).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::GetTransactionIsolation).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::ClearWarnings).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::SetSchema("s".into())).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::GetSchema).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::Abort).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::IsValid).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::NativeSQL("x".into())).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::SetNetworkTimeout(Duration::from_secs(1))).await.is_ok());
+    assert!(f.on_connection_event(&ConnectionEvent::GetNetworkTimeout).await.is_ok());
+    // statement events
+    assert!(f.on_statement_event(&StatementEvent::CreateStatement).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::PrepareStatement("x".into())).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::PrepareCall("x".into())).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::Execute("x".into())).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::ExecuteQuery("x".into())).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::ExecuteUpdate("x".into())).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::Close).await.is_ok());
+    assert!(f.on_statement_event(&StatementEvent::ExecuteBatch).await.is_ok());
+    // result set events
+    assert!(f.on_result_set_event(&ResultSetEvent::Next).await.is_ok());
+    assert!(f.on_result_set_event(&ResultSetEvent::Close).await.is_ok());
+    assert!(f.on_result_set_event(&ResultSetEvent::GetString).await.is_ok());
+    assert!(f.on_result_set_event(&ResultSetEvent::GetBoolean).await.is_ok());
+    assert!(f.on_result_set_event(&ResultSetEvent::GetInt).await.is_ok());
+    assert!(f.on_result_set_event(&ResultSetEvent::First).await.is_ok());
+    assert!(f.on_result_set_event(&ResultSetEvent::Last).await.is_ok());
+    // lifecycle
+    assert!(f.init().await.is_ok());
+    assert!(f.destroy().await.is_ok());
+}
+
+// ── AfterFilter default after_connection_close ──
+
+#[tokio::test]
+async fn test_after_filter_default_after_connection_close() {
+    struct M; #[async_trait::async_trait]
+    impl AfterFilter for M {
+        fn name(&self) -> &str { "m" }
+        async fn after(&self, _: &ExecContext<'_>, _: &Result<ExecResult, DruidError>, _: Duration) {}
+        async fn after_connection_close(&self) {}
+    }
+    let f = M;
+    f.after_connection_close().await;
+}
