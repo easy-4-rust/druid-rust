@@ -306,6 +306,8 @@ version = "0.0.0-design"
 dependencies = [
  "async-trait",
  "druid-admin",
+ "druid-pool",
+ "druid-sql",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

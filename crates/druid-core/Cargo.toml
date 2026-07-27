@@ -20,3 +20,5 @@ uuid        = { version = "1", features = ["v4"] }
 [dev-dependencies]
 tokio = { workspace = true, features = ["full"] }
 druid-admin = { path = "../druid-admin" }
+druid-sql = { path = "../druid-sql" }
+druid-pool = { path = "../druid-pool" }
