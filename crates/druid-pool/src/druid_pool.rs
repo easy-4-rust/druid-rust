@@ -5,13 +5,10 @@
 use crate::config::DruidPoolBuilder;
 use crate::pool_inner::PoolInner;
 use druid_core::{
-    ConnectionFactory, DruidError, ExecContext, ExecResult,
-    FilterChain, PoolState, Value, Row,
+    ConnectionFactory, DruidError, DruidPooledConnection, FilterChain, PoolState,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-
-use crate::pooled_connection::DruidPoolConnection;
 
 /// Druid 风格连接池。
 ///
@@ -35,11 +32,11 @@ impl DruidPool {
 
     pub fn builder() -> DruidPoolBuilder { DruidPoolBuilder::new() }
 
-    pub async fn get(&self) -> Result<DruidPoolConnection, DruidError> {
+    pub async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
         self.get_timeout(self.inner.config.acquire_timeout).await
     }
 
-    pub async fn get_timeout(&self, timeout: Duration) -> Result<DruidPoolConnection, DruidError> {
+    pub async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
         if self.inner.closed.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(DruidError::PoolClosed);
         }
@@ -47,20 +44,29 @@ impl DruidPool {
         self.inner.connect_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         loop {
-            if let Some(item) = self.inner.idle.lock().pop_front() {
-                self.inner.active_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                return Ok(DruidPoolConnection::new(item.conn, item.id, self.inner.clone(), self.filter_chain.clone()));
-            }
-            if self.inner.can_grow() {
-                match self.inner.create_connection().await {
-                    Ok(conn) => {
-                        let id = self.inner.next_id();
-                        self.inner.active_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        return Ok(DruidPoolConnection::new(conn, id, self.inner.clone(), self.filter_chain.clone()));
-                    }
-                    Err(_) if !self.inner.idle.lock().is_empty() => continue,
-                    Err(e) => return Err(e),
+            let idle_connection = {
+                let mut idle = self.inner.idle.lock();
+                idle.pop_front()
+            };
+            if let Some(mut item) = idle_connection {
+                if self.inner.config.test_on_borrow
+                    && self.inner.factory.validate(&mut item.conn).await.is_err()
+                {
+                    self.inner.destroy_connection(item.conn);
+                    continue;
                 }
+                self.inner.active_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return Ok(self.wrap_connection(item.conn, item.id));
+            }
+            match self.inner.create_connection().await {
+                Ok(conn) => {
+                    let id = self.inner.next_id();
+                    self.inner.active_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    return Ok(self.wrap_connection(conn, id));
+                }
+                Err(DruidError::PoolExhausted) => {}
+                Err(_) if !self.inner.idle.lock().is_empty() => continue,
+                Err(e) => return Err(e),
             }
             let notify = self.inner.notify.notified();
             tokio::pin!(notify);
@@ -91,4 +97,47 @@ impl DruidPool {
     pub fn filter_chain(&self) -> Option<&Arc<FilterChain>> { self.filter_chain.as_ref() }
     pub fn driver_name(&self) -> &str { &self.driver_name }
     pub fn name(&self) -> &str { &self.name }
+
+    fn wrap_connection(
+        &self,
+        connection: Box<dyn druid_core::PhysicalConnection>,
+        id: u64,
+    ) -> DruidPooledConnection {
+        let pool = self.inner.clone();
+        DruidPooledConnection::with_context(
+            connection,
+            id,
+            self.name.clone(),
+            self.filter_chain.clone(),
+            Box::new(move |connection, connection_id| {
+                pool.return_connection(connection, connection_id);
+            }),
+        )
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_core::Pool for DruidPool {
+    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
+        DruidPool::get(self).await
+    }
+
+    async fn get_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        DruidPool::get_timeout(self, timeout).await
+    }
+
+    fn state(&self) -> PoolState {
+        DruidPool::state(self)
+    }
+
+    fn driver_name(&self) -> &str {
+        DruidPool::driver_name(self)
+    }
+
+    fn name(&self) -> &str {
+        DruidPool::name(self)
+    }
 }

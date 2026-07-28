@@ -7,6 +7,7 @@ members = [
     "crates/druid-stats",
     "crates/druid-dynamic",
     "crates/druid-rbdc",
+    "crates/druid-sqlx",
     "crates/druid-sqlx-deadpool",
     "crates/druid-sqlx-bb8",
     "crates/druid-admin",
@@ -50,7 +51,7 @@ futures      = "0.3"
 sqlparser    = "0.52"
 
 # connection pool ecosystem (optional adapters)
-sqlx         = { version = "0.8", default-features = false }
+sqlx         = { version = "0.8", default-features = false, features = ["runtime-tokio", "any", "sqlite", "postgres", "mysql"] }
 deadpool     = { version = "0.12", features = ["managed", "rt_tokio_1"] }
 bb8          = "0.8"
 

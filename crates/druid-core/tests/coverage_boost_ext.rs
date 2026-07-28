@@ -252,8 +252,8 @@ async fn test_pooled_connection_all_methods() {
     // ping
     pc.ping().await.unwrap();
 
-    // conn_mut
-    assert!(pc.conn_mut().is_some());
+    // physical_connection_mut
+    assert!(pc.physical_connection_mut().is_some());
 
     // recycle
     pc.recycle();
@@ -261,11 +261,22 @@ async fn test_pooled_connection_all_methods() {
 }
 
 #[tokio::test]
-async fn test_pooled_connection_take_returns_connection() {
+async fn test_pooled_connection_close_returns_exactly_once() {
+    let returns = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let callback_returns = returns.clone();
     let conn = Box::new(MockConnForPool);
-    let pc = PooledConnection::new(conn, 1, Box::new(|_, _| {}));
-    let taken = pc.take();
-    assert_eq!(taken.driver_name(), "mock-pool");
+    let mut pc = PooledConnection::new(
+        conn,
+        1,
+        Box::new(move |_, _| {
+            callback_returns.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }),
+    );
+    pc.close().await.unwrap();
+    pc.close().await.unwrap();
+    assert!(pc.is_recycled());
+    drop(pc);
+    assert_eq!(returns.load(std::sync::atomic::Ordering::Relaxed), 1);
 }
 
 #[tokio::test]
@@ -528,32 +539,53 @@ async fn test_connection_trait_all_defaults() {
     // Default auto_commit
     assert!(c.auto_commit());
 
-    // Default set_auto_commit
-    c.set_auto_commit(false).await.unwrap();
+    // 未声明能力时不得伪造设置成功。
+    assert!(matches!(
+        c.set_auto_commit(false).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_auto_commit"
+        })
+    ));
 
     // Default read_only
     assert!(!c.read_only());
 
-    // Default set_read_only
-    c.set_read_only(true).await.unwrap();
+    assert!(matches!(
+        c.set_read_only(true).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_read_only"
+        })
+    ));
 
     // Default transaction_isolation
     assert_eq!(c.transaction_isolation(), 2);
 
-    // Default set_transaction_isolation
-    c.set_transaction_isolation(4).await.unwrap();
+    assert!(matches!(
+        c.set_transaction_isolation(4).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_transaction_isolation"
+        })
+    ));
 
     // Default catalog
     assert!(c.catalog().is_none());
 
-    // Default set_catalog
-    c.set_catalog("mydb").await.unwrap();
+    assert!(matches!(
+        c.set_catalog("mydb").await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_catalog"
+        })
+    ));
 
     // Default schema
     assert!(c.schema().is_none());
 
-    // Default set_schema
-    c.set_schema("public").await.unwrap();
+    assert!(matches!(
+        c.set_schema("public").await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_schema"
+        })
+    ));
 
     // Default driver_name
     assert_eq!(c.driver_name(), "");
@@ -590,23 +622,39 @@ async fn test_connection_ext_all_defaults() {
     // Default get_holdability
     assert_eq!(c.get_holdability(), 1);
 
-    // Default set_holdability
-    c.set_holdability(2).await.unwrap();
+    assert!(matches!(
+        c.set_holdability(2).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_holdability"
+        })
+    ));
 
-    // Default set_client_info
-    c.set_client_info("key", "value").await.unwrap();
+    assert!(matches!(
+        c.set_client_info("key", "value").await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_client_info"
+        })
+    ));
 
     // Default get_client_info
     assert!(c.get_client_info("key").is_none());
 
-    // Default clear_warnings
-    c.clear_warnings().await.unwrap();
+    assert!(matches!(
+        c.clear_warnings().await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "clear_warnings"
+        })
+    ));
 
     // Default native_sql
     assert_eq!(c.native_sql("SELECT 1").await.unwrap(), "SELECT 1");
 
-    // Default set_network_timeout
-    c.set_network_timeout(Duration::from_secs(5)).await.unwrap();
+    assert!(matches!(
+        c.set_network_timeout(Duration::from_secs(5)).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_network_timeout"
+        })
+    ));
 
     // Default get_network_timeout
     assert_eq!(c.get_network_timeout(), 0);
@@ -617,7 +665,12 @@ async fn test_connection_ext_all_defaults() {
     // Default set_type_map
     let mut map = HashMap::new();
     map.insert("k".into(), "v".into());
-    c.set_type_map(map).await.unwrap();
+    assert!(matches!(
+        c.set_type_map(map).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_type_map"
+        })
+    ));
 }
 
 // ══════════════════════════════════════════════════════════════════

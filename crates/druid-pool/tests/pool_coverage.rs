@@ -237,7 +237,7 @@ async fn test_druid_pool_filter_chain() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 3. pooled_connection.rs: DruidPoolConnection all methods
+// 3. druid_pooled_connection.rs: DruidPooledConnection all methods
 // ══════════════════════════════════════════════════════════════════
 
 #[tokio::test]
@@ -284,19 +284,23 @@ fn test_druid_pool_connection_debug() {
         let pool = build_pool(2, 2).await;
         let conn = pool.get().await.unwrap();
         let debug_str = format!("{:?}", conn);
-        assert!(debug_str.contains("DruidPoolConnection"));
-        assert!(debug_str.contains("has_conn"));
+        assert!(debug_str.contains("DruidPooledConnection"));
+        assert!(debug_str.contains("has_physical_connection"));
     });
 }
 
 #[test]
-fn test_druid_pool_connection_into_core() {
+fn test_pool_trait_returns_canonical_pooled_connection() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let pool = build_pool(2, 2).await;
-        let conn = pool.get().await.unwrap();
-        let core_conn = conn.into_core();
-        assert!(core_conn.id() > 0);
+        let pool_trait: &dyn Pool = &pool;
+        let connection = pool_trait.get().await.unwrap();
+        assert!(connection.id() > 0);
+        assert_eq!(connection.data_source(), "test");
+        drop(connection);
+        assert_eq!(pool.state().active_count, 0);
+        assert_eq!(pool.state().idle_count, 1);
     });
 }
 
@@ -493,7 +497,7 @@ fn test_pool_inner_should_evict_direct() {
 // ══════════════════════════════════════════════════════════════════
 
 // ══════════════════════════════════════════════════════════════════
-// 10. DruidPoolConnection: before_execute error path (branch ^0)
+// 10. DruidPooledConnection: before_execute error path
 // ══════════════════════════════════════════════════════════════════
 
 #[tokio::test]
@@ -531,23 +535,25 @@ async fn test_pool_connection_before_execute_error() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 11. DruidPoolConnection: Drop after take (branch ^0 on line 72)
+// 11. DruidPooledConnection: explicit close and Drop share one recycle path
 // ══════════════════════════════════════════════════════════════════
 
 #[tokio::test]
-async fn test_pool_connection_drop_after_take() {
+async fn test_pool_connection_explicit_close_recycles_exactly_once() {
     let pool = build_pool(2, 2).await;
-    let conn = pool.get().await.unwrap();
-    // into_core takes the connection, leaving conn=None
-    let core = conn.into_core();
-    assert!(core.id() > 0);
-    // The original DruidPoolConnection was consumed by into_core,
-    // so Drop won't find conn. This tests the false branch of
-    // `if let Some(conn) = self.conn.take()` in Drop.
+    let mut connection = pool.get().await.unwrap();
+    assert_eq!(pool.state().active_count, 1);
+    connection.close().await.unwrap();
+    connection.close().await.unwrap();
+    assert!(connection.is_recycled());
+    assert_eq!(pool.state().active_count, 0);
+    assert_eq!(pool.state().recycle_count, 1);
+    drop(connection);
+    assert_eq!(pool.state().recycle_count, 1);
 }
 
 // ══════════════════════════════════════════════════════════════════
-// 12. DruidPoolConnection: filter_chain = None (branch ^0 on lines 37, 43)
+// 12. DruidPooledConnection: filter_chain = None
 // ══════════════════════════════════════════════════════════════════
 
 #[tokio::test]

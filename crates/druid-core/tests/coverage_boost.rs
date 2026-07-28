@@ -137,6 +137,9 @@ fn test_error_all_variants_display() {
         DruidError::SqlParseError("e".into()),
         DruidError::WallViolation("e".into()),
         DruidError::DataSourceNotFound("e".into()),
+        DruidError::UnsupportedOperation {
+            operation: "test",
+        },
         DruidError::Other("e".into()),
     ];
     for v in &variants { let _ = format!("{}", v); }

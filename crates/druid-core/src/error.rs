@@ -18,6 +18,7 @@ pub enum DruidError {
     SqlParseError(String),
     WallViolation(String),
     DataSourceNotFound(String),
+    UnsupportedOperation { operation: &'static str },
     Other(String),
 }
 
@@ -34,6 +35,9 @@ impl fmt::Display for DruidError {
             Self::SqlParseError(msg) => write!(f, "SQL parse error: {msg}"),
             Self::WallViolation(msg) => write!(f, "wall violation: {msg}"),
             Self::DataSourceNotFound(name) => write!(f, "datasource not found: {name}"),
+            Self::UnsupportedOperation { operation } => {
+                write!(f, "operation is not supported by the physical connection: {operation}")
+            }
             Self::Other(msg) => write!(f, "{msg}"),
         }
     }

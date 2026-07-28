@@ -2,7 +2,7 @@
 //!
 //! 连接池内部状态：空闲队列、活跃计数、等待通知。
 
-use druid_core::{Connection, ConnectionFactory, DruidError, FilterChain};
+use druid_core::{ConnectionFactory, DruidError, PhysicalConnection};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use tokio::sync::Notify;
 
 /// 空闲连接条目。
 pub(crate) struct IdleConn {
-    pub conn: Box<dyn Connection>,
+    pub conn: Box<dyn PhysicalConnection>,
     pub id: u64,
     pub created_at: Instant,
     pub last_used: Instant,
@@ -59,7 +59,7 @@ impl PoolInner {
     }
 
     pub fn can_grow(&self) -> bool {
-        self.total_count.load(Ordering::Relaxed) < self.config.max_open
+        self.total_count.load(Ordering::Acquire) < self.config.max_open
     }
 
     pub fn should_evict(&self) -> bool {
@@ -68,10 +68,25 @@ impl PoolInner {
     }
 
     /// 创建新连接。
-    pub async fn create_connection(&self) -> Result<Box<dyn Connection>, DruidError> {
-        self.total_count.fetch_add(1, Ordering::Relaxed);
+    pub async fn create_connection(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+        let reserved = self
+            .total_count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current < self.config.max_open).then_some(current + 1)
+            })
+            .is_ok();
+        if !reserved {
+            return Err(DruidError::PoolExhausted);
+        }
+
         match self.factory.create().await {
-            Ok(conn) => {
+            Ok(mut conn) => {
+                if self.closed.load(Ordering::Acquire) {
+                    let _ = self.factory.close(&mut conn).await;
+                    self.total_count.fetch_sub(1, Ordering::AcqRel);
+                    self.close_count.fetch_add(1, Ordering::Relaxed);
+                    return Err(DruidError::PoolClosed);
+                }
                 self.create_count.fetch_add(1, Ordering::Relaxed);
                 Ok(conn)
             }
@@ -84,38 +99,60 @@ impl PoolInner {
     }
 
     /// 归还连接到空闲队列。
-    pub fn return_connection(&self, conn: Box<dyn Connection>, id: u64) {
-        if self.closed.load(Ordering::Relaxed) {
+    pub fn return_connection(&self, conn: Box<dyn PhysicalConnection>, id: u64) {
+        let was_active = self
+            .active_count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current > 0).then_some(current - 1)
+            })
+            .is_ok();
+        if !was_active {
             self.destroy_connection(conn);
             return;
         }
-        self.active_count.fetch_sub(1, Ordering::Relaxed);
+
         self.recycle_count.fetch_add(1, Ordering::Relaxed);
 
-        let idle_count = self.idle.lock().len();
-        if idle_count >= self.config.max_idle {
-            // 超过 max_idle，销毁
+        if self.closed.load(Ordering::Acquire) || conn.is_closed() {
+            self.destroy_connection(conn);
+            return;
+        }
+
+        let returned = {
+            let mut queue = self.idle.lock();
+            if queue.len() >= self.config.max_idle {
+                Err(conn)
+            } else {
+                queue.push_back(IdleConn {
+                    conn,
+                    id,
+                    created_at: Instant::now(),
+                    last_used: Instant::now(),
+                });
+                Ok(())
+            }
+        };
+
+        if let Err(conn) = returned {
             self.destroy_connection(conn);
         } else {
-            let mut queue = self.idle.lock();
-            queue.push_back(IdleConn {
-                conn,
-                id,
-                created_at: Instant::now(),
-                last_used: Instant::now(),
-            });
-            drop(queue);
             self.notify.notify_one();
         }
     }
 
     /// 销毁连接。
-    pub fn destroy_connection(&self, mut conn: Box<dyn Connection>) {
-        self.total_count.fetch_sub(1, Ordering::Relaxed);
+    pub fn destroy_connection(&self, mut conn: Box<dyn PhysicalConnection>) {
+        let _ = self
+            .total_count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current > 0).then_some(current - 1)
+            });
         self.close_count.fetch_add(1, Ordering::Relaxed);
-        tokio::spawn(async move {
-            let _ = conn.close().await;
-        });
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move {
+                let _ = conn.close().await;
+            });
+        }
     }
 
     /// 关闭池。
@@ -125,8 +162,15 @@ impl PoolInner {
             let mut queue = self.idle.lock();
             queue.drain(..).collect()
         };
-        for item in idle {
-            self.destroy_connection(item.conn);
+        for mut item in idle {
+            let _ = self.factory.close(&mut item.conn).await;
+            let _ = self
+                .total_count
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                    (current > 0).then_some(current - 1)
+                });
+            self.close_count.fetch_add(1, Ordering::Relaxed);
         }
+        self.notify.notify_waiters();
     }
 }

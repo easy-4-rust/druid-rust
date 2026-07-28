@@ -236,13 +236,16 @@ async fn test_pooled_connection_id() {
 }
 
 #[test]
-fn test_pooled_connection_into_core() {
+fn test_pool_trait_preserves_connection_lease() {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let pool = build_pool(2, 2).await;
-        let conn = pool.get().await.unwrap();
-        let core_conn = conn.into_core();
-        // into_core consumes DruidPoolConnection, returns CorePooledConnection
-        assert!(core_conn.id() > 0);
+        let pool_trait: &dyn Pool = &pool;
+        let connection = pool_trait.get().await.unwrap();
+        assert!(connection.id() > 0);
+        assert_eq!(pool.state().active_count, 1);
+        drop(connection);
+        assert_eq!(pool.state().active_count, 0);
+        assert_eq!(pool.state().idle_count, 1);
     });
 }
