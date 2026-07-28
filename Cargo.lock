@@ -1520,13 +1520,24 @@ checksum = "117240f60069e65410b3ae1bb213295bd828f707b5bec6596a1afc8793ce0cbc"
 name = "druid"
 version = "0.0.0-design"
 dependencies = [
- "druid-core",
- "druid-dynamic",
- "druid-pool",
- "druid-sql",
- "druid-stats",
- "druid-toasty",
+ "arc-swap",
+ "async-trait",
+ "bigdecimal",
+ "chrono",
+ "dashmap",
+ "fastrand",
+ "moka",
+ "parking_lot",
+ "prometheus",
+ "serde",
+ "serde_json",
+ "sqlparser",
+ "thiserror 1.0.69",
+ "toasty",
+ "toasty-core",
  "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1534,10 +1545,7 @@ name = "druid-admin"
 version = "0.0.0-design"
 dependencies = [
  "axum",
- "druid-core",
- "druid-dynamic",
- "druid-pool",
- "druid-stats",
+ "druid",
  "prometheus",
  "serde",
  "serde_json",
@@ -1547,145 +1555,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "druid-core"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "bigdecimal",
- "chrono",
- "druid-admin",
- "druid-pool",
- "druid-sql",
- "serde",
- "serde_json",
- "thiserror 1.0.69",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "druid-dynamic"
-version = "0.0.0-design"
-dependencies = [
- "arc-swap",
- "async-trait",
- "dashmap",
- "druid-core",
- "druid-pool",
- "druid-sql",
- "fastrand",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "druid-pool"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "bigdecimal",
- "chrono",
- "druid-core",
- "druid-sql",
- "fastrand",
- "parking_lot",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "druid-rbdc"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "druid-core",
- "druid-pool",
- "futures",
- "rbdc",
- "rbs",
- "thiserror 1.0.69",
- "tokio",
-]
-
-[[package]]
-name = "druid-sql"
-version = "0.0.0-design"
-dependencies = [
- "druid-core",
- "sqlparser",
- "thiserror 1.0.69",
-]
-
-[[package]]
-name = "druid-sqlx"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "druid-core",
- "druid-pool",
- "sqlx",
- "tokio",
-]
-
-[[package]]
-name = "druid-sqlx-bb8"
+name = "druid-wrapper"
 version = "0.0.0-design"
 dependencies = [
  "async-trait",
  "bb8",
- "druid-core",
- "druid-sqlx",
- "tokio",
-]
-
-[[package]]
-name = "druid-sqlx-deadpool"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
  "deadpool 0.12.3",
- "druid-core",
- "druid-sqlx",
- "tokio",
-]
-
-[[package]]
-name = "druid-stats"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "dashmap",
- "druid-core",
- "druid-sql",
- "moka",
- "parking_lot",
- "prometheus",
+ "druid",
+ "futures",
+ "rbdc",
+ "rbs",
+ "sqlx",
  "thiserror 1.0.69",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "druid-toasty"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "druid-core",
- "druid-pool",
- "toasty",
- "toasty-core",
- "tokio",
-]
-
-[[package]]
-name = "druid-wrapper"
-version = "0.0.0-design"
-dependencies = [
- "druid-core",
- "druid-rbdc",
- "druid-sqlx",
- "druid-sqlx-bb8",
- "druid-sqlx-deadpool",
  "tokio",
 ]
 

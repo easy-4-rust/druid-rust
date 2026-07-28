@@ -1,14 +1,13 @@
-//! Java Druid `druid-wrapper` 模块的 Rust 适配门面。
+//! Java Druid `druid-wrapper` 模块的 Rust 语义迁移。
 //!
 //! 对应 Java 模块：`/druid-wrapper`。Java 模块包装 c3p0、DBCP、Proxool；
-//! Rust 迁移按等价职责聚合 RBDC、SQLx、bb8 与 deadpool Adapter。各 Adapter
-//! 仍保留独立 crate，本 crate 只提供统一、无池中池的模块边界。
+//! Rust 迁移按等价职责在本 crate 内部聚合 RBDC、SQLx、bb8 与 deadpool Adapter。
 
 /// RBDC 直连驱动 Adapter。
-pub use druid_rbdc as rbdc;
+pub mod rbdc;
 /// SQLx 直连驱动 Adapter。
-pub use druid_sqlx as sqlx;
+pub mod sqlx;
 /// SQLx bb8 外部池桥接。
-pub use druid_sqlx_bb8 as sqlx_bb8;
+pub mod sqlx_bb8;
 /// SQLx deadpool 外部池桥接。
-pub use druid_sqlx_deadpool as sqlx_deadpool;
+pub mod sqlx_deadpool;

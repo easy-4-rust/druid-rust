@@ -1,6 +1,6 @@
 //! `druid-wrapper` 的真实 SQLite 适配边界契约。
 
-use druid_core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, Pool, Value};
+use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, Pool, Value};
 use druid_wrapper::sqlx::SqlxConnectionFactory;
 use druid_wrapper::sqlx_bb8::SqlxBb8Pool;
 use druid_wrapper::sqlx_deadpool::SqlxDeadpoolPool;
@@ -32,10 +32,10 @@ async fn direct_sqlx_wrapper_uses_real_sqlite_and_reports_callable_capability() 
 
     let callable = connection
         .prepare_physical_call(
-            &druid_core::PreparedStatementKey::new(
+            &druid::core::PreparedStatementKey::new(
                 Some("{call sqlite_has_no_procedure()}".to_string()),
                 None,
-                druid_core::PreparedStatementMethodType::Precall1,
+                druid::core::PreparedStatementMethodType::Precall1,
             )
             .unwrap(),
         )

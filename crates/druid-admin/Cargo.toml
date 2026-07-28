@@ -11,10 +11,7 @@ publish      = false
 workspace = true
 
 [dependencies]
-druid-core    = { path = "../druid-core" }
-druid-pool    = { path = "../druid-pool" }
-druid-stats   = { path = "../druid-stats" }
-druid-dynamic = { path = "../druid-dynamic" }
+druid         = { path = "../druid" }
 tokio         = { workspace = true }
 axum          = { workspace = true }
 tower         = { workspace = true }

@@ -11,7 +11,7 @@
 它表示：
 
 1. `PhysicalConnection` 仍是 Druid 内部唯一、稳定、且不泄漏第三方类型的 SPI；
-2. `druid-toasty` 是随 `druid` facade 提供的默认 `PhysicalConnectionFactory`；
+2. `druid::toasty` 是 `druid` 内部默认 `PhysicalConnectionFactory` 实现；
 3. Adapter 直接调用 Toasty 的 `Driver::connect` 获取一条 raw connection；
 4. 不创建 `toasty::Db`，因此 Toasty 自带 pool 不进入 Druid native pool；
 5. SQLx/RBDC 是可选 direct adapter；bb8/deadpool 是外部 pool provider，不是
@@ -19,7 +19,7 @@
 
 ```mermaid
 flowchart TB
-    App["Application"] --> Facade["druid facade"]
+    App["Application"] --> Facade["druid"]
     Facade --> Pool["DruidPool<br/>唯一 native pool"]
     Pool --> Pooled["DruidPooledConnection"]
     Pooled --> SPI["PhysicalConnection<br/>内部最小 SPI"]
@@ -36,6 +36,11 @@ flowchart TB
     Wrapper --> Bb8["bb8 Pool provider"]
     Wrapper --> Deadpool["deadpool Pool provider"]
 ```
+
+最终源码必须位于 `crates/druid/src/toasty/`。当前
+`crates/druid-toasty/` 只记录已经落地的过渡实现和测试证据，必须归并回
+`druid`；它不是第四个产品模块，也不能独立发布。仅在 `druid` facade 中
+重导出 `druid-toasty` 不算完成归并。
 
 关键所有权关系只有一条：
 
@@ -138,7 +143,8 @@ Toasty `RawSqlRet::Infer` 按 SQLite runtime storage class 解码。SQLite 的
 
 | 门禁 | 状态 |
 | :--- | :--- |
-| `cargo check -p druid-toasty --all-features` | DONE：SQLite/PostgreSQL/MySQL/Turso/DynamoDB feature 图编译通过 |
+| 过渡路径 `cargo check -p druid --all-features` | DONE：SQLite/PostgreSQL/MySQL/Turso/DynamoDB feature 图编译通过 |
+| 物理归并到 `druid/src/toasty`，并由 `druid` 默认 feature 启用 | TODO |
 | PostgreSQL 真实 container contract | TODO |
 | MySQL 真实 container contract | TODO |
 | Turso 真实服务/本地 contract | TODO |
@@ -151,7 +157,9 @@ Toasty `RawSqlRet::Infer` 按 SQLite runtime storage class 解码。SQLite 的
 
 ## 5. Feature 与发布边界
 
-`druid-toasty` 默认只启用 SQLite，其他 driver 按 feature 增量启用：
+最终 feature 全部由唯一 `druid` crate 暴露，`sqlite` 默认启用，其他 driver
+按 feature 增量启用。当前同名 feature 暂时定义在过渡 `druid-toasty` 中，归并时
+必须原样迁入 `druid`：
 
 | feature | Toasty driver | Druid 定位 |
 | :--- | :--- | :--- |
@@ -186,10 +194,10 @@ driver 依赖 `rusqlite 0.40`。为了保留 SQLx 扩展兼容面：
 | raw SQL 扩展 | SQLx | `druid-wrapper` 可选 direct adapter |
 | Java/MyBatis 风格扩展 | RBDC/Rbatis | `druid-wrapper` 可选 direct adapter |
 | 外部连接池 | bb8/deadpool | `Pool` provider；禁止嵌入 `DruidPool` |
-| SQL parser/Wall | sqlparser-rs + Druid extension | `druid-sql` |
+| SQL parser/Wall | sqlparser-rs + Druid extension | `druid::sql` |
 | 缓存 | Moka | SQL 解析/元数据等缓存；PS LRU 保留 Druid 语义 |
 | 日志与追踪 | tracing | Filter/driver/管理链路统一 span |
-| 指标 | metrics + Prometheus exporter | `druid-stats`/`druid-admin` |
+| 指标 | metrics + Prometheus exporter | `druid::stats`/`druid-admin` |
 | 配置序列化 | serde/serde_json/toml | typed config，禁止泄漏第三方配置对象 |
 | async runtime | Tokio + async-trait | pool maintenance、driver async SPI |
 | 集成测试 | testcontainers | PostgreSQL/MySQL 后续真实门禁 |
@@ -200,12 +208,13 @@ driver 依赖 `rusqlite 0.40`。为了保留 SQLx 扩展兼容面：
 ## 8. 验收证据
 
 ```bash
-cargo test -p druid-toasty --test toasty_connection_adapter_test
+# 以下 druid-toasty/druid-sqlx 路径是归并完成前的过渡测试命令：
+cargo test -p druid --test toasty_connection_adapter_test
 cargo test -p druid --test sqlite_core_semantics_test
-cargo test -p druid-sqlx -p druid-sqlx-bb8 -p druid-sqlx-deadpool
+cargo test -p druid-wrapper
 cargo test -p druid-wrapper
 cargo test --workspace
-cargo clippy -p druid-toasty --all-targets --no-deps -- -D warnings
+cargo clippy -p druid --all-targets --no-deps -- -D warnings
 ```
 
 `toasty_connection_adapter_test` 使用真实 SQLite，覆盖：
@@ -224,8 +233,8 @@ cargo clippy -p druid-toasty --all-targets --no-deps -- -D warnings
 
 - `cargo test --workspace`：431/431 通过；
 - Toasty 内置/核心/扩展的 21 个真实 SQLite 用例通过；
-- `cargo check -p druid-toasty --all-features` 通过，证明全部可选 driver 的
+- `cargo check -p druid --all-features` 通过，证明全部可选 driver 的
   feature 边界可组合编译；该结果不替代 PostgreSQL/MySQL/Turso 的真实语义门禁；
 - `druid-toasty` fmt 与 pedantic clippy `-D warnings` 通过；
-- 整个 `druid` facade 的 `-D warnings` 仍被 `druid-core` 203 个历史 pedantic
+- 整个 `druid` 模块的 `-D warnings` 仍被当前 `druid-core` 过渡源码的 203 个历史 pedantic
   告警阻断，因此全仓 clippy 与覆盖率 100% 仍是迁移门禁，不能写成完成。

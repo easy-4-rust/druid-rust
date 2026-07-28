@@ -1,17 +1,17 @@
-//! Java Druid `core` 模块的 Rust crate 门面。
+//! Java Druid `core` 模块的 Rust 语义迁移。
 //!
-//! 对应 Java 模块：`/core`。本 crate 只固定 Java `core` 与 Rust 多个内部实现
-//! crate 的模块边界，不复制对象，也不把尚未迁移的语义标记为完成。
+//! 对应 Java 模块：`/core`。连接 SPI、连接池、SQL/Wall、统计、动态数据源和
+//! 默认 Toasty 数据源都位于本 crate 的具名内部模块中。
 
 /// Druid 公共对象、连接 SPI 与 Filter 基础。
-pub use druid_core as core;
+pub mod core;
 /// 高可用数据源与路由实现。
-pub use druid_dynamic as dynamic;
+pub mod dynamic;
 /// Druid 原生连接池实现。
-pub use druid_pool as pool;
+pub mod pool;
 /// SQL 解析与 Wall 实现。
-pub use druid_sql as sql;
+pub mod sql;
 /// Druid 统计实现。
-pub use druid_stats as stats;
+pub mod stats;
 /// 内置 Toasty 标准数据源实现。
-pub use druid_toasty as toasty;
+pub mod toasty;
