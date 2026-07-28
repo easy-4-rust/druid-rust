@@ -1,0 +1,25 @@
+[package]
+name = "toasty-driver-sqlite"
+version = "0.9.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+description = "SQLite driver for Toasty (druid-rust libsqlite compatibility patch)"
+repository = "https://github.com/tokio-rs/toasty"
+publish = false
+
+[features]
+rust_decimal = ["toasty-core/rust_decimal", "toasty-sql/rust_decimal"]
+bigdecimal = ["toasty-core/bigdecimal", "toasty-sql/bigdecimal"]
+jiff = ["toasty-core/jiff", "toasty-sql/jiff"]
+
+[dependencies]
+async-trait = "0.1.89"
+percent-encoding = "2.3.2"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+serde = { version = "1.0.228", features = ["derive"] }
+toasty-core = "0.9.0"
+toasty-sql = "0.9.0"
+tracing = "0.1"
+url = "2.5.8"
+uuid = { version = "1.23.0", features = ["v4", "v7", "fast-rng", "serde"] }

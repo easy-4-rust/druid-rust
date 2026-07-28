@@ -1,0 +1,21 @@
+[package]
+name         = "druid-wrapper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description  = "Druid driver and external pool wrapper facade"
+repository.workspace = true
+
+[dependencies]
+druid-rbdc = { path = "../druid-rbdc" }
+druid-sqlx = { path = "../druid-sqlx" }
+druid-sqlx-bb8 = { path = "../druid-sqlx-bb8" }
+druid-sqlx-deadpool = { path = "../druid-sqlx-deadpool" }
+
+[dev-dependencies]
+druid-core = { path = "../druid-core" }
+tokio.workspace = true
+
+[lints]
+workspace = true

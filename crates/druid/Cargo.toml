@@ -1,0 +1,22 @@
+[package]
+name         = "druid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description  = "Druid 1.2.28 core semantic migration facade"
+repository.workspace = true
+
+[dependencies]
+druid-core = { path = "../druid-core" }
+druid-dynamic = { path = "../druid-dynamic" }
+druid-pool = { path = "../druid-pool" }
+druid-sql = { path = "../druid-sql" }
+druid-stats = { path = "../druid-stats" }
+druid-toasty = { path = "../druid-toasty" }
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true
