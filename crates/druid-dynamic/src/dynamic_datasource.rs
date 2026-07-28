@@ -3,10 +3,9 @@
 //! 动态数据源，支持 ArcSwap 热切换。
 
 use crate::datasource_group::DataSourceGroup;
-use crate::load_balancer::LoadBalancer;
 use crate::sql_hint::SqlHint;
 use arc_swap::ArcSwap;
-use druid_core::{DruidError, Pool};
+use druid_core::Pool;
 use std::sync::Arc;
 
 /// 动态数据源。
@@ -19,7 +18,9 @@ pub struct DynamicDataSource {
 impl DynamicDataSource {
     /// 创建动态数据源。
     pub fn new(initial: DataSourceGroup) -> Self {
-        Self { current: ArcSwap::from(Arc::new(initial)) }
+        Self {
+            current: ArcSwap::from(Arc::new(initial)),
+        }
     }
 
     /// 按 SqlHint 路由到对应池。
@@ -27,11 +28,11 @@ impl DynamicDataSource {
         let group = self.current.load();
         match hint {
             SqlHint::Write => group.master.clone(),
-            SqlHint::Read => {
-                group.load_balancer.pick(&group.slaves)
-                    .unwrap_or(&group.master)
-                    .clone()
-            }
+            SqlHint::Read => group
+                .load_balancer
+                .pick(&group.slaves)
+                .unwrap_or(&group.master)
+                .clone(),
             SqlHint::Auto => group.master.clone(), // 默认走主库
         }
     }

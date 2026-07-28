@@ -35,19 +35,20 @@
 | :--- | :--- | :--- |
 | druid-rust | 仓库与产品总称 | 不可省略连字符 |
 | Cargo workspace | 仓库根 `Cargo.toml` 声明的多 crate 工作区 | 与"crate"区别 |
-| adapter / 适配器 | `druid-rbdc / druid-sqlx-deadpool / druid-sqlx-bb8` 的统称 | 不含领域 crate |
-| 横切层 / cross-cutting | Filter / Wall / Stat / Dynamic 的统称 | 通过 `Connection` 拦截 |
+| adapter / 适配器 | SQLx/RBDC direct adapter 与 bb8/deadpool external bridge 的统称 | direct 与 bridge 必须标明，禁止混为 factory |
+| 横切层 / cross-cutting | Filter / Wall / Stat / Dynamic 的统称 | 通过 `DruidPooledConnection` 拦截 |
 | 治理面 | `druid-admin` 暴露的 HTTP 端点 | 不参与请求路径 |
 
 ### 2.2 架构级术语
 
 | 术语 | 定义 | 禁止混用 |
 | :--- | :--- | :--- |
-| `Connection` | `druid-core` 暴露的 trait，所有横切层的拦截点 | `sqlx::Connection`、`db::Connection` |
+| `DruidPooledConnection` | 唯一对外池化连接；横切与 exactly-once 回收入口 | `PhysicalConnection`、旧 alias `PooledConnection` |
+| `PhysicalConnection` | druid-rust 内部最小物理连接 SPI | `sqlx::Connection`、`rbdc::db::Connection`、对外 pooled facade |
 | `Driver` | 数据库驱动抽象 | `sqlx::Pool`、`deadpool::Pool` |
 | `Pool` | 连接池 trait | `r2d2::Pool`、`bb8::Pool` |
-| `ConnectionFactory` | 适配器实现，向 pool 提供新连接 | 不要叫 `Provider` |
-| `PooledConnection` | RAII 句柄，`Drop` 自动归还 | 不要叫 `ConnHandle` |
+| `PhysicalConnectionFactory` | native pool 的 raw physical connection 创建器 | external bb8/deadpool `Pool` Provider |
+| `PhysicalConnectionLease` | 外部池已借出租约的透明 SPI bridge | native idle queue、第二层池 |
 | `BeforeFilter` / `AfterFilter` | 横切关注单元 trait | 不要叫 `Interceptor` |
 | `FilterChain` | 一组 filter 的执行链 | 不要叫 `Pipeline` |
 | `Wall` | SQL 防火墙 | 不要叫 `Guard` |

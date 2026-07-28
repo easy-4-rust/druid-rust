@@ -10,8 +10,12 @@ pub struct PhysicalConnectionCapabilities {
     pub transactions: bool,
     /// 是否支持保存点。
     pub savepoints: bool,
-    /// 是否支持只读、自动提交和隔离级别等连接属性。
-    pub connection_attributes: bool,
+    /// 是否支持读取与设置自动提交状态。
+    pub auto_commit: bool,
+    /// 是否支持读取与设置只读状态。
+    pub read_only: bool,
+    /// 是否支持读取与设置事务隔离级别。
+    pub transaction_isolation: bool,
     /// 是否支持 catalog。
     pub catalog: bool,
     /// 是否支持 schema。
@@ -23,7 +27,9 @@ impl Default for PhysicalConnectionCapabilities {
         Self {
             transactions: true,
             savepoints: false,
-            connection_attributes: false,
+            auto_commit: false,
+            read_only: false,
+            transaction_isolation: false,
             catalog: false,
             schema: false,
         }

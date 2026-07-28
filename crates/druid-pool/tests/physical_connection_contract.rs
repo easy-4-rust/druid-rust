@@ -6,8 +6,8 @@
 //! - `FilterChainImpl` 的前向进入、逆向退出调用链
 
 use druid_core::{
-    AfterFilter, BeforeFilter, ConnectionFactory, DruidError, ExecContext, ExecResult,
-    FilterChain, PhysicalConnection, Row, Value,
+    AfterFilter, BeforeFilter, ConnectionFactory, DruidError, ExecContext, ExecResult, FilterChain,
+    PhysicalConnection, Row, Value,
 };
 use druid_pool::DruidPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -19,11 +19,7 @@ struct ContractPhysicalConnection;
 
 #[async_trait::async_trait]
 impl PhysicalConnection for ContractPhysicalConnection {
-    async fn exec(
-        &mut self,
-        _sql: &str,
-        _params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
         Ok(ExecResult {
             rows_affected: 1,
             last_insert_id: Some(7),
@@ -31,11 +27,7 @@ impl PhysicalConnection for ContractPhysicalConnection {
         })
     }
 
-    async fn fetch(
-        &mut self,
-        _sql: &str,
-        _params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         Ok(vec![
             Row::new(vec![Value::Int(1)]),
             Row::new(vec![Value::Int(2)]),
@@ -181,7 +173,10 @@ async fn contract_pool(filter: Arc<ContextContractFilter>) -> DruidPool {
 async fn exec_and_fetch_preserve_one_filter_context() {
     let filter = Arc::new(ContextContractFilter::new());
     let pool = contract_pool(filter.clone()).await;
-    let mut connection = pool.get().await.expect("connection acquisition must succeed");
+    let mut connection = pool
+        .get()
+        .await
+        .expect("connection acquisition must succeed");
 
     let result = connection
         .exec("UPDATE account SET balance = ?", vec![Value::Int(7)])
@@ -209,10 +204,16 @@ async fn exec_and_fetch_preserve_one_filter_context() {
 async fn explicit_close_and_drop_recycle_exactly_once() {
     let filter = Arc::new(ContextContractFilter::new());
     let pool = contract_pool(filter).await;
-    let mut connection = pool.get().await.expect("connection acquisition must succeed");
+    let mut connection = pool
+        .get()
+        .await
+        .expect("connection acquisition must succeed");
 
     connection.close().await.expect("first close must recycle");
-    connection.close().await.expect("duplicate close must be idempotent");
+    connection
+        .close()
+        .await
+        .expect("duplicate close must be idempotent");
     assert_eq!(pool.state().active_count, 0);
     assert_eq!(pool.state().idle_count, 1);
     assert_eq!(pool.state().recycle_count, 1);
@@ -221,6 +222,27 @@ async fn explicit_close_and_drop_recycle_exactly_once() {
     assert_eq!(pool.state().active_count, 0);
     assert_eq!(pool.state().idle_count, 1);
     assert_eq!(pool.state().recycle_count, 1);
+}
+
+#[test]
+fn unwind_drop_recycles_exactly_once() {
+    let recycle_count = Arc::new(AtomicUsize::new(0));
+    let observed_recycle_count = recycle_count.clone();
+
+    let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        let _connection = druid_core::DruidPooledConnection::new(
+            Box::new(ContractPhysicalConnection),
+            41,
+            Box::new(move |_connection, connection_id| {
+                assert_eq!(connection_id, 41);
+                observed_recycle_count.fetch_add(1, Ordering::Relaxed);
+            }),
+        );
+        panic!("contract panic");
+    }));
+
+    assert!(unwind.is_err());
+    assert_eq!(recycle_count.load(Ordering::Relaxed), 1);
 }
 
 struct GatedFactory {

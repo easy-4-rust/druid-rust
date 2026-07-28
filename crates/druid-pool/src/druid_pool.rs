@@ -5,7 +5,7 @@
 use crate::config::DruidPoolBuilder;
 use crate::pool_inner::PoolInner;
 use druid_core::{
-    ConnectionFactory, DruidError, DruidPooledConnection, FilterChain, PoolState,
+    DruidError, DruidPooledConnection, FilterChain, PhysicalConnectionFactory, PoolState,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 /// Druid 风格连接池。
 ///
 /// 对应 Druid Java 的 `DruidDataSource`，实现 max_open / min_idle /
-/// acquire_timeout / FilterChain 装配 / PooledConnection::drop 归还。
+/// acquire_timeout / FilterChain 装配 / DruidPooledConnection::drop 归还。
 pub struct DruidPool {
     name: String,
     driver_name: String,
@@ -23,46 +23,74 @@ pub struct DruidPool {
 
 impl DruidPool {
     pub fn new(
-        name: String, driver_name: String,
-        factory: Arc<dyn ConnectionFactory>, config: crate::config::PoolInnerConfig,
+        name: String,
+        driver_name: String,
+        factory: Arc<dyn PhysicalConnectionFactory>,
+        config: crate::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
     ) -> Self {
-        Self { name, driver_name, inner: Arc::new(PoolInner::new(factory, config)), filter_chain }
+        Self {
+            name,
+            driver_name,
+            inner: Arc::new(PoolInner::new(factory, config)),
+            filter_chain,
+        }
     }
 
-    pub fn builder() -> DruidPoolBuilder { DruidPoolBuilder::new() }
+    pub fn builder() -> DruidPoolBuilder {
+        DruidPoolBuilder::new()
+    }
 
     pub async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
         self.get_timeout(self.inner.config.acquire_timeout).await
     }
 
-    pub async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
+    pub async fn get_timeout(
+        &self,
+        timeout: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
         if self.inner.closed.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(DruidError::PoolClosed);
         }
         let deadline = Instant::now() + timeout;
-        self.inner.connect_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.inner
+            .connect_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         loop {
-            let idle_connection = {
+            let (idle_connection, remaining_idle) = {
                 let mut idle = self.inner.idle.lock();
-                idle.pop_front()
+                let connection = idle.pop_front();
+                (connection, idle.len())
             };
             if let Some(mut item) = idle_connection {
+                let now = Instant::now();
+                let lifetime_expired =
+                    now.duration_since(item.created_at) >= self.inner.config.max_lifetime;
+                let idle_expired = remaining_idle >= self.inner.config.min_idle
+                    && now.duration_since(item.last_used) >= self.inner.config.idle_timeout;
+                if lifetime_expired || idle_expired {
+                    self.inner.destroy_connection(item.conn);
+                    continue;
+                }
                 if self.inner.config.test_on_borrow
                     && self.inner.factory.validate(&mut item.conn).await.is_err()
                 {
                     self.inner.destroy_connection(item.conn);
                     continue;
                 }
-                self.inner.active_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                return Ok(self.wrap_connection(item.conn, item.id));
+                self.inner
+                    .active_count
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return Ok(self.wrap_connection(item.conn, item.id, item.created_at));
             }
             match self.inner.create_connection().await {
                 Ok(conn) => {
                     let id = self.inner.next_id();
-                    self.inner.active_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    return Ok(self.wrap_connection(conn, id));
+                    self.inner
+                        .active_count
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    return Ok(self.wrap_connection(conn, id, Instant::now()));
                 }
                 Err(DruidError::PoolExhausted) => {}
                 Err(_) if !self.inner.idle.lock().is_empty() => continue,
@@ -79,29 +107,57 @@ impl DruidPool {
 
     pub fn state(&self) -> PoolState {
         PoolState {
-            name: self.name.clone(), driver_name: self.driver_name.clone(),
+            name: self.name.clone(),
+            driver_name: self.driver_name.clone(),
             max_open: self.inner.config.max_open,
-            active_count: self.inner.active_count.load(std::sync::atomic::Ordering::Relaxed),
+            active_count: self
+                .inner
+                .active_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             idle_count: self.inner.idle.lock().len(),
-            create_count: self.inner.create_count.load(std::sync::atomic::Ordering::Relaxed),
-            close_count: self.inner.close_count.load(std::sync::atomic::Ordering::Relaxed),
-            connect_count: self.inner.connect_count.load(std::sync::atomic::Ordering::Relaxed),
-            connect_error_count: self.inner.connect_error_count.load(std::sync::atomic::Ordering::Relaxed),
-            recycle_count: self.inner.recycle_count.load(std::sync::atomic::Ordering::Relaxed),
+            create_count: self
+                .inner
+                .create_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            close_count: self
+                .inner
+                .close_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            connect_count: self
+                .inner
+                .connect_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            connect_error_count: self
+                .inner
+                .connect_error_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            recycle_count: self
+                .inner
+                .recycle_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             closed: self.inner.closed.load(std::sync::atomic::Ordering::Relaxed),
             ..Default::default()
         }
     }
 
-    pub async fn close(&self) { self.inner.close().await; }
-    pub fn filter_chain(&self) -> Option<&Arc<FilterChain>> { self.filter_chain.as_ref() }
-    pub fn driver_name(&self) -> &str { &self.driver_name }
-    pub fn name(&self) -> &str { &self.name }
+    pub async fn close(&self) {
+        self.inner.close().await;
+    }
+    pub fn filter_chain(&self) -> Option<&Arc<FilterChain>> {
+        self.filter_chain.as_ref()
+    }
+    pub fn driver_name(&self) -> &str {
+        &self.driver_name
+    }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 
     fn wrap_connection(
         &self,
         connection: Box<dyn druid_core::PhysicalConnection>,
         id: u64,
+        created_at: Instant,
     ) -> DruidPooledConnection {
         let pool = self.inner.clone();
         DruidPooledConnection::with_context(
@@ -110,7 +166,7 @@ impl DruidPool {
             self.name.clone(),
             self.filter_chain.clone(),
             Box::new(move |connection, connection_id| {
-                pool.return_connection(connection, connection_id);
+                pool.return_connection(connection, connection_id, created_at);
             }),
         )
     }
@@ -122,10 +178,7 @@ impl druid_core::Pool for DruidPool {
         DruidPool::get(self).await
     }
 
-    async fn get_timeout(
-        &self,
-        timeout: Duration,
-    ) -> Result<DruidPooledConnection, DruidError> {
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
         DruidPool::get_timeout(self, timeout).await
     }
 

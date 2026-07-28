@@ -204,11 +204,7 @@ impl SqlxConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for SqlxConnectionAdapter {
-    async fn exec(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let result = Self::bind_any_values(sql, params)
@@ -226,8 +222,8 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     .execute(connection)
                     .await
                     .map_err(Self::driver_error)?;
-                let last_insert_id = (result.last_insert_rowid() != 0)
-                    .then_some(result.last_insert_rowid());
+                let last_insert_id =
+                    (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
                 Ok(ExecResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id,
@@ -237,11 +233,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         }
     }
 
-    async fn fetch(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let rows = Self::bind_any_values(sql, params)
@@ -277,11 +269,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
 
     async fn commit(&mut self) -> Result<(), DruidError> {
         match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                AnyTransactionManager::commit(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
+            SqlxConnectionBackend::Any(connection) => AnyTransactionManager::commit(connection)
+                .await
+                .map_err(Self::driver_error),
             SqlxConnectionBackend::Sqlite(connection) => {
                 SqliteTransactionManager::commit(connection)
                     .await
@@ -292,11 +282,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
 
     async fn rollback(&mut self) -> Result<(), DruidError> {
         match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                AnyTransactionManager::rollback(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
+            SqlxConnectionBackend::Any(connection) => AnyTransactionManager::rollback(connection)
+                .await
+                .map_err(Self::driver_error),
             SqlxConnectionBackend::Sqlite(connection) => {
                 SqliteTransactionManager::rollback(connection)
                     .await
@@ -353,16 +341,12 @@ impl PhysicalConnection for SqlxConnectionAdapter {
 
     async fn ping(&mut self) -> Result<(), DruidError> {
         match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                SqlxConnection::ping(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                SqlxConnection::ping(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
+            SqlxConnectionBackend::Any(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::Sqlite(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
         }
     }
 
@@ -391,7 +375,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         PhysicalConnectionCapabilities {
             transactions: true,
             savepoints: true,
-            connection_attributes: true,
+            auto_commit: true,
+            read_only: false,
+            transaction_isolation: false,
             catalog: false,
             schema: false,
         }

@@ -16,7 +16,6 @@ druid-pool = { path = "../druid-pool" }
 async-trait = { workspace = true }
 tokio      = { workspace = true }
 thiserror  = { workspace = true }
-
-# NOTE: rbdc is not yet a workspace dependency. It will be added once the
-# adapter is wired to the actual rbdc trait surface (planned for V2).
-# rbdc        = { version = "4", default-features = false }
+rbdc       = { workspace = true }
+rbs        = { workspace = true }
+futures    = { workspace = true }

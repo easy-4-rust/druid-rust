@@ -1,6 +1,7 @@
-//! druid-rust rbdc adapter.
-//!
-//! **Status: design-stage placeholder.** See ADR-001.
+//! RBDC 直连驱动适配层。
 
-pub mod adapter;
-pub use adapter::RbdcAdapter;
+pub mod rbdc_connection_adapter;
+pub mod rbdc_connection_factory;
+
+pub use rbdc_connection_adapter::RbdcConnectionAdapter;
+pub use rbdc_connection_factory::RbdcConnectionFactory;

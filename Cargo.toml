@@ -46,6 +46,8 @@ missing_panics_doc = "allow"
 tokio        = { version = "1.40", features = ["full"] }
 async-trait  = "0.1"
 futures      = "0.3"
+rbdc         = { version = "4.9.10", default-features = false }
+rbs          = "4.8.4"
 
 # SQL parsing
 sqlparser    = "0.52"

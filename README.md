@@ -4,7 +4,7 @@
 
 # druid-rust
 
-**A Rust data-source governance middleware inspired by Alibaba Druid (Java)**
+**A planned semantic migration of Alibaba Druid (Java) to Rust**
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
@@ -18,67 +18,65 @@
 
 ---
 
-> **Project status: Design Stage.**
+> **Project status: Active semantic migration.**
 >
-> This repository does not yet ship a buildable workspace, installable crates
-> or a stable public API. The Cargo workspace at the root is a placeholder
-> skeleton whose members each contain a single `#![doc]` line and no real
-> implementation. The README, the architecture document and the `doc/` tree
-> describe the target contract, the planned crate boundaries and the phased
-> rollout — they are **not** evidence that the project is runnable today.
+> This repository is a buildable Cargo workspace with implemented core, pool,
+> SQL, statistics, dynamic datasource and driver-bridge code. It is not yet a
+> stable or complete Druid migration: every completed claim must be backed by
+> Java-oracle differential tests or an explicit Rust ecosystem contract.
 >
-> Do not file bugs about missing features; instead, open an issue with a
-> `design-question` label to discuss the planned contract before any code is
-> shipped.
+> The goal is complete Druid feature semantics, delivered in planned slices.
+> It is deliberately not a line-for-line Java translation, but it is also not
+> a loose reimplementation that may drop behavior.
 
-> **Last verified**: 2026-07-27.
+> **Last verified**: 2026-07-28.
 
 ## 1. Project Positioning and Status
 
-**druid-rust is a Rust workspace that aims to provide a Druid-style data-source
-governance middleware for backend services.** It takes inspiration from
-Alibaba Druid for the JVM — connection pooling, filter chains, SQL
-firewall, statistics, dynamic datasource and an admin surface — and
-rebuilds those capabilities against the Rust async ecosystem
+**druid-rust is a Rust workspace that migrates Alibaba Druid's observable
+semantics to the Rust async ecosystem.** Connection pooling, filter chains,
+SQL firewall, statistics, dynamic datasource and the admin surface are tracked
+as migration contracts against the Java source rather than selected only as
+general architectural patterns. The implementation targets
 (`tokio`, `sqlparser-rs`, `sqlx`, `deadpool`, `bb8`, `rbdc`, `axum`).
 
 ### 1.1 What this project is
 
 | Field | Value |
 | :--- | :--- |
-| Primary crate | none yet (planned: `druid-core`) |
-| Current version | `0.0.0-design` (placeholder) |
+| Primary contracts | `druid-core`; native pool in `druid-pool` |
+| Current version | `0.0.0-design` (unstable migration workspace) |
 | MSRV | `1.75` (pinned in `rust-toolchain.toml`) |
 | Edition | `2021` |
 | Workspace resolver | `2` |
 | Unsafe policy | `forbid` (workspace lint) |
-| Default features | none — every crate ships empty |
+| Default features | none |
 | Publication | none — every crate is `publish = false` |
 | License | Apache-2.0 |
 
 ### 1.2 What this project is not
 
-- Not a 1:1 port of Druid Java. Druid Java carries ~200k LOC of features that
-  do not all map cleanly to Rust async; only the architectural *patterns*
-  carry over.
+- Not a line-for-line or class-layout copy. Java behaviors are migrated through
+  an object ledger and semantic contract matrix, with Rust-specific internal
+  scheduling and driver adapters where the platforms differ.
 - Not an ORM. druid-rust does not generate SQL; it pools, observes and
   governs SQL emitted by the host application.
 - Not a database migration tool. Schema versioning is explicitly out of scope.
-- Not yet runnable. There is no `cargo add druid-core`, no public API, no
-  tests, no benchmarks, no CI badge. Those land in later phases.
+- Not release-ready. The workspace is runnable and tested, but the complete
+  Druid object/behavior matrix, Java golden tests and stable API are unfinished.
 
 ### 1.3 Status evidence
 
 | Claim | Current value | Evidence |
 | :--- | :--- | :--- |
-| Workspace builds | yes (placeholder only) | `cargo check --workspace` passes locally |
-| Public API | none exported | `crates/*/src/lib.rs` contains a single doc attribute |
-| Tests | none | no `#[test]` in workspace |
-| Documentation | architecture baseline only | `druid-rust-Architecture.zh_CN.md`, `doc/` |
+| Workspace builds | yes with current stable toolchain | `cargo +stable test --workspace --all-targets` |
+| Connection API | implemented, unstable | `DruidPooledConnection` → `PhysicalConnection` |
+| Tests | implemented | core/pool/SQL/Stats/Dynamic/SQLx/RBDC/bb8/deadpool suites |
+| Documentation | migration ledger + architecture | `doc/migration/` |
 | crates.io | not published | every crate is `publish = false` |
 | docs.rs | not published | every crate is `publish = false` |
 | CI | not configured | no `.github/workflows/` directory |
-| Coverage | not measured | no `cargo llvm-cov` run |
+| Coverage | baseline measured; current changes require re-audit | `cargo llvm-cov` is an exit gate, not a completion shortcut |
 | Benchmark | not measured | no `benches/` directory |
 
 ## 2. Features and Maturity
@@ -87,14 +85,15 @@ rebuilds those capabilities against the Rust async ecosystem
 
 | Feature | Status | Crate | Constraint | Verification |
 | :---: | :---: | :--- | :--- | :--- |
-| Driver-agnostic `Connection` trait | 🗓️ design target | `druid-core` | not yet declared | `doc/7` §3 |
-| HikariCP-style async pool | 🗓️ design target | `druid-pool` | not yet declared | `doc/5` §3 |
-| sqlparser-rs based Wall rules | 🗓️ design target | `druid-sql` | depends on `druid-core` | `doc/7` §4 |
-| SQL merge statistics | 🗓️ design target | `druid-stats` | depends on `druid-sql` | `doc/8` §12 |
-| Multi-datasource hot switching | 🗓️ design target | `druid-dynamic` | depends on `druid-pool` | `doc/8` §10 |
-| `sqlx + deadpool` adapter | 🗓️ design target | `druid-sqlx-deadpool` | V2 | ADR-001 |
-| `sqlx + bb8` adapter | 🗓️ design target | `druid-sqlx-bb8` | V2 | ADR-001 |
-| `rbdc` adapter | 🗓️ design target | `druid-rbdc` | V2 | ADR-001 |
+| Driver-agnostic `PhysicalConnection` SPI | 🚧 partial | `druid-core` | JDBC breadth incomplete | migration doc §5 |
+| Native async pool | 🚧 partial | `druid-pool` | full Druid lifecycle incomplete | migration semantic matrix |
+| sqlparser-rs based Wall rules | 🚧 partial | `druid-sql` | Druid rule matrix incomplete | migration semantic matrix |
+| SQL merge statistics | 🚧 partial | `druid-stats` | layered Java stats incomplete | migration semantic matrix |
+| Multi-datasource hot switching | 🚧 partial | `druid-dynamic` | HA health/recovery incomplete | migration semantic matrix |
+| `sqlx + deadpool` external-pool bridge | 🧪 preview | `druid-sqlx-deadpool` | no nested Druid pool | bridge contract tests |
+| `sqlx + bb8` external-pool bridge | 🧪 preview | `druid-sqlx-bb8` | no nested Druid pool | bridge contract tests |
+| SQLx direct adapter | 🧪 preview | `druid-sqlx` | SQLite tested; DB matrix incomplete | direct contract tests |
+| RBDC direct adapter | 🚧 partial | `druid-rbdc` | real driver matrix incomplete | RBDC trait contract tests |
 | `/druid/admin` HTTP surface | 🗓️ design target | `druid-admin` | V3 | `doc/9` |
 | SQL injection regex detector | ⛔ not ported | — | semantically unsafe | ADR-005 |
 
@@ -118,9 +117,8 @@ rebuilds those capabilities against the Rust async ecosystem
 | rustfmt | stable | `rust-toolchain.toml` components |
 | Clippy | workspace pedantic enabled | `Cargo.toml` `[workspace.lints.clippy]` |
 
-> Platform support, `no_std`, WASM and `unsafe` policy will be filled in once
-> `druid-core` exposes its first public trait. The placeholder workspace
-> intentionally does not claim any platform matrix.
+> Platform support, `no_std` and WASM remain undecided. `druid-core` already
+> exposes public contracts, but no stable platform matrix is claimed yet.
 
 ## 4. Workspace and Crate Architecture
 
@@ -128,20 +126,21 @@ rebuilds those capabilities against the Rust async ecosystem
 
 ```text
 [downstream application]
-        │ cargo add druid-core + adapter
+        │
         ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ druid-rust Cargo Workspace (design stage)                    │
+│ druid-rust Cargo Workspace (active migration)                │
 │                                                              │
-│ druid-core         Connection / Driver / Pool / Filter traits│
+│ druid-core         DruidPooledConnection / PhysicalConnection│
 │ druid-sql          sqlparser-rs AST, Wall, parameterize      │
-│ druid-pool         HikariCP-style async pool (driver-agnostic)
+│ druid-pool         Druid native async pool                    │
 │ druid-stats        SQL merge + percentile + Prometheus        │
 │ druid-dynamic      ArcSwap multi-datasource + read/write split
 │                                                              │
-│ druid-rbdc         adapter for the rbdc ecosystem            │
-│ druid-sqlx-deadpool adapter for sqlx via deadpool             │
-│ druid-sqlx-bb8     adapter for sqlx via bb8                   │
+│ druid-sqlx         direct SQLx PhysicalConnection adapter     │
+│ druid-rbdc         direct RBDC PhysicalConnection adapter     │
+│ druid-sqlx-deadpool external pool bridge                      │
+│ druid-sqlx-bb8     external pool bridge                       │
 │                                                              │
 │ druid-admin        axum-based /druid/admin HTTP surface       │
 └──────────────────────────────────────────────────────────────┘
@@ -149,6 +148,20 @@ rebuilds those capabilities against the Rust async ecosystem
         ▼
 [database driver ecosystem: sqlx, rbdc, deadpool, bb8, tokio-postgres, ...]
 ```
+
+The connection boundary is fixed:
+
+```text
+DruidPooledConnection
+└── PhysicalConnection
+    ├── SqlxConnectionAdapter
+    ├── RbdcConnectionAdapter
+    └── other driver adapters
+```
+
+bb8/deadpool are `Pool` providers. They return an external lease through
+`PhysicalConnectionLease`; they are not `PhysicalConnectionFactory`
+implementations and are never nested inside `DruidPool`.
 
 ### 4.2 Dependency graph
 
@@ -168,11 +181,11 @@ flowchart TB
     DYNAMIC --> POOL
 
     RBDC["druid-rbdc"] --> CORE
-    RBDC --> POOL
+    SQLX["druid-sqlx"] --> CORE
     SQLXDP["druid-sqlx-deadpool"] --> CORE
-    SQLXDP --> POOL
+    SQLXDP --> SQLX
     SQLXB8["druid-sqlx-bb8"] --> CORE
-    SQLXB8 --> POOL
+    SQLXB8 --> SQLX
 
     ADMIN --> CORE
     ADMIN --> POOL
@@ -184,14 +197,15 @@ flowchart TB
 
 | Crate | Publish | Default | Responsibility | Planned key dependencies |
 | :---: | :---: | :---: | :--- | :--- |
-| `druid-core` | ⛔ | — | Trait contracts: `Connection`, `Driver`, `Pool`, `Filter`, `ConnectionFactory` | none (zero-dep) |
+| `druid-core` | ⛔ | — | `DruidPooledConnection`, `PhysicalConnection`, `Pool`, Filter contracts | `async-trait` |
 | `druid-sql` | ⛔ | — | sqlparser-rs adapter, Wall rules, parameterization, fingerprint | `sqlparser` |
 | `druid-pool` | ⛔ | — | HikariCP-style async pool, idle queue, eviction scheduler | `tokio`, `parking_lot` |
 | `druid-stats` | ⛔ | — | SQL merge, percentile histogram, Prometheus exporter | `moka`, `prometheus` |
 | `druid-dynamic` | ⛔ | — | `ArcSwap` multi-datasource, read/write split, load balancer | `arc-swap`, `dashmap` |
-| `druid-rbdc` | ⛔ | — | Adapter for the `rbdc` driver ecosystem | `rbdc` (deferred to V2) |
-| `druid-sqlx-deadpool` | ⛔ | — | Adapter combining `sqlx` with `deadpool` | `sqlx`, `deadpool` |
-| `druid-sqlx-bb8` | ⛔ | — | Adapter combining `sqlx` with `bb8` | `sqlx`, `bb8` |
+| `druid-sqlx` | ⛔ | — | Direct raw SQLx connection adapter | `sqlx` |
+| `druid-rbdc` | ⛔ | — | Direct adapter for the `rbdc` driver ecosystem | `rbdc`, `rbs` |
+| `druid-sqlx-deadpool` | ⛔ | — | deadpool external-pool bridge over SQLx | `druid-sqlx`, `deadpool` |
+| `druid-sqlx-bb8` | ⛔ | — | bb8 external-pool bridge over SQLx | `druid-sqlx`, `bb8` |
 | `druid-admin` | ⛔ | — | axum-based `/druid/admin` HTTP surface | `axum`, `prometheus` |
 
 ### 4.4 Dependency and visibility rules
@@ -200,9 +214,9 @@ flowchart TB
   backend. It only exposes trait contracts.
 - Domain crates (`druid-sql`, `druid-pool`, `druid-stats`, `druid-dynamic`)
   MUST NOT depend on each other cyclically; they share `druid-core` only.
-- Adapter crates (`druid-rbdc`, `druid-sqlx-deadpool`, `druid-sqlx-bb8`)
-  each depend on exactly one external pool ecosystem and on `druid-core`
-  + `druid-pool`. They MUST NOT pull in the other two adapter crates.
+- Direct adapters depend on `druid-core`; external-pool bridges depend on
+  `druid-core`, `druid-sqlx` and exactly one pool ecosystem. They MUST NOT
+  depend on `druid-pool`, because that would create pool-in-pool.
 - `druid-admin` is the only crate that depends on every other crate; it is
   intentionally not in the dependency closure of any domain crate.
 - All crates are `publish = false` until Phase 1 closes.
@@ -211,16 +225,16 @@ flowchart TB
 
 | Principle | How it lands in this workspace | Verified by |
 | :--- | :--- | :--- |
-| Type safety | `Connection` is a trait object behind `Box<dyn Connection>`; `Filter` split into `BeforeFilter` and `AfterFilter` traits | future compile tests |
-| Clear ownership | `PooledConnection` is the only handle that owns a live connection; `Drop` returns it to the pool | future leak tests |
+| Type safety | `PhysicalConnection` is internal behind `Box<dyn PhysicalConnection>`; applications receive `DruidPooledConnection` | compile + contract tests |
+| Clear ownership | `DruidPooledConnection` owns one connection and one `FnOnce` return path; external leases use `PhysicalConnectionLease` | exactly-once tests |
 | Composable errors | Single `druid_core::Error` enum with `thiserror`; `Result<T, Error>` propagates through all layers | future error tests |
 | Default safe | Wall denies `DROP`/`TRUNCATE` by default; filter chain defaults to `StatFilter + WallFilter` | future security tests |
 | Zero-cost where it matters | Trait dispatch through `async-trait` only at the boundary; inner scheduler uses `parking_lot::Mutex` and `tokio::sync::Notify` | future bench |
 | Evolvable | Feature flags hide individual adapters; the `druid-core` trait surface is the contract that survives upgrades | future semver tests |
 
-## 6. Design Sketch — Future API (Not Runnable Today)
+## 6. Historical Design Sketch
 
-> **Warning: the snippets below are design sketches.** Crate names, module
+> **Warning: the snippets below are preserved historical design sketches.** Crate names, module
 > paths, trait signatures and configuration keys are *provisional* and will
 > change before any crate is published. Do not copy them into production
 > code. They exist to communicate intent, not to serve as an API guarantee.

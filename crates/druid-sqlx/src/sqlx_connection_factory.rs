@@ -1,12 +1,13 @@
 //! SQLx 物理连接工厂。
 
 use crate::sqlx_connection_adapter::SqlxConnectionAdapter;
-use druid_core::{ConnectionFactory, DruidError, PhysicalConnection};
+use druid_core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 
 /// SQLx 物理连接工厂。
 ///
 /// 对应 Java: `DruidDataSource#createPhysicalConnection`。
 /// 每次 `create` 都打开一个未池化的 SQLx 连接，由 DruidPool 独占池化职责。
+#[derive(Debug, Clone)]
 pub struct SqlxConnectionFactory {
     url: String,
 }
@@ -26,7 +27,7 @@ impl SqlxConnectionFactory {
 }
 
 #[async_trait::async_trait]
-impl ConnectionFactory for SqlxConnectionFactory {
+impl PhysicalConnectionFactory for SqlxConnectionFactory {
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         let connection = SqlxConnectionAdapter::connect(&self.url).await?;
         Ok(Box::new(connection))

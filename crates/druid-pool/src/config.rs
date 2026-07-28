@@ -36,7 +36,7 @@ impl Default for PoolInnerConfig {
 pub struct DruidPoolBuilder {
     name: String,
     driver_name: String,
-    factory: Option<Arc<dyn druid_core::ConnectionFactory>>,
+    factory: Option<Arc<dyn druid_core::PhysicalConnectionFactory>>,
     max_open: usize,
     min_idle: usize,
     max_idle: usize,
@@ -64,18 +64,63 @@ impl DruidPoolBuilder {
         }
     }
 
-    pub fn name(mut self, v: impl Into<String>) -> Self { self.name = v.into(); self }
-    pub fn driver_name(mut self, v: impl Into<String>) -> Self { self.driver_name = v.into(); self }
-    pub fn factory(mut self, f: Arc<dyn druid_core::ConnectionFactory>) -> Self { self.factory = Some(f); self }
-    pub fn max_open(mut self, v: usize) -> Self { self.max_open = v; self }
-    pub fn min_idle(mut self, v: usize) -> Self { self.min_idle = v; self }
-    pub fn max_idle(mut self, v: usize) -> Self { self.max_idle = v; self }
-    pub fn acquire_timeout(mut self, v: Duration) -> Self { self.acquire_timeout = v; self }
-    pub fn test_on_borrow(mut self, v: bool) -> Self { self.test_on_borrow = v; self }
-    pub fn filter_chain(mut self, fc: Arc<FilterChain>) -> Self { self.filter_chain = Some(fc); self }
+    pub fn name(mut self, v: impl Into<String>) -> Self {
+        self.name = v.into();
+        self
+    }
+    pub fn driver_name(mut self, v: impl Into<String>) -> Self {
+        self.driver_name = v.into();
+        self
+    }
+    pub fn factory(mut self, factory: Arc<dyn druid_core::PhysicalConnectionFactory>) -> Self {
+        self.factory = Some(factory);
+        self
+    }
+    pub fn max_open(mut self, v: usize) -> Self {
+        self.max_open = v;
+        self
+    }
+    pub fn min_idle(mut self, v: usize) -> Self {
+        self.min_idle = v;
+        self
+    }
+    pub fn max_idle(mut self, v: usize) -> Self {
+        self.max_idle = v;
+        self
+    }
+    pub fn acquire_timeout(mut self, v: Duration) -> Self {
+        self.acquire_timeout = v;
+        self
+    }
+    /// 设置物理连接最大生命周期。
+    ///
+    /// 超过该时长的空闲连接在下次借用检查时被销毁。
+    pub fn max_lifetime(mut self, max_lifetime: Duration) -> Self {
+        self.max_lifetime = max_lifetime;
+        self
+    }
+
+    /// 设置连接最大空闲时间。
+    ///
+    /// 超过该时长且销毁后仍满足 `min_idle` 的连接在下次借用检查时被销毁。
+    pub fn idle_timeout(mut self, idle_timeout: Duration) -> Self {
+        self.idle_timeout = idle_timeout;
+        self
+    }
+
+    pub fn test_on_borrow(mut self, v: bool) -> Self {
+        self.test_on_borrow = v;
+        self
+    }
+    pub fn filter_chain(mut self, fc: Arc<FilterChain>) -> Self {
+        self.filter_chain = Some(fc);
+        self
+    }
 
     pub async fn build(self) -> Result<crate::DruidPool, druid_core::DruidError> {
-        let factory = self.factory.ok_or(druid_core::DruidError::Other("factory required".into()))?;
+        let factory = self
+            .factory
+            .ok_or(druid_core::DruidError::Other("factory required".into()))?;
         let inner_config = PoolInnerConfig {
             max_open: self.max_open,
             min_idle: self.min_idle,
@@ -85,10 +130,18 @@ impl DruidPoolBuilder {
             idle_timeout: self.idle_timeout,
             test_on_borrow: self.test_on_borrow,
         };
-        Ok(crate::DruidPool::new(self.name, self.driver_name, factory, inner_config, self.filter_chain))
+        Ok(crate::DruidPool::new(
+            self.name,
+            self.driver_name,
+            factory,
+            inner_config,
+            self.filter_chain,
+        ))
     }
 }
 
 impl Default for DruidPoolBuilder {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

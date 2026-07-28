@@ -2,11 +2,11 @@
 //!
 //! 连接池内部状态：空闲队列、活跃计数、等待通知。
 
-use druid_core::{ConnectionFactory, DruidError, PhysicalConnection};
+use druid_core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::Notify;
 
 /// 空闲连接条目。
@@ -19,24 +19,27 @@ pub(crate) struct IdleConn {
 
 /// 连接池内部状态。
 pub struct PoolInner {
-    pub factory: Arc<dyn ConnectionFactory>,
-    pub config: crate::config::PoolInnerConfig,
-    pub idle: parking_lot::Mutex<VecDeque<IdleConn>>,
-    pub notify: Notify,
-    pub active_count: AtomicUsize,
-    pub total_count: AtomicUsize,
-    pub next_id: AtomicU64,
-    pub closed: AtomicBool,
+    pub(crate) factory: Arc<dyn PhysicalConnectionFactory>,
+    pub(crate) config: crate::config::PoolInnerConfig,
+    pub(crate) idle: parking_lot::Mutex<VecDeque<IdleConn>>,
+    pub(crate) notify: Notify,
+    pub(crate) active_count: AtomicUsize,
+    pub(crate) total_count: AtomicUsize,
+    pub(crate) next_id: AtomicU64,
+    pub(crate) closed: AtomicBool,
     // 统计
-    pub create_count: AtomicU64,
-    pub close_count: AtomicU64,
-    pub connect_count: AtomicU64,
-    pub connect_error_count: AtomicU64,
-    pub recycle_count: AtomicU64,
+    pub(crate) create_count: AtomicU64,
+    pub(crate) close_count: AtomicU64,
+    pub(crate) connect_count: AtomicU64,
+    pub(crate) connect_error_count: AtomicU64,
+    pub(crate) recycle_count: AtomicU64,
 }
 
 impl PoolInner {
-    pub fn new(factory: Arc<dyn ConnectionFactory>, config: crate::config::PoolInnerConfig) -> Self {
+    pub fn new(
+        factory: Arc<dyn PhysicalConnectionFactory>,
+        config: crate::config::PoolInnerConfig,
+    ) -> Self {
         Self {
             factory,
             config,
@@ -99,7 +102,12 @@ impl PoolInner {
     }
 
     /// 归还连接到空闲队列。
-    pub fn return_connection(&self, conn: Box<dyn PhysicalConnection>, id: u64) {
+    pub fn return_connection(
+        &self,
+        conn: Box<dyn PhysicalConnection>,
+        id: u64,
+        created_at: Instant,
+    ) {
         let was_active = self
             .active_count
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
@@ -126,7 +134,7 @@ impl PoolInner {
                 queue.push_back(IdleConn {
                     conn,
                     id,
-                    created_at: Instant::now(),
+                    created_at,
                     last_used: Instant::now(),
                 });
                 Ok(())
