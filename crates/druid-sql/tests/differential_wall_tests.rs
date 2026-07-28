@@ -21,8 +21,8 @@ fn test_wall_config_all_46_defaults() {
     assert!(c.insert_allow);
     assert!(c.update_allow);
     assert!(c.delete_allow);
-    assert!(!c.drop_table_allow);          // DruidJava: false
-    assert!(!c.truncate_allow);            // DruidJava: false
+    assert!(!c.drop_table_allow); // DruidJava: false
+    assert!(!c.truncate_allow); // DruidJava: false
     assert!(c.alter_table_allow);
     assert!(c.create_table_allow);
     assert!(c.commit_allow);
@@ -34,8 +34,8 @@ fn test_wall_config_all_46_defaults() {
     assert!(c.start_transaction_allow);
     // WHERE enforcement (6 fields)
     assert!(c.set_allow);
-    assert!(c.update_must_have_where);     // DruidJava: true
-    assert!(c.delete_must_have_where);     // DruidJava: true
+    assert!(c.update_must_have_where); // DruidJava: true
+    assert!(c.delete_must_have_where); // DruidJava: true
     assert!(c.select_where_alway_true_check);
     assert!(c.select_having_alway_true_check);
     assert!(c.update_where_alway_true_check);
@@ -47,10 +47,10 @@ fn test_wall_config_all_46_defaults() {
     assert!(c.condition_like_true_allow);
     // Syntax control (9 fields)
     assert!(c.case_condition_const_allow);
-    assert!(!c.multi_statement_allow);     // DruidJava: false
+    assert!(!c.multi_statement_allow); // DruidJava: false
     assert!(c.hint_allow);
     assert!(c.none_base_statement_allow);
-    assert!(!c.limit_zero_allow);          // DruidJava: false
+    assert!(!c.limit_zero_allow); // DruidJava: false
     assert!(c.comment_allow);
     assert!(c.variant_check);
     assert!(!c.must_parameterized);
@@ -78,7 +78,10 @@ fn test_wall_delete_without_where() {
     let wall = Wall::new(WallConfig::default());
     let result = wall.check("DELETE FROM users");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
 }
 
 /// WallBVTTest#test_delete_1: DELETE with WHERE → Allowed.
@@ -94,14 +97,19 @@ fn test_wall_update_without_where() {
     let wall = Wall::new(WallConfig::default());
     let result = wall.check("UPDATE users SET name = 'x'");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
 }
 
 /// WallBVTTest#test_update_1: UPDATE with WHERE → Allowed.
 #[test]
 fn test_wall_update_with_where() {
     let wall = Wall::new(WallConfig::default());
-    assert!(wall.check("UPDATE users SET name = 'x' WHERE id = 1").is_ok());
+    assert!(wall
+        .check("UPDATE users SET name = 'x' WHERE id = 1")
+        .is_ok());
 }
 
 /// WallBVTTest#test_drop: DROP TABLE → Denied.
@@ -110,7 +118,10 @@ fn test_wall_drop_table_denied() {
     let wall = Wall::new(WallConfig::default());
     let result = wall.check("DROP TABLE users");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
 }
 
 /// WallBVTTest#test_truncate: TRUNCATE → Denied.
@@ -119,21 +130,28 @@ fn test_wall_truncate_denied() {
     let wall = Wall::new(WallConfig::default());
     let result = wall.check("TRUNCATE users");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
 }
 
 /// WallBVTTest#test_select: SELECT → Allowed.
 #[test]
 fn test_wall_select_allowed() {
     let wall = Wall::new(WallConfig::default());
-    assert!(wall.check("SELECT id, name FROM users WHERE id = 1").is_ok());
+    assert!(wall
+        .check("SELECT id, name FROM users WHERE id = 1")
+        .is_ok());
 }
 
 /// WallBVTTest#test_insert: INSERT → Allowed.
 #[test]
 fn test_wall_insert_allowed() {
     let wall = Wall::new(WallConfig::default());
-    assert!(wall.check("INSERT INTO users (name) VALUES ('test')").is_ok());
+    assert!(wall
+        .check("INSERT INTO users (name) VALUES ('test')")
+        .is_ok());
 }
 
 /// WallBVTTest#test_deny_table: denied table → Blocked.
@@ -143,7 +161,10 @@ fn test_wall_deny_table() {
     let wall = Wall::new(c);
     let result = wall.check("SELECT * FROM secret_data");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 /// WallBVTTest#test_drop_table_allowed: DROP TABLE allowed when configured.
@@ -182,7 +203,10 @@ fn test_wall_syntax_error() {
     let wall = Wall::new(WallConfig::default());
     let result = wall.check("SELCT * FORM users");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::SyntaxError(_))));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::SyntaxError(_))));
 }
 
 /// Multiple violations in one statement.
@@ -193,7 +217,11 @@ fn test_wall_multiple_violations() {
     let result = wall.check("DROP TABLE users; TRUNCATE orders");
     assert!(result.is_err());
     let v = result.unwrap_err();
-    assert!(v.len() >= 2, "should report at least 2 violations, got {}", v.len());
+    assert!(
+        v.len() >= 2,
+        "should report at least 2 violations, got {}",
+        v.len()
+    );
 }
 
 /// Table name check across SELECT/UPDATE/DELETE.
@@ -206,13 +234,17 @@ fn test_wall_deny_table_in_select() {
 #[test]
 fn test_wall_deny_table_in_update() {
     let c = WallConfig::builder().deny_table("admin").build();
-    assert!(Wall::new(c).check("UPDATE admin SET x = 1 WHERE id = 1").is_err());
+    assert!(Wall::new(c)
+        .check("UPDATE admin SET x = 1 WHERE id = 1")
+        .is_err());
 }
 
 #[test]
 fn test_wall_deny_table_in_delete() {
     let c = WallConfig::builder().deny_table("admin").build();
-    assert!(Wall::new(c).check("DELETE FROM admin WHERE id = 1").is_err());
+    assert!(Wall::new(c)
+        .check("DELETE FROM admin WHERE id = 1")
+        .is_err());
 }
 
 /// WallConfig builder chaining.

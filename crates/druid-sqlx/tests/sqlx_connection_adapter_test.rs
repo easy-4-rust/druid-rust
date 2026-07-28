@@ -1,8 +1,8 @@
 //! SQLx Adapter 真实 SQLite 驱动合同测试。
 
-use druid_core::{PhysicalConnection, Value};
+use druid_core::{PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, Value};
 use druid_pool::DruidPool;
-use druid_sqlx::SqlxConnectionFactory;
+use druid_sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
 use std::sync::Arc;
 
 async fn sqlite_pool() -> DruidPool {
@@ -69,6 +69,12 @@ async fn sqlx_adapter_exec_fetch_and_type_mapping() {
             Value::Bool(true),
         ]
     );
+
+    let aggregate = connection
+        .fetch("SELECT COUNT(*) FROM item", vec![])
+        .await
+        .expect("SQLite expression columns must use their runtime value type");
+    assert_eq!(aggregate[0].values, vec![Value::Int(1)]);
 }
 
 #[tokio::test]
@@ -76,7 +82,10 @@ async fn sqlx_adapter_transaction_and_savepoint_semantics() {
     let pool = sqlite_pool().await;
     let mut connection = pool.get().await.expect("SQLite connection must open");
     connection
-        .exec("CREATE TABLE account(id INTEGER PRIMARY KEY, balance INTEGER)", vec![])
+        .exec(
+            "CREATE TABLE account(id INTEGER PRIMARY KEY, balance INTEGER)",
+            vec![],
+        )
         .await
         .expect("table creation must succeed");
 
@@ -116,7 +125,10 @@ async fn sqlx_adapter_transaction_and_savepoint_semantics() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].values, vec![Value::Int(1)]);
 
-    connection.begin().await.expect("second transaction must begin");
+    connection
+        .begin()
+        .await
+        .expect("second transaction must begin");
     connection
         .exec(
             "INSERT INTO account(id, balance) VALUES (?, ?)",
@@ -124,7 +136,10 @@ async fn sqlx_adapter_transaction_and_savepoint_semantics() {
         )
         .await
         .expect("third insert must succeed");
-    connection.rollback().await.expect("transaction must rollback");
+    connection
+        .rollback()
+        .await
+        .expect("transaction must rollback");
     let rows = connection
         .fetch("SELECT id FROM account ORDER BY id", vec![])
         .await
@@ -140,5 +155,115 @@ async fn sqlx_adapter_rejects_unsafe_savepoint_names() {
     connection.begin().await.expect("transaction must begin");
     let result = connection.set_savepoint_named("bad;DROP_TABLE").await;
     assert!(result.is_err());
-    connection.rollback().await.expect("transaction must rollback");
+    connection
+        .rollback()
+        .await
+        .expect("transaction must rollback");
+}
+
+#[tokio::test]
+async fn sqlx_adapter_executes_and_reuses_real_prepared_statements() {
+    let pool = DruidPool::builder()
+        .name("sqlite-prepared-contract")
+        .driver_name("sqlx-sqlite")
+        .factory(Arc::new(SqlxConnectionFactory::new("sqlite::memory:")))
+        .max_open(1)
+        .max_idle(1)
+        .pool_prepared_statements(true)
+        .max_pool_prepared_statements_per_connection(3)
+        .build()
+        .await
+        .expect("SQLite prepared pool must build");
+    let mut connection = pool.get().await.expect("SQLite connection must open");
+    connection
+        .exec(
+            "CREATE TABLE prepared_item(id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            vec![],
+        )
+        .await
+        .expect("table creation must succeed");
+
+    let insert_sql = "INSERT INTO prepared_item(id, name) VALUES (?, ?)";
+    let mut first_insert = connection
+        .prepare_statement(insert_sql)
+        .await
+        .expect("first prepare must succeed");
+    first_insert
+        .exec(
+            &mut connection,
+            vec![Value::Int(1), Value::String("first".to_string())],
+        )
+        .await
+        .expect("first prepared insert must succeed");
+    first_insert.close().expect("first statement must close");
+
+    let mut second_insert = connection
+        .prepare_statement(insert_sql)
+        .await
+        .expect("cached prepare must succeed");
+    second_insert
+        .exec(
+            &mut connection,
+            vec![Value::Int(2), Value::String("second".to_string())],
+        )
+        .await
+        .expect("cached prepared insert must succeed");
+    second_insert.close().expect("second statement must close");
+
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 1);
+    assert_eq!(state.cached_prepared_statement_hit_count, 1);
+    assert_eq!(state.cached_prepared_statement_miss_count, 1);
+    assert_eq!(state.cached_prepared_statement_count, 1);
+
+    let mut select = connection
+        .prepare_statement("SELECT id, name FROM prepared_item ORDER BY id")
+        .await
+        .expect("select prepare must succeed");
+    let rows = select
+        .fetch(&mut connection, vec![])
+        .await
+        .expect("prepared select must succeed");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(
+        rows[0].values,
+        vec![Value::Int(1), Value::String("first".to_string())]
+    );
+    assert_eq!(
+        rows[1].values,
+        vec![Value::Int(2), Value::String("second".to_string())]
+    );
+    select.close().expect("select statement must close");
+
+    connection
+        .close()
+        .await
+        .expect("pooled connection must close");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn sqlx_adapter_rejects_a_closed_prepared_statement_handle() {
+    let mut adapter = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .expect("SQLite adapter must connect");
+    let key = PreparedStatementKey::new(
+        Some("SELECT 1".to_string()),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("prepared key must build");
+    let statement = adapter
+        .prepare_physical_statement(&key)
+        .await
+        .expect("physical prepare must succeed");
+    adapter
+        .close_prepared_statement(statement.clone())
+        .await
+        .expect("physical statement close must succeed");
+
+    assert!(adapter
+        .fetch_prepared(statement.as_ref(), vec![])
+        .await
+        .is_err());
 }

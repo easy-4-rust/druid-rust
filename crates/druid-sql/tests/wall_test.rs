@@ -22,7 +22,9 @@ fn test_drop_table_blocked() {
     let result = wall.check("DROP TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
 }
 
 #[test]
@@ -39,13 +41,17 @@ fn test_update_without_where_blocked() {
     let result = wall.check("UPDATE users SET name = 'a'");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
 }
 
 #[test]
 fn test_update_with_where_passes() {
     let wall = Wall::new(WallConfig::default());
-    assert!(wall.check("UPDATE users SET name = 'a' WHERE id = 1").is_ok());
+    assert!(wall
+        .check("UPDATE users SET name = 'a' WHERE id = 1")
+        .is_ok());
 }
 
 // FR-013: DELETE 无 WHERE 拦截
@@ -55,7 +61,9 @@ fn test_delete_without_where_blocked() {
     let result = wall.check("DELETE FROM users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
 }
 
 #[test]
@@ -71,7 +79,9 @@ fn test_truncate_blocked() {
     let result = wall.check("TRUNCATE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
 }
 
 #[test]
@@ -85,12 +95,12 @@ fn test_truncate_allowed_when_configured() {
 #[test]
 fn test_wall_config_builder_defaults() {
     let config = WallConfig::default();
-    assert!(!config.drop_table_allow);      // 默认拒绝 DROP
-    assert!(!config.truncate_allow);        // 默认拒绝 TRUNCATE
+    assert!(!config.drop_table_allow); // 默认拒绝 DROP
+    assert!(!config.truncate_allow); // 默认拒绝 TRUNCATE
     assert!(config.update_must_have_where); // UPDATE 必须有 WHERE
     assert!(config.delete_must_have_where); // DELETE 必须有 WHERE
-    assert!(config.select_all_column_allow);       // SELECT * 默认允许
-    assert!(config.insert_allow);           // INSERT 默认允许
+    assert!(config.select_all_column_allow); // SELECT * 默认允许
+    assert!(config.insert_allow); // INSERT 默认允许
 }
 
 #[test]
@@ -116,7 +126,10 @@ fn test_denied_table_blocked() {
     let wall = Wall::new(config);
     let result = wall.check("SELECT * FROM secret_data");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 // 额外：语法错误
@@ -125,7 +138,10 @@ fn test_syntax_error_reported() {
     let wall = Wall::new(WallConfig::default());
     let result = wall.check("SELCT * FORM users");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::SyntaxError(_))));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::SyntaxError(_))));
 }
 
 // 额外：多语句

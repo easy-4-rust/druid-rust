@@ -52,7 +52,8 @@ fn test_wall_multi_statement_one_drop() {
 #[test]
 fn test_wall_multi_statement_all_valid() {
     let wall = Wall::new(WallConfig::default());
-    let result = wall.check("SELECT 1; INSERT INTO t (c) VALUES (1); UPDATE t SET c = 1 WHERE id = 1");
+    let result =
+        wall.check("SELECT 1; INSERT INTO t (c) VALUES (1); UPDATE t SET c = 1 WHERE id = 1");
     assert!(result.is_ok());
 }
 
@@ -131,7 +132,9 @@ fn test_wall_deny_table_in_insert() {
 #[test]
 fn test_wall_query_with_subquery() {
     let wall = Wall::new(WallConfig::default());
-    assert!(wall.check("SELECT * FROM t WHERE id IN (SELECT id FROM s)").is_ok());
+    assert!(wall
+        .check("SELECT * FROM t WHERE id IN (SELECT id FROM s)")
+        .is_ok());
 }
 
 // ── Complex multi-violation ──
@@ -142,7 +145,10 @@ fn test_wall_complex_multi_violation() {
     let wall = Wall::new(c);
     let result = wall.check("SELECT * FROM secret WHERE id = 1");
     assert!(result.is_err());
-    assert!(result.unwrap_err().iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(result
+        .unwrap_err()
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 // ── Empty/whitespace SQL ──

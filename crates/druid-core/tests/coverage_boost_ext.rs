@@ -18,17 +18,36 @@ struct MockConnForPool;
 #[async_trait::async_trait]
 impl Connection for MockConnForPool {
     async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
-        Ok(ExecResult { rows_affected: 1, last_insert_id: Some(42), row_count: None })
+        Ok(ExecResult {
+            rows_affected: 1,
+            last_insert_id: Some(42),
+            row_count: None,
+        })
     }
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
-        Ok(vec![Row::new(vec![Value::Int(1), Value::String("test".into())])])
+        Ok(vec![Row::new(vec![
+            Value::Int(1),
+            Value::String("test".into()),
+        ])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
-    fn driver_name(&self) -> &str { "mock-pool" }
+    async fn begin(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn ping(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn close(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    fn driver_name(&self) -> &str {
+        "mock-pool"
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -227,9 +246,13 @@ async fn test_pooled_connection_all_methods() {
     let conn = Box::new(MockConnForPool);
     let return_fn_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let flag = return_fn_called.clone();
-    let mut pc = PooledConnection::new(conn, 42, Box::new(move |_conn, _id| {
-        flag.store(true, std::sync::atomic::Ordering::Relaxed);
-    }));
+    let mut pc = PooledConnection::new(
+        conn,
+        42,
+        Box::new(move |_conn, _id| {
+            flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        }),
+    );
 
     assert_eq!(pc.id(), 42);
     assert!(!pc.driver_name().is_empty());
@@ -285,9 +308,13 @@ async fn test_pooled_connection_drop_calls_return() {
     let flag2 = flag.clone();
     {
         let conn = Box::new(MockConnForPool);
-        let _pc = PooledConnection::new(conn, 1, Box::new(move |_c, _id| {
-            flag2.store(true, std::sync::atomic::Ordering::Relaxed);
-        }));
+        let _pc = PooledConnection::new(
+            conn,
+            1,
+            Box::new(move |_c, _id| {
+                flag2.store(true, std::sync::atomic::Ordering::Relaxed);
+            }),
+        );
     }
     assert!(flag.load(std::sync::atomic::Ordering::Relaxed));
 }
@@ -384,7 +411,10 @@ fn test_error_display_all_variants() {
         DruidError::AcquireTimeout,
         DruidError::PoolExhausted,
         DruidError::ValidationFailed("timeout".into()),
-        DruidError::ConnectionLeaked { id: 1, held_for: Duration::from_secs(60) },
+        DruidError::ConnectionLeaked {
+            id: 1,
+            held_for: Duration::from_secs(60),
+        },
         DruidError::ConnectionDiscarded,
         DruidError::DriverError("bad driver".into()),
         DruidError::SqlParseError("syntax error".into()),
@@ -400,7 +430,14 @@ fn test_error_display_all_variants() {
     assert!(format!("{}", DruidError::AcquireTimeout).contains("timed out"));
     assert!(format!("{}", DruidError::PoolExhausted).contains("exhausted"));
     assert!(format!("{}", DruidError::ValidationFailed("x".into())).contains("x"));
-    assert!(format!("{}", DruidError::ConnectionLeaked { id: 5, held_for: Duration::from_secs(10) }).contains("5"));
+    assert!(format!(
+        "{}",
+        DruidError::ConnectionLeaked {
+            id: 5,
+            held_for: Duration::from_secs(10)
+        }
+    )
+    .contains("5"));
     assert!(format!("{}", DruidError::DriverError("d".into())).contains("d"));
     assert!(format!("{}", DruidError::SqlParseError("p".into())).contains("p"));
     assert!(format!("{}", DruidError::WallViolation("w".into())).contains("w"));
@@ -499,13 +536,27 @@ struct MockConnForDefaults;
 
 #[async_trait::async_trait]
 impl Connection for MockConnForDefaults {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
-    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        Ok(ExecResult::default())
+    }
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        Ok(vec![])
+    }
+    async fn begin(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn ping(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn close(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -518,7 +569,10 @@ async fn test_connection_trait_all_defaults() {
     let mut c = MockConnForDefaults;
 
     // Default rollback_to returns error
-    let sp = Savepoint { id: 1, name: Some("sp1".into()) };
+    let sp = Savepoint {
+        id: 1,
+        name: Some("sp1".into()),
+    };
     assert!(c.rollback_to(&sp).await.is_err());
 
     // Default set_savepoint returns error
@@ -623,7 +677,7 @@ async fn test_connection_ext_all_defaults() {
     assert_eq!(c.get_holdability(), 1);
 
     assert!(matches!(
-        c.set_holdability(2).await,
+        ConnectionExt::set_holdability(&mut c, 2).await,
         Err(DruidError::UnsupportedOperation {
             operation: "set_holdability"
         })
@@ -640,7 +694,7 @@ async fn test_connection_ext_all_defaults() {
     assert!(c.get_client_info("key").is_none());
 
     assert!(matches!(
-        c.clear_warnings().await,
+        ConnectionExt::clear_warnings(&mut c).await,
         Err(DruidError::UnsupportedOperation {
             operation: "clear_warnings"
         })

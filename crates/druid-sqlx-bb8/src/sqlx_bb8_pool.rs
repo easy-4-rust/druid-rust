@@ -2,7 +2,8 @@
 
 use crate::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager;
 use druid_core::{
-    DruidError, DruidPooledConnection, FilterChain, PhysicalConnectionLease, Pool, PoolState,
+    ConnectionRecycleDisposition, DruidError, DruidPooledConnection, FilterChain,
+    PhysicalConnectionLease, Pool, PoolState,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -24,7 +25,10 @@ pub struct SqlxBb8Pool {
     connection_sequence: AtomicU64,
     connect_count: AtomicU64,
     connect_error_count: AtomicU64,
+    close_count: Arc<AtomicU64>,
     recycle_count: Arc<AtomicU64>,
+    recycle_error_count: Arc<AtomicU64>,
+    discard_count: Arc<AtomicU64>,
 }
 
 impl SqlxBb8Pool {
@@ -82,7 +86,10 @@ impl SqlxBb8Pool {
             connection_sequence: AtomicU64::new(0),
             connect_count: AtomicU64::new(0),
             connect_error_count: AtomicU64::new(0),
+            close_count: Arc::new(AtomicU64::new(0)),
             recycle_count: Arc::new(AtomicU64::new(0)),
+            recycle_error_count: Arc::new(AtomicU64::new(0)),
+            discard_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -106,16 +113,33 @@ impl SqlxBb8Pool {
         };
 
         let id = self.connection_sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        let close_count = self.close_count.clone();
         let recycle_count = self.recycle_count.clone();
-        Ok(DruidPooledConnection::with_context(
+        let recycle_error_count = self.recycle_error_count.clone();
+        let discard_count = self.discard_count.clone();
+        Ok(DruidPooledConnection::with_recycle_policy(
             Box::new(PhysicalConnectionLease::new(lease)),
             id,
             self.name.clone(),
             self.filter_chain.clone(),
-            Box::new(move |connection, _connection_id| {
+            false,
+            None,
+            Box::new(move |mut connection, _connection_id, disposition| {
+                close_count.fetch_add(1, Ordering::Relaxed);
+                match disposition {
+                    ConnectionRecycleDisposition::Reusable => {
+                        recycle_count.fetch_add(1, Ordering::Relaxed);
+                    }
+                    ConnectionRecycleDisposition::Discard { recycle_error } => {
+                        connection.mark_discarded();
+                        discard_count.fetch_add(1, Ordering::Relaxed);
+                        if recycle_error.is_some() {
+                            recycle_error_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }
                 // 丢弃透明租约桥接会触发 bb8 自身唯一的归还路径。
                 drop(connection);
-                recycle_count.fetch_add(1, Ordering::Relaxed);
             }),
         ))
     }
@@ -145,13 +169,16 @@ impl Pool for SqlxBb8Pool {
             idle_count: state.idle_connections as usize,
             wait_count: state.statistics.get_waited as usize,
             create_count: state.statistics.connections_created,
-            close_count: state.statistics.connections_closed_broken
+            close_count: self.close_count.load(Ordering::Relaxed),
+            destroy_count: state.statistics.connections_closed_broken
                 + state.statistics.connections_closed_invalid
                 + state.statistics.connections_closed_max_lifetime
                 + state.statistics.connections_closed_idle_timeout,
             connect_count: self.connect_count.load(Ordering::Relaxed),
             connect_error_count: self.connect_error_count.load(Ordering::Relaxed),
             recycle_count: self.recycle_count.load(Ordering::Relaxed),
+            recycle_error_count: self.recycle_error_count.load(Ordering::Relaxed),
+            discard_count: self.discard_count.load(Ordering::Relaxed),
             ..PoolState::default()
         }
     }

@@ -1,15 +1,17 @@
 //! SQLx 物理连接适配器。
 
+use crate::sqlx_prepared_statement::SqlxPreparedStatement;
 use druid_core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, Row, Savepoint,
-    Value,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
+    PhysicalPreparedStatement, PreparedStatementKey, Row, Savepoint, Value,
 };
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
 use sqlx::sqlite::{SqliteArguments, SqliteRow, SqliteTransactionManager};
 use sqlx::{
-    Any, AnyConnection, Column, Connection as SqlxConnection, Row as SqlxRow, Sqlite,
-    SqliteConnection, TransactionManager, TypeInfo, ValueRef,
+    Any, AnyConnection, Column, Connection as SqlxConnection, Executor, Row as SqlxRow, Sqlite,
+    SqliteConnection, Statement, TransactionManager, TypeInfo, ValueRef,
 };
+use std::sync::Arc;
 
 enum SqlxConnectionBackend {
     Any(AnyConnection),
@@ -25,6 +27,7 @@ enum SqlxConnectionBackend {
 pub struct SqlxConnectionAdapter {
     connection: Option<SqlxConnectionBackend>,
     savepoint_sequence: u64,
+    discarded: bool,
 }
 
 impl SqlxConnectionAdapter {
@@ -49,10 +52,14 @@ impl SqlxConnectionAdapter {
         Ok(Self {
             connection: Some(connection),
             savepoint_sequence: 0,
+            discarded: false,
         })
     }
 
     fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, DruidError> {
+        if self.discarded {
+            return Err(DruidError::ConnectionDiscarded);
+        }
         self.connection
             .as_mut()
             .ok_or(DruidError::ConnectionDiscarded)
@@ -99,6 +106,42 @@ impl SqlxConnectionAdapter {
         params: Vec<Value>,
     ) -> sqlx::query::Query<'query, Sqlite, SqliteArguments<'query>> {
         let mut query = sqlx::query(sql);
+        for value in params {
+            query = match value {
+                Value::Null => query.bind(Option::<String>::None),
+                Value::Bool(value) => query.bind(value),
+                Value::Int(value) => query.bind(value),
+                Value::Float(value) => query.bind(value),
+                Value::String(value) => query.bind(value),
+                Value::Bytes(value) => query.bind(value),
+            };
+        }
+        query
+    }
+
+    fn bind_any_prepared_values<'query>(
+        statement: &'query sqlx::any::AnyStatement<'query>,
+        params: Vec<Value>,
+    ) -> sqlx::query::Query<'query, Any, sqlx::any::AnyArguments<'query>> {
+        let mut query = statement.query();
+        for value in params {
+            query = match value {
+                Value::Null => query.bind(Option::<String>::None),
+                Value::Bool(value) => query.bind(value),
+                Value::Int(value) => query.bind(value),
+                Value::Float(value) => query.bind(value),
+                Value::String(value) => query.bind(value),
+                Value::Bytes(value) => query.bind(value),
+            };
+        }
+        query
+    }
+
+    fn bind_sqlite_prepared_values<'query>(
+        statement: &'query sqlx::sqlite::SqliteStatement<'query>,
+        params: Vec<Value>,
+    ) -> sqlx::query::Query<'query, Sqlite, SqliteArguments<'query>> {
+        let mut query = statement.query();
         for value in params {
             query = match value {
                 Value::Null => query.bind(Option::<String>::None),
@@ -165,7 +208,15 @@ impl SqlxConnectionAdapter {
                 continue;
             }
 
-            let value = match column.type_info().name() {
+            // SQLite 的表达式列（如 COUNT(*)）没有声明类型，SQLx 会把
+            // column type 标为 NULL，但运行时 value type 仍是 INTEGER/REAL 等。
+            // 普通 BOOLEAN 列仍优先使用声明类型，保留 Druid 的布尔值语义。
+            let runtime_type = raw.type_info();
+            let type_name = match column.type_info().name() {
+                "NULL" => runtime_type.name(),
+                declared => declared,
+            };
+            let value = match type_name {
                 "BOOLEAN" => Value::Bool(row.try_get(index).map_err(Self::driver_error)?),
                 "INTEGER" => Value::Int(row.try_get(index).map_err(Self::driver_error)?),
                 "REAL" => Value::Float(row.try_get(index).map_err(Self::driver_error)?),
@@ -244,6 +295,142 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let rows = Self::bind_sqlite_values(sql, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                rows.into_iter().map(Self::decode_sqlite_row).collect()
+            }
+        }
+    }
+
+    async fn prepare_physical_statement(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        let sql = key.sql().to_string();
+        let statement: Arc<dyn PhysicalPreparedStatement> = match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(key.sql())
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = Statement::to_owned(&statement);
+                Arc::new(SqlxPreparedStatement::any(sql, statement))
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(key.sql())
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = Statement::to_owned(&statement);
+                Arc::new(SqlxPreparedStatement::sqlite(sql, statement))
+            }
+        };
+        Ok(statement)
+    }
+
+    async fn exec_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, DruidError> {
+        let statement = statement
+            .as_any()
+            .downcast_ref::<SqlxPreparedStatement>()
+            .ok_or_else(|| {
+                DruidError::DriverError(
+                    "prepared statement was not created by SqlxConnectionAdapter".to_string(),
+                )
+            })?;
+        if statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        let sqlite = matches!(self.connection, Some(SqlxConnectionBackend::Sqlite(_)));
+        if !statement.matches_backend(sqlite) {
+            return Err(DruidError::DriverError(
+                "SQLx prepared statement backend does not match connection".to_string(),
+            ));
+        }
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let statement = statement.any_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let result = Self::bind_any_prepared_values(statement, params)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(ExecResult {
+                    rows_affected: result.rows_affected(),
+                    last_insert_id: result.last_insert_id(),
+                    row_count: None,
+                })
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let statement = statement.sqlite_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let result = Self::bind_sqlite_prepared_values(statement, params)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let last_insert_id =
+                    (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
+                Ok(ExecResult {
+                    rows_affected: result.rows_affected(),
+                    last_insert_id,
+                    row_count: None,
+                })
+            }
+        }
+    }
+
+    async fn fetch_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, DruidError> {
+        let statement = statement
+            .as_any()
+            .downcast_ref::<SqlxPreparedStatement>()
+            .ok_or_else(|| {
+                DruidError::DriverError(
+                    "prepared statement was not created by SqlxConnectionAdapter".to_string(),
+                )
+            })?;
+        if statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        let sqlite = matches!(self.connection, Some(SqlxConnectionBackend::Sqlite(_)));
+        if !statement.matches_backend(sqlite) {
+            return Err(DruidError::DriverError(
+                "SQLx prepared statement backend does not match connection".to_string(),
+            ));
+        }
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let statement = statement.any_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let rows = Self::bind_any_prepared_values(statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                rows.into_iter().map(Self::decode_any_row).collect()
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let statement = statement.sqlite_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let rows = Self::bind_sqlite_prepared_values(statement, params)
                     .fetch_all(connection)
                     .await
                     .map_err(Self::driver_error)?;
@@ -378,6 +565,8 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             auto_commit: true,
             read_only: false,
             transaction_isolation: false,
+            holdability: false,
+            clear_warnings: false,
             catalog: false,
             schema: false,
         }
@@ -407,6 +596,14 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             _ => Ok(()),
         }
+    }
+
+    fn mark_discarded(&mut self) {
+        self.discarded = true;
+    }
+
+    fn is_discarded(&self) -> bool {
+        self.discarded
     }
 
     fn driver_name(&self) -> &str {

@@ -1,23 +1,27 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/druid",
     "crates/druid-core",
     "crates/druid-sql",
     "crates/druid-pool",
     "crates/druid-stats",
     "crates/druid-dynamic",
     "crates/druid-rbdc",
+    "crates/druid-toasty",
     "crates/druid-sqlx",
     "crates/druid-sqlx-deadpool",
     "crates/druid-sqlx-bb8",
     "crates/druid-admin",
+    "crates/druid-wrapper",
 ]
+exclude = ["vendor/toasty-driver-sqlite"]
 
 [workspace.package]
 version       = "0.0.0-design"
 edition       = "2021"
 license       = "Apache-2.0"
-rust-version  = "1.75"
+rust-version  = "1.95"
 authors       = ["druid-rust maintainers"]
 repository    = "https://github.com/easy-4-rust/druid-rust"
 homepage      = "https://github.com/easy-4-rust/druid-rust"
@@ -36,10 +40,8 @@ missing_errors_doc = "allow"
 missing_panics_doc = "allow"
 
 # ---------------------------------------------------------------------------
-# Planned runtime dependencies. Versions are pinned to the targets defined in
-# doc/5、druid-rust-技术方案与路线.md and druid-rust-Architecture.zh_CN.md §14.
-# No crate currently consumes these — they are declared up-front so the
-# workspace compiles cleanly once a crate opts into them.
+# Shared runtime dependencies. Version and feature changes must remain aligned
+# with the migration documents and each adapter's real-database contract.
 # ---------------------------------------------------------------------------
 [workspace.dependencies]
 # async runtime
@@ -48,6 +50,8 @@ async-trait  = "0.1"
 futures      = "0.3"
 rbdc         = { version = "4.9.10", default-features = false }
 rbs          = "4.8.4"
+toasty       = { version = "0.9.0", default-features = false }
+toasty-core  = { version = "0.9.0", default-features = false }
 
 # SQL parsing
 sqlparser    = "0.52"
@@ -80,8 +84,16 @@ anyhow          = "1"
 serde           = { version = "1", features = ["derive"] }
 serde_json      = "1"
 chrono          = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+bigdecimal      = "0.4"
 xxhash-rust     = { version = "0.8", features = ["xxh3"] }
 fastrand        = "2"
+
+[patch.crates-io]
+# Toasty 0.9.0 的 SQLite driver 仅使用 rusqlite 的稳定 API，但其发布清单
+# 锁到 rusqlite 0.40/libsqlite3-sys 0.38；SQLx 0.8 使用
+# libsqlite3-sys 0.30.1。保留 Toasty 0.9.0 原源码，仅将 rusqlite 锁到
+# API 兼容的 0.32.1/libsqlite3-sys 0.30.1，使内置 Toasty 与扩展 SQLx 可共存。
+toasty-driver-sqlite = { path = "vendor/toasty-driver-sqlite" }
 
 # profile --------------------------------------------------------------
 [profile.dev]

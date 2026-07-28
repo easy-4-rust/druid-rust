@@ -87,3 +87,61 @@ fn deadpool_rejects_invalid_capacity() {
     );
     assert!(result.is_err());
 }
+
+#[tokio::test]
+async fn deadpool_explicit_close_rolls_back_and_reuses_physical_connection() {
+    let pool = SqlxDeadpoolPool::connect(
+        "deadpool-explicit-recycle",
+        "sqlite::memory:",
+        1,
+        Duration::from_secs(1),
+        None,
+    )
+    .expect("deadpool must build");
+
+    let mut connection = pool.get().await.expect("connection must be acquired");
+    connection.begin().await.expect("transaction must begin");
+    connection
+        .close()
+        .await
+        .expect("explicit close must rollback and recycle");
+
+    let state = pool.state();
+    assert_eq!(state.recycle_count, 1);
+    assert_eq!(state.discard_count, 0);
+    assert_eq!(state.create_count, 1);
+
+    let reused = pool
+        .get()
+        .await
+        .expect("physical connection must be reused");
+    assert!(reused.auto_commit());
+    assert_eq!(pool.state().create_count, 1);
+}
+
+#[tokio::test]
+async fn deadpool_dirty_drop_marks_external_lease_broken_and_replaces_it() {
+    let pool = SqlxDeadpoolPool::connect(
+        "deadpool-dirty-drop",
+        "sqlite::memory:",
+        1,
+        Duration::from_secs(1),
+        None,
+    )
+    .expect("deadpool must build");
+
+    let mut connection = pool.get().await.expect("connection must be acquired");
+    connection.begin().await.expect("transaction must begin");
+    drop(connection);
+
+    let state = pool.state();
+    assert_eq!(state.recycle_count, 0);
+    assert_eq!(state.discard_count, 1);
+
+    let replacement = pool
+        .get()
+        .await
+        .expect("deadpool must replace the discarded physical connection");
+    assert!(replacement.auto_commit());
+    assert_eq!(pool.state().create_count, 2);
+}

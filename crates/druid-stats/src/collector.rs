@@ -48,18 +48,30 @@ impl StatsCollector {
     }
 
     /// 记录连接创建。
-    pub fn record_connect(&self) { self.connect_count.fetch_add(1, Ordering::Relaxed); }
+    pub fn record_connect(&self) {
+        self.connect_count.fetch_add(1, Ordering::Relaxed);
+    }
 
     /// 记录连接错误。
-    pub fn record_connect_error(&self) { self.connect_error_count.fetch_add(1, Ordering::Relaxed); }
+    pub fn record_connect_error(&self) {
+        self.connect_error_count.fetch_add(1, Ordering::Relaxed);
+    }
 
     /// 记录连接关闭。
-    pub fn record_close(&self) { self.close_count.fetch_add(1, Ordering::Relaxed); }
+    pub fn record_close(&self) {
+        self.close_count.fetch_add(1, Ordering::Relaxed);
+    }
 
-    pub fn connect_count(&self) -> u64 { self.connect_count.load(Ordering::Relaxed) }
-    pub fn slow_sql_count(&self) -> u64 { self.slow_sql_count.load(Ordering::Relaxed) }
+    pub fn connect_count(&self) -> u64 {
+        self.connect_count.load(Ordering::Relaxed)
+    }
+    pub fn slow_sql_count(&self) -> u64 {
+        self.slow_sql_count.load(Ordering::Relaxed)
+    }
 }
 
 impl Default for StatsCollector {
-    fn default() -> Self { Self::new("default", Duration::from_secs(2)) }
+    fn default() -> Self {
+        Self::new("default", Duration::from_secs(2))
+    }
 }

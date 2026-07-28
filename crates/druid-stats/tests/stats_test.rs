@@ -22,7 +22,10 @@ fn test_parameterize_strings() {
 fn test_parameterize_same_fingerprint() {
     let p1 = parameterize("SELECT * FROM users WHERE id = 1");
     let p2 = parameterize("SELECT * FROM users WHERE id = 999");
-    assert_eq!(p1.fingerprint, p2.fingerprint, "same template should have same fingerprint");
+    assert_eq!(
+        p1.fingerprint, p2.fingerprint,
+        "same template should have same fingerprint"
+    );
 }
 
 #[test]
@@ -64,8 +67,16 @@ fn test_merged_sql_stat_cas_max() {
 #[test]
 fn test_sql_merger_record_and_get() {
     let merger = SqlMerger::new();
-    merger.record("SELECT * FROM users WHERE id = 1", Duration::from_millis(10), true);
-    merger.record("SELECT * FROM users WHERE id = 2", Duration::from_millis(15), true);
+    merger.record(
+        "SELECT * FROM users WHERE id = 1",
+        Duration::from_millis(10),
+        true,
+    );
+    merger.record(
+        "SELECT * FROM users WHERE id = 2",
+        Duration::from_millis(15),
+        true,
+    );
 
     // Same template -> same stat
     assert_eq!(merger.len(), 1);
@@ -124,15 +135,34 @@ async fn test_stat_filter_as_after_filter() {
 
     let params = vec![];
     let ctx = ExecContext {
-        sql: "SELECT 1", params: &params, data_source: "test",
-        start: std::time::Instant::now(), fingerprint: None,
+        sql: "SELECT 1",
+        params: &params,
+        data_source: "test",
+        start: std::time::Instant::now(),
+        fingerprint: None,
     };
 
     // ok execution
-    filter.after(&ctx, &Ok(ExecResult { rows_affected: 1, last_insert_id: None, row_count: None }), Duration::from_millis(5)).await;
+    filter
+        .after(
+            &ctx,
+            &Ok(ExecResult {
+                rows_affected: 1,
+                last_insert_id: None,
+                row_count: None,
+            }),
+            Duration::from_millis(5),
+        )
+        .await;
 
     // error execution
-    filter.after(&ctx, &Err(DruidError::Other("fail".into())), Duration::from_millis(10)).await;
+    filter
+        .after(
+            &ctx,
+            &Err(DruidError::Other("fail".into())),
+            Duration::from_millis(10),
+        )
+        .await;
 
     assert_eq!(collector.sql_merger.len(), 1);
     let stats = collector.sql_merger.all_stats();

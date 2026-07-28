@@ -1,7 +1,7 @@
 //! `PhysicalConnectionLease` 透明委托契约测试。
 
 use druid_core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
+    ConnectionDefaults, DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalConnectionLease, Row, Savepoint, Value,
 };
 use std::ops::{Deref, DerefMut};
@@ -13,6 +13,8 @@ struct ContractConnection {
     auto_commit: bool,
     read_only: bool,
     isolation: u8,
+    holdability: i32,
+    discarded: bool,
     catalog: String,
     schema: String,
 }
@@ -96,6 +98,8 @@ impl PhysicalConnection for ContractConnection {
             auto_commit: true,
             read_only: true,
             transaction_isolation: true,
+            holdability: true,
+            clear_warnings: true,
             catalog: true,
             schema: true,
         }
@@ -126,6 +130,27 @@ impl PhysicalConnection for ContractConnection {
     async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
         self.isolation = level;
         Ok(())
+    }
+
+    fn holdability(&self) -> i32 {
+        self.holdability
+    }
+
+    async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {
+        self.holdability = holdability;
+        Ok(())
+    }
+
+    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    fn mark_discarded(&mut self) {
+        self.discarded = true;
+    }
+
+    fn is_discarded(&self) -> bool {
+        self.discarded
     }
 
     fn catalog(&self) -> Option<&str> {
@@ -183,6 +208,8 @@ fn connection_lease(drop_count: Arc<AtomicUsize>) -> PhysicalConnectionLease<Con
             auto_commit: true,
             read_only: false,
             isolation: 2,
+            holdability: 0,
+            discarded: false,
             catalog: "catalog_a".to_string(),
             schema: "schema_a".to_string(),
         }),
@@ -227,6 +254,14 @@ async fn physical_connection_lease_delegates_complete_spi() {
         .await
         .expect("set isolation must delegate");
     connection
+        .set_holdability(1)
+        .await
+        .expect("set holdability must delegate");
+    connection
+        .clear_warnings()
+        .await
+        .expect("clear warnings must delegate");
+    connection
         .set_catalog("catalog_b")
         .await
         .expect("set catalog must delegate");
@@ -237,6 +272,7 @@ async fn physical_connection_lease_delegates_complete_spi() {
     assert!(!connection.auto_commit());
     assert!(connection.read_only());
     assert_eq!(connection.transaction_isolation(), 8);
+    assert_eq!(connection.holdability(), 1);
     assert_eq!(connection.catalog(), Some("catalog_b"));
     assert_eq!(connection.schema(), Some("schema_b"));
 
@@ -267,13 +303,73 @@ async fn physical_connection_lease_delegates_complete_spi() {
             auto_commit: true,
             read_only: true,
             transaction_isolation: true,
+            holdability: true,
+            clear_warnings: true,
             catalog: true,
             schema: true,
         }
     );
+    assert!(!connection.is_discarded());
+    connection.mark_discarded();
+    assert!(connection.is_discarded());
     connection.abort().await.expect("abort must delegate");
     assert!(connection.is_closed());
     connection.close().await.expect("close must delegate");
+
+    drop(connection);
+    assert_eq!(drop_count.load(Ordering::Relaxed), 1);
+}
+
+#[tokio::test]
+async fn connection_defaults_capture_compare_and_reset_complete_state() {
+    let drop_count = Arc::new(AtomicUsize::new(0));
+    let mut connection = connection_lease(drop_count.clone());
+    let defaults = ConnectionDefaults::capture(&connection);
+
+    assert!(defaults.auto_commit());
+    assert!(!defaults.read_only());
+    assert_eq!(defaults.transaction_isolation(), 2);
+    assert_eq!(defaults.holdability(), 0);
+    assert!(!defaults.needs_reset(&connection, false));
+
+    connection
+        .set_read_only(true)
+        .await
+        .expect("read only must change");
+    connection
+        .set_holdability(1)
+        .await
+        .expect("holdability must change");
+    connection
+        .set_transaction_isolation(8)
+        .await
+        .expect("isolation must change");
+    connection
+        .set_auto_commit(false)
+        .await
+        .expect("auto commit must change");
+
+    assert!(defaults.needs_reset(&connection, false));
+    defaults
+        .reset(&mut connection, false)
+        .await
+        .expect("all supported connection state must reset");
+    assert!(!defaults.needs_reset(&connection, false));
+    assert!(connection.auto_commit());
+    assert!(!connection.read_only());
+    assert_eq!(connection.transaction_isolation(), 2);
+    assert_eq!(connection.holdability(), 0);
+
+    connection
+        .set_transaction_isolation(8)
+        .await
+        .expect("isolation must change again");
+    assert!(!defaults.needs_reset(&connection, true));
+    defaults
+        .reset(&mut connection, true)
+        .await
+        .expect("isolation preservation must skip reset");
+    assert_eq!(connection.transaction_isolation(), 8);
 
     drop(connection);
     assert_eq!(drop_count.load(Ordering::Relaxed), 1);

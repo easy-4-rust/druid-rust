@@ -165,8 +165,16 @@ fn test_sql_merger_default() {
 #[test]
 fn test_sql_merger_record_same_template() {
     let merger = SqlMerger::new();
-    merger.record("SELECT * FROM users WHERE id = 1", Duration::from_millis(10), true);
-    merger.record("SELECT * FROM users WHERE id = 2", Duration::from_millis(15), true);
+    merger.record(
+        "SELECT * FROM users WHERE id = 1",
+        Duration::from_millis(10),
+        true,
+    );
+    merger.record(
+        "SELECT * FROM users WHERE id = 2",
+        Duration::from_millis(15),
+        true,
+    );
     assert_eq!(merger.len(), 1);
     let stats = merger.all_stats();
     assert_eq!(stats.len(), 1);
@@ -288,14 +296,24 @@ fn test_stats_collector_connect() {
 fn test_stats_collector_connect_error() {
     let collector = StatsCollector::new("test", Duration::from_millis(100));
     collector.record_connect_error();
-    assert_eq!(collector.connect_error_count.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(
+        collector
+            .connect_error_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 }
 
 #[test]
 fn test_stats_collector_close() {
     let collector = StatsCollector::new("test", Duration::from_millis(100));
     collector.record_close();
-    assert_eq!(collector.close_count.load(std::sync::atomic::Ordering::Relaxed), 1);
+    assert_eq!(
+        collector
+            .close_count
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
 }
 
 #[test]
@@ -330,7 +348,17 @@ async fn test_stat_filter_after_ok() {
         start: std::time::Instant::now(),
         fingerprint: None,
     };
-    filter.after(&ctx, &Ok(ExecResult { rows_affected: 1, last_insert_id: None, row_count: None }), Duration::from_millis(5)).await;
+    filter
+        .after(
+            &ctx,
+            &Ok(ExecResult {
+                rows_affected: 1,
+                last_insert_id: None,
+                row_count: None,
+            }),
+            Duration::from_millis(5),
+        )
+        .await;
     assert_eq!(collector.sql_merger.len(), 1);
 }
 
@@ -346,7 +374,13 @@ async fn test_stat_filter_after_error() {
         start: std::time::Instant::now(),
         fingerprint: None,
     };
-    filter.after(&ctx, &Err(DruidError::Other("fail".into())), Duration::from_millis(10)).await;
+    filter
+        .after(
+            &ctx,
+            &Err(DruidError::Other("fail".into())),
+            Duration::from_millis(10),
+        )
+        .await;
     let stats = collector.sql_merger.all_stats();
     assert_eq!(stats[0].error_count(), 1);
 }
@@ -363,7 +397,9 @@ async fn test_stat_filter_after_slow_sql() {
         start: std::time::Instant::now(),
         fingerprint: None,
     };
-    filter.after(&ctx, &Ok(ExecResult::default()), Duration::from_millis(200)).await;
+    filter
+        .after(&ctx, &Ok(ExecResult::default()), Duration::from_millis(200))
+        .await;
     assert_eq!(collector.slow_sql_count(), 1);
 }
 
@@ -405,7 +441,8 @@ fn test_merged_sql_stat_cas_retry_direct() {
     use std::sync::atomic::AtomicU64;
     let stat = Arc::new(MergedSqlStat::new("SELECT 1".into(), 12345));
     // Pre-set max_time_ns to a non-zero value
-    stat.max_time_ns.store(1000, std::sync::atomic::Ordering::Relaxed);
+    stat.max_time_ns
+        .store(1000, std::sync::atomic::Ordering::Relaxed);
     let mut handles = vec![];
     // Many threads all trying to set a larger value - forces CAS contention
     for i in 0..1000 {

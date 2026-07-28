@@ -52,6 +52,11 @@ impl Manager for SqlxDeadpoolConnectionManager {
         connection: &mut Self::Type,
         _metrics: &Metrics,
     ) -> RecycleResult<Self::Error> {
+        if connection.is_discarded() {
+            return Err(deadpool::managed::RecycleError::Backend(
+                DruidError::ConnectionDiscarded,
+            ));
+        }
         self.factory
             .validate(connection)
             .await

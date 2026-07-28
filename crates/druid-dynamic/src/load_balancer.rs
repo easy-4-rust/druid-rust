@@ -21,16 +21,25 @@ pub struct RoundRobinBalancer {
 
 impl RoundRobinBalancer {
     pub fn new() -> Self {
-        Self { index: std::sync::atomic::AtomicUsize::new(0) }
+        Self {
+            index: std::sync::atomic::AtomicUsize::new(0),
+        }
     }
 }
 
 #[async_trait::async_trait]
 impl LoadBalancer for RoundRobinBalancer {
-    fn name(&self) -> &str { "round_robin" }
+    fn name(&self) -> &str {
+        "round_robin"
+    }
     fn pick<'a>(&self, pools: &'a [Arc<dyn Pool>]) -> Option<&'a Arc<dyn Pool>> {
-        if pools.is_empty() { return None; }
-        let idx = self.index.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % pools.len();
+        if pools.is_empty() {
+            return None;
+        }
+        let idx = self
+            .index
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            % pools.len();
         pools.get(idx)
     }
 }
@@ -40,9 +49,13 @@ pub struct RandomBalancer;
 
 #[async_trait::async_trait]
 impl LoadBalancer for RandomBalancer {
-    fn name(&self) -> &str { "random" }
+    fn name(&self) -> &str {
+        "random"
+    }
     fn pick<'a>(&self, pools: &'a [Arc<dyn Pool>]) -> Option<&'a Arc<dyn Pool>> {
-        if pools.is_empty() { return None; }
+        if pools.is_empty() {
+            return None;
+        }
         let idx = fastrand::usize(0..pools.len());
         pools.get(idx)
     }

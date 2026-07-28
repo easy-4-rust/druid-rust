@@ -13,7 +13,10 @@ struct MockConnection {
 
 impl MockConnection {
     fn new() -> Self {
-        Self { closed: false, exec_count: Arc::new(AtomicU64::new(0)) }
+        Self {
+            closed: false,
+            exec_count: Arc::new(AtomicU64::new(0)),
+        }
     }
 }
 
@@ -21,18 +24,37 @@ impl MockConnection {
 impl Connection for MockConnection {
     async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
-        Ok(ExecResult { rows_affected: 1, last_insert_id: Some(42), row_count: None })
+        Ok(ExecResult {
+            rows_affected: 1,
+            last_insert_id: Some(42),
+            row_count: None,
+        })
     }
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn close(&mut self) -> Result<(), DruidError> { self.closed = true; Ok(()) }
-    fn driver_name(&self) -> &str { "mock" }
-    fn is_closed(&self) -> bool { self.closed }
+    async fn begin(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn ping(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn close(&mut self) -> Result<(), DruidError> {
+        self.closed = true;
+        Ok(())
+    }
+    fn driver_name(&self) -> &str {
+        "mock"
+    }
+    fn is_closed(&self) -> bool {
+        self.closed
+    }
 }
 
 // ── Mock Driver ──────────────────────────────────────────────────
@@ -41,7 +63,9 @@ struct MockDriver;
 
 #[async_trait::async_trait]
 impl Driver for MockDriver {
-    fn name(&self) -> &str { "mock" }
+    fn name(&self) -> &str {
+        "mock"
+    }
     async fn connect(&self, _url: &str) -> Result<Box<dyn Connection>, DruidError> {
         Ok(Box::new(MockConnection::new()))
     }
@@ -67,7 +91,9 @@ struct BlockDropFilter;
 
 #[async_trait::async_trait]
 impl BeforeFilter for BlockDropFilter {
-    fn name(&self) -> &str { "block_drop" }
+    fn name(&self) -> &str {
+        "block_drop"
+    }
     async fn before(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {
         if ctx.sql.to_uppercase().contains("DROP") {
             Err(DruidError::WallViolation("DROP not allowed".into()))
@@ -85,8 +111,15 @@ struct CountAfterFilter {
 
 #[async_trait::async_trait]
 impl AfterFilter for CountAfterFilter {
-    fn name(&self) -> &str { "count_after" }
-    async fn after(&self, _ctx: &ExecContext<'_>, _result: &Result<ExecResult, DruidError>, _elapsed: std::time::Duration) {
+    fn name(&self) -> &str {
+        "count_after"
+    }
+    async fn after(
+        &self,
+        _ctx: &ExecContext<'_>,
+        _result: &Result<ExecResult, DruidError>,
+        _elapsed: std::time::Duration,
+    ) {
         self.count.fetch_add(1, Ordering::Relaxed);
     }
 }
@@ -106,8 +139,14 @@ impl ExceptionSorter for MockFatalSorter {
 #[tokio::test]
 async fn test_connection_trait_exec() {
     let count = Arc::new(AtomicU64::new(0));
-    let mut conn = MockConnection { closed: false, exec_count: count.clone() };
-    let result = conn.exec("INSERT INTO t VALUES (?)", vec![Value::Int(1)]).await.unwrap();
+    let mut conn = MockConnection {
+        closed: false,
+        exec_count: count.clone(),
+    };
+    let result = conn
+        .exec("INSERT INTO t VALUES (?)", vec![Value::Int(1)])
+        .await
+        .unwrap();
     assert_eq!(result.rows_affected, 1);
     assert_eq!(result.last_insert_id, Some(42));
     assert_eq!(count.load(Ordering::Relaxed), 1);
@@ -169,8 +208,11 @@ async fn test_before_filter_block_drop() {
 
     let params = vec![];
     let mut ctx = ExecContext {
-        sql: "SELECT 1", params: &params, data_source: "test",
-        start: std::time::Instant::now(), fingerprint: None,
+        sql: "SELECT 1",
+        params: &params,
+        data_source: "test",
+        start: std::time::Instant::now(),
+        fingerprint: None,
     };
     assert!(filter.before(&mut ctx).await.is_ok());
 
@@ -181,14 +223,31 @@ async fn test_before_filter_block_drop() {
 #[tokio::test]
 async fn test_after_filter_count() {
     let count = Arc::new(AtomicU64::new(0));
-    let filter = CountAfterFilter { count: count.clone() };
+    let filter = CountAfterFilter {
+        count: count.clone(),
+    };
     let params = vec![];
     let ctx = ExecContext {
-        sql: "SELECT 1", params: &params, data_source: "test",
-        start: std::time::Instant::now(), fingerprint: None,
+        sql: "SELECT 1",
+        params: &params,
+        data_source: "test",
+        start: std::time::Instant::now(),
+        fingerprint: None,
     };
-    filter.after(&ctx, &Ok(ExecResult::default()), std::time::Duration::from_millis(1)).await;
-    filter.after(&ctx, &Ok(ExecResult::default()), std::time::Duration::from_millis(2)).await;
+    filter
+        .after(
+            &ctx,
+            &Ok(ExecResult::default()),
+            std::time::Duration::from_millis(1),
+        )
+        .await;
+    filter
+        .after(
+            &ctx,
+            &Ok(ExecResult::default()),
+            std::time::Duration::from_millis(2),
+        )
+        .await;
     assert_eq!(count.load(Ordering::Relaxed), 2);
 }
 
@@ -199,8 +258,11 @@ async fn test_filter_chain_before_short_circuit() {
 
     let params = vec![];
     let mut ctx = ExecContext {
-        sql: "SELECT 1", params: &params, data_source: "test",
-        start: std::time::Instant::now(), fingerprint: None,
+        sql: "SELECT 1",
+        params: &params,
+        data_source: "test",
+        start: std::time::Instant::now(),
+        fingerprint: None,
     };
     assert!(chain.before_execute(&mut ctx).await.is_ok());
 
@@ -212,14 +274,25 @@ async fn test_filter_chain_before_short_circuit() {
 async fn test_filter_chain_after_reverse_order() {
     let count = Arc::new(AtomicU64::new(0));
     let mut chain = FilterChain::new();
-    chain.add_after(Arc::new(CountAfterFilter { count: count.clone() }));
+    chain.add_after(Arc::new(CountAfterFilter {
+        count: count.clone(),
+    }));
 
     let params = vec![];
     let ctx = ExecContext {
-        sql: "SELECT 1", params: &params, data_source: "test",
-        start: std::time::Instant::now(), fingerprint: None,
+        sql: "SELECT 1",
+        params: &params,
+        data_source: "test",
+        start: std::time::Instant::now(),
+        fingerprint: None,
     };
-    chain.after_execute(&ctx, &Ok(ExecResult::default()), std::time::Duration::from_millis(1)).await;
+    chain
+        .after_execute(
+            &ctx,
+            &Ok(ExecResult::default()),
+            std::time::Duration::from_millis(1),
+        )
+        .await;
     assert_eq!(count.load(Ordering::Relaxed), 1);
 }
 
@@ -258,8 +331,11 @@ async fn test_pooled_connection_lifecycle() {
 
     {
         let mut pooled = PooledConnection::new(
-            conn, 1,
-            Box::new(move |_conn, _id| { returned_clone.fetch_add(1, Ordering::Relaxed); }),
+            conn,
+            1,
+            Box::new(move |_conn, _id| {
+                returned_clone.fetch_add(1, Ordering::Relaxed);
+            }),
         );
         assert_eq!(pooled.id(), 1);
         assert_eq!(pooled.driver_name(), "mock");
@@ -302,7 +378,8 @@ fn test_connection_holder_state_machine() {
     assert_eq!(holder.state(), ConnectionState::Idle);
 
     // 不能从 Idle 直接到 Closed
-    assert!(holder.try_transition(ConnectionState::Idle, ConnectionState::Closed)); // CAS is atomic, state machine rules enforced at higher level
+    assert!(holder.try_transition(ConnectionState::Idle, ConnectionState::Closed));
+    // CAS is atomic, state machine rules enforced at higher level
 }
 
 #[test]
@@ -346,7 +423,10 @@ fn test_druid_error_display() {
     let err = DruidError::WallViolation("DROP TABLE".into());
     assert!(format!("{err}").contains("DROP TABLE"));
 
-    let err = DruidError::ConnectionLeaked { id: 42, held_for: std::time::Duration::from_secs(300) };
+    let err = DruidError::ConnectionLeaked {
+        id: 42,
+        held_for: std::time::Duration::from_secs(300),
+    };
     assert!(format!("{err}").contains("42"));
     assert!(format!("{err}").contains("300s"));
 }

@@ -24,6 +24,11 @@ impl DataSourceGroup {
         slaves: Vec<Arc<dyn Pool>>,
         load_balancer: Arc<dyn LoadBalancer>,
     ) -> Self {
-        Self { name: name.into(), master, slaves, load_balancer }
+        Self {
+            name: name.into(),
+            master,
+            slaves,
+            load_balancer,
+        }
     }
 }

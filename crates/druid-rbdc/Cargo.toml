@@ -2,7 +2,7 @@
 name         = "druid-rbdc"
 version      = "0.0.0-design"
 edition      = "2021"
-rust-version = "1.75"
+rust-version = "1.95"
 license      = "Apache-2.0"
 description  = "druid-rust rbdc adapter: bridges the rbatis rbdc::Connection trait into druid-core"
 publish      = false

@@ -16,7 +16,13 @@ struct MockConnection {
 impl MockConnection {
     fn new() -> (Self, Arc<AtomicU64>) {
         let count = Arc::new(AtomicU64::new(0));
-        (Self { closed: false, exec_count: count.clone() }, count)
+        (
+            Self {
+                closed: false,
+                exec_count: count.clone(),
+            },
+            count,
+        )
     }
 }
 
@@ -24,17 +30,34 @@ impl MockConnection {
 impl Connection for MockConnection {
     async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
-        Ok(ExecResult { rows_affected: 1, last_insert_id: Some(1), row_count: None })
+        Ok(ExecResult {
+            rows_affected: 1,
+            last_insert_id: Some(1),
+            row_count: None,
+        })
     }
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn close(&mut self) -> Result<(), DruidError> { self.closed = true; Ok(()) }
-    fn driver_name(&self) -> &str { "mock" }
+    async fn begin(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn ping(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn close(&mut self) -> Result<(), DruidError> {
+        self.closed = true;
+        Ok(())
+    }
+    fn driver_name(&self) -> &str {
+        "mock"
+    }
 }
 
 // ── Mock Factory ─────────────────────────────────────────────────
@@ -103,7 +126,11 @@ async fn test_max_idle_limit() {
     tokio::time::sleep(Duration::from_millis(50)).await;
     let st = pool.state();
     // 空闲连接不应超过 max_idle
-    assert!(st.idle_count <= 2, "idle_count={} should <= 2", st.idle_count);
+    assert!(
+        st.idle_count <= 2,
+        "idle_count={} should <= 2",
+        st.idle_count
+    );
 }
 
 // FR-022: acquire_timeout 返回

@@ -255,7 +255,10 @@ pub enum DataSourceEvent {
 #[async_trait::async_trait]
 pub trait ExtendedFilter: Send + Sync {
     /// Statement 属性事件。
-    async fn on_statement_property_event(&self, _event: &StatementPropertyEvent) -> Result<(), DruidError> {
+    async fn on_statement_property_event(
+        &self,
+        _event: &StatementPropertyEvent,
+    ) -> Result<(), DruidError> {
         Ok(())
     }
 
@@ -270,10 +273,15 @@ pub trait ExtendedFilter: Send + Sync {
     }
 
     /// 过滤器配置（对应 Filter.configFromProperties）。
-    async fn config_from_properties(&mut self, _properties: &std::collections::HashMap<String, String>) -> Result<(), DruidError> {
+    async fn config_from_properties(
+        &mut self,
+        _properties: &std::collections::HashMap<String, String>,
+    ) -> Result<(), DruidError> {
         Ok(())
     }
 
     /// 过滤器是否匹配给定接口（对应 Filter.isWrapperFor）。
-    fn is_wrapper_for(&self, _type_name: &str) -> bool { false }
+    fn is_wrapper_for(&self, _type_name: &str) -> bool {
+        false
+    }
 }

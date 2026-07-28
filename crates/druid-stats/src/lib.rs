@@ -7,5 +7,5 @@ pub mod merge;
 pub mod stat_filter;
 
 pub use collector::StatsCollector;
-pub use merge::{MergedSqlStat, SqlMerger, fingerprint, parameterize};
+pub use merge::{fingerprint, parameterize, MergedSqlStat, SqlMerger};
 pub use stat_filter::StatFilter;

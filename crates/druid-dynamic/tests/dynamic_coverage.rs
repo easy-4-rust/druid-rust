@@ -11,22 +11,47 @@ impl Pool for MockPool {
         let conn = Box::new(MockConn) as Box<dyn Connection>;
         Ok(PooledConnection::new(conn, 1, Box::new(|_, _| {})))
     }
-    async fn get_timeout(&self, _: Duration) -> Result<PooledConnection, DruidError> { self.get().await }
-    fn state(&self) -> PoolState { PoolState { name: "mock".into(), ..Default::default() } }
-    fn driver_name(&self) -> &str { "mock" }
-    fn name(&self) -> &str { "mock" }
+    async fn get_timeout(&self, _: Duration) -> Result<PooledConnection, DruidError> {
+        self.get().await
+    }
+    fn state(&self) -> PoolState {
+        PoolState {
+            name: "mock".into(),
+            ..Default::default()
+        }
+    }
+    fn driver_name(&self) -> &str {
+        "mock"
+    }
+    fn name(&self) -> &str {
+        "mock"
+    }
 }
 
 struct MockConn;
 #[async_trait::async_trait]
 impl Connection for MockConn {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> { Ok(ExecResult::default()) }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> { Ok(vec![]) }
-    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn close(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        Ok(ExecResult::default())
+    }
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        Ok(vec![])
+    }
+    async fn begin(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn ping(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn close(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
 }
 
 #[test]
@@ -71,7 +96,12 @@ fn test_sql_hint_equality() {
 fn test_datasource_group_new() {
     let master = Arc::new(MockPool) as Arc<dyn Pool>;
     let slave = Arc::new(MockPool) as Arc<dyn Pool>;
-    let group = DataSourceGroup::new("main", master, vec![slave], Arc::new(RoundRobinBalancer::new()));
+    let group = DataSourceGroup::new(
+        "main",
+        master,
+        vec![slave],
+        Arc::new(RoundRobinBalancer::new()),
+    );
     assert_eq!(group.name, "main");
     assert_eq!(group.slaves.len(), 1);
 }
@@ -116,7 +146,12 @@ async fn test_dynamic_datasource_route_auto() {
 async fn test_dynamic_datasource_hot_switch() {
     let master1 = Arc::new(MockPool) as Arc<dyn Pool>;
     let slave1 = Arc::new(MockPool) as Arc<dyn Pool>;
-    let g1 = DataSourceGroup::new("v1", master1, vec![slave1], Arc::new(RoundRobinBalancer::new()));
+    let g1 = DataSourceGroup::new(
+        "v1",
+        master1,
+        vec![slave1],
+        Arc::new(RoundRobinBalancer::new()),
+    );
     let ds = DynamicDataSource::new(g1);
     assert_eq!(ds.current_name(), "v1");
 

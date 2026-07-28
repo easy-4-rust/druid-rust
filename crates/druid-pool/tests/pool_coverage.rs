@@ -21,20 +21,34 @@ struct MockConn {
 #[async_trait::async_trait]
 impl Connection for MockConn {
     async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
-        Ok(ExecResult { rows_affected: 1, last_insert_id: Some(self.id as i64), row_count: None })
+        Ok(ExecResult {
+            rows_affected: 1,
+            last_insert_id: Some(self.id as i64),
+            row_count: None,
+        })
     }
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         Ok(vec![Row::new(vec![Value::Int(self.id as i64)])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn commit(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn rollback(&mut self) -> Result<(), DruidError> { Ok(()) }
-    async fn ping(&mut self) -> Result<(), DruidError> { Ok(()) }
+    async fn begin(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn commit(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn rollback(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
+    async fn ping(&mut self) -> Result<(), DruidError> {
+        Ok(())
+    }
     async fn close(&mut self) -> Result<(), DruidError> {
         self.closed.store(true, Ordering::Relaxed);
         Ok(())
     }
-    fn driver_name(&self) -> &str { "mock" }
+    fn driver_name(&self) -> &str {
+        "mock"
+    }
 }
 
 struct MockFactory {
@@ -45,7 +59,10 @@ struct MockFactory {
 impl ConnectionFactory for MockFactory {
     async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
         let id = self.counter.fetch_add(1, Ordering::SeqCst) + 1;
-        Ok(Box::new(MockConn { id, closed: std::sync::atomic::AtomicBool::new(false) }))
+        Ok(Box::new(MockConn {
+            id,
+            closed: std::sync::atomic::AtomicBool::new(false),
+        }))
     }
     async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
         conn.ping().await
@@ -54,7 +71,12 @@ impl ConnectionFactory for MockFactory {
 
 fn make_factory() -> (Arc<MockFactory>, Arc<AtomicU64>) {
     let counter = Arc::new(AtomicU64::new(0));
-    (Arc::new(MockFactory { counter: counter.clone() }), counter)
+    (
+        Arc::new(MockFactory {
+            counter: counter.clone(),
+        }),
+        counter,
+    )
 }
 
 async fn build_pool(max_open: usize, max_idle: usize) -> DruidPool {
@@ -78,13 +100,28 @@ async fn build_pool(max_open: usize, max_idle: usize) -> DruidPool {
 #[test]
 fn test_pool_inner_config_default() {
     let cfg = druid_pool::PoolInnerConfig::default();
+    assert_eq!(cfg.db_type_name, None);
     assert_eq!(cfg.max_open, 8);
     assert_eq!(cfg.min_idle, 0);
     assert_eq!(cfg.max_idle, 8);
     assert_eq!(cfg.acquire_timeout, Duration::from_secs(30));
-    assert_eq!(cfg.max_lifetime, Duration::from_secs(1800));
-    assert_eq!(cfg.idle_timeout, Duration::from_secs(600));
+    assert_eq!(cfg.max_lifetime, Duration::MAX);
+    assert_eq!(cfg.idle_timeout, Duration::from_secs(1800));
+    assert_eq!(
+        cfg.max_evictable_idle_time,
+        Duration::from_secs(7 * 60 * 60)
+    );
+    assert_eq!(cfg.physical_connection_timeout, None);
     assert!(!cfg.test_on_borrow);
+    assert!(!cfg.test_on_return);
+    assert!(!cfg.keep_alive);
+    assert_eq!(cfg.keep_alive_between_time, Duration::from_secs(120));
+    assert!(!cfg.keep_connection_underlying_transaction_isolation);
+    assert_eq!(cfg.max_use_count, 0);
+    assert!(cfg.default_auto_commit);
+    assert_eq!(cfg.default_read_only, None);
+    assert_eq!(cfg.default_transaction_isolation, None);
+    assert_eq!(cfg.default_catalog, None);
 }
 
 #[test]
@@ -94,12 +131,27 @@ fn test_druid_pool_builder_all_methods() {
     let builder = DruidPool::builder()
         .name("my-pool")
         .driver_name("pg")
+        .db_type_name("postgresql")
         .factory(factory)
         .max_open(20)
         .min_idle(5)
         .max_idle(15)
         .acquire_timeout(Duration::from_secs(10))
+        .max_lifetime(Duration::from_secs(3600))
+        .idle_timeout(Duration::from_secs(1200))
+        .max_evictable_idle_time(Duration::from_secs(7200))
+        .physical_connection_timeout(Duration::from_secs(300))
+        .phy_timeout(Duration::from_secs(301))
         .test_on_borrow(true)
+        .test_on_return(true)
+        .keep_alive(true)
+        .keep_alive_between_time(Duration::from_secs(60))
+        .keep_connection_underlying_transaction_isolation(true)
+        .max_use_count(100)
+        .default_auto_commit(false)
+        .default_read_only(true)
+        .default_transaction_isolation(8)
+        .default_catalog("catalog_a")
         .filter_chain(fc);
 
     // Verify builder state via build
@@ -119,10 +171,7 @@ fn test_druid_pool_builder_default() {
 
 #[tokio::test]
 async fn test_druid_pool_builder_without_factory() {
-    let result = DruidPool::builder()
-        .name("no-factory")
-        .build()
-        .await;
+    let result = DruidPool::builder().name("no-factory").build().await;
     assert!(result.is_err());
 }
 
@@ -386,7 +435,11 @@ async fn test_pool_inner_max_idle_eviction() {
     drop(c4);
     tokio::time::sleep(Duration::from_millis(100)).await;
     let st = pool.state();
-    assert!(st.idle_count <= 1, "idle_count={} should <= 1", st.idle_count);
+    assert!(
+        st.idle_count <= 1,
+        "idle_count={} should <= 1",
+        st.idle_count
+    );
 }
 
 #[tokio::test]
@@ -452,7 +505,10 @@ async fn test_pool_trait_state() {
 async fn test_pool_trait_get_timeout_success() {
     let pool = build_pool(2, 2).await;
     let pool_trait: &dyn druid_core::Pool = &pool;
-    let conn = pool_trait.get_timeout(Duration::from_secs(2)).await.unwrap();
+    let conn = pool_trait
+        .get_timeout(Duration::from_secs(2))
+        .await
+        .unwrap();
     assert!(conn.id() > 0);
 }
 
@@ -463,7 +519,7 @@ async fn test_pool_trait_get_timeout_success() {
 #[tokio::test]
 async fn test_pool_inner_should_evict() {
     let pool = build_pool(4, 1).await; // min_idle=1
-    // Acquire 3 connections
+                                       // Acquire 3 connections
     let c1 = pool.get().await.unwrap();
     let c2 = pool.get().await.unwrap();
     let c3 = pool.get().await.unwrap();
@@ -507,7 +563,9 @@ async fn test_pool_connection_before_execute_error() {
     struct BlockingFilter;
     #[async_trait::async_trait]
     impl BeforeFilter for BlockingFilter {
-        fn name(&self) -> &str { "blocking" }
+        fn name(&self) -> &str {
+            "blocking"
+        }
         async fn before(&self, _ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {
             Err(DruidError::WallViolation("blocked by filter".into()))
         }
@@ -620,7 +678,10 @@ async fn test_pool_get_timeout_retry_on_create_failure() {
             if self.fail.load(Ordering::Relaxed) && count > 0 {
                 Err(DruidError::DriverError("transient failure".into()))
             } else {
-                Ok(Box::new(MockConn { id: count + 1, closed: std::sync::atomic::AtomicBool::new(false) }))
+                Ok(Box::new(MockConn {
+                    id: count + 1,
+                    closed: std::sync::atomic::AtomicBool::new(false),
+                }))
             }
         }
         async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {

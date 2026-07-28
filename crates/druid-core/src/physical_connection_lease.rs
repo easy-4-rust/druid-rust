@@ -140,6 +140,28 @@ where
             .await
     }
 
+    fn holdability(&self) -> i32 {
+        self.physical_connection().holdability()
+    }
+
+    async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {
+        self.physical_connection_mut()
+            .set_holdability(holdability)
+            .await
+    }
+
+    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+        self.physical_connection_mut().clear_warnings().await
+    }
+
+    fn mark_discarded(&mut self) {
+        self.physical_connection_mut().mark_discarded();
+    }
+
+    fn is_discarded(&self) -> bool {
+        self.physical_connection().is_discarded()
+    }
+
     fn catalog(&self) -> Option<&str> {
         self.physical_connection().catalog()
     }

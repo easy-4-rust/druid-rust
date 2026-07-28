@@ -16,6 +16,10 @@ pub struct PhysicalConnectionCapabilities {
     pub read_only: bool,
     /// 是否支持读取与设置事务隔离级别。
     pub transaction_isolation: bool,
+    /// 是否支持读取与设置 `ResultSet` 保持性。
+    pub holdability: bool,
+    /// 是否支持清理 `SQLWarning`。
+    pub clear_warnings: bool,
     /// 是否支持 catalog。
     pub catalog: bool,
     /// 是否支持 schema。
@@ -30,6 +34,8 @@ impl Default for PhysicalConnectionCapabilities {
             auto_commit: false,
             read_only: false,
             transaction_isolation: false,
+            holdability: false,
+            clear_warnings: false,
             catalog: false,
             schema: false,
         }

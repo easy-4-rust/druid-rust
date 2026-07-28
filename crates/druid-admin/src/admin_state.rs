@@ -8,6 +8,9 @@ pub struct AdminState {
 }
 impl AdminState {
     pub fn new(pool_name: impl Into<String>, driver_name: impl Into<String>) -> Self {
-        Self { pool_name: pool_name.into(), driver_name: driver_name.into() }
+        Self {
+            pool_name: pool_name.into(),
+            driver_name: driver_name.into(),
+        }
     }
 }

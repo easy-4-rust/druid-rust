@@ -1,10 +1,12 @@
 //! RBDC 物理连接适配器。
 
 use druid_core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, Row, Savepoint,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
+    PhysicalPreparedStatement, PreparedStatementKey, Row, Savepoint, SqlTextPreparedStatement,
     Value,
 };
 use futures::StreamExt;
+use std::sync::Arc;
 
 /// RBDC 物理连接适配器。
 ///
@@ -14,6 +16,7 @@ pub struct RbdcConnectionAdapter {
     connection: Box<dyn rbdc::db::Connection>,
     driver_name: String,
     closed: bool,
+    discarded: bool,
     auto_commit: bool,
     savepoint_sequence: u64,
 }
@@ -27,6 +30,7 @@ impl RbdcConnectionAdapter {
             connection,
             driver_name: driver_name.into(),
             closed: false,
+            discarded: false,
             auto_commit: true,
             savepoint_sequence: 0,
         }
@@ -144,6 +148,18 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         Ok(rows)
     }
 
+    async fn prepare_physical_statement(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        if self.closed || self.discarded {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        // RBDC 的公开 Connection SPI 在 exec 内部完成驱动 prepare/cache，
+        // 因此这里保存经过完整 Druid key 区分后的 SQL token。
+        Ok(Arc::new(SqlTextPreparedStatement::new(key.sql())))
+    }
+
     async fn begin(&mut self) -> Result<(), DruidError> {
         self.connection.begin().await.map_err(Self::driver_error)?;
         self.auto_commit = false;
@@ -230,6 +246,8 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             auto_commit: true,
             read_only: false,
             transaction_isolation: false,
+            holdability: false,
+            clear_warnings: false,
             catalog: false,
             schema: false,
         }
@@ -245,6 +263,14 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             (false, true) => self.commit().await,
             _ => Ok(()),
         }
+    }
+
+    fn mark_discarded(&mut self) {
+        self.discarded = true;
+    }
+
+    fn is_discarded(&self) -> bool {
+        self.discarded
     }
 
     fn driver_name(&self) -> &str {

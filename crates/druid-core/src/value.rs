@@ -26,10 +26,38 @@ impl fmt::Display for Value {
     }
 }
 
-impl From<bool> for Value { fn from(v: bool) -> Self { Self::Bool(v) } }
-impl From<i64> for Value { fn from(v: i64) -> Self { Self::Int(v) } }
-impl From<i32> for Value { fn from(v: i32) -> Self { Self::Int(v as i64) } }
-impl From<f64> for Value { fn from(v: f64) -> Self { Self::Float(v) } }
-impl From<String> for Value { fn from(v: String) -> Self { Self::String(v) } }
-impl From<&str> for Value { fn from(v: &str) -> Self { Self::String(v.to_string()) } }
-impl From<Vec<u8>> for Value { fn from(v: Vec<u8>) -> Self { Self::Bytes(v) } }
+impl From<bool> for Value {
+    fn from(v: bool) -> Self {
+        Self::Bool(v)
+    }
+}
+impl From<i64> for Value {
+    fn from(v: i64) -> Self {
+        Self::Int(v)
+    }
+}
+impl From<i32> for Value {
+    fn from(v: i32) -> Self {
+        Self::Int(v as i64)
+    }
+}
+impl From<f64> for Value {
+    fn from(v: f64) -> Self {
+        Self::Float(v)
+    }
+}
+impl From<String> for Value {
+    fn from(v: String) -> Self {
+        Self::String(v)
+    }
+}
+impl From<&str> for Value {
+    fn from(v: &str) -> Self {
+        Self::String(v.to_string())
+    }
+}
+impl From<Vec<u8>> for Value {
+    fn from(v: Vec<u8>) -> Self {
+        Self::Bytes(v)
+    }
+}

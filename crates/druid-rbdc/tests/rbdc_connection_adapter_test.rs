@@ -1,6 +1,6 @@
 //! RBDC Adapter 合同测试。
 
-use druid_core::{ConnectionFactory, Value};
+use druid_core::{ConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value};
 use druid_rbdc::RbdcConnectionFactory;
 use futures::future::BoxFuture;
 use futures::stream::{self, BoxStream, StreamExt};
@@ -242,4 +242,43 @@ async fn rbdc_adapter_fetch_transaction_and_savepoint_semantics() {
         .await
         .expect("duplicate close must succeed");
     assert!(connection.is_closed());
+}
+
+#[tokio::test]
+async fn rbdc_adapter_maps_prepared_statement_to_driver_exec_contract() {
+    let observed_params = Arc::new(Mutex::new(Vec::new()));
+    let factory = factory(observed_params.clone());
+    let mut connection = factory.create().await.expect("factory create must succeed");
+    let key = PreparedStatementKey::new(
+        Some("INSERT INTO item VALUES (?)".to_string()),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("prepared key must build");
+    let statement = connection
+        .prepare_physical_statement(&key)
+        .await
+        .expect("RBDC prepared token must build");
+
+    let result = connection
+        .exec_prepared(
+            statement.as_ref(),
+            vec![Value::String("prepared".to_string())],
+        )
+        .await
+        .expect("RBDC prepared execution must delegate to exec");
+    assert_eq!(result.rows_affected, 1);
+    assert_eq!(
+        *observed_params.lock().expect("params lock poisoned"),
+        vec![rbs::Value::String("prepared".to_string())]
+    );
+
+    connection
+        .close_prepared_statement(statement.clone())
+        .await
+        .expect("RBDC prepared token must close");
+    assert!(connection
+        .exec_prepared(statement.as_ref(), vec![])
+        .await
+        .is_err());
 }

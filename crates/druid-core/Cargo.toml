@@ -2,9 +2,9 @@
 name         = "druid-core"
 version      = "0.0.0-design"
 edition      = "2021"
-rust-version = "1.75"
+rust-version = "1.95"
 license      = "Apache-2.0"
-description  = "druid-rust core traits: Connection, Driver, Pool, Filter — zero-dependency abstraction layer"
+description  = "druid-rust core traits and typed JDBC-semantic platform values"
 publish      = false
 
 [lints]
@@ -15,6 +15,8 @@ async-trait = { workspace = true }
 thiserror   = { workspace = true }
 serde       = { workspace = true }
 serde_json  = { workspace = true }
+chrono      = { workspace = true }
+bigdecimal  = { workspace = true }
 uuid        = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

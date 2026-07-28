@@ -2,7 +2,7 @@
 name         = "druid-pool"
 version      = "0.0.0-design"
 edition      = "2021"
-rust-version = "1.75"
+rust-version = "1.95"
 license      = "Apache-2.0"
 description  = "druid-rust connection pool: HikariCP-style pool that consumes druid-core traits; driver-agnostic"
 publish      = false
@@ -22,3 +22,5 @@ thiserror  = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 druid-sql = { path = "../druid-sql" }
 druid-core = { path = "../druid-core" }
+chrono = { workspace = true }
+bigdecimal = { workspace = true }

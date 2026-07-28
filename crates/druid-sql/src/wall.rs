@@ -4,7 +4,9 @@
 
 use crate::wall_config::WallConfig;
 use crate::wall_violation::WallViolation;
-use sqlparser::ast::{Statement, SetExpr, Select, TableFactor, ObjectType, FromTable, Query, ObjectName};
+use sqlparser::ast::{
+    FromTable, ObjectName, ObjectType, Query, Select, SetExpr, Statement, TableFactor,
+};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;
@@ -16,10 +18,14 @@ pub struct Wall {
 
 impl Wall {
     pub fn new(config: WallConfig) -> Self {
-        Self { config: Arc::new(config) }
+        Self {
+            config: Arc::new(config),
+        }
     }
 
-    pub fn config(&self) -> &WallConfig { &self.config }
+    pub fn config(&self) -> &WallConfig {
+        &self.config
+    }
 
     /// 检查 SQL 是否合规。
     pub fn check(&self, sql: &str) -> Result<(), Vec<WallViolation>> {
@@ -30,7 +36,11 @@ impl Wall {
         for stmt in &ast {
             self.check_statement(stmt, &mut violations);
         }
-        if violations.is_empty() { Ok(()) } else { Err(violations) }
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
+        }
     }
 
     fn check_statement(&self, stmt: &Statement, v: &mut Vec<WallViolation>) {
@@ -47,7 +57,9 @@ impl Wall {
                 }
                 self.check_from_table(&delete.from, v);
             }
-            Statement::Update { table, selection, .. } => {
+            Statement::Update {
+                table, selection, ..
+            } => {
                 if !self.config.update_allow {
                     v.push(WallViolation::SyntaxError("UPDATE not allowed".into()));
                 }
@@ -62,7 +74,9 @@ impl Wall {
                 }
                 self.check_object_name(&insert.table_name, v);
             }
-            Statement::Drop { object_type, names, .. } => {
+            Statement::Drop {
+                object_type, names, ..
+            } => {
                 if *object_type == ObjectType::Table {
                     if !self.config.drop_table_allow {
                         for name in names {
@@ -92,8 +106,12 @@ impl Wall {
                 self.check_query(subquery, v);
             }
             SetExpr::SetOperation { left, right, .. } => {
-                if let SetExpr::Select(l) = &**left { self.check_select(l, v); }
-                if let SetExpr::Select(r) = &**right { self.check_select(r, v); }
+                if let SetExpr::Select(l) = &**left {
+                    self.check_select(l, v);
+                }
+                if let SetExpr::Select(r) = &**right {
+                    self.check_select(r, v);
+                }
             }
             _ => {}
         }

@@ -162,34 +162,113 @@ impl Default for PoolConfig {
 pub struct PoolConfigBuilder(PoolConfig);
 
 impl PoolConfig {
-    pub fn builder() -> PoolConfigBuilder { PoolConfigBuilder(PoolConfig::default()) }
+    pub fn builder() -> PoolConfigBuilder {
+        PoolConfigBuilder(PoolConfig::default())
+    }
 }
 
 impl PoolConfigBuilder {
-    pub fn name(mut self, v: impl Into<String>) -> Self { self.0.name = v.into(); self }
-    pub fn url(mut self, v: impl Into<String>) -> Self { self.0.url = v.into(); self }
-    pub fn driver_name(mut self, v: impl Into<String>) -> Self { self.0.driver_name = v.into(); self }
-    pub fn username(mut self, v: impl Into<String>) -> Self { self.0.username = v.into(); self }
-    pub fn password(mut self, v: impl Into<String>) -> Self { self.0.password = v.into(); self }
-    pub fn max_open(mut self, v: usize) -> Self { self.0.max_open = v; self }
-    pub fn min_idle(mut self, v: usize) -> Self { self.0.min_idle = v; self }
-    pub fn initial_size(mut self, v: usize) -> Self { self.0.initial_size = v; self }
-    pub fn acquire_timeout(mut self, v: Duration) -> Self { self.0.acquire_timeout = v; self }
-    pub fn max_lifetime(mut self, v: Duration) -> Self { self.0.max_lifetime = v; self }
-    pub fn eviction_interval(mut self, v: Duration) -> Self { self.0.eviction_interval = v; self }
-    pub fn min_evictable_idle(mut self, v: Duration) -> Self { self.0.min_evictable_idle = v; self }
-    pub fn test_on_borrow(mut self, v: bool) -> Self { self.0.test_on_borrow = v; self }
-    pub fn test_on_return(mut self, v: bool) -> Self { self.0.test_on_return = v; self }
-    pub fn test_while_idle(mut self, v: bool) -> Self { self.0.test_while_idle = v; self }
-    pub fn validation_query(mut self, v: impl Into<String>) -> Self { self.0.validation_query = Some(v.into()); self }
-    pub fn keep_alive(mut self, v: bool) -> Self { self.0.keep_alive = v; self }
-    pub fn leak_detection(mut self, v: bool) -> Self { self.0.leak_detection = v; self }
-    pub fn leak_threshold(mut self, v: Duration) -> Self { self.0.leak_threshold = v; self }
-    pub fn slow_sql_threshold(mut self, v: Duration) -> Self { self.0.slow_sql_threshold = v; self }
-    pub fn pool_prepared_statements(mut self, v: bool) -> Self { self.0.pool_prepared_statements = v; self }
-    pub fn default_auto_commit(mut self, v: bool) -> Self { self.0.default_auto_commit = Some(v); self }
-    pub fn break_after_acquire_failure(mut self, v: bool) -> Self { self.0.break_after_acquire_failure = v; self }
-    pub fn connection_error_retry_attempts(mut self, v: usize) -> Self { self.0.connection_error_retry_attempts = v; self }
-    pub fn async_close_connection(mut self, v: bool) -> Self { self.0.async_close_connection = v; self }
-    pub fn build(self) -> PoolConfig { self.0 }
+    pub fn name(mut self, v: impl Into<String>) -> Self {
+        self.0.name = v.into();
+        self
+    }
+    pub fn url(mut self, v: impl Into<String>) -> Self {
+        self.0.url = v.into();
+        self
+    }
+    pub fn driver_name(mut self, v: impl Into<String>) -> Self {
+        self.0.driver_name = v.into();
+        self
+    }
+    pub fn username(mut self, v: impl Into<String>) -> Self {
+        self.0.username = v.into();
+        self
+    }
+    pub fn password(mut self, v: impl Into<String>) -> Self {
+        self.0.password = v.into();
+        self
+    }
+    pub fn max_open(mut self, v: usize) -> Self {
+        self.0.max_open = v;
+        self
+    }
+    pub fn min_idle(mut self, v: usize) -> Self {
+        self.0.min_idle = v;
+        self
+    }
+    pub fn initial_size(mut self, v: usize) -> Self {
+        self.0.initial_size = v;
+        self
+    }
+    pub fn acquire_timeout(mut self, v: Duration) -> Self {
+        self.0.acquire_timeout = v;
+        self
+    }
+    pub fn max_lifetime(mut self, v: Duration) -> Self {
+        self.0.max_lifetime = v;
+        self
+    }
+    pub fn eviction_interval(mut self, v: Duration) -> Self {
+        self.0.eviction_interval = v;
+        self
+    }
+    pub fn min_evictable_idle(mut self, v: Duration) -> Self {
+        self.0.min_evictable_idle = v;
+        self
+    }
+    pub fn test_on_borrow(mut self, v: bool) -> Self {
+        self.0.test_on_borrow = v;
+        self
+    }
+    pub fn test_on_return(mut self, v: bool) -> Self {
+        self.0.test_on_return = v;
+        self
+    }
+    pub fn test_while_idle(mut self, v: bool) -> Self {
+        self.0.test_while_idle = v;
+        self
+    }
+    pub fn validation_query(mut self, v: impl Into<String>) -> Self {
+        self.0.validation_query = Some(v.into());
+        self
+    }
+    pub fn keep_alive(mut self, v: bool) -> Self {
+        self.0.keep_alive = v;
+        self
+    }
+    pub fn leak_detection(mut self, v: bool) -> Self {
+        self.0.leak_detection = v;
+        self
+    }
+    pub fn leak_threshold(mut self, v: Duration) -> Self {
+        self.0.leak_threshold = v;
+        self
+    }
+    pub fn slow_sql_threshold(mut self, v: Duration) -> Self {
+        self.0.slow_sql_threshold = v;
+        self
+    }
+    pub fn pool_prepared_statements(mut self, v: bool) -> Self {
+        self.0.pool_prepared_statements = v;
+        self
+    }
+    pub fn default_auto_commit(mut self, v: bool) -> Self {
+        self.0.default_auto_commit = Some(v);
+        self
+    }
+    pub fn break_after_acquire_failure(mut self, v: bool) -> Self {
+        self.0.break_after_acquire_failure = v;
+        self
+    }
+    pub fn connection_error_retry_attempts(mut self, v: usize) -> Self {
+        self.0.connection_error_retry_attempts = v;
+        self
+    }
+    pub fn async_close_connection(mut self, v: bool) -> Self {
+        self.0.async_close_connection = v;
+        self
+    }
+    pub fn build(self) -> PoolConfig {
+        self.0
+    }
 }

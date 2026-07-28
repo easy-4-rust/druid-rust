@@ -50,7 +50,10 @@ pub fn parameterize(sql: &str) -> ParameterizedSql {
     }
 
     let fp = fingerprint(&template);
-    ParameterizedSql { template, fingerprint: fp }
+    ParameterizedSql {
+        template,
+        fingerprint: fp,
+    }
 }
 
 /// 单条 SQL 的合并统计。
@@ -72,7 +75,8 @@ pub struct MergedSqlStat {
 impl MergedSqlStat {
     pub fn new(sql: String, fingerprint: u64) -> Self {
         Self {
-            sql, fingerprint,
+            sql,
+            fingerprint,
             execute_count: AtomicU64::new(0),
             total_time_ns: AtomicU64::new(0),
             max_time_ns: AtomicU64::new(0),
@@ -97,10 +101,18 @@ impl MergedSqlStat {
         }
     }
 
-    pub fn execute_count(&self) -> u64 { self.execute_count.load(Ordering::Relaxed) }
-    pub fn total_time_ms(&self) -> f64 { self.total_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0 }
-    pub fn max_time_ms(&self) -> f64 { self.max_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0 }
-    pub fn error_count(&self) -> u64 { self.error_count.load(Ordering::Relaxed) }
+    pub fn execute_count(&self) -> u64 {
+        self.execute_count.load(Ordering::Relaxed)
+    }
+    pub fn total_time_ms(&self) -> f64 {
+        self.total_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0
+    }
+    pub fn max_time_ms(&self) -> f64 {
+        self.max_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0
+    }
+    pub fn error_count(&self) -> u64 {
+        self.error_count.load(Ordering::Relaxed)
+    }
 }
 
 /// SQL 合并器。
@@ -112,22 +124,30 @@ pub struct SqlMerger {
 
 impl SqlMerger {
     pub fn new() -> Self {
-        Self { cache: dashmap::DashMap::new() }
+        Self {
+            cache: dashmap::DashMap::new(),
+        }
     }
 
     /// 记录一条 SQL 执行。
     pub fn record(&self, sql: &str, elapsed: Duration, ok: bool) {
         let param = parameterize(sql);
-        let stat = self.cache
+        let stat = self
+            .cache
             .entry(param.fingerprint)
-            .or_insert_with(|| std::sync::Arc::new(MergedSqlStat::new(param.template, param.fingerprint)))
+            .or_insert_with(|| {
+                std::sync::Arc::new(MergedSqlStat::new(param.template, param.fingerprint))
+            })
             .clone();
         stat.record(elapsed, ok);
     }
 
     /// 获取所有 SQL 统计。
     pub fn all_stats(&self) -> Vec<std::sync::Arc<MergedSqlStat>> {
-        self.cache.iter().map(|entry| entry.value().clone()).collect()
+        self.cache
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     /// 获取指定指纹的统计。
@@ -136,10 +156,16 @@ impl SqlMerger {
     }
 
     /// SQL 模板数量。
-    pub fn len(&self) -> usize { self.cache.len() }
-    pub fn is_empty(&self) -> bool { self.cache.is_empty() }
+    pub fn len(&self) -> usize {
+        self.cache.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.cache.is_empty()
+    }
 }
 
 impl Default for SqlMerger {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }

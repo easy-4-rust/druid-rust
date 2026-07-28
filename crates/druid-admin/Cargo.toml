@@ -2,7 +2,7 @@
 name         = "druid-admin"
 version      = "0.0.0-design"
 edition      = "2021"
-rust-version = "1.75"
+rust-version = "1.95"
 license      = "Apache-2.0"
 description  = "druid-rust admin: axum-based HTTP endpoints that expose datasource, SQL, wall and /metrics"
 publish      = false

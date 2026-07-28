@@ -3,9 +3,12 @@
 use crate::error::DruidError;
 use crate::exec_result::ExecResult;
 use crate::physical_connection_capabilities::PhysicalConnectionCapabilities;
+use crate::physical_prepared_statement::PhysicalPreparedStatement;
+use crate::prepared_statement_key::PreparedStatementKey;
 use crate::row::Row;
 use crate::savepoint::Savepoint;
 use crate::value::Value;
+use std::sync::Arc;
 
 /// druid-rust 内部最小物理连接 SPI。
 ///
@@ -17,16 +20,73 @@ pub trait PhysicalConnection: Send {
     /// 执行更新类 SQL。
     ///
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回执行结果。
-    async fn exec(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError>;
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError>;
 
     /// 执行查询类 SQL。
     ///
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回结果行。
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError>;
+
+    /// 按完整 JDBC 重载键创建物理预编译语句。
+    ///
+    /// 对应 Java：`Connection#prepareStatement(...)` 和 `prepareCall(...)`。
+    /// 不支持的 Adapter 必须返回明确错误。
+    async fn prepare_physical_statement(
+        &mut self,
+        _key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "prepare_physical_statement",
+        })
+    }
+
+    /// 按完整 `prepareCall` 缓存键创建物理 CallableStatement。
+    ///
+    /// 不支持存储过程调用的 Adapter 必须返回明确错误。
+    async fn prepare_physical_call(
+        &mut self,
+        _key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "prepare_physical_call",
+        })
+    }
+
+    /// 执行已经 prepare 的更新类语句。
+    ///
+    /// 默认实现把 statement 的 SQL 交回驱动执行入口；这适用于 RBDC 等在
+    /// `exec` 内部完成 prepare/cache 的驱动。持有独立 server handle 的 Adapter
+    /// 可以覆盖本方法。
+    async fn exec_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, DruidError> {
+        if statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        self.exec(statement.sql(), params).await
+    }
+
+    /// 执行已经 prepare 的查询类语句。
+    async fn fetch_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, DruidError> {
+        if statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        self.fetch(statement.sql(), params).await
+    }
+
+    /// 关闭物理预编译语句。
+    async fn close_prepared_statement(
+        &mut self,
+        statement: Arc<dyn PhysicalPreparedStatement>,
+    ) -> Result<(), DruidError> {
+        statement.close()
+    }
 
     /// 开始事务。
     async fn begin(&mut self) -> Result<(), DruidError>;
@@ -120,6 +180,36 @@ pub trait PhysicalConnection: Send {
         Err(DruidError::UnsupportedOperation {
             operation: "set_transaction_isolation",
         })
+    }
+
+    /// 返回 `ResultSet` 保持性。
+    fn holdability(&self) -> i32 {
+        0
+    }
+
+    /// 设置 `ResultSet` 保持性。
+    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "set_holdability",
+        })
+    }
+
+    /// 清理连接上的 `SQLWarning`。
+    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "clear_warnings",
+        })
+    }
+
+    /// 标记连接不得重新进入外部池。
+    ///
+    /// Native Pool 通过回收处置枚举直接丢弃连接；bb8/deadpool 等外部池
+    /// Adapter 必须覆盖该方法，使其 manager 能在同步 Drop 路径识别脏连接。
+    fn mark_discarded(&mut self) {}
+
+    /// 返回连接是否已被标记为不得复用。
+    fn is_discarded(&self) -> bool {
+        false
     }
 
     /// 返回 catalog。

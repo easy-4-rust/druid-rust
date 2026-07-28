@@ -4,118 +4,130 @@
 
 # druid-rust
 
-**阿里 Druid (Java) 到 Rust 的规划式完整语义迁移**
+**阿里 Druid 1.2.28 到 Rust 的规划式完整语义迁移**
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
 [定位与状态](#1-项目定位与状态) · [功能与成熟度](#2-功能与成熟度) ·
 [Workspace 与 crate 架构](#4-workspace-与-crate-架构) ·
-[设计草图](#6-设计草图-未来-api-当前不可运行) ·
-[路线图](#11-路线图与阶段) ·
+[示例与调用路径](#6-可执行示例与调用路径) ·
+[迁移路线](#11-迁移路线与阶段) ·
 [贡献与许可证](#19-贡献安全与许可证)
 
 </div>
 
 ---
 
-> **项目状态：语义迁移进行中**
+> **项目状态：功能语义迁移进行中**
 >
-> 当前仓库是可构建、可测试的 Cargo workspace，已经包含 core、pool、
-> SQL、统计、动态数据源和驱动桥接实现。它尚未完成全部 Druid 语义迁移，
-> 也没有稳定公共 API；任何“完成”都必须有 Java oracle 差分证据或明确的
-> Rust 生态契约测试。
+> 当前仓库是可构建、可测试的 Cargo workspace，已经包含 core、native pool、
+> SQL、Wall、统计、动态数据源、Toasty 内置数据源和多种驱动/外部池桥接实现。
+> 它尚未完成全部 Druid 语义迁移，也没有稳定公共 API。任何“完成”都必须有
+> Java oracle、Rust contract 和真实数据库证据。
 >
-> 目标是完整迁移 Druid 的功能语义。迁移不是 Java 源码逐行翻译，但也
-> 不是只借鉴架构模式后自行取舍功能。
+> 迁移不是 Java 源码逐行翻译，但也不是只借鉴架构模式后自行删减功能。
 
 > **最后核验**：2026-07-28。
 
 ## 1. 项目定位与状态
 
-**druid-rust 是一个把阿里 Druid 可观察语义迁移到 Rust 异步生态的
-workspace。** 连接池、过滤器链、SQL 防火墙、统计、动态数据源与管理端
-均进入对象总账和语义契约表，不以“只选择架构模式”的方式缩减范围。实现基于
-(`tokio`、`sqlparser-rs`、`sqlx`、`deadpool`、`bb8`、`rbdc`、`axum`)
-生态完成平台适配。
+**druid-rust 是把阿里 Druid 的可观察功能语义迁移到 Rust 异步生态的
+workspace。** 连接池、Connection/Statement/ResultSet、过滤器链、SQL
+防火墙、统计、动态数据源、管理面和 wrapper 都进入对象总账和语义契约表。
+
+Rust 平台适配使用 Toasty、Tokio、sqlparser、SQLx、RBDC、deadpool、bb8、
+Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结果语义的迁移责任。
 
 ### 1.1 是什么
 
 | 字段 | 值 |
 | :--- | :--- |
-| 核心契约 | `druid-core`；native pool 位于 `druid-pool` |
-| 当前版本 | `0.0.0-design`（迁移期不稳定版本） |
-| MSRV | `1.75`（在 `rust-toolchain.toml` 中固定） |
-| Edition | `2021` |
-| Workspace Resolver | `2` |
-| unsafe 策略 | `forbid`（workspace lint） |
-| 默认 features | 无 |
-| 发布状态 | 未发布——每个 crate `publish = false` |
+| Java 基线 | Druid `1.2.28`，提交 `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
+| 对外连接 | `DruidPooledConnection` |
+| 内部物理 SPI | `PhysicalConnection` / `PhysicalConnectionFactory` |
+| Native pool | `DruidPool` |
+| 内置标准数据源 | Toasty 0.9，默认 SQLite |
+| 当前版本 | `0.0.0-design` |
+| MSRV | `1.95` |
+| 默认工具链 | `1.97.1` |
+| Edition / Resolver | `2021` / `2` |
+| unsafe 策略 | `forbid` |
+| 发布状态 | 未发布；每个 crate `publish = false` |
 | 许可证 | Apache-2.0 |
 
 ### 1.2 不是什么
 
-- **不是逐行、逐类布局复制**。Java 行为通过对象总账和语义契约迁移；
-  调度器、所有权和驱动适配使用 Rust 机制实现，但不能因此删减外部语义。
-- **不是 ORM**。druid-rust 不生成 SQL，只对宿主应用发出的 SQL 做池化、
-  观测和治理。
-- **不是数据库 migration 工具**。Schema 版本管理明确不在范围内。
-- **尚未达到发布标准**。workspace 已可运行且有测试，但完整对象矩阵、
-  Java golden 差分、稳定 API、CI 与基准仍未闭环。
+- **不是逐行、逐类布局复制。** Java 行为通过对象总账和语义契约迁移；
+  调度、所有权和生态适配使用 Rust 机制实现。
+- **不是功能借鉴项目。** Rust 中没有直接标准对象时，应通过
+  `ADAPTER/MERGE/SPLIT/PROTOCOL` 迁移，而不是删去能力。
+- **Druid 治理层不是 SQL 生成器。** Toasty 是内置标准数据源/ORM 入口，
+  但 DruidPool、Filter、Stat 和回收语义仍由 druid-rust 掌握。
+- **不是 Schema migration 工具。** 数据库版本管理由宿主应用或专用工具承担。
+- **尚未达到发布标准。** 多数据库矩阵、完整 Java 差分、稳定 API、CI、
+  覆盖率和基准仍未闭环。
 
 ### 1.3 状态证据
 
 | 声明 | 当前值 | 证据 |
 | :--- | :--- | :--- |
-| workspace 可构建 | 是（当前需 stable 工具链） | `cargo +stable test --workspace --all-targets` |
-| 连接 API | 已实现，尚不稳定 | `DruidPooledConnection` → `PhysicalConnection` |
-| 测试 | 已实现 | core/pool/SQL/Stats/Dynamic/SQLx/RBDC/bb8/deadpool 测试 |
-| 文档 | 迁移总账 + 架构 | `doc/migration/` |
-| crates.io | 未发布 | 所有 crate `publish = false` |
-| docs.rs | 未发布 | 所有 crate `publish = false` |
-| CI | 未配置 | 无 `.github/workflows/` 目录 |
-| 覆盖率 | 基线已测；当前变更需重审 | `cargo llvm-cov` 是出口门禁，不代替语义验收 |
-| 基准 | 未测量 | 无 `benches/` 目录 |
+| workspace 可构建 | 是 | `cargo check --workspace` |
+| 全 workspace 测试 | 431/431 通过 | `cargo test --workspace` |
+| 真实 SQLite | 21 个跨内置/core/扩展用例通过 | Toasty、SQLx、bb8、deadpool、wrapper 测试 |
+| Toasty feature 图 | 全部可组合编译 | `cargo check -p druid-toasty --all-features` |
+| 连接 API | 已实现，尚不稳定 | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
+| 迁移完成度 | 部分 | `doc/migration/` 对象与语义总账 |
+| crates.io / docs.rs | 未发布 | `publish = false` |
+| CI | 未配置 | 无 `.github/workflows/` |
+| 覆盖率 | 有历史快照，未达到完成门禁 | 迁移路线图 §15 |
+| 基准 | 未测量 | 无稳定 benchmark 报告 |
 
 ## 2. 功能与成熟度
 
 ### 2.1 功能矩阵
 
-| 功能 | 状态 | crate | 限制 | 验证 |
-| :---: | :---: | :--- | :--- | :--- |
-| 与 driver 解耦的 `PhysicalConnection` SPI | 🚧 部分 | `druid-core` | JDBC 广度未完成 | 迁移文档 §5 |
-| Druid native 异步连接池 | 🚧 部分 | `druid-pool` | 完整生命周期未完成 | 语义迁移表 |
-| 基于 sqlparser-rs 的 Wall 规则 | 🚧 部分 | `druid-sql` | Druid 规则矩阵未完成 | 语义迁移表 |
-| SQL 合并统计 | 🚧 部分 | `druid-stats` | Java 分层统计未完成 | 语义迁移表 |
-| 多数据源热切换 | 🚧 部分 | `druid-dynamic` | HA 健康/恢复未完成 | 语义迁移表 |
-| `sqlx + deadpool` 外部池桥接 | 🧪 预览 | `druid-sqlx-deadpool` | 禁止嵌套 DruidPool | bridge 契约测试 |
-| `sqlx + bb8` 外部池桥接 | 🧪 预览 | `druid-sqlx-bb8` | 禁止嵌套 DruidPool | bridge 契约测试 |
-| SQLx direct adapter | 🧪 预览 | `druid-sqlx` | SQLite 已测，数据库矩阵未完成 | direct 契约测试 |
-| RBDC direct adapter | 🚧 部分 | `druid-rbdc` | 真实 driver 矩阵未完成 | RBDC trait 契约测试 |
-| `/druid/admin` HTTP 端点 | 🗓️ 计划 | `druid-admin` | V3 | `doc/9` |
-| SQL 注入正则检测 | ⛔ 不移植 | — | 语义不安全 | ADR-005 |
+| 功能 | 状态 | crate | 当前边界 | 验证 |
+| :--- | :---: | :--- | :--- | :--- |
+| `DruidPooledConnection` 对外连接 | 🚧 部分 | `druid-core` | JDBC 全广度未完成 | core/pool contract |
+| `PhysicalConnection` 内部 SPI | 🚧 部分 | `druid-core` | metadata/LOB/vendor 能力待扩 | physical contract |
+| Druid native 异步连接池 | 🚧 部分 | `druid-pool` | 完整配置和生产矩阵未完成 | 生命周期/并发/维护测试 |
+| PreparedStatement cache | 🚧 部分 | `druid-core`/`druid-pool` | Callable/driver 全矩阵待补 | Java oracle + Rust 测试 |
+| SQL AST 与 Wall | 🚧 部分 | `druid-sql` | Druid 方言和规则矩阵未完成 | differential Wall 测试 |
+| SQL 合并统计 | 🚧 部分 | `druid-stats` | Java 分层统计未完成 | stats 测试 |
+| 多数据源热切换 | 🚧 部分 | `druid-dynamic` | HA 健康和恢复未完成 | route/switch 测试 |
+| Toasty 内置数据源 | 🧪 预览 | `druid-toasty` | SQLite 已测，其他数据库实测待补 | 真实 SQLite + all-features |
+| SQLx direct adapter | 🧪 预览 | `druid-sqlx` | SQLite 已测，数据库矩阵未完成 | direct contract |
+| RBDC direct adapter | 🚧 部分 | `druid-rbdc` | 真实 driver 矩阵未完成 | RBDC contract |
+| deadpool external bridge | 🧪 预览 | `druid-sqlx-deadpool` | 禁止嵌套 DruidPool | 真实 SQLite bridge |
+| bb8 external bridge | 🧪 预览 | `druid-sqlx-bb8` | 禁止嵌套 DruidPool | 真实 SQLite bridge |
+| `/druid/*` Admin 兼容面 | 🗓️ 计划 | `druid-admin` | 只有占位 state/endpoint 字符串 | 迁移账本 |
+| Java 全对象语义 | 🚧 部分 | workspace | P0–P10 未全部关闭 | 对象/语义总账 |
 
 ### 2.2 状态定义
 
 | 状态 | 定义 |
 | :--- | :--- |
-| ✅ 稳定 | 公共 API、测试、文档和兼容承诺齐全 |
-| 🧪 预览 | 可用但 API 或行为可能变化 |
-| 🚧 部分 | 只有明确列出的子集可用 |
-| 🗓️ 计划 | 尚无可调用实现 |
-| ⛔ 不移植 | 明确拒绝——见 ADR 理由 |
+| ✅ 稳定 | 公共 API、差分、真实集成、文档和兼容承诺齐全 |
+| 🧪 预览 | 存在真实实现和测试，但 API 或数据库矩阵可能变化 |
+| 🚧 部分 | 只有总账中明确列出的语义切片可用 |
+| 🗓️ 计划 | 尚无可接受的真实实现 |
+| ⛔ 不支持 | 平台确实无法承载，并已登记替代方案和明确错误 |
 
 ## 3. Rust 基线与平台支持
 
 | 项目 | 值 | 来源 |
 | :--- | :--- | :--- |
-| MSRV | `1.75` | `rust-toolchain.toml`、`Cargo.toml` `rust-version` |
-| Edition | `2021` | workspace `[workspace.package]` |
-| Resolver | `2` | workspace `[workspace]` |
-| rustfmt | stable | `rust-toolchain.toml` components |
-| Clippy | 启用 workspace pedantic | `Cargo.toml` `[workspace.lints.clippy]` |
+| MSRV | `1.95` | workspace `rust-version`；Toasty 0.9 最低要求 |
+| 默认工具链 | `1.97.1` | `rust-toolchain.toml` |
+| Edition | `2021` | workspace package |
+| Resolver | `2` | workspace |
+| rustfmt | stable | toolchain component |
+| Clippy | workspace `all + pedantic` | workspace lint |
+| async runtime | Tokio 1.x | workspace dependency |
+| `no_std` / WASM | 不承诺 | 数据库 driver 和 Tokio 运行时依赖 |
 
-> `druid-core` 已暴露公共契约，但平台支持矩阵、`no_std` 与 WASM 尚未
-> 决策，因此当前不作稳定支持承诺。
+Linux、macOS 和 Windows 的稳定支持矩阵需要 CI 证据。当前本地验证环境不能被
+解释为跨平台发布承诺。
 
 ## 4. Workspace 与 crate 架构
 
@@ -126,65 +138,60 @@ workspace。** 连接池、过滤器链、SQL 防火墙、统计、动态数据�
         │
         ▼
 ┌──────────────────────────────────────────────────────────────┐
-│ druid-rust Cargo Workspace（语义迁移进行中）                 │
+│ druid facade                                                 │
+│  └── DruidPool → DruidPooledConnection                      │
+│        └── DruidConnectionHolder                            │
+│              └── PhysicalConnection                         │
+│                    ├── Toasty（内置标准）                    │
+│                    ├── SQLx（direct 扩展）                   │
+│                    └── RBDC（direct 扩展）                   │
 │                                                              │
-│ druid-core         DruidPooledConnection / PhysicalConnection│
-│ druid-sql          sqlparser-rs AST、Wall、参数化            │
-│ druid-pool         Druid native 异步连接池                   │
-│ druid-stats        SQL 合并 + 百分位 + Prometheus             │
-│ druid-dynamic      ArcSwap 多数据源 + 读写分离                │
-│                                                              │
-│ druid-sqlx         SQLx direct PhysicalConnection adapter    │
-│ druid-rbdc         RBDC direct PhysicalConnection adapter    │
-│ druid-sqlx-deadpool deadpool 外部池 bridge                   │
-│ druid-sqlx-bb8     bb8 外部池 bridge                         │
-│                                                              │
-│ druid-admin        axum 实现的 /druid/admin HTTP 端点         │
+│ SQL/Wall      druid-sql       Stats       druid-stats        │
+│ Dynamic/HA    druid-dynamic   Admin       druid-admin        │
+│ External pool druid-sqlx-bb8 / druid-sqlx-deadpool          │
 └──────────────────────────────────────────────────────────────┘
-        │
-        ▼
-[数据库 driver 生态：sqlx、rbdc、deadpool、bb8、tokio-postgres、...]
 ```
 
 连接边界固定为：
 
 ```text
 DruidPooledConnection            对外池化连接
-└── PhysicalConnection           druid-rust 内部最小 SPI
-    ├── SqlxConnectionAdapter
-    ├── RbdcConnectionAdapter
-    └── 其他驱动 Adapter
+└── DruidConnectionHolder        Druid 生命周期权威容器
+    └── PhysicalConnection       内部最小 SPI
+        ├── ToastyConnectionAdapter
+        ├── SqlxConnectionAdapter
+        ├── RbdcConnectionAdapter
+        └── 其他直接驱动 Adapter
 ```
 
-bb8/deadpool 是 `Pool` Provider：它们通过 `PhysicalConnectionLease`
-持有外部租约，不实现 `PhysicalConnectionFactory`，也不能再嵌套到
-`DruidPool`。
+bb8/deadpool 是 `Pool` provider：它们通过 `PhysicalConnectionLease` 持有外部
+租约，不实现 `PhysicalConnectionFactory`，也不能再嵌套到 `DruidPool`。
 
 ### 4.2 crate 依赖图
 
 ```mermaid
 flowchart TB
-    APP["下游应用"] --> CORE["druid-core"]
-    APP --> POOL["druid-pool"]
-    APP --> DYNAMIC["druid-dynamic"]
-    APP --> ADMIN["druid-admin"]
+    APP["下游应用"] --> FACADE["druid"]
+    FACADE --> CORE["druid-core"]
+    FACADE --> POOL["druid-pool"]
+    FACADE --> TOASTY["druid-toasty"]
 
     SQL["druid-sql"] --> CORE
     POOL --> CORE
     STATS["druid-stats"] --> CORE
-    STATS --> SQL
-    DYNAMIC --> CORE
-    DYNAMIC --> SQL
+    DYNAMIC["druid-dynamic"] --> CORE
     DYNAMIC --> POOL
 
-    RBDC["druid-rbdc"] --> CORE
+    TOASTY --> CORE
     SQLX["druid-sqlx"] --> CORE
-    SQLXDP["druid-sqlx-deadpool"] --> CORE
-    SQLXDP --> SQLX
-    SQLXB8["druid-sqlx-bb8"] --> CORE
-    SQLXB8 --> SQLX
+    RBDC["druid-rbdc"] --> CORE
 
-    ADMIN --> CORE
+    WRAPPER["druid-wrapper"] --> SQLX
+    WRAPPER --> RBDC
+    WRAPPER --> SQLXDP["druid-sqlx-deadpool"]
+    WRAPPER --> SQLXB8["druid-sqlx-bb8"]
+
+    ADMIN["druid-admin"] --> CORE
     ADMIN --> POOL
     ADMIN --> STATS
     ADMIN --> DYNAMIC
@@ -192,258 +199,308 @@ flowchart TB
 
 ### 4.3 Crate Map
 
-| Crate | 发布 | 默认启用 | 职责 | 计划关键依赖 |
-| :---: | :---: | :---: | :--- | :--- |
-| `druid-core` | ⛔ | — | `DruidPooledConnection`、`PhysicalConnection`、`Pool`、Filter 契约 | `async-trait` |
-| `druid-sql` | ⛔ | — | sqlparser-rs 适配、Wall 规则、参数化、指纹 | `sqlparser` |
-| `druid-pool` | ⛔ | — | HikariCP 风格异步池、空闲队列、驱逐调度 | `tokio`、`parking_lot` |
-| `druid-stats` | ⛔ | — | SQL 合并、百分位直方图、Prometheus 导出 | `moka`、`prometheus` |
-| `druid-dynamic` | ⛔ | — | `ArcSwap` 多数据源、读写分离、负载均衡 | `arc-swap`、`dashmap` |
-| `druid-sqlx` | ⛔ | — | SQLx raw connection direct adapter | `sqlx` |
-| `druid-rbdc` | ⛔ | — | RBDC raw connection direct adapter | `rbdc`、`rbs` |
-| `druid-sqlx-deadpool` | ⛔ | — | SQLx + deadpool external bridge | `druid-sqlx`、`deadpool` |
-| `druid-sqlx-bb8` | ⛔ | — | SQLx + bb8 external bridge | `druid-sqlx`、`bb8` |
-| `druid-admin` | ⛔ | — | axum 实现的 `/druid/admin` HTTP 端点 | `axum`、`prometheus` |
+| Crate | 发布 | 职责 | 关键依赖 |
+| :--- | :---: | :--- | :--- |
+| `druid` | ⛔ | 统一 facade，默认导出 Toasty 标准实现 | core/pool/toasty |
+| `druid-core` | ⛔ | 对外连接、holder、SPI、语句、事务、Filter | `async-trait` |
+| `druid-sql` | ⛔ | AST、方言、Wall、参数化 | `sqlparser` |
+| `druid-pool` | ⛔ | Native pool、空闲队列、维护和回收 | Tokio/parking_lot |
+| `druid-stats` | ⛔ | SQL 合并、直方图、观测对象 | moka/prometheus |
+| `druid-dynamic` | ⛔ | ArcSwap 数据源组、路由和 HA | arc-swap/dashmap |
+| `druid-toasty` | ⛔ | Toasty raw connection 内置适配 | Toasty 0.9 |
+| `druid-sqlx` | ⛔ | SQLx direct adapter | SQLx 0.8 |
+| `druid-rbdc` | ⛔ | RBDC direct adapter | RBDC/RBS |
+| `druid-sqlx-deadpool` | ⛔ | deadpool external bridge | SQLx/deadpool |
+| `druid-sqlx-bb8` | ⛔ | bb8 external bridge | SQLx/bb8 |
+| `druid-wrapper` | ⛔ | direct/bridge 扩展统一归口 | wrapper crates |
+| `druid-admin` | ⛔ | Java Admin 兼容面和 Rust-only 管理扩展 | Axum/Prometheus |
 
 ### 4.4 依赖和可见性规则
 
-- `druid-core` **不得**依赖任何 driver、parser、async runtime 或 TLS 后端，
-  只暴露 trait 契约。
-- 领域 crate（`druid-sql`、`druid-pool`、`druid-stats`、`druid-dynamic`）
-  **不得**形成循环依赖，仅共享 `druid-core`。
-- direct adapter 只依赖 `druid-core`；外部池 bridge 依赖 `druid-core`、
-  `druid-sqlx` 和一个外部池生态。bridge **不得**依赖 `druid-pool`，
-  否则会形成 pool-in-pool。
-- `druid-admin` 是唯一依赖所有其他 crate 的 crate，且故意不在任何领域
-  crate 的依赖闭包里。
-- 所有 crate 在 Phase 1 完成前保持 `publish = false`。
+- `druid-core` 不依赖具体 ORM、driver、外部 pool、parser 或 HTTP 框架。
+- Native 模式由 `DruidPool + PhysicalConnectionFactory` 独占池化职责。
+- External 模式由 bb8/deadpool 独占池化职责；bridge 不进入 `DruidPool`。
+- direct adapter 只向 core SPI 暴露 Druid 类型，禁止泄漏 Toasty/SQLx/RBDC 类型。
+- `druid-wrapper` 归口扩展；`druid` facade 暴露内置标准。
+- `druid-admin` 不得反向进入领域 crate 的依赖闭包。
+- 所有 crate 在发布门禁关闭前保持 `publish = false`。
 
 ## 5. 设计原则
 
 | 原则 | 工程落地 | 验证手段 |
 | :--- | :--- | :--- |
-| 类型安全 | `PhysicalConnection` 通过 `Box<dyn PhysicalConnection>` 留在内部；应用拿到 `DruidPooledConnection` | 编译与契约测试 |
-| 所有权清晰 | `DruidPooledConnection` 只有一个连接和一个 `FnOnce` 归还路径；外部池使用 `PhysicalConnectionLease` | exactly-once 测试 |
-| 错误可组合 | 单一 `druid_core::Error` 枚举，使用 `thiserror`；所有层返回 `Result<T, Error>` | 未来的错误测试 |
-| 默认安全 | Wall 默认拒绝 `DROP`/`TRUNCATE`；过滤器链默认 `StatFilter + WallFilter` | 未来的安全测试 |
-| 零成本抽象 | 仅在边界使用 `async-trait` 动态分发；调度器内部用 `parking_lot::Mutex` 和 `tokio::sync::Notify` | 未来的基准 |
-| 可演进 | 通过 feature flag 隐藏每个适配器；`druid-core` 的 trait 契约是跨升级的稳定合同 | 未来的 semver 测试 |
+| 语义迁移 | Java 对象和方法进入对象/语义账本 | Java/Rust 差分 |
+| 类型安全 | driver 类型只存在于 adapter 内部 | 编译和公共 API 审计 |
+| 所有权清晰 | holder 拥有一条物理连接；租约只归还一次 | exactly-once 测试 |
+| 单一池化权威 | native/external 两种模式互斥 | provider contract |
+| 错误显式 | 不支持能力返回结构化错误 | error/capability 测试 |
+| 默认安全 | 未知 scheme、非法 savepoint、脏事务安全失败 | 负面路径测试 |
+| 证据驱动 | 文件存在或名称相同不构成完成 | 真实 DB + oracle |
+| 可演进 | 内置标准和扩展分层 | feature/API 审计 |
 
-## 6. 历史设计草图
+## 6. 可执行示例与调用路径
 
-> **警告：以下片段是保留的历史设计草图。** crate 名、模块路径、trait 签名和配置键
-> 均为**暂定**，在任何 crate 发布前都会调整。**请勿**复制到生产代码。
-> 它们只用来传达意图，不作为 API 保证。
+README 不再保存无法编译的伪 API。当前可执行用法以测试文件为准：
 
-### 6.1 最小示例（计划）
+### 6.1 Toasty 内置 SQLite
 
-```rust
-// 伪代码——当前 workspace 不可编译
-use druid_core::pool::DruidPool;
-use druid_sqlx_bb8::SqlxBb8PoolBuilder;
+- [`toasty_connection_adapter_test.rs`](crates/druid-toasty/tests/toasty_connection_adapter_test.rs)
+  覆盖建表、增删查、六类 `Value`、prepared、事务、savepoint、generated key、
+  discard 和未知 URL。
+- [`sqlite_core_semantics_test.rs`](crates/druid/tests/sqlite_core_semantics_test.rs)
+  覆盖 Toasty → DruidPool → DruidPooledConnection 的纵向主链。
 
-let pool: DruidPool<_> = SqlxBb8PoolBuilder::new()
-    .driver_name("postgres")
-    .url("postgres://user:pwd@host/db")
-    .max_open(20)
-    .max_idle(4)
-    .acquire_timeout(Duration::from_secs(3))
-    .build()
-    .await?;
+### 6.2 Native pool 与连接生命周期
 
-let mut conn = pool.get().await?;
-let rows = conn.fetch("SELECT id FROM users WHERE id = ?", vec![42.into()]).await?;
-println!("rows = {rows:?}");
+- [`physical_connection_contract.rs`](crates/druid-pool/tests/physical_connection_contract.rs)
+  覆盖并发容量、Filter 和 exactly-once 归还。
+- [`recycle_semantics_test.rs`](crates/druid-pool/tests/recycle_semantics_test.rs)
+  覆盖 rollback、状态复位、校验、discard 和 schema。
+- [`prepared_statement_semantics_test.rs`](crates/druid-pool/tests/prepared_statement_semantics_test.rs)
+  覆盖缓存、LRU、in-use 和连接租约边界。
+
+### 6.3 Direct 与 external 扩展
+
+- [`sqlx_connection_adapter_test.rs`](crates/druid-sqlx/tests/sqlx_connection_adapter_test.rs)
+- [`sqlx_bb8_pool_test.rs`](crates/druid-sqlx-bb8/tests/sqlx_bb8_pool_test.rs)
+- [`sqlx_deadpool_pool_test.rs`](crates/druid-sqlx-deadpool/tests/sqlx_deadpool_pool_test.rs)
+- [`sqlite_wrapper_semantics_test.rs`](crates/druid-wrapper/tests/sqlite_wrapper_semantics_test.rs)
+
+API 未稳定前，README 不承诺构造器签名；测试是当前源码版本的可执行示例。
+
+## 7. Cargo Features
+
+当前只有 `druid-toasty` 暴露正式 feature：
+
+| Feature | 默认 | 能力 | 边界 |
+| :--- | :---: | :--- | :--- |
+| `sqlite` | ✅ | Toasty SQLite driver | 内置真实 SQLite 门禁 |
+| `postgresql` | ❌ | Toasty PostgreSQL driver | 真实容器待补 |
+| `mysql` | ❌ | Toasty MySQL driver | 真实容器待补 |
+| `turso` | ❌ | Toasty Turso driver | 真实服务待补 |
+| `dynamodb` | ❌ | Toasty DynamoDB driver | 非 SQL，不进入 `PhysicalConnection` |
+
+```bash
+cargo check -p druid-toasty --all-features
 ```
 
-### 6.2 多数据源热切换（计划）
+其他 crate 尚未形成稳定 feature 合同。新增 feature 必须同步能力矩阵、依赖树、
+真实集成测试和发布说明。
 
-```rust
-// 伪代码——当前 workspace 不可编译
-use druid_dynamic::{DynamicDataSource, SqlHint};
+## 8. 核心 API 与用法
 
-let ds = DynamicDataSource::builder()
-    .add("main", main_pool)
-    .add("readonly", read_pool.clone())
-    .build();
+当前 canonical 对象关系：
 
-// 之后，零停机切换主库：
-ds.switch("new_main").await?;
-
-// 按 SQL 类型路由
-let conn = ds.route(SqlHint::Read).await?;
+```text
+DruidPool::get/get_timeout
+    → DruidPooledConnection
+        → DruidConnectionHolder
+            → dyn PhysicalConnection
 ```
 
-### 6.3 Wall 规则（计划）
+核心 trait/对象：
 
-```rust
-// 伪代码——当前 workspace 不可编译
-use druid_sql::wall::WallConfig;
+| 对象 | 责任 |
+| :--- | :--- |
+| `Pool` | 统一 native/external provider 获取与状态合同 |
+| `DruidPool` | Native pool 实现 |
+| `DruidPooledConnection` | 对外连接 facade、Filter 和回收 |
+| `DruidConnectionHolder` | 物理连接、状态、时间、计数和 prepared cache |
+| `PhysicalConnection` | direct adapter 的内部最小 SPI |
+| `PhysicalConnectionFactory` | Native 模式创建/校验未池化连接 |
+| `PhysicalConnectionLease` | External 模式持有并归还外部池对象 |
+| `PhysicalConnectionCapabilities` | Adapter 高级能力声明 |
 
-let wall = WallConfig::default()
-    .deny_drop_table(true)
-    .deny_truncate(true)
-    .update_must_have_where(true)
-    .delete_must_have_where(true)
-    .max_sql_length(Some(64 * 1024))
-    .build();
-```
-
-## 7. 计划的 Cargo Features
-
-> **注意：所有 crate 当前 features 为零。** 本节是设计草图，会在 V1
-> `druid-core` 暴露 trait 后填实。
-
-| Crate | Feature | 默认 | 增加能力 | 计划关键依赖 |
-| :---: | :---: | :--- | :--- | :--- |
-| `druid-core` | `std` | ✅ | 使用 `std::error::Error` 与 `std::time::Duration` | 无 |
-| `druid-sql` | `postgres-dialect` | ❌ | `PostgreSqlDialect` 参数化 | `sqlparser` |
-| `druid-sql` | `mysql-dialect` | ❌ | `MySqlDialect` 参数化 | `sqlparser` |
-| `druid-sqlx-deadpool` | `postgres` | ❌ | `sqlx::postgres` feature gate | `sqlx` |
-| `druid-sqlx-deadpool` | `mysql` | ❌ | `sqlx::mysql` feature gate | `sqlx` |
-| `druid-admin` | `tls` | ❌ | rustls 服务端配置 | `axum`、`rustls` |
-
-## 8. 计划的核心 API 与用法
-
-V1 计划的 trait 面如下；完整合同见 `druid-rust-Architecture.zh_CN.md` §8
-与 `doc/7、druid-rust-领域模型设计.md`。
-
-```rust
-// 计划——尚未实现
-#[async_trait::async_trait]
-pub trait Connection: Send + Sync {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, Error>;
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, Error>;
-    async fn begin(&mut self) -> Result<(), Error>;
-    async fn commit(&mut self) -> Result<(), Error>;
-    async fn rollback(&mut self) -> Result<(), Error>;
-    async fn ping(&mut self) -> Result<(), Error>;
-    async fn close(&mut self) -> Result<(), Error>;
-}
-```
+旧 `Connection`、`ConnectionFactory`、`PooledConnection` 名称只保留迁移期兼容
+重导出，不是新代码的 canonical 名称。
 
 ## 9. 后端、格式与可选引擎
 
-| 能力 | 后端 | 计划 feature | 边界 | 许可证 |
-| :--- | :--- | :--- | :--- | :--- |
-| Postgres | `tokio-postgres` via `sqlx` | `druid-sqlx-deadpool/postgres` 或 `druid-sqlx-bb8/postgres` | 必须参数绑定 | Apache-2.0 / MIT |
-| MySQL | `sqlx::mysql` | `druid-sqlx-deadpool/mysql` | 通过 `druid-sql` 重写占位符 | Apache-2.0 / MIT |
-| MSSQL | `tiberius`（计划） | `druid-sqlx-bb8/mssql`（计划） | 不在 V1/V2 范围 | Apache-2.0 |
-| rbdc 生态 | `rbdc-pg`、`rbdc-mysql`、`rbdc-mssql` | `druid-rbdc/<dialect>` | 通过 `Box<dyn Connection>` 桥接 | Apache-2.0 |
-| SQLite / DuckDB / Turso | n/a | n/a | 明确不在范围内 | — |
+| 通道 | 后端 | 池化归属 | 当前证据 |
+| :--- | :--- | :--- | :--- |
+| Toasty 内置 | SQLite | DruidPool | 真实测试通过 |
+| Toasty 内置 | PostgreSQL/MySQL/Turso | DruidPool | feature 编译；实库待补 |
+| Toasty 非 SQL | DynamoDB | 不适用 | SQL factory 明确拒绝 |
+| SQLx direct | SQLite | DruidPool | 真实测试通过 |
+| SQLx direct | PostgreSQL/MySQL | DruidPool | 实库待补 |
+| RBDC direct | RBDC driver 生态 | DruidPool | trait contract；实库待补 |
+| SQLx + bb8 | SQLite/SQLx driver | bb8 | 真实 SQLite bridge |
+| SQLx + deadpool | SQLite/SQLx driver | deadpool | 真实 SQLite bridge |
 
-> 多引擎能力**不对等**。若某后端缺少某能力，`Pool::state()` 与
-> `druid-admin` API 返回 `Unsupported`，而不是悄悄降级。
+多引擎能力不对等。上层必须读取 capability；不支持时返回明确错误，不得静默
+伪造成功。
 
 ## 10. 并发、内存与资源模型
 
-- `Send + Sync`：所有公共类型必须满足。`Box<dyn Connection>` 是 API 边界
-  唯一出现的非 `Sized` 类型。
-- 内存策略：连接池最多持有 `max_open` 条活连接加一个有界空闲队列。
-  `druid-stats` 为每个独立 SQL 指纹保留一个直方图，TTL 通过
-  `druid-stats::MergeConfig` 配置。
-- 资源释放：`PooledConnection::drop` 是归还连接并发出泄漏告警的唯一位置。
-- 取消：每个 `async` 方法接收 `&mut self`，接受调用方驱动的
-  `tokio::select!` 竞争；不在调用方上下文中派生内部 spawn。
-- 背压：`pool.get()` 在 `in_use == max_open` 时阻塞；可选 `acquire_timeout`
-  返回 `Error::AcquireTimeout` 而不是无限等待。
+- `DruidPooledConnection` 对单个租约提供独占可变访问。
+- `DruidConnectionHolder` 在 idle queue 与 active facade 之间移动同一所有权。
+- native pool 的 open/active/idle/creating 计数必须守恒且不超过 `max_open`。
+- `DynamicDataSource` 使用 `ArcSwap<DataSourceGroup>`；切换只影响后续路由。
+- 事务连接不得因动态切换漂移。
+- 显式异步 close 执行 rollback、状态复位和 validation。
+- `Drop` 只复用无需异步修复的干净连接；脏连接安全淘汰。
+- external lease 必须回到原 bb8/deadpool owner，不能交给 DruidPool。
+- 取消、panic 和回收错误不得造成双重归还或容量泄漏。
 
-## 11. 路线图与阶段
+## 11. 迁移路线与阶段
 
-以下阶段与 `doc/5、druid-rust-技术方案与路线.md` 和
-`druid-rust-Architecture.zh_CN.md` §23 对齐。
+正式路线以[迁移路线图](doc/migration/1、迁移路线图.md)为准：
 
-| 阶段 | 交付物 | 退出条件 | 依赖 | 风险 |
-| :---: | :--- | :--- | :--- | :--- |
-| Phase 0 | workspace 骨架 + 设计文档（当前） | `cargo check --workspace` 通过 | toolchain | 依赖漂移 |
-| Phase 1 | `druid-core` + `druid-sql` + `druid-pool` + mock driver | `SELECT 1` 端到端；Wall 拦截 `DROP TABLE` | Phase 0 | API 漂移 |
-| Phase 2 | `druid-rbdc` + `druid-sqlx-deadpool` + `druid-sqlx-bb8` + `druid-stats` | Prometheus 导出可用；任一 driver 适配器冒烟测试 | Phase 1 | 上游 `sqlx` / `rbdc` 变更 |
-| Phase 3 | `druid-dynamic` + `druid-admin` | 热切换 demo；`/druid/admin` JSON 端点 | Phase 2 | ArcSwap 语义验证 |
+| 阶段 | 对象域 | 当前 |
+| :--- | :--- | :--- |
+| P0 | 基线、对象治理、正确性止血 | 进行中 |
+| P1 | 内部 SPI 与真实数据库适配 | SQLite 主链已落地；矩阵未完成 |
+| P2 | 连接池生命周期 | 部分实现 |
+| P3 | Filter、Proxy、执行事件 | 部分实现 |
+| P4 | SQL 内核和方言 | 部分实现 |
+| P5 | Wall | 部分实现 |
+| P6 | Stat、Tracing、日志 | 部分实现 |
+| P7 | HA、动态数据源和恢复 | 部分实现 |
+| P8 | Admin、监控和框架集成 | TODO |
+| P9 | XA、分布式事务和高级兼容 | TODO |
+| P10 | 全量差分、性能和生产发布 | TODO |
 
-> 故意省略时间估计。引用到发布说明前，先替换为可验证的退出条件。
+阶段状态不能用“crate 已存在”替代。退出条件必须包含对象、行为、错误、真实集成
+和生产属性证据。
 
-## 12. 计划的文档集合
+## 12. 文档集合
 
-| 文档 | 作用 |
+根 `doc/` 只维护：
+
+| 文档 | 责任 |
 | :--- | :--- |
-| `druid-rust-Architecture.zh_CN.md` | workspace、crate、关键决策（架构基线唯一来源） |
-| `doc/`（root） | 10 篇产品级文档，符合 `full-stack-doc` v3 标准 |
-| `doc/V1/` | Phase 1 里程碑对应的 7 篇版本级文档 |
-| `LICENSE` | Apache-2.0 |
+| [总体架构](doc/druid-rust-Architecture.zh_CN.md) | 当前/目标架构、不变量和 ADR |
+| [迁移总账](doc/migration/README.md) | 路线、对象、语义、名称和连接专项设计 |
 
-## 13. 计划的质量门禁
+各 crate 可以维护自身迁移账本，但不得复制根完成率。README 是项目入口，不是
+第三套路线图。
 
-以下门禁是**目标**，不是现状。CI 里今天**一个都没有**。
+## 13. 质量门禁
+
+| 命令/门禁 | 当前结果 |
+| :--- | :--- |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo test --workspace` | 431/431 通过 |
+| `cargo check -p druid-toasty --all-features` | 通过 |
+| `cargo clippy -p druid-toasty --all-targets --no-deps -- -D warnings` | 通过 |
+| 全 workspace clippy `-D warnings` | 未通过；存在历史告警 |
+| `cargo llvm-cov` | 有历史快照；未达到完成门禁 |
+| `cargo audit` / `cargo deny` | 尚未形成持续 CI 门禁 |
+| Java/Rust 全差分 | 未完成 |
+| PostgreSQL/MySQL/Turso 真实矩阵 | 未完成 |
+
+推荐本地命令：
 
 ```bash
-cargo fmt --all -- --check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo check --workspace --all-features
+cargo check --workspace
 cargo test --workspace
-cargo test --workspace --no-default-features
-cargo test --workspace --all-features
-cargo doc --workspace --all-features --no-deps
-cargo llvm-cov --workspace --all-features
-cargo audit
-cargo deny check
+cargo fmt --all -- --check
+cargo check -p druid-toasty --all-features
+cargo clippy -p druid-toasty --all-targets --no-deps -- -D warnings
 ```
 
-## 14. 计划的基准矩阵
+## 14. 基准矩阵
 
-| 场景 | 目标 | 状态 |
+以下是待测目标，不是当前性能声明：
+
+| 场景 | 需要测量 | 当前状态 |
 | :--- | :--- | :--- |
-| `pool_acquire` | 热池中位数 < 200ns | 未测量 |
-| `sql_merge` | 参数化 + 指纹 < 50µs | 未测量 |
-| `wall_check` | 完整 Wall 检查 < 100µs | 未测量 |
-| `dynamic_switch` | `ArcSwap::store` 后 `load` < 50ns | 未测量 |
+| `pool_acquire` | 热/冷获取、竞争、超时 | 未形成稳定报告 |
+| `recycle` | rollback、reset、validate、discard | 未形成稳定报告 |
+| `prepared_cache` | hit/miss/LRU/并发 in-use | 未形成稳定报告 |
+| `sql_parse/wall` | 多方言、多规则和复杂 SQL | 未形成稳定报告 |
+| `sql_merge` | 参数化、指纹和直方图 | 未形成稳定报告 |
+| `dynamic_switch` | ArcSwap 切换和路由 | 未形成稳定报告 |
 
-> 基准声明只在与可复现脚本、固定硬件、`git rev-parse HEAD` 引用一同发布
-> 时才会被引用。
+性能结果只有在携带硬件、工具链、数据库版本、数据集和 commit 时才可发布。
 
-## 15. 计划的兼容与迁移
+## 15. 兼容与迁移
 
-| 主题 | 目标 |
+| 主题 | 规则 |
 | :--- | :--- |
-| SemVer | crate 在取消 `publish = false` 后遵循 SemVer |
-| MSRV 策略 | Phase 1 后，MSRV 升级需要 minor 版本号变更 |
-| 默认 features | 改变默认 feature 是破坏性变更 |
-| 源码兼容性 | 与 `druid-rust-Architecture.zh_CN.md` §6 的 ADR 对齐 |
+| Java 基线 | 固定 Druid 1.2.28；升级必须创建差异批次 |
+| SemVer | 取消 `publish = false` 后遵循 SemVer |
+| MSRV | 当前 1.95；变化必须更新 workspace、README 和发布说明 |
+| 默认 feature | 改变默认 feature 视为兼容性事件 |
+| 对象命名 | 由对象名称一致性检查约束 |
+| 错误 | 保留结构化分类，禁止只返回字符串 |
+| Adapter | 不泄漏第三方类型，不静默降低能力 |
+| Vendor 补丁 | 必须记录来源、变更范围和移除条件 |
 
 ## 16. 故障排查
 
-占位 workspace 暂时没有故障排查表。如果阅读设计文档时遇到与预期不符
-的描述，请使用 `design-question` 标签在 issue 中反馈，并附上相关章节
-链接。
+### Toasty 与 SQLx SQLite 链接冲突
 
-## 17. 计划的 crates.io 发布
+Cargo 依赖图只能链接一个 `libsqlite3-sys`。当前 vendor 补丁让 Toasty SQLite
+与 SQLx 0.8 共用 `libsqlite3-sys 0.30.1`。检查：
 
-当前**没有** crate 发布。发布前置条件：
+```bash
+cargo tree -i libsqlite3-sys
+```
 
-- [ ] `druid-core` 导出完整 trait 面并有单元测试覆盖。
-- [ ] `druid-pool` 针对 `deadpool` 和 `bb8` 完成热获取路径基准。
-- [ ] 每个取消 `publish = false` 的 crate 通过 `cargo publish --dry-run`。
-- [ ] CI 在每个 PR 上运行 `cargo fmt`、`cargo clippy -D warnings`、
-      `cargo test` 与 `cargo audit`。
-- [ ] docs.rs 在已发布的 feature 矩阵下构建成功。
+### `sqlite::memory:` 数据消失
 
-## 18. 计划的贡献流程
+SQLite memory URL 每条物理连接是独立数据库。`ToastyConnectionFactory` 将其
+最大连接数约束恢复为 1。需要多连接共享时使用文件数据库或支持共享缓存的明确
+URL，并增加对应真实测试。
 
-- 新增 crate 或 ADR 前先开 issue 或 discussion。
-- 提审前运行 §13 列出的计划门禁。
-- 新公共 API 必须附带文档、示例、测试，以及在 PR 描述中说明 SemVer /
-  MSRV 影响。
+### 外部池出现容量翻倍或连接不归还
+
+检查是否把 bb8/deadpool bridge 再放进 `DruidPool`。External provider 必须直接
+返回 canonical `DruidPooledConnection`，并由 `PhysicalConnectionLease`
+归还原 owner。
+
+### Admin endpoint 字符串存在但 HTTP 不可访问
+
+`druid-admin` 当前仍是占位实现，没有真实 Axum Router/handler。endpoint list
+测试不代表 HTTP 服务完成。
+
+### `UnsupportedOperation`
+
+先检查 `PhysicalConnectionCapabilities`。适配器明确不支持的能力不应通过配置
+或内存标志伪装成功。
+
+## 17. crates.io 发布
+
+当前没有 crate 发布。发布前至少满足：
+
+- [ ] 目标 crate 的对象与语义账本没有伪 DONE。
+- [ ] 默认 feature 和可选 feature 均有真实集成测试。
+- [ ] `cargo publish --dry-run` 通过。
+- [ ] fmt、clippy、test、doc、audit、deny 进入 CI。
+- [ ] docs.rs feature 矩阵构建成功。
+- [ ] MSRV 在干净环境验证。
+- [ ] 公共 API、错误和配置兼容策略冻结。
+- [ ] license、vendor 和第三方 NOTICE 审计完成。
+
+## 18. 贡献流程
+
+- 修改前先在对象账本定位 Java 来源和当前状态。
+- 使用 CodeGraph 分析对象、调用链和影响测试。
+- 一个 `.rs` 文件只承载一个 Java 对象或明确的 Rust-only 对象。
+- 禁止 `todo!()`、`unimplemented!()`、空逻辑和集中式 `compat.rs` 充数。
+- 新对象和公开方法使用中文 doc 注释并标注 Java 来源。
+- 新增或改变 `MERGE/SPLIT/ADAPTER/PROTOCOL` 必须更新四张迁移表。
+- 新功能先建立失败测试，再实现，再执行真实数据库/Java 差分。
+- 提审时报告执行过的命令、通过数、未关闭门禁和已知告警。
 
 ## 19. 贡献、安全与许可证
 
 druid-rust 使用 [Apache-2.0](LICENSE) 许可证。
 
-漏洞披露渠道将在首次发布前建立。报告前请勿公开未修复的漏洞。
+`druid-rust` 表示 Alibaba Druid 的 Rust 语义迁移，不表示 Alibaba 官方发行。
+引用、发布和宣传时必须保留上游来源说明。
+
+普通日志不得输出数据库密码、token、完整连接 URL、原始 SQL 参数或其他 PII。
+正式漏洞披露渠道将在首次发布前建立；在此之前不要公开未修复的漏洞细节。
 
 ---
 
 <div align="center">
 
-[返回顶部](#readme-top) · [架构文档](druid-rust-Architecture.zh_CN.md) ·
-[产品文档](doc/) · [Issues](https://github.com/easy-4-rust/druid-rust/issues)
+[返回顶部](#readme-top) ·
+[架构文档](doc/druid-rust-Architecture.zh_CN.md) ·
+[迁移总账](doc/migration/README.md) ·
+[Issues](https://github.com/easy-4-rust/druid-rust/issues)
 
 </div>

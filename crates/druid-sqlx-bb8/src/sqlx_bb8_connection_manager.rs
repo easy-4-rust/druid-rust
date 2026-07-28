@@ -42,6 +42,6 @@ impl bb8::ManageConnection for SqlxBb8ConnectionManager {
     }
 
     fn has_broken(&self, connection: &mut Self::Connection) -> bool {
-        connection.is_closed()
+        connection.is_closed() || connection.is_discarded()
     }
 }

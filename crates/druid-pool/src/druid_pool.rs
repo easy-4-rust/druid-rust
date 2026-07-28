@@ -5,7 +5,8 @@
 use crate::config::DruidPoolBuilder;
 use crate::pool_inner::PoolInner;
 use druid_core::{
-    DruidError, DruidPooledConnection, FilterChain, PhysicalConnectionFactory, PoolState,
+    DruidConnectionHolder, DruidError, DruidPooledConnection, FilterChain,
+    PhysicalConnectionFactory, PoolState,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -63,34 +64,44 @@ impl DruidPool {
                 let connection = idle.pop_front();
                 (connection, idle.len())
             };
-            if let Some(mut item) = idle_connection {
-                let now = Instant::now();
-                let lifetime_expired =
-                    now.duration_since(item.created_at) >= self.inner.config.max_lifetime;
+            if let Some(mut holder) = idle_connection {
+                let lifetime_expired = holder.physical_age() >= self.inner.config.max_lifetime;
                 let idle_expired = remaining_idle >= self.inner.config.min_idle
-                    && now.duration_since(item.last_used) >= self.inner.config.idle_timeout;
+                    && holder.idle_duration() >= self.inner.config.idle_timeout;
                 if lifetime_expired || idle_expired {
-                    self.inner.destroy_connection(item.conn);
+                    self.inner.destroy_holder(holder);
                     continue;
                 }
-                if self.inner.config.test_on_borrow
-                    && self.inner.factory.validate(&mut item.conn).await.is_err()
-                {
-                    self.inner.destroy_connection(item.conn);
+                if self.inner.config.test_on_borrow {
+                    let validation_failed = match holder.physical_connection_box_mut() {
+                        Some(connection) => self.inner.factory.validate(connection).await.is_err(),
+                        None => true,
+                    };
+                    if validation_failed {
+                        self.inner.destroy_holder(holder);
+                        continue;
+                    }
+                    holder.record_valid();
+                }
+                if !holder.mark_active() {
+                    self.inner.destroy_holder(holder);
                     continue;
                 }
                 self.inner
                     .active_count
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                return Ok(self.wrap_connection(item.conn, item.id, item.created_at));
+                return Ok(self.wrap_connection(holder));
             }
             match self.inner.create_connection().await {
-                Ok(conn) => {
-                    let id = self.inner.next_id();
+                Ok(holder) => {
+                    if !holder.mark_active() {
+                        self.inner.destroy_holder(holder);
+                        continue;
+                    }
                     self.inner
                         .active_count
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    return Ok(self.wrap_connection(conn, id, Instant::now()));
+                    return Ok(self.wrap_connection(holder));
                 }
                 Err(DruidError::PoolExhausted) => {}
                 Err(_) if !self.inner.idle.lock().is_empty() => continue,
@@ -123,6 +134,10 @@ impl DruidPool {
                 .inner
                 .close_count
                 .load(std::sync::atomic::Ordering::Relaxed),
+            destroy_count: self
+                .inner
+                .destroy_count
+                .load(std::sync::atomic::Ordering::Relaxed),
             connect_count: self
                 .inner
                 .connect_count
@@ -135,9 +150,84 @@ impl DruidPool {
                 .inner
                 .recycle_count
                 .load(std::sync::atomic::Ordering::Relaxed),
+            recycle_error_count: self
+                .inner
+                .recycle_error_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            discard_count: self
+                .inner
+                .discard_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            keep_alive_check_count: self
+                .inner
+                .keep_alive_check_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            keep_alive_check_error_count: self
+                .inner
+                .keep_alive_check_error_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            prepared_statement_count: self
+                .inner
+                .prepared_statement_stats
+                .prepared_statement_count(),
+            closed_prepared_statement_count: self
+                .inner
+                .prepared_statement_stats
+                .closed_prepared_statement_count(),
+            cached_prepared_statement_count: self
+                .inner
+                .prepared_statement_stats
+                .cached_prepared_statement_count(),
+            cached_prepared_statement_delete_count: self
+                .inner
+                .prepared_statement_stats
+                .cached_prepared_statement_delete_count(),
+            cached_prepared_statement_hit_count: self
+                .inner
+                .prepared_statement_stats
+                .cached_prepared_statement_hit_count(),
+            cached_prepared_statement_miss_count: self
+                .inner
+                .prepared_statement_stats
+                .cached_prepared_statement_miss_count(),
+            cached_prepared_statement_access_count: self
+                .inner
+                .prepared_statement_stats
+                .cached_prepared_statement_access_count(),
             closed: self.inner.closed.load(std::sync::atomic::Ordering::Relaxed),
             ..Default::default()
         }
+    }
+
+    /// 将超过 `min_idle` 的空闲连接收缩掉。
+    ///
+    /// 对应 Java：`DruidDataSource#shrink()`，即
+    /// `shrink(false, false)`。
+    pub async fn shrink(&self) {
+        self.inner.shrink(false, false).await;
+    }
+
+    /// 按时间执行空闲连接收缩。
+    ///
+    /// 对应 Java：`DruidDataSource#shrink(boolean)`；保活参数取数据源配置。
+    ///
+    /// # 参数
+    /// - `check_time`：是否应用空闲与物理寿命阈值。
+    pub async fn shrink_check_time(&self, check_time: bool) {
+        self.inner
+            .shrink(check_time, self.inner.config.keep_alive)
+            .await;
+    }
+
+    /// 按显式时间与保活选项执行空闲连接收缩。
+    ///
+    /// 对应 Java：`DruidDataSource#shrink(boolean, boolean)`。
+    ///
+    /// # 参数
+    /// - `check_time`：是否应用空闲与物理寿命阈值。
+    /// - `keep_alive`：是否验证到期的空闲连接。
+    pub async fn shrink_with_options(&self, check_time: bool, keep_alive: bool) {
+        self.inner.shrink(check_time, keep_alive).await;
     }
 
     pub async fn close(&self) {
@@ -153,20 +243,23 @@ impl DruidPool {
         &self.name
     }
 
-    fn wrap_connection(
-        &self,
-        connection: Box<dyn druid_core::PhysicalConnection>,
-        id: u64,
-        created_at: Instant,
-    ) -> DruidPooledConnection {
+    fn wrap_connection(&self, holder: DruidConnectionHolder) -> DruidPooledConnection {
         let pool = self.inner.clone();
-        DruidPooledConnection::with_context(
-            connection,
-            id,
+        let recycle_validator = self
+            .inner
+            .config
+            .test_on_return
+            .then(|| self.inner.factory.clone());
+        DruidPooledConnection::with_holder(
+            holder,
             self.name.clone(),
             self.filter_chain.clone(),
-            Box::new(move |connection, connection_id| {
-                pool.return_connection(connection, connection_id, created_at);
+            self.inner
+                .config
+                .keep_connection_underlying_transaction_isolation,
+            recycle_validator,
+            Box::new(move |holder, disposition| {
+                pool.return_connection(holder, disposition);
             }),
         )
     }

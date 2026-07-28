@@ -205,7 +205,9 @@ fn test_wall_insert_denied() {
     let result = wall.check("INSERT INTO users VALUES (1)");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::SyntaxError(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::SyntaxError(_))));
 }
 
 #[test]
@@ -215,7 +217,9 @@ fn test_wall_insert_deny_table() {
     let result = wall.check("INSERT INTO users VALUES (1)");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 // ── UPDATE ──
@@ -223,7 +227,9 @@ fn test_wall_insert_deny_table() {
 #[test]
 fn test_wall_update_with_where() {
     let wall = Wall::new(WallConfig::default());
-    assert!(wall.check("UPDATE users SET name = 'x' WHERE id = 1").is_ok());
+    assert!(wall
+        .check("UPDATE users SET name = 'x' WHERE id = 1")
+        .is_ok());
 }
 
 #[test]
@@ -232,7 +238,9 @@ fn test_wall_update_without_where() {
     let result = wall.check("UPDATE users SET name = 'x'");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
 }
 
 #[test]
@@ -250,7 +258,9 @@ fn test_wall_update_deny_table() {
     let result = wall.check("UPDATE users SET name = 'x' WHERE id = 1");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 #[test]
@@ -274,7 +284,9 @@ fn test_wall_delete_without_where() {
     let result = wall.check("DELETE FROM users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
 }
 
 #[test]
@@ -292,7 +304,9 @@ fn test_wall_delete_deny_table() {
     let result = wall.check("DELETE FROM users WHERE id = 1");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 #[test]
@@ -317,7 +331,9 @@ fn test_wall_drop_table_denied() {
     let result = wall.check("DROP TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
 }
 
 #[test]
@@ -326,7 +342,10 @@ fn test_wall_drop_table_multiple() {
     let result = wall.check("DROP TABLE users, orders");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    let drop_count = violations.iter().filter(|v| matches!(v, WallViolation::DropTableNotAllowed(_))).count();
+    let drop_count = violations
+        .iter()
+        .filter(|v| matches!(v, WallViolation::DropTableNotAllowed(_)))
+        .count();
     assert_eq!(drop_count, 2);
 }
 
@@ -353,7 +372,9 @@ fn test_wall_truncate_denied() {
     let result = wall.check("TRUNCATE TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
 }
 
 #[test]
@@ -363,7 +384,9 @@ fn test_wall_truncate_deny_table() {
     let result = wall.check("TRUNCATE TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 // ── Multi-statement ──
@@ -410,7 +433,9 @@ fn test_wall_syntax_error() {
     let result = wall.check("THIS IS NOT VALID SQL !!!");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::SyntaxError(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::SyntaxError(_))));
 }
 
 // ── Empty SQL ──
@@ -436,9 +461,7 @@ fn test_wall_whitespace_only() {
 
 #[test]
 fn test_wall_complex_multi_violation() {
-    let cfg = WallConfig::builder()
-        .deny_table("secret")
-        .build();
+    let cfg = WallConfig::builder().deny_table("secret").build();
     let wall = Wall::new(cfg);
     // This should trigger DeniedTable
     let result = wall.check("SELECT * FROM secret");
@@ -465,7 +488,9 @@ fn test_wall_delete_from_deny_table() {
     let result = wall.check("DELETE FROM secret WHERE id = 1");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 // ── Table factor (UPDATE) ──
@@ -563,7 +588,9 @@ fn test_wall_query_recursive_subquery() {
     let result = wall.check("SELECT * FROM (SELECT * FROM (SELECT 1 FROM secret) AS t1) AS t2");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -575,7 +602,8 @@ fn test_wall_statement_with_derived_table() {
     let cfg = WallConfig::builder().deny_table("secret").build();
     let wall = Wall::new(cfg);
     // UPDATE with subquery in SET
-    let _ = wall.check("UPDATE users SET name = (SELECT name FROM secret WHERE id = 1) WHERE id = 1");
+    let _ =
+        wall.check("UPDATE users SET name = (SELECT name FROM secret WHERE id = 1) WHERE id = 1");
 }
 
 #[test]
@@ -586,5 +614,7 @@ fn test_wall_recursive_query_body() {
     let result = wall.check("((SELECT 1 FROM secret))");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations.iter().any(|v| matches!(v, WallViolation::DeniedTable(_))));
+    assert!(violations
+        .iter()
+        .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }

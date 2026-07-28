@@ -12,13 +12,20 @@ pub enum DruidError {
     AcquireTimeout,
     PoolExhausted,
     ValidationFailed(String),
-    ConnectionLeaked { id: u64, held_for: Duration },
+    ConnectionLeaked {
+        id: u64,
+        held_for: Duration,
+    },
     ConnectionDiscarded,
     DriverError(String),
     SqlParseError(String),
     WallViolation(String),
     DataSourceNotFound(String),
-    UnsupportedOperation { operation: &'static str },
+    /// 公共 API 参数不满足 Java 合约。
+    InvalidArgument(String),
+    UnsupportedOperation {
+        operation: &'static str,
+    },
     Other(String),
 }
 
@@ -29,14 +36,20 @@ impl fmt::Display for DruidError {
             Self::AcquireTimeout => write!(f, "acquire connection timed out"),
             Self::PoolExhausted => write!(f, "connection pool exhausted"),
             Self::ValidationFailed(msg) => write!(f, "connection validation failed: {msg}"),
-            Self::ConnectionLeaked { id, held_for } => write!(f, "connection {id} leaked, held for {held_for:?}"),
+            Self::ConnectionLeaked { id, held_for } => {
+                write!(f, "connection {id} leaked, held for {held_for:?}")
+            }
             Self::ConnectionDiscarded => write!(f, "connection has been discarded"),
             Self::DriverError(msg) => write!(f, "driver error: {msg}"),
             Self::SqlParseError(msg) => write!(f, "SQL parse error: {msg}"),
             Self::WallViolation(msg) => write!(f, "wall violation: {msg}"),
             Self::DataSourceNotFound(name) => write!(f, "datasource not found: {name}"),
+            Self::InvalidArgument(message) => write!(f, "invalid argument: {message}"),
             Self::UnsupportedOperation { operation } => {
-                write!(f, "operation is not supported by the physical connection: {operation}")
+                write!(
+                    f,
+                    "operation is not supported by the physical connection: {operation}"
+                )
             }
             Self::Other(msg) => write!(f, "{msg}"),
         }
@@ -46,8 +59,12 @@ impl fmt::Display for DruidError {
 impl std::error::Error for DruidError {}
 
 impl From<String> for DruidError {
-    fn from(s: String) -> Self { Self::Other(s) }
+    fn from(s: String) -> Self {
+        Self::Other(s)
+    }
 }
 impl From<&str> for DruidError {
-    fn from(s: &str) -> Self { Self::Other(s.to_string()) }
+    fn from(s: &str) -> Self {
+        Self::Other(s.to_string())
+    }
 }

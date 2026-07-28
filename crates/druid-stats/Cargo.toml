@@ -2,7 +2,7 @@
 name         = "druid-stats"
 version      = "0.0.0-design"
 edition      = "2021"
-rust-version = "1.75"
+rust-version = "1.95"
 license      = "Apache-2.0"
 description  = "druid-rust stats: SQL merge, percentile histogram, Prometheus exporter"
 publish      = false
