@@ -37,10 +37,8 @@ flowchart TB
     Wrapper --> Deadpool["deadpool Pool provider"]
 ```
 
-最终源码必须位于 `crates/druid/src/toasty/`。当前
-`crates/druid-toasty/` 只记录已经落地的过渡实现和测试证据，必须归并回
-`druid`；它不是第四个产品模块，也不能独立发布。仅在 `druid` facade 中
-重导出 `druid-toasty` 不算完成归并。
+源码已位于 `crates/druid/src/toasty/`，feature 也由 `druid` 统一暴露。原
+`crates/druid-toasty/` 已删除，不形成第四个产品模块或独立发布物。
 
 关键所有权关系只有一条：
 
@@ -143,8 +141,8 @@ Toasty `RawSqlRet::Infer` 按 SQLite runtime storage class 解码。SQLite 的
 
 | 门禁 | 状态 |
 | :--- | :--- |
-| 过渡路径 `cargo check -p druid --all-features` | DONE：SQLite/PostgreSQL/MySQL/Turso/DynamoDB feature 图编译通过 |
-| 物理归并到 `druid/src/toasty`，并由 `druid` 默认 feature 启用 | TODO |
+| `cargo check -p druid --all-features` | DONE：SQLite/PostgreSQL/MySQL/Turso/DynamoDB feature 图编译通过 |
+| 物理归并到 `druid/src/toasty`，并由 `druid` 默认 feature 启用 | DONE |
 | PostgreSQL 真实 container contract | TODO |
 | MySQL 真实 container contract | TODO |
 | Turso 真实服务/本地 contract | TODO |
@@ -157,9 +155,8 @@ Toasty `RawSqlRet::Infer` 按 SQLite runtime storage class 解码。SQLite 的
 
 ## 5. Feature 与发布边界
 
-最终 feature 全部由唯一 `druid` crate 暴露，`sqlite` 默认启用，其他 driver
-按 feature 增量启用。当前同名 feature 暂时定义在过渡 `druid-toasty` 中，归并时
-必须原样迁入 `druid`：
+feature 全部由唯一 `druid` crate 暴露，`sqlite` 默认启用，其他 driver
+按 feature 增量启用：
 
 | feature | Toasty driver | Druid 定位 |
 | :--- | :--- | :--- |
@@ -208,10 +205,8 @@ driver 依赖 `rusqlite 0.40`。为了保留 SQLx 扩展兼容面：
 ## 8. 验收证据
 
 ```bash
-# 以下 druid-toasty/druid-sqlx 路径是归并完成前的过渡测试命令：
 cargo test -p druid --test toasty_connection_adapter_test
 cargo test -p druid --test sqlite_core_semantics_test
-cargo test -p druid-wrapper
 cargo test -p druid-wrapper
 cargo test --workspace
 cargo clippy -p druid --all-targets --no-deps -- -D warnings
@@ -229,12 +224,11 @@ cargo clippy -p druid --all-targets --no-deps -- -D warnings
 - discard 后拒绝继续执行；
 - 未知 URL scheme 不回退。
 
-2026-07-28 实测结果：
+2026-07-29 三模块归并后实测结果：
 
-- `cargo test --workspace`：431/431 通过；
+- `cargo test --workspace`：433/433 通过；
 - Toasty 内置/核心/扩展的 21 个真实 SQLite 用例通过；
 - `cargo check -p druid --all-features` 通过，证明全部可选 driver 的
   feature 边界可组合编译；该结果不替代 PostgreSQL/MySQL/Turso 的真实语义门禁；
-- `druid-toasty` fmt 与 pedantic clippy `-D warnings` 通过；
-- 整个 `druid` 模块的 `-D warnings` 仍被当前 `druid-core` 过渡源码的 203 个历史 pedantic
-  告警阻断，因此全仓 clippy 与覆盖率 100% 仍是迁移门禁，不能写成完成。
+- `cargo metadata` 只包含 `druid`、`druid-wrapper`、`druid-admin`；
+- 全仓 clippy 与覆盖率 100% 仍按独立质量门禁验收，不能因物理归并标记为完成。

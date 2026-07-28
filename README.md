@@ -82,11 +82,11 @@ the obligation to migrate Druid result semantics.
 | Claim | Current value | Evidence |
 | :--- | :--- | :--- |
 | Workspace builds | Yes | `cargo check --workspace` |
-| Workspace tests | 431/431 pass | `cargo test --workspace` |
+| Workspace tests | 433/433 pass | `cargo test --workspace` |
 | Real SQLite | 21 cross-layer cases pass | Toasty, SQLx, bb8, deadpool, wrapper tests |
 | Toasty feature graph | All features compose and compile | `cargo check -p druid --all-features` |
 | Connection API | Implemented, unstable | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
-| Migration completion | Partial | object and semantic ledgers under `doc/migration/` |
+| Migration completion | Partial | object and semantic ledgers under `docs/migration/` |
 | crates.io / docs.rs | Unpublished | `publish = false` |
 | CI | Not configured | no `.github/workflows/` |
 | Coverage | Historical snapshots exist; exit gate is open | migration roadmap §15 |
@@ -341,7 +341,7 @@ operations return explicit errors and never silently report success.
 ## 11. Migration Roadmap and Phases
 
 The authoritative plan is the
-[migration roadmap](doc/migration/1、迁移路线图.md):
+[migration roadmap](docs/migration/1、迁移路线图.md):
 
 | Phase | Object domain | Current status |
 | :--- | :--- | :--- |
@@ -362,12 +362,12 @@ error, real-integration, and production-property evidence.
 
 ## 12. Documentation Set
 
-The root `doc/` directory maintains only:
+The root `docs/` directory maintains only:
 
 | Document | Responsibility |
 | :--- | :--- |
-| [Architecture](doc/druid-rust-Architecture.zh_CN.md) | current/target architecture, invariants, ADRs |
-| [Migration ledger](doc/migration/README.md) | roadmap, objects, semantics, naming, connection design |
+| [Architecture](docs/druid-rust-Architecture.zh_CN.md) | current/target architecture, invariants, ADRs |
+| [Migration ledger](docs/migration/README.md) | roadmap, objects, semantics, naming, connection design |
 
 The three modules may maintain their own migration ledgers, but must not copy the root
 completion percentage. The README is the project entry point, not a third roadmap.
@@ -377,10 +377,9 @@ completion percentage. The README is the project entry point, not a third roadma
 | Command / gate | Current result |
 | :--- | :--- |
 | `cargo fmt --all -- --check` | passes |
-| `cargo test --workspace` | 431/431 pass |
+| `cargo test --workspace` | 433/433 pass |
 | `cargo check -p druid --all-features` | passes |
-| `cargo clippy -p druid --all-targets --no-deps -- -D warnings` | passes |
-| Full-workspace clippy with `-D warnings` | open; historical warnings remain |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | fails; pre-existing pedantic lint debt remains |
 | `cargo llvm-cov` | historical snapshots exist; completion gate is open |
 | `cargo audit` / `cargo deny` | not yet continuous CI gates |
 | Full Java/Rust differential | incomplete |
@@ -507,8 +506,8 @@ then.
 <div align="center">
 
 [Back to top](#readme-top) ·
-[Architecture](doc/druid-rust-Architecture.zh_CN.md) ·
-[Migration ledger](doc/migration/README.md) ·
+[Architecture](docs/druid-rust-Architecture.zh_CN.md) ·
+[Migration ledger](docs/migration/README.md) ·
 [Issues](https://github.com/easy-4-rust/druid-rust/issues)
 
 </div>

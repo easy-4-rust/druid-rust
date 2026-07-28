@@ -4,8 +4,8 @@
 
 use super::datasource_group::DataSourceGroup;
 use super::sql_hint::SqlHint;
-use arc_swap::ArcSwap;
 use crate::core::Pool;
+use arc_swap::ArcSwap;
 use std::sync::Arc;
 
 /// 动态数据源。

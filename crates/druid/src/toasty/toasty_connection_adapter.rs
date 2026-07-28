@@ -146,7 +146,8 @@ impl ToastyConnectionAdapter {
             ToastyValue::U32(value) => Ok(Value::Int(i64::from(value))),
             ToastyValue::U64(value) => i64::try_from(value).map(Value::Int).map_err(|_| {
                 DruidError::DriverError(
-                    "Toasty u64 result cannot be represented by crate::core::Value::Int".to_string(),
+                    "Toasty u64 result cannot be represented by crate::core::Value::Int"
+                        .to_string(),
                 )
             }),
             ToastyValue::F32(value) => Ok(Value::Float(f64::from(value))),

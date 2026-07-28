@@ -73,11 +73,11 @@ Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结�
 | 声明 | 当前值 | 证据 |
 | :--- | :--- | :--- |
 | workspace 可构建 | 是 | `cargo check --workspace` |
-| 全 workspace 测试 | 431/431 通过 | `cargo test --workspace` |
+| 全 workspace 测试 | 433/433 通过 | `cargo test --workspace` |
 | 真实 SQLite | 21 个跨内置/core/扩展用例通过 | Toasty、SQLx、bb8、deadpool、wrapper 测试 |
 | Toasty feature 图 | 全部可组合编译 | `cargo check -p druid --all-features` |
 | 连接 API | 已实现，尚不稳定 | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
-| 迁移完成度 | 部分 | `doc/migration/` 对象与语义总账 |
+| 迁移完成度 | 部分 | `docs/migration/` 对象与语义总账 |
 | crates.io / docs.rs | 未发布 | `publish = false` |
 | CI | 未配置 | 无 `.github/workflows/` |
 | 覆盖率 | 有历史快照，未达到完成门禁 | 迁移路线图 §15 |
@@ -321,7 +321,7 @@ DruidPool::get/get_timeout
 
 ## 11. 迁移路线与阶段
 
-正式路线以[迁移路线图](doc/migration/1、迁移路线图.md)为准：
+正式路线以[迁移路线图](docs/migration/1、迁移路线图.md)为准：
 
 | 阶段 | 对象域 | 当前 |
 | :--- | :--- | :--- |
@@ -342,12 +342,12 @@ DruidPool::get/get_timeout
 
 ## 12. 文档集合
 
-根 `doc/` 只维护：
+根 `docs/` 只维护：
 
 | 文档 | 责任 |
 | :--- | :--- |
-| [总体架构](doc/druid-rust-Architecture.zh_CN.md) | 当前/目标架构、不变量和 ADR |
-| [迁移总账](doc/migration/README.md) | 路线、对象、语义、名称和连接专项设计 |
+| [总体架构](docs/druid-rust-Architecture.zh_CN.md) | 当前/目标架构、不变量和 ADR |
+| [迁移总账](docs/migration/README.md) | 路线、对象、语义、名称和连接专项设计 |
 
 三个模块可以维护自身迁移账本，但不得复制根完成率。README 是项目入口，不是
 第三套路线图。
@@ -357,10 +357,9 @@ DruidPool::get/get_timeout
 | 命令/门禁 | 当前结果 |
 | :--- | :--- |
 | `cargo fmt --all -- --check` | 通过 |
-| `cargo test --workspace` | 431/431 通过 |
+| `cargo test --workspace` | 433/433 通过 |
 | `cargo check -p druid --all-features` | 通过 |
-| `cargo clippy -p druid --all-targets --no-deps -- -D warnings` | 通过 |
-| 全 workspace clippy `-D warnings` | 未通过；存在历史告警 |
+| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | 未通过；存在归并前已有的 pedantic 告警债务 |
 | `cargo llvm-cov` | 有历史快照；未达到完成门禁 |
 | `cargo audit` / `cargo deny` | 尚未形成持续 CI 门禁 |
 | Java/Rust 全差分 | 未完成 |
@@ -478,8 +477,8 @@ druid-rust 使用 [Apache-2.0](LICENSE) 许可证。
 <div align="center">
 
 [返回顶部](#readme-top) ·
-[架构文档](doc/druid-rust-Architecture.zh_CN.md) ·
-[迁移总账](doc/migration/README.md) ·
+[架构文档](docs/druid-rust-Architecture.zh_CN.md) ·
+[迁移总账](docs/migration/README.md) ·
 [Issues](https://github.com/easy-4-rust/druid-rust/issues)
 
 </div>
