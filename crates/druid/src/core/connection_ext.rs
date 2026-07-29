@@ -3,7 +3,12 @@
 use super::error::DruidError;
 use super::meta_data::MetaData;
 use super::physical_connection::PhysicalConnection;
+use super::physical_prepared_statement::PhysicalPreparedStatement;
+use super::physical_statement::{PhysicalStatement, PhysicalStatementOptions};
+use super::prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
+use super::SqlWarning;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 
 /// 物理连接扩展能力。
@@ -13,30 +18,35 @@ use std::time::Duration;
 #[async_trait::async_trait]
 pub trait ConnectionExt: PhysicalConnection {
     /// 创建普通 Statement 对象。
-    async fn create_statement(&mut self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
-            operation: "create_statement",
-        })
+    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
+        self.create_physical_statement(PhysicalStatementOptions::default())
+            .await
     }
 
     /// 创建 PreparedStatement 对象。
     async fn prepare_statement(
         &mut self,
-        _sql: &str,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
-            operation: "prepare_statement",
-        })
+        sql: &str,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        let key = PreparedStatementKey::new(
+            Some(sql.to_string()),
+            self.catalog().map(ToOwned::to_owned),
+            PreparedStatementMethodType::M1,
+        )?;
+        self.prepare_physical_statement(&key).await
     }
 
     /// 创建 CallableStatement 对象。
     async fn prepare_call(
         &mut self,
-        _sql: &str,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
-            operation: "prepare_call",
-        })
+        sql: &str,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        let key = PreparedStatementKey::new(
+            Some(sql.to_string()),
+            self.catalog().map(ToOwned::to_owned),
+            PreparedStatementMethodType::Precall1,
+        )?;
+        self.prepare_physical_call(&key).await
     }
 
     /// 返回数据库与驱动元数据。
@@ -88,11 +98,14 @@ pub trait ConnectionExt: PhysicalConnection {
         None
     }
 
+    /// 返回驱动警告链。
+    async fn get_warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+        self.warnings().await
+    }
+
     /// 清除驱动警告。
     async fn clear_warnings(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
-            operation: "clear_warnings",
-        })
+        PhysicalConnection::clear_warnings(self).await
     }
 
     /// 将 SQL 转换为驱动原生 SQL。

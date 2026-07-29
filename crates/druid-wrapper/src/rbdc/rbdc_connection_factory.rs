@@ -1,7 +1,7 @@
 //! RBDC 物理连接工厂。
 
 use super::rbdc_connection_adapter::RbdcConnectionAdapter;
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, SqlException};
 use std::sync::Arc;
 
 /// RBDC 物理连接工厂。
@@ -38,11 +38,11 @@ impl RbdcConnectionFactory {
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for RbdcConnectionFactory {
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        let connection = self
-            .driver
-            .connect(&self.url)
-            .await
-            .map_err(|error| DruidError::DriverError(error.to_string()))?;
+        let connection = self.driver.connect(&self.url).await.map_err(|error| {
+            DruidError::SqlException(Box::new(
+                SqlException::driver(0, error.to_string()).with_class_name("rbdc::Error"),
+            ))
+        })?;
         Ok(Box::new(RbdcConnectionAdapter::new(
             connection,
             self.driver.name(),

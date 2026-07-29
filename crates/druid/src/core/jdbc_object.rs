@@ -1,25 +1,40 @@
-//! `CallableStatement` OUT 参数值。
+//! JDBC `Object` 平台值。
 //!
-//! 对应 Java 平台对象：`java.sql.CallableStatement#getObject` 的标量返回值，
-//! 并为 `BigDecimal`、`Date`、`Time`、`Timestamp` 保留独立类型身份。
+//! 对应 Java：`ResultSet#getObject`、`CallableStatement#getObject`、
+//! `Array#getArray` 与 `Ref#getObject` 的返回对象。该类型属于 JDBC 平台层，
+//! 不绑定某一种 Statement。
 
 use super::{
-    JdbcArray, JdbcBlob, JdbcClob, JdbcNClob, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcUrl,
-    Value,
+    JdbcArray, JdbcBlob, JdbcClob, JdbcNClob, JdbcOpaqueObject, JdbcReader, JdbcRef, JdbcRowId,
+    JdbcSqlXml, JdbcUrl, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::fmt;
 
-/// `CallableStatement` 标量 OUT 值。
-///
-/// Java `getObject` 还可能返回 ResultSet、Ref、Blob、Clob、Array 等对象；这些
-/// 对象不能伪装成标量。本枚举只承载已迁移的标量族，其他对象由后续独立 SPI
-/// 表达。
+/// JDBC `Object` 的无损平台表示。
 #[derive(Debug, Clone, PartialEq)]
-pub enum CallableOutputValue {
+pub enum JdbcObject {
     /// 现有通用标量或 SQL NULL。
     Scalar(Value),
+    /// typed `getObject(..., String.class)`。
+    String(String),
+    /// typed `getObject(..., Boolean.class)`。
+    Boolean(bool),
+    /// typed `getObject(..., Byte.class)`。
+    Byte(i8),
+    /// typed `getObject(..., Short.class)`。
+    Short(i16),
+    /// typed `getObject(..., Integer.class)`。
+    Integer(i32),
+    /// typed `getObject(..., Long.class)`。
+    Long(i64),
+    /// typed `getObject(..., Float.class)`。
+    Float(f32),
+    /// typed `getObject(..., Double.class)`。
+    Double(f64),
+    /// typed `getObject(..., byte[].class)`。
+    Bytes(Vec<u8>),
     /// `java.math.BigDecimal`。
     BigDecimal(BigDecimal),
     /// `java.sql.Date`。
@@ -50,25 +65,36 @@ pub enum CallableOutputValue {
     CharacterStream(JdbcReader),
     /// `java.io.Reader`，由 `getNCharacterStream` 返回。
     NCharacterStream(JdbcReader),
+    /// 任意 driver/vendor 自定义对象；共享句柄保留 Java 引用身份。
+    Custom(JdbcOpaqueObject),
 }
 
-impl CallableOutputValue {
+impl JdbcObject {
     /// 返回是否为 SQL NULL。
     pub fn is_null(&self) -> bool {
         matches!(self, Self::Scalar(Value::Null))
     }
 }
 
-impl From<Value> for CallableOutputValue {
+impl From<Value> for JdbcObject {
     fn from(value: Value) -> Self {
         Self::Scalar(value)
     }
 }
 
-impl fmt::Display for CallableOutputValue {
+impl fmt::Display for JdbcObject {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Scalar(value) => value.fmt(formatter),
+            Self::String(value) => value.fmt(formatter),
+            Self::Boolean(value) => value.fmt(formatter),
+            Self::Byte(value) => value.fmt(formatter),
+            Self::Short(value) => value.fmt(formatter),
+            Self::Integer(value) => value.fmt(formatter),
+            Self::Long(value) => value.fmt(formatter),
+            Self::Float(value) => value.fmt(formatter),
+            Self::Double(value) => value.fmt(formatter),
+            Self::Bytes(value) => write!(formatter, "<{} bytes>", value.len()),
             Self::BigDecimal(value) => value.fmt(formatter),
             Self::Date(value) => value.fmt(formatter),
             Self::Time(value) => value.fmt(formatter),
@@ -84,6 +110,7 @@ impl fmt::Display for CallableOutputValue {
             Self::NClob(_) => formatter.write_str("<NClob>"),
             Self::CharacterStream(_) => formatter.write_str("<CharacterStream>"),
             Self::NCharacterStream(_) => formatter.write_str("<NCharacterStream>"),
+            Self::Custom(value) => write!(formatter, "<{}>", value.class_name()),
         }
     }
 }

@@ -7,7 +7,8 @@
 
 use druid::core::{
     AfterFilter, BeforeFilter, ConnectionFactory, DruidError, ExecContext, ExecResult, FilterChain,
-    PhysicalConnection, Row, Value,
+    PhysicalConnection, PhysicalPreparedStatement, PreparedInputParameter, Row,
+    SqlTextPreparedStatement, StatementGeneratedKeys, Value,
 };
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -128,7 +129,7 @@ impl AfterFilter for ContextContractFilter {
         context: &ExecContext<'_>,
         result: &Result<ExecResult, DruidError>,
         _elapsed: Duration,
-    ) {
+    ) -> Result<(), DruidError> {
         // 主调用必须 await after；主动让出一次调度可捕获“创建 future 但未轮询”的回归。
         tokio::task::yield_now().await;
         let before = self
@@ -150,6 +151,7 @@ impl AfterFilter for ContextContractFilter {
             .expect("row count lock poisoned")
             .push(row_count);
         self.after_count.fetch_add(1, Ordering::Release);
+        Ok(())
     }
 }
 
@@ -178,6 +180,19 @@ async fn exec_and_fetch_preserve_one_filter_context() {
         .await
         .expect("connection acquisition must succeed");
 
+    assert_eq!(
+        connection.warnings().await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_get_warnings"
+        })
+    );
+    let mut statement = connection
+        .create_statement()
+        .await
+        .expect("default physical statement must be created");
+    assert_eq!(statement.warnings(&mut connection).await.unwrap(), None);
+    statement.clear_warnings(&mut connection).await.unwrap();
+
     let result = connection
         .exec("UPDATE account SET balance = ?", vec![Value::Int(7)])
         .await
@@ -194,10 +209,89 @@ async fn exec_and_fetch_preserve_one_filter_context() {
         .expect("fetch must succeed");
     assert_eq!(rows.len(), 2);
     assert_eq!(filter.after_count.load(Ordering::Acquire), 2);
+
+    let mut result_set = statement
+        .execute_query_result_set(
+            &mut connection,
+            "SELECT id FROM account WHERE owner = 'alice'",
+        )
+        .await
+        .expect("默认 PhysicalConnection 必须回退为物理 ResultSet");
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(result_set.long(&mut connection, 1).unwrap(), 1);
+    result_set.close_with_connection(&mut connection).unwrap();
+    assert_eq!(filter.after_count.load(Ordering::Acquire), 3);
     assert_eq!(
         *filter.row_counts.lock().expect("row count lock poisoned"),
-        vec![None, Some(2)]
+        vec![None, Some(2), None]
     );
+}
+
+#[tokio::test]
+async fn physical_connection_default_generic_execute_is_explicitly_unsupported() {
+    let mut connection = ContractPhysicalConnection;
+    assert_eq!(
+        connection.warnings().await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_get_warnings"
+        })
+    );
+    assert_eq!(
+        connection
+            .execute("SELECT 1", Vec::new(), StatementGeneratedKeys::None,)
+            .await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "statement_execute"
+        })
+    );
+    let prepared = SqlTextPreparedStatement::new("SELECT ?1");
+    let result_set = connection
+        .fetch_result_set("SELECT ?1", Vec::new())
+        .await
+        .expect("默认 fetch_result_set 必须包装 eager fetch");
+    assert!(result_set.next().unwrap());
+    assert_eq!(result_set.value(1).unwrap(), Value::Int(1));
+    let prepared_result_set = connection
+        .fetch_prepared_result_set(
+            &prepared as &dyn PhysicalPreparedStatement,
+            vec![Value::Int(1)],
+        )
+        .await
+        .expect("默认 prepared ResultSet 必须包装 eager fetch");
+    assert!(prepared_result_set.next().unwrap());
+    assert_eq!(prepared_result_set.value(1).unwrap(), Value::Int(1));
+    let descriptor_result_set = connection
+        .fetch_prepared_parameters_result_set(
+            &prepared as &dyn PhysicalPreparedStatement,
+            vec![PreparedInputParameter::RustValue(Value::Int(1))],
+        )
+        .await
+        .expect("默认 descriptor prepared ResultSet 必须物化参数并包装 eager fetch");
+    assert!(descriptor_result_set.next().unwrap());
+    assert_eq!(descriptor_result_set.value(1).unwrap(), Value::Int(1));
+    assert_eq!(prepared.warnings().unwrap(), None);
+    prepared.clear_warnings().unwrap();
+    assert_eq!(
+        connection
+            .execute_prepared(
+                &prepared as &dyn PhysicalPreparedStatement,
+                vec![Value::Int(1)],
+                StatementGeneratedKeys::None,
+            )
+            .await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "statement_execute"
+        })
+    );
+    prepared.close().unwrap();
+    assert!(matches!(
+        prepared.warnings(),
+        Err(DruidError::Other(message)) if message == "statement is closed"
+    ));
+    assert!(matches!(
+        prepared.clear_warnings(),
+        Err(DruidError::Other(message)) if message == "statement is closed"
+    ));
 }
 
 #[tokio::test]

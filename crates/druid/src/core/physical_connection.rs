@@ -2,12 +2,20 @@
 
 use super::error::DruidError;
 use super::exec_result::ExecResult;
+use super::jdbc_result_set::{PhysicalResultSet, RowSetResultSet};
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
 use super::physical_prepared_statement::PhysicalPreparedStatement;
+use super::physical_statement::{
+    PhysicalStatement, PhysicalStatementOptions, SqlTextStatement, StatementExecuteResult,
+    StatementGeneratedKeys,
+};
+use super::prepared_input_parameter::PreparedInputParameter;
 use super::prepared_statement_key::PreparedStatementKey;
 use super::row::Row;
 use super::savepoint::Savepoint;
+use super::sql_warning::SqlWarning;
 use super::value::Value;
+use std::any::Any;
 use std::sync::Arc;
 
 /// druid-rust 内部最小物理连接 SPI。
@@ -16,16 +24,82 @@ use std::sync::Arc;
 /// 仅作为 `DruidPooledConnection` 与 SQLx、RBDC 等驱动之间的稳定边界。
 /// 所有驱动 Adapter 必须实现本 trait，Adapter 不得再次持有连接池。
 #[async_trait::async_trait]
-pub trait PhysicalConnection: Send {
+pub trait PhysicalConnection: Any + Send {
+    /// 创建普通物理语句。
+    ///
+    /// 对应 Java：`Connection#createStatement(...)`。动态 SQL 驱动可使用默认
+    /// 状态对象并在当前连接上执行；具有原生 Statement handle 的 Adapter 可覆盖。
+    async fn create_physical_statement(
+        &mut self,
+        options: PhysicalStatementOptions,
+    ) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
+        Ok(Arc::new(SqlTextStatement::new(options)))
+    }
+
     /// 执行更新类 SQL。
     ///
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回执行结果。
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError>;
 
+    /// 执行 JDBC `Statement#execute(...)` 并返回有序结果。
+    ///
+    /// 该入口不能根据 SQL 前缀猜测结果类型。支持 generic execute 的 Adapter
+    /// 必须让驱动执行并报告真实结果；多结果驱动按 JDBC 顺序返回全部结果。
+    async fn execute(
+        &mut self,
+        _sql: &str,
+        _params: Vec<Value>,
+        _generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "statement_execute",
+        })
+    }
+
+    /// 执行一个 JDBC 更新批次并返回每项更新计数。
+    ///
+    /// 对应 Java：`Statement#executeBatch()`。默认实现按驱动连接顺序执行；
+    /// Adapter 若有原生 batch 能力应覆盖本方法。失败时返回
+    /// `BatchUpdateException` 并保留失败前已经得到的计数。
+    async fn exec_batch(
+        &mut self,
+        batch: Vec<(String, Vec<Value>)>,
+    ) -> Result<Vec<i32>, DruidError> {
+        let mut update_counts = Vec::with_capacity(batch.len());
+        for (sql, params) in batch {
+            match self.exec(&sql, params).await {
+                Ok(result) => {
+                    update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
+                }
+                Err(error) => {
+                    return Err(DruidError::BatchUpdateException {
+                        update_counts,
+                        cause: Box::new(error),
+                    });
+                }
+            }
+        }
+        Ok(update_counts)
+    }
+
     /// 执行查询类 SQL。
     ///
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回结果行。
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError>;
+
+    /// 执行查询并返回物理 `ResultSet` 对象。
+    ///
+    /// 对应 Java：`Statement#executeQuery(String)` 返回驱动 `ResultSet`，池化层
+    /// 必须保留其标签、metadata、getter 重载与关闭身份。仅提供 eager 行集合的
+    /// Adapter 可使用默认回退；真实驱动应覆盖本方法。
+    async fn fetch_result_set(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let rows = self.fetch(sql, params).await?;
+        Ok(Arc::new(RowSetResultSet::new(rows)))
+    }
 
     /// 按完整 JDBC 重载键创建物理预编译语句。
     ///
@@ -68,6 +142,104 @@ pub trait PhysicalConnection: Send {
         self.exec(statement.sql(), params).await
     }
 
+    /// 使用完整 JDBC setter 描述符执行已经 prepare 的更新语句。
+    ///
+    /// 默认实现只接受可无损投影为 `Value` 的标量参数。LOB、Stream、Reader
+    /// 及其他资源必须由具体 Adapter 覆盖本入口，并在这里读取资源；池化层
+    /// 不得提前物化。
+    async fn exec_prepared_parameters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<ExecResult, DruidError> {
+        let params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.exec_prepared(statement, params).await
+    }
+
+    /// generic execute 已经 prepare 的语句，并保留 query/update 结果类型。
+    ///
+    /// 对应 Java：`PreparedStatement#execute()`。默认实现把预编译 SQL、参数
+    /// 快照及 prepare 时保存的 generated-keys 重载交给同一驱动 generic
+    /// execute 边界；`Adapter` 不得按 SQL 文本前缀猜测结果类型。
+    async fn execute_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        if statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        self.execute(statement.sql(), params, generated_keys).await
+    }
+
+    /// 使用完整 JDBC setter 描述符执行 generic PreparedStatement。
+    async fn execute_prepared_parameters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.execute_prepared(statement, params, generated_keys)
+            .await
+    }
+
+    /// 执行已经 prepare 的参数批次。
+    ///
+    /// 对应 Java：`PreparedStatement#executeBatch()`。默认实现保持参数快照顺序，
+    /// 逐次调用同一物理 PreparedStatement；Adapter 可覆盖为原生批处理。任一项
+    /// 失败时返回携带已完成更新计数的 `BatchUpdateException`。
+    async fn exec_prepared_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: Vec<Vec<Value>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        if statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+
+        let mut update_counts = Vec::with_capacity(parameter_sets.len());
+        for params in parameter_sets {
+            match self.exec_prepared(statement, params).await {
+                Ok(result) => {
+                    update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
+                }
+                Err(error) => {
+                    return Err(DruidError::BatchUpdateException {
+                        update_counts,
+                        cause: Box::new(error),
+                    });
+                }
+            }
+        }
+        Ok(update_counts)
+    }
+
+    /// 使用完整 JDBC setter 描述符执行 PreparedStatement 参数批次。
+    async fn exec_prepared_parameter_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: Vec<Vec<PreparedInputParameter>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        let parameter_sets = parameter_sets
+            .iter()
+            .map(|parameters| {
+                parameters
+                    .iter()
+                    .map(PreparedInputParameter::scalar_value)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.exec_prepared_batch(statement, parameter_sets).await
+    }
+
     /// 执行已经 prepare 的查询类语句。
     async fn fetch_prepared(
         &mut self,
@@ -78,6 +250,42 @@ pub trait PhysicalConnection: Send {
             return Err(DruidError::ConnectionDiscarded);
         }
         self.fetch(statement.sql(), params).await
+    }
+
+    /// 使用完整 JDBC setter 描述符执行已经 prepare 的查询。
+    async fn fetch_prepared_parameters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<Vec<Row>, DruidError> {
+        let params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.fetch_prepared(statement, params).await
+    }
+
+    /// 执行已经 prepare 的查询并保留驱动级 `ResultSet` 语义。
+    async fn fetch_prepared_result_set(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let rows = self.fetch_prepared(statement, params).await?;
+        Ok(Arc::new(RowSetResultSet::new(rows)))
+    }
+
+    /// 使用完整 JDBC setter 描述符执行查询并保留驱动级 `ResultSet` 语义。
+    async fn fetch_prepared_parameters_result_set(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.fetch_prepared_result_set(statement, params).await
     }
 
     /// 关闭物理预编译语句。
@@ -191,6 +399,16 @@ pub trait PhysicalConnection: Send {
     async fn set_holdability(&mut self, _holdability: i32) -> Result<(), DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "set_holdability",
+        })
+    }
+
+    /// 返回连接上的 `SQLWarning` 链。
+    ///
+    /// 对应 Java：`Connection#getWarnings()`。不支持的 Adapter 必须明确返回
+    /// unsupported，不能用 `None` 冒充驱动没有警告。
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_get_warnings",
         })
     }
 

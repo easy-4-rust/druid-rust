@@ -1,7 +1,7 @@
 //! Toasty 未池化物理连接工厂。
 
 use super::ToastyConnectionAdapter;
-use crate::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use crate::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, SqlException};
 use std::sync::Arc;
 use toasty::db::Connect;
 use toasty_core::{
@@ -119,6 +119,11 @@ impl ToastyConnectionFactory {
     fn driver_error(error: &toasty_core::Error) -> DruidError {
         if error.is_connection_lost() {
             DruidError::ConnectionDiscarded
+        } else if error.is_driver_operation_failed() {
+            DruidError::SqlException(Box::new(
+                SqlException::driver(0, error.to_string())
+                    .with_class_name("toasty_core::error::DriverOperationFailed"),
+            ))
         } else {
             DruidError::DriverError(error.to_string())
         }

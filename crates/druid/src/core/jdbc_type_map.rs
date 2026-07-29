@@ -1,24 +1,24 @@
-//! `CallableStatement#getObject(..., Map<String, Class<?>>)` 类型映射。
+//! JDBC `getObject(..., Map<String, Class<?>>)` 类型映射。
 //!
 //! 对应 Java 平台对象：`java.util.Map<String, Class<?>>`。
 
-use super::CallableTargetType;
+use super::JdbcTargetType;
 use std::collections::HashMap;
 
 /// JDBC 用户定义类型名称到目标类的映射。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct CallableTypeMap {
-    mappings: HashMap<String, CallableTargetType>,
+pub struct JdbcTypeMap {
+    mappings: HashMap<String, JdbcTargetType>,
 }
 
-impl CallableTypeMap {
+impl JdbcTypeMap {
     /// 创建空类型映射。
     pub fn new() -> Self {
         Self::default()
     }
 
     /// 从已有映射创建对象。
-    pub fn from_mappings(mappings: HashMap<String, CallableTargetType>) -> Self {
+    pub fn from_mappings(mappings: HashMap<String, JdbcTargetType>) -> Self {
         Self { mappings }
     }
 
@@ -30,18 +30,18 @@ impl CallableTypeMap {
     pub fn insert(
         &mut self,
         sql_type_name: impl Into<String>,
-        target_type: CallableTargetType,
-    ) -> Option<CallableTargetType> {
+        target_type: JdbcTargetType,
+    ) -> Option<JdbcTargetType> {
         self.mappings.insert(sql_type_name.into(), target_type)
     }
 
     /// 返回指定 SQL 类型名的目标类型。
-    pub fn get(&self, sql_type_name: &str) -> Option<&CallableTargetType> {
+    pub fn get(&self, sql_type_name: &str) -> Option<&JdbcTargetType> {
         self.mappings.get(sql_type_name)
     }
 
     /// 返回全部映射。
-    pub fn mappings(&self) -> &HashMap<String, CallableTargetType> {
+    pub fn mappings(&self) -> &HashMap<String, JdbcTargetType> {
         &self.mappings
     }
 

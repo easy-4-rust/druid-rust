@@ -1,5 +1,6 @@
 //! Coverage boost tests targeting specific uncovered lines.
 use druid::core::*;
+use std::sync::Arc;
 use std::time::Duration;
 
 // ── ConnectionExt: all default methods ──
@@ -32,13 +33,19 @@ impl Connection for MockConnForExt {
 
 #[async_trait::async_trait]
 impl ConnectionExt for MockConnForExt {
-    async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
         Err(DruidError::Other("n/a".into()))
     }
-    async fn prepare_statement(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> {
+    async fn prepare_statement(
+        &mut self,
+        _: &str,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
         Err(DruidError::Other("n/a".into()))
     }
-    async fn prepare_call(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> {
+    async fn prepare_call(
+        &mut self,
+        _: &str,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
         Err(DruidError::Other("n/a".into()))
     }
     async fn native_sql(&self, sql: &str) -> Result<String, DruidError> {
@@ -296,15 +303,16 @@ fn test_connection_holder_all_paths() {
 // ── ExceptionSorter: all three implementations ──
 #[test]
 fn test_exception_sorter_all() {
-    assert!(!NullExceptionSorter.is_exception_fatal(0, "any"));
-    assert!(!NullExceptionSorter.is_exception_fatal(57001, "shutdown"));
-    assert!(PgExceptionSorter.is_exception_fatal(57001, "shutdown"));
-    assert!(!PgExceptionSorter.is_exception_fatal(42601, "syntax"));
-    assert!(PgExceptionSorter.is_exception_fatal(0, "connection has been closed"));
-    assert!(PgExceptionSorter.is_exception_fatal(0, "connection is not available"));
-    assert!(MySqlExceptionSorter.is_exception_fatal(1042, "hostname"));
-    assert!(!MySqlExceptionSorter.is_exception_fatal(1062, "duplicate"));
-    assert!(MySqlExceptionSorter.is_exception_fatal(0, "Communications link failure"));
+    assert!(!NullExceptionSorter.is_exception_fatal(&SqlException::driver(0, "any")));
+    assert!(!NullExceptionSorter.is_exception_fatal(&SqlException::driver(57001, "shutdown")));
+    assert!(PgExceptionSorter
+        .is_exception_fatal(&SqlException::driver(0, "closed").with_sql_state("08003")));
+    assert!(!PgExceptionSorter
+        .is_exception_fatal(&SqlException::driver(0, "syntax").with_sql_state("42601")));
+    assert!(MySqlExceptionSorter.is_exception_fatal(&SqlException::driver(1042, "hostname")));
+    assert!(!MySqlExceptionSorter.is_exception_fatal(&SqlException::driver(1062, "duplicate")));
+    assert!(MySqlExceptionSorter
+        .is_exception_fatal(&SqlException::driver(0, "Communications link failure")));
 }
 
 // ── ConnState + Savepoint ──
@@ -363,8 +371,12 @@ fn test_exec_result_all() {
 #[test]
 fn test_wrapper_default() {
     struct W;
-    impl Wrapper for W {}
-    assert!(!W.is_wrapper_for("anything"));
+    impl Wrapper for W {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+    assert!(!W.is_wrapper_for(None));
 }
 
 // ── Connection: all default methods ──
@@ -677,11 +689,12 @@ async fn test_after_filter_all_defaults() {
             _: &ExecContext<'_>,
             _: &Result<ExecResult, DruidError>,
             _: std::time::Duration,
-        ) {
+        ) -> Result<(), DruidError> {
+            Ok(())
         }
     }
     let f = F;
-    f.after_connection_close().await;
+    f.after_connection_close().await.unwrap();
 }
 
 // ── ConnectionExt: mock that REUSES default implementations ──
@@ -718,13 +731,19 @@ impl Connection for DefaultConnExt {
 #[async_trait::async_trait]
 impl ConnectionExt for DefaultConnExt {
     // Use ALL default implementations - don't override anything!
-    async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
         Err(DruidError::Other("not implemented".into()))
     }
-    async fn prepare_statement(&mut self, _sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+    async fn prepare_statement(
+        &mut self,
+        _sql: &str,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
         Err(DruidError::Other("not implemented".into()))
     }
-    async fn prepare_call(&mut self, _sql: &str) -> Result<Box<dyn Connection>, DruidError> {
+    async fn prepare_call(
+        &mut self,
+        _sql: &str,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
         Err(DruidError::Other("not implemented".into()))
     }
 }
@@ -889,8 +908,9 @@ async fn test_all_default_methods_exercised() {
     assert_eq!(c.get_network_timeout(), 0);
     assert_eq!(c.get_type_map(), None);
     let _ = c.set_type_map(std::collections::HashMap::new()).await;
-    // Also test async methods that return errors
-    assert!(c.create_statement().await.is_err());
+    // 普通 Statement 使用连接 SPI 的通用状态对象；prepare/call 仍要求
+    // Adapter 明确提供物理预编译句柄。
+    assert!(c.create_statement().await.is_ok());
     assert!(c.prepare_statement("SELECT 1").await.is_err());
     assert!(c.prepare_call("CALL sp").await.is_err());
 }

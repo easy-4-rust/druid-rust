@@ -10,21 +10,25 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableOutputValue, CallableParameter, CallableStatementUnwrapTarget,
-    CallableStatementUnwrapped, CallableTargetType, CallableTypeMap, DruidError, ExecResult,
-    JavaString, JdbcArray, JdbcBlob, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob,
-    JdbcOutputStream, JdbcReader, JdbcRef, JdbcResultSet, JdbcRowId, JdbcSqlXml, JdbcStreamLength,
-    JdbcUrl, JdbcWriter, JdbcXmlRepresentationType, JdbcXmlResult, JdbcXmlSource, PhysicalArray,
-    PhysicalBlob, PhysicalCallableStatement, PhysicalClob, PhysicalConnection, PhysicalNClob,
-    PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
-    PreparedStatementMethodType, Row, SqlTextPreparedStatement, Value,
+    CallableParameter, DruidError, DruidPooledCallableStatement,
+    DruidPooledCallableStatementHandle, ExecResult, JavaString, JdbcArray, JdbcBlob,
+    JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcOutputStream,
+    JdbcReader, JdbcRef, JdbcResultSet, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
+    JdbcTypeMap, JdbcUrl, JdbcWriter, JdbcXmlRepresentationType, JdbcXmlResult, JdbcXmlSource,
+    PhysicalArray, PhysicalBlob, PhysicalCallableStatement, PhysicalClob, PhysicalConnection,
+    PhysicalNClob, PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
+    PreparedStatementMethodType, Row, SqlTextPreparedStatement, StatementExecuteResult,
+    StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
 use druid::pool::DruidPool;
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+
+#[derive(Debug)]
+struct UnsupportedUnwrapType;
 
 /// Callable 契约测试使用的只读物理 Blob。
 #[derive(Debug)]
@@ -322,20 +326,15 @@ impl PhysicalRef for TestPhysicalRef {
         Ok("schema.kind".to_string())
     }
 
-    fn object(&self) -> Result<CallableOutputValue, DruidError> {
-        Ok(CallableOutputValue::from(Value::String(
-            "ref-value".to_string(),
-        )))
+    fn object(&self) -> Result<JdbcObject, DruidError> {
+        Ok(JdbcObject::from(Value::String("ref-value".to_string())))
     }
 
-    fn object_with_type_map(
-        &self,
-        _type_map: &CallableTypeMap,
-    ) -> Result<CallableOutputValue, DruidError> {
+    fn object_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<JdbcObject, DruidError> {
         self.object()
     }
 
-    fn set_object(&self, _value: CallableOutputValue) -> Result<(), DruidError> {
+    fn set_object(&self, _value: JdbcObject) -> Result<(), DruidError> {
         Ok(())
     }
 }
@@ -352,22 +351,15 @@ impl PhysicalArray for TestPhysicalArray {
         Ok(4)
     }
 
-    fn values(&self) -> Result<Vec<CallableOutputValue>, DruidError> {
-        Ok(vec![CallableOutputValue::from(Value::Int(1))])
+    fn values(&self) -> Result<Vec<JdbcObject>, DruidError> {
+        Ok(vec![JdbcObject::from(Value::Int(1))])
     }
 
-    fn values_with_type_map(
-        &self,
-        _type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+    fn values_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<Vec<JdbcObject>, DruidError> {
         self.values()
     }
 
-    fn values_range(
-        &self,
-        _index: i64,
-        _count: i32,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+    fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<JdbcObject>, DruidError> {
         self.values()
     }
 
@@ -375,8 +367,8 @@ impl PhysicalArray for TestPhysicalArray {
         &self,
         index: i64,
         count: i32,
-        _type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+        _type_map: &JdbcTypeMap,
+    ) -> Result<Vec<JdbcObject>, DruidError> {
         self.values_range(index, count)
     }
 
@@ -388,7 +380,7 @@ impl PhysicalArray for TestPhysicalArray {
 
     fn result_set_with_type_map(
         &self,
-        _type_map: &CallableTypeMap,
+        _type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError> {
         self.result_set()
     }
@@ -401,7 +393,7 @@ impl PhysicalArray for TestPhysicalArray {
         &self,
         index: i64,
         count: i32,
-        _type_map: &CallableTypeMap,
+        _type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError> {
         self.result_set_range(index, count)
     }
@@ -478,10 +470,10 @@ struct TestCallableStatement {
     closed: AtomicBool,
     registrations: Mutex<HashMap<CallableParameter, CallableOutParameter>>,
     named_parameters: Mutex<HashMap<String, CallableInputParameter>>,
-    outputs: HashMap<CallableParameter, CallableOutputValue>,
+    outputs: HashMap<CallableParameter, JdbcObject>,
     calendar_reads: Mutex<Vec<(CallableParameter, CallableCalendarArgument)>>,
-    type_map_reads: Mutex<Vec<(CallableParameter, Option<CallableTypeMap>)>>,
-    typed_reads: Mutex<Vec<(CallableParameter, CallableTargetType)>>,
+    type_map_reads: Mutex<Vec<(CallableParameter, Option<JdbcTypeMap>)>>,
+    typed_reads: Mutex<Vec<(CallableParameter, JdbcTargetType)>>,
     last_was_null: AtomicBool,
 }
 
@@ -504,155 +496,140 @@ impl TestCallableStatement {
             registrations: Mutex::new(HashMap::new()),
             named_parameters: Mutex::new(HashMap::new()),
             outputs: HashMap::from([
-                (
-                    CallableParameter::Index(1),
-                    CallableOutputValue::from(Value::Int(7)),
-                ),
-                (
-                    CallableParameter::Index(2),
-                    CallableOutputValue::from(Value::Null),
-                ),
+                (CallableParameter::Index(1), JdbcObject::from(Value::Int(7))),
+                (CallableParameter::Index(2), JdbcObject::from(Value::Null)),
                 (
                     CallableParameter::Index(4),
-                    CallableOutputValue::from(Value::Int(300)),
+                    JdbcObject::from(Value::Int(300)),
                 ),
                 (
                     CallableParameter::Index(5),
-                    CallableOutputValue::BigDecimal(
+                    JdbcObject::BigDecimal(
                         BigDecimal::from_str("123.4500").expect("valid decimal"),
                     ),
                 ),
-                (CallableParameter::Index(6), CallableOutputValue::Date(date)),
-                (CallableParameter::Index(7), CallableOutputValue::Time(time)),
+                (CallableParameter::Index(6), JdbcObject::Date(date)),
+                (CallableParameter::Index(7), JdbcObject::Time(time)),
                 (
                     CallableParameter::Index(8),
-                    CallableOutputValue::Timestamp(timestamp),
+                    JdbcObject::Timestamp(timestamp),
                 ),
-                (
-                    CallableParameter::Index(9),
-                    CallableOutputValue::Blob(blob.clone()),
-                ),
-                (
-                    CallableParameter::Index(10),
-                    CallableOutputValue::Clob(clob.clone()),
-                ),
+                (CallableParameter::Index(9), JdbcObject::Blob(blob.clone())),
+                (CallableParameter::Index(10), JdbcObject::Clob(clob.clone())),
                 (
                     CallableParameter::Index(11),
-                    CallableOutputValue::NClob(n_clob.clone()),
+                    JdbcObject::NClob(n_clob.clone()),
                 ),
                 (
                     CallableParameter::Index(12),
-                    CallableOutputValue::CharacterStream(JdbcReader::from_string("reader-index")),
+                    JdbcObject::CharacterStream(JdbcReader::from_string("reader-index")),
                 ),
                 (
                     CallableParameter::Index(13),
-                    CallableOutputValue::NCharacterStream(JdbcReader::from_string("国字-index")),
+                    JdbcObject::NCharacterStream(JdbcReader::from_string("国字-index")),
                 ),
                 (
                     CallableParameter::Index(14),
-                    CallableOutputValue::NString("国字-string-index".to_string()),
+                    JdbcObject::NString("国字-string-index".to_string()),
                 ),
-                (
-                    CallableParameter::Index(15),
-                    CallableOutputValue::Url(url.clone()),
-                ),
+                (CallableParameter::Index(15), JdbcObject::Url(url.clone())),
                 (
                     CallableParameter::Index(16),
-                    CallableOutputValue::Ref(reference.clone()),
+                    JdbcObject::Ref(reference.clone()),
                 ),
                 (
                     CallableParameter::Index(17),
-                    CallableOutputValue::Array(array.clone()),
+                    JdbcObject::Array(array.clone()),
                 ),
                 (
                     CallableParameter::Index(18),
-                    CallableOutputValue::RowId(row_id.clone()),
+                    JdbcObject::RowId(row_id.clone()),
                 ),
                 (
                     CallableParameter::Index(19),
-                    CallableOutputValue::SqlXml(sql_xml.clone()),
+                    JdbcObject::SqlXml(sql_xml.clone()),
                 ),
                 (
                     CallableParameter::Name("name".to_string()),
-                    CallableOutputValue::from(Value::String("druid".to_string())),
+                    JdbcObject::from(Value::String("druid".to_string())),
                 ),
                 (
                     CallableParameter::Name("flag".to_string()),
-                    CallableOutputValue::from(Value::Bool(true)),
+                    JdbcObject::from(Value::Bool(true)),
                 ),
                 (
                     CallableParameter::Name("count".to_string()),
-                    CallableOutputValue::from(Value::Int(9)),
+                    JdbcObject::from(Value::Int(9)),
                 ),
                 (
                     CallableParameter::Name("ratio".to_string()),
-                    CallableOutputValue::from(Value::Float(1.5)),
+                    JdbcObject::from(Value::Float(1.5)),
                 ),
                 (
                     CallableParameter::Name("bytes".to_string()),
-                    CallableOutputValue::from(Value::Bytes(vec![1, 2, 3])),
+                    JdbcObject::from(Value::Bytes(vec![1, 2, 3])),
                 ),
                 (
                     CallableParameter::Name("decimal".to_string()),
-                    CallableOutputValue::BigDecimal(
+                    JdbcObject::BigDecimal(
                         BigDecimal::from_str("123.4500").expect("valid decimal"),
                     ),
                 ),
                 (
                     CallableParameter::Name("date".to_string()),
-                    CallableOutputValue::Date(date),
+                    JdbcObject::Date(date),
                 ),
                 (
                     CallableParameter::Name("time".to_string()),
-                    CallableOutputValue::Time(time),
+                    JdbcObject::Time(time),
                 ),
                 (
                     CallableParameter::Name("timestamp".to_string()),
-                    CallableOutputValue::Timestamp(timestamp),
+                    JdbcObject::Timestamp(timestamp),
                 ),
                 (
                     CallableParameter::Name("blob".to_string()),
-                    CallableOutputValue::Blob(blob),
+                    JdbcObject::Blob(blob),
                 ),
                 (
                     CallableParameter::Name("clob".to_string()),
-                    CallableOutputValue::Clob(clob),
+                    JdbcObject::Clob(clob),
                 ),
                 (
                     CallableParameter::Name("n_clob".to_string()),
-                    CallableOutputValue::NClob(n_clob),
+                    JdbcObject::NClob(n_clob),
                 ),
                 (
                     CallableParameter::Name("character_stream".to_string()),
-                    CallableOutputValue::CharacterStream(JdbcReader::from_string("reader-name")),
+                    JdbcObject::CharacterStream(JdbcReader::from_string("reader-name")),
                 ),
                 (
                     CallableParameter::Name("n_character_stream".to_string()),
-                    CallableOutputValue::NCharacterStream(JdbcReader::from_string("国字-name")),
+                    JdbcObject::NCharacterStream(JdbcReader::from_string("国字-name")),
                 ),
                 (
                     CallableParameter::Name("n_string".to_string()),
-                    CallableOutputValue::NString("国字-string-name".to_string()),
+                    JdbcObject::NString("国字-string-name".to_string()),
                 ),
                 (
                     CallableParameter::Name("url".to_string()),
-                    CallableOutputValue::Url(url),
+                    JdbcObject::Url(url),
                 ),
                 (
                     CallableParameter::Name("ref".to_string()),
-                    CallableOutputValue::Ref(reference),
+                    JdbcObject::Ref(reference),
                 ),
                 (
                     CallableParameter::Name("array".to_string()),
-                    CallableOutputValue::Array(array),
+                    JdbcObject::Array(array),
                 ),
                 (
                     CallableParameter::Name("row_id".to_string()),
-                    CallableOutputValue::RowId(row_id),
+                    JdbcObject::RowId(row_id),
                 ),
                 (
                     CallableParameter::Name("sql_xml".to_string()),
-                    CallableOutputValue::SqlXml(sql_xml),
+                    JdbcObject::SqlXml(sql_xml),
                 ),
             ]),
             calendar_reads: Mutex::new(Vec::new()),
@@ -719,10 +696,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         Ok(())
     }
 
-    fn out_parameter(
-        &self,
-        parameter: &CallableParameter,
-    ) -> Result<CallableOutputValue, DruidError> {
+    fn out_parameter(&self, parameter: &CallableParameter) -> Result<JdbcObject, DruidError> {
         let value = self.outputs.get(parameter).cloned().ok_or_else(|| {
             DruidError::DriverError(format!("OUT parameter {parameter:?} is unavailable"))
         })?;
@@ -733,8 +707,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
     fn out_parameter_with_type_map(
         &self,
         parameter: &CallableParameter,
-        type_map: Option<&CallableTypeMap>,
-    ) -> Result<CallableOutputValue, DruidError> {
+        type_map: Option<&JdbcTypeMap>,
+    ) -> Result<JdbcObject, DruidError> {
         self.type_map_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -745,8 +719,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
     fn out_parameter_as(
         &self,
         parameter: &CallableParameter,
-        target_type: &CallableTargetType,
-    ) -> Result<CallableOutputValue, DruidError> {
+        target_type: &JdbcTargetType,
+    ) -> Result<JdbcObject, DruidError> {
         self.typed_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -768,8 +742,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((parameter.clone(), calendar.clone()));
         match self.out_parameter(parameter)? {
-            CallableOutputValue::Scalar(Value::Null) => Ok(None),
-            CallableOutputValue::Date(value) => Ok(Some(value)),
+            JdbcObject::Scalar(Value::Null) => Ok(None),
+            JdbcObject::Date(value) => Ok(Some(value)),
             other => Err(DruidError::DriverError(format!(
                 "expected Date, got {other}"
             ))),
@@ -786,8 +760,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((parameter.clone(), calendar.clone()));
         match self.out_parameter(parameter)? {
-            CallableOutputValue::Scalar(Value::Null) => Ok(None),
-            CallableOutputValue::Time(value) => Ok(Some(value)),
+            JdbcObject::Scalar(Value::Null) => Ok(None),
+            JdbcObject::Time(value) => Ok(Some(value)),
             other => Err(DruidError::DriverError(format!(
                 "expected Time, got {other}"
             ))),
@@ -804,8 +778,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((parameter.clone(), calendar.clone()));
         match self.out_parameter(parameter)? {
-            CallableOutputValue::Scalar(Value::Null) => Ok(None),
-            CallableOutputValue::Timestamp(value) => Ok(Some(value)),
+            JdbcObject::Scalar(Value::Null) => Ok(None),
+            JdbcObject::Timestamp(value) => Ok(Some(value)),
             other => Err(DruidError::DriverError(format!(
                 "expected Timestamp, got {other}"
             ))),
@@ -832,6 +806,31 @@ impl PhysicalConnection for CallableConnection {
 
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
+    }
+
+    async fn execute(
+        &mut self,
+        sql: &str,
+        _params: Vec<Value>,
+        _generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        if sql == "{call multi()}" {
+            Ok(vec![
+                StatementExecuteResult::ResultSet(vec![Row::new(vec![Value::Int(10)])]),
+                StatementExecuteResult::Update(ExecResult {
+                    rows_affected: 2,
+                    last_insert_id: None,
+                    row_count: None,
+                }),
+                StatementExecuteResult::ResultSet(vec![Row::new(vec![Value::Int(20)])]),
+            ])
+        } else {
+            Ok(vec![StatementExecuteResult::Update(ExecResult {
+                rows_affected: 1,
+                last_insert_id: None,
+                row_count: None,
+            })])
+        }
     }
 
     async fn prepare_physical_call(
@@ -937,6 +936,88 @@ async fn callable_pool() -> (
         .await
         .unwrap();
     (pool, prepare_count, prepared_keys)
+}
+
+#[tokio::test]
+async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
+    let (pool, _, _) = callable_pool().await;
+    let mut connection = pool.get().await.unwrap();
+    let mut callable = connection.prepare_call("{call query()}").await.unwrap();
+    let expected_key = callable.key().clone();
+    let mut result_set = callable
+        .fetch_result_set(&mut connection, Vec::new())
+        .await
+        .unwrap();
+
+    let identity = result_set
+        .callable_statement()
+        .expect("CallableStatement ResultSet 必须保留 callable 动态身份");
+    assert!(identity.is_same_statement(&callable));
+    assert_eq!(identity.key(), &expected_key);
+    assert!(result_set.prepared_statement().is_some());
+    assert!(identity.is_wrapper_for_type::<DruidPooledCallableStatementHandle>());
+    assert!(identity
+        .unwrap_ref::<DruidPooledCallableStatementHandle>()
+        .is_some());
+    assert!(identity.is_wrapper_for_type::<dyn PhysicalCallableStatement>());
+    assert!(identity
+        .unwrap(Some(TypeId::of::<dyn PhysicalCallableStatement>()))
+        .and_then(|value| value.callable_statement())
+        .is_some());
+    assert!(identity.is_wrapper_for_type::<dyn PhysicalPreparedStatement>());
+    assert!(identity.is_wrapper_for_type::<TestCallableStatement>());
+    assert!(identity.unwrap_ref::<TestCallableStatement>().is_some());
+    assert!(!identity.is_wrapper_for(None));
+    assert!(identity.unwrap(None).is_none());
+    assert!(!identity.is_wrapper_for_type::<UnsupportedUnwrapType>());
+    assert!(identity.unwrap_ref::<UnsupportedUnwrapType>().is_none());
+
+    drop(callable);
+    assert!(!result_set.callable_statement().unwrap().is_closed());
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(
+        result_set.object(&mut connection, 1).unwrap(),
+        Value::Int(1)
+    );
+    result_set.callable_statement().unwrap().close().unwrap();
+    result_set.callable_statement().unwrap().close().unwrap();
+    assert!(result_set.callable_statement().unwrap().is_closed());
+    assert!(result_set.is_closed());
+
+    connection.close().await.unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn callable_generic_execute_preserves_inherited_ordered_results() {
+    let (pool, _, _) = callable_pool().await;
+    let mut connection = pool.get().await.unwrap();
+    let mut callable = connection.prepare_call("{call multi()}").await.unwrap();
+
+    assert!(callable.execute(&mut connection, Vec::new()).await.unwrap());
+    assert_eq!(callable.update_count(&mut connection).unwrap(), -1);
+    let mut first = callable.result_set(&mut connection).unwrap().unwrap();
+    assert!(first
+        .callable_statement()
+        .unwrap()
+        .is_same_statement(&callable));
+    assert!(first.next(&mut connection).unwrap());
+    assert_eq!(first.object(&mut connection, 1).unwrap(), Value::Int(10));
+
+    assert!(!callable.more_results(&mut connection).unwrap());
+    assert!(first.is_closed());
+    assert_eq!(callable.update_count(&mut connection).unwrap(), 2);
+    assert!(callable
+        .more_results_with_current(&mut connection, 1)
+        .unwrap());
+    let mut second = callable.result_set(&mut connection).unwrap().unwrap();
+    assert!(second.callable_statement().is_some());
+    assert!(second.next(&mut connection).unwrap());
+    assert_eq!(second.object(&mut connection, 1).unwrap(), Value::Int(20));
+
+    callable.close().unwrap();
+    connection.close().await.unwrap();
+    pool.close().await;
 }
 
 #[tokio::test]
@@ -1117,7 +1198,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert_eq!(callable.get_long(1).unwrap(), 7);
     assert_eq!(
         callable.get_object(2).unwrap(),
-        CallableOutputValue::from(Value::Null)
+        JdbcObject::from(Value::Null)
     );
     assert!(callable.was_null().unwrap());
     assert_eq!(
@@ -1250,7 +1331,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .object()
             .unwrap(),
-        CallableOutputValue::from(Value::String("ref-value".to_string()))
+        JdbcObject::from(Value::String("ref-value".to_string()))
     );
     assert_eq!(
         callable
@@ -1268,7 +1349,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .values()
             .unwrap(),
-        vec![CallableOutputValue::from(Value::Int(1))]
+        vec![JdbcObject::from(Value::Int(1))]
     );
     assert_eq!(
         callable.get_row_id(18).unwrap().unwrap().bytes(),
@@ -1310,55 +1391,68 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert!(callable.get_row_id(2).unwrap().is_none());
     assert!(callable.get_sql_xml(2).unwrap().is_none());
 
-    let mut type_map = CallableTypeMap::new();
-    type_map.insert("schema.kind", CallableTargetType::String);
+    let mut type_map = JdbcTypeMap::new();
+    type_map.insert("schema.kind", JdbcTargetType::String);
     assert_eq!(
         callable
             .get_object_with_type_map(1, Some(&type_map))
             .unwrap(),
-        CallableOutputValue::from(Value::Int(7))
+        JdbcObject::from(Value::Int(7))
     );
     assert_eq!(
         callable
             .get_named_object_with_type_map("name", None)
             .unwrap(),
-        CallableOutputValue::from(Value::String("druid".to_string()))
+        JdbcObject::from(Value::String("druid".to_string()))
+    );
+    assert_eq!(
+        callable.get_object_as(1, &JdbcTargetType::Integer).unwrap(),
+        JdbcObject::from(Value::Int(7))
     );
     assert_eq!(
         callable
-            .get_object_as(1, &CallableTargetType::Integer)
+            .get_named_object_as("name", &JdbcTargetType::String)
             .unwrap(),
-        CallableOutputValue::from(Value::Int(7))
+        JdbcObject::from(Value::String("druid".to_string()))
     );
-    assert_eq!(
-        callable
-            .get_named_object_as("name", &CallableTargetType::String)
-            .unwrap(),
-        CallableOutputValue::from(Value::String("druid".to_string()))
-    );
-    assert!(matches!(
-        callable
-            .unwrap_statement(&CallableStatementUnwrapTarget::PooledCallableStatement)
-            .unwrap(),
-        CallableStatementUnwrapped::Pooled(_)
-    ));
-    assert!(matches!(
-        callable
-            .unwrap_statement(&CallableStatementUnwrapTarget::CallableStatement)
-            .unwrap(),
-        CallableStatementUnwrapped::Callable(_)
-    ));
-    assert!(matches!(
-        callable
-            .unwrap_statement(&CallableStatementUnwrapTarget::PreparedStatement)
-            .unwrap(),
-        CallableStatementUnwrapped::Prepared(_)
-    ));
+    assert!(!callable.is_wrapper_for(None));
+    assert!(callable.unwrap(None).is_none());
+    assert!(callable.is_wrapper_for_type::<DruidPooledCallableStatement>());
     assert!(callable
-        .unwrap_statement(&CallableStatementUnwrapTarget::Other(
-            "vendor.Statement".to_string()
-        ))
-        .is_err());
+        .unwrap_ref::<DruidPooledCallableStatement>()
+        .is_some());
+    assert!(callable.is_wrapper_for_type::<TestCallableStatement>());
+    assert!(callable.unwrap_ref::<TestCallableStatement>().is_some());
+
+    let callable_interface = callable
+        .unwrap(Some(TypeId::of::<dyn PhysicalCallableStatement>()))
+        .expect("必须解包 CallableStatement 接口");
+    assert_eq!(
+        format!("{callable_interface:?}"),
+        "Unwrapped::CallableStatement"
+    );
+    assert!(callable_interface.callable_statement().is_some());
+    assert!(callable_interface.prepared_statement().is_none());
+    assert!(callable_interface.physical_connection().is_none());
+    assert!(callable_interface
+        .downcast_ref::<TestCallableStatement>()
+        .is_none());
+
+    let prepared_interface = callable
+        .unwrap(Some(TypeId::of::<dyn PhysicalPreparedStatement>()))
+        .expect("CallableStatement 也必须解包 PreparedStatement 接口");
+    assert_eq!(
+        format!("{prepared_interface:?}"),
+        "Unwrapped::PreparedStatement"
+    );
+    assert!(prepared_interface.prepared_statement().is_some());
+    assert!(prepared_interface.callable_statement().is_none());
+    assert!(prepared_interface.physical_connection().is_none());
+    assert!(prepared_interface
+        .downcast_ref::<TestCallableStatement>()
+        .is_none());
+    assert!(!callable.is_wrapper_for_type::<UnsupportedUnwrapType>());
+    assert!(callable.unwrap_ref::<UnsupportedUnwrapType>().is_none());
     assert_eq!(callable.get_big_decimal(5).unwrap(), Some(decimal.clone()));
     assert_eq!(
         callable.get_big_decimal_with_scale(5, 2).unwrap(),
@@ -1793,18 +1887,19 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert_eq!(
         typed_reads.as_slice(),
         &[
-            (CallableParameter::Index(1), CallableTargetType::Integer),
+            (CallableParameter::Index(1), JdbcTargetType::Integer),
             (
                 CallableParameter::Name("name".to_string()),
-                CallableTargetType::String,
+                JdbcTargetType::String,
             ),
         ]
     );
     drop(typed_reads);
     callable.close().unwrap();
+    assert!(callable.is_wrapper_for_type::<dyn PhysicalCallableStatement>());
     assert!(callable
-        .unwrap_statement(&CallableStatementUnwrapTarget::CallableStatement)
-        .is_err());
+        .unwrap(Some(TypeId::of::<dyn PhysicalCallableStatement>()))
+        .is_some());
     drop(callable);
 
     let mut cached = connection.prepare_call("{call demo(?, ?)}").await.unwrap();
@@ -1891,7 +1986,7 @@ async fn callable_errors_invalidate_cache_and_non_callable_handles_are_rejected(
     assert!(invalid_index.get_sql_xml(0).is_err());
     assert!(invalid_index.get_object_with_type_map(0, None).is_err());
     assert!(invalid_index
-        .get_object_as(0, &CallableTargetType::String)
+        .get_object_as(0, &JdbcTargetType::String)
         .is_err());
     invalid_index.close().unwrap();
 
@@ -1957,7 +2052,7 @@ async fn callable_errors_invalidate_cache_and_non_callable_handles_are_rejected(
         .get_named_object_with_type_map("missing", None)
         .is_err());
     assert!(unavailable
-        .get_named_object_as("missing", &CallableTargetType::String)
+        .get_named_object_as("missing", &JdbcTargetType::String)
         .is_err());
     unavailable.close().unwrap();
 

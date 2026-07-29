@@ -5,6 +5,8 @@
 use std::fmt;
 use std::time::Duration;
 
+use super::SqlException;
+
 /// druid-rust 统一错误类型。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DruidError {
@@ -18,6 +20,20 @@ pub enum DruidError {
     },
     ConnectionDiscarded,
     DriverError(String),
+    /// 保留 JDBC/驱动异常分类字段的 SQL 执行错误。
+    ///
+    /// 对应 Java `SQLException`；池化连接会把该对象交给
+    /// `ExceptionSorter`，但仍把原始错误返回调用者。
+    SqlException(Box<SqlException>),
+    /// JDBC 批处理异常及已经完成项的更新计数。
+    ///
+    /// 对应 Java `java.sql.BatchUpdateException#getUpdateCounts()`。计数允许
+    /// `Statement::SUCCESS_NO_INFO(-2)` 与 `Statement::EXECUTE_FAILED(-3)`；
+    /// `cause` 保留原始驱动错误，供异常分类器判断连接是否应丢弃。
+    BatchUpdateException {
+        update_counts: Vec<i32>,
+        cause: Box<DruidError>,
+    },
     SqlParseError(String),
     WallViolation(String),
     DataSourceNotFound(String),
@@ -41,6 +57,21 @@ impl fmt::Display for DruidError {
             }
             Self::ConnectionDiscarded => write!(f, "connection has been discarded"),
             Self::DriverError(msg) => write!(f, "driver error: {msg}"),
+            Self::SqlException(exception) => write!(
+                f,
+                "SQL exception (code={}, state={}): {}",
+                exception.error_code(),
+                exception.sql_state().unwrap_or("null"),
+                exception.message().unwrap_or("null")
+            ),
+            Self::BatchUpdateException {
+                update_counts,
+                cause,
+            } => write!(
+                f,
+                "batch update failed after {} result(s): {cause}",
+                update_counts.len()
+            ),
             Self::SqlParseError(msg) => write!(f, "SQL parse error: {msg}"),
             Self::WallViolation(msg) => write!(f, "wall violation: {msg}"),
             Self::DataSourceNotFound(name) => write!(f, "datasource not found: {name}"),
@@ -57,6 +88,27 @@ impl fmt::Display for DruidError {
 }
 
 impl std::error::Error for DruidError {}
+
+impl DruidError {
+    /// 返回当前错误或批处理 cause 中保留的 JDBC `SQLException`。
+    ///
+    /// 批处理异常仍必须进入与普通 SQL 异常相同的 vendor fatal sorter。
+    pub fn sql_exception(&self) -> Option<&SqlException> {
+        match self {
+            Self::SqlException(exception) => Some(exception),
+            Self::BatchUpdateException { cause, .. } => cause.sql_exception(),
+            _ => None,
+        }
+    }
+
+    /// 返回批处理失败前已经得到的 JDBC 更新计数。
+    pub fn batch_update_counts(&self) -> Option<&[i32]> {
+        match self {
+            Self::BatchUpdateException { update_counts, .. } => Some(update_counts),
+            _ => None,
+        }
+    }
+}
 
 impl From<String> for DruidError {
     fn from(s: String) -> Self {

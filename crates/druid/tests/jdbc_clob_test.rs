@@ -1,9 +1,9 @@
 //! java.sql.Clob/NClob 与 java.io.Reader/Writer 的资源语义契约。
 
 use druid::core::{
-    CallableOutputValue, DruidError, JavaString, JdbcClob, JdbcInputStream, JdbcNClob,
-    JdbcOutputStream, JdbcReader, JdbcWriter, PhysicalCharacterReader, PhysicalCharacterWriter,
-    PhysicalClob, PhysicalNClob,
+    DruidError, JavaString, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcOutputStream,
+    JdbcReader, JdbcWriter, PhysicalCharacterReader, PhysicalCharacterWriter, PhysicalClob,
+    PhysicalNClob,
 };
 use std::any::Any;
 use std::io::{Error, Write};
@@ -501,25 +501,19 @@ fn clob_and_n_clob_delegate_complete_jdbc_character_resource_contract() {
         .downcast_ref::<InMemoryPhysicalClob>()
         .is_some());
     assert!(format!("{national:?}").contains("JdbcNClob"));
-    assert_eq!(
-        format!("{}", CallableOutputValue::Clob(value.clone())),
-        "<Clob>"
-    );
-    assert_eq!(
-        format!("{}", CallableOutputValue::NClob(national)),
-        "<NClob>"
-    );
+    assert_eq!(format!("{}", JdbcObject::Clob(value.clone())), "<Clob>");
+    assert_eq!(format!("{}", JdbcObject::NClob(national)), "<NClob>");
     assert_eq!(
         format!(
             "{}",
-            CallableOutputValue::CharacterStream(JdbcReader::from_string("x"))
+            JdbcObject::CharacterStream(JdbcReader::from_string("x"))
         ),
         "<CharacterStream>"
     );
     assert_eq!(
         format!(
             "{}",
-            CallableOutputValue::NCharacterStream(JdbcReader::from_string("x"))
+            JdbcObject::NCharacterStream(JdbcReader::from_string("x"))
         ),
         "<NCharacterStream>"
     );

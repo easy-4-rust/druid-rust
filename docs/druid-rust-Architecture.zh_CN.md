@@ -2,7 +2,8 @@
 
 > 本文是 druid-rust 的唯一总体架构基线。项目目标是把 Alibaba Druid
 > 1.2.28 的功能语义有规划地迁移到 Rust，不是借鉴、重新想象或按文件机械翻译。
-> 对象完成度、语义完成度和命名检查分别以 `doc/migration/` 下的总账为准。
+> 对象完成度、语义完成度和命名检查分别以 `docs/druid`、
+> `docs/druid-admin`、`docs/druid-wrapper` 下的模块账本为准。
 
 | 字段 | 当前值 |
 | :--- | :--- |
@@ -12,20 +13,24 @@
 | Rust MSRV | `1.95` |
 | 默认工具链 | `1.97.1` |
 | 文档状态 | 执行中；不得理解为完整迁移已经完成 |
-| 事实核验日期 | 2026-07-28 |
+| 事实核验日期 | 2026-07-29 |
 
 ## 1. 文档责任与阅读路径
 
-根 `doc/` 只维护两类权威文档：
+根 `docs/` 维护项目级架构与治理入口，三个模块目录维护各自迁移账本：
 
 | 权威来源 | 责任 |
 | :--- | :--- |
 | 本文 | 当前架构、目标架构、不变量、模块边界和 ADR |
-| [`migration/`](./migration/README.md) | 路线图、对象账本、语义账本、名称审计和连接专项架构 |
+| [文档总入口](./README.md) | 总路线、模块账本导航和全 workspace 门禁 |
+| [连接专项架构](./连接抽象与驱动适配架构.md) | 跨 `druid`/`druid-wrapper` 的连接对象、所有权和驱动边界 |
+| [`druid`](./druid/迁移路线图.md) | Java core 对象、语义和命名账本 |
+| [`druid-admin`](./druid-admin/迁移路线图.md) | Java admin 对象、语义和命名账本 |
+| [`druid-wrapper`](./druid-wrapper/迁移路线图.md) | Java wrapper 与 Rust 扩展适配账本 |
 
-三个模块可以维护自身的迁移账本，即 `druid`、`druid-admin` 和
-`druid-wrapper`，但不得复制根总账后形成另一套完成率。README 只承担项目入口，
-不维护独立路线图。
+`druid`、`druid-admin` 和 `druid-wrapper` 三个目录分别是所属对象、语义和
+名称状态的唯一权威账本。项目级文档只聚合导航、架构和统一门禁，不形成第二套
+完成率。README 只承担项目入口，不维护独立路线图。
 
 状态含义：
 
@@ -240,7 +245,7 @@ SQLite 与 SQLx 同时启用时必须只有一个 `libsqlite3-sys` 链接版本�
 与 SQLx 0.8 共用的兼容版本；补丁来源和移除条件写在 vendor README。
 
 专项设计见
-[`crates/druid/doc/Toasty-内置数据源标准实现.md`](../crates/druid/doc/Toasty-内置数据源标准实现.md)。
+[`docs/druid/Toasty-内置数据源标准实现.md`](./druid/Toasty-内置数据源标准实现.md)。
 
 ## 8. SQL 执行、Filter 与统计
 
@@ -405,7 +410,7 @@ flowchart LR
 
 2026-07-29 三模块归并后已记录证据：
 
-- `cargo test --workspace`：433/433；
+- `cargo test --workspace --all-targets`：453/453；
 - Toasty/core/SQLx/bb8/deadpool/wrapper：21 个真实 SQLite 用例；
 - `cargo check -p druid --all-features` 通过；
 - `cargo metadata` 只包含三个 workspace member。
@@ -430,11 +435,11 @@ flowchart LR
 
 路线和总账：
 
-- [迁移路线图](./migration/1、迁移路线图.md)
-- [对象级对照表](./migration/2、对象级对照表.md)
-- [语义迁移对照表](./migration/3、语义迁移对照表.md)
-- [对象名称一致性检查](./migration/4、对象名称一致性检查.md)
-- [连接抽象与驱动适配架构](./migration/5、连接抽象与驱动适配架构.md)
+- [迁移总路线图](./迁移总路线图.md)
+- [`druid` 对象、语义和名称账本](./druid/迁移路线图.md)
+- [`druid-admin` 对象、语义和名称账本](./druid-admin/迁移路线图.md)
+- [`druid-wrapper` 对象、语义和名称账本](./druid-wrapper/迁移路线图.md)
+- [连接抽象与驱动适配架构](./连接抽象与驱动适配架构.md)
 
 ## 17. ADR
 

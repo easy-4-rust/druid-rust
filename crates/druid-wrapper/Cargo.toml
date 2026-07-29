@@ -10,6 +10,8 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 bb8.workspace = true
+bigdecimal.workspace = true
+chrono.workspace = true
 deadpool.workspace = true
 druid = { path = "../druid" }
 futures.workspace = true

@@ -5,8 +5,10 @@
 use super::config::DruidPoolBuilder;
 use super::pool_inner::PoolInner;
 use crate::core::{
-    DruidConnectionHolder, DruidError, DruidPooledConnection, FilterChain,
-    PhysicalConnectionFactory, PoolState,
+    Db2ExceptionSorter, DruidConnectionHolder, DruidError, DruidPooledConnection, ExceptionSorter,
+    FilterChain, InformixExceptionSorter, MockExceptionSorter, MySqlExceptionSorter,
+    OceanBaseOracleExceptionSorter, OracleExceptionSorter, PgExceptionSorter,
+    PhoenixExceptionSorter, PhysicalConnectionFactory, PoolState, SybaseExceptionSorter,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -20,6 +22,7 @@ pub struct DruidPool {
     driver_name: String,
     inner: Arc<PoolInner>,
     filter_chain: Option<Arc<FilterChain>>,
+    exception_sorter: Option<Arc<dyn ExceptionSorter>>,
 }
 
 impl DruidPool {
@@ -30,11 +33,42 @@ impl DruidPool {
         config: super::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
     ) -> Self {
+        let exception_sorter =
+            Self::select_exception_sorter(config.db_type_name.as_deref(), &driver_name);
         Self {
             name,
             driver_name,
             inner: Arc::new(PoolInner::new(factory, config)),
             filter_chain,
+            exception_sorter,
+        }
+    }
+
+    fn select_exception_sorter(
+        db_type_name: Option<&str>,
+        driver_name: &str,
+    ) -> Option<Arc<dyn ExceptionSorter>> {
+        let identity = db_type_name.unwrap_or(driver_name).to_ascii_lowercase();
+        if identity.contains("oceanbase") && identity.contains("oracle") {
+            Some(Arc::new(OceanBaseOracleExceptionSorter::new()))
+        } else if identity.contains("oracle") {
+            Some(Arc::new(OracleExceptionSorter::new()))
+        } else if identity.contains("mysql") || identity.contains("mariadb") {
+            Some(Arc::new(MySqlExceptionSorter))
+        } else if identity.contains("postgres") || identity == "pg" {
+            Some(Arc::new(PgExceptionSorter))
+        } else if identity.contains("phoenix") {
+            Some(Arc::new(PhoenixExceptionSorter))
+        } else if identity.contains("informix") {
+            Some(Arc::new(InformixExceptionSorter))
+        } else if identity.contains("sybase") {
+            Some(Arc::new(SybaseExceptionSorter))
+        } else if identity.contains("db2") {
+            Some(Arc::new(Db2ExceptionSorter))
+        } else if identity.contains("mock") {
+            Some(Arc::new(MockExceptionSorter))
+        } else {
+            None
         }
     }
 
@@ -250,7 +284,7 @@ impl DruidPool {
             .config
             .test_on_return
             .then(|| self.inner.factory.clone());
-        DruidPooledConnection::with_holder(
+        let mut connection = DruidPooledConnection::with_holder(
             holder,
             self.name.clone(),
             self.filter_chain.clone(),
@@ -261,7 +295,11 @@ impl DruidPool {
             Box::new(move |holder, disposition| {
                 pool.return_connection(holder, disposition);
             }),
-        )
+        );
+        if let Some(exception_sorter) = self.exception_sorter.clone() {
+            connection.set_exception_sorter(exception_sorter);
+        }
+        connection
     }
 }
 

@@ -124,6 +124,10 @@ fn test_stats_collector_connect() {
     collector.record_connect();
     collector.record_connect_error();
     assert_eq!(collector.connect_count(), 2);
+    collector.record_execute_batch(3);
+    collector.record_execute_batch(2);
+    assert_eq!(collector.execute_batch_count(), 2);
+    assert_eq!(collector.execute_batch_size_total(), 5);
 }
 
 #[tokio::test]
@@ -131,15 +135,18 @@ async fn test_stat_filter_as_after_filter() {
     let collector = Arc::new(StatsCollector::new("test", Duration::from_millis(100)));
     let filter = StatFilter::new(collector.clone());
 
-    assert_eq!(filter.name(), "stat");
+    assert_eq!(AfterFilter::name(&filter), "stat");
 
     let params = vec![];
     let ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Update,
     };
 
     // ok execution
@@ -153,7 +160,8 @@ async fn test_stat_filter_as_after_filter() {
             }),
             Duration::from_millis(5),
         )
-        .await;
+        .await
+        .unwrap();
 
     // error execution
     filter
@@ -162,7 +170,8 @@ async fn test_stat_filter_as_after_filter() {
             &Err(DruidError::Other("fail".into())),
             Duration::from_millis(10),
         )
-        .await;
+        .await
+        .unwrap();
 
     assert_eq!(collector.sql_merger.len(), 1);
     let stats = collector.sql_merger.all_stats();

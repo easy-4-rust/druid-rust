@@ -24,6 +24,8 @@ use async_trait::async_trait;
 use rusqlite::Connection as RusqliteConnection;
 use std::{
     borrow::Cow,
+    error::Error as StdError,
+    fmt,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -48,6 +50,17 @@ enum SqlReturn {
     Infer,
     Types(Vec<stmt::Type>),
 }
+
+#[derive(Debug)]
+struct SqliteDriverContractError(&'static str);
+
+impl fmt::Display for SqliteDriverContractError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.0)
+    }
+}
+
+impl StdError for SqliteDriverContractError {}
 
 /// A SQLite [`Driver`] that opens connections to a file or in-memory database.
 ///
@@ -121,7 +134,7 @@ impl Driver for Sqlite {
     ) -> toasty_core::Result<Box<dyn toasty_core::Connection>> {
         let mut connection = match self {
             Sqlite::File(path) => Connection::open(path)?,
-            Sqlite::InMemory => Connection::in_memory(),
+            Sqlite::InMemory => Connection::in_memory()?,
         };
         connection.query_log = cx.query_log;
         Ok(Box::new(connection))
@@ -169,13 +182,14 @@ pub struct Connection {
 
 impl Connection {
     /// Open an in-memory SQLite connection.
-    pub fn in_memory() -> Self {
-        let connection = RusqliteConnection::open_in_memory().unwrap();
+    pub fn in_memory() -> Result<Self> {
+        let connection = RusqliteConnection::open_in_memory()
+            .map_err(toasty_core::Error::driver_operation_failed)?;
 
-        Self {
+        Ok(Self {
             connection,
             query_log: QueryLogConfig::default(),
-        }
+        })
     }
 
     /// Open a SQLite connection to a file at `path`.
@@ -223,11 +237,27 @@ impl Connection {
             .map(|tv| Value::from(tv.value))
             .collect::<Vec<_>>();
 
+        let declared_types = stmt
+            .columns()
+            .iter()
+            .map(|column| column.decl_type().map(str::to_string))
+            .collect::<Vec<_>>();
+
         if matches!(ret, SqlReturn::Count) {
             let count = stmt
                 .execute(rusqlite::params_from_iter(params.iter()))
                 .map_err(toasty_core::Error::driver_operation_failed)?;
 
+            return Ok(ExecResponse::count(count as _));
+        }
+
+        // `RawSqlRet::Infer` 同时服务 JDBC `Statement#execute`：SQLite 在 prepare
+        // 后已能通过 column_count 区分首结果。无结果列时必须走 execute 并返回
+        // update count，不能把 INSERT/UPDATE 当成空查询结果。
+        if matches!(ret, SqlReturn::Infer) && stmt.column_count() == 0 {
+            let count = stmt
+                .execute(rusqlite::params_from_iter(params.iter()))
+                .map_err(toasty_core::Error::driver_operation_failed)?;
             return Ok(ExecResponse::count(count as _));
         }
 
@@ -242,15 +272,34 @@ impl Connection {
             match rows.next() {
                 Ok(Some(row)) => {
                     let items = match &ret {
-                        SqlReturn::Count => unreachable!(),
+                        SqlReturn::Count => {
+                            return Err(toasty_core::Error::driver_operation_failed(
+                                SqliteDriverContractError(
+                                    "SQLite row query cannot use count-only return mode",
+                                ),
+                            ));
+                        }
                         SqlReturn::Infer => (0..column_count)
-                            .map(|index| Value::from_sql_infer(row, index).into_inner())
-                            .collect(),
+                            .map(|index| {
+                                let declared_type =
+                                    declared_types.get(index).and_then(Option::as_deref);
+                                Value::from_sql_infer(
+                                    row,
+                                    index,
+                                    declared_type,
+                                )
+                                .map(Value::into_inner)
+                            })
+                            .collect::<rusqlite::Result<Vec<_>>>()
+                            .map_err(toasty_core::Error::driver_operation_failed)?,
                         SqlReturn::Types(ret_tys) => ret_tys
                             .iter()
                             .enumerate()
-                            .map(|(index, ret_ty)| Value::from_sql(row, index, ret_ty).into_inner())
-                            .collect(),
+                            .map(|(index, ret_ty)| {
+                                Value::from_sql(row, index, ret_ty).map(Value::into_inner)
+                            })
+                            .collect::<rusqlite::Result<Vec<_>>>()
+                            .map_err(toasty_core::Error::driver_operation_failed)?,
                     };
 
                     values.push(stmt::ValueRecord::from_vec(items).into());
@@ -276,10 +325,11 @@ impl toasty_core::driver::Connection for Connection {
 
         let (sql, typed_params, ret_tys) = match op {
             Operation::QuerySql(op) => {
-                assert!(
-                    op.last_insert_id_hack.is_none(),
-                    "last_insert_id_hack is MySQL-specific and should not be set for SQLite"
-                );
+                if op.last_insert_id_hack.is_some() {
+                    return Err(toasty_core::Error::unsupported_feature(
+                        "SQLite does not support the MySQL last_insert_id_hack contract",
+                    ));
+                }
                 (sql::Statement::from(op.stmt), op.params, op.ret)
             }
             Operation::RawSql(op) => {
@@ -306,30 +356,69 @@ impl toasty_core::driver::Connection for Connection {
                     .map_err(toasty_core::Error::driver_operation_failed)?;
                 return Ok(ExecResponse::count(0));
             }
-            _ => todo!("op={:#?}", op),
+            unsupported => {
+                return Err(toasty_core::Error::unsupported_feature(format!(
+                    "SQLite driver does not support operation {unsupported:#?}"
+                )));
+            }
         };
 
         let ret = match &sql {
             sql::Statement::Query(stmt) => match &stmt.body {
-                stmt::ExprSet::Select(_) => SqlReturn::Types(ret_tys.unwrap()),
-                _ => todo!(),
+                stmt::ExprSet::Select(_) => SqlReturn::Types(ret_tys.ok_or_else(|| {
+                    toasty_core::Error::driver_operation_failed(
+                        SqliteDriverContractError("SQLite SELECT is missing return types"),
+                    )
+                })?),
+                _ => {
+                    return Err(toasty_core::Error::unsupported_feature(
+                        "SQLite driver only supports SELECT query expressions",
+                    ));
+                }
             },
-            sql::Statement::Insert(stmt) => stmt
-                .returning
-                .as_ref()
-                .map(|_| SqlReturn::Types(ret_tys.unwrap()))
-                .unwrap_or(SqlReturn::Count),
-            sql::Statement::Delete(stmt) => stmt
-                .returning
-                .as_ref()
-                .map(|_| SqlReturn::Types(ret_tys.unwrap()))
-                .unwrap_or(SqlReturn::Count),
+            sql::Statement::Insert(stmt) => {
+                if stmt.returning.is_some() {
+                    SqlReturn::Types(ret_tys.ok_or_else(|| {
+                        toasty_core::Error::driver_operation_failed(
+                            SqliteDriverContractError(
+                                "SQLite INSERT RETURNING is missing return types",
+                            ),
+                        )
+                    })?)
+                } else {
+                    SqlReturn::Count
+                }
+            }
+            sql::Statement::Delete(stmt) => {
+                if stmt.returning.is_some() {
+                    SqlReturn::Types(ret_tys.ok_or_else(|| {
+                        toasty_core::Error::driver_operation_failed(
+                            SqliteDriverContractError(
+                                "SQLite DELETE RETURNING is missing return types",
+                            ),
+                        )
+                    })?)
+                } else {
+                    SqlReturn::Count
+                }
+            }
             sql::Statement::Update(stmt) => {
-                assert!(stmt.condition.is_none(), "stmt={stmt:#?}");
-                stmt.returning
-                    .as_ref()
-                    .map(|_| SqlReturn::Types(ret_tys.unwrap()))
-                    .unwrap_or(SqlReturn::Count)
+                if stmt.condition.is_some() {
+                    return Err(toasty_core::Error::unsupported_feature(
+                        "SQLite serialized UPDATE cannot carry an out-of-band condition",
+                    ));
+                }
+                if stmt.returning.is_some() {
+                    SqlReturn::Types(ret_tys.ok_or_else(|| {
+                        toasty_core::Error::driver_operation_failed(
+                            SqliteDriverContractError(
+                                "SQLite UPDATE RETURNING is missing return types",
+                            ),
+                        )
+                    })?)
+                } else {
+                    SqlReturn::Count
+                }
             }
             _ => SqlReturn::Count,
         };

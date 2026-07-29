@@ -7,15 +7,16 @@
 
 use super::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableOutputValue, CallableParameter, CallableStatementUnwrapTarget,
-    CallableStatementUnwrapped, CallableTargetType, CallableTypeMap, DruidError,
-    DruidPooledConnection, DruidPooledPreparedStatement, ExecResult, JdbcArray, JdbcBlob,
-    JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcReader, JdbcRef, JdbcRowId,
-    JdbcSqlXml, JdbcStreamLength, JdbcUrl, PhysicalCallableStatement, PreparedStatementKey, Row,
-    Value,
+    CallableParameter, DruidError, DruidPooledConnection, DruidPooledPreparedStatement,
+    DruidPooledPreparedStatementHandle, DruidPooledResultSet, DruidPooledStatement, ExecResult,
+    JdbcArray, JdbcBlob, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject,
+    JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType, JdbcTypeMap,
+    JdbcUrl, PhysicalCallableStatement, PhysicalPreparedStatement, PreparedStatementKey, Row,
+    Unwrapped, Value, Wrapper,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use std::any::{Any, TypeId};
 
 /// 池化存储过程调用语句。
 ///
@@ -24,6 +25,116 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 /// `PhysicalCallableStatement`。
 pub struct DruidPooledCallableStatement {
     prepared_statement: DruidPooledPreparedStatement,
+}
+
+/// `ResultSet#getStatement()` 返回的 CallableStatement 共享身份句柄。
+///
+/// 对应 Java：`DruidPooledCallableStatement` 继承
+/// `DruidPooledPreparedStatement`，结果集保存并返回原 callable 对象。Rust
+/// 句柄保留相同的 prepared 生命周期、物理 callable 能力和关闭级联。
+pub struct DruidPooledCallableStatementHandle {
+    prepared_statement: DruidPooledPreparedStatementHandle,
+}
+
+impl DruidPooledCallableStatementHandle {
+    /// 返回完整缓存键。
+    pub fn key(&self) -> &PreparedStatementKey {
+        self.prepared_statement.key()
+    }
+
+    /// 返回继承的池化 Statement 视图。
+    pub fn pooled_statement(&self) -> &DruidPooledStatement {
+        self.prepared_statement.pooled_statement()
+    }
+
+    /// 返回继承的 PreparedStatement 身份视图。
+    pub fn prepared_statement(&self) -> &DruidPooledPreparedStatementHandle {
+        &self.prepared_statement
+    }
+
+    /// 返回原逻辑 CallableStatement 是否已关闭。
+    pub fn is_closed(&self) -> bool {
+        self.prepared_statement.is_closed()
+    }
+
+    /// 判断句柄是否与给定 CallableStatement 表示同一逻辑 Java 对象。
+    pub fn is_same_statement(&self, statement: &DruidPooledCallableStatement) -> bool {
+        self.prepared_statement
+            .is_same_statement(&statement.prepared_statement)
+    }
+
+    /// 关闭原逻辑 CallableStatement。
+    pub fn close(&self) -> Result<(), DruidError> {
+        self.prepared_statement.close()
+    }
+}
+
+impl Wrapper for DruidPooledCallableStatementHandle {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn is_wrapper_for(&self, iface: Option<TypeId>) -> bool {
+        let Some(iface) = iface else {
+            return false;
+        };
+        iface == TypeId::of::<Self>()
+            || iface == TypeId::of::<dyn PhysicalCallableStatement>()
+            || self.prepared_statement.is_wrapper_for(Some(iface))
+    }
+
+    fn unwrap(&self, iface: Option<TypeId>) -> Option<Unwrapped<'_>> {
+        let iface = iface?;
+        if iface == TypeId::of::<Self>() {
+            return Some(Unwrapped::Object(self));
+        }
+        if iface == TypeId::of::<dyn PhysicalCallableStatement>() {
+            return self
+                .prepared_statement
+                .physical_statement()
+                .as_callable()
+                .map(Unwrapped::CallableStatement);
+        }
+        self.prepared_statement.unwrap(Some(iface))
+    }
+}
+
+impl Wrapper for DruidPooledCallableStatement {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn is_wrapper_for(&self, iface: Option<TypeId>) -> bool {
+        let Some(iface) = iface else {
+            return false;
+        };
+        let raw = self
+            .prepared_statement
+            .prepared_statement_holder()
+            .statement();
+        iface == TypeId::of::<Self>()
+            || iface == TypeId::of::<dyn PhysicalCallableStatement>()
+            || iface == TypeId::of::<dyn PhysicalPreparedStatement>()
+            || raw.as_any().type_id() == iface
+    }
+
+    fn unwrap(&self, iface: Option<TypeId>) -> Option<Unwrapped<'_>> {
+        let iface = iface?;
+        if iface == TypeId::of::<Self>() {
+            return Some(Unwrapped::Object(self));
+        }
+        let raw = self
+            .prepared_statement
+            .prepared_statement_holder()
+            .statement();
+        if iface == TypeId::of::<dyn PhysicalCallableStatement>() {
+            return raw.as_callable().map(Unwrapped::CallableStatement);
+        }
+        if iface == TypeId::of::<dyn PhysicalPreparedStatement>() {
+            return Some(Unwrapped::PreparedStatement(raw.as_ref()));
+        }
+        (raw.as_any().type_id() == iface).then(|| Unwrapped::Object(raw.as_any()))
+    }
 }
 
 impl std::fmt::Debug for DruidPooledCallableStatement {
@@ -66,34 +177,6 @@ impl DruidPooledCallableStatement {
             })
     }
 
-    /// 按 Java `unwrap(Class<T>)` 规则返回 pooled/raw statement 身份。
-    pub fn unwrap_statement(
-        &self,
-        target: &CallableStatementUnwrapTarget,
-    ) -> Result<CallableStatementUnwrapped<'_>, DruidError> {
-        match target {
-            CallableStatementUnwrapTarget::PooledCallableStatement => {
-                self.prepared_statement.ensure_open()?;
-                Ok(CallableStatementUnwrapped::Pooled(self))
-            }
-            CallableStatementUnwrapTarget::CallableStatement => Ok(
-                CallableStatementUnwrapped::Callable(self.physical_callable_statement()?),
-            ),
-            CallableStatementUnwrapTarget::PreparedStatement => {
-                self.prepared_statement.ensure_open()?;
-                Ok(CallableStatementUnwrapped::Prepared(
-                    self.prepared_statement
-                        .prepared_statement_holder()
-                        .statement()
-                        .as_ref(),
-                ))
-            }
-            CallableStatementUnwrapTarget::Other(_) => Err(DruidError::UnsupportedOperation {
-                operation: "callable_statement_unwrap",
-            }),
-        }
-    }
-
     /// 执行存储过程调用。
     pub async fn exec(
         &mut self,
@@ -112,9 +195,89 @@ impl DruidPooledCallableStatement {
         self.prepared_statement.fetch(connection, params).await
     }
 
+    /// 执行查询并返回保持 CallableStatement 动态身份的池化结果集。
+    pub async fn fetch_result_set(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        params: Vec<Value>,
+    ) -> Result<DruidPooledResultSet, DruidError> {
+        let result_set = self
+            .prepared_statement
+            .fetch_result_set(connection, params)
+            .await?;
+        Ok(result_set.with_callable_statement(self.result_set_statement_handle()))
+    }
+
+    /// 执行 `CallableStatement#execute()` 并返回首结果是否为 ResultSet。
+    pub async fn execute(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        params: Vec<Value>,
+    ) -> Result<bool, DruidError> {
+        self.prepared_statement.execute(connection, params).await
+    }
+
+    /// 返回 generic execute 的当前结果集，并恢复 CallableStatement 身份。
+    pub fn result_set(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<Option<DruidPooledResultSet>, DruidError> {
+        self.prepared_statement
+            .result_set(connection)
+            .map(|result_set| {
+                result_set.map(|result_set| {
+                    result_set.with_callable_statement(self.result_set_statement_handle())
+                })
+            })
+    }
+
+    /// 返回最近一次执行的更新计数。
+    pub fn update_count(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<i64, DruidError> {
+        self.prepared_statement.update_count(connection)
+    }
+
+    /// 返回 generated keys，并恢复 CallableStatement 身份。
+    pub fn generated_keys(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<DruidPooledResultSet, DruidError> {
+        self.prepared_statement
+            .generated_keys(connection)
+            .map(|result_set| {
+                result_set.with_callable_statement(self.result_set_statement_handle())
+            })
+    }
+
+    /// 推进到下一个 JDBC 结果。
+    pub fn more_results(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<bool, DruidError> {
+        self.prepared_statement.more_results(connection)
+    }
+
+    /// 使用 JDBC current 常量推进到下一个结果。
+    pub fn more_results_with_current(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        current: i32,
+    ) -> Result<bool, DruidError> {
+        self.prepared_statement
+            .more_results_with_current(connection, current)
+    }
+
     /// 关闭逻辑 CallableStatement。
     pub fn close(&mut self) -> Result<(), DruidError> {
         self.prepared_statement.close()
+    }
+
+    fn result_set_statement_handle(&self) -> DruidPooledCallableStatementHandle {
+        DruidPooledCallableStatementHandle {
+            prepared_statement: self.prepared_statement.result_set_statement_handle(),
+        }
     }
 
     /// 注册 `registerOutParameter(int, int)`。
@@ -817,10 +980,7 @@ impl DruidPooledCallableStatement {
     ///
     /// 对应 Java：`getObject(int)` 的已迁移标量部分。ResultSet/LOB/Ref/Array
     /// 必须由后续独立对象 SPI 表达，不能伪装成标量。
-    pub fn get_object(
-        &mut self,
-        parameter_index: usize,
-    ) -> Result<CallableOutputValue, DruidError> {
+    pub fn get_object(&mut self, parameter_index: usize) -> Result<JdbcObject, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.get(parameter)
     }
@@ -828,10 +988,7 @@ impl DruidPooledCallableStatement {
     /// 读取命名 OUT 参数。
     ///
     /// 对应 Java：`getObject(String)` 的已迁移标量部分。
-    pub fn get_named_object(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<CallableOutputValue, DruidError> {
+    pub fn get_named_object(&mut self, parameter_name: &str) -> Result<JdbcObject, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.get(parameter)
     }
@@ -840,8 +997,8 @@ impl DruidPooledCallableStatement {
     pub fn get_object_with_type_map(
         &mut self,
         parameter_index: usize,
-        type_map: Option<&CallableTypeMap>,
-    ) -> Result<CallableOutputValue, DruidError> {
+        type_map: Option<&JdbcTypeMap>,
+    ) -> Result<JdbcObject, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.out_parameter_with_type_map(&parameter, type_map))
     }
@@ -850,8 +1007,8 @@ impl DruidPooledCallableStatement {
     pub fn get_named_object_with_type_map(
         &mut self,
         parameter_name: &str,
-        type_map: Option<&CallableTypeMap>,
-    ) -> Result<CallableOutputValue, DruidError> {
+        type_map: Option<&JdbcTypeMap>,
+    ) -> Result<JdbcObject, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.out_parameter_with_type_map(&parameter, type_map))
     }
@@ -860,8 +1017,8 @@ impl DruidPooledCallableStatement {
     pub fn get_object_as(
         &mut self,
         parameter_index: usize,
-        target_type: &CallableTargetType,
-    ) -> Result<CallableOutputValue, DruidError> {
+        target_type: &JdbcTargetType,
+    ) -> Result<JdbcObject, DruidError> {
         // Java 4.1 typed `getObject` 直接委托给底层 stmt，不经过 checkException。
         let parameter = CallableParameter::by_index(parameter_index)?;
         self.physical_callable_statement()?
@@ -872,8 +1029,8 @@ impl DruidPooledCallableStatement {
     pub fn get_named_object_as(
         &mut self,
         parameter_name: &str,
-        target_type: &CallableTargetType,
-    ) -> Result<CallableOutputValue, DruidError> {
+        target_type: &JdbcTargetType,
+    ) -> Result<JdbcObject, DruidError> {
         // 与 Java 原方法一致：保留底层异常，不写入连接异常计数。
         let parameter = CallableParameter::by_name(parameter_name)?;
         self.physical_callable_statement()?
@@ -1363,7 +1520,7 @@ impl DruidPooledCallableStatement {
         self.apply_callable(|statement| statement.register_out_parameter(parameter, out_parameter))
     }
 
-    fn get(&mut self, parameter: CallableParameter) -> Result<CallableOutputValue, DruidError> {
+    fn get(&mut self, parameter: CallableParameter) -> Result<JdbcObject, DruidError> {
         self.apply_callable(|statement| statement.out_parameter(&parameter))
     }
 

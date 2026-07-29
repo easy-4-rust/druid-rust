@@ -2,7 +2,7 @@
 //!
 //! 对应 Java 平台对象：`java.sql.Array`。
 
-use super::{CallableOutputValue, CallableTypeMap, DruidError, JdbcResultSet};
+use super::{DruidError, JdbcObject, JdbcResultSet, JdbcTypeMap};
 use std::fmt;
 use std::sync::Arc;
 
@@ -15,33 +15,28 @@ pub trait PhysicalArray: fmt::Debug + Send + Sync {
     fn base_type(&self) -> Result<i32, DruidError>;
 
     /// 使用默认映射读取全部元素。
-    fn values(&self) -> Result<Vec<CallableOutputValue>, DruidError>;
+    fn values(&self) -> Result<Vec<JdbcObject>, DruidError>;
 
     /// 使用显式类型映射读取全部元素。
-    fn values_with_type_map(
-        &self,
-        type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError>;
+    fn values_with_type_map(&self, type_map: &JdbcTypeMap) -> Result<Vec<JdbcObject>, DruidError>;
 
     /// 从 Java 1-based index 读取 `count` 个元素。
-    fn values_range(&self, index: i64, count: i32) -> Result<Vec<CallableOutputValue>, DruidError>;
+    fn values_range(&self, index: i64, count: i32) -> Result<Vec<JdbcObject>, DruidError>;
 
     /// 使用显式类型映射读取指定范围。
     fn values_range_with_type_map(
         &self,
         index: i64,
         count: i32,
-        type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError>;
+        type_map: &JdbcTypeMap,
+    ) -> Result<Vec<JdbcObject>, DruidError>;
 
     /// 使用默认映射返回全部元素结果集。
     fn result_set(&self) -> Result<JdbcResultSet, DruidError>;
 
     /// 使用显式类型映射返回全部元素结果集。
-    fn result_set_with_type_map(
-        &self,
-        type_map: &CallableTypeMap,
-    ) -> Result<JdbcResultSet, DruidError>;
+    fn result_set_with_type_map(&self, type_map: &JdbcTypeMap)
+        -> Result<JdbcResultSet, DruidError>;
 
     /// 返回指定范围结果集。
     fn result_set_range(&self, index: i64, count: i32) -> Result<JdbcResultSet, DruidError>;
@@ -51,7 +46,7 @@ pub trait PhysicalArray: fmt::Debug + Send + Sync {
         &self,
         index: i64,
         count: i32,
-        type_map: &CallableTypeMap,
+        type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError>;
 
     /// 释放数组资源。
@@ -84,24 +79,20 @@ impl JdbcArray {
     }
 
     /// 读取全部元素。
-    pub fn values(&self) -> Result<Vec<CallableOutputValue>, DruidError> {
+    pub fn values(&self) -> Result<Vec<JdbcObject>, DruidError> {
         self.physical.values()
     }
 
     /// 使用显式类型映射读取全部元素。
     pub fn values_with_type_map(
         &self,
-        type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+        type_map: &JdbcTypeMap,
+    ) -> Result<Vec<JdbcObject>, DruidError> {
         self.physical.values_with_type_map(type_map)
     }
 
     /// 读取指定范围。
-    pub fn values_range(
-        &self,
-        index: i64,
-        count: i32,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+    pub fn values_range(&self, index: i64, count: i32) -> Result<Vec<JdbcObject>, DruidError> {
         self.physical.values_range(index, count)
     }
 
@@ -110,8 +101,8 @@ impl JdbcArray {
         &self,
         index: i64,
         count: i32,
-        type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+        type_map: &JdbcTypeMap,
+    ) -> Result<Vec<JdbcObject>, DruidError> {
         self.physical
             .values_range_with_type_map(index, count, type_map)
     }
@@ -124,7 +115,7 @@ impl JdbcArray {
     /// 使用显式类型映射返回全部元素结果集。
     pub fn result_set_with_type_map(
         &self,
-        type_map: &CallableTypeMap,
+        type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError> {
         self.physical.result_set_with_type_map(type_map)
     }
@@ -139,7 +130,7 @@ impl JdbcArray {
         &self,
         index: i64,
         count: i32,
-        type_map: &CallableTypeMap,
+        type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError> {
         self.physical
             .result_set_range_with_type_map(index, count, type_map)

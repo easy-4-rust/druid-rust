@@ -1,8 +1,9 @@
-//! 对应 Java 类：com.alibaba.druid.stat.JdbcDataSourceStat + DruidDataSourceStatManager
+//! 对应 Java 类：`com.alibaba.druid.stat.JdbcDataSourceStat` +
+//! `DruidDataSourceStatManager`
 //!
 //! 数据源级统计收集器。
 
-use super::merge::SqlMerger;
+use super::{JdbcResultSetStat, SqlMerger};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +14,8 @@ use std::time::Duration;
 pub struct StatsCollector {
     pub name: String,
     pub sql_merger: Arc<SqlMerger>,
+    /// `ResultSet` 层统计；对应 Java `JdbcDataSourceStat#getResultSetStat()`。
+    pub result_set_stat: Arc<JdbcResultSetStat>,
     // 连接级统计
     pub connect_count: AtomicU64,
     pub connect_error_count: AtomicU64,
@@ -22,6 +25,10 @@ pub struct StatsCollector {
     pub slow_sql_threshold: Duration,
     // 慢 SQL 计数
     pub slow_sql_count: AtomicU64,
+    /// `executeBatch` 调用次数。
+    pub execute_batch_count: AtomicU64,
+    /// 所有 batch 的 SQL 项数总和。
+    pub execute_batch_size_total: AtomicU64,
 }
 
 impl StatsCollector {
@@ -29,12 +36,15 @@ impl StatsCollector {
         Self {
             name: name.into(),
             sql_merger: Arc::new(SqlMerger::new()),
+            result_set_stat: Arc::new(JdbcResultSetStat::new()),
             connect_count: AtomicU64::new(0),
             connect_error_count: AtomicU64::new(0),
             close_count: AtomicU64::new(0),
             active_count: AtomicU64::new(0),
             slow_sql_threshold,
             slow_sql_count: AtomicU64::new(0),
+            execute_batch_count: AtomicU64::new(0),
+            execute_batch_size_total: AtomicU64::new(0),
         }
     }
 
@@ -67,6 +77,33 @@ impl StatsCollector {
     }
     pub fn slow_sql_count(&self) -> u64 {
         self.slow_sql_count.load(Ordering::Relaxed)
+    }
+
+    /// 记录一次批处理及其条目数。
+    ///
+    /// 对应 Java `incrementExecuteBatchCount()` 与
+    /// `JdbcSqlStat#addExecuteBatchCount(long)`。
+    pub fn record_execute_batch(&self, batch_size: usize) {
+        self.execute_batch_count.fetch_add(1, Ordering::Relaxed);
+        self.execute_batch_size_total.fetch_add(
+            u64::try_from(batch_size).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
+
+    /// 返回批处理调用次数。
+    pub fn execute_batch_count(&self) -> u64 {
+        self.execute_batch_count.load(Ordering::Relaxed)
+    }
+
+    /// 返回累计批处理条目数。
+    pub fn execute_batch_size_total(&self) -> u64 {
+        self.execute_batch_size_total.load(Ordering::Relaxed)
+    }
+
+    /// 返回本数据源共享的 `ResultSet` 统计对象。
+    pub fn result_set_stat(&self) -> &JdbcResultSetStat {
+        self.result_set_stat.as_ref()
     }
 }
 

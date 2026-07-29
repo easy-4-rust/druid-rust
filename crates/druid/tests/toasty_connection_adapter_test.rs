@@ -1,9 +1,12 @@
 //! Toasty 内置数据源的真实 `SQLite` 契约测试。
 
+use bigdecimal::BigDecimal;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
 };
 use druid::toasty::ToastyConnectionFactory;
+use std::str::FromStr;
 
 async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -123,6 +126,60 @@ async fn sqlite_factory_and_raw_sql_cover_druid_value_semantics() {
         connection.ping().await,
         Err(DruidError::ConnectionDiscarded)
     ));
+}
+
+#[tokio::test]
+async fn sqlite_raw_sql_preserves_decimal_date_time_and_timestamp_types() {
+    let mut connection = sqlite_connection().await;
+    connection
+        .exec(
+            "CREATE TABLE strong_value (
+                id INTEGER PRIMARY KEY,
+                amount NUMERIC NOT NULL,
+                event_date DATE NOT NULL,
+                event_time TIME NOT NULL,
+                event_at DATETIME NOT NULL
+            )",
+            Vec::new(),
+        )
+        .await
+        .expect("强类型 SQLite 表必须创建");
+
+    let decimal = BigDecimal::from_str("1234567890.123456").unwrap();
+    let date = NaiveDate::from_ymd_opt(2026, 7, 29).unwrap();
+    let time = NaiveTime::from_hms_micro_opt(9, 8, 7, 654_321).unwrap();
+    let timestamp = NaiveDateTime::new(date, time);
+    connection
+        .exec(
+            "INSERT INTO strong_value VALUES (?1, ?2, ?3, ?4, ?5)",
+            vec![
+                Value::Int(1),
+                Value::Decimal(decimal.clone()),
+                Value::Date(date),
+                Value::Time(time),
+                Value::Timestamp(timestamp),
+            ],
+        )
+        .await
+        .expect("Toasty 必须绑定全部强类型值");
+
+    let rows = connection
+        .fetch(
+            "SELECT amount, event_date, event_time, event_at
+             FROM strong_value WHERE id = ?1",
+            vec![Value::Int(1)],
+        )
+        .await
+        .expect("Toasty 必须读取全部强类型值");
+    assert_eq!(
+        rows[0].values,
+        vec![
+            Value::Decimal(decimal),
+            Value::Date(date),
+            Value::Time(time),
+            Value::Timestamp(timestamp),
+        ]
+    );
 }
 
 #[tokio::test]
@@ -247,5 +304,30 @@ async fn unsupported_scheme_is_reported_instead_of_falling_back() {
         DruidError::UnsupportedOperation {
             operation: "toasty_non_sql_physical_connection"
         }
+    );
+}
+
+#[tokio::test]
+async fn sqlite_driver_failure_preserves_structured_sql_exception_boundary() {
+    let mut connection = sqlite_connection().await;
+    let error = connection
+        .exec("THIS IS NOT VALID SQLITE", Vec::new())
+        .await
+        .expect_err("真实 SQLite 语法错误必须返回失败");
+
+    let DruidError::SqlException(exception) = error else {
+        panic!("Toasty driver operation failure 必须映射为结构化 SqlException");
+    };
+    assert_eq!(exception.error_code(), 0);
+    assert_eq!(exception.sql_state(), None);
+    assert_eq!(
+        exception.class_name(),
+        "toasty_core::error::DriverOperationFailed"
+    );
+    assert!(
+        exception
+            .message()
+            .is_some_and(|message| !message.is_empty()),
+        "上游未公开 code/SQLState 时仍必须无损保留驱动消息"
     );
 }

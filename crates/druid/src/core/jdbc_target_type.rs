@@ -1,11 +1,11 @@
-//! `CallableStatement#getObject(..., Class<T>)` 的目标类型描述。
+//! JDBC `getObject(..., Class<T>)` 的目标类型描述。
 //!
 //! 对应 Java 平台对象：`java.lang.Class`。Rust 不使用 JVM 反射类对象，因此以
 //! 稳定枚举保留调用方要求的目标类型；驱动 Adapter 负责执行实际转换。
 
 /// `getObject` typed 重载的目标类型。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum CallableTargetType {
+pub enum JdbcTargetType {
     /// `java.lang.String`。
     String,
     /// `java.lang.Boolean`。
@@ -22,6 +22,8 @@ pub enum CallableTargetType {
     Float,
     /// `java.lang.Double`。
     Double,
+    /// `byte[]`。
+    Bytes,
     /// `java.math.BigDecimal`。
     BigDecimal,
     /// `java.sql.Date`。

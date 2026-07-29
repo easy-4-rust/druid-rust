@@ -86,7 +86,7 @@ the obligation to migrate Druid result semantics.
 | Real SQLite | 21 cross-layer cases pass | Toasty, SQLx, bb8, deadpool, wrapper tests |
 | Toasty feature graph | All features compose and compile | `cargo check -p druid --all-features` |
 | Connection API | Implemented, unstable | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
-| Migration completion | Partial | object and semantic ledgers under `docs/migration/` |
+| Migration completion | Partial | module ledgers under `docs/druid*` |
 | crates.io / docs.rs | Unpublished | `publish = false` |
 | CI | Not configured | no `.github/workflows/` |
 | Coverage | Historical snapshots exist; exit gate is open | migration roadmap §15 |
@@ -341,7 +341,7 @@ operations return explicit errors and never silently report success.
 ## 11. Migration Roadmap and Phases
 
 The authoritative plan is the
-[migration roadmap](docs/migration/1、迁移路线图.md):
+[migration roadmap](docs/迁移总路线图.md):
 
 | Phase | Object domain | Current status |
 | :--- | :--- | :--- |
@@ -367,10 +367,11 @@ The root `docs/` directory maintains only:
 | Document | Responsibility |
 | :--- | :--- |
 | [Architecture](docs/druid-rust-Architecture.zh_CN.md) | current/target architecture, invariants, ADRs |
-| [Migration ledger](docs/migration/README.md) | roadmap, objects, semantics, naming, connection design |
+| [Documentation index](docs/README.md) | roadmap, module ledgers, semantics, naming, connection design |
 
-The three modules may maintain their own migration ledgers, but must not copy the root
-completion percentage. The README is the project entry point, not a third roadmap.
+The three module directories are the authoritative object, semantic, and naming
+ledgers. Project-level documents aggregate navigation and gates without copying a
+second completion ledger. The README is the project entry point, not another roadmap.
 
 ## 13. Quality Gates
 
@@ -507,7 +508,7 @@ then.
 
 [Back to top](#readme-top) ·
 [Architecture](docs/druid-rust-Architecture.zh_CN.md) ·
-[Migration ledger](docs/migration/README.md) ·
+[Documentation index](docs/README.md) ·
 [Issues](https://github.com/easy-4-rust/druid-rust/issues)
 
 </div>

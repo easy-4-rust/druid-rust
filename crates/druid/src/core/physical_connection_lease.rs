@@ -1,10 +1,12 @@
 //! 外部连接池租约到物理连接 SPI 的透明桥接。
 
 use super::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, Row, Savepoint,
-    Value,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, Row, Savepoint,
+    SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 
 /// 外部连接池租约的透明物理连接适配器。
 ///
@@ -48,14 +50,127 @@ impl<L> PhysicalConnection for PhysicalConnectionLease<L>
 where
     L: Deref<Target = Box<dyn PhysicalConnection>>
         + DerefMut<Target = Box<dyn PhysicalConnection>>
-        + Send,
+        + Send
+        + 'static,
 {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.physical_connection_mut().exec(sql, params).await
     }
 
+    async fn execute(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        self.physical_connection_mut()
+            .execute(sql, params, generated_keys)
+            .await
+    }
+
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         self.physical_connection_mut().fetch(sql, params).await
+    }
+
+    async fn fetch_result_set(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        self.physical_connection_mut()
+            .fetch_result_set(sql, params)
+            .await
+    }
+
+    async fn exec_prepared_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: Vec<Vec<Value>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        self.physical_connection_mut()
+            .exec_prepared_batch(statement, parameter_sets)
+            .await
+    }
+
+    async fn exec_prepared_parameters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<ExecResult, DruidError> {
+        self.physical_connection_mut()
+            .exec_prepared_parameters(statement, parameters)
+            .await
+    }
+
+    async fn exec_prepared_parameter_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: Vec<Vec<PreparedInputParameter>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        self.physical_connection_mut()
+            .exec_prepared_parameter_batch(statement, parameter_sets)
+            .await
+    }
+
+    async fn execute_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        self.physical_connection_mut()
+            .execute_prepared(statement, params, generated_keys)
+            .await
+    }
+
+    async fn execute_prepared_parameters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        self.physical_connection_mut()
+            .execute_prepared_parameters(statement, parameters, generated_keys)
+            .await
+    }
+
+    async fn fetch_prepared_parameters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<Vec<Row>, DruidError> {
+        self.physical_connection_mut()
+            .fetch_prepared_parameters(statement, parameters)
+            .await
+    }
+
+    async fn fetch_prepared_result_set(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        self.physical_connection_mut()
+            .fetch_prepared_result_set(statement, params)
+            .await
+    }
+
+    async fn fetch_prepared_parameters_result_set(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        self.physical_connection_mut()
+            .fetch_prepared_parameters_result_set(statement, parameters)
+            .await
+    }
+
+    async fn close_prepared_statement(
+        &mut self,
+        statement: Arc<dyn PhysicalPreparedStatement>,
+    ) -> Result<(), DruidError> {
+        self.physical_connection_mut()
+            .close_prepared_statement(statement)
+            .await
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
@@ -148,6 +263,10 @@ where
         self.physical_connection_mut()
             .set_holdability(holdability)
             .await
+    }
+
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+        self.physical_connection_mut().warnings().await
     }
 
     async fn clear_warnings(&mut self) -> Result<(), DruidError> {

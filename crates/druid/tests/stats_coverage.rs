@@ -333,7 +333,7 @@ fn test_stats_collector_multiple_sql_templates() {
 async fn test_stat_filter_name() {
     let collector = Arc::new(StatsCollector::new("test", Duration::from_millis(100)));
     let filter = StatFilter::new(collector);
-    assert_eq!(filter.name(), "stat");
+    assert_eq!(AfterFilter::name(&filter), "stat");
 }
 
 #[tokio::test]
@@ -344,9 +344,12 @@ async fn test_stat_filter_after_ok() {
     let ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Update,
     };
     filter
         .after(
@@ -358,7 +361,8 @@ async fn test_stat_filter_after_ok() {
             }),
             Duration::from_millis(5),
         )
-        .await;
+        .await
+        .unwrap();
     assert_eq!(collector.sql_merger.len(), 1);
 }
 
@@ -370,9 +374,12 @@ async fn test_stat_filter_after_error() {
     let ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Update,
     };
     filter
         .after(
@@ -380,7 +387,8 @@ async fn test_stat_filter_after_error() {
             &Err(DruidError::Other("fail".into())),
             Duration::from_millis(10),
         )
-        .await;
+        .await
+        .unwrap();
     let stats = collector.sql_merger.all_stats();
     assert_eq!(stats[0].error_count(), 1);
 }
@@ -393,13 +401,17 @@ async fn test_stat_filter_after_slow_sql() {
     let ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Query,
     };
     filter
         .after(&ctx, &Ok(ExecResult::default()), Duration::from_millis(200))
-        .await;
+        .await
+        .unwrap();
     assert_eq!(collector.slow_sql_count(), 1);
 }
 
@@ -408,7 +420,7 @@ async fn test_stat_filter_after_connection_close() {
     let collector = Arc::new(StatsCollector::new("test", Duration::from_millis(100)));
     let filter = StatFilter::new(collector);
     // after_connection_close is a no-op default, just call it
-    filter.after_connection_close().await;
+    filter.after_connection_close().await.unwrap();
 }
 
 // ══════════════════════════════════════════════════════════════════

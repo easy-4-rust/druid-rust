@@ -1,9 +1,46 @@
 //! SQLx Adapter 真实 SQLite 驱动合同测试。
 
-use druid::core::{PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, Value};
+use druid::core::{
+    BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, JdbcCharacterLength,
+    JdbcInputStream, JdbcReader, JdbcRowId, JdbcStreamLength, JdbcUrl, PhysicalConnection,
+    PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, Row, Value,
+};
 use druid::pool::DruidPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+#[derive(Default)]
+struct SqlxPreparedDescriptorRecorder {
+    executions: Mutex<Vec<Vec<PreparedInputParameter>>>,
+    batches: Mutex<Vec<Vec<Vec<PreparedInputParameter>>>>,
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for SqlxPreparedDescriptorRecorder {
+    fn name(&self) -> &str {
+        "sqlx_prepared_descriptor_recorder"
+    }
+
+    async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        if let Some(parameters) = context.prepared_parameters {
+            self.executions
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(parameters.to_vec());
+        }
+        Ok(())
+    }
+
+    async fn before_batch(&self, context: &mut BatchExecContext<'_>) -> Result<(), DruidError> {
+        if let Some(parameter_sets) = context.prepared_parameter_sets {
+            self.batches
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(parameter_sets.to_vec());
+        }
+        Ok(())
+    }
+}
 
 async fn sqlite_pool() -> DruidPool {
     DruidPool::builder()
@@ -75,6 +112,65 @@ async fn sqlx_adapter_exec_fetch_and_type_mapping() {
         .await
         .expect("SQLite expression columns must use their runtime value type");
     assert_eq!(aggregate[0].values, vec![Value::Int(1)]);
+
+    let mut statement = connection
+        .create_statement()
+        .await
+        .expect("池化 Statement 必须创建");
+    let mut result_set = statement
+        .execute_query_result_set(
+            &mut connection,
+            "SELECT id AS identifier, name AS display_name FROM item",
+        )
+        .await
+        .expect("真实 SQLx ResultSet 必须创建");
+    let current_result_set = statement
+        .result_set(&mut connection)
+        .unwrap()
+        .expect("Statement#getResultSet 必须返回同一物理结果集");
+    assert!(std::ptr::eq(
+        result_set.raw_result_set(),
+        current_result_set.raw_result_set()
+    ));
+    drop(current_result_set);
+    let meta_data = result_set
+        .meta_data(&mut connection)
+        .expect("真实 SQLx 列标签必须保留");
+    assert_eq!(meta_data.column_label(1).unwrap(), "identifier");
+    assert_eq!(meta_data.column_label(2).unwrap(), "display_name");
+    assert_eq!(
+        result_set
+            .find_column(&mut connection, "DISPLAY_NAME")
+            .unwrap(),
+        2
+    );
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(
+        result_set
+            .string_by_label(&mut connection, "display_name")
+            .unwrap()
+            .as_deref(),
+        Some("alpha")
+    );
+    result_set.close_with_connection(&mut connection).unwrap();
+
+    let mut empty_result_set = statement
+        .execute_query_result_set(
+            &mut connection,
+            "SELECT id AS empty_identifier, name AS empty_display_name FROM item WHERE 1 = 0",
+        )
+        .await
+        .expect("零行 SQLx ResultSet 也必须保留 prepared descriptor");
+    let empty_meta_data = empty_result_set.meta_data(&mut connection).unwrap();
+    assert_eq!(empty_meta_data.column_label(1).unwrap(), "empty_identifier");
+    assert_eq!(
+        empty_meta_data.column_label(2).unwrap(),
+        "empty_display_name"
+    );
+    assert!(!empty_result_set.next(&mut connection).unwrap());
+    empty_result_set
+        .close_with_connection(&mut connection)
+        .unwrap();
 }
 
 #[tokio::test]
@@ -266,4 +362,252 @@ async fn sqlx_adapter_rejects_a_closed_prepared_statement_handle() {
         .fetch_prepared(statement.as_ref(), vec![])
         .await
         .is_err());
+}
+
+#[tokio::test]
+async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
+    let recorder = Arc::new(SqlxPreparedDescriptorRecorder::default());
+    let mut filters = FilterChain::new();
+    filters.add_before(Arc::clone(&recorder) as Arc<dyn BeforeFilter>);
+    let pool = DruidPool::builder()
+        .name("sqlx-prepared-resource")
+        .driver_name("sqlx-sqlite")
+        .factory(Arc::new(SqlxConnectionFactory::new("sqlite::memory:")))
+        .filter_chain(Arc::new(filters))
+        .max_open(1)
+        .max_idle(1)
+        .pool_prepared_statements(true)
+        .max_pool_prepared_statements_per_connection(4)
+        .build()
+        .await
+        .expect("SQLite prepared resource pool must build");
+    let mut connection = pool.get().await.expect("SQLite connection must open");
+    connection
+        .exec(
+            "CREATE TABLE prepared_resource(
+                binary_value BLOB,
+                character_value TEXT,
+                url_value TEXT,
+                row_id_value BLOB
+            )",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+
+    let mut invalid = connection.prepare_statement("SELECT ?").await.unwrap();
+    let short = JdbcInputStream::from_bytes(vec![1, 2]);
+    assert!(matches!(
+        invalid.set_binary_stream_with_int_length(&mut connection, 1, Some(short.clone()), 3,),
+        Err(DruidError::DriverError(_))
+    ));
+    assert!(short.read_to_end().unwrap().is_empty());
+    assert!(matches!(
+        invalid.set_character_stream_with_int_length(
+            &mut connection,
+            1,
+            Some(JdbcReader::from_string("x")),
+            -1,
+        ),
+        Err(DruidError::InvalidArgument(_))
+    ));
+    invalid.close_with_connection(&mut connection).unwrap();
+
+    let binary = JdbcInputStream::from_bytes(vec![1, 2, 3, 4]);
+    let reader = JdbcReader::from_string("reader-tail");
+    let mut insert = connection
+        .prepare_statement(
+            "INSERT INTO prepared_resource(
+                binary_value, character_value, url_value, row_id_value
+             ) VALUES (?, ?, ?, ?)",
+        )
+        .await
+        .unwrap();
+    insert
+        .set_binary_stream_with_long_length(&mut connection, 1, Some(binary.clone()), 3)
+        .unwrap();
+    insert
+        .set_character_stream_with_int_length(&mut connection, 2, Some(reader.clone()), 6)
+        .unwrap();
+    insert
+        .set_url(
+            &mut connection,
+            3,
+            Some(JdbcUrl::new("https://example.com/sqlx")),
+        )
+        .unwrap();
+    insert
+        .set_row_id(&mut connection, 4, Some(JdbcRowId::new(vec![7, 8])))
+        .unwrap();
+    assert_eq!(binary.read_to_end().unwrap(), vec![4]);
+    assert_eq!(reader.read_to_string().unwrap(), "-tail");
+    assert_eq!(
+        insert
+            .execute_update_bound(&mut connection)
+            .await
+            .unwrap()
+            .rows_affected,
+        1
+    );
+
+    let mut query = connection
+        .prepare_statement("SELECT ? AS binary_value, ? AS character_value")
+        .await
+        .unwrap();
+    query
+        .set_binary_stream(
+            &mut connection,
+            1,
+            Some(JdbcInputStream::from_bytes(vec![9, 10])),
+        )
+        .unwrap();
+    query
+        .set_n_character_stream(&mut connection, 2, Some(JdbcReader::from_string("查询")))
+        .unwrap();
+    let mut result_set = query.execute_query_bound(&mut connection).await.unwrap();
+    let meta_data = result_set.meta_data(&mut connection).unwrap();
+    assert_eq!(meta_data.column_label(1).unwrap(), "binary_value");
+    assert_eq!(meta_data.column_label(2).unwrap(), "character_value");
+    assert_eq!(
+        result_set
+            .find_column(&mut connection, "CHARACTER_VALUE")
+            .unwrap(),
+        2
+    );
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(
+        result_set.object(&mut connection, 1).unwrap(),
+        Value::Bytes(vec![9, 10])
+    );
+    assert_eq!(
+        result_set.object(&mut connection, 2).unwrap(),
+        Value::String("查询".to_string())
+    );
+    assert_eq!(
+        result_set
+            .string_by_label(&mut connection, "character_value")
+            .unwrap(),
+        Some("查询".to_string())
+    );
+    result_set.close_with_connection(&mut connection).unwrap();
+    query.close_with_connection(&mut connection).unwrap();
+
+    let mut generic = connection.prepare_statement("SELECT ?").await.unwrap();
+    generic
+        .set_clob_reader(&mut connection, 1, Some(JdbcReader::from_string("generic")))
+        .unwrap();
+    assert!(generic.execute_bound(&mut connection).await.unwrap());
+    let mut generic_rows = generic.result_set(&mut connection).unwrap().unwrap();
+    assert!(generic_rows.next(&mut connection).unwrap());
+    assert_eq!(
+        generic_rows.object(&mut connection, 1).unwrap(),
+        Value::String("generic".to_string())
+    );
+    generic_rows.close_with_connection(&mut connection).unwrap();
+    generic.close_with_connection(&mut connection).unwrap();
+
+    let first_batch_stream = JdbcInputStream::from_bytes(vec![20, 21, 22]);
+    let mut batch = connection
+        .prepare_statement(
+            "INSERT INTO prepared_resource(binary_value, character_value) VALUES (?, ?)",
+        )
+        .await
+        .unwrap();
+    batch
+        .set_blob_stream_with_long_length(&mut connection, 1, Some(first_batch_stream.clone()), 2)
+        .unwrap();
+    batch
+        .set_clob_reader(&mut connection, 2, Some(JdbcReader::from_string("first")))
+        .unwrap();
+    batch.add_bound_batch(&mut connection).unwrap();
+    batch
+        .set_binary_stream(
+            &mut connection,
+            1,
+            Some(JdbcInputStream::from_bytes(vec![30, 31])),
+        )
+        .unwrap();
+    batch
+        .set_n_clob_reader(&mut connection, 2, Some(JdbcReader::from_string("第二")))
+        .unwrap();
+    batch.add_bound_batch(&mut connection).unwrap();
+    assert_eq!(
+        batch.execute_batch(&mut connection).await.unwrap(),
+        vec![1, 1]
+    );
+    assert_eq!(first_batch_stream.read_to_end().unwrap(), vec![22]);
+    batch.close_with_connection(&mut connection).unwrap();
+
+    let rows = connection
+        .fetch(
+            "SELECT binary_value, character_value, url_value, row_id_value
+             FROM prepared_resource ORDER BY rowid",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        rows,
+        vec![
+            Row::new(vec![
+                Value::Bytes(vec![1, 2, 3]),
+                Value::String("reader".to_string()),
+                Value::String("https://example.com/sqlx".to_string()),
+                Value::Bytes(vec![7, 8]),
+            ]),
+            Row::new(vec![
+                Value::Bytes(vec![20, 21]),
+                Value::String("first".to_string()),
+                Value::Null,
+                Value::Null,
+            ]),
+            Row::new(vec![
+                Value::Bytes(vec![30, 31]),
+                Value::String("第二".to_string()),
+                Value::Null,
+                Value::Null,
+            ]),
+        ]
+    );
+
+    {
+        let executions = recorder
+            .executions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(executions.len(), 3);
+        assert!(matches!(
+            executions[0][0],
+            PreparedInputParameter::BinaryStream {
+                length: JdbcStreamLength::Long(3),
+                ..
+            }
+        ));
+        assert!(matches!(
+            executions[1][1],
+            PreparedInputParameter::NCharacterStream {
+                length: JdbcCharacterLength::Unspecified,
+                ..
+            }
+        ));
+    }
+    {
+        let batches = recorder
+            .batches
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(batches.len(), 1);
+        assert_eq!(batches[0].len(), 2);
+        assert!(matches!(
+            batches[0][0][0],
+            PreparedInputParameter::BlobStream {
+                length: JdbcStreamLength::Long(2),
+                ..
+            }
+        ));
+    }
+
+    insert.close_with_connection(&mut connection).unwrap();
+    connection.close().await.unwrap();
+    pool.close().await;
 }

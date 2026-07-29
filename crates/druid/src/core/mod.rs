@@ -7,14 +7,10 @@
 //! Callable 重载所需的强类型平台值，由 `toasty` 或 `druid-wrapper` Adapter
 //! 实现具体驱动语义。
 
-pub mod callable_calendar;
+pub mod abstract_oracle_exception_sorter;
 pub mod callable_input_parameter;
 pub mod callable_out_parameter;
-pub mod callable_output_value;
 pub mod callable_parameter;
-pub mod callable_statement_unwrap;
-pub mod callable_target_type;
-pub mod callable_type_map;
 pub mod config;
 pub mod conn_state;
 pub mod connection;
@@ -22,102 +18,157 @@ pub mod connection_defaults;
 pub mod connection_ext;
 pub mod connection_factory;
 pub mod connection_recycle_disposition;
+pub mod db2_exception_sorter;
 pub mod driver;
 pub mod druid_connection_holder;
 pub mod druid_pooled_callable_statement;
 pub mod druid_pooled_connection;
 pub mod druid_pooled_prepared_statement;
+pub mod druid_pooled_result_set;
+pub mod druid_pooled_statement;
 pub mod error;
 pub mod exception_sorter;
 pub mod exec_result;
 pub mod filter;
 pub mod filter_chain;
+pub mod informix_exception_sorter;
 pub mod java_string;
 pub mod jdbc_array;
 pub mod jdbc_blob;
+pub mod jdbc_calendar;
 pub mod jdbc_clob;
 pub mod jdbc_input_stream;
 pub mod jdbc_n_clob;
+pub mod jdbc_object;
+pub mod jdbc_opaque_object;
 pub mod jdbc_output_stream;
 pub mod jdbc_reader;
 pub mod jdbc_ref;
 pub mod jdbc_result_set;
 pub mod jdbc_row_id;
 pub mod jdbc_sql_xml;
+pub mod jdbc_target_type;
+pub mod jdbc_type_map;
 pub mod jdbc_url;
 pub mod jdbc_writer;
 pub mod jdbc_xml_representation_type;
 pub mod jdbc_xml_result;
 pub mod jdbc_xml_source;
 pub mod meta_data;
+pub mod mock_exception_sorter;
+pub mod my_sql_exception_sorter;
+pub mod null_exception_sorter;
+pub mod ocean_base_oracle_exception_sorter;
+pub mod oracle_exception_sorter;
+pub mod pg_exception_sorter;
+pub mod phoenix_exception_sorter;
 pub mod physical_callable_statement;
 pub mod physical_connection;
 pub mod physical_connection_capabilities;
 pub mod physical_connection_factory;
 pub mod physical_connection_lease;
 pub mod physical_prepared_statement;
+pub mod physical_result_set_meta_data;
+pub mod physical_statement;
 pub mod pool;
 pub mod pool_state;
+pub mod poolable_wrapper;
 pub mod pooled_connection;
+pub mod prepared_input_parameter;
 pub mod prepared_statement_cache_stats;
 pub mod prepared_statement_holder;
 pub mod prepared_statement_key;
+mod prepared_statement_physical_statement;
 pub mod prepared_statement_pool;
+pub mod result_set_column_meta;
+pub mod result_set_column_type;
+pub mod result_set_filter;
+pub mod result_set_filter_chain;
+pub mod result_set_filter_context;
+pub mod result_set_meta_data;
+pub mod result_set_nullability;
+pub mod result_set_update;
 pub mod row;
 pub mod savepoint;
+pub mod sql_exception;
+pub mod sql_warning;
 pub mod statement_type;
+pub mod sybase_exception_sorter;
 pub mod valid_connection_checker;
 pub mod value;
 pub mod wrapper;
+pub mod wrapper_adapter;
 
-pub use callable_calendar::{CallableCalendar, CallableCalendarArgument};
+pub use abstract_oracle_exception_sorter::{
+    AbstractOracleExceptionSorter, ORACLE_FATAL_ERROR_CODES_PROPERTY,
+};
 pub use callable_input_parameter::CallableInputParameter;
 pub use callable_out_parameter::CallableOutParameter;
-pub use callable_output_value::CallableOutputValue;
 pub use callable_parameter::CallableParameter;
-pub use callable_statement_unwrap::{CallableStatementUnwrapTarget, CallableStatementUnwrapped};
-pub use callable_target_type::CallableTargetType;
-pub use callable_type_map::CallableTypeMap;
 pub use config::{PoolConfig, PoolConfigBuilder};
 pub use conn_state::ConnState;
 pub use connection_defaults::ConnectionDefaults;
 pub use connection_ext::ConnectionExt;
 pub use connection_recycle_disposition::ConnectionRecycleDisposition;
+pub use db2_exception_sorter::Db2ExceptionSorter;
 pub use driver::Driver;
 pub use druid_connection_holder::{
     ConnectionState, DruidConnectionHolder, DruidConnectionHolder as ConnectionHolder,
 };
-pub use druid_pooled_callable_statement::DruidPooledCallableStatement;
+pub use druid_pooled_callable_statement::{
+    DruidPooledCallableStatement, DruidPooledCallableStatementHandle,
+};
 pub use druid_pooled_connection::DruidPooledConnection;
 pub use druid_pooled_connection::DruidPooledConnection as PooledConnection;
-pub use druid_pooled_prepared_statement::DruidPooledPreparedStatement;
-pub use error::DruidError;
-pub use exception_sorter::{
-    ExceptionSorter, MySqlExceptionSorter, NullExceptionSorter, PgExceptionSorter,
+pub use druid_pooled_prepared_statement::{
+    DruidPooledPreparedStatement, DruidPooledPreparedStatementHandle,
 };
+pub use druid_pooled_result_set::DruidPooledResultSet;
+pub use druid_pooled_statement::DruidPooledStatement;
+pub use error::DruidError;
+pub use exception_sorter::{ExceptionSorter, ExceptionSorterProperties};
 pub use exec_result::ExecResult;
-pub use filter::{AfterFilter, BeforeFilter, ExecContext};
+pub use filter::{
+    AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ExecContext, ExecOperation,
+};
 pub use filter::{ClobEvent, DataSourceEvent, ExtendedFilter, StatementPropertyEvent};
 pub use filter::{ConnectionEvent, ResultSetEvent, StatementEvent};
-pub use filter_chain::FilterChain;
+pub use filter_chain::{ConnectionWarningFilterChain, FilterChain, StatementWarningFilterChain};
+pub use informix_exception_sorter::InformixExceptionSorter;
 pub use java_string::JavaString;
 pub use jdbc_array::{JdbcArray, PhysicalArray};
 pub use jdbc_blob::{JdbcBlob, PhysicalBlob};
+pub use jdbc_calendar::{
+    JdbcCalendar, JdbcCalendar as CallableCalendar, JdbcCalendarArgument,
+    JdbcCalendarArgument as CallableCalendarArgument,
+};
 pub use jdbc_clob::{JdbcClob, PhysicalClob};
 pub use jdbc_input_stream::{JdbcInputStream, JdbcStreamLength};
 pub use jdbc_n_clob::{JdbcNClob, PhysicalNClob};
+pub use jdbc_object::{JdbcObject, JdbcObject as CallableOutputValue};
+pub use jdbc_opaque_object::{JdbcOpaqueObject, PhysicalJdbcOpaqueObject};
 pub use jdbc_output_stream::JdbcOutputStream;
 pub use jdbc_reader::{JdbcCharacterLength, JdbcReader, PhysicalCharacterReader};
 pub use jdbc_ref::{JdbcRef, PhysicalRef};
-pub use jdbc_result_set::{JdbcResultSet, PhysicalResultSet};
+pub use jdbc_result_set::{JdbcResultSet, PhysicalResultSet, RowSetResultSet};
 pub use jdbc_row_id::JdbcRowId;
 pub use jdbc_sql_xml::{JdbcSqlXml, PhysicalSqlXml};
+pub use jdbc_target_type::JdbcTargetType;
+pub use jdbc_target_type::JdbcTargetType as CallableTargetType;
+pub use jdbc_type_map::{JdbcTypeMap, JdbcTypeMap as CallableTypeMap};
 pub use jdbc_url::JdbcUrl;
 pub use jdbc_writer::{JdbcWriter, PhysicalCharacterWriter};
 pub use jdbc_xml_representation_type::JdbcXmlRepresentationType;
 pub use jdbc_xml_result::{JdbcXmlResult, PhysicalXmlResult};
 pub use jdbc_xml_source::{JdbcXmlSource, PhysicalXmlSource};
 pub use meta_data::MetaData;
+pub use mock_exception_sorter::MockExceptionSorter;
+pub use my_sql_exception_sorter::MySqlExceptionSorter;
+pub use null_exception_sorter::NullExceptionSorter;
+pub use ocean_base_oracle_exception_sorter::OceanBaseOracleExceptionSorter;
+pub use oracle_exception_sorter::OracleExceptionSorter;
+pub use pg_exception_sorter::PgExceptionSorter;
+pub use phoenix_exception_sorter::PhoenixExceptionSorter;
 pub use physical_callable_statement::PhysicalCallableStatement;
 pub use physical_connection::PhysicalConnection;
 pub use physical_connection::PhysicalConnection as Connection;
@@ -126,15 +177,34 @@ pub use physical_connection_factory::PhysicalConnectionFactory;
 pub use physical_connection_factory::PhysicalConnectionFactory as ConnectionFactory;
 pub use physical_connection_lease::PhysicalConnectionLease;
 pub use physical_prepared_statement::{PhysicalPreparedStatement, SqlTextPreparedStatement};
+pub use physical_result_set_meta_data::PhysicalResultSetMetaData;
+pub use physical_statement::{
+    PhysicalStatement, PhysicalStatementOptions, SqlTextStatement, StatementExecuteResult,
+    StatementGeneratedKeys,
+};
 pub use pool::Pool;
 pub use pool_state::PoolState;
+pub use poolable_wrapper::PoolableWrapper;
+pub use prepared_input_parameter::{PreparedInputParameter, PreparedTypeNameArgument};
 pub use prepared_statement_cache_stats::PreparedStatementCacheStats;
 pub use prepared_statement_holder::PreparedStatementHolder;
 pub use prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
 pub use prepared_statement_pool::PreparedStatementPool;
+pub use result_set_column_meta::ResultSetColumnMeta;
+pub use result_set_column_type::ResultSetColumnType;
+pub use result_set_filter::ResultSetFilter;
+pub use result_set_filter_chain::ResultSetFilterChain;
+pub use result_set_filter_context::ResultSetFilterContext;
+pub use result_set_meta_data::ResultSetMetaData;
+pub use result_set_nullability::ResultSetNullability;
+pub use result_set_update::ResultSetUpdate;
 pub use row::Row;
 pub use savepoint::Savepoint;
+pub use sql_exception::{SqlException, SqlExceptionCause};
+pub use sql_warning::SqlWarning;
 pub use statement_type::StatementType;
+pub use sybase_exception_sorter::SybaseExceptionSorter;
 pub use valid_connection_checker::{PingConnectionChecker, ValidConnectionChecker};
 pub use value::Value;
-pub use wrapper::Wrapper;
+pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
+pub use wrapper_adapter::WrapperAdapter;

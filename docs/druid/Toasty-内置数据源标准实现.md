@@ -95,7 +95,7 @@ DruidPooledConnection
 | :--- | :--- | :--- | :--- |
 | `DruidDataSource#createPhysicalConnection` | `ToastyConnectionFactory` | `Driver` | 每次创建一条未池化连接 |
 | JDBC driver `Connection` | `ToastyConnectionAdapter` | `Box<dyn Connection>` | 不暴露 Toasty 类型 |
-| `Connection#prepareStatement` | `PhysicalPreparedStatement` | SQLite `prepare_cached` 执行路径 | Druid holder 管逻辑 LRU，driver 管物理 prepare cache |
+| `Connection#prepareStatement` | `ToastyPreparedStatement: PhysicalPreparedStatement` | raw SQL 执行路径 | Druid holder 管逻辑 LRU；物理句柄在 setter 阶段物化并保存 Toasty 参数值 |
 | `Statement#executeUpdate` | `ExecResult` | `RawSqlRet::None` / `Rows::Count` | 保留 affected rows；SQLite 补取 last row id |
 | `Statement#executeQuery` | `Vec<Row>` | `RawSqlRet::Infer` / record stream | 当前保持 eager Druid contract |
 | JDBC transaction | `begin/commit/rollback` | `Transaction` operation | 状态只在真实操作成功后变化 |
@@ -117,10 +117,10 @@ DruidPooledConnection
 | 非 SQL driver | 明确拒绝，不把 DynamoDB 冒充 SQL/JDBC |
 | raw connection | 直接 `Driver::connect`，无 Toasty pool |
 | DDL/DML/query | `RawSql` 真实执行 |
-| 参数 | NULL/BOOL/I64/F64/TEXT/BLOB typed binding |
+| 参数 | NULL/BOOL/I64/F64/TEXT/BLOB typed binding；Prepared stream/reader/LOB/URL/RowId/null 在物理 setter 阶段转换 |
 | 行值 | NULL/整数/浮点/文本/字节映射 |
 | generated key | SQLite 同连接读取 `last_insert_rowid()` |
-| PreparedStatement | Druid 完整 key/LRU + Toasty SQLite `prepare_cached` |
+| PreparedStatement | Druid 完整 key/LRU + `ToastyPreparedStatement` 参数槽；Filter 保留原 setter 描述符，execute/batch 不二次读取资源 |
 | 事务 | begin/commit/rollback/setAutoCommit |
 | 保存点 | anonymous/named/rollback/release |
 | 生命周期 | ping/validate/close/discard |
@@ -148,7 +148,10 @@ Toasty `RawSqlRet::Infer` 按 SQLite runtime storage class 解码。SQLite 的
 | Turso 真实服务/本地 contract | TODO |
 | vendor SQLState/transient/fatal 分类 | TODO |
 | PostgreSQL/MySQL generated keys 精确重载 | TODO |
-| streaming ResultSet/cancel/timeout/metadata | TODO |
+| SQLite DECIMAL/DATE/TIME/TIMESTAMP 强类型参数与结果 | DONE：声明类型恢复 + 真实 SQLite contract |
+| SQLite Prepared 资源参数 | DONE：ASCII/Binary/Character/NCharacter/Blob/Clob/NClob/URL/RowId/null，含 setter 错误时点、显式长度、剩余游标与有序 batch |
+| SQLx/RBDC Prepared 资源参数 | TODO |
+| streaming ResultSet/cancel/timeout/完整 metadata | TODO |
 | Toasty ORM model 与 Druid Filter/Stat 事件统一 | TODO |
 
 因此“内置标准实现已建立”不等于多数据库和整个 Java Druid 已迁移完成。
@@ -209,7 +212,7 @@ cargo test -p druid --test toasty_connection_adapter_test
 cargo test -p druid --test sqlite_core_semantics_test
 cargo test -p druid-wrapper
 cargo test --workspace
-cargo clippy -p druid --all-targets --no-deps -- -D warnings
+cargo clippy --workspace --all-targets --all-features
 ```
 
 `toasty_connection_adapter_test` 使用真实 SQLite，覆盖：
@@ -218,17 +221,25 @@ cargo clippy -p druid --all-targets --no-deps -- -D warnings
 - DDL、DML、query 和六类 `Value` 参数；
 - affected rows 与 `last_insert_rowid()`；
 - prepared execute/close；
+- Prepared stream/reader/LOB/URL/RowId/null 的 setter 时点物化、query/update/
+  generic execute、Filter 描述符与两组 batch 顺序；Java xerial SQLite JShell
+  同时作为 binary stream 显式长度、提前 EOF、负长度的行为基准；
 - begin/commit/rollback/setAutoCommit；
 - named savepoint、rollback-to、release；
 - SQLite isolation/read-only 的真实能力边界；
 - discard 后拒绝继续执行；
+- 真实 SQLite 语法错误映射为结构化 `SqlException`；Toasty 0.9 未公开的
+  vendor code/SQLState 保持未知，不按消息猜测；
 - 未知 URL scheme 不回退。
 
 2026-07-29 三模块归并后实测结果：
 
-- `cargo test --workspace`：433/433 通过；
+- `cargo test --workspace --all-targets`：518/518 通过；
 - Toasty 内置/核心/扩展的 21 个真实 SQLite 用例通过；
 - `cargo check -p druid --all-features` 通过，证明全部可选 driver 的
   feature 边界可组合编译；该结果不替代 PostgreSQL/MySQL/Turso 的真实语义门禁；
 - `cargo metadata` 只包含 `druid`、`druid-wrapper`、`druid-admin`；
-- 全仓 clippy 与覆盖率 100% 仍按独立质量门禁验收，不能因物理归并标记为完成。
+- 普通 clippy 退出码为 0，但仓库既存 pedantic warnings 尚未清零，不能写成
+  `-D warnings` 已通过；
+- cargo-llvm-cov：Regions 85.92%、Functions 88.48%、Lines 89.25%，距离
+  100% 仍是明确开放债务，不能因本切片通过而标记整体迁移完成。

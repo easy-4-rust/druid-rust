@@ -499,33 +499,29 @@ fn test_value_from_conversions() {
 #[test]
 fn test_exception_sorter_mysql_variants() {
     let sorter = MySqlExceptionSorter;
-    assert!(sorter.is_exception_fatal(0, "normal"));
-    assert!(sorter.is_exception_fatal(1042, "hostname"));
-    assert!(sorter.is_exception_fatal(1053, "shutdown"));
-    assert!(sorter.is_exception_fatal(999, "Communications link failure"));
-    assert!(sorter.is_exception_fatal(999, "Connection refused"));
-    assert!(!sorter.is_exception_fatal(1062, "duplicate"));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "normal")));
+    assert!(sorter.is_exception_fatal(&SqlException::driver(1042, "hostname")));
+    assert!(sorter.is_exception_fatal(&SqlException::driver(0, "Communications link failure")));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(999, "Connection refused")));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(1062, "duplicate")));
 }
 
 #[test]
 fn test_exception_sorter_pg_variants() {
     let sorter = PgExceptionSorter;
-    assert!(sorter.is_exception_fatal(57000, "any"));
-    assert!(sorter.is_exception_fatal(57001, "any"));
-    assert!(sorter.is_exception_fatal(57002, "any"));
-    assert!(sorter.is_exception_fatal(57003, "any"));
-    assert!(sorter.is_exception_fatal(57014, "any"));
-    assert!(sorter.is_exception_fatal(57015, "any"));
-    assert!(sorter.is_exception_fatal(0, "connection has been closed"));
-    assert!(sorter.is_exception_fatal(0, "connection is not available"));
-    assert!(!sorter.is_exception_fatal(42601, "syntax"));
+    assert!(sorter.is_exception_fatal(&SqlException::driver(0, "recoverable").recoverable()));
+    assert!(sorter.is_exception_fatal(
+        &SqlException::driver(0, "connection failure").with_sql_state("08000")
+    ));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "no state")));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "syntax").with_sql_state("42601")));
 }
 
 #[test]
 fn test_exception_sorter_null() {
     let sorter = NullExceptionSorter;
-    assert!(!sorter.is_exception_fatal(0, "anything"));
-    assert!(!sorter.is_exception_fatal(57001, "shutdown"));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "anything")));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(57001, "shutdown")));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -649,8 +645,8 @@ async fn test_connection_trait_all_defaults() {
 async fn test_connection_ext_all_defaults() {
     let mut c = MockConnForDefaults;
 
-    // Default create_statement
-    assert!(c.create_statement().await.is_err());
+    // 普通 Statement 的默认 SPI 可直接创建通用状态对象。
+    assert!(c.create_statement().await.is_ok());
 
     // Default prepare_statement
     assert!(c.prepare_statement("SELECT 1").await.is_err());
@@ -692,6 +688,13 @@ async fn test_connection_ext_all_defaults() {
 
     // Default get_client_info
     assert!(c.get_client_info("key").is_none());
+
+    assert!(matches!(
+        ConnectionExt::get_warnings(&mut c).await,
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_get_warnings"
+        })
+    ));
 
     assert!(matches!(
         ConnectionExt::clear_warnings(&mut c).await,

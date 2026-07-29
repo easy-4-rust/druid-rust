@@ -1,4 +1,4 @@
-//! CallableStatement 日期时间重载的 Calendar 参数。
+//! JDBC 日期时间重载的 Calendar 参数。
 //!
 //! 对应 Java 平台对象：`java.util.Calendar`。JDBC 日期时间 setter/getter
 //! 使用 Calendar 的时区解释数据库值；Rust 侧保留时区标识以及“是否调用了
@@ -8,15 +8,14 @@ use super::DruidError;
 
 /// JDBC 日期时间转换使用的 Calendar 时区。
 ///
-/// 对应 Java：`java.util.Calendar` 在 `CallableStatement` 日期时间重载中的
-/// 可观察语义。这里保留 IANA 时区标识或驱动接受的等价标识，不把它压缩为
-/// 当前瞬时 UTC offset，以免丢失夏令时规则。
+/// 对应 Java：`java.util.Calendar`。这里保留 IANA 时区标识或驱动接受的
+/// 等价标识，不把它压缩为当前瞬时 UTC offset，以免丢失夏令时规则。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CallableCalendar {
+pub struct JdbcCalendar {
     time_zone_id: String,
 }
 
-impl CallableCalendar {
+impl JdbcCalendar {
     /// 创建 Calendar 时区描述。
     ///
     /// # 参数
@@ -28,7 +27,7 @@ impl CallableCalendar {
         let time_zone_id = time_zone_id.into();
         if time_zone_id.trim().is_empty() {
             return Err(DruidError::DriverError(
-                "CallableStatement Calendar time zone id must not be empty".to_string(),
+                "JDBC Calendar time zone id must not be empty".to_string(),
             ));
         }
         Ok(Self { time_zone_id })
@@ -45,15 +44,15 @@ impl CallableCalendar {
 /// `Unspecified` 表示调用无 Calendar 的重载；`Specified(None)` 表示调用
 /// Calendar 重载但 Java 参数为 null。二者必须区分，避免重载身份丢失。
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-pub enum CallableCalendarArgument {
+pub enum JdbcCalendarArgument {
     /// 未调用 Calendar 重载。
     #[default]
     Unspecified,
     /// 调用了 Calendar 重载；内部值允许对应 Java null。
-    Specified(Option<CallableCalendar>),
+    Specified(Option<JdbcCalendar>),
 }
 
-impl CallableCalendarArgument {
+impl JdbcCalendarArgument {
     /// 创建无 Calendar 的重载标记。
     pub fn unspecified() -> Self {
         Self::Unspecified
@@ -63,7 +62,7 @@ impl CallableCalendarArgument {
     ///
     /// # 参数
     /// - `calendar`：Calendar 值；`None` 对应 Java null。
-    pub fn specified(calendar: Option<CallableCalendar>) -> Self {
+    pub fn specified(calendar: Option<JdbcCalendar>) -> Self {
         Self::Specified(calendar)
     }
 }

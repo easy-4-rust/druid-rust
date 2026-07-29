@@ -1,8 +1,8 @@
 //! URL/Ref/Array/RowId/SQLXML 平台对象完整资源契约。
 
 use druid::core::{
-    CallableOutputValue, CallableTargetType, CallableTypeMap, DruidError, JavaString, JdbcArray,
-    JdbcInputStream, JdbcOutputStream, JdbcRef, JdbcResultSet, JdbcRowId, JdbcSqlXml, JdbcWriter,
+    DruidError, JavaString, JdbcArray, JdbcInputStream, JdbcObject, JdbcOutputStream, JdbcRef,
+    JdbcResultSet, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcWriter,
     JdbcXmlRepresentationType, JdbcXmlResult, JdbcXmlSource, PhysicalArray,
     PhysicalCharacterWriter, PhysicalRef, PhysicalResultSet, PhysicalSqlXml, PhysicalXmlResult,
     PhysicalXmlSource, Value,
@@ -34,7 +34,7 @@ fn result_set() -> JdbcResultSet {
 
 #[derive(Debug)]
 struct TestArray {
-    values: Vec<CallableOutputValue>,
+    values: Vec<JdbcObject>,
     freed: AtomicBool,
 }
 
@@ -47,7 +47,7 @@ impl TestArray {
         }
     }
 
-    fn range(&self, index: i64, count: i32) -> Result<Vec<CallableOutputValue>, DruidError> {
+    fn range(&self, index: i64, count: i32) -> Result<Vec<JdbcObject>, DruidError> {
         self.ensure_open()?;
         let start = index
             .checked_sub(1)
@@ -60,7 +60,7 @@ impl TestArray {
             .ok_or_else(|| DruidError::DriverError("Array range overflow".to_string()))?;
         self.values
             .get(start..end)
-            .map(<[CallableOutputValue]>::to_vec)
+            .map(<[JdbcObject]>::to_vec)
             .ok_or_else(|| DruidError::DriverError("invalid Array range".to_string()))
     }
 }
@@ -76,19 +76,16 @@ impl PhysicalArray for TestArray {
         Ok(4)
     }
 
-    fn values(&self) -> Result<Vec<CallableOutputValue>, DruidError> {
+    fn values(&self) -> Result<Vec<JdbcObject>, DruidError> {
         self.ensure_open()?;
         Ok(self.values.clone())
     }
 
-    fn values_with_type_map(
-        &self,
-        _type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+    fn values_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<Vec<JdbcObject>, DruidError> {
         self.values()
     }
 
-    fn values_range(&self, index: i64, count: i32) -> Result<Vec<CallableOutputValue>, DruidError> {
+    fn values_range(&self, index: i64, count: i32) -> Result<Vec<JdbcObject>, DruidError> {
         self.range(index, count)
     }
 
@@ -96,8 +93,8 @@ impl PhysicalArray for TestArray {
         &self,
         index: i64,
         count: i32,
-        _type_map: &CallableTypeMap,
-    ) -> Result<Vec<CallableOutputValue>, DruidError> {
+        _type_map: &JdbcTypeMap,
+    ) -> Result<Vec<JdbcObject>, DruidError> {
         self.range(index, count)
     }
 
@@ -108,7 +105,7 @@ impl PhysicalArray for TestArray {
 
     fn result_set_with_type_map(
         &self,
-        _type_map: &CallableTypeMap,
+        _type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError> {
         self.result_set()
     }
@@ -122,7 +119,7 @@ impl PhysicalArray for TestArray {
         &self,
         index: i64,
         count: i32,
-        _type_map: &CallableTypeMap,
+        _type_map: &JdbcTypeMap,
     ) -> Result<JdbcResultSet, DruidError> {
         self.result_set_range(index, count)
     }
@@ -140,9 +137,9 @@ impl PhysicalArray for TestArray {
 fn array() -> JdbcArray {
     JdbcArray::new(Arc::new(TestArray {
         values: vec![
-            CallableOutputValue::from(Value::Int(10)),
-            CallableOutputValue::from(Value::Int(20)),
-            CallableOutputValue::from(Value::Int(30)),
+            JdbcObject::from(Value::Int(10)),
+            JdbcObject::from(Value::Int(20)),
+            JdbcObject::from(Value::Int(30)),
         ],
         freed: AtomicBool::new(false),
     }))
@@ -150,7 +147,7 @@ fn array() -> JdbcArray {
 
 #[derive(Debug)]
 struct TestRef {
-    value: Mutex<CallableOutputValue>,
+    value: Mutex<JdbcObject>,
 }
 
 impl PhysicalRef for TestRef {
@@ -158,7 +155,7 @@ impl PhysicalRef for TestRef {
         Ok("schema.kind".to_string())
     }
 
-    fn object(&self) -> Result<CallableOutputValue, DruidError> {
+    fn object(&self) -> Result<JdbcObject, DruidError> {
         Ok(self
             .value
             .lock()
@@ -166,14 +163,11 @@ impl PhysicalRef for TestRef {
             .clone())
     }
 
-    fn object_with_type_map(
-        &self,
-        _type_map: &CallableTypeMap,
-    ) -> Result<CallableOutputValue, DruidError> {
+    fn object_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<JdbcObject, DruidError> {
         self.object()
     }
 
-    fn set_object(&self, value: CallableOutputValue) -> Result<(), DruidError> {
+    fn set_object(&self, value: JdbcObject) -> Result<(), DruidError> {
         *self
             .value
             .lock()
@@ -298,19 +292,13 @@ impl PhysicalSqlXml for TestSqlXml {
 
 #[test]
 fn array_and_ref_preserve_complete_jdbc_operations_and_identity() {
-    let mut type_map = CallableTypeMap::new();
+    let mut type_map = JdbcTypeMap::new();
     assert!(type_map.is_empty());
-    assert_eq!(
-        type_map.insert("schema.kind", CallableTargetType::String),
-        None
-    );
+    assert_eq!(type_map.insert("schema.kind", JdbcTargetType::String), None);
     assert_eq!(type_map.len(), 1);
-    assert_eq!(
-        type_map.get("schema.kind"),
-        Some(&CallableTargetType::String)
-    );
+    assert_eq!(type_map.get("schema.kind"), Some(&JdbcTargetType::String));
     assert_eq!(type_map.mappings().len(), 1);
-    let copied_map = CallableTypeMap::from_mappings(type_map.mappings().clone());
+    let copied_map = JdbcTypeMap::from_mappings(type_map.mappings().clone());
     assert_eq!(copied_map, type_map);
 
     let value = array();
@@ -324,13 +312,13 @@ fn array_and_ref_preserve_complete_jdbc_operations_and_identity() {
     assert_eq!(
         value.values_range(2, 2).unwrap(),
         vec![
-            CallableOutputValue::from(Value::Int(20)),
-            CallableOutputValue::from(Value::Int(30))
+            JdbcObject::from(Value::Int(20)),
+            JdbcObject::from(Value::Int(30))
         ]
     );
     assert_eq!(
         value.values_range_with_type_map(1, 1, &type_map).unwrap(),
-        vec![CallableOutputValue::from(Value::Int(10))]
+        vec![JdbcObject::from(Value::Int(10))]
     );
     assert!(value.values_range(0, 1).is_err());
     for result_set in [
@@ -352,21 +340,21 @@ fn array_and_ref_preserve_complete_jdbc_operations_and_identity() {
     assert!(value.values().is_err());
 
     let reference = JdbcRef::new(Arc::new(TestRef {
-        value: Mutex::new(CallableOutputValue::from(Value::Int(1))),
+        value: Mutex::new(JdbcObject::from(Value::Int(1))),
     }));
     assert_eq!(reference, reference.clone());
     assert!(format!("{reference:?}").contains("JdbcRef"));
     assert_eq!(reference.base_type_name().unwrap(), "schema.kind");
     assert_eq!(
         reference.object_with_type_map(&type_map).unwrap(),
-        CallableOutputValue::from(Value::Int(1))
+        JdbcObject::from(Value::Int(1))
     );
     reference
-        .set_object(CallableOutputValue::from(Value::String("next".to_string())))
+        .set_object(JdbcObject::from(Value::String("next".to_string())))
         .unwrap();
     assert_eq!(
         reference.object().unwrap(),
-        CallableOutputValue::from(Value::String("next".to_string()))
+        JdbcObject::from(Value::String("next".to_string()))
     );
 }
 

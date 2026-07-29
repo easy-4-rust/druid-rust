@@ -2,7 +2,7 @@
 //!
 //! 对应 Java 平台对象：`java.sql.Ref`。
 
-use super::{CallableOutputValue, CallableTypeMap, DruidError};
+use super::{DruidError, JdbcObject, JdbcTypeMap};
 use std::fmt;
 use std::sync::Arc;
 
@@ -12,16 +12,13 @@ pub trait PhysicalRef: fmt::Debug + Send + Sync {
     fn base_type_name(&self) -> Result<String, DruidError>;
 
     /// 使用驱动默认类型映射读取引用对象。
-    fn object(&self) -> Result<CallableOutputValue, DruidError>;
+    fn object(&self) -> Result<JdbcObject, DruidError>;
 
     /// 使用显式类型映射读取引用对象。
-    fn object_with_type_map(
-        &self,
-        type_map: &CallableTypeMap,
-    ) -> Result<CallableOutputValue, DruidError>;
+    fn object_with_type_map(&self, type_map: &JdbcTypeMap) -> Result<JdbcObject, DruidError>;
 
     /// 替换引用所指对象。
-    fn set_object(&self, value: CallableOutputValue) -> Result<(), DruidError>;
+    fn set_object(&self, value: JdbcObject) -> Result<(), DruidError>;
 }
 
 /// 不泄漏具体驱动类型的 JDBC `Ref` 句柄。
@@ -42,20 +39,17 @@ impl JdbcRef {
     }
 
     /// 对应 Java `Ref#getObject()`。
-    pub fn object(&self) -> Result<CallableOutputValue, DruidError> {
+    pub fn object(&self) -> Result<JdbcObject, DruidError> {
         self.physical.object()
     }
 
     /// 对应 Java `Ref#getObject(Map)`。
-    pub fn object_with_type_map(
-        &self,
-        type_map: &CallableTypeMap,
-    ) -> Result<CallableOutputValue, DruidError> {
+    pub fn object_with_type_map(&self, type_map: &JdbcTypeMap) -> Result<JdbcObject, DruidError> {
         self.physical.object_with_type_map(type_map)
     }
 
     /// 对应 Java `Ref#setObject(Object)`。
-    pub fn set_object(&self, value: CallableOutputValue) -> Result<(), DruidError> {
+    pub fn set_object(&self, value: JdbcObject) -> Result<(), DruidError> {
         self.physical.set_object(value)
     }
 

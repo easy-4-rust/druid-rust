@@ -1,7 +1,7 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
 use druid::core::{
-    CallableOutputValue, DruidError, JdbcBlob, JdbcInputStream, JdbcOutputStream, PhysicalBlob,
+    DruidError, JdbcBlob, JdbcInputStream, JdbcObject, JdbcOutputStream, PhysicalBlob,
 };
 use std::any::Any;
 use std::io::{Error, Read, Write};
@@ -314,10 +314,7 @@ fn blob_delegates_complete_jdbc_resource_contract_without_eager_materialization(
         .downcast_ref::<InMemoryPhysicalBlob>()
         .is_some());
     assert!(format!("{value:?}").contains("JdbcBlob"));
-    assert_eq!(
-        format!("{}", CallableOutputValue::Blob(value.clone())),
-        "<Blob>"
-    );
+    assert_eq!(format!("{}", JdbcObject::Blob(value.clone())), "<Blob>");
     assert_eq!(value.length().unwrap(), 6);
     assert_eq!(value.get_bytes(2, 3).unwrap(), b"bcd");
     assert_eq!(value.position_bytes(b"cd", 1).unwrap(), Some(3));

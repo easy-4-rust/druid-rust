@@ -1,38 +1,26 @@
-//! 对应 Java 类：com.alibaba.druid.pool.ExceptionSorter
+//! 数据库异常致命性判定协议。
 
-/// 致命异常判断 trait。
+use super::SqlException;
+use std::collections::BTreeMap;
+
+/// Java `Properties` 到 Rust 的确定性键值映射。
+pub type ExceptionSorterProperties = BTreeMap<String, String>;
+
+/// 判断 SQL 异常是否意味着物理连接不可继续复用。
+///
+/// 对应 Java: `com.alibaba.druid.pool.ExceptionSorter`。输入保留
+/// `SQLException` 的 error code、SQLState、具体异常类型、消息与 cause 链，
+/// 不能再用 `(error_code, message)` 近似。
 pub trait ExceptionSorter: Send + Sync {
-    fn is_exception_fatal(&self, error_code: i32, message: &str) -> bool;
-}
+    /// 返回异常是否为致命连接异常。
+    ///
+    /// 参数 `exception` 对应 Java `SQLException e`；返回 `true` 时连接池必须
+    /// 丢弃物理连接。
+    fn is_exception_fatal(&self, exception: &SqlException) -> bool;
 
-/// 空实现。
-pub struct NullExceptionSorter;
-impl ExceptionSorter for NullExceptionSorter {
-    fn is_exception_fatal(&self, _error_code: i32, _message: &str) -> bool {
-        false
-    }
-}
-
-/// PostgreSQL 致命异常判断。
-pub struct PgExceptionSorter;
-impl ExceptionSorter for PgExceptionSorter {
-    fn is_exception_fatal(&self, error_code: i32, message: &str) -> bool {
-        matches!(
-            error_code,
-            57_000 | 57_001 | 57_002 | 57_003 | 57_014 | 57_015
-        ) || message.contains("connection has been closed")
-            || message.contains("connection is not available")
-    }
-}
-
-/// MySQL 致命异常判断。
-pub struct MySqlExceptionSorter;
-impl ExceptionSorter for MySqlExceptionSorter {
-    fn is_exception_fatal(&self, error_code: i32, message: &str) -> bool {
-        matches!(
-            error_code,
-            0 | 1053 | 1042 | 1043 | 1044 | 1045 | 1046 | 1047 | 1048 | 1049 | 1050 | 1051 | 1052
-        ) || message.contains("Communications link failure")
-            || message.contains("Connection refused")
-    }
+    /// 从连接属性配置 sorter。
+    ///
+    /// 参数 `properties` 对应 Java 可空 `Properties`。无配置对象也必须显式
+    /// 接受 `None`，以保留 Java 调用边界。
+    fn config_from_properties(&mut self, properties: Option<&ExceptionSorterProperties>);
 }

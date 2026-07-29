@@ -23,6 +23,7 @@ chrono.workspace = true
 dashmap.workspace = true
 fastrand.workspace = true
 moka.workspace = true
+jiff.workspace = true
 parking_lot.workspace = true
 prometheus.workspace = true
 serde.workspace = true

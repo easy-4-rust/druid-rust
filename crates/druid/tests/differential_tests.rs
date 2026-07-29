@@ -1,5 +1,6 @@
 //! Differential tests: druid-rust vs Druid Java 1.2.28.
 use druid::core::*;
+use std::sync::Arc;
 use std::time::Duration;
 
 // ── PoolConfig defaults ──
@@ -64,19 +65,23 @@ fn test_connection_holder_use_count() {
 // ── ExceptionSorter ──
 #[test]
 fn test_pg_sorter() {
-    assert!(PgExceptionSorter.is_exception_fatal(57001, "admin shutdown"));
+    assert!(PgExceptionSorter
+        .is_exception_fatal(&SqlException::driver(0, "admin shutdown").with_sql_state("08006")));
 }
 #[test]
 fn test_pg_sorter_non_fatal() {
-    assert!(!PgExceptionSorter.is_exception_fatal(42601, "syntax error"));
+    assert!(!PgExceptionSorter
+        .is_exception_fatal(&SqlException::driver(0, "syntax error").with_sql_state("42601")));
 }
 #[test]
 fn test_mysql_sorter() {
-    assert!(MySqlExceptionSorter.is_exception_fatal(1042, "Can't get hostname"));
+    assert!(
+        MySqlExceptionSorter.is_exception_fatal(&SqlException::driver(1042, "Can't get hostname"))
+    );
 }
 #[test]
 fn test_null_sorter() {
-    assert!(!NullExceptionSorter.is_exception_fatal(99999, "anything"));
+    assert!(!NullExceptionSorter.is_exception_fatal(&SqlException::driver(99999, "anything")));
 }
 
 // ── Value display ──
@@ -305,8 +310,12 @@ fn test_conn_state_defaults() {
 #[test]
 fn test_wrapper() {
     struct W;
-    impl Wrapper for W {}
-    assert!(!W.is_wrapper_for("anything"));
+    impl Wrapper for W {
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+    }
+    assert!(!W.is_wrapper_for(None));
 }
 
 #[test]
@@ -562,13 +571,19 @@ async fn test_connection_ext_all_defaults() {
     }
     #[async_trait::async_trait]
     impl ConnectionExt for M {
-        async fn create_statement(&mut self) -> Result<Box<dyn Connection>, DruidError> {
+        async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
             Err(DruidError::Other("n/a".into()))
         }
-        async fn prepare_statement(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> {
+        async fn prepare_statement(
+            &mut self,
+            _: &str,
+        ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
             Err(DruidError::Other("n/a".into()))
         }
-        async fn prepare_call(&mut self, _: &str) -> Result<Box<dyn Connection>, DruidError> {
+        async fn prepare_call(
+            &mut self,
+            _: &str,
+        ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
             Err(DruidError::Other("n/a".into()))
         }
         async fn native_sql(&self, sql: &str) -> Result<String, DruidError> {
@@ -796,11 +811,14 @@ async fn test_after_filter_default() {
             _: &ExecContext<'_>,
             _: &Result<ExecResult, DruidError>,
             _: Duration,
-        ) {
+        ) -> Result<(), DruidError> {
+            Ok(())
         }
-        async fn after_connection_close(&self) {}
+        async fn after_connection_close(&self) -> Result<(), DruidError> {
+            Ok(())
+        }
     }
-    M.after_connection_close().await;
+    M.after_connection_close().await.unwrap();
 }
 
 // ── PoolConfig defaults ──

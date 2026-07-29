@@ -5,19 +5,29 @@ use super::connection_recycle_disposition::ConnectionRecycleDisposition;
 use super::druid_connection_holder::DruidConnectionHolder;
 use super::druid_pooled_callable_statement::DruidPooledCallableStatement;
 use super::druid_pooled_prepared_statement::DruidPooledPreparedStatement;
+use super::druid_pooled_statement::DruidPooledStatement;
 use super::error::DruidError;
+use super::exception_sorter::ExceptionSorter;
 use super::exec_result::ExecResult;
 use super::filter::{ConnectionEvent, ExecContext};
 use super::filter_chain::FilterChain;
+use super::jdbc_result_set::PhysicalResultSet;
 use super::physical_connection::PhysicalConnection;
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
 use super::physical_connection_factory::PhysicalConnectionFactory;
 use super::physical_prepared_statement::PhysicalPreparedStatement;
+use super::physical_statement::{
+    PhysicalStatementOptions, StatementExecuteResult, StatementGeneratedKeys,
+};
+use super::prepared_input_parameter::PreparedInputParameter;
 use super::prepared_statement_holder::PreparedStatementHolder;
 use super::prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
 use super::row::Row;
 use super::savepoint::Savepoint;
+use super::sql_warning::SqlWarning;
 use super::value::Value;
+use super::wrapper::{Unwrapped, Wrapper};
+use std::any::{Any, TypeId};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -41,6 +51,7 @@ pub struct DruidPooledConnection {
     filter_chain: Option<Arc<FilterChain>>,
     keep_underlying_transaction_isolation: bool,
     recycle_validator: Option<Arc<dyn PhysicalConnectionFactory>>,
+    exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     return_connection: Option<DruidConnectionReturnCallback>,
     lease_active: Arc<AtomicBool>,
     recycled: bool,
@@ -53,14 +64,74 @@ impl std::fmt::Debug for DruidPooledConnection {
             .field("id", &self.id)
             .field("data_source", &self.data_source)
             .field(
+                "holder",
+                &self
+                    .holder
+                    .as_ref()
+                    .is_some_and(DruidConnectionHolder::has_physical_connection),
+            )
+            .field(
                 "has_physical_connection",
                 &self
                     .holder
                     .as_ref()
                     .is_some_and(DruidConnectionHolder::has_physical_connection),
             )
+            .field("filter_chain", &self.filter_chain.is_some())
+            .field(
+                "keep_underlying_transaction_isolation",
+                &self.keep_underlying_transaction_isolation,
+            )
+            .field("recycle_validator", &self.recycle_validator.is_some())
+            .field("exception_sorter", &self.exception_sorter.is_some())
+            .field("return_connection", &self.return_connection.is_some())
+            .field("lease_active", &self.lease_active.load(Ordering::Acquire))
             .field("recycled", &self.recycled)
             .finish()
+    }
+}
+
+impl Wrapper for DruidPooledConnection {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn is_wrapper_for(&self, iface: Option<TypeId>) -> bool {
+        let Some(iface) = iface else {
+            return false;
+        };
+        if Wrapper::as_any(self).type_id() == iface {
+            return true;
+        }
+        if iface == TypeId::of::<dyn PhysicalConnection>() {
+            return self
+                .holder
+                .as_ref()
+                .is_some_and(DruidConnectionHolder::has_physical_connection);
+        }
+        self.holder
+            .as_ref()
+            .and_then(DruidConnectionHolder::physical_connection)
+            .is_some_and(|connection| {
+                let connection: &dyn Any = connection;
+                connection.type_id() == iface
+            })
+    }
+
+    fn unwrap(&self, iface: Option<TypeId>) -> Option<Unwrapped<'_>> {
+        let iface = iface?;
+        if Wrapper::as_any(self).type_id() == iface {
+            return Some(Unwrapped::Object(Wrapper::as_any(self)));
+        }
+        let connection = self
+            .holder
+            .as_ref()
+            .and_then(DruidConnectionHolder::physical_connection)?;
+        if iface == TypeId::of::<dyn PhysicalConnection>() {
+            return Some(Unwrapped::PhysicalConnection(connection));
+        }
+        let connection: &dyn Any = connection;
+        (connection.type_id() == iface).then_some(Unwrapped::Object(connection))
     }
 }
 
@@ -211,6 +282,7 @@ impl DruidPooledConnection {
             filter_chain,
             keep_underlying_transaction_isolation,
             recycle_validator,
+            exception_sorter: None,
             return_connection: Some(return_connection),
             lease_active: Arc::new(AtomicBool::new(true)),
             recycled: false,
@@ -232,6 +304,58 @@ impl DruidPooledConnection {
         self.recycled
     }
 
+    /// 装配数据源的异常分类器。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setExceptionSorter(ExceptionSorter)`。
+    /// 分类器命中 fatal SQL 异常时，当前 holder 与物理 Adapter 会立即标记为
+    /// discard，之后的 close/Drop 只能进入销毁分支。
+    pub fn set_exception_sorter(&mut self, exception_sorter: Arc<dyn ExceptionSorter>) {
+        self.exception_sorter = Some(exception_sorter);
+    }
+
+    /// 使用链式形式装配数据源异常分类器。
+    #[must_use]
+    pub fn with_exception_sorter(mut self, exception_sorter: Arc<dyn ExceptionSorter>) -> Self {
+        self.set_exception_sorter(exception_sorter);
+        self
+    }
+
+    /// 处理驱动错误并返回它是否使连接不可复用。
+    ///
+    /// 对应 Java：
+    /// `DruidDataSource#handleConnectionException` → `handleFatalError`。
+    /// 非 SQL 错误和未命中 sorter 的 SQL 错误保持连接可复用。
+    pub fn handle_exception(&mut self, error: &DruidError) -> bool {
+        let fatal = self
+            .exception_sorter
+            .as_ref()
+            .zip(error.sql_exception())
+            .is_some_and(|(exception_sorter, exception)| {
+                exception_sorter.is_exception_fatal(exception)
+            });
+        if fatal {
+            if let Some(holder) = self.holder.as_mut() {
+                holder.mark_discarded();
+            }
+        }
+        fatal
+    }
+
+    /// 对数据库操作结果执行统一异常分类，并原样保留成功值或错误。
+    ///
+    /// 对应 Java：`DruidPooledConnection#handleException(Throwable, String)`。
+    /// 所有可能产生 `SQLException` 的物理连接和过滤器调用都必须经过本入口，
+    /// 使 fatal 判断不会只覆盖 SQL execute/query。
+    pub(crate) fn classify_result<T>(
+        &mut self,
+        result: Result<T, DruidError>,
+    ) -> Result<T, DruidError> {
+        if let Err(error) = &result {
+            self.handle_exception(error);
+        }
+        result
+    }
+
     /// 返回底层物理连接的可变引用；连接已归还时返回 `None`。
     pub fn physical_connection_mut(&mut self) -> Option<&mut (dyn PhysicalConnection + 'static)> {
         self.holder
@@ -251,6 +375,67 @@ impl DruidPooledConnection {
     /// 对应 Java 可通过 `getConnectionHolder()` 访问 holder 的可变对象语义。
     pub fn connection_holder_mut(&mut self) -> Option<&mut DruidConnectionHolder> {
         self.holder.as_mut()
+    }
+
+    /// 创建默认类型、只读并发和当前保持性的普通池化语句。
+    ///
+    /// 对应 Java：`DruidPooledConnection#createStatement()`。
+    pub async fn create_statement(&mut self) -> Result<DruidPooledStatement, DruidError> {
+        self.create_statement_with_options(PhysicalStatementOptions::default())
+            .await
+    }
+
+    /// 使用指定结果集类型与并发模式创建普通池化语句。
+    ///
+    /// 对应 Java：`DruidPooledConnection#createStatement(int, int)`。
+    pub async fn create_statement_with_result_set(
+        &mut self,
+        result_set_type: i32,
+        result_set_concurrency: i32,
+    ) -> Result<DruidPooledStatement, DruidError> {
+        self.create_statement_with_options(PhysicalStatementOptions {
+            result_set_type,
+            result_set_concurrency,
+            result_set_holdability: self
+                .holder
+                .as_ref()
+                .and_then(DruidConnectionHolder::physical_connection)
+                .map_or(1, PhysicalConnection::holdability),
+        })
+        .await
+    }
+
+    /// 使用完整结果集创建参数创建普通池化语句。
+    ///
+    /// 对应 Java：`DruidPooledConnection#createStatement(int, int, int)`。
+    pub async fn create_statement_with_holdability(
+        &mut self,
+        result_set_type: i32,
+        result_set_concurrency: i32,
+        result_set_holdability: i32,
+    ) -> Result<DruidPooledStatement, DruidError> {
+        self.create_statement_with_options(PhysicalStatementOptions {
+            result_set_type,
+            result_set_concurrency,
+            result_set_holdability,
+        })
+        .await
+    }
+
+    async fn create_statement_with_options(
+        &mut self,
+        options: PhysicalStatementOptions,
+    ) -> Result<DruidPooledStatement, DruidError> {
+        let result = self
+            .physical_mut()?
+            .create_physical_statement(options)
+            .await;
+        let statement = self.classify_result(result)?;
+        Ok(DruidPooledStatement::new(
+            statement,
+            self.lease_active.clone(),
+            self.filter_chain.clone(),
+        ))
     }
 
     /// 创建 `prepareStatement(String)` 语义的池化语句。
@@ -478,13 +663,12 @@ impl DruidPooledConnection {
         let statement_holder = match cached {
             Some(statement_holder) => statement_holder,
             None => {
-                let statement = if callable {
-                    self.physical_mut()?.prepare_physical_call(&key).await?
+                let result = if callable {
+                    self.physical_mut()?.prepare_physical_call(&key).await
                 } else {
-                    self.physical_mut()?
-                        .prepare_physical_statement(&key)
-                        .await?
+                    self.physical_mut()?.prepare_physical_statement(&key).await
                 };
+                let statement = self.classify_result(result)?;
                 let stats = self
                     .holder
                     .as_ref()
@@ -508,6 +692,7 @@ impl DruidPooledConnection {
             statement_pool,
             stats,
             self.lease_active.clone(),
+            self.filter_chain.clone(),
         ))
     }
 
@@ -671,7 +856,38 @@ impl DruidPooledConnection {
         }
     }
 
-    async fn exec_with_filters(
+    /// 返回连接警告链。
+    ///
+    /// 对应 Java：`DruidPooledConnection#getWarnings()`。调用穿过完整 Filter
+    /// around-chain，但 Java 此 getter 不捕获底层 `SQLException`，因此错误不会
+    /// 进入连接 `ExceptionSorter`。
+    pub async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+        let filter_chain = self.filter_chain.clone();
+        let physical = self.physical_mut()?;
+        match filter_chain {
+            Some(filter_chain) => filter_chain.connection_warnings(physical).await,
+            None => physical.warnings().await,
+        }
+    }
+
+    /// 清除连接警告链。
+    ///
+    /// 对应 Java：`DruidPooledConnection#clearWarnings()`。与 getter 不同，
+    /// Java 捕获底层 `SQLException` 并交给 `handleException`，Rust 因此必须
+    /// 执行 fatal sorter。
+    pub async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+        let filter_chain = self.filter_chain.clone();
+        let result = {
+            let physical = self.physical_mut()?;
+            match filter_chain {
+                Some(filter_chain) => filter_chain.connection_clear_warnings(physical).await,
+                None => physical.clear_warnings().await,
+            }
+        };
+        self.classify_result(result)
+    }
+
+    pub(crate) async fn exec_with_filters(
         &mut self,
         sql: &str,
         params: Vec<Value>,
@@ -682,29 +898,321 @@ impl DruidPooledConnection {
         let mut context = ExecContext {
             sql,
             params: &params,
+            prepared_parameters: None,
             data_source: &data_source,
             start,
             fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Update,
         };
 
         if let Some(filter_chain) = &filter_chain {
-            filter_chain.before_execute(&mut context).await?;
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
         }
 
         // 过滤器需要在 after 阶段观察同一组参数，因此只克隆驱动调用所需所有权。
         let result = self.physical_mut()?.exec(sql, params.clone()).await;
+        let result = self.classify_result(result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
             filter_chain
                 .after_execute(&context, &result, start.elapsed())
-                .await;
+                .await?;
         }
         result
     }
 
-    async fn fetch_with_filters(
+    /// 以 Java `statement_execute` 边界执行 generic Statement。
+    ///
+    /// 驱动返回有序 JDBC 结果；Filter before/after 对整个 `execute` 调用各执行
+    /// 一次，查询首结果通过 `row_count` 暴露给 after hook，更新首结果保留
+    /// `ExecResult` 的更新计数与生成键。
+    pub(crate) async fn execute_with_filters(
+        &mut self,
+        sql: &str,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let params = Vec::<Value>::new();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql,
+            params: &params,
+            prepared_parameters: None,
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Execute,
+        };
+
+        if let Some(filter_chain) = &filter_chain {
+            let before_result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(before_result)?;
+        }
+
+        let result = self
+            .physical_mut()?
+            .execute(sql, params.clone(), generated_keys)
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = match &result {
+                Ok(results) => match results.first() {
+                    Some(StatementExecuteResult::ResultSet(rows)) => Ok(ExecResult {
+                        rows_affected: 0,
+                        last_insert_id: None,
+                        row_count: Some(rows.len() as u64),
+                    }),
+                    Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
+                    None => Ok(ExecResult::default()),
+                },
+                Err(error) => Err(error.clone()),
+            };
+            let after_result = filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
+                .await;
+            self.classify_result(after_result)?;
+        }
+        result
+    }
+
+    /// 以 Java `preparedStatement_execute` 边界执行 generic PreparedStatement。
+    ///
+    /// 固定预编译 SQL 与本次参数快照只进入一次 Filter before/after；物理
+    /// Adapter 返回 query/update 有序结果，不能由 Druid 层分析 SQL 前缀。
+    pub(crate) async fn execute_prepared_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let sql = statement.sql().to_string();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql: &sql,
+            params: &params,
+            prepared_parameters: None,
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Execute,
+        };
+
+        if let Some(filter_chain) = &filter_chain {
+            let before_result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(before_result)?;
+        }
+
+        let result = self
+            .physical_mut()?
+            .execute_prepared(statement, params.clone(), generated_keys)
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = match &result {
+                Ok(results) => match results.first() {
+                    Some(StatementExecuteResult::ResultSet(rows)) => Ok(ExecResult {
+                        rows_affected: 0,
+                        last_insert_id: None,
+                        row_count: Some(rows.len() as u64),
+                    }),
+                    Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
+                    None => Ok(ExecResult::default()),
+                },
+                Err(error) => Err(error.clone()),
+            };
+            let after_result = filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
+                .await;
+            self.classify_result(after_result)?;
+        }
+        result
+    }
+
+    /// 以完整 setter 描述符执行 generic PreparedStatement。
+    pub(crate) async fn execute_prepared_parameters_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let sql = statement.sql().to_string();
+        let scalar_params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql: &sql,
+            params: &scalar_params,
+            prepared_parameters: Some(&parameters),
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Execute,
+        };
+
+        if let Some(filter_chain) = &filter_chain {
+            let before_result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(before_result)?;
+        }
+
+        let result = self
+            .physical_mut()?
+            .execute_prepared_parameters(statement, parameters.clone(), generated_keys)
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = match &result {
+                Ok(results) => match results.first() {
+                    Some(StatementExecuteResult::ResultSet(rows)) => Ok(ExecResult {
+                        rows_affected: 0,
+                        last_insert_id: None,
+                        row_count: Some(rows.len() as u64),
+                    }),
+                    Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
+                    None => Ok(ExecResult::default()),
+                },
+                Err(error) => Err(error.clone()),
+            };
+            let after_result = filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
+                .await;
+            self.classify_result(after_result)?;
+        }
+        result
+    }
+
+    /// 以单次 Java `statement_executeBatch` Filter 边界执行整个批次。
+    ///
+    /// `sql` 必须是 `StatementProxy#getBatchSql()` 的 `"\n;\n"` 合并结果；
+    /// 物理层返回完整 JDBC 更新计数数组，失败时保留部分计数。
+    pub(crate) async fn exec_batch_with_filters(
+        &mut self,
+        sql: &str,
+        statements: &[String],
+    ) -> Result<Vec<i32>, DruidError> {
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = super::BatchExecContext {
+            sql,
+            statements,
+            parameter_sets: &[],
+            prepared_parameter_sets: None,
+            kind: super::BatchExecKind::Statement,
+            data_source: &data_source,
+            start,
+            in_transaction: !self.auto_commit(),
+        };
+
+        if let Some(filter_chain) = &filter_chain {
+            let before_result = filter_chain.before_batch(&mut context).await;
+            self.classify_result(before_result)?;
+        }
+
+        let batch = statements
+            .iter()
+            .cloned()
+            .map(|statement| (statement, Vec::<Value>::new()))
+            .collect();
+        let result = self.physical_mut()?.exec_batch(batch).await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let after_result = filter_chain
+                .after_batch(&context, &result, start.elapsed())
+                .await;
+            self.classify_result(after_result)?;
+        }
+        result
+    }
+
+    /// 以单次 Java `statement_executeBatch` Filter 边界执行 PreparedStatement 批次。
+    ///
+    /// PreparedStatement 的 `getBatchSql()` 始终为原始预编译 SQL，而继承的
+    /// `getBatchSqlList()` 为空；参数批次由物理驱动消费。只有进入物理执行后才
+    /// 清空调用方批次，因而 before Filter 短路时仍可重试。
+    pub(crate) async fn exec_prepared_batch_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: &mut Vec<Vec<PreparedInputParameter>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        let sql = statement.sql().to_string();
+        let snapshot = parameter_sets.clone();
+        let scalar_snapshot = snapshot
+            .iter()
+            .map(|parameters| {
+                parameters
+                    .iter()
+                    .map(PreparedInputParameter::scalar_value)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        let statements = Vec::<String>::new();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = super::BatchExecContext {
+            sql: &sql,
+            statements: &statements,
+            parameter_sets: &scalar_snapshot,
+            prepared_parameter_sets: Some(&snapshot),
+            kind: super::BatchExecKind::PreparedStatement,
+            data_source: &data_source,
+            start,
+            in_transaction: !self.auto_commit(),
+        };
+
+        if let Some(filter_chain) = &filter_chain {
+            let before_result = filter_chain.before_batch(&mut context).await;
+            self.classify_result(before_result)?;
+        }
+
+        let physical = self.physical_mut()?;
+        let result = physical
+            .exec_prepared_parameter_batch(statement, snapshot.clone())
+            .await;
+        // JDBC 驱动在 executeBatch 调用后消费参数批次；物理调用前的短路不清空。
+        parameter_sets.clear();
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let after_result = filter_chain
+                .after_batch(&context, &result, start.elapsed())
+                .await;
+            self.classify_result(after_result)?;
+        }
+        result
+    }
+
+    pub(crate) async fn fetch_with_filters(
         &mut self,
         sql: &str,
         params: Vec<Value>,
@@ -715,16 +1223,21 @@ impl DruidPooledConnection {
         let mut context = ExecContext {
             sql,
             params: &params,
+            prepared_parameters: None,
             data_source: &data_source,
             start,
             fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Query,
         };
 
         if let Some(filter_chain) = &filter_chain {
-            filter_chain.before_execute(&mut context).await?;
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
         }
 
         let result = self.physical_mut()?.fetch(sql, params.clone()).await;
+        let result = self.classify_result(result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
@@ -739,7 +1252,60 @@ impl DruidPooledConnection {
             };
             filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
+                .await?;
+        }
+        result
+    }
+
+    /// 以 Java `Statement#executeQuery` 边界返回物理 `ResultSet`。
+    ///
+    /// Filter before/after 仍各执行一次；物理结果集的行数只有在游标抓取时才能
+    /// 确定，因此 SQL after 事件不伪造 eager `row_count`。
+    pub(crate) async fn fetch_result_set_with_filters(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql,
+            params: &params,
+            prepared_parameters: None,
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Query,
+        };
+
+        if let Some(filter_chain) = &filter_chain {
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
+        }
+
+        let result = self
+            .physical_mut()?
+            .fetch_result_set(sql, params.clone())
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = match &result {
+                Ok(_) => Ok(ExecResult {
+                    rows_affected: 0,
+                    last_insert_id: None,
+                    row_count: None,
+                }),
+                Err(error) => Err(error.clone()),
+            };
+            let after_result = filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
                 .await;
+            self.classify_result(after_result)?;
         }
         result
     }
@@ -756,24 +1322,74 @@ impl DruidPooledConnection {
         let mut context = ExecContext {
             sql: &sql,
             params: &params,
+            prepared_parameters: None,
             data_source: &data_source,
             start,
             fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Update,
         };
         if let Some(filter_chain) = &filter_chain {
-            filter_chain.before_execute(&mut context).await?;
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
         }
         let result = self
             .physical_mut()?
             .exec_prepared(statement, params.clone())
             .await;
+        let result = self.classify_result(result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
             filter_chain
                 .after_execute(&context, &result, start.elapsed())
-                .await;
+                .await?;
+        }
+        result
+    }
+
+    /// 以完整 setter 描述符执行更新 PreparedStatement。
+    pub(crate) async fn exec_prepared_parameters_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<ExecResult, DruidError> {
+        let sql = statement.sql().to_string();
+        let scalar_params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql: &sql,
+            params: &scalar_params,
+            prepared_parameters: Some(&parameters),
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Update,
+        };
+        if let Some(filter_chain) = &filter_chain {
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
+        }
+        let result = self
+            .physical_mut()?
+            .exec_prepared_parameters(statement, parameters.clone())
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            filter_chain
+                .after_execute(&context, &result, start.elapsed())
+                .await?;
         }
         result
     }
@@ -790,17 +1406,22 @@ impl DruidPooledConnection {
         let mut context = ExecContext {
             sql: &sql,
             params: &params,
+            prepared_parameters: None,
             data_source: &data_source,
             start,
             fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Query,
         };
         if let Some(filter_chain) = &filter_chain {
-            filter_chain.before_execute(&mut context).await?;
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
         }
         let result = self
             .physical_mut()?
             .fetch_prepared(statement, params.clone())
             .await;
+        let result = self.classify_result(result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
@@ -815,7 +1436,157 @@ impl DruidPooledConnection {
             };
             filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
-                .await;
+                .await?;
+        }
+        result
+    }
+
+    /// 执行物理预编译查询，同时保留驱动级 `ResultSet` 身份和列元数据。
+    pub(crate) async fn fetch_prepared_result_set_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let sql = statement.sql().to_string();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql: &sql,
+            params: &params,
+            prepared_parameters: None,
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Query,
+        };
+        if let Some(filter_chain) = &filter_chain {
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
+        }
+        let result = self
+            .physical_mut()?
+            .fetch_prepared_result_set(statement, params.clone())
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.as_ref().map(|_| ExecResult {
+                rows_affected: 0,
+                last_insert_id: None,
+                row_count: None,
+            });
+            let filter_result = filter_result.map_err(Clone::clone);
+            filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
+                .await?;
+        }
+        result
+    }
+
+    /// 以完整 setter 描述符执行查询 PreparedStatement。
+    pub(crate) async fn fetch_prepared_parameters_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<Vec<Row>, DruidError> {
+        let sql = statement.sql().to_string();
+        let scalar_params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql: &sql,
+            params: &scalar_params,
+            prepared_parameters: Some(&parameters),
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Query,
+        };
+        if let Some(filter_chain) = &filter_chain {
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
+        }
+        let result = self
+            .physical_mut()?
+            .fetch_prepared_parameters(statement, parameters.clone())
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = match &result {
+                Ok(rows) => Ok(ExecResult {
+                    rows_affected: 0,
+                    last_insert_id: None,
+                    row_count: Some(rows.len() as u64),
+                }),
+                Err(error) => Err(error.clone()),
+            };
+            filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
+                .await?;
+        }
+        result
+    }
+
+    /// 以完整 setter 描述符执行查询，并保留驱动级 `ResultSet` 身份和列元数据。
+    pub(crate) async fn fetch_prepared_parameters_result_set_with_filters(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameters: Vec<PreparedInputParameter>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let sql = statement.sql().to_string();
+        let scalar_params = parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let data_source = self.data_source.clone();
+        let mut context = ExecContext {
+            sql: &sql,
+            params: &scalar_params,
+            prepared_parameters: Some(&parameters),
+            data_source: &data_source,
+            start,
+            fingerprint: None,
+            in_transaction: !self.auto_commit(),
+            operation: super::ExecOperation::Query,
+        };
+        if let Some(filter_chain) = &filter_chain {
+            let result = filter_chain.before_execute(&mut context).await;
+            self.classify_result(result)?;
+        }
+        let result = self
+            .physical_mut()?
+            .fetch_prepared_parameters_result_set(statement, parameters.clone())
+            .await;
+        let result = self.classify_result(result);
+        if let Some(holder) = self.holder.as_ref() {
+            holder.record_execute();
+        }
+        if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.as_ref().map(|_| ExecResult {
+                rows_affected: 0,
+                last_insert_id: None,
+                row_count: None,
+            });
+            let filter_result = filter_result.map_err(Clone::clone);
+            filter_chain
+                .after_execute(&context, &filter_result, start.elapsed())
+                .await?;
         }
         result
     }
@@ -827,6 +1598,21 @@ impl PhysicalConnection for DruidPooledConnection {
         self.exec_with_filters(sql, params).await
     }
 
+    async fn execute(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+        generated_keys: StatementGeneratedKeys,
+    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        if params.is_empty() {
+            self.execute_with_filters(sql, generated_keys).await
+        } else {
+            Err(DruidError::InvalidArgument(
+                "DruidPooledStatement generic execute does not accept bind parameters".to_string(),
+            ))
+        }
+    }
+
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
         self.fetch_with_filters(sql, params).await
     }
@@ -835,14 +1621,16 @@ impl PhysicalConnection for DruidPooledConnection {
         &mut self,
         key: &PreparedStatementKey,
     ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        self.physical_mut()?.prepare_physical_statement(key).await
+        let result = self.physical_mut()?.prepare_physical_statement(key).await;
+        self.classify_result(result)
     }
 
     async fn prepare_physical_call(
         &mut self,
         key: &PreparedStatementKey,
     ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        self.physical_mut()?.prepare_physical_call(key).await
+        let result = self.physical_mut()?.prepare_physical_call(key).await;
+        self.classify_result(result)
     }
 
     async fn exec_prepared(
@@ -851,6 +1639,33 @@ impl PhysicalConnection for DruidPooledConnection {
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
         self.exec_prepared_with_filters(statement, params).await
+    }
+
+    async fn exec_prepared_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: Vec<Vec<Value>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        let mut parameter_sets = parameter_sets
+            .into_iter()
+            .map(|parameters| {
+                parameters
+                    .into_iter()
+                    .map(PreparedInputParameter::RustValue)
+                    .collect()
+            })
+            .collect();
+        self.exec_prepared_batch_with_filters(statement, &mut parameter_sets)
+            .await
+    }
+
+    async fn exec_prepared_parameter_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        mut parameter_sets: Vec<Vec<PreparedInputParameter>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        self.exec_prepared_batch_with_filters(statement, &mut parameter_sets)
+            .await
     }
 
     async fn fetch_prepared(
@@ -865,47 +1680,80 @@ impl PhysicalConnection for DruidPooledConnection {
         &mut self,
         statement: Arc<dyn PhysicalPreparedStatement>,
     ) -> Result<(), DruidError> {
-        self.physical_mut()?
+        let result = self
+            .physical_mut()?
             .close_prepared_statement(statement)
-            .await
+            .await;
+        self.classify_result(result)
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
-        self.physical_mut()?.begin().await
+        let result = self.physical_mut()?.begin().await;
+        self.classify_result(result)
     }
 
     async fn commit(&mut self) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::Commit)
-            .await?;
-        self.physical_mut()?.commit().await
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let result = self.before_connection_event(&ConnectionEvent::Commit).await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.commit().await;
+        self.classify_result(result)?;
+        if let Some(filter_chain) = filter_chain {
+            filter_chain
+                .after_connection_event(&ConnectionEvent::Commit, start.elapsed())
+                .await?;
+        }
+        Ok(())
     }
 
     async fn rollback(&mut self) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::Rollback)
-            .await?;
-        self.physical_mut()?.rollback().await
+        let start = Instant::now();
+        let filter_chain = self.filter_chain.clone();
+        let result = self
+            .before_connection_event(&ConnectionEvent::Rollback)
+            .await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.rollback().await;
+        self.classify_result(result)?;
+        if let Some(filter_chain) = filter_chain {
+            filter_chain
+                .after_connection_event(&ConnectionEvent::Rollback, start.elapsed())
+                .await?;
+        }
+        Ok(())
     }
 
     async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
-        self.physical_mut()?.rollback_to(savepoint).await
+        let result = self.physical_mut()?.rollback_to(savepoint).await;
+        self.classify_result(result)
     }
 
     async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
-        self.physical_mut()?.set_savepoint().await
+        let result = self.physical_mut()?.set_savepoint().await;
+        self.classify_result(result)
     }
 
     async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
-        self.physical_mut()?.set_savepoint_named(name).await
+        let result = self.physical_mut()?.set_savepoint_named(name).await;
+        self.classify_result(result)
     }
 
     async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
-        self.physical_mut()?.release_savepoint(savepoint).await
+        let result = self.physical_mut()?.release_savepoint(savepoint).await;
+        self.classify_result(result)
     }
 
     async fn abort(&mut self) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::Abort)
-            .await?;
-        let result = self.physical_mut()?.abort().await;
+        let before_result = self.before_connection_event(&ConnectionEvent::Abort).await;
+        let before_result = self.classify_result(before_result);
+        let result = match before_result {
+            Ok(()) => {
+                let result = self.physical_mut()?.abort().await;
+                self.classify_result(result)
+            }
+            Err(error) => Err(error),
+        };
         if let Some(holder) = self.holder.as_mut() {
             holder.mark_discarded();
         }
@@ -914,9 +1762,12 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn ping(&mut self) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::IsValid)
-            .await?;
-        self.physical_mut()?.ping().await
+        let result = self
+            .before_connection_event(&ConnectionEvent::IsValid)
+            .await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.ping().await;
+        self.classify_result(result)
     }
 
     async fn close(&mut self) -> Result<(), DruidError> {
@@ -930,7 +1781,7 @@ impl PhysicalConnection for DruidPooledConnection {
         let disposition = self.prepare_for_recycle().await;
         self.recycle_once(disposition);
         if let Some(filter_chain) = filter_chain {
-            filter_chain.after_connection_close().await;
+            filter_chain.after_connection_close().await?;
         }
         Ok(())
     }
@@ -956,9 +1807,12 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::SetAutoCommit(auto_commit))
-            .await?;
-        self.physical_mut()?.set_auto_commit(auto_commit).await
+        let result = self
+            .before_connection_event(&ConnectionEvent::SetAutoCommit(auto_commit))
+            .await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.set_auto_commit(auto_commit).await;
+        self.classify_result(result)
     }
 
     fn read_only(&self) -> bool {
@@ -969,9 +1823,12 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::SetReadOnly(read_only))
-            .await?;
-        self.physical_mut()?.set_read_only(read_only).await
+        let result = self
+            .before_connection_event(&ConnectionEvent::SetReadOnly(read_only))
+            .await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.set_read_only(read_only).await;
+        self.classify_result(result)
     }
 
     fn transaction_isolation(&self) -> u8 {
@@ -982,9 +1839,12 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::SetTransactionIsolation(level))
-            .await?;
-        self.physical_mut()?.set_transaction_isolation(level).await
+        let result = self
+            .before_connection_event(&ConnectionEvent::SetTransactionIsolation(level))
+            .await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.set_transaction_isolation(level).await;
+        self.classify_result(result)
     }
 
     fn holdability(&self) -> i32 {
@@ -995,11 +1855,16 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {
-        self.physical_mut()?.set_holdability(holdability).await
+        let result = self.physical_mut()?.set_holdability(holdability).await;
+        self.classify_result(result)
+    }
+
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+        DruidPooledConnection::warnings(self).await
     }
 
     async fn clear_warnings(&mut self) -> Result<(), DruidError> {
-        self.physical_mut()?.clear_warnings().await
+        DruidPooledConnection::clear_warnings(self).await
     }
 
     fn mark_discarded(&mut self) {
@@ -1022,9 +1887,12 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn set_catalog(&mut self, catalog: &str) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::SetCatalog(catalog.to_string()))
-            .await?;
-        self.physical_mut()?.set_catalog(catalog).await
+        let result = self
+            .before_connection_event(&ConnectionEvent::SetCatalog(catalog.to_string()))
+            .await;
+        self.classify_result(result)?;
+        let result = self.physical_mut()?.set_catalog(catalog).await;
+        self.classify_result(result)
     }
 
     fn schema(&self) -> Option<&str> {
@@ -1035,8 +1903,10 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
-        self.before_connection_event(&ConnectionEvent::SetSchema(schema.to_string()))
-            .await?;
+        let result = self
+            .before_connection_event(&ConnectionEvent::SetSchema(schema.to_string()))
+            .await;
+        self.classify_result(result)?;
         let initial_schema = self.holder.as_ref().and_then(|holder| {
             holder
                 .should_restore_schema_on_recycle()
@@ -1051,7 +1921,8 @@ impl PhysicalConnection for DruidPooledConnection {
         if let Some(holder) = self.holder.as_ref() {
             holder.remember_initial_schema(initial_schema);
         }
-        self.physical_mut()?.set_schema(schema).await?;
+        let result = self.physical_mut()?.set_schema(schema).await;
+        self.classify_result(result)?;
         if let Some(holder) = self.holder.as_mut() {
             if holder.should_restore_schema_on_recycle() && holder.statement_pool_direct().is_some()
             {

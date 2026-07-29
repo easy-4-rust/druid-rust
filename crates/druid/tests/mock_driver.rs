@@ -22,8 +22,14 @@ impl MockConnection {
 
 #[async_trait::async_trait]
 impl Connection for MockConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
+        if sql == "FAIL" {
+            return Err(DruidError::SqlException(Box::new(SqlException::driver(
+                9999,
+                "batch failure",
+            ))));
+        }
         Ok(ExecResult {
             rows_affected: 1,
             last_insert_id: Some(42),
@@ -119,8 +125,9 @@ impl AfterFilter for CountAfterFilter {
         _ctx: &ExecContext<'_>,
         _result: &Result<ExecResult, DruidError>,
         _elapsed: std::time::Duration,
-    ) {
+    ) -> Result<(), DruidError> {
         self.count.fetch_add(1, Ordering::Relaxed);
+        Ok(())
     }
 }
 
@@ -130,9 +137,11 @@ impl AfterFilter for CountAfterFilter {
 struct MockFatalSorter;
 
 impl ExceptionSorter for MockFatalSorter {
-    fn is_exception_fatal(&self, error_code: i32, _message: &str) -> bool {
-        error_code == 9999
+    fn is_exception_fatal(&self, exception: &SqlException) -> bool {
+        exception.error_code() == 9999
     }
+
+    fn config_from_properties(&mut self, _properties: Option<&ExceptionSorterProperties>) {}
 }
 
 // ── Tests ────────────────────────────────────────────────────────
@@ -151,6 +160,64 @@ async fn test_connection_trait_exec() {
     assert_eq!(result.rows_affected, 1);
     assert_eq!(result.last_insert_id, Some(42));
     assert_eq!(count.load(Ordering::Relaxed), 1);
+}
+
+#[tokio::test]
+async fn test_connection_default_batch_preserves_partial_counts_and_sql_cause() {
+    let mut connection = MockConnection::new();
+    assert_eq!(
+        connection
+            .exec_batch(vec![
+                ("UPDATE 1".to_string(), Vec::new()),
+                ("UPDATE 2".to_string(), Vec::new()),
+            ])
+            .await
+            .unwrap(),
+        [1, 1]
+    );
+
+    let error = connection
+        .exec_batch(vec![
+            ("UPDATE 3".to_string(), Vec::new()),
+            ("FAIL".to_string(), Vec::new()),
+        ])
+        .await
+        .unwrap_err();
+    assert_eq!(error.batch_update_counts(), Some([1].as_slice()));
+    assert_eq!(error.sql_exception().unwrap().error_code(), 9999);
+    assert!(error.to_string().contains("after 1 result"));
+    assert_eq!(
+        DruidError::Other("plain".to_string()).batch_update_counts(),
+        None
+    );
+}
+
+#[tokio::test]
+async fn test_connection_default_prepared_batch_reuses_one_statement_in_order() {
+    let mut connection = MockConnection::new();
+    let statement = SqlTextPreparedStatement::new("UPDATE prepared_item SET value = ?1");
+    assert_eq!(
+        connection
+            .exec_prepared_batch(
+                &statement,
+                vec![
+                    vec![Value::String("first".to_string())],
+                    vec![Value::String("second".to_string())],
+                ],
+            )
+            .await
+            .unwrap(),
+        [1, 1]
+    );
+    assert_eq!(connection.exec_count.load(Ordering::Relaxed), 2);
+
+    statement.close().unwrap();
+    assert_eq!(
+        connection
+            .exec_prepared_batch(&statement, vec![vec![Value::Int(1)]])
+            .await,
+        Err(DruidError::ConnectionDiscarded)
+    );
 }
 
 #[tokio::test]
@@ -211,9 +278,12 @@ async fn test_before_filter_block_drop() {
     let mut ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Query,
     };
     assert!(filter.before(&mut ctx).await.is_ok());
 
@@ -231,9 +301,12 @@ async fn test_after_filter_count() {
     let ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Query,
     };
     filter
         .after(
@@ -241,14 +314,16 @@ async fn test_after_filter_count() {
             &Ok(ExecResult::default()),
             std::time::Duration::from_millis(1),
         )
-        .await;
+        .await
+        .unwrap();
     filter
         .after(
             &ctx,
             &Ok(ExecResult::default()),
             std::time::Duration::from_millis(2),
         )
-        .await;
+        .await
+        .unwrap();
     assert_eq!(count.load(Ordering::Relaxed), 2);
 }
 
@@ -261,9 +336,12 @@ async fn test_filter_chain_before_short_circuit() {
     let mut ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Query,
     };
     assert!(chain.before_execute(&mut ctx).await.is_ok());
 
@@ -283,9 +361,12 @@ async fn test_filter_chain_after_reverse_order() {
     let ctx = ExecContext {
         sql: "SELECT 1",
         params: &params,
+        prepared_parameters: None,
         data_source: "test",
         start: std::time::Instant::now(),
         fingerprint: None,
+        in_transaction: false,
+        operation: druid::core::ExecOperation::Query,
     };
     chain
         .after_execute(
@@ -293,29 +374,79 @@ async fn test_filter_chain_after_reverse_order() {
             &Ok(ExecResult::default()),
             std::time::Duration::from_millis(1),
         )
-        .await;
+        .await
+        .unwrap();
     assert_eq!(count.load(Ordering::Relaxed), 1);
+}
+
+#[tokio::test]
+async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
+    let mut chain = FilterChain::new();
+    chain.add_before(Arc::new(BlockDropFilter));
+    let after_count = Arc::new(AtomicU64::new(0));
+    chain.add_after(Arc::new(CountAfterFilter {
+        count: Arc::clone(&after_count),
+    }));
+    let statements = vec!["UPDATE a".to_string(), "UPDATE b".to_string()];
+    let mut context = BatchExecContext {
+        sql: "UPDATE a\n;\nUPDATE b",
+        statements: &statements,
+        parameter_sets: &[],
+        prepared_parameter_sets: None,
+        kind: druid::core::BatchExecKind::Statement,
+        data_source: "batch-default",
+        start: std::time::Instant::now(),
+        in_transaction: true,
+    };
+    chain.before_batch(&mut context).await.unwrap();
+    chain
+        .after_batch(
+            &context,
+            &Ok(vec![1, -2]),
+            std::time::Duration::from_millis(1),
+        )
+        .await
+        .unwrap();
+    assert_eq!(after_count.load(Ordering::Relaxed), 1);
+
+    let blocked = vec!["UPDATE a".to_string(), "DROP TABLE b".to_string()];
+    let mut blocked_context = BatchExecContext {
+        sql: "UPDATE a\n;\nDROP TABLE b",
+        statements: &blocked,
+        parameter_sets: &[],
+        prepared_parameter_sets: None,
+        kind: druid::core::BatchExecKind::Statement,
+        data_source: "batch-default",
+        start: std::time::Instant::now(),
+        in_transaction: false,
+    };
+    assert!(matches!(
+        chain.before_batch(&mut blocked_context).await,
+        Err(DruidError::WallViolation(_))
+    ));
 }
 
 #[test]
 fn test_exception_sorter_null() {
     let sorter = NullExceptionSorter;
-    assert!(!sorter.is_exception_fatal(0, "anything"));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(0, "anything")));
 }
 
 #[test]
 fn test_exception_sorter_pg_fatal() {
     let sorter = PgExceptionSorter;
-    assert!(sorter.is_exception_fatal(57_001, "admin shutdown"));
-    assert!(!sorter.is_exception_fatal(42, "syntax error"));
+    assert!(sorter
+        .is_exception_fatal(&SqlException::driver(0, "admin shutdown").with_sql_state("08006")));
+    assert!(!sorter
+        .is_exception_fatal(&SqlException::driver(0, "syntax error").with_sql_state("42601")));
 }
 
 #[test]
 fn test_exception_sorter_mysql_fatal() {
     let sorter = MySqlExceptionSorter;
-    assert!(sorter.is_exception_fatal(1042, "Can't get hostname"));
-    assert!(sorter.is_exception_fatal(0, "Communications link failure"));
-    assert!(!sorter.is_exception_fatal(1062, "Duplicate entry"));
+    assert!(sorter.is_exception_fatal(&SqlException::driver(1042, "Can't get hostname")));
+    assert!(sorter.is_exception_fatal(&SqlException::driver(0, "Communications link failure")));
+    assert!(!sorter.is_exception_fatal(&SqlException::driver(1062, "Duplicate entry")));
 }
 
 #[test]
