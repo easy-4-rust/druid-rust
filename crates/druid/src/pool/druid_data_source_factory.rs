@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::core::{DruidError, PhysicalConnectionFactory};
+use crate::core::{ConfigFilter, DruidError, PhysicalConnectionFactory};
 use crate::sql::{JdbcUtils, WallConfig};
 use crate::toasty::ToastyConnectionFactory;
 
@@ -24,6 +24,27 @@ impl DruidDataSourceFactory {
     /// 时返回结构化错误。独立凭据必须交给能原生表达它们的扩展 factory，不能
     /// 无声丢弃。
     pub async fn create_data_source(
+        properties: &HashMap<String, String>,
+    ) -> Result<DruidDataSource, DruidError> {
+        let properties = Self::resolve_config_properties(properties).await?;
+        Self::create_data_source_resolved(&properties).await
+    }
+
+    /// 在构造具体驱动 factory 前执行 Java `ConfigFilter` 初始化语义。
+    ///
+    /// SQLx/RBDC 等扩展应先调用此方法，再用返回的 URL、用户名与密码构造
+    /// `PhysicalConnectionFactory`，从而避免先建驱动、后下载配置的错误顺序。
+    pub async fn resolve_config_properties(
+        properties: &HashMap<String, String>,
+    ) -> Result<HashMap<String, String>, DruidError> {
+        if ConfigFilter::is_enabled(properties) {
+            ConfigFilter::new().resolve_properties(properties).await
+        } else {
+            Ok(properties.clone())
+        }
+    }
+
+    async fn create_data_source_resolved(
         properties: &HashMap<String, String>,
     ) -> Result<DruidDataSource, DruidError> {
         if properties.contains_key(Self::PROP_USERNAME)
@@ -54,11 +75,22 @@ impl DruidDataSourceFactory {
                 )));
             }
         }
-        Self::create_data_source_with_factory(properties, Arc::new(factory), driver_name).await
+        Self::create_data_source_with_factory_resolved(properties, Arc::new(factory), driver_name)
+            .await
     }
 
     /// 使用外部未池化物理连接 factory 创建数据源。
     pub async fn create_data_source_with_factory(
+        properties: &HashMap<String, String>,
+        factory: Arc<dyn PhysicalConnectionFactory>,
+        default_driver_name: impl Into<String>,
+    ) -> Result<DruidDataSource, DruidError> {
+        let properties = Self::resolve_config_properties(properties).await?;
+        Self::create_data_source_with_factory_resolved(&properties, factory, default_driver_name)
+            .await
+    }
+
+    async fn create_data_source_with_factory_resolved(
         properties: &HashMap<String, String>,
         factory: Arc<dyn PhysicalConnectionFactory>,
         default_driver_name: impl Into<String>,

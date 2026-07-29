@@ -239,7 +239,7 @@ impl Default for FilterManager {
     }
 }
 
-fn parse_java_properties(source: &str) -> Result<HashMap<String, String>, DruidError> {
+pub(crate) fn parse_java_properties(source: &str) -> Result<HashMap<String, String>, DruidError> {
     let mut properties = HashMap::new();
     let mut logical_line = String::new();
 

@@ -19,6 +19,7 @@ dynamodb = ["toasty/dynamodb"]
 arc-swap.workspace = true
 async-trait.workspace = true
 bigdecimal.workspace = true
+base64.workspace = true
 chrono.workspace = true
 dashmap.workspace = true
 encoding_rs.workspace = true
@@ -28,6 +29,9 @@ moka = { workspace = true, features = ["sync"] }
 jiff.workspace = true
 parking_lot.workspace = true
 prometheus.workspace = true
+quick-xml.workspace = true
+reqwest.workspace = true
+rsa.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlparser = { workspace = true, features = ["visitor"] }
@@ -38,6 +42,7 @@ tokio.workspace = true
 tracing.workspace = true
 uuid = { version = "1", features = ["v4"] }
 xxhash-rust.workspace = true
+x509-cert.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

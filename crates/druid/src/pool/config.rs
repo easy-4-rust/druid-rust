@@ -3,7 +3,8 @@
 //! 池内部配置，从 PoolConfig 翻译而来。
 
 use crate::core::{
-    FilterChain, FilterManager, LogFilter, MySQL8DateTimeSqlTypeFilter, ValidConnectionChecker,
+    ConfigFilter, FilterChain, FilterManager, LogFilter, MySQL8DateTimeSqlTypeFilter,
+    ValidConnectionChecker,
 };
 use crate::sql::{DbType, WallConfig, WallFilter, WallProvider};
 use crate::stats::{MergeStatFilter, StatFilter, StatsCollector};
@@ -16,6 +17,7 @@ const MERGE_STAT_FILTER_CLASS: &str = "com.alibaba.druid.filter.stat.MergeStatFi
 const WALL_FILTER_CLASS: &str = "com.alibaba.druid.wall.WallFilter";
 const MYSQL8_DATETIME_FILTER_CLASS: &str =
     "com.alibaba.druid.filter.mysql8datetime.MySQL8DateTimeSqlTypeFilter";
+const CONFIG_FILTER_CLASS: &str = "com.alibaba.druid.filter.config.ConfigFilter";
 const LEGACY_LOG_FILTER_CLASSES: [&str; 4] = [
     "com.alibaba.druid.filter.logging.Log4jFilter",
     "com.alibaba.druid.filter.logging.Log4j2Filter",
@@ -814,6 +816,7 @@ fn default_filter_manager(
     manager.register_filter(MYSQL8_DATETIME_FILTER_CLASS, || {
         Ok(MySQL8DateTimeSqlTypeFilter::new())
     });
+    manager.register_filter(CONFIG_FILTER_CLASS, || Ok(ConfigFilter::new()));
     for legacy_class_name in LEGACY_LOG_FILTER_CLASSES {
         // Java 日志框架类名只作为旧配置 alias；Rust 统一采用 tracing，
         // 不制造不存在于 Rust 生态的 Log4j/SLF4J 运行时对象。

@@ -12,6 +12,8 @@ use super::{
 };
 use std::time::{Duration, Instant};
 
+/// 配置加载与旧 Druid 密文兼容。
+pub mod config;
 /// JDBC 字符编码转换 Filter。
 pub mod encoding;
 /// MySQL Connector/J 8 日期时间兼容 Filter。

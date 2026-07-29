@@ -1739,6 +1739,7 @@ version = "0.0.0-design"
 dependencies = [
  "arc-swap",
  "async-trait",
+ "base64 0.22.1",
  "bigdecimal",
  "chrono",
  "dashmap",
@@ -1749,6 +1750,9 @@ dependencies = [
  "moka",
  "parking_lot",
  "prometheus",
+ "quick-xml",
+ "reqwest",
+ "rsa",
  "serde",
  "serde_json",
  "sqlparser",
@@ -1758,6 +1762,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "x509-cert",
  "xxhash-rust",
 ]
 
@@ -4233,6 +4238,16 @@ name = "protobuf"
 version = "2.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
+
+[[package]]
+name = "quick-xml"
+version = "0.41.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
+dependencies = [
+ "memchr",
+ "serde",
+]
 
 [[package]]
 name = "quinn"

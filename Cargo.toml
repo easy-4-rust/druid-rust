@@ -58,6 +58,10 @@ dashmap      = "6"
 moka         = { version = "0.12", features = ["future"] }
 form_urlencoded = "1"
 encoding_rs = "0.8"
+base64 = "0.22.1"
+quick-xml = { version = "0.41.0", features = ["serialize"] }
+rsa = "0.9.10"
+x509-cert = "0.2.5"
 
 # observability
 tracing              = "0.1"

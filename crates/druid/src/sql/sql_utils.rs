@@ -11,7 +11,7 @@ use sqlparser::parser::Parser;
 ///
 /// 对应 Java：`com.alibaba.druid.sql.SQLUtils.FormatOption`。该对象是
 /// `SQLUtils` 的紧密内部对象，保留大小写、pretty、参数化和脱敏四项可观察
-/// 配置，供 `LogFilterMBean` 等调用方保存配置契约。
+/// 配置，供日志过滤器及其他 SQL 格式化调用方保存配置契约。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SqlFormatOption {
     ucase: bool,
