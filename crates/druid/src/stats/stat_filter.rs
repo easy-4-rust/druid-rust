@@ -8,6 +8,7 @@ use crate::core::{
     ExecContext, ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterChain,
     ResultSetFilterContext,
 };
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,11 +17,27 @@ use std::time::Duration;
 /// 对应 Druid Java 的 `StatFilter`，在 SQL 执行后记录统计。
 pub struct StatFilter {
     collector: Arc<StatsCollector>,
+    merge_sql: AtomicBool,
 }
 
 impl StatFilter {
+    /// 创建普通统计 Filter；与 Java 一致，默认不合并 SQL。
     pub fn new(collector: Arc<StatsCollector>) -> Self {
-        Self { collector }
+        Self {
+            collector,
+            merge_sql: AtomicBool::new(false),
+        }
+    }
+
+    /// 返回是否参数化并合并 SQL。对应 Java：`StatFilter#isMergeSql()`。
+    #[must_use]
+    pub fn is_merge_sql(&self) -> bool {
+        self.merge_sql.load(Ordering::Acquire)
+    }
+
+    /// 设置是否参数化并合并 SQL。对应 Java：`StatFilter#setMergeSql(boolean)`。
+    pub fn set_merge_sql(&self, merge_sql: bool) {
+        self.merge_sql.store(merge_sql, Ordering::Release);
     }
 
     /// 返回本 `Filter` 所属数据源的 `ResultSet` 统计对象。
@@ -59,7 +76,8 @@ impl AfterFilter for StatFilter {
         result: &Result<ExecResult, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
-        self.collector.record_sql(ctx.sql, elapsed, result.is_ok());
+        self.collector
+            .record_sql_with_merge(ctx.sql, elapsed, result.is_ok(), self.is_merge_sql());
         let context = StatFilterContext::global();
         if ctx.operation == ExecOperation::Update {
             if let Ok(execution) = result {
@@ -77,8 +95,12 @@ impl AfterFilter for StatFilter {
         result: &Result<Vec<i32>, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
-        self.collector
-            .record_sql(context.sql, elapsed, result.is_ok());
+        self.collector.record_sql_with_merge(
+            context.sql,
+            elapsed,
+            result.is_ok(),
+            self.is_merge_sql(),
+        );
         let global = StatFilterContext::global();
         if let Ok(update_counts) = result {
             for update_count in update_counts {

@@ -19,6 +19,7 @@ enum ResultSetMetaDataBackend {
 /// 查询结果的列 metadata。
 pub struct ResultSetMetaData {
     backend: ResultSetMetaDataBackend,
+    mysql8_datetime_compatibility: bool,
 }
 
 impl ResultSetMetaData {
@@ -26,6 +27,7 @@ impl ResultSetMetaData {
     pub fn new(columns: Vec<ResultSetColumnMeta>) -> Self {
         Self {
             backend: ResultSetMetaDataBackend::Columns(columns),
+            mysql8_datetime_compatibility: false,
         }
     }
 
@@ -33,7 +35,17 @@ impl ResultSetMetaData {
     pub fn from_physical(physical: Arc<dyn PhysicalResultSetMetaData>) -> Self {
         Self {
             backend: ResultSetMetaDataBackend::Physical(physical),
+            mysql8_datetime_compatibility: false,
         }
+    }
+
+    /// 启用 MySQL Connector/J 8.0.24 的 DATETIME 类名兼容。
+    ///
+    /// 仅由 canonical `MySQL8DateTimeResultSetMetaData` 使用；其余 metadata
+    /// 委托、物理 Wrapper 身份和列属性保持不变。
+    pub(crate) fn with_mysql8_datetime_compatibility(mut self) -> Self {
+        self.mysql8_datetime_compatibility = true;
+        self
     }
 
     /// 返回物理 metadata SPI；eager descriptor 返回 `None`。
@@ -242,13 +254,16 @@ impl ResultSetMetaData {
 
     /// 返回 Java typed getter 对应类名。
     pub fn column_class_name(&self, column_index: usize) -> Result<String, DruidError> {
-        match &self.backend {
-            ResultSetMetaDataBackend::Columns(_) => {
-                Ok(self.column(column_index)?.class_name.clone())
-            }
+        let class_name = match &self.backend {
+            ResultSetMetaDataBackend::Columns(_) => self.column(column_index)?.class_name.clone(),
             ResultSetMetaDataBackend::Physical(physical) => {
-                physical.column_class_name(column_index)
+                physical.column_class_name(column_index)?
             }
+        };
+        if self.mysql8_datetime_compatibility && class_name == "java.time.LocalDateTime" {
+            Ok("java.sql.Timestamp".to_owned())
+        } else {
+            Ok(class_name)
         }
     }
 
@@ -306,6 +321,14 @@ impl Clone for ResultSetMetaData {
             ResultSetMetaDataBackend::Columns(columns) => Self::new(columns.clone()),
             ResultSetMetaDataBackend::Physical(physical) => Self::from_physical(physical.clone()),
         }
+        .with_mysql8_datetime_compatibility_if(self.mysql8_datetime_compatibility)
+    }
+}
+
+impl ResultSetMetaData {
+    fn with_mysql8_datetime_compatibility_if(mut self, enabled: bool) -> Self {
+        self.mysql8_datetime_compatibility = enabled;
+        self
     }
 }
 
@@ -326,7 +349,7 @@ impl fmt::Debug for ResultSetMetaData {
 
 impl PartialEq for ResultSetMetaData {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.backend, &other.backend) {
+        (match (&self.backend, &other.backend) {
             (ResultSetMetaDataBackend::Columns(left), ResultSetMetaDataBackend::Columns(right)) => {
                 left == right
             }
@@ -338,7 +361,7 @@ impl PartialEq for ResultSetMetaData {
             | (ResultSetMetaDataBackend::Physical(_), ResultSetMetaDataBackend::Columns(_)) => {
                 false
             }
-        }
+        }) && self.mysql8_datetime_compatibility == other.mysql8_datetime_compatibility
     }
 }
 

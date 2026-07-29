@@ -2,9 +2,11 @@
 //!
 //! 池内部配置，从 PoolConfig 翻译而来。
 
-use crate::core::{FilterChain, FilterManager, LogFilter, ValidConnectionChecker};
+use crate::core::{
+    FilterChain, FilterManager, LogFilter, MySQL8DateTimeSqlTypeFilter, ValidConnectionChecker,
+};
 use crate::sql::{DbType, WallConfig, WallFilter, WallProvider};
-use crate::stats::{StatFilter, StatsCollector};
+use crate::stats::{MergeStatFilter, StatFilter, StatsCollector};
 use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
@@ -12,6 +14,8 @@ use std::time::Duration;
 const STAT_FILTER_CLASS: &str = "com.alibaba.druid.filter.stat.StatFilter";
 const MERGE_STAT_FILTER_CLASS: &str = "com.alibaba.druid.filter.stat.MergeStatFilter";
 const WALL_FILTER_CLASS: &str = "com.alibaba.druid.wall.WallFilter";
+const MYSQL8_DATETIME_FILTER_CLASS: &str =
+    "com.alibaba.druid.filter.mysql8datetime.MySQL8DateTimeSqlTypeFilter";
 const LOG_FILTER_CLASSES: [&str; 4] = [
     "com.alibaba.druid.filter.logging.Log4jFilter",
     "com.alibaba.druid.filter.logging.Log4j2Filter",
@@ -802,10 +806,13 @@ fn default_filter_manager(
         Ok(StatFilter::new(Arc::clone(&stat_collector)))
     });
     manager.register_filter(MERGE_STAT_FILTER_CLASS, move || {
-        Ok(StatFilter::new(Arc::clone(&merge_stats_collector)))
+        Ok(MergeStatFilter::new(Arc::clone(&merge_stats_collector)))
     });
     manager.register_filter(WALL_FILTER_CLASS, move || {
         Ok(WallFilter::new(Arc::clone(&wall_provider)))
+    });
+    manager.register_filter(MYSQL8_DATETIME_FILTER_CLASS, || {
+        Ok(MySQL8DateTimeSqlTypeFilter::new())
     });
     for class_name in LOG_FILTER_CLASSES {
         manager.register_filter(class_name, || Ok(LogFilter::new()));

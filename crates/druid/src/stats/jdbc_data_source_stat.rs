@@ -49,7 +49,16 @@ impl JdbcDataSourceStat {
 
     /// 记录一次 SQL 执行。
     pub fn record_sql(&self, sql: &str, elapsed: Duration, ok: bool) {
-        self.sql_merger.record(sql, elapsed, ok);
+        self.record_sql_with_merge(sql, elapsed, ok, true);
+    }
+
+    /// 按 `StatFilter.mergeSql` 开关记录 SQL。
+    ///
+    /// 对应 Java：`StatFilter#createSqlStat`。普通 `StatFilter` 保存原 SQL，
+    /// `MergeStatFilter` 才按参数化模板聚合。
+    pub fn record_sql_with_merge(&self, sql: &str, elapsed: Duration, ok: bool, merge_sql: bool) {
+        self.sql_merger
+            .record_with_merge(sql, elapsed, ok, merge_sql);
         if elapsed >= self.slow_sql_threshold {
             self.slow_sql_count.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(sql = %sql, elapsed_ms = elapsed.as_millis(), "slow SQL detected");

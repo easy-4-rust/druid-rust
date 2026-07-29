@@ -4,6 +4,7 @@
 
 use super::active_connection_lease::ActiveConnectionLease;
 use super::config::DruidPoolBuilder;
+use super::connection_close_worker::ConnectionCloseWorker;
 use super::pool_inner::PoolInner;
 use super::pool_validation_factory::PoolValidationFactory;
 use crate::core::{
@@ -38,6 +39,8 @@ pub struct DruidPool {
     remove_abandoned_count: Arc<AtomicU64>,
     maintenance_shutdown: Arc<Notify>,
     maintenance_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    close_worker: parking_lot::Mutex<Option<ConnectionCloseWorker>>,
+    close_worker_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
     stats_collector: Arc<StatsCollector>,
     wall_provider: Arc<WallProvider>,
 }
@@ -78,10 +81,14 @@ impl DruidPool {
             config.valid_connection_checker =
                 Self::select_valid_connection_checker(config.db_type_name.as_deref(), &driver_name);
         }
+        let close_factory = Arc::clone(&factory);
+        let inner = Arc::new(PoolInner::new(factory, config));
+        let (close_sender, close_receiver) = tokio::sync::mpsc::unbounded_channel();
+        inner.install_close_sender(close_sender);
         Self {
             name,
             driver_name,
-            inner: Arc::new(PoolInner::new(factory, config)),
+            inner,
             filter_chain,
             exception_sorter,
             filters_initialized: AtomicBool::new(false),
@@ -90,6 +97,11 @@ impl DruidPool {
             remove_abandoned_count: Arc::new(AtomicU64::new(0)),
             maintenance_shutdown: Arc::new(Notify::new()),
             maintenance_task: parking_lot::Mutex::new(None),
+            close_worker: parking_lot::Mutex::new(Some(ConnectionCloseWorker::new(
+                close_factory,
+                close_receiver,
+            ))),
+            close_worker_task: parking_lot::Mutex::new(None),
             stats_collector,
             wall_provider,
         }
@@ -160,6 +172,7 @@ impl DruidPool {
     ///
     /// 对应 Java: `DruidDataSource#init()`。
     pub async fn init(&self) -> Result<(), DruidError> {
+        self.start_close_worker();
         self.initialized
             .get_or_try_init(|| self.inner.fill_initial())
             .await
@@ -197,6 +210,17 @@ impl DruidPool {
                 remove_abandoned_leases(&inner, &active_leases, remove_abandoned_count.as_ref());
             }
         }));
+    }
+
+    /// 启动每池唯一的受监管物理关闭 worker。
+    fn start_close_worker(&self) {
+        let mut task = self.close_worker_task.lock();
+        if task.is_some() {
+            return;
+        }
+        if let Some(worker) = self.close_worker.lock().take() {
+            *task = Some(worker.spawn());
+        }
     }
 
     pub async fn get_timeout(
@@ -566,6 +590,7 @@ impl DruidPool {
     }
 
     pub async fn close(&self) {
+        self.start_close_worker();
         self.maintenance_shutdown.notify_one();
         // 先把池标记为 closed 并排空 idle，再等待维护任务退出。这样 close
         // future 在等待后台任务期间被取消时，新借用也已经被拒绝，且
@@ -574,6 +599,13 @@ impl DruidPool {
         let maintenance_task = self.maintenance_task.lock().take();
         if let Some(maintenance_task) = maintenance_task {
             let _ = maintenance_task.await;
+        }
+        self.inner.request_close_worker_shutdown_if_idle();
+        if self.inner.active_count.load(Ordering::Acquire) == 0 {
+            let close_worker_task = self.close_worker_task.lock().take();
+            if let Some(close_worker_task) = close_worker_task {
+                let _ = close_worker_task.await;
+            }
         }
         if self
             .filters_initialized

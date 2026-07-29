@@ -157,17 +157,30 @@ const RUST_URL_PREFIXES: &[(&str, DbType)] = &[
     ("postgresql:", DbType::PostgreSql),
     ("postgres:", DbType::PostgreSql),
     ("mysql:", DbType::MySql),
+    // rsfbclient native 与 pure-Rust builder 使用同一 DSN。
+    ("firebird:", DbType::FirebirdSql),
 ];
 
 const DRIVER_IDENTITIES: &[(&str, DbType)] = &[
     ("mysql", DbType::MySql),
     ("mariadb", DbType::MariaDb),
     ("postgres", DbType::PostgreSql),
+    ("tiberius", DbType::SqlServer),
+    ("sibyl", DbType::Oracle),
     ("oracle", DbType::Oracle),
     ("sqlserver", DbType::SqlServer),
     ("sqlite", DbType::SQLite),
+    ("turso", DbType::SQLite),
+    ("libsql", DbType::SQLite),
+    ("rsfbclient", DbType::FirebirdSql),
+    ("firebird", DbType::FirebirdSql),
     ("clickhouse", DbType::ClickHouse),
     ("db2", DbType::Db2),
+    // DuckDB、ODBC/ADBC 在 Java 1.2.28 DbType 中没有独立枚举；识别为
+    // Other，避免伪造 Java enum variant 或错误套用其他 SQL 方言。
+    ("duckdb", DbType::Other),
+    ("odbc", DbType::Other),
+    ("adbc", DbType::Other),
     ("h2", DbType::H2),
     ("rbdc", DbType::Other),
     ("toasty", DbType::Other),

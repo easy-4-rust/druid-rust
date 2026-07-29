@@ -12,6 +12,11 @@ use super::{
 };
 use std::time::{Duration, Instant};
 
+/// JDBC 字符编码转换 Filter。
+pub mod encoding;
+/// MySQL Connector/J 8 日期时间兼容 Filter。
+pub mod mysql8datetime;
+
 /// SQL 执行上下文，传递给 Filter 的 before/after 方法。
 ///
 /// 对应 DruidJava Filter 方法的各种参数。

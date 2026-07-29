@@ -1742,6 +1742,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "dashmap",
+ "encoding_rs",
  "fastrand",
  "form_urlencoded",
  "jiff",

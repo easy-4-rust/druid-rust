@@ -143,6 +143,9 @@ pub use druid_pooled_statement::DruidPooledStatement;
 pub use error::DruidError;
 pub use exception_sorter::{ExceptionSorter, ExceptionSorterProperties};
 pub use exec_result::ExecResult;
+#[allow(deprecated)]
+pub use filter::encoding::{CharsetConvert, CharsetParameter, EncodingConvertFilter};
+pub use filter::mysql8datetime::{MySQL8DateTimeResultSetMetaData, MySQL8DateTimeSqlTypeFilter};
 pub use filter::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ExecContext, ExecOperation,
 };

@@ -229,7 +229,23 @@ impl SqlMerger {
 
     /// 记录一条 SQL 执行。
     pub fn record(&self, sql: &str, elapsed: Duration, ok: bool) {
-        let param = parameterize(sql);
+        self.record_with_merge(sql, elapsed, ok, true);
+    }
+
+    /// 按 `StatFilter.mergeSql` 配置记录 SQL。
+    ///
+    /// `merge_sql=false` 时使用原始 SQL 文本及其哈希作为统计键；开启时才执行
+    /// Druid 参数化合并。对应 Java：
+    /// `StatFilter#createSqlStat(StatementProxy, String)`。
+    pub fn record_with_merge(&self, sql: &str, elapsed: Duration, ok: bool, merge_sql: bool) {
+        let param = if merge_sql {
+            parameterize(sql)
+        } else {
+            ParameterizedSql {
+                template: sql.to_owned(),
+                fingerprint: fingerprint(sql),
+            }
+        };
         let stat = self
             .cache
             .entry(param.fingerprint)

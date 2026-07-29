@@ -2,6 +2,7 @@
 
 mod active_connection_lease;
 pub mod config;
+mod connection_close_worker;
 pub mod druid_data_source;
 pub mod druid_data_source_factory;
 pub mod druid_pool;

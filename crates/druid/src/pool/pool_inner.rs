@@ -10,6 +10,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
 
 /// 连接池内部状态。
@@ -35,6 +36,7 @@ pub struct PoolInner {
     pub(crate) keep_alive_check_count: AtomicU64,
     pub(crate) keep_alive_check_error_count: AtomicU64,
     pub(crate) prepared_statement_stats: Arc<PreparedStatementCacheStats>,
+    close_sender: parking_lot::RwLock<Option<UnboundedSender<Option<Box<dyn PhysicalConnection>>>>>,
 }
 
 impl PoolInner {
@@ -63,7 +65,16 @@ impl PoolInner {
             keep_alive_check_count: AtomicU64::new(0),
             keep_alive_check_error_count: AtomicU64::new(0),
             prepared_statement_stats: Arc::new(PreparedStatementCacheStats::default()),
+            close_sender: parking_lot::RwLock::new(None),
         }
+    }
+
+    /// 安装由 canonical `DruidPool` 持有的物理关闭 worker sender。
+    pub(crate) fn install_close_sender(
+        &self,
+        sender: UnboundedSender<Option<Box<dyn PhysicalConnection>>>,
+    ) {
+        *self.close_sender.write() = Some(sender);
     }
 
     pub fn next_id(&self) -> u64 {
@@ -258,6 +269,9 @@ impl PoolInner {
         holder: DruidConnectionHolder,
         disposition: ConnectionRecycleDisposition,
     ) {
+        // 所有 return 分支结束后再决定是否关闭 worker，保证最后一条
+        // connection command 一定排在 shutdown command 之前。
+        let _termination = CloseWorkerTerminationGuard { inner: self };
         let was_active = self
             .active_count
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
@@ -338,12 +352,29 @@ impl PoolInner {
     }
 
     /// 销毁连接。
-    pub fn destroy_connection(&self, mut conn: Box<dyn PhysicalConnection>) {
+    pub fn destroy_connection(&self, conn: Box<dyn PhysicalConnection>) {
         self.record_destroy();
-        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            runtime.spawn(async move {
-                let _ = conn.close().await;
-            });
+        let sender = self.close_sender.read().clone();
+        if let Some(sender) = sender {
+            if let Err(error) = sender.send(Some(conn)) {
+                // worker 已退出时，Drop 仍会释放 driver 资源；禁止重新 spawn
+                // 一条不可追踪任务。
+                drop(error.0);
+            }
+        } else {
+            // 只有直接构造公开 PoolInner 的测试/低层调用会走到这里；canonical
+            // DruidPool 在对外可借用前必定安装 worker。
+            drop(conn);
+        }
+    }
+
+    /// 当池已关闭且最后一个活跃租约已归还时请求关闭 worker。
+    pub(crate) fn request_close_worker_shutdown_if_idle(&self) {
+        if !self.closed.load(Ordering::Acquire) || self.active_count.load(Ordering::Acquire) != 0 {
+            return;
+        }
+        if let Some(sender) = self.close_sender.read().clone() {
+            let _ = sender.send(None);
         }
     }
 
@@ -609,5 +640,16 @@ impl Drop for DetachedHolder<'_> {
         if let Some(holder) = self.holder.take() {
             self.inner.destroy_holder(holder);
         }
+    }
+}
+
+/// 确保最后一个活跃连接的关闭命令先于 worker shutdown 命令入队。
+struct CloseWorkerTerminationGuard<'a> {
+    inner: &'a PoolInner,
+}
+
+impl Drop for CloseWorkerTerminationGuard<'_> {
+    fn drop(&mut self) {
+        self.inner.request_close_worker_shutdown_if_idle();
     }
 }

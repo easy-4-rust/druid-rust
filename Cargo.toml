@@ -57,6 +57,7 @@ arc-swap     = "1"
 dashmap      = "6"
 moka         = { version = "0.12", features = ["future"] }
 form_urlencoded = "1"
+encoding_rs = "0.8"
 
 # observability
 tracing              = "0.1"
