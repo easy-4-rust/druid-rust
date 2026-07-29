@@ -122,6 +122,37 @@ macro_rules! resource_result_set_filter_chain_methods {
     };
 }
 
+macro_rules! no_arg_result_set_filter_chain_methods {
+    ($(($method:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("从位置 0 执行 `ResultSet#", $java, "()` around-chain。")]
+            pub fn $method(
+                &self,
+                physical: &dyn PhysicalResultSet,
+                context: &ResultSetFilterContext,
+            ) -> Result<$ty, DruidError> {
+                ResultSetFilterChain::new(&self.result_set, physical, context).$method()
+            }
+        )+
+    };
+}
+
+macro_rules! i32_arg_result_set_filter_chain_methods {
+    ($(($method:ident, $argument:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("从位置 0 执行 `ResultSet#", $java, "(int)` around-chain。")]
+            pub fn $method(
+                &self,
+                physical: &dyn PhysicalResultSet,
+                context: &ResultSetFilterContext,
+                $argument: i32,
+            ) -> Result<$ty, DruidError> {
+                ResultSetFilterChain::new(&self.result_set, physical, context).$method($argument)
+            }
+        )+
+    };
+}
+
 /// Filter 链。
 pub struct FilterChain {
     before: Vec<Arc<dyn BeforeFilter>>,
@@ -453,6 +484,12 @@ impl FilterChain {
             Option<Vec<u8>>,
             "getBytes"
         ),
+        (
+            result_set_get_n_string,
+            result_set_get_n_string_by_label,
+            Option<String>,
+            "getNString"
+        ),
     );
 
     /// 从位置 0 执行 `ResultSet#getBigDecimal(int)` around-chain。
@@ -608,6 +645,53 @@ impl FilterChain {
             "getNCharacterStream"
         ),
     );
+
+    no_arg_result_set_filter_chain_methods!(
+        (result_set_was_null, bool, "wasNull"),
+        (result_set_previous, bool, "previous"),
+        (result_set_is_before_first, bool, "isBeforeFirst"),
+        (result_set_is_after_last, bool, "isAfterLast"),
+        (result_set_is_first, bool, "isFirst"),
+        (result_set_is_last, bool, "isLast"),
+        (result_set_before_first, (), "beforeFirst"),
+        (result_set_after_last, (), "afterLast"),
+        (result_set_first, bool, "first"),
+        (result_set_last, bool, "last"),
+        (result_set_get_row, i32, "getRow"),
+        (result_set_get_fetch_direction, i32, "getFetchDirection"),
+        (result_set_get_fetch_size, i32, "getFetchSize"),
+        (result_set_get_type, i32, "getType"),
+        (result_set_get_concurrency, i32, "getConcurrency"),
+        (result_set_get_holdability, i32, "getHoldability"),
+        (result_set_get_cursor_name, Option<String>, "getCursorName"),
+        (result_set_row_updated, bool, "rowUpdated"),
+        (result_set_row_inserted, bool, "rowInserted"),
+        (result_set_row_deleted, bool, "rowDeleted"),
+        (result_set_is_closed, bool, "isClosed"),
+    );
+
+    i32_arg_result_set_filter_chain_methods!(
+        (result_set_absolute, row, bool, "absolute"),
+        (result_set_relative, rows, bool, "relative"),
+        (
+            result_set_set_fetch_direction,
+            direction,
+            (),
+            "setFetchDirection"
+        ),
+        (result_set_set_fetch_size, rows, (), "setFetchSize"),
+    );
+
+    /// 从位置 0 执行 `ResultSet#findColumn(String)` around-chain。
+    pub fn result_set_find_column(
+        &self,
+        physical: &dyn PhysicalResultSet,
+        context: &ResultSetFilterContext,
+        column_label: &str,
+    ) -> Result<usize, DruidError> {
+        ResultSetFilterChain::new(&self.result_set, physical, context)
+            .result_set_find_column(column_label)
+    }
 
     pub async fn before_execute(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {
         for f in &self.before {

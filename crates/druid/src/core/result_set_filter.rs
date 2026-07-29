@@ -102,6 +102,35 @@ macro_rules! resource_getter_filter_methods {
     };
 }
 
+macro_rules! no_arg_result_set_filter_methods {
+    ($(($method:ident, $chain_method:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("包围 Java `ResultSet#", $java, "()`。")]
+            fn $method(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+            ) -> Result<$ty, DruidError> {
+                chain.$chain_method()
+            }
+        )+
+    };
+}
+
+macro_rules! i32_arg_result_set_filter_methods {
+    ($(($method:ident, $chain_method:ident, $argument:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int)`，保留参数身份。")]
+            fn $method(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                $argument: i32,
+            ) -> Result<$ty, DruidError> {
+                chain.$chain_method($argument)
+            }
+        )+
+    };
+}
+
 /// 可包围 `ResultSet` 物理操作的同步 `Filter`。
 ///
 /// Java JDBC `ResultSet` 操作是同步调用，`Filter` 可以在委托前后执行逻辑，也可以
@@ -281,6 +310,14 @@ pub trait ResultSetFilter: Send + Sync {
             Option<Vec<u8>>,
             "getBytes"
         ),
+        (
+            result_set_get_n_string,
+            result_set_get_n_string_by_label,
+            result_set_get_n_string,
+            result_set_get_n_string_by_label,
+            Option<String>,
+            "getNString"
+        ),
     );
 
     /// 包围 Java `ResultSet#getBigDecimal(int)`。
@@ -440,4 +477,88 @@ pub trait ResultSetFilter: Send + Sync {
             "getNCharacterStream"
         ),
     );
+
+    no_arg_result_set_filter_methods!(
+        (result_set_was_null, result_set_was_null, bool, "wasNull"),
+        (result_set_previous, result_set_previous, bool, "previous"),
+        (result_set_is_before_first, result_set_is_before_first, bool, "isBeforeFirst"),
+        (result_set_is_after_last, result_set_is_after_last, bool, "isAfterLast"),
+        (result_set_is_first, result_set_is_first, bool, "isFirst"),
+        (result_set_is_last, result_set_is_last, bool, "isLast"),
+        (result_set_before_first, result_set_before_first, (), "beforeFirst"),
+        (result_set_after_last, result_set_after_last, (), "afterLast"),
+        (result_set_first, result_set_first, bool, "first"),
+        (result_set_last, result_set_last, bool, "last"),
+        (result_set_get_row, result_set_get_row, i32, "getRow"),
+        (
+            result_set_get_fetch_direction,
+            result_set_get_fetch_direction,
+            i32,
+            "getFetchDirection"
+        ),
+        (result_set_get_fetch_size, result_set_get_fetch_size, i32, "getFetchSize"),
+        (result_set_get_type, result_set_get_type, i32, "getType"),
+        (
+            result_set_get_concurrency,
+            result_set_get_concurrency,
+            i32,
+            "getConcurrency"
+        ),
+        (
+            result_set_get_holdability,
+            result_set_get_holdability,
+            i32,
+            "getHoldability"
+        ),
+        (
+            result_set_get_cursor_name,
+            result_set_get_cursor_name,
+            Option<String>,
+            "getCursorName"
+        ),
+        (result_set_row_updated, result_set_row_updated, bool, "rowUpdated"),
+        (result_set_row_inserted, result_set_row_inserted, bool, "rowInserted"),
+        (result_set_row_deleted, result_set_row_deleted, bool, "rowDeleted"),
+        (result_set_is_closed, result_set_is_closed, bool, "isClosed"),
+    );
+
+    i32_arg_result_set_filter_methods!(
+        (
+            result_set_absolute,
+            result_set_absolute,
+            row,
+            bool,
+            "absolute"
+        ),
+        (
+            result_set_relative,
+            result_set_relative,
+            rows,
+            bool,
+            "relative"
+        ),
+        (
+            result_set_set_fetch_direction,
+            result_set_set_fetch_direction,
+            direction,
+            (),
+            "setFetchDirection"
+        ),
+        (
+            result_set_set_fetch_size,
+            result_set_set_fetch_size,
+            rows,
+            (),
+            "setFetchSize"
+        ),
+    );
+
+    /// 包围 Java `ResultSet#findColumn(String)`，保留标签参数。
+    fn result_set_find_column(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_label: &str,
+    ) -> Result<usize, DruidError> {
+        chain.result_set_find_column(column_label)
+    }
 }

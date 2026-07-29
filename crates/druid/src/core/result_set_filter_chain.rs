@@ -129,6 +129,40 @@ macro_rules! resource_getter_chain_methods {
     };
 }
 
+macro_rules! no_arg_result_set_chain_methods {
+    ($(($method:ident, $filter_method:ident, $physical_method:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "()`，末端调用物理方法。")]
+            pub fn $method(&mut self) -> Result<$ty, DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$filter_method(self)
+                } else {
+                    self.physical.$physical_method()
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! i32_arg_result_set_chain_methods {
+    ($(($method:ident, $filter_method:ident, $physical_method:ident, $argument:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int)`，末端保留参数身份。")]
+            pub fn $method(&mut self, $argument: i32) -> Result<$ty, DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$filter_method(self, $argument)
+                } else {
+                    self.physical.$physical_method($argument)
+                }
+            }
+        )+
+    };
+}
+
 /// 单次 `ResultSet` 操作使用的有位置调用链。
 ///
 /// 每次 `ResultSet` 方法调用都创建新链并从位置 0 开始，等价于 Java
@@ -376,6 +410,16 @@ impl<'a> ResultSetFilterChain<'a> {
             Option<Vec<u8>>,
             "getBytes"
         ),
+        (
+            result_set_get_n_string,
+            result_set_get_n_string_by_label,
+            result_set_get_n_string,
+            result_set_get_n_string_by_label,
+            n_string,
+            n_string_by_label,
+            Option<String>,
+            "getNString"
+        ),
     );
 
     /// 继续分派 Java `ResultSet#getBigDecimal(int)`。
@@ -614,6 +658,86 @@ impl<'a> ResultSetFilterChain<'a> {
             "getNCharacterStream"
         ),
     );
+
+    no_arg_result_set_chain_methods!(
+        (result_set_was_null, result_set_was_null, was_null, bool, "wasNull"),
+        (result_set_previous, result_set_previous, previous, bool, "previous"),
+        (result_set_is_before_first, result_set_is_before_first, is_before_first, bool, "isBeforeFirst"),
+        (result_set_is_after_last, result_set_is_after_last, is_after_last, bool, "isAfterLast"),
+        (result_set_is_first, result_set_is_first, is_first, bool, "isFirst"),
+        (result_set_is_last, result_set_is_last, is_last, bool, "isLast"),
+        (result_set_before_first, result_set_before_first, before_first, (), "beforeFirst"),
+        (result_set_after_last, result_set_after_last, after_last, (), "afterLast"),
+        (result_set_first, result_set_first, first, bool, "first"),
+        (result_set_last, result_set_last, last, bool, "last"),
+        (result_set_get_row, result_set_get_row, row, i32, "getRow"),
+        (result_set_get_fetch_direction, result_set_get_fetch_direction, fetch_direction, i32, "getFetchDirection"),
+        (result_set_get_fetch_size, result_set_get_fetch_size, fetch_size, i32, "getFetchSize"),
+        (result_set_get_type, result_set_get_type, result_set_type, i32, "getType"),
+        (result_set_get_concurrency, result_set_get_concurrency, concurrency, i32, "getConcurrency"),
+        (result_set_get_holdability, result_set_get_holdability, holdability, i32, "getHoldability"),
+        (result_set_get_cursor_name, result_set_get_cursor_name, cursor_name, Option<String>, "getCursorName"),
+        (result_set_row_updated, result_set_row_updated, row_updated, bool, "rowUpdated"),
+        (result_set_row_inserted, result_set_row_inserted, row_inserted, bool, "rowInserted"),
+        (result_set_row_deleted, result_set_row_deleted, row_deleted, bool, "rowDeleted"),
+    );
+
+    i32_arg_result_set_chain_methods!(
+        (
+            result_set_absolute,
+            result_set_absolute,
+            absolute,
+            row,
+            bool,
+            "absolute"
+        ),
+        (
+            result_set_relative,
+            result_set_relative,
+            relative,
+            rows,
+            bool,
+            "relative"
+        ),
+        (
+            result_set_set_fetch_direction,
+            result_set_set_fetch_direction,
+            set_fetch_direction,
+            direction,
+            (),
+            "setFetchDirection"
+        ),
+        (
+            result_set_set_fetch_size,
+            result_set_set_fetch_size,
+            set_fetch_size,
+            rows,
+            (),
+            "setFetchSize"
+        ),
+    );
+
+    /// 继续分派 Java `ResultSet#findColumn(String)`。
+    pub fn result_set_find_column(&mut self, column_label: &str) -> Result<usize, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_find_column(self, column_label)
+        } else {
+            self.physical.find_column(column_label)
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#isClosed()`。
+    pub fn result_set_is_closed(&mut self) -> Result<bool, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_is_closed(self)
+        } else {
+            Ok(self.physical.is_closed())
+        }
+    }
 
     /// 返回本结果集共享的 Filter 上下文。
     pub fn context(&self) -> &ResultSetFilterContext {

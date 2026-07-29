@@ -275,6 +275,25 @@ Java/Rust 对象条目遗漏。故不恢复 `docs/migration`。
 502 个测试函数及 144 个需人工复核信号；这些数量只用于建立测试账本，不作为
 语义等价证明。
 
+2026-07-29 C2-R45：新增 `CORE-FLT-010` 与 `SEM-FLT-027` 后为 223 行、
+223 个唯一 ID、重复 0；workspace `SEM-*` 为 156 个唯一 ID，删除前 143 个
+旧 ID 仍然遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+504 个测试函数及 144 个需人工复核信号；ResultSet stream/resource 26 重载
+由物理探针、资源共享生命周期及真实 Toasty SQLite 流读取建立三账本证据，
+不把该数量审计或单数据库主机测试解释为全语义等价。
+
+2026-07-29 C2-R46：新增 `CORE-FLT-011` 与 `SEM-FLT-028` 后为 225 行、
+225 个唯一 ID、重复 0；workspace `SEM-*` 为 157 个唯一 ID，删除前 143 个
+旧 ID 仍然遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+506 个测试函数及 144 个需人工复核信号；navigation/property 26 调用由精确
+物理穿透、全方法短路、可失败 isClosed 分层及真实 SQLite 游标状态机建立证据。
+
+2026-07-29 C2-R47：新增 `CORE-FLT-012` 与 `SEM-FLT-029` 后为 227 行、
+227 个唯一 ID、重复 0；workspace `SEM-*` 为 158 个唯一 ID，删除前 143 个
+旧 ID 仍然遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+507 个测试函数及 144 个需人工复核信号；NString 两重载已从 getString 折叠中
+拆出，并由精确物理方法、短路错误与真实 SQLite Unicode 读取建立证据。
+
 统计方法是将 Git 基线中的 6 份 `docs/migration` 文档拼接为旧集合，将
 `docs/README.md`、两份跨模块文档和三个模块目录拼接为新集合；分别对
 `SEM-[A-Z]+-[0-9]{3}`、Markdown 表格首列反引号 token、含小写字符的

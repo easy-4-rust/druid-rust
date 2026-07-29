@@ -458,7 +458,10 @@ impl DruidPooledResultSet {
     /// 对应 Java：`DruidPooledResultSet#previous()`。
     pub fn previous(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.previous();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.previous(),
+            |chain| chain.result_set_previous(self.physical.as_ref(), &self.filter_context),
+        );
         let more_rows = self.classify(connection, result)?;
         if more_rows {
             let _ = self.cursor_index.fetch_update(
@@ -496,6 +499,22 @@ impl DruidPooledResultSet {
         self.closed.load(Ordering::Acquire)
     }
 
+    /// 经 Java `ResultSet#isClosed()` FilterChain 查询物理关闭状态。
+    ///
+    /// `is_closed()` 保留为 Rust 内部无失败生命周期观察器；对外 JDBC 语义入口
+    /// 使用本方法，使 Filter 可以短路、改写或返回驱动错误。
+    pub fn is_closed_with_connection(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<bool, DruidError> {
+        self.ensure_same_lease(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || Ok(self.physical.is_closed()),
+            |chain| chain.result_set_is_closed(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
+    }
+
     /// 返回成功抓取的历史峰值行号。
     ///
     /// 对应 Java：`DruidPooledResultSet#getFetchRowCount()`。
@@ -506,7 +525,10 @@ impl DruidPooledResultSet {
     /// 返回最近一次 getter 是否读取 SQL NULL。
     pub fn was_null(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.was_null();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.was_null(),
+            |chain| chain.result_set_was_null(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2192,7 +2214,18 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
     ) -> Result<Option<String>, DruidError> {
-        self.string(connection, column_index)
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.n_string(column_index),
+            |chain| {
+                chain.result_set_get_n_string(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                )
+            },
+        );
+        self.classify(connection, result)
     }
 
     /// 按标签读取 NString。
@@ -2201,7 +2234,18 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
     ) -> Result<Option<String>, DruidError> {
-        self.string_by_label(connection, column_label)
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.n_string_by_label(column_label),
+            |chain| {
+                chain.result_set_get_n_string_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                )
+            },
+        );
+        self.classify(connection, result)
     }
 
     /// 按下标读取 ASCII 输入流。
@@ -2411,7 +2455,16 @@ impl DruidPooledResultSet {
         column_label: &str,
     ) -> Result<usize, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.find_column(column_label);
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.find_column(column_label),
+            |chain| {
+                chain.result_set_find_column(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                )
+            },
+        );
         self.classify(connection, result)
     }
 
@@ -2420,7 +2473,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.is_before_first())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.is_before_first(),
+            |chain| chain.result_set_is_before_first(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 返回是否位于最后一行之后。
@@ -2428,17 +2486,32 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.is_after_last())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.is_after_last(),
+            |chain| chain.result_set_is_after_last(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 返回是否位于第一行。
     pub fn is_first(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.is_first())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.is_first(),
+            |chain| chain.result_set_is_first(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 返回是否位于最后一行。
     pub fn is_last(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.is_last())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.is_last(),
+            |chain| chain.result_set_is_last(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 移到第一行之前。
@@ -2446,28 +2519,51 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.before_first())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.before_first(),
+            |chain| chain.result_set_before_first(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 移到最后一行之后。
     pub fn after_last(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.after_last())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.after_last(),
+            |chain| chain.result_set_after_last(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 移到第一行。
     pub fn first(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.first())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.first(),
+            |chain| chain.result_set_first(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 移到最后一行。
     pub fn last(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.last())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.last(),
+            |chain| chain.result_set_last(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 返回当前 JDBC 行号。
     pub fn row(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.row();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.row(),
+            |chain| chain.result_set_get_row(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2478,7 +2574,10 @@ impl DruidPooledResultSet {
         row: i32,
     ) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.absolute(row);
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.absolute(row),
+            |chain| chain.result_set_absolute(self.physical.as_ref(), &self.filter_context, row),
+        );
         self.classify(connection, result)
     }
 
@@ -2489,7 +2588,10 @@ impl DruidPooledResultSet {
         rows: i32,
     ) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.relative(rows);
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.relative(rows),
+            |chain| chain.result_set_relative(self.physical.as_ref(), &self.filter_context, rows),
+        );
         self.classify(connection, result)
     }
 
@@ -2500,7 +2602,16 @@ impl DruidPooledResultSet {
         direction: i32,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.set_fetch_direction(direction);
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.set_fetch_direction(direction),
+            |chain| {
+                chain.result_set_set_fetch_direction(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    direction,
+                )
+            },
+        );
         self.classify(connection, result)
     }
 
@@ -2510,7 +2621,12 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.fetch_direction();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.fetch_direction(),
+            |chain| {
+                chain.result_set_get_fetch_direction(self.physical.as_ref(), &self.filter_context)
+            },
+        );
         self.classify(connection, result)
     }
 
@@ -2521,7 +2637,12 @@ impl DruidPooledResultSet {
         rows: i32,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.set_fetch_size(rows);
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.set_fetch_size(rows),
+            |chain| {
+                chain.result_set_set_fetch_size(self.physical.as_ref(), &self.filter_context, rows)
+            },
+        );
         self.classify(connection, result)
     }
 
@@ -2531,7 +2652,10 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.fetch_size();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.fetch_size(),
+            |chain| chain.result_set_get_fetch_size(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2541,7 +2665,10 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.result_set_type();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.result_set_type(),
+            |chain| chain.result_set_get_type(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2551,7 +2678,10 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.concurrency();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.concurrency(),
+            |chain| chain.result_set_get_concurrency(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2561,7 +2691,10 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.holdability();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.holdability(),
+            |chain| chain.result_set_get_holdability(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2603,7 +2736,10 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<Option<String>, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.cursor_name();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.cursor_name(),
+            |chain| chain.result_set_get_cursor_name(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2624,7 +2760,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.row_updated())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.row_updated(),
+            |chain| chain.result_set_row_updated(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 返回当前行是否为插入行。
@@ -2632,7 +2773,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.row_inserted())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.row_inserted(),
+            |chain| chain.result_set_row_inserted(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 返回当前行是否被删除。
@@ -2640,7 +2786,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<bool, DruidError> {
-        self.delegate_bool(connection, |result_set| result_set.row_deleted())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.row_deleted(),
+            |chain| chain.result_set_row_deleted(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 提交插入行。
@@ -2960,16 +3111,6 @@ impl DruidPooledResultSet {
         self.delegate_unit(connection, |result_set| {
             result_set.update_n_clob_reader_by_label(column_label, reader, length)
         })
-    }
-
-    fn delegate_bool(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        operation: impl FnOnce(&dyn PhysicalResultSet) -> Result<bool, DruidError>,
-    ) -> Result<bool, DruidError> {
-        self.ensure_open_for(connection)?;
-        let result = operation(self.physical.as_ref());
-        self.classify(connection, result)
     }
 
     fn delegate_unit(
