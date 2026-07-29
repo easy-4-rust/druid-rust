@@ -22,19 +22,21 @@ bigdecimal.workspace = true
 chrono.workspace = true
 dashmap.workspace = true
 fastrand.workspace = true
-moka.workspace = true
+form_urlencoded.workspace = true
+moka = { workspace = true, features = ["sync"] }
 jiff.workspace = true
 parking_lot.workspace = true
 prometheus.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlparser.workspace = true
+sqlparser = { workspace = true, features = ["visitor"] }
 thiserror.workspace = true
 toasty.workspace = true
 toasty-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid = { version = "1", features = ["v4"] }
+xxhash-rust.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

@@ -12,7 +12,7 @@ use super::{
     JdbcCalendar, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob,
     JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
     JdbcTypeMap, JdbcUrl, PhysicalResultSet, ResultSetFilterContext, ResultSetMetaData,
-    ResultSetUpdate, SqlWarning, Unwrapped, Value, Wrapper,
+    ResultSetStatement, ResultSetUpdate, SqlWarning, Unwrapped, Value, Wrapper,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -21,7 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
 macro_rules! scalar_update_pair {
-    ($index_method:ident, $label_method:ident, $value_type:ty, $variant:ident, $java_name:literal) => {
+    ($index_method:ident, $label_method:ident, $value_type:ty, $variant:ident, $chain_index:ident, $chain_label:ident, $java_name:literal) => {
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, ..)`。")]
         pub fn $index_method(
             &mut self,
@@ -29,7 +29,19 @@ macro_rules! scalar_update_pair {
             column_index: usize,
             value: $value_type,
         ) -> Result<(), DruidError> {
-            self.update_argument(connection, column_index, ResultSetUpdate::$variant(value))
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    value,
+                )
+            } else {
+                self.physical
+                    .update_value(column_index, &ResultSetUpdate::$variant(value))
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, ..)`。")]
@@ -39,11 +51,72 @@ macro_rules! scalar_update_pair {
             column_label: &str,
             value: $value_type,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant(value),
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    value,
+                )
+            } else {
+                self.physical
+                    .update_value_by_label(column_label, &ResultSetUpdate::$variant(value))
+            };
+            self.classify(connection, result)
+        }
+    };
+}
+
+macro_rules! resource_update_pair {
+    (
+        $index_method:ident,
+        $label_method:ident,
+        $chain_index:ident,
+        $chain_label:ident,
+        $value_type:ty,
+        $java_name:literal
+    ) => {
+        #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, ..)`，保留 nullable 资源句柄。")]
+        pub fn $index_method(
+            &mut self,
+            connection: &mut DruidPooledConnection,
+            column_index: usize,
+            value: Option<&$value_type>,
+        ) -> Result<(), DruidError> {
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    value.cloned(),
+                )
+            } else {
+                self.physical.$index_method(column_index, value)
+            };
+            self.classify(connection, result)
+        }
+
+        #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, ..)`，保留 nullable 资源句柄。")]
+        pub fn $label_method(
+            &mut self,
+            connection: &mut DruidPooledConnection,
+            column_label: &str,
+            value: Option<&$value_type>,
+        ) -> Result<(), DruidError> {
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    value.cloned(),
+                )
+            } else {
+                self.physical.$label_method(column_label, value)
+            };
+            self.classify(connection, result)
         }
     };
 }
@@ -53,6 +126,9 @@ macro_rules! input_stream_update_family {
         $plain_index:ident, $plain_label:ident,
         $int_index:ident, $int_label:ident,
         $long_index:ident, $long_label:ident,
+        $chain_plain_index:ident, $chain_plain_label:ident,
+        $chain_int_index:ident, $chain_int_label:ident,
+        $chain_long_index:ident, $chain_long_label:ident,
         $variant:ident, $java_name:literal
     ) => {
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, InputStream)`。")]
@@ -62,14 +138,24 @@ macro_rules! input_stream_update_family {
             column_index: usize,
             stream: Option<&JdbcInputStream>,
         ) -> Result<(), DruidError> {
-            self.update_argument(
-                connection,
-                column_index,
-                ResultSetUpdate::$variant {
-                    stream: stream.cloned(),
-                    length: JdbcStreamLength::Unspecified,
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_plain_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    stream.cloned(),
+                )
+            } else {
+                self.physical.update_value(
+                    column_index,
+                    &ResultSetUpdate::$variant {
+                        stream: stream.cloned(),
+                        length: JdbcStreamLength::Unspecified,
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, InputStream)`。")]
@@ -79,14 +165,24 @@ macro_rules! input_stream_update_family {
             column_label: &str,
             stream: Option<&JdbcInputStream>,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant {
-                    stream: stream.cloned(),
-                    length: JdbcStreamLength::Unspecified,
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_plain_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    stream.cloned(),
+                )
+            } else {
+                self.physical.update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::$variant {
+                        stream: stream.cloned(),
+                        length: JdbcStreamLength::Unspecified,
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, InputStream, int)`。")]
@@ -97,14 +193,25 @@ macro_rules! input_stream_update_family {
             stream: Option<&JdbcInputStream>,
             length: i32,
         ) -> Result<(), DruidError> {
-            self.update_argument(
-                connection,
-                column_index,
-                ResultSetUpdate::$variant {
-                    stream: stream.cloned(),
-                    length: JdbcStreamLength::Int(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_int_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    stream.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value(
+                    column_index,
+                    &ResultSetUpdate::$variant {
+                        stream: stream.cloned(),
+                        length: JdbcStreamLength::Int(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, InputStream, int)`。")]
@@ -115,14 +222,25 @@ macro_rules! input_stream_update_family {
             stream: Option<&JdbcInputStream>,
             length: i32,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant {
-                    stream: stream.cloned(),
-                    length: JdbcStreamLength::Int(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_int_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    stream.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::$variant {
+                        stream: stream.cloned(),
+                        length: JdbcStreamLength::Int(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, InputStream, long)`。")]
@@ -133,14 +251,25 @@ macro_rules! input_stream_update_family {
             stream: Option<&JdbcInputStream>,
             length: i64,
         ) -> Result<(), DruidError> {
-            self.update_argument(
-                connection,
-                column_index,
-                ResultSetUpdate::$variant {
-                    stream: stream.cloned(),
-                    length: JdbcStreamLength::Long(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_long_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    stream.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value(
+                    column_index,
+                    &ResultSetUpdate::$variant {
+                        stream: stream.cloned(),
+                        length: JdbcStreamLength::Long(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, InputStream, long)`。")]
@@ -151,14 +280,25 @@ macro_rules! input_stream_update_family {
             stream: Option<&JdbcInputStream>,
             length: i64,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant {
-                    stream: stream.cloned(),
-                    length: JdbcStreamLength::Long(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_long_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    stream.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::$variant {
+                        stream: stream.cloned(),
+                        length: JdbcStreamLength::Long(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
     };
 }
@@ -168,6 +308,9 @@ macro_rules! reader_update_family {
         $plain_index:ident, $plain_label:ident,
         $int_index:ident, $int_label:ident,
         $long_index:ident, $long_label:ident,
+        $chain_plain_index:ident, $chain_plain_label:ident,
+        $chain_int_index:ident, $chain_int_label:ident,
+        $chain_long_index:ident, $chain_long_label:ident,
         $variant:ident, $java_name:literal
     ) => {
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, Reader)`。")]
@@ -177,14 +320,24 @@ macro_rules! reader_update_family {
             column_index: usize,
             reader: Option<&JdbcReader>,
         ) -> Result<(), DruidError> {
-            self.update_argument(
-                connection,
-                column_index,
-                ResultSetUpdate::$variant {
-                    reader: reader.cloned(),
-                    length: JdbcCharacterLength::Unspecified,
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_plain_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                )
+            } else {
+                self.physical.update_value(
+                    column_index,
+                    &ResultSetUpdate::$variant {
+                        reader: reader.cloned(),
+                        length: JdbcCharacterLength::Unspecified,
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, Reader)`。")]
@@ -194,14 +347,24 @@ macro_rules! reader_update_family {
             column_label: &str,
             reader: Option<&JdbcReader>,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant {
-                    reader: reader.cloned(),
-                    length: JdbcCharacterLength::Unspecified,
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_plain_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                )
+            } else {
+                self.physical.update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::$variant {
+                        reader: reader.cloned(),
+                        length: JdbcCharacterLength::Unspecified,
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, Reader, int)`。")]
@@ -212,14 +375,25 @@ macro_rules! reader_update_family {
             reader: Option<&JdbcReader>,
             length: i32,
         ) -> Result<(), DruidError> {
-            self.update_argument(
-                connection,
-                column_index,
-                ResultSetUpdate::$variant {
-                    reader: reader.cloned(),
-                    length: JdbcCharacterLength::Int(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_int_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value(
+                    column_index,
+                    &ResultSetUpdate::$variant {
+                        reader: reader.cloned(),
+                        length: JdbcCharacterLength::Int(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, Reader, int)`。")]
@@ -230,14 +404,25 @@ macro_rules! reader_update_family {
             reader: Option<&JdbcReader>,
             length: i32,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant {
-                    reader: reader.cloned(),
-                    length: JdbcCharacterLength::Int(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_int_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::$variant {
+                        reader: reader.cloned(),
+                        length: JdbcCharacterLength::Int(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按下标执行 Java `ResultSet#", $java_name, "(int, Reader, long)`。")]
@@ -248,14 +433,25 @@ macro_rules! reader_update_family {
             reader: Option<&JdbcReader>,
             length: i64,
         ) -> Result<(), DruidError> {
-            self.update_argument(
-                connection,
-                column_index,
-                ResultSetUpdate::$variant {
-                    reader: reader.cloned(),
-                    length: JdbcCharacterLength::Long(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_long_index(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value(
+                    column_index,
+                    &ResultSetUpdate::$variant {
+                        reader: reader.cloned(),
+                        length: JdbcCharacterLength::Long(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
 
         #[doc = concat!("按标签执行 Java `ResultSet#", $java_name, "(String, Reader, long)`。")]
@@ -266,14 +462,25 @@ macro_rules! reader_update_family {
             reader: Option<&JdbcReader>,
             length: i64,
         ) -> Result<(), DruidError> {
-            self.update_by_label_argument(
-                connection,
-                column_label,
-                ResultSetUpdate::$variant {
-                    reader: reader.cloned(),
-                    length: JdbcCharacterLength::Long(length),
-                },
-            )
+            self.ensure_open_for(connection)?;
+            let result = if let Some(chain) = self.filter_chain.as_ref() {
+                chain.$chain_long_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                    length,
+                )
+            } else {
+                self.physical.update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::$variant {
+                        reader: reader.cloned(),
+                        length: JdbcCharacterLength::Long(length),
+                    },
+                )
+            };
+            self.classify(connection, result)
         }
     };
 }
@@ -410,6 +617,35 @@ impl DruidPooledResultSet {
     /// Statement 身份，不委托 raw ResultSet。
     pub fn statement(&self) -> &DruidPooledStatement {
         &self.statement
+    }
+
+    /// 通过 FilterChain 返回创建本结果集的动态 Statement 平台对象。
+    ///
+    /// 对应 Java `ResultSet#getStatement()`：普通、Prepared、Callable 三种运行时
+    /// 身份均保留为共享句柄，Filter 可以继续调用、短路替换或返回驱动错误。
+    pub fn statement_object(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<ResultSetStatement, DruidError> {
+        self.ensure_open_for(connection)?;
+        let statement = if let Some(callable) = &self.callable_statement {
+            ResultSetStatement::Callable(callable.clone())
+        } else if let Some(prepared) = &self.prepared_statement {
+            ResultSetStatement::Prepared(prepared.clone())
+        } else {
+            ResultSetStatement::Statement(self.statement.clone())
+        };
+        let result = self.filter_chain.as_ref().map_or_else(
+            || Ok(statement.clone()),
+            |chain| {
+                chain.result_set_get_statement(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    &statement,
+                )
+            },
+        );
+        self.classify(connection, result)
     }
 
     /// 尝试把 `getStatement()` 的动态身份恢复为 PreparedStatement。
@@ -1600,7 +1836,21 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
     ) -> Result<(), DruidError> {
-        self.update_argument(connection, column_index, ResultSetUpdate::Null)
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || {
+                self.physical
+                    .update_value(column_index, &ResultSetUpdate::Null)
+            },
+            |chain| {
+                chain.result_set_update_null(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                )
+            },
+        );
+        self.classify(connection, result)
     }
 
     /// 按标签执行 Java `ResultSet#updateNull(String)`。
@@ -1609,7 +1859,21 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
     ) -> Result<(), DruidError> {
-        self.update_by_label_argument(connection, column_label, ResultSetUpdate::Null)
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || {
+                self.physical
+                    .update_value_by_label(column_label, &ResultSetUpdate::Null)
+            },
+            |chain| {
+                chain.result_set_update_null_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                )
+            },
+        );
+        self.classify(connection, result)
     }
 
     scalar_update_pair!(
@@ -1617,23 +1881,53 @@ impl DruidPooledResultSet {
         update_boolean_by_label,
         bool,
         Boolean,
+        result_set_update_boolean,
+        result_set_update_boolean_by_label,
         "updateBoolean"
     );
-    scalar_update_pair!(update_byte, update_byte_by_label, i8, Byte, "updateByte");
+    scalar_update_pair!(
+        update_byte,
+        update_byte_by_label,
+        i8,
+        Byte,
+        result_set_update_byte,
+        result_set_update_byte_by_label,
+        "updateByte"
+    );
     scalar_update_pair!(
         update_short,
         update_short_by_label,
         i16,
         Short,
+        result_set_update_short,
+        result_set_update_short_by_label,
         "updateShort"
     );
-    scalar_update_pair!(update_int, update_int_by_label, i32, Int, "updateInt");
-    scalar_update_pair!(update_long, update_long_by_label, i64, Long, "updateLong");
+    scalar_update_pair!(
+        update_int,
+        update_int_by_label,
+        i32,
+        Int,
+        result_set_update_int,
+        result_set_update_int_by_label,
+        "updateInt"
+    );
+    scalar_update_pair!(
+        update_long,
+        update_long_by_label,
+        i64,
+        Long,
+        result_set_update_long,
+        result_set_update_long_by_label,
+        "updateLong"
+    );
     scalar_update_pair!(
         update_float,
         update_float_by_label,
         f32,
         Float,
+        result_set_update_float,
+        result_set_update_float_by_label,
         "updateFloat"
     );
     scalar_update_pair!(
@@ -1641,6 +1935,8 @@ impl DruidPooledResultSet {
         update_double_by_label,
         f64,
         Double,
+        result_set_update_double,
+        result_set_update_double_by_label,
         "updateDouble"
     );
     scalar_update_pair!(
@@ -1648,6 +1944,8 @@ impl DruidPooledResultSet {
         update_big_decimal_by_label,
         Option<BigDecimal>,
         BigDecimal,
+        result_set_update_big_decimal,
+        result_set_update_big_decimal_by_label,
         "updateBigDecimal"
     );
     scalar_update_pair!(
@@ -1655,6 +1953,8 @@ impl DruidPooledResultSet {
         update_string_by_label,
         Option<String>,
         String,
+        result_set_update_string,
+        result_set_update_string_by_label,
         "updateString"
     );
     scalar_update_pair!(
@@ -1662,6 +1962,8 @@ impl DruidPooledResultSet {
         update_bytes_by_label,
         Option<Vec<u8>>,
         Bytes,
+        result_set_update_bytes,
+        result_set_update_bytes_by_label,
         "updateBytes"
     );
     scalar_update_pair!(
@@ -1669,6 +1971,8 @@ impl DruidPooledResultSet {
         update_date_by_label,
         Option<NaiveDate>,
         Date,
+        result_set_update_date,
+        result_set_update_date_by_label,
         "updateDate"
     );
     scalar_update_pair!(
@@ -1676,6 +1980,8 @@ impl DruidPooledResultSet {
         update_time_by_label,
         Option<NaiveTime>,
         Time,
+        result_set_update_time,
+        result_set_update_time_by_label,
         "updateTime"
     );
     scalar_update_pair!(
@@ -1683,6 +1989,8 @@ impl DruidPooledResultSet {
         update_timestamp_by_label,
         Option<NaiveDateTime>,
         Timestamp,
+        result_set_update_timestamp,
+        result_set_update_timestamp_by_label,
         "updateTimestamp"
     );
 
@@ -1693,7 +2001,19 @@ impl DruidPooledResultSet {
         column_index: usize,
         value: JdbcObject,
     ) -> Result<(), DruidError> {
-        self.update_argument(connection, column_index, ResultSetUpdate::Object(value))
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_object(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_index,
+                value,
+            )
+        } else {
+            self.physical
+                .update_value(column_index, &ResultSetUpdate::Object(value))
+        };
+        self.classify(connection, result)
     }
 
     /// 按标签执行 Java `ResultSet#updateObject(String, Object)`。
@@ -1703,7 +2023,19 @@ impl DruidPooledResultSet {
         column_label: &str,
         value: JdbcObject,
     ) -> Result<(), DruidError> {
-        self.update_by_label_argument(connection, column_label, ResultSetUpdate::Object(value))
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_object_by_label(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_label,
+                value,
+            )
+        } else {
+            self.physical
+                .update_value_by_label(column_label, &ResultSetUpdate::Object(value))
+        };
+        self.classify(connection, result)
     }
 
     /// 按下标执行 Java `ResultSet#updateObject(int, Object, int)`。
@@ -1714,14 +2046,25 @@ impl DruidPooledResultSet {
         value: JdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
-        self.update_argument(
-            connection,
-            column_index,
-            ResultSetUpdate::ObjectWithScaleOrLength {
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_object_with_scale_or_length(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_index,
                 value,
                 scale_or_length,
-            },
-        )
+            )
+        } else {
+            self.physical.update_value(
+                column_index,
+                &ResultSetUpdate::ObjectWithScaleOrLength {
+                    value,
+                    scale_or_length,
+                },
+            )
+        };
+        self.classify(connection, result)
     }
 
     /// 按标签执行 Java `ResultSet#updateObject(String, Object, int)`。
@@ -1732,14 +2075,25 @@ impl DruidPooledResultSet {
         value: JdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
-        self.update_by_label_argument(
-            connection,
-            column_label,
-            ResultSetUpdate::ObjectWithScaleOrLength {
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_object_by_label_with_scale_or_length(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_label,
                 value,
                 scale_or_length,
-            },
-        )
+            )
+        } else {
+            self.physical.update_value_by_label(
+                column_label,
+                &ResultSetUpdate::ObjectWithScaleOrLength {
+                    value,
+                    scale_or_length,
+                },
+            )
+        };
+        self.classify(connection, result)
     }
 
     scalar_update_pair!(
@@ -1747,6 +2101,8 @@ impl DruidPooledResultSet {
         update_n_string_by_label,
         Option<String>,
         NString,
+        result_set_update_n_string,
+        result_set_update_n_string_by_label,
         "updateNString"
     );
 
@@ -1757,6 +2113,12 @@ impl DruidPooledResultSet {
         update_ascii_stream_by_label_with_int_length,
         update_ascii_stream_with_length,
         update_ascii_stream_by_label_with_length,
+        result_set_update_ascii_stream,
+        result_set_update_ascii_stream_by_label,
+        result_set_update_ascii_stream_with_int_length,
+        result_set_update_ascii_stream_by_label_with_int_length,
+        result_set_update_ascii_stream_with_length,
+        result_set_update_ascii_stream_by_label_with_length,
         AsciiStream,
         "updateAsciiStream"
     );
@@ -1767,6 +2129,12 @@ impl DruidPooledResultSet {
         update_binary_stream_by_label_with_int_length,
         update_binary_stream_with_length,
         update_binary_stream_by_label_with_length,
+        result_set_update_binary_stream,
+        result_set_update_binary_stream_by_label,
+        result_set_update_binary_stream_with_int_length,
+        result_set_update_binary_stream_by_label_with_int_length,
+        result_set_update_binary_stream_with_length,
+        result_set_update_binary_stream_by_label_with_length,
         BinaryStream,
         "updateBinaryStream"
     );
@@ -1777,6 +2145,12 @@ impl DruidPooledResultSet {
         update_character_stream_by_label_with_int_length,
         update_character_stream_with_length,
         update_character_stream_by_label_with_length,
+        result_set_update_character_stream,
+        result_set_update_character_stream_by_label,
+        result_set_update_character_stream_with_int_length,
+        result_set_update_character_stream_by_label_with_int_length,
+        result_set_update_character_stream_with_length,
+        result_set_update_character_stream_by_label_with_length,
         CharacterStream,
         "updateCharacterStream"
     );
@@ -1788,14 +2162,24 @@ impl DruidPooledResultSet {
         column_index: usize,
         reader: Option<&JdbcReader>,
     ) -> Result<(), DruidError> {
-        self.update_argument(
-            connection,
-            column_index,
-            ResultSetUpdate::NCharacterStream {
-                reader: reader.cloned(),
-                length: JdbcCharacterLength::Unspecified,
-            },
-        )
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_n_character_stream(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_index,
+                reader.cloned(),
+            )
+        } else {
+            self.physical.update_value(
+                column_index,
+                &ResultSetUpdate::NCharacterStream {
+                    reader: reader.cloned(),
+                    length: JdbcCharacterLength::Unspecified,
+                },
+            )
+        };
+        self.classify(connection, result)
     }
 
     /// 按标签执行 Java `ResultSet#updateNCharacterStream(String, Reader)`。
@@ -1805,14 +2189,24 @@ impl DruidPooledResultSet {
         column_label: &str,
         reader: Option<&JdbcReader>,
     ) -> Result<(), DruidError> {
-        self.update_by_label_argument(
-            connection,
-            column_label,
-            ResultSetUpdate::NCharacterStream {
-                reader: reader.cloned(),
-                length: JdbcCharacterLength::Unspecified,
-            },
-        )
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_n_character_stream_by_label(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_label,
+                reader.cloned(),
+            )
+        } else {
+            self.physical.update_value_by_label(
+                column_label,
+                &ResultSetUpdate::NCharacterStream {
+                    reader: reader.cloned(),
+                    length: JdbcCharacterLength::Unspecified,
+                },
+            )
+        };
+        self.classify(connection, result)
     }
 
     /// 按下标执行 Java `ResultSet#updateNCharacterStream(int, Reader, long)`。
@@ -1823,14 +2217,25 @@ impl DruidPooledResultSet {
         reader: Option<&JdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
-        self.update_argument(
-            connection,
-            column_index,
-            ResultSetUpdate::NCharacterStream {
-                reader: reader.cloned(),
-                length: JdbcCharacterLength::Long(length),
-            },
-        )
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_n_character_stream_with_length(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_index,
+                reader.cloned(),
+                length,
+            )
+        } else {
+            self.physical.update_value(
+                column_index,
+                &ResultSetUpdate::NCharacterStream {
+                    reader: reader.cloned(),
+                    length: JdbcCharacterLength::Long(length),
+                },
+            )
+        };
+        self.classify(connection, result)
     }
 
     /// 按标签执行 Java `ResultSet#updateNCharacterStream(String, Reader, long)`。
@@ -1841,183 +2246,83 @@ impl DruidPooledResultSet {
         reader: Option<&JdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
-        self.update_by_label_argument(
-            connection,
-            column_label,
-            ResultSetUpdate::NCharacterStream {
-                reader: reader.cloned(),
-                length: JdbcCharacterLength::Long(length),
-            },
-        )
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            chain.result_set_update_n_character_stream_by_label_with_length(
+                self.physical.as_ref(),
+                &self.filter_context,
+                column_label,
+                reader.cloned(),
+                length,
+            )
+        } else {
+            self.physical.update_value_by_label(
+                column_label,
+                &ResultSetUpdate::NCharacterStream {
+                    reader: reader.cloned(),
+                    length: JdbcCharacterLength::Long(length),
+                },
+            )
+        };
+        self.classify(connection, result)
     }
 
-    /// 按下标更新 JDBC `Ref`。
-    pub fn update_reference(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcRef>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_reference(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `Ref`。
-    pub fn update_reference_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcRef>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_reference_by_label(column_label, value)
-        })
-    }
-
-    /// 按下标更新 JDBC `Blob`。
-    pub fn update_blob(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcBlob>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_blob(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `Blob`。
-    pub fn update_blob_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcBlob>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_blob_by_label(column_label, value)
-        })
-    }
-
-    /// 按下标更新 JDBC `Clob`。
-    pub fn update_clob(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcClob>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_clob(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `Clob`。
-    pub fn update_clob_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcClob>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_clob_by_label(column_label, value)
-        })
-    }
-
-    /// 按下标更新 JDBC `Array`。
-    pub fn update_array(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcArray>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_array(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `Array`。
-    pub fn update_array_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcArray>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_array_by_label(column_label, value)
-        })
-    }
-
-    /// 按下标更新 JDBC `RowId`。
-    pub fn update_row_id(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcRowId>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_row_id(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `RowId`。
-    pub fn update_row_id_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcRowId>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_row_id_by_label(column_label, value)
-        })
-    }
-
-    /// 按下标更新 JDBC `NClob`。
-    pub fn update_n_clob(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcNClob>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_n_clob(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `NClob`。
-    pub fn update_n_clob_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcNClob>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_n_clob_by_label(column_label, value)
-        })
-    }
-
-    /// 按下标更新 JDBC `SQLXML`。
-    pub fn update_sql_xml(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        value: Option<&JdbcSqlXml>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_sql_xml(column_index, value)
-        })
-    }
-
-    /// 按标签更新 JDBC `SQLXML`。
-    pub fn update_sql_xml_by_label(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        value: Option<&JdbcSqlXml>,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_sql_xml_by_label(column_label, value)
-        })
-    }
+    resource_update_pair!(
+        update_reference,
+        update_reference_by_label,
+        result_set_update_reference,
+        result_set_update_reference_by_label,
+        JdbcRef,
+        "updateRef"
+    );
+    resource_update_pair!(
+        update_blob,
+        update_blob_by_label,
+        result_set_update_blob,
+        result_set_update_blob_by_label,
+        JdbcBlob,
+        "updateBlob"
+    );
+    resource_update_pair!(
+        update_clob,
+        update_clob_by_label,
+        result_set_update_clob,
+        result_set_update_clob_by_label,
+        JdbcClob,
+        "updateClob"
+    );
+    resource_update_pair!(
+        update_array,
+        update_array_by_label,
+        result_set_update_array,
+        result_set_update_array_by_label,
+        JdbcArray,
+        "updateArray"
+    );
+    resource_update_pair!(
+        update_row_id,
+        update_row_id_by_label,
+        result_set_update_row_id,
+        result_set_update_row_id_by_label,
+        JdbcRowId,
+        "updateRowId"
+    );
+    resource_update_pair!(
+        update_n_clob,
+        update_n_clob_by_label,
+        result_set_update_n_clob,
+        result_set_update_n_clob_by_label,
+        JdbcNClob,
+        "updateNClob"
+    );
+    resource_update_pair!(
+        update_sql_xml,
+        update_sql_xml_by_label,
+        result_set_update_sql_xml,
+        result_set_update_sql_xml_by_label,
+        JdbcSqlXml,
+        "updateSQLXML"
+    );
 
     /// 按下标使用无长度输入流重载更新 `Blob`。
     pub fn update_blob_stream(
@@ -2751,7 +3056,10 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
     ) -> Result<ResultSetMetaData, DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.physical.meta_data();
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.meta_data(),
+            |chain| chain.result_set_get_meta_data(self.physical.as_ref(), &self.filter_context),
+        );
         self.classify(connection, result)
     }
 
@@ -2796,17 +3104,32 @@ impl DruidPooledResultSet {
 
     /// 提交插入行。
     pub fn insert_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.insert_row())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.insert_row(),
+            |chain| chain.result_set_insert_row(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 提交当前行更新。
     pub fn update_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.update_row())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.update_row(),
+            |chain| chain.result_set_update_row(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 删除当前行。
     pub fn delete_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.delete_row())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.delete_row(),
+            |chain| chain.result_set_delete_row(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 刷新当前行。
@@ -2814,7 +3137,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.refresh_row())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.refresh_row(),
+            |chain| chain.result_set_refresh_row(self.physical.as_ref(), &self.filter_context),
+        );
+        self.classify(connection, result)
     }
 
     /// 取消当前行尚未提交的更新。
@@ -2822,7 +3150,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.cancel_row_updates())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.cancel_row_updates(),
+            |chain| {
+                chain.result_set_cancel_row_updates(self.physical.as_ref(), &self.filter_context)
+            },
+        );
+        self.classify(connection, result)
     }
 
     /// 移到插入行。
@@ -2830,7 +3165,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.move_to_insert_row())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.move_to_insert_row(),
+            |chain| {
+                chain.result_set_move_to_insert_row(self.physical.as_ref(), &self.filter_context)
+            },
+        );
+        self.classify(connection, result)
     }
 
     /// 从插入行返回当前行。
@@ -2838,7 +3180,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| result_set.move_to_current_row())
+        self.ensure_open_for(connection)?;
+        let result = self.filter_chain.as_ref().map_or_else(
+            || self.physical.move_to_current_row(),
+            |chain| {
+                chain.result_set_move_to_current_row(self.physical.as_ref(), &self.filter_context)
+            },
+        );
+        self.classify(connection, result)
     }
 
     fn value(
@@ -3019,28 +3368,6 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    fn update_argument(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_index: usize,
-        update: ResultSetUpdate,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_value(column_index, &update)
-        })
-    }
-
-    fn update_by_label_argument(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        column_label: &str,
-        update: ResultSetUpdate,
-    ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_value_by_label(column_label, &update)
-        })
-    }
-
     fn update_blob_stream_argument(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -3048,9 +3375,29 @@ impl DruidPooledResultSet {
         stream: Option<&JdbcInputStream>,
         length: JdbcStreamLength,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_blob_stream(column_index, stream, length)
-        })
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            match length {
+                JdbcStreamLength::Unspecified => chain.result_set_update_blob_stream(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    stream.cloned(),
+                ),
+                JdbcStreamLength::Long(length) => chain.result_set_update_blob_stream_with_length(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    stream.cloned(),
+                    length,
+                ),
+                JdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
+            }
+        } else {
+            self.physical
+                .update_blob_stream(column_index, stream, length)
+        };
+        self.classify(connection, result)
     }
 
     fn update_blob_stream_by_label_argument(
@@ -3060,9 +3407,30 @@ impl DruidPooledResultSet {
         stream: Option<&JdbcInputStream>,
         length: JdbcStreamLength,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_blob_stream_by_label(column_label, stream, length)
-        })
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            match length {
+                JdbcStreamLength::Unspecified => chain.result_set_update_blob_stream_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    stream.cloned(),
+                ),
+                JdbcStreamLength::Long(length) => chain
+                    .result_set_update_blob_stream_by_label_with_length(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        stream.cloned(),
+                        length,
+                    ),
+                JdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
+            }
+        } else {
+            self.physical
+                .update_blob_stream_by_label(column_label, stream, length)
+        };
+        self.classify(connection, result)
     }
 
     fn update_clob_reader_argument(
@@ -3072,9 +3440,30 @@ impl DruidPooledResultSet {
         reader: Option<&JdbcReader>,
         length: JdbcCharacterLength,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_clob_reader(column_index, reader, length)
-        })
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            match length {
+                JdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                ),
+                JdbcCharacterLength::Long(length) => chain
+                    .result_set_update_clob_reader_with_length(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                        length,
+                    ),
+                JdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
+            }
+        } else {
+            self.physical
+                .update_clob_reader(column_index, reader, length)
+        };
+        self.classify(connection, result)
     }
 
     fn update_clob_reader_by_label_argument(
@@ -3084,9 +3473,30 @@ impl DruidPooledResultSet {
         reader: Option<&JdbcReader>,
         length: JdbcCharacterLength,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_clob_reader_by_label(column_label, reader, length)
-        })
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            match length {
+                JdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                ),
+                JdbcCharacterLength::Long(length) => chain
+                    .result_set_update_clob_reader_by_label_with_length(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                        length,
+                    ),
+                JdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
+            }
+        } else {
+            self.physical
+                .update_clob_reader_by_label(column_label, reader, length)
+        };
+        self.classify(connection, result)
     }
 
     fn update_n_clob_reader_argument(
@@ -3096,9 +3506,30 @@ impl DruidPooledResultSet {
         reader: Option<&JdbcReader>,
         length: JdbcCharacterLength,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_n_clob_reader(column_index, reader, length)
-        })
+        self.ensure_open_for(connection)?;
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            match length {
+                JdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                ),
+                JdbcCharacterLength::Long(length) => chain
+                    .result_set_update_n_clob_reader_with_length(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                        length,
+                    ),
+                JdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
+            }
+        } else {
+            self.physical
+                .update_n_clob_reader(column_index, reader, length)
+        };
+        self.classify(connection, result)
     }
 
     fn update_n_clob_reader_by_label_argument(
@@ -3108,18 +3539,29 @@ impl DruidPooledResultSet {
         reader: Option<&JdbcReader>,
         length: JdbcCharacterLength,
     ) -> Result<(), DruidError> {
-        self.delegate_unit(connection, |result_set| {
-            result_set.update_n_clob_reader_by_label(column_label, reader, length)
-        })
-    }
-
-    fn delegate_unit(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        operation: impl FnOnce(&dyn PhysicalResultSet) -> Result<(), DruidError>,
-    ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
-        let result = operation(self.physical.as_ref());
+        let result = if let Some(chain) = self.filter_chain.as_ref() {
+            match length {
+                JdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                ),
+                JdbcCharacterLength::Long(length) => chain
+                    .result_set_update_n_clob_reader_by_label_with_length(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                        length,
+                    ),
+                JdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
+            }
+        } else {
+            self.physical
+                .update_n_clob_reader_by_label(column_label, reader, length)
+        };
         self.classify(connection, result)
     }
 

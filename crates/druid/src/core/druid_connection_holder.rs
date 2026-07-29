@@ -6,9 +6,11 @@
 //! `core/src/main/java/com/alibaba/druid/pool/DruidConnectionHolder.java`。
 
 use super::{
-    ConnectionDefaults, DruidError, PhysicalConnection, PreparedStatementCacheStats,
-    PreparedStatementHolder, PreparedStatementKey, PreparedStatementPool,
+    ConnectionDefaults, ConnectionEventListener, DruidError, PhysicalConnection,
+    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementKey,
+    PreparedStatementPool,
 };
+use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -41,7 +43,8 @@ pub enum ConnectionState {
 /// 属性、创建/活跃/执行/保活时间、借用次数、密码版本和回收标记。
 ///
 /// PreparedStatement cache 已由同名 `PreparedStatementPool`/holder 对象承载；
-/// JDBC listener 与 statement trace 仍由后续切片补齐。
+/// ConnectionEventListener 已迁入；StatementEventListener 与完整 statement trace
+/// 仍由后续切片补齐。
 pub struct DruidConnectionHolder {
     physical_connection: Option<Box<dyn PhysicalConnection>>,
     /// 物理连接 ID。对应 Java：`connectionId`。
@@ -69,6 +72,7 @@ pub struct DruidConnectionHolder {
     share_prepared_statements: bool,
     use_oracle_implicit_cache: bool,
     prepared_statement_stats: Arc<PreparedStatementCacheStats>,
+    connection_event_listeners: RwLock<Vec<Arc<dyn ConnectionEventListener>>>,
     /// 最近一次 SQL 指纹；保留现有 Rust 统计扩展。
     pub last_fingerprint: Mutex<Option<u64>>,
 }
@@ -192,6 +196,7 @@ impl DruidConnectionHolder {
             share_prepared_statements: false,
             use_oracle_implicit_cache: false,
             prepared_statement_stats: Arc::new(PreparedStatementCacheStats::default()),
+            connection_event_listeners: RwLock::new(Vec::new()),
             last_fingerprint: Mutex::new(None),
         }
     }
@@ -204,6 +209,37 @@ impl DruidConnectionHolder {
     /// 返回 holder 是否仍拥有物理连接。
     pub fn has_physical_connection(&self) -> bool {
         self.physical_connection.is_some()
+    }
+
+    /// 添加 `javax.sql.ConnectionEventListener` 对应监听器。
+    pub fn add_connection_event_listener(&self, listener: Arc<dyn ConnectionEventListener>) {
+        self.connection_event_listeners.write().push(listener);
+    }
+
+    /// 按对象身份移除连接监听器。
+    pub fn remove_connection_event_listener(
+        &self,
+        listener: &Arc<dyn ConnectionEventListener>,
+    ) -> bool {
+        let mut listeners = self.connection_event_listeners.write();
+        let Some(index) = listeners
+            .iter()
+            .position(|candidate| Arc::ptr_eq(candidate, listener))
+        else {
+            return false;
+        };
+        listeners.remove(index);
+        true
+    }
+
+    /// 返回连接监听器快照，避免回调期间持有锁。
+    pub fn connection_event_listeners(&self) -> Vec<Arc<dyn ConnectionEventListener>> {
+        self.connection_event_listeners.read().clone()
+    }
+
+    /// 回收 holder 时清空本次逻辑租约的监听器。
+    pub fn clear_connection_event_listeners(&self) {
+        self.connection_event_listeners.write().clear();
     }
 
     /// 返回物理连接只读引用。

@@ -125,8 +125,10 @@ impl Default for PoolConfig {
             max_open: 8,
             min_idle: 0,
             initial_size: 0,
-            acquire_timeout: Duration::from_secs(30),
-            max_lifetime: Duration::from_secs(25200),
+            // Java Druid 的 maxWait 与 phyTimeoutMillis 默认均为 -1（禁用）。
+            // 公共兼容配置以 Duration::MAX 表达该状态。
+            acquire_timeout: Duration::MAX,
+            max_lifetime: Duration::MAX,
             eviction_interval: Duration::from_secs(60),
             min_evictable_idle: Duration::from_secs(1800),
             test_on_borrow: false,

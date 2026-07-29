@@ -19,6 +19,7 @@ pub struct PoolInner {
     pub(crate) idle: parking_lot::Mutex<VecDeque<DruidConnectionHolder>>,
     pub(crate) notify: Notify,
     pub(crate) active_count: AtomicUsize,
+    pub(crate) wait_count: AtomicUsize,
     pub(crate) total_count: AtomicUsize,
     pub(crate) next_id: AtomicU64,
     pub(crate) closed: AtomicBool,
@@ -47,6 +48,7 @@ impl PoolInner {
             idle: parking_lot::Mutex::new(VecDeque::new()),
             notify: Notify::new(),
             active_count: AtomicUsize::new(0),
+            wait_count: AtomicUsize::new(0),
             total_count: AtomicUsize::new(0),
             next_id: AtomicU64::new(1),
             closed: AtomicBool::new(false),
@@ -77,6 +79,70 @@ impl PoolInner {
         idle_count > self.config.min_idle
     }
 
+    /// 重置数据源累计统计，保留当前连接数量和缓存占用。
+    pub(crate) fn reset_stats(&self) {
+        self.create_count.store(0, Ordering::Release);
+        self.close_count.store(0, Ordering::Release);
+        self.destroy_count.store(0, Ordering::Release);
+        self.connect_count.store(0, Ordering::Release);
+        self.connect_error_count.store(0, Ordering::Release);
+        self.recycle_count.store(0, Ordering::Release);
+        self.recycle_error_count.store(0, Ordering::Release);
+        self.discard_count.store(0, Ordering::Release);
+        self.keep_alive_check_count.store(0, Ordering::Release);
+        self.keep_alive_check_error_count
+            .store(0, Ordering::Release);
+        self.prepared_statement_stats.reset();
+    }
+
+    /// 使用数据源配置的 Java `ValidConnectionChecker` 校验物理连接。
+    pub(crate) async fn validate_connection(
+        &self,
+        connection: &mut Box<dyn PhysicalConnection>,
+    ) -> Result<(), DruidError> {
+        if let Some(checker) = self.config.valid_connection_checker.as_ref() {
+            let valid = checker
+                .is_valid_connection(
+                    connection,
+                    self.config.validation_query.as_deref(),
+                    self.config.validation_query_timeout,
+                )
+                .await?;
+            return if valid {
+                Ok(())
+            } else {
+                Err(DruidError::ValidationFailed(
+                    "ValidConnectionChecker returned false".to_owned(),
+                ))
+            };
+        }
+        self.factory.validate(connection).await
+    }
+
+    /// 按 Java `initialSize` 预建空闲物理连接。
+    pub(crate) async fn fill_initial(&self) -> Result<(), DruidError> {
+        self.fill(self.config.initial_size).await?;
+        Ok(())
+    }
+
+    /// 将池内物理连接总数填充到指定数量，返回本次创建数。
+    ///
+    /// 对应 Java：`DruidDataSource#fill(int)`。目标会被 `maxActive` 截断；
+    /// 已有活跃连接计入总数，新连接只进入空闲队列。
+    pub(crate) async fn fill(&self, to_count: usize) -> Result<usize, DruidError> {
+        let target = to_count.min(self.config.max_open);
+        let mut created = 0usize;
+        while self.total_count.load(Ordering::Acquire) < target {
+            let holder = self.create_connection().await?;
+            self.idle.lock().push_back(holder);
+            created += 1;
+        }
+        if created > 0 {
+            self.notify.notify_waiters();
+        }
+        Ok(created)
+    }
+
     /// 创建新连接。
     pub async fn create_connection(&self) -> Result<DruidConnectionHolder, DruidError> {
         let reserved = self
@@ -88,6 +154,7 @@ impl PoolInner {
         if !reserved {
             return Err(DruidError::PoolExhausted);
         }
+        let mut reservation = ConnectionSlotReservation::new(&self.total_count);
 
         let create_started = Instant::now();
         match self.factory.create().await {
@@ -97,7 +164,6 @@ impl PoolInner {
                 self.create_count.fetch_add(1, Ordering::Relaxed);
                 if self.closed.load(Ordering::Acquire) {
                     let _ = self.factory.close(&mut conn).await;
-                    self.total_count.fetch_sub(1, Ordering::AcqRel);
                     self.destroy_count.fetch_add(1, Ordering::Relaxed);
                     return Err(DruidError::PoolClosed);
                 }
@@ -106,7 +172,6 @@ impl PoolInner {
                     // 对应 Java createPhysicalConnection() 的异常路径：初始化失败时
                     // 关闭刚创建的物理连接，但它从未进入池，不增加 destroyCount。
                     let _ = self.factory.close(&mut conn).await;
-                    self.total_count.fetch_sub(1, Ordering::AcqRel);
                     self.connect_error_count.fetch_add(1, Ordering::Relaxed);
                     return Err(error);
                 }
@@ -141,10 +206,10 @@ impl PoolInner {
                     .any(|candidate| db_type.eq_ignore_ascii_case(candidate))
                 });
                 holder.set_restore_schema_on_recycle(restore_schema);
+                reservation.commit();
                 Ok(holder)
             }
             Err(e) => {
-                self.total_count.fetch_sub(1, Ordering::Relaxed);
                 self.connect_error_count.fetch_add(1, Ordering::Relaxed);
                 Err(e)
             }
@@ -242,7 +307,9 @@ impl PoolInner {
 
         let returned = {
             let mut queue = self.idle.lock();
-            if queue.len() >= self.config.max_idle {
+            // Java Druid 的 maxIdle 已 deprecated，真实 idle 容量由 maxActive
+            // 限制；保留配置字段仅用于兼容读取，不能改变 putLast 语义。
+            if queue.len() >= self.config.max_open {
                 Err(holder)
             } else {
                 queue.push_back(holder);
@@ -305,6 +372,9 @@ impl PoolInner {
     /// - `check_time`：是否按空闲时间、物理寿命和保活时间筛选。
     /// - `keep_alive`：是否对达到间隔的连接执行有效性检查。
     pub async fn shrink(&self, check_time: bool, keep_alive: bool) {
+        if self.closed.load(Ordering::Acquire) {
+            return;
+        }
         let (evict_connections, keep_alive_connections) = {
             let mut queue = self.idle.lock();
             if queue.is_empty() {
@@ -318,16 +388,6 @@ impl PoolInner {
             let mut index = 0usize;
 
             while let Some(holder) = queue.pop_front() {
-                let physical_timeout_expired = self
-                    .config
-                    .physical_connection_timeout
-                    .is_some_and(|timeout| !timeout.is_zero() && holder.physical_age() > timeout);
-                if physical_timeout_expired {
-                    evicted.push(holder);
-                    index += 1;
-                    continue;
-                }
-
                 if !check_time {
                     if index < check_count {
                         evicted.push(holder);
@@ -336,6 +396,16 @@ impl PoolInner {
                         retained.append(&mut queue);
                         break;
                     }
+                    index += 1;
+                    continue;
+                }
+
+                let physical_timeout_expired = self
+                    .config
+                    .physical_connection_timeout
+                    .is_some_and(|timeout| !timeout.is_zero() && holder.physical_age() > timeout);
+                if physical_timeout_expired {
+                    evicted.push(holder);
                     index += 1;
                     continue;
                 }
@@ -373,24 +443,40 @@ impl PoolInner {
             (evicted, keep_alive_candidates)
         };
 
-        for holder in evict_connections {
-            self.destroy_holder_now(holder).await;
+        // 候选连接已经脱离 idle 队列。先全部纳入 RAII 守卫，再进入任何
+        // `.await`；这样显式 shrink future 或维护任务被取消时，剩余 holder
+        // 会统一销毁并归还 totalCount，不会成为池账本之外的悬空资源。
+        let evict_connections: Vec<DetachedHolder<'_>> = evict_connections
+            .into_iter()
+            .map(|holder| DetachedHolder::new(self, holder))
+            .collect();
+        let keep_alive_connections: Vec<DetachedHolder<'_>> = keep_alive_connections
+            .into_iter()
+            .map(|holder| DetachedHolder::new(self, holder))
+            .collect();
+
+        for mut candidate in evict_connections {
+            candidate.destroy_now().await;
         }
 
         if keep_alive_connections.is_empty() {
+            if keep_alive && self.total_count.load(Ordering::Acquire) < self.config.min_idle {
+                let _ = self.fill(self.config.min_idle).await;
+            }
             return;
         }
 
         self.keep_alive_check_count
             .fetch_add(keep_alive_connections.len() as u64, Ordering::Relaxed);
-        let mut validated = VecDeque::new();
-        for mut holder in keep_alive_connections.into_iter().rev() {
+        let mut validated: VecDeque<DetachedHolder<'_>> = VecDeque::new();
+        for mut candidate in keep_alive_connections.into_iter().rev() {
+            let holder = candidate.holder_mut();
             holder.increment_keep_alive_check_count();
             let entered_validation =
                 holder.try_transition(ConnectionState::Idle, ConnectionState::Validating);
             let valid = if entered_validation {
                 match holder.physical_connection_box_mut() {
-                    Some(connection) => self.factory.validate(connection).await.is_ok(),
+                    Some(connection) => self.validate_connection(connection).await.is_ok(),
                     None => false,
                 }
             } else {
@@ -399,43 +485,129 @@ impl PoolInner {
 
             if valid && holder.try_transition(ConnectionState::Validating, ConnectionState::Idle) {
                 holder.record_keep_alive();
-                validated.push_front(holder);
+                validated.push_front(candidate);
             } else {
                 holder.mark_discarded();
                 self.keep_alive_check_error_count
                     .fetch_add(1, Ordering::Relaxed);
                 self.discard_count.fetch_add(1, Ordering::Relaxed);
-                self.destroy_holder_now(holder).await;
+                candidate.destroy_now().await;
             }
         }
 
-        if !validated.is_empty() {
+        if !validated.is_empty() && !self.closed.load(Ordering::Acquire) {
             let mut queue = self.idle.lock();
-            validated.append(&mut queue);
-            *queue = validated;
-            self.notify.notify_waiters();
+            // close 可能在读取 closed 与拿到 idle 锁之间发生；拿锁后再次确认，
+            // 防止已经关闭的数据源重新出现空闲连接。
+            if !self.closed.load(Ordering::Acquire) {
+                let mut returned = VecDeque::with_capacity(validated.len() + queue.len());
+                while let Some(mut candidate) = validated.pop_front() {
+                    returned.push_back(candidate.take());
+                }
+                returned.append(&mut queue);
+                *queue = returned;
+                self.notify.notify_waiters();
+            }
+        }
+
+        // Java keepAlive shrink 在驱逐或校验失败后会触发 emptySignal(fillCount)。
+        // Rust 没有独立 creator 线程，直接异步补齐到 minIdle，创建预留仍由
+        // ConnectionSlotReservation 保证错误与取消安全。
+        if keep_alive && self.total_count.load(Ordering::Acquire) < self.config.min_idle {
+            let _ = self.fill(self.config.min_idle).await;
         }
     }
 
     /// 关闭池。
     pub async fn close(&self) {
         self.closed.store(true, Ordering::Relaxed);
-        let idle: Vec<DruidConnectionHolder> = {
+        let idle: Vec<DetachedHolder<'_>> = {
             let mut queue = self.idle.lock();
-            queue.drain(..).collect()
+            queue
+                .drain(..)
+                .map(|holder| DetachedHolder::new(self, holder))
+                .collect()
         };
-        for mut holder in idle {
-            holder.mark_discarded();
-            if let Some(mut connection) = holder.take_physical_connection() {
-                let _ = self.factory.close(&mut connection).await;
-            }
+        for mut candidate in idle {
+            candidate.destroy_now().await;
+        }
+        self.notify.notify_waiters();
+    }
+}
+
+/// 物理连接创建期间的容量预留守卫。
+///
+/// Rust future 可在任意 `.await` 被取消；Java creator 线程则依靠 finally
+/// 释放 creatingCount。守卫只有在 holder 完整构造后 commit，其余错误或取消
+/// 路径都会恢复 `total_count`。
+struct ConnectionSlotReservation<'a> {
+    total_count: &'a AtomicUsize,
+    committed: bool,
+}
+
+impl<'a> ConnectionSlotReservation<'a> {
+    fn new(total_count: &'a AtomicUsize) -> Self {
+        Self {
+            total_count,
+            committed: false,
+        }
+    }
+
+    fn commit(&mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for ConnectionSlotReservation<'_> {
+    fn drop(&mut self) {
+        if !self.committed {
             let _ = self
                 .total_count
                 .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
                     (current > 0).then_some(current - 1)
                 });
-            self.destroy_count.fetch_add(1, Ordering::Relaxed);
         }
-        self.notify.notify_waiters();
+    }
+}
+
+/// 已从池队列摘出的连接持有者守卫。
+///
+/// 对应 Java `shrink` 在锁内维护的 `evictConnections` /
+/// `keepAliveConnections` 临时数组。Rust 的异步调用可在校验或关闭时被取消，
+/// 因此临时所有权必须由 Drop 托底；显式 `take` 表示 holder 已安全回到 idle
+/// 队列，`destroy_now` 表示已经计入销毁并等待物理关闭。
+struct DetachedHolder<'a> {
+    inner: &'a PoolInner,
+    holder: Option<DruidConnectionHolder>,
+}
+
+impl<'a> DetachedHolder<'a> {
+    fn new(inner: &'a PoolInner, holder: DruidConnectionHolder) -> Self {
+        Self {
+            inner,
+            holder: Some(holder),
+        }
+    }
+
+    fn holder_mut(&mut self) -> &mut DruidConnectionHolder {
+        self.holder.as_mut().expect("detached holder is present")
+    }
+
+    fn take(&mut self) -> DruidConnectionHolder {
+        self.holder.take().expect("detached holder is present")
+    }
+
+    async fn destroy_now(&mut self) {
+        if let Some(holder) = self.holder.take() {
+            self.inner.destroy_holder_now(holder).await;
+        }
+    }
+}
+
+impl Drop for DetachedHolder<'_> {
+    fn drop(&mut self) {
+        if let Some(holder) = self.holder.take() {
+            self.inner.destroy_holder(holder);
+        }
     }
 }

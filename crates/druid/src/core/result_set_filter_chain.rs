@@ -3,9 +3,11 @@
 //! 对应 Java：`com.alibaba.druid.filter.FilterChainImpl` 的 `resultSet_*` 分派。
 
 use super::{
-    DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream, JdbcNClob,
-    JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl,
-    PhysicalResultSet, ResultSetFilter, ResultSetFilterContext, SqlWarning, Value,
+    DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob,
+    JdbcInputStream, JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml,
+    JdbcStreamLength, JdbcTargetType, JdbcTypeMap, JdbcUrl, PhysicalResultSet, ResultSetFilter,
+    ResultSetFilterContext, ResultSetMetaData, ResultSetStatement, ResultSetUpdate, SqlWarning,
+    Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -163,6 +165,418 @@ macro_rules! i32_arg_result_set_chain_methods {
     };
 }
 
+macro_rules! scalar_update_chain_methods {
+    ($(($index:ident, $label:ident, $filter_index:ident, $filter_label:ident, $ty:ty, $variant:ident, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, ..)`，末端保留 setter 类型身份。")]
+            pub fn $index(&mut self, column_index: usize, value: $ty) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$filter_index(self, column_index, value)
+                } else {
+                    self.physical
+                        .update_value(column_index, &ResultSetUpdate::$variant(value))
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, ..)`，末端保留标签重载身份。")]
+            pub fn $label(&mut self, column_label: &str, value: $ty) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$filter_label(self, column_label, value)
+                } else {
+                    self.physical.update_value_by_label(
+                        column_label,
+                        &ResultSetUpdate::$variant(value),
+                    )
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! resource_update_chain_methods {
+    ($(($index:ident, $label:ident, $physical_index:ident, $physical_label:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, ..)`，末端调用物理资源重载。")]
+            pub fn $index(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index(self, column_index, value)
+                } else {
+                    self.physical.$physical_index(column_index, value.as_ref())
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, ..)`，末端调用物理标签资源重载。")]
+            pub fn $label(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label(self, column_label, value)
+                } else {
+                    self.physical.$physical_label(column_label, value.as_ref())
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! lob_stream_update_chain_methods {
+    ($((
+        $index:ident,
+        $label:ident,
+        $index_with_length:ident,
+        $label_with_length:ident,
+        $physical_index:ident,
+        $physical_label:ident,
+        $ty:ty,
+        $length_type:ident,
+        $java:literal
+    )),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader)`，末端保留无长度重载。")]
+            pub fn $index(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index(self, column_index, value)
+                } else {
+                    self.physical.$physical_index(
+                        column_index,
+                        value.as_ref(),
+                        $length_type::Unspecified,
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader)`，末端保留标签与无长度重载。")]
+            pub fn $label(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label(self, column_label, value)
+                } else {
+                    self.physical.$physical_label(
+                        column_label,
+                        value.as_ref(),
+                        $length_type::Unspecified,
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader, long)`，末端保留原始 long。")]
+            pub fn $index_with_length(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index_with_length(self, column_index, value, length)
+                } else {
+                    self.physical.$physical_index(
+                        column_index,
+                        value.as_ref(),
+                        $length_type::Long(length),
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader, long)`，末端保留标签与原始 long。")]
+            pub fn $label_with_length(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label_with_length(self, column_label, value, length)
+                } else {
+                    self.physical.$physical_label(
+                        column_label,
+                        value.as_ref(),
+                        $length_type::Long(length),
+                    )
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! stream_update_chain_methods {
+    ($((
+        $index:ident,
+        $label:ident,
+        $index_with_int_length:ident,
+        $label_with_int_length:ident,
+        $index_with_length:ident,
+        $label_with_length:ident,
+        $resource_field:ident,
+        $ty:ty,
+        $length_type:ident,
+        $variant:ident,
+        $java:literal
+    )),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader)`，末端保留无长度描述符。")]
+            pub fn $index(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index(self, column_index, value)
+                } else {
+                    self.physical.update_value(
+                        column_index,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Unspecified,
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader)`，末端保留标签与无长度描述符。")]
+            pub fn $label(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label(self, column_label, value)
+                } else {
+                    self.physical.update_value_by_label(
+                        column_label,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Unspecified,
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader, int)`，末端保留 int 长度描述符。")]
+            pub fn $index_with_int_length(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i32,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index_with_int_length(self, column_index, value, length)
+                } else {
+                    self.physical.update_value(
+                        column_index,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Int(length),
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader, int)`，末端保留标签与 int 长度描述符。")]
+            pub fn $label_with_int_length(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i32,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label_with_int_length(self, column_label, value, length)
+                } else {
+                    self.physical.update_value_by_label(
+                        column_label,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Int(length),
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader, long)`，末端保留 long 长度描述符。")]
+            pub fn $index_with_length(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index_with_length(self, column_index, value, length)
+                } else {
+                    self.physical.update_value(
+                        column_index,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Long(length),
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader, long)`，末端保留标签与 long 长度描述符。")]
+            pub fn $label_with_length(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label_with_length(self, column_label, value, length)
+                } else {
+                    self.physical.update_value_by_label(
+                        column_label,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Long(length),
+                        },
+                    )
+                }
+            }
+        )+
+    };
+}
+
+macro_rules! long_stream_update_chain_methods {
+    ($((
+        $index:ident,
+        $label:ident,
+        $index_with_length:ident,
+        $label_with_length:ident,
+        $resource_field:ident,
+        $ty:ty,
+        $length_type:ident,
+        $variant:ident,
+        $java:literal
+    )),+ $(,)?) => {
+        $(
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader)`，末端保留无长度描述符。")]
+            pub fn $index(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index(self, column_index, value)
+                } else {
+                    self.physical.update_value(
+                        column_index,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Unspecified,
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader)`，末端保留标签与无长度描述符。")]
+            pub fn $label(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label(self, column_label, value)
+                } else {
+                    self.physical.update_value_by_label(
+                        column_label,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Unspecified,
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(int, stream/reader, long)`，末端保留 long 长度描述符。")]
+            pub fn $index_with_length(
+                &mut self,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$index_with_length(self, column_index, value, length)
+                } else {
+                    self.physical.update_value(
+                        column_index,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Long(length),
+                        },
+                    )
+                }
+            }
+
+            #[doc = concat!("继续分派 Java `ResultSet#", $java, "(String, stream/reader, long)`，末端保留标签与 long 长度描述符。")]
+            pub fn $label_with_length(
+                &mut self,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                if self.position < self.filters.len() {
+                    let filter = Arc::clone(&self.filters[self.position]);
+                    self.position += 1;
+                    filter.$label_with_length(self, column_label, value, length)
+                } else {
+                    self.physical.update_value_by_label(
+                        column_label,
+                        &ResultSetUpdate::$variant {
+                            $resource_field: value,
+                            length: $length_type::Long(length),
+                        },
+                    )
+                }
+            }
+        )+
+    };
+}
+
 /// 单次 `ResultSet` 操作使用的有位置调用链。
 ///
 /// 每次 `ResultSet` 方法调用都创建新链并从位置 0 开始，等价于 Java
@@ -172,6 +586,7 @@ pub struct ResultSetFilterChain<'a> {
     position: usize,
     physical: &'a dyn PhysicalResultSet,
     context: &'a ResultSetFilterContext,
+    statement: Option<&'a ResultSetStatement>,
 }
 
 impl<'a> ResultSetFilterChain<'a> {
@@ -186,6 +601,23 @@ impl<'a> ResultSetFilterChain<'a> {
             position: 0,
             physical,
             context,
+            statement: None,
+        }
+    }
+
+    /// 创建携带 `ResultSet#getStatement()` 动态平台对象的单次调用链。
+    pub fn new_with_statement(
+        filters: &'a [Arc<dyn ResultSetFilter>],
+        physical: &'a dyn PhysicalResultSet,
+        context: &'a ResultSetFilterContext,
+        statement: &'a ResultSetStatement,
+    ) -> Self {
+        Self {
+            filters,
+            position: 0,
+            physical,
+            context,
+            statement: Some(statement),
         }
     }
 
@@ -680,6 +1112,31 @@ impl<'a> ResultSetFilterChain<'a> {
         (result_set_row_updated, result_set_row_updated, row_updated, bool, "rowUpdated"),
         (result_set_row_inserted, result_set_row_inserted, row_inserted, bool, "rowInserted"),
         (result_set_row_deleted, result_set_row_deleted, row_deleted, bool, "rowDeleted"),
+        (result_set_insert_row, result_set_insert_row, insert_row, (), "insertRow"),
+        (result_set_update_row, result_set_update_row, update_row, (), "updateRow"),
+        (result_set_delete_row, result_set_delete_row, delete_row, (), "deleteRow"),
+        (result_set_refresh_row, result_set_refresh_row, refresh_row, (), "refreshRow"),
+        (
+            result_set_cancel_row_updates,
+            result_set_cancel_row_updates,
+            cancel_row_updates,
+            (),
+            "cancelRowUpdates"
+        ),
+        (
+            result_set_move_to_insert_row,
+            result_set_move_to_insert_row,
+            move_to_insert_row,
+            (),
+            "moveToInsertRow"
+        ),
+        (
+            result_set_move_to_current_row,
+            result_set_move_to_current_row,
+            move_to_current_row,
+            (),
+            "moveToCurrentRow"
+        ),
     );
 
     i32_arg_result_set_chain_methods!(
@@ -717,6 +1174,285 @@ impl<'a> ResultSetFilterChain<'a> {
         ),
     );
 
+    /// 继续分派 Java `ResultSet#updateNull(int)`。
+    pub fn result_set_update_null(&mut self, column_index: usize) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_update_null(self, column_index)
+        } else {
+            self.physical
+                .update_value(column_index, &ResultSetUpdate::Null)
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#updateNull(String)`。
+    pub fn result_set_update_null_by_label(
+        &mut self,
+        column_label: &str,
+    ) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_update_null_by_label(self, column_label)
+        } else {
+            self.physical
+                .update_value_by_label(column_label, &ResultSetUpdate::Null)
+        }
+    }
+
+    scalar_update_chain_methods!(
+        (result_set_update_boolean, result_set_update_boolean_by_label, result_set_update_boolean, result_set_update_boolean_by_label, bool, Boolean, "updateBoolean"),
+        (result_set_update_byte, result_set_update_byte_by_label, result_set_update_byte, result_set_update_byte_by_label, i8, Byte, "updateByte"),
+        (result_set_update_short, result_set_update_short_by_label, result_set_update_short, result_set_update_short_by_label, i16, Short, "updateShort"),
+        (result_set_update_int, result_set_update_int_by_label, result_set_update_int, result_set_update_int_by_label, i32, Int, "updateInt"),
+        (result_set_update_long, result_set_update_long_by_label, result_set_update_long, result_set_update_long_by_label, i64, Long, "updateLong"),
+        (result_set_update_float, result_set_update_float_by_label, result_set_update_float, result_set_update_float_by_label, f32, Float, "updateFloat"),
+        (result_set_update_double, result_set_update_double_by_label, result_set_update_double, result_set_update_double_by_label, f64, Double, "updateDouble"),
+        (result_set_update_big_decimal, result_set_update_big_decimal_by_label, result_set_update_big_decimal, result_set_update_big_decimal_by_label, Option<BigDecimal>, BigDecimal, "updateBigDecimal"),
+        (result_set_update_string, result_set_update_string_by_label, result_set_update_string, result_set_update_string_by_label, Option<String>, String, "updateString"),
+        (result_set_update_n_string, result_set_update_n_string_by_label, result_set_update_n_string, result_set_update_n_string_by_label, Option<String>, NString, "updateNString"),
+        (result_set_update_bytes, result_set_update_bytes_by_label, result_set_update_bytes, result_set_update_bytes_by_label, Option<Vec<u8>>, Bytes, "updateBytes"),
+        (result_set_update_date, result_set_update_date_by_label, result_set_update_date, result_set_update_date_by_label, Option<NaiveDate>, Date, "updateDate"),
+        (result_set_update_time, result_set_update_time_by_label, result_set_update_time, result_set_update_time_by_label, Option<NaiveTime>, Time, "updateTime"),
+        (result_set_update_timestamp, result_set_update_timestamp_by_label, result_set_update_timestamp, result_set_update_timestamp_by_label, Option<NaiveDateTime>, Timestamp, "updateTimestamp"),
+    );
+
+    /// 继续分派 Java `ResultSet#updateObject(int, Object)`。
+    pub fn result_set_update_object(
+        &mut self,
+        column_index: usize,
+        value: JdbcObject,
+    ) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_update_object(self, column_index, value)
+        } else {
+            self.physical
+                .update_value(column_index, &ResultSetUpdate::Object(value))
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#updateObject(String, Object)`。
+    pub fn result_set_update_object_by_label(
+        &mut self,
+        column_label: &str,
+        value: JdbcObject,
+    ) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_update_object_by_label(self, column_label, value)
+        } else {
+            self.physical
+                .update_value_by_label(column_label, &ResultSetUpdate::Object(value))
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#updateObject(int, Object, int)`。
+    pub fn result_set_update_object_with_scale_or_length(
+        &mut self,
+        column_index: usize,
+        value: JdbcObject,
+        scale_or_length: i32,
+    ) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_update_object_with_scale_or_length(
+                self,
+                column_index,
+                value,
+                scale_or_length,
+            )
+        } else {
+            self.physical.update_value(
+                column_index,
+                &ResultSetUpdate::ObjectWithScaleOrLength {
+                    value,
+                    scale_or_length,
+                },
+            )
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#updateObject(String, Object, int)`。
+    pub fn result_set_update_object_by_label_with_scale_or_length(
+        &mut self,
+        column_label: &str,
+        value: JdbcObject,
+        scale_or_length: i32,
+    ) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_update_object_by_label_with_scale_or_length(
+                self,
+                column_label,
+                value,
+                scale_or_length,
+            )
+        } else {
+            self.physical.update_value_by_label(
+                column_label,
+                &ResultSetUpdate::ObjectWithScaleOrLength {
+                    value,
+                    scale_or_length,
+                },
+            )
+        }
+    }
+
+    resource_update_chain_methods!(
+        (
+            result_set_update_reference,
+            result_set_update_reference_by_label,
+            update_reference,
+            update_reference_by_label,
+            JdbcRef,
+            "updateRef"
+        ),
+        (
+            result_set_update_blob,
+            result_set_update_blob_by_label,
+            update_blob,
+            update_blob_by_label,
+            JdbcBlob,
+            "updateBlob"
+        ),
+        (
+            result_set_update_clob,
+            result_set_update_clob_by_label,
+            update_clob,
+            update_clob_by_label,
+            JdbcClob,
+            "updateClob"
+        ),
+        (
+            result_set_update_array,
+            result_set_update_array_by_label,
+            update_array,
+            update_array_by_label,
+            JdbcArray,
+            "updateArray"
+        ),
+        (
+            result_set_update_row_id,
+            result_set_update_row_id_by_label,
+            update_row_id,
+            update_row_id_by_label,
+            JdbcRowId,
+            "updateRowId"
+        ),
+        (
+            result_set_update_n_clob,
+            result_set_update_n_clob_by_label,
+            update_n_clob,
+            update_n_clob_by_label,
+            JdbcNClob,
+            "updateNClob"
+        ),
+        (
+            result_set_update_sql_xml,
+            result_set_update_sql_xml_by_label,
+            update_sql_xml,
+            update_sql_xml_by_label,
+            JdbcSqlXml,
+            "updateSQLXML"
+        ),
+    );
+
+    lob_stream_update_chain_methods!(
+        (
+            result_set_update_blob_stream,
+            result_set_update_blob_stream_by_label,
+            result_set_update_blob_stream_with_length,
+            result_set_update_blob_stream_by_label_with_length,
+            update_blob_stream,
+            update_blob_stream_by_label,
+            JdbcInputStream,
+            JdbcStreamLength,
+            "updateBlob"
+        ),
+        (
+            result_set_update_clob_reader,
+            result_set_update_clob_reader_by_label,
+            result_set_update_clob_reader_with_length,
+            result_set_update_clob_reader_by_label_with_length,
+            update_clob_reader,
+            update_clob_reader_by_label,
+            JdbcReader,
+            JdbcCharacterLength,
+            "updateClob"
+        ),
+        (
+            result_set_update_n_clob_reader,
+            result_set_update_n_clob_reader_by_label,
+            result_set_update_n_clob_reader_with_length,
+            result_set_update_n_clob_reader_by_label_with_length,
+            update_n_clob_reader,
+            update_n_clob_reader_by_label,
+            JdbcReader,
+            JdbcCharacterLength,
+            "updateNClob"
+        ),
+    );
+
+    stream_update_chain_methods!(
+        (
+            result_set_update_ascii_stream,
+            result_set_update_ascii_stream_by_label,
+            result_set_update_ascii_stream_with_int_length,
+            result_set_update_ascii_stream_by_label_with_int_length,
+            result_set_update_ascii_stream_with_length,
+            result_set_update_ascii_stream_by_label_with_length,
+            stream,
+            JdbcInputStream,
+            JdbcStreamLength,
+            AsciiStream,
+            "updateAsciiStream"
+        ),
+        (
+            result_set_update_binary_stream,
+            result_set_update_binary_stream_by_label,
+            result_set_update_binary_stream_with_int_length,
+            result_set_update_binary_stream_by_label_with_int_length,
+            result_set_update_binary_stream_with_length,
+            result_set_update_binary_stream_by_label_with_length,
+            stream,
+            JdbcInputStream,
+            JdbcStreamLength,
+            BinaryStream,
+            "updateBinaryStream"
+        ),
+        (
+            result_set_update_character_stream,
+            result_set_update_character_stream_by_label,
+            result_set_update_character_stream_with_int_length,
+            result_set_update_character_stream_by_label_with_int_length,
+            result_set_update_character_stream_with_length,
+            result_set_update_character_stream_by_label_with_length,
+            reader,
+            JdbcReader,
+            JdbcCharacterLength,
+            CharacterStream,
+            "updateCharacterStream"
+        ),
+    );
+
+    long_stream_update_chain_methods!((
+        result_set_update_n_character_stream,
+        result_set_update_n_character_stream_by_label,
+        result_set_update_n_character_stream_with_length,
+        result_set_update_n_character_stream_by_label_with_length,
+        reader,
+        JdbcReader,
+        JdbcCharacterLength,
+        NCharacterStream,
+        "updateNCharacterStream"
+    ));
+
     /// 继续分派 Java `ResultSet#findColumn(String)`。
     pub fn result_set_find_column(&mut self, column_label: &str) -> Result<usize, DruidError> {
         if self.position < self.filters.len() {
@@ -736,6 +1472,32 @@ impl<'a> ResultSetFilterChain<'a> {
             filter.result_set_is_closed(self)
         } else {
             Ok(self.physical.is_closed())
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#getMetaData()`，末端返回物理 metadata 句柄。
+    pub fn result_set_get_meta_data(&mut self) -> Result<ResultSetMetaData, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_get_meta_data(self)
+        } else {
+            self.physical.meta_data()
+        }
+    }
+
+    /// 继续分派 Java `ResultSet#getStatement()`，末端返回共享动态平台句柄。
+    pub fn result_set_get_statement(&mut self) -> Result<ResultSetStatement, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.result_set_get_statement(self)
+        } else {
+            self.statement
+                .cloned()
+                .ok_or(DruidError::UnsupportedOperation {
+                    operation: "result_set_get_statement_without_platform_object",
+                })
         }
     }
 

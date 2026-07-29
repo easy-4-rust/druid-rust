@@ -110,6 +110,19 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         self.string(column_index)
     }
 
+    /// 按 1-based 下标执行 JDBC `ResultSet#getNString(int)`。
+    ///
+    /// Rust 字符串统一为 Unicode，但仍保留独立 SPI，避免驱动和 Filter 无法
+    /// 区分 JDBC 的 `getString` 与 `getNString` 调用。
+    fn n_string(&self, column_index: usize) -> Result<Option<String>, DruidError> {
+        self.string(column_index)
+    }
+
+    /// 按标签执行 JDBC `ResultSet#getNString(String)`。
+    fn n_string_by_label(&self, column_label: &str) -> Result<Option<String>, DruidError> {
+        self.string_by_label(column_label)
+    }
+
     /// 按 1-based 下标执行 JDBC `ResultSet#getBoolean(int)`。
     fn boolean(&self, column_index: usize) -> Result<bool, DruidError> {
         match self.value(column_index)? {

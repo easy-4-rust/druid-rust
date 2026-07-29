@@ -204,7 +204,7 @@ were removed and moved into named internal directories:
 | :--- | :--- | :--- |
 | `druid-core`, `druid-pool`, `druid-sql`, `druid-stats`, `druid-dynamic` | `druid` | `crates/druid/src/{core,pool,sql,stats,dynamic}/` |
 | `druid-toasty` | `druid` | `crates/druid/src/toasty/`, enabled by default |
-| `druid-sqlx`, `druid-rbdc`, `druid-sqlx-bb8`, `druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/{sqlx,rbdc,sqlx_bb8,sqlx_deadpool}/` |
+| `druid-sqlx`, `druid-rbdc`, `druid-sqlx-bb8`, `druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/rbdc/`、`crates/druid-wrapper/src/sqlx/{bb8,deadpool}/` |
 
 - `cargo metadata` reports only `druid`, `druid-wrapper`, and `druid-admin` as workspace members.
 - Internal directories do not own independent public APIs, versions, completion

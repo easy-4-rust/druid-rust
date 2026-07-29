@@ -32,6 +32,7 @@ pub struct DruidPooledCallableStatement {
 /// 对应 Java：`DruidPooledCallableStatement` 继承
 /// `DruidPooledPreparedStatement`，结果集保存并返回原 callable 对象。Rust
 /// 句柄保留相同的 prepared 生命周期、物理 callable 能力和关闭级联。
+#[derive(Clone)]
 pub struct DruidPooledCallableStatementHandle {
     prepared_statement: DruidPooledPreparedStatementHandle,
 }

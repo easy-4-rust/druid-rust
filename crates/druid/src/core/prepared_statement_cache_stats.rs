@@ -18,6 +18,21 @@ pub struct PreparedStatementCacheStats {
 }
 
 impl PreparedStatementCacheStats {
+    /// 重置累计计数；当前缓存数量保持不变。
+    ///
+    /// 对应 Java 数据源 `resetStat()`：不能把仍在缓存中的 statement 伪造为零。
+    pub fn reset(&self) {
+        self.prepared_statement_count.store(0, Ordering::Release);
+        self.closed_prepared_statement_count
+            .store(0, Ordering::Release);
+        self.cached_prepared_statement_delete_count
+            .store(0, Ordering::Release);
+        self.cached_prepared_statement_hit_count
+            .store(0, Ordering::Release);
+        self.cached_prepared_statement_miss_count
+            .store(0, Ordering::Release);
+    }
+
     /// 记录创建一个新的物理 PreparedStatement。
     pub fn record_prepare(&self) {
         self.prepared_statement_count

@@ -209,6 +209,7 @@ pub struct DruidPooledPreparedStatement {
 /// `DruidPooledPreparedStatement` 实例。Rust 句柄与原对象共享 holder、
 /// Statement 状态、关闭状态和缓存归还所有权；即使原局部变量先离开作用域，
 /// ResultSet 持有的句柄也会阻止物理语句被提前回收。
+#[derive(Clone)]
 pub struct DruidPooledPreparedStatementHandle {
     shared: Arc<DruidPooledPreparedStatementShared>,
     statement_base: DruidPooledStatement,

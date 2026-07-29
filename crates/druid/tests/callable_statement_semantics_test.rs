@@ -17,8 +17,8 @@ use druid::core::{
     JdbcTypeMap, JdbcUrl, JdbcWriter, JdbcXmlRepresentationType, JdbcXmlResult, JdbcXmlSource,
     PhysicalArray, PhysicalBlob, PhysicalCallableStatement, PhysicalClob, PhysicalConnection,
     PhysicalNClob, PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
-    PreparedStatementMethodType, Row, SqlTextPreparedStatement, StatementExecuteResult,
-    StatementGeneratedKeys, Value, Wrapper, WrapperExt,
+    PreparedStatementMethodType, ResultSetStatement, Row, SqlTextPreparedStatement,
+    StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
 use druid::pool::DruidPool;
 use std::any::{Any, TypeId};
@@ -971,6 +971,23 @@ async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
     assert!(identity.unwrap(None).is_none());
     assert!(!identity.is_wrapper_for_type::<UnsupportedUnwrapType>());
     assert!(identity.unwrap_ref::<UnsupportedUnwrapType>().is_none());
+    let statement_object = result_set.statement_object(&mut connection).unwrap();
+    assert!(matches!(statement_object, ResultSetStatement::Callable(_)));
+    assert!(statement_object
+        .callable_statement()
+        .expect("动态平台对象必须保留 CallableStatement 身份")
+        .is_same_statement(&callable));
+    assert!(
+        statement_object
+            .prepared_statement()
+            .expect("CallableStatement 必须保留继承的 PreparedStatement 身份")
+            .key()
+            == &expected_key
+    );
+    assert!(statement_object
+        .pooled_statement()
+        .is_same_statement(result_set.statement()));
+    assert!(!statement_object.is_closed());
 
     drop(callable);
     assert!(!result_set.callable_statement().unwrap().is_closed());
@@ -981,6 +998,7 @@ async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
     );
     result_set.callable_statement().unwrap().close().unwrap();
     result_set.callable_statement().unwrap().close().unwrap();
+    assert!(statement_object.is_closed());
     assert!(result_set.callable_statement().unwrap().is_closed());
     assert!(result_set.is_closed());
 

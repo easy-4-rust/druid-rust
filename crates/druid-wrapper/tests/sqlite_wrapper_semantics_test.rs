@@ -7,9 +7,9 @@ use druid::core::{
     ExceptionSorterProperties, PhysicalConnection, PhysicalConnectionFactory, PhysicalResultSet,
     Pool, RowSetResultSet, SqlException, Value, Wrapper, WrapperExt,
 };
+use druid_wrapper::sqlx::bb8::SqlxBb8Pool;
+use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
-use druid_wrapper::sqlx_bb8::SqlxBb8Pool;
-use druid_wrapper::sqlx_deadpool::SqlxDeadpoolPool;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

@@ -12,6 +12,8 @@ pub struct PoolState {
     pub active_count: usize,
     pub idle_count: usize,
     pub wait_count: usize,
+    /// Java `maxWaitThreadCount`；`None` 对应 `-1`。
+    pub max_wait_thread_count: Option<usize>,
     pub create_count: u64,
     /// 逻辑池化连接关闭次数，对应 Java `closeCount`。
     pub close_count: u64,

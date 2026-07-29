@@ -1,7 +1,7 @@
 //! SQLx + deadpool 外部池桥接契约测试。
 
 use druid::core::{DruidError, PhysicalConnection, Pool, Value};
-use druid_wrapper::sqlx_deadpool::SqlxDeadpoolPool;
+use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;
 use std::time::Duration;
 
 #[tokio::test]

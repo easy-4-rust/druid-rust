@@ -2,18 +2,42 @@
 //!
 //! 池内部配置，从 PoolConfig 翻译而来。
 
-use crate::core::FilterChain;
+use crate::core::{FilterChain, FilterManager, LogFilter, ValidConnectionChecker};
+use crate::sql::{DbType, WallConfig, WallFilter, WallProvider};
+use crate::stats::{StatFilter, StatsCollector};
+use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
+
+const STAT_FILTER_CLASS: &str = "com.alibaba.druid.filter.stat.StatFilter";
+const MERGE_STAT_FILTER_CLASS: &str = "com.alibaba.druid.filter.stat.MergeStatFilter";
+const WALL_FILTER_CLASS: &str = "com.alibaba.druid.wall.WallFilter";
+const LOG_FILTER_CLASSES: [&str; 4] = [
+    "com.alibaba.druid.filter.logging.Log4jFilter",
+    "com.alibaba.druid.filter.logging.Log4j2Filter",
+    "com.alibaba.druid.filter.logging.Slf4jLogFilter",
+    "com.alibaba.druid.filter.logging.CommonsLogFilter",
+];
 
 /// 池内部配置（运行时使用）。
 #[derive(Clone)]
 pub struct PoolInnerConfig {
     pub db_type_name: Option<String>,
     pub max_open: usize,
+    pub initial_size: usize,
     pub min_idle: usize,
     pub max_idle: usize,
     pub acquire_timeout: Duration,
+    /// Java `maxWaitThreadCount`；`None` 对应默认值 `-1`。
+    pub max_wait_thread_count: Option<usize>,
+    /// Java `connectionErrorRetryAttempts`。
+    pub connection_error_retry_attempts: usize,
+    /// Java `breakAfterAcquireFailure`。
+    pub break_after_acquire_failure: bool,
+    /// Java `timeBetweenConnectErrorMillis`。
+    pub time_between_connect_error: Duration,
+    /// Java `failFast`。
+    pub fail_fast: bool,
     /// Rust 扩展的显式最大生命周期；默认禁用。
     pub max_lifetime: Duration,
     /// Java `minEvictableIdleTimeMillis`。
@@ -24,6 +48,14 @@ pub struct PoolInnerConfig {
     pub physical_connection_timeout: Option<Duration>,
     pub test_on_borrow: bool,
     pub test_on_return: bool,
+    pub test_while_idle: bool,
+    pub time_between_eviction_runs: Duration,
+    pub validation_query: Option<String>,
+    pub validation_query_timeout: Duration,
+    pub valid_connection_checker: Option<Arc<dyn ValidConnectionChecker>>,
+    pub remove_abandoned: bool,
+    pub remove_abandoned_timeout: Duration,
+    pub log_abandoned: bool,
     pub keep_alive: bool,
     pub keep_alive_between_time: Duration,
     pub keep_connection_underlying_transaction_isolation: bool,
@@ -43,15 +75,29 @@ impl Default for PoolInnerConfig {
         Self {
             db_type_name: None,
             max_open: 8,
+            initial_size: 0,
             min_idle: 0,
             max_idle: 8,
-            acquire_timeout: Duration::from_secs(30),
+            acquire_timeout: Duration::MAX,
+            max_wait_thread_count: None,
+            connection_error_retry_attempts: 1,
+            break_after_acquire_failure: false,
+            time_between_connect_error: Duration::from_millis(500),
+            fail_fast: false,
             max_lifetime: Duration::MAX,
             idle_timeout: Duration::from_secs(1800),
             max_evictable_idle_time: Duration::from_secs(7 * 60 * 60),
             physical_connection_timeout: None,
             test_on_borrow: false,
             test_on_return: false,
+            test_while_idle: false,
+            time_between_eviction_runs: Duration::from_secs(60),
+            validation_query: None,
+            validation_query_timeout: Duration::ZERO,
+            valid_connection_checker: None,
+            remove_abandoned: false,
+            remove_abandoned_timeout: Duration::from_secs(300),
+            log_abandoned: false,
             keep_alive: false,
             keep_alive_between_time: Duration::from_secs(120),
             keep_connection_underlying_transaction_isolation: false,
@@ -75,15 +121,29 @@ pub struct DruidPoolBuilder {
     db_type_name: Option<String>,
     factory: Option<Arc<dyn crate::core::PhysicalConnectionFactory>>,
     max_open: usize,
+    initial_size: usize,
     min_idle: usize,
     max_idle: usize,
     acquire_timeout: Duration,
+    max_wait_thread_count: Option<usize>,
+    connection_error_retry_attempts: usize,
+    break_after_acquire_failure: bool,
+    time_between_connect_error: Duration,
+    fail_fast: bool,
     max_lifetime: Duration,
     idle_timeout: Duration,
     max_evictable_idle_time: Duration,
     physical_connection_timeout: Option<Duration>,
     test_on_borrow: bool,
     test_on_return: bool,
+    test_while_idle: bool,
+    time_between_eviction_runs: Duration,
+    validation_query: Option<String>,
+    validation_query_timeout: Duration,
+    valid_connection_checker: Option<Arc<dyn ValidConnectionChecker>>,
+    remove_abandoned: bool,
+    remove_abandoned_timeout: Duration,
+    log_abandoned: bool,
     keep_alive: bool,
     keep_alive_between_time: Duration,
     keep_connection_underlying_transaction_isolation: bool,
@@ -96,26 +156,54 @@ pub struct DruidPoolBuilder {
     max_pool_prepared_statements_per_connection: usize,
     share_prepared_statements: bool,
     use_oracle_implicit_cache: bool,
-    filter_chain: Option<Arc<FilterChain>>,
+    filter_chain: FilterChain,
+    filter_chain_configured: bool,
+    filter_manager: Arc<FilterManager>,
+    filter_data_source_name: Arc<RwLock<String>>,
+    clear_filters_enable: bool,
+    stats_collector: Arc<StatsCollector>,
+    wall_provider: Arc<WallProvider>,
 }
 
 impl DruidPoolBuilder {
     pub fn new() -> Self {
+        let filter_data_source_name = Arc::new(RwLock::new(String::new()));
+        let stats_collector = Arc::new(StatsCollector::new(String::new(), Duration::from_secs(2)));
+        let wall_provider = Arc::new(WallProvider::default());
+        let filter_manager = default_filter_manager(
+            Arc::clone(&filter_data_source_name),
+            Arc::clone(&stats_collector),
+            Arc::clone(&wall_provider),
+        );
         Self {
             name: String::new(),
             driver_name: String::new(),
             db_type_name: None,
             factory: None,
             max_open: 8,
+            initial_size: 0,
             min_idle: 0,
             max_idle: 8,
-            acquire_timeout: Duration::from_secs(30),
+            acquire_timeout: Duration::MAX,
+            max_wait_thread_count: None,
+            connection_error_retry_attempts: 1,
+            break_after_acquire_failure: false,
+            time_between_connect_error: Duration::from_millis(500),
+            fail_fast: false,
             max_lifetime: Duration::MAX,
             idle_timeout: Duration::from_secs(1800),
             max_evictable_idle_time: Duration::from_secs(7 * 60 * 60),
             physical_connection_timeout: None,
             test_on_borrow: false,
             test_on_return: false,
+            test_while_idle: false,
+            time_between_eviction_runs: Duration::from_secs(60),
+            validation_query: None,
+            validation_query_timeout: Duration::ZERO,
+            valid_connection_checker: None,
+            remove_abandoned: false,
+            remove_abandoned_timeout: Duration::from_secs(300),
+            log_abandoned: false,
             keep_alive: false,
             keep_alive_between_time: Duration::from_secs(120),
             keep_connection_underlying_transaction_isolation: false,
@@ -128,12 +216,19 @@ impl DruidPoolBuilder {
             max_pool_prepared_statements_per_connection: 10,
             share_prepared_statements: false,
             use_oracle_implicit_cache: false,
-            filter_chain: None,
+            filter_chain: FilterChain::new(),
+            filter_chain_configured: false,
+            filter_manager,
+            filter_data_source_name,
+            clear_filters_enable: true,
+            stats_collector,
+            wall_provider,
         }
     }
 
     pub fn name(mut self, v: impl Into<String>) -> Self {
         self.name = v.into();
+        self.filter_data_source_name.write().clone_from(&self.name);
         self
     }
     pub fn driver_name(mut self, v: impl Into<String>) -> Self {
@@ -145,7 +240,30 @@ impl DruidPoolBuilder {
     /// 对应 Java：`DruidAbstractDataSource#dbTypeName`。`odps` 会跳过
     /// `defaultAutoCommit` 初始化，其余默认连接属性仍按 Java 顺序应用。
     pub fn db_type_name(mut self, db_type_name: impl Into<String>) -> Self {
-        self.db_type_name = Some(db_type_name.into());
+        let db_type_name = db_type_name.into();
+        if let Some(db_type) = DbType::of(&db_type_name) {
+            self.wall_provider.set_db_type(db_type);
+        }
+        self.db_type_name = Some(db_type_name);
+        self
+    }
+
+    /// 替换 Wall 规则并重建默认 Filter 工厂注册。
+    ///
+    /// 对应 Java `WallFilter#configFromProperties` 在数据源初始化前应用规则。
+    /// 必须在 `set_filters` 前调用；已显式配置的 FilterChain 不回溯替换。
+    pub fn wall_config(mut self, wall_config: WallConfig) -> Self {
+        self.wall_provider = Arc::new(WallProvider::new(wall_config));
+        if let Some(db_type_name) = self.db_type_name.as_deref() {
+            if let Some(db_type) = DbType::of(db_type_name) {
+                self.wall_provider.set_db_type(db_type);
+            }
+        }
+        self.filter_manager = default_filter_manager(
+            Arc::clone(&self.filter_data_source_name),
+            Arc::clone(&self.stats_collector),
+            Arc::clone(&self.wall_provider),
+        );
         self
     }
     pub fn factory(mut self, factory: Arc<dyn crate::core::PhysicalConnectionFactory>) -> Self {
@@ -154,6 +272,11 @@ impl DruidPoolBuilder {
     }
     pub fn max_open(mut self, v: usize) -> Self {
         self.max_open = v;
+        self
+    }
+    /// 设置 Java `initialSize`；初始化时预建但不借出这些连接。
+    pub fn initial_size(mut self, initial_size: usize) -> Self {
+        self.initial_size = initial_size;
         self
     }
     pub fn min_idle(mut self, v: usize) -> Self {
@@ -166,6 +289,53 @@ impl DruidPoolBuilder {
     }
     pub fn acquire_timeout(mut self, v: Duration) -> Self {
         self.acquire_timeout = v;
+        self
+    }
+
+    /// 设置最多允许同时等待连接的任务数。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setMaxWaitThreadCount(int)`。
+    /// `None` 表示 Java 默认值 `-1`，即不限制。
+    pub fn max_wait_thread_count(mut self, max_wait_thread_count: Option<usize>) -> Self {
+        self.max_wait_thread_count = max_wait_thread_count;
+        self
+    }
+
+    /// 设置一次连接创建周期内的立即重试次数。
+    ///
+    /// 对应 Java：
+    /// `DruidAbstractDataSource#setConnectionErrorRetryAttempts(int)`。
+    pub fn connection_error_retry_attempts(
+        mut self,
+        connection_error_retry_attempts: usize,
+    ) -> Self {
+        self.connection_error_retry_attempts = connection_error_retry_attempts;
+        self
+    }
+
+    /// 设置达到连接创建重试阈值后是否停止本次获取。
+    ///
+    /// 对应 Java：
+    /// `DruidAbstractDataSource#setBreakAfterAcquireFailure(boolean)`。
+    pub fn break_after_acquire_failure(mut self, break_after_acquire_failure: bool) -> Self {
+        self.break_after_acquire_failure = break_after_acquire_failure;
+        self
+    }
+
+    /// 设置连续创建失败后的退避时间。
+    ///
+    /// 对应 Java：
+    /// `DruidAbstractDataSource#setTimeBetweenConnectErrorMillis(long)`。
+    pub fn time_between_connect_error(mut self, time_between_connect_error: Duration) -> Self {
+        self.time_between_connect_error = time_between_connect_error;
+        self
+    }
+
+    /// 设置连续创建失败时是否立即把错误返回等待者。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setFailFast(boolean)`。
+    pub fn fail_fast(mut self, fail_fast: bool) -> Self {
+        self.fail_fast = fail_fast;
         self
     }
     /// 设置 Rust 扩展的物理连接最大生命周期。
@@ -219,6 +389,69 @@ impl DruidPoolBuilder {
     /// 对应 Java：`DruidAbstractDataSource#setTestOnReturn(boolean)`。
     pub fn test_on_return(mut self, test_on_return: bool) -> Self {
         self.test_on_return = test_on_return;
+        self
+    }
+
+    /// 设置借出长期空闲连接前是否执行有效性检查。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setTestWhileIdle(boolean)`。
+    pub fn test_while_idle(mut self, test_while_idle: bool) -> Self {
+        self.test_while_idle = test_while_idle;
+        self
+    }
+
+    /// 设置后台驱逐周期，也是 `testWhileIdle` 的空闲检查阈值。
+    ///
+    /// 对应 Java：
+    /// `DruidAbstractDataSource#setTimeBetweenEvictionRunsMillis(long)`。
+    pub fn time_between_eviction_runs(mut self, time_between_eviction_runs: Duration) -> Self {
+        self.time_between_eviction_runs = time_between_eviction_runs;
+        self
+    }
+
+    /// 设置 Java `validationQuery`。
+    pub fn validation_query(mut self, validation_query: impl Into<String>) -> Self {
+        self.validation_query = Some(validation_query.into());
+        self
+    }
+
+    /// 设置 Java 秒级 `validationQueryTimeout`。
+    pub fn validation_query_timeout(mut self, validation_query_timeout: Duration) -> Self {
+        self.validation_query_timeout = validation_query_timeout;
+        self
+    }
+
+    /// 设置显式 `ValidConnectionChecker`。
+    pub fn valid_connection_checker(
+        mut self,
+        valid_connection_checker: Arc<dyn ValidConnectionChecker>,
+    ) -> Self {
+        self.valid_connection_checker = Some(valid_connection_checker);
+        self
+    }
+
+    /// 设置是否扫描并回收超过阈值且不在执行 SQL 的借出连接。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setRemoveAbandoned(boolean)`。
+    pub fn remove_abandoned(mut self, remove_abandoned: bool) -> Self {
+        self.remove_abandoned = remove_abandoned;
+        self
+    }
+
+    /// 设置借出连接判定为 abandoned 的时间阈值。
+    ///
+    /// 对应 Java：`setRemoveAbandonedTimeoutMillis(long)`；秒级属性由
+    /// `DruidDataSourceFactory` 转换后调用本方法。
+    pub fn remove_abandoned_timeout(mut self, remove_abandoned_timeout: Duration) -> Self {
+        self.remove_abandoned_timeout = remove_abandoned_timeout;
+        self
+    }
+
+    /// 设置回收 abandoned 连接时是否输出告警。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setLogAbandoned(boolean)`。
+    pub fn log_abandoned(mut self, log_abandoned: bool) -> Self {
+        self.log_abandoned = log_abandoned;
         self
     }
 
@@ -335,26 +568,175 @@ impl DruidPoolBuilder {
     }
 
     pub fn filter_chain(mut self, fc: Arc<FilterChain>) -> Self {
-        self.filter_chain = Some(fc);
+        self.filter_chain = fc.as_ref().clone();
+        self.filter_chain_configured = true;
         self
     }
 
+    /// 设置 Filter 别名与构造工厂管理器。
+    ///
+    /// 这是 Java ClassLoader/反射机制的 Rust 显式替代入口。默认管理器为
+    /// Java `stat/default` 别名注册
+    /// [`StatFilter`]；资源中尚未迁移的其他别名仍按 Java 缺失类语义记录后跳过。
+    ///
+    /// 应在 [`Self::set_filters`] / [`Self::add_filters`] 之前设置；已经构造并
+    /// 加入链的 Filter 与 Java 一样不会因之后替换 ClassLoader/工厂而回溯重建。
+    pub fn filter_manager(mut self, filter_manager: Arc<FilterManager>) -> Self {
+        self.filter_manager = filter_manager;
+        self
+    }
+
+    /// 设置是否允许 `clearFilters()` 清空当前 Filter。
+    ///
+    /// 对应 Java：
+    /// `DruidAbstractDataSource#setClearFiltersEnable(boolean)`。
+    pub fn clear_filters_enable(mut self, clear_filters_enable: bool) -> Self {
+        self.clear_filters_enable = clear_filters_enable;
+        self
+    }
+
+    /// 原位设置是否允许清空 Filter。
+    ///
+    /// 对应 Java：
+    /// `DruidAbstractDataSource#setClearFiltersEnable(boolean)`；该入口便于与
+    /// 原位 [`Self::set_filters`] 保持相同调用顺序。
+    pub fn set_clear_filters_enable(&mut self, clear_filters_enable: bool) {
+        self.clear_filters_enable = clear_filters_enable;
+    }
+
+    /// 设置 Filter 配置。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#setFilters(String)`：
+    ///
+    /// - `None` 和空字符串不改变当前配置；
+    /// - 首字符为 `!` 时先移除该字符，再按 `clearFiltersEnable` 决定是否清空；
+    /// - 其余内容交给 [`Self::add_filters`]。
+    ///
+    /// # 参数
+    ///
+    /// - `filters`：Java 参数 `filters`；`None` 对应 Java `null`。
+    ///
+    /// # Errors
+    ///
+    /// Filter 工厂构造失败时，在本方法调用点返回错误，对应 Java
+    /// `setFilters` 直接抛出 `SQLException`，而不是推迟到数据源初始化。
+    pub fn set_filters(&mut self, filters: Option<&str>) -> Result<(), crate::core::DruidError> {
+        let Some(filters) = filters else {
+            return Ok(());
+        };
+        let filters = if let Some(filters) = filters.strip_prefix('!') {
+            if self.clear_filters_enable {
+                self.filter_chain = FilterChain::new();
+                self.filter_chain_configured = true;
+            }
+            filters
+        } else {
+            filters
+        };
+        self.add_filters_in_place(filters)?;
+        Ok(())
+    }
+
+    /// 追加逗号分隔的 Filter 配置。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#addFilters(String)`。每项使用
+    /// `String#trim()` 的 U+0000..U+0020 边界，而不是 Rust 会额外删除 Unicode
+    /// 空白的 `str::trim()`；重复类名仍由 [`FilterManager`] 忽略大小写去重。
+    ///
+    /// # Errors
+    ///
+    /// 任一 Filter 工厂构造失败时立即返回带 Java 消息前缀的错误；此前已经添加的
+    /// Filter 保持可见，对应 Java 循环的部分副作用。
+    pub fn add_filters(&mut self, filters: Option<&str>) -> Result<(), crate::core::DruidError> {
+        if let Some(filters) = filters {
+            self.add_filters_in_place(filters)?;
+        }
+        Ok(())
+    }
+
+    /// 清空已配置 Filter。
+    ///
+    /// 对应 Java：`DruidAbstractDataSource#clearFilters()`。关闭
+    /// `clearFiltersEnable` 时保持链不变。
+    pub fn clear_filters(&mut self) {
+        if self.clear_filters_enable {
+            self.filter_chain = FilterChain::new();
+            self.filter_chain_configured = true;
+        }
+    }
+
+    fn add_filters_in_place(&mut self, filters: &str) -> Result<(), crate::core::DruidError> {
+        if filters.is_empty() {
+            return Ok(());
+        }
+        self.filter_chain_configured = true;
+        for item in filters.split(',') {
+            self.filter_manager
+                .load_filter(&mut self.filter_chain, trim_java_string(item))?;
+        }
+        Ok(())
+    }
+
     pub async fn build(self) -> Result<super::DruidPool, crate::core::DruidError> {
+        if self.max_open == 0 {
+            return Err(crate::core::DruidError::InvalidArgument(
+                "illegal maxActive 0".to_owned(),
+            ));
+        }
+        if self.max_open < self.min_idle {
+            return Err(crate::core::DruidError::InvalidArgument(format!(
+                "illegal maxActive {}",
+                self.max_open
+            )));
+        }
+        if self.initial_size > self.max_open {
+            return Err(crate::core::DruidError::InvalidArgument(format!(
+                "illegal initialSize {}, maxActive {}",
+                self.initial_size, self.max_open
+            )));
+        }
+        if self.max_evictable_idle_time < self.idle_timeout {
+            return Err(crate::core::DruidError::InvalidArgument(
+                "maxEvictableIdleTimeMillis must be grater than minEvictableIdleTimeMillis"
+                    .to_owned(),
+            ));
+        }
+        if self.keep_alive && self.keep_alive_between_time <= self.time_between_eviction_runs {
+            return Err(crate::core::DruidError::InvalidArgument(
+                "keepAliveBetweenTimeMillis must be greater than timeBetweenEvictionRunsMillis"
+                    .to_owned(),
+            ));
+        }
+
         let factory = self
             .factory
             .ok_or(crate::core::DruidError::Other("factory required".into()))?;
         let inner_config = PoolInnerConfig {
             db_type_name: self.db_type_name,
             max_open: self.max_open,
+            initial_size: self.initial_size,
             min_idle: self.min_idle,
             max_idle: self.max_idle,
             acquire_timeout: self.acquire_timeout,
+            max_wait_thread_count: self.max_wait_thread_count,
+            connection_error_retry_attempts: self.connection_error_retry_attempts,
+            break_after_acquire_failure: self.break_after_acquire_failure,
+            time_between_connect_error: self.time_between_connect_error,
+            fail_fast: self.fail_fast,
             max_lifetime: self.max_lifetime,
             idle_timeout: self.idle_timeout,
             max_evictable_idle_time: self.max_evictable_idle_time,
             physical_connection_timeout: self.physical_connection_timeout,
             test_on_borrow: self.test_on_borrow,
             test_on_return: self.test_on_return,
+            test_while_idle: self.test_while_idle,
+            time_between_eviction_runs: self.time_between_eviction_runs,
+            validation_query: self.validation_query,
+            validation_query_timeout: self.validation_query_timeout,
+            valid_connection_checker: self.valid_connection_checker,
+            remove_abandoned: self.remove_abandoned,
+            remove_abandoned_timeout: self.remove_abandoned_timeout,
+            log_abandoned: self.log_abandoned,
             keep_alive: self.keep_alive,
             keep_alive_between_time: self.keep_alive_between_time,
             keep_connection_underlying_transaction_isolation: self
@@ -370,13 +752,34 @@ impl DruidPoolBuilder {
             share_prepared_statements: self.share_prepared_statements,
             use_oracle_implicit_cache: self.use_oracle_implicit_cache,
         };
-        Ok(super::DruidPool::new(
+        let filter_chain = if self.filter_chain.is_empty() && !self.filter_chain_configured {
+            None
+        } else {
+            self.filter_chain.init_filters().await?;
+            Some(Arc::new(self.filter_chain))
+        };
+        let pool = super::DruidPool::new_with_observability(
             self.name,
             self.driver_name,
             factory,
             inner_config,
-            self.filter_chain,
-        ))
+            filter_chain,
+            self.stats_collector,
+            self.wall_provider,
+        );
+        if pool.filter_chain().is_some() {
+            pool.mark_filters_initialized();
+        }
+        Ok(pool)
+    }
+
+    /// 构建 canonical `DruidDataSource` 门面。
+    ///
+    /// 与 [`Self::build`] 使用同一个 native pool 状态机，不增加第二层连接池。
+    pub async fn build_data_source(
+        self,
+    ) -> Result<super::DruidDataSource, crate::core::DruidError> {
+        self.build().await.map(super::DruidDataSource::from_pool)
     }
 }
 
@@ -384,4 +787,32 @@ impl Default for DruidPoolBuilder {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn default_filter_manager(
+    data_source_name: Arc<RwLock<String>>,
+    stats_collector: Arc<StatsCollector>,
+    wall_provider: Arc<WallProvider>,
+) -> Arc<FilterManager> {
+    let manager = Arc::new(FilterManager::new());
+    let stat_collector = Arc::clone(&stats_collector);
+    let merge_stats_collector = Arc::clone(&stats_collector);
+    manager.register_filter(STAT_FILTER_CLASS, move || {
+        let _data_source_name = data_source_name.read().clone();
+        Ok(StatFilter::new(Arc::clone(&stat_collector)))
+    });
+    manager.register_filter(MERGE_STAT_FILTER_CLASS, move || {
+        Ok(StatFilter::new(Arc::clone(&merge_stats_collector)))
+    });
+    manager.register_filter(WALL_FILTER_CLASS, move || {
+        Ok(WallFilter::new(Arc::clone(&wall_provider)))
+    });
+    for class_name in LOG_FILTER_CLASSES {
+        manager.register_filter(class_name, || Ok(LogFilter::new()));
+    }
+    manager
+}
+
+fn trim_java_string(value: &str) -> &str {
+    value.trim_matches(|character| character <= '\u{20}')
 }

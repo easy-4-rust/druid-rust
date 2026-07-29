@@ -122,7 +122,7 @@ flowchart TB
 | :--- | :--- | :--- | :--- |
 | `druid` | `/core` | 连接池、SQL、Wall、Stat、Dynamic、JDBC 平台对象、内部 SPI；默认 Toasty | PARTIAL |
 | `druid-wrapper` | `/druid-wrapper` | SQLx、RBDC、bb8、deadpool 及各种数据库操作/连接生态封装 | PARTIAL |
-| `druid-admin` | `/druid-admin` | 服务发现、监控聚合、DTO、路由、资源和管理扩展 | TODO；当前只有占位对象 |
+| `druid-admin` | `/druid-admin` | 服务发现、监控聚合、DTO、路由、资源和管理扩展 | IMPLEMENTED_UNVERIFIED；功能 UI PARTIAL |
 
 依赖方向：
 
@@ -141,7 +141,7 @@ flowchart LR
 | :--- | :--- | :--- |
 | `druid-core`、`druid-pool`、`druid-sql`、`druid-stats`、`druid-dynamic` | `druid` | `crates/druid/src/{core,pool,sql,stats,dynamic}/` |
 | `druid-toasty` | `druid` | `crates/druid/src/toasty/` |
-| `druid-sqlx`、`druid-rbdc`、`druid-sqlx-bb8`、`druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/{sqlx,rbdc,sqlx_bb8,sqlx_deadpool}/` |
+| `druid-sqlx`、`druid-rbdc`、`druid-sqlx-bb8`、`druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/rbdc/`、`crates/druid-wrapper/src/sqlx/{bb8,deadpool}/` |
 
 `cargo metadata` 只返回 `druid`、`druid-wrapper`、`druid-admin` 三个 workspace
 member。内部目录不得独立发布、独立维护版本或单独计算完成率。
@@ -368,14 +368,21 @@ capability 需要保留结构化字段，并由对应真实数据库测试验证
 日志使用 `tracing`，指标适配 `metrics`/Prometheus。指标标签必须有界，禁止把
 原始 SQL、用户 ID 或请求 ID直接作为高基数 label。
 
-`druid-admin` 当前只有 `AdminState` 和 `endpoint_list()` 占位，尚无真实 Axum
-Router、handler、DTO、远端聚合或 Java静态资源。因此 Admin 必须保持 TODO。
-Java 兼容面与可选 `/druid/api/*` Rust 扩展分别记账。
+`druid-admin` 已采用 Topcoat 外层服务 + Axum/Tower 协议路由：
+axum-valid 负责边界参数校验，Tokio 负责运行时，tokio-metrics 暴露任务指标，
+prost 为 `ServiceNode` 提供可选快照传输；远端统计仍通过 Java-compatible JSON
+协议聚合。Toasty 只属于 `druid` 默认数据源实现，不进入管理端。
+
+13 个 Java canonical 对象已有独立 Rust 实现并通过模块级编译，但 Java oracle、
+真实 Tower/HTTP 故障测试与统一覆盖率尚未执行，所以状态是
+`IMPLEMENTED_UNVERIFIED`；Java 管理端 25 份 HTML/CSS/JS 原资源已逐字节迁入，
+但运行路由仍待统一验证。Java 兼容面与可选 `/druid/api/*` Rust 扩展分别记账。
 
 ## 14. 部署、升级与回滚
 
-druid-rust 默认作为库嵌入应用进程。`druid-admin` 只有在真实服务实现后才可作为
-独立或 sidecar 管理进程部署。
+druid-rust 默认作为库嵌入应用进程。`druid-admin` 已有可启动的 Topcoat
+服务对象，但只有通过统一协议、安全与故障验证后才可进入独立或 sidecar
+生产部署门禁。
 
 升级要求：
 

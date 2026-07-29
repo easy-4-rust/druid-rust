@@ -5,7 +5,8 @@
 use super::{
     DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream, JdbcNClob,
     JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl,
-    ResultSetFilterChain, ResultSetFilterContext, SqlWarning, Value,
+    ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData, ResultSetStatement,
+    SqlWarning, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -127,6 +128,214 @@ macro_rules! i32_arg_result_set_filter_methods {
             ) -> Result<$ty, DruidError> {
                 chain.$chain_method($argument)
             }
+        )+
+    };
+}
+
+macro_rules! scalar_update_filter_methods {
+    ($(($index:ident, $label:ident, $chain_index:ident, $chain_label:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, ..)`，保留 setter 类型身份。")]
+            fn $index(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: $ty,
+            ) -> Result<(), DruidError> {
+                chain.$chain_index(column_index, value)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, ..)`，保留标签重载身份。")]
+            fn $label(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: $ty,
+            ) -> Result<(), DruidError> {
+                chain.$chain_label(column_label, value)
+            }
+        )+
+    };
+}
+
+macro_rules! resource_update_filter_methods {
+    ($(($index:ident, $label:ident, $ty:ty, $java:literal)),+ $(,)?) => {
+        $(
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, ..)`，保留 nullable 资源句柄身份。")]
+            fn $index(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                chain.$index(column_index, value)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, ..)`，保留标签与 nullable 资源句柄身份。")]
+            fn $label(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                chain.$label(column_label, value)
+            }
+        )+
+    };
+}
+
+macro_rules! lob_stream_update_filter_methods {
+    ($((
+        $index:ident,
+        $label:ident,
+        $index_with_length:ident,
+        $label_with_length:ident,
+        $ty:ty,
+        $java:literal
+    )),+ $(,)?) => {
+        $(
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, stream/reader)`，保留无长度重载身份。")]
+            fn $index(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                chain.$index(column_index, value)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, stream/reader)`，保留标签与无长度重载身份。")]
+            fn $label(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                chain.$label(column_label, value)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, stream/reader, long)`，长度原样下沉。")]
+            fn $index_with_length(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                chain.$index_with_length(column_index, value, length)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, stream/reader, long)`，保留标签与长度身份。")]
+            fn $label_with_length(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                chain.$label_with_length(column_label, value, length)
+            }
+        )+
+    };
+}
+
+macro_rules! stream_update_filter_methods {
+    ($((
+        $index:ident,
+        $label:ident,
+        $index_with_int_length:ident,
+        $label_with_int_length:ident,
+        $index_with_length:ident,
+        $label_with_length:ident,
+        $ty:ty,
+        $java:literal
+    )),+ $(,)?) => {
+        $(
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, stream/reader)`，保留无长度重载身份。")]
+            fn $index(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                chain.$index(column_index, value)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, stream/reader)`，保留标签与无长度重载身份。")]
+            fn $label(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: Option<$ty>,
+            ) -> Result<(), DruidError> {
+                chain.$label(column_label, value)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, stream/reader, int)`，保留 int 长度重载身份。")]
+            fn $index_with_int_length(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i32,
+            ) -> Result<(), DruidError> {
+                chain.$index_with_int_length(column_index, value, length)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, stream/reader, int)`，保留标签与 int 长度身份。")]
+            fn $label_with_int_length(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i32,
+            ) -> Result<(), DruidError> {
+                chain.$label_with_int_length(column_label, value, length)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(int, stream/reader, long)`，保留 long 长度重载身份。")]
+            fn $index_with_length(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_index: usize,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                chain.$index_with_length(column_index, value, length)
+            }
+
+            #[doc = concat!("包围 Java `ResultSet#", $java, "(String, stream/reader, long)`，保留标签与 long 长度身份。")]
+            fn $label_with_length(
+                &self,
+                chain: &mut ResultSetFilterChain<'_>,
+                column_label: &str,
+                value: Option<$ty>,
+                length: i64,
+            ) -> Result<(), DruidError> {
+                chain.$label_with_length(column_label, value, length)
+            }
+        )+
+    };
+}
+
+macro_rules! long_stream_update_filter_methods {
+    ($((
+        $index:ident,
+        $label:ident,
+        $index_with_length:ident,
+        $label_with_length:ident,
+        $ty:ty,
+        $java:literal
+    )),+ $(,)?) => {
+        $(
+            lob_stream_update_filter_methods!((
+                $index,
+                $label,
+                $index_with_length,
+                $label_with_length,
+                $ty,
+                $java
+            ));
         )+
     };
 }
@@ -478,6 +687,201 @@ pub trait ResultSetFilter: Send + Sync {
         ),
     );
 
+    /// 包围 Java `ResultSet#updateNull(int)`。
+    fn result_set_update_null(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_index: usize,
+    ) -> Result<(), DruidError> {
+        chain.result_set_update_null(column_index)
+    }
+
+    /// 包围 Java `ResultSet#updateNull(String)`。
+    fn result_set_update_null_by_label(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_label: &str,
+    ) -> Result<(), DruidError> {
+        chain.result_set_update_null_by_label(column_label)
+    }
+
+    scalar_update_filter_methods!(
+        (result_set_update_boolean, result_set_update_boolean_by_label, result_set_update_boolean, result_set_update_boolean_by_label, bool, "updateBoolean"),
+        (result_set_update_byte, result_set_update_byte_by_label, result_set_update_byte, result_set_update_byte_by_label, i8, "updateByte"),
+        (result_set_update_short, result_set_update_short_by_label, result_set_update_short, result_set_update_short_by_label, i16, "updateShort"),
+        (result_set_update_int, result_set_update_int_by_label, result_set_update_int, result_set_update_int_by_label, i32, "updateInt"),
+        (result_set_update_long, result_set_update_long_by_label, result_set_update_long, result_set_update_long_by_label, i64, "updateLong"),
+        (result_set_update_float, result_set_update_float_by_label, result_set_update_float, result_set_update_float_by_label, f32, "updateFloat"),
+        (result_set_update_double, result_set_update_double_by_label, result_set_update_double, result_set_update_double_by_label, f64, "updateDouble"),
+        (result_set_update_big_decimal, result_set_update_big_decimal_by_label, result_set_update_big_decimal, result_set_update_big_decimal_by_label, Option<BigDecimal>, "updateBigDecimal"),
+        (result_set_update_string, result_set_update_string_by_label, result_set_update_string, result_set_update_string_by_label, Option<String>, "updateString"),
+        (result_set_update_n_string, result_set_update_n_string_by_label, result_set_update_n_string, result_set_update_n_string_by_label, Option<String>, "updateNString"),
+        (result_set_update_bytes, result_set_update_bytes_by_label, result_set_update_bytes, result_set_update_bytes_by_label, Option<Vec<u8>>, "updateBytes"),
+        (result_set_update_date, result_set_update_date_by_label, result_set_update_date, result_set_update_date_by_label, Option<NaiveDate>, "updateDate"),
+        (result_set_update_time, result_set_update_time_by_label, result_set_update_time, result_set_update_time_by_label, Option<NaiveTime>, "updateTime"),
+        (result_set_update_timestamp, result_set_update_timestamp_by_label, result_set_update_timestamp, result_set_update_timestamp_by_label, Option<NaiveDateTime>, "updateTimestamp"),
+    );
+
+    /// 包围 Java `ResultSet#updateObject(int, Object)`，保留平台对象身份。
+    fn result_set_update_object(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_index: usize,
+        value: JdbcObject,
+    ) -> Result<(), DruidError> {
+        chain.result_set_update_object(column_index, value)
+    }
+
+    /// 包围 Java `ResultSet#updateObject(String, Object)`。
+    fn result_set_update_object_by_label(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_label: &str,
+        value: JdbcObject,
+    ) -> Result<(), DruidError> {
+        chain.result_set_update_object_by_label(column_label, value)
+    }
+
+    /// 包围 Java `ResultSet#updateObject(int, Object, int)`。
+    fn result_set_update_object_with_scale_or_length(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_index: usize,
+        value: JdbcObject,
+        scale_or_length: i32,
+    ) -> Result<(), DruidError> {
+        chain.result_set_update_object_with_scale_or_length(column_index, value, scale_or_length)
+    }
+
+    /// 包围 Java `ResultSet#updateObject(String, Object, int)`。
+    fn result_set_update_object_by_label_with_scale_or_length(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+        column_label: &str,
+        value: JdbcObject,
+        scale_or_length: i32,
+    ) -> Result<(), DruidError> {
+        chain.result_set_update_object_by_label_with_scale_or_length(
+            column_label,
+            value,
+            scale_or_length,
+        )
+    }
+
+    resource_update_filter_methods!(
+        (
+            result_set_update_reference,
+            result_set_update_reference_by_label,
+            JdbcRef,
+            "updateRef"
+        ),
+        (
+            result_set_update_blob,
+            result_set_update_blob_by_label,
+            JdbcBlob,
+            "updateBlob"
+        ),
+        (
+            result_set_update_clob,
+            result_set_update_clob_by_label,
+            JdbcClob,
+            "updateClob"
+        ),
+        (
+            result_set_update_array,
+            result_set_update_array_by_label,
+            JdbcArray,
+            "updateArray"
+        ),
+        (
+            result_set_update_row_id,
+            result_set_update_row_id_by_label,
+            JdbcRowId,
+            "updateRowId"
+        ),
+        (
+            result_set_update_n_clob,
+            result_set_update_n_clob_by_label,
+            JdbcNClob,
+            "updateNClob"
+        ),
+        (
+            result_set_update_sql_xml,
+            result_set_update_sql_xml_by_label,
+            JdbcSqlXml,
+            "updateSQLXML"
+        ),
+    );
+
+    lob_stream_update_filter_methods!(
+        (
+            result_set_update_blob_stream,
+            result_set_update_blob_stream_by_label,
+            result_set_update_blob_stream_with_length,
+            result_set_update_blob_stream_by_label_with_length,
+            JdbcInputStream,
+            "updateBlob"
+        ),
+        (
+            result_set_update_clob_reader,
+            result_set_update_clob_reader_by_label,
+            result_set_update_clob_reader_with_length,
+            result_set_update_clob_reader_by_label_with_length,
+            JdbcReader,
+            "updateClob"
+        ),
+        (
+            result_set_update_n_clob_reader,
+            result_set_update_n_clob_reader_by_label,
+            result_set_update_n_clob_reader_with_length,
+            result_set_update_n_clob_reader_by_label_with_length,
+            JdbcReader,
+            "updateNClob"
+        ),
+    );
+
+    stream_update_filter_methods!(
+        (
+            result_set_update_ascii_stream,
+            result_set_update_ascii_stream_by_label,
+            result_set_update_ascii_stream_with_int_length,
+            result_set_update_ascii_stream_by_label_with_int_length,
+            result_set_update_ascii_stream_with_length,
+            result_set_update_ascii_stream_by_label_with_length,
+            JdbcInputStream,
+            "updateAsciiStream"
+        ),
+        (
+            result_set_update_binary_stream,
+            result_set_update_binary_stream_by_label,
+            result_set_update_binary_stream_with_int_length,
+            result_set_update_binary_stream_by_label_with_int_length,
+            result_set_update_binary_stream_with_length,
+            result_set_update_binary_stream_by_label_with_length,
+            JdbcInputStream,
+            "updateBinaryStream"
+        ),
+        (
+            result_set_update_character_stream,
+            result_set_update_character_stream_by_label,
+            result_set_update_character_stream_with_int_length,
+            result_set_update_character_stream_by_label_with_int_length,
+            result_set_update_character_stream_with_length,
+            result_set_update_character_stream_by_label_with_length,
+            JdbcReader,
+            "updateCharacterStream"
+        ),
+    );
+
+    long_stream_update_filter_methods!((
+        result_set_update_n_character_stream,
+        result_set_update_n_character_stream_by_label,
+        result_set_update_n_character_stream_with_length,
+        result_set_update_n_character_stream_by_label_with_length,
+        JdbcReader,
+        "updateNCharacterStream"
+    ));
+
     no_arg_result_set_filter_methods!(
         (result_set_was_null, result_set_was_null, bool, "wasNull"),
         (result_set_previous, result_set_previous, bool, "previous"),
@@ -519,6 +923,28 @@ pub trait ResultSetFilter: Send + Sync {
         (result_set_row_updated, result_set_row_updated, bool, "rowUpdated"),
         (result_set_row_inserted, result_set_row_inserted, bool, "rowInserted"),
         (result_set_row_deleted, result_set_row_deleted, bool, "rowDeleted"),
+        (result_set_insert_row, result_set_insert_row, (), "insertRow"),
+        (result_set_update_row, result_set_update_row, (), "updateRow"),
+        (result_set_delete_row, result_set_delete_row, (), "deleteRow"),
+        (result_set_refresh_row, result_set_refresh_row, (), "refreshRow"),
+        (
+            result_set_cancel_row_updates,
+            result_set_cancel_row_updates,
+            (),
+            "cancelRowUpdates"
+        ),
+        (
+            result_set_move_to_insert_row,
+            result_set_move_to_insert_row,
+            (),
+            "moveToInsertRow"
+        ),
+        (
+            result_set_move_to_current_row,
+            result_set_move_to_current_row,
+            (),
+            "moveToCurrentRow"
+        ),
         (result_set_is_closed, result_set_is_closed, bool, "isClosed"),
     );
 
@@ -560,5 +986,21 @@ pub trait ResultSetFilter: Send + Sync {
         column_label: &str,
     ) -> Result<usize, DruidError> {
         chain.result_set_find_column(column_label)
+    }
+
+    /// 包围 Java `ResultSet#getMetaData()`，保留 metadata 平台句柄。
+    fn result_set_get_meta_data(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+    ) -> Result<ResultSetMetaData, DruidError> {
+        chain.result_set_get_meta_data()
+    }
+
+    /// 包围 Java `ResultSet#getStatement()`，保留动态 Statement 身份。
+    fn result_set_get_statement(
+        &self,
+        chain: &mut ResultSetFilterChain<'_>,
+    ) -> Result<ResultSetStatement, DruidError> {
+        chain.result_set_get_statement()
     }
 }

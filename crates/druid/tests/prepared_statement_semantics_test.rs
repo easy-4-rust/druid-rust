@@ -13,8 +13,8 @@ use druid::core::{
     ExecResult, FilterChain, JdbcCalendar, JdbcCalendarArgument, JdbcCharacterLength,
     JdbcInputStream, JdbcObject, JdbcReader, JdbcRowId, JdbcStreamLength, JdbcUrl,
     PhysicalConnection, PhysicalConnectionFactory, PhysicalPreparedStatement,
-    PreparedInputParameter, PreparedStatementKey, PreparedTypeNameArgument, Row,
-    SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
+    PreparedInputParameter, PreparedStatementKey, PreparedTypeNameArgument, ResultSetStatement,
+    Row, SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
     WrapperExt,
 };
 use druid::pool::DruidPool;
@@ -2114,6 +2114,17 @@ async fn prepared_result_set_keeps_the_same_statement_alive_and_can_close_it() {
         .unwrap_ref::<UnsupportedPreparedUnwrapType>()
         .is_none());
     assert!(identity.as_any().is::<DruidPooledPreparedStatementHandle>());
+    let statement_object = result_set.statement_object(&mut connection).unwrap();
+    assert!(matches!(statement_object, ResultSetStatement::Prepared(_)));
+    assert!(statement_object
+        .prepared_statement()
+        .expect("动态平台对象必须保留 PreparedStatement 身份")
+        .is_same_statement(&statement));
+    assert!(statement_object
+        .pooled_statement()
+        .is_same_statement(statement.pooled_statement()));
+    assert!(statement_object.callable_statement().is_none());
+    assert!(!statement_object.is_closed());
 
     drop(statement);
     assert!(
@@ -2128,6 +2139,7 @@ async fn prepared_result_set_keeps_the_same_statement_alive_and_can_close_it() {
 
     result_set.prepared_statement().unwrap().close().unwrap();
     result_set.prepared_statement().unwrap().close().unwrap();
+    assert!(statement_object.is_closed());
     assert!(result_set.prepared_statement().unwrap().is_closed());
     assert!(
         result_set.is_closed(),

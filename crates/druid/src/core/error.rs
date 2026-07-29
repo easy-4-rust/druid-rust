@@ -13,6 +13,14 @@ pub enum DruidError {
     PoolClosed,
     AcquireTimeout,
     PoolExhausted,
+    /// 等待获取连接的任务数超过数据源上限。
+    ///
+    /// 对应 Java `DruidDataSource#getConnectionInternal` 的
+    /// `maxWaitThreadCount` 分支。
+    MaxWaitThreadCountExceeded {
+        max: usize,
+        current: usize,
+    },
     ValidationFailed(String),
     ConnectionLeaked {
         id: u64,
@@ -37,6 +45,14 @@ pub enum DruidError {
     SqlParseError(String),
     WallViolation(String),
     DataSourceNotFound(String),
+    /// 数据源管理开关已禁用。
+    ///
+    /// 对应 Java `DataSourceDisableException`。
+    DataSourceDisabled,
+    /// 高可用数据源当前没有可用节点。
+    ///
+    /// 对应 Java `DataSourceNotAvailableException`，不能与名称不存在混同。
+    DataSourceNotAvailable(String),
     /// 公共 API 参数不满足 Java 合约。
     InvalidArgument(String),
     UnsupportedOperation {
@@ -51,6 +67,10 @@ impl fmt::Display for DruidError {
             Self::PoolClosed => write!(f, "connection pool is closed"),
             Self::AcquireTimeout => write!(f, "acquire connection timed out"),
             Self::PoolExhausted => write!(f, "connection pool exhausted"),
+            Self::MaxWaitThreadCountExceeded { max, current } => write!(
+                f,
+                "maxWaitThreadCount {max}, current wait task count {current}"
+            ),
             Self::ValidationFailed(msg) => write!(f, "connection validation failed: {msg}"),
             Self::ConnectionLeaked { id, held_for } => {
                 write!(f, "connection {id} leaked, held for {held_for:?}")
@@ -75,6 +95,10 @@ impl fmt::Display for DruidError {
             Self::SqlParseError(msg) => write!(f, "SQL parse error: {msg}"),
             Self::WallViolation(msg) => write!(f, "wall violation: {msg}"),
             Self::DataSourceNotFound(name) => write!(f, "datasource not found: {name}"),
+            Self::DataSourceDisabled => write!(f, "datasource is disabled"),
+            Self::DataSourceNotAvailable(name) => {
+                write!(f, "datasource is not available: {name}")
+            }
             Self::InvalidArgument(message) => write!(f, "invalid argument: {message}"),
             Self::UnsupportedOperation { operation } => {
                 write!(

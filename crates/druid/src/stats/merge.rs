@@ -2,15 +2,16 @@
 //!
 //! SQL 合并统计：把参数化后的 SQL 模板作为 key，聚合执行统计。
 
-use std::hash::{Hash, Hasher};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+
+use super::JdbcSqlStat;
+
+/// 旧内部名称，保留源码兼容；canonical 对象为 [`JdbcSqlStat`]。
+pub type MergedSqlStat = JdbcSqlStat;
 
 /// SQL 指纹（xxh3 哈希）。
 pub fn fingerprint(sql_template: &str) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    sql_template.hash(&mut hasher);
-    hasher.finish()
+    xxhash_rust::xxh3::xxh3_64(sql_template.as_bytes())
 }
 
 /// 参数化 SQL 结果。
@@ -20,32 +21,73 @@ pub struct ParameterizedSql {
     pub fingerprint: u64,
 }
 
-/// 简易 SQL 参数化：把字面量替换为 ?。
+/// SQL 词法参数化：只把字符串和数值字面量替换为 `?`。
+///
+/// 对应 Java `SQLUtils#parameterize` 的统计合并职责。标识符、已有 placeholder、
+/// quoted identifier 与注释保持不变；字符串转义和科学计数法作为一个字面量
+/// 消费，避免旧实现把 `table1` 错误改成 `table?`。
 pub fn parameterize(sql: &str) -> ParameterizedSql {
     let mut template = String::with_capacity(sql.len());
-    let mut in_string = false;
-    let mut in_number = false;
-
-    for ch in sql.chars() {
-        match ch {
-            '\'' if !in_string => {
-                in_string = true;
+    let bytes = sql.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' => {
+                if index > 0
+                    && matches!(
+                        bytes[index - 1],
+                        b'n' | b'N' | b'e' | b'E' | b'x' | b'X' | b'b' | b'B'
+                    )
+                    && is_token_start(bytes, index - 1)
+                {
+                    template.pop();
+                }
+                index = consume_quoted(bytes, index, b'\'');
                 template.push('?');
             }
-            '\'' if in_string => {
-                in_string = false;
+            b'"' | b'`' => {
+                let end = consume_quoted(bytes, index, bytes[index]);
+                template.push_str(&sql[index..end]);
+                index = end;
             }
-            '0'..='9' if !in_string && !in_number => {
-                in_number = true;
+            b'[' => {
+                let end = consume_bracket_identifier(bytes, index);
+                template.push_str(&sql[index..end]);
+                index = end;
+            }
+            b'-' if bytes.get(index + 1) == Some(&b'-') => {
+                let end = consume_line_comment(bytes, index);
+                template.push_str(&sql[index..end]);
+                index = end;
+            }
+            b'#' => {
+                let end = consume_line_comment(bytes, index);
+                template.push_str(&sql[index..end]);
+                index = end;
+            }
+            b'/' if bytes.get(index + 1) == Some(&b'*') => {
+                let end = consume_block_comment(bytes, index);
+                template.push_str(&sql[index..end]);
+                index = end;
+            }
+            byte if byte.is_ascii_digit() && is_token_start(bytes, index) => {
+                index = consume_number(bytes, index);
                 template.push('?');
             }
-            '0'..='9' if in_number => { /* skip digits */ }
-            _ if in_number => {
-                in_number = false;
+            b'.' if bytes.get(index + 1).is_some_and(u8::is_ascii_digit)
+                && is_token_start(bytes, index) =>
+            {
+                index = consume_number(bytes, index);
+                template.push('?');
+            }
+            _ => {
+                let ch = sql[index..]
+                    .chars()
+                    .next()
+                    .expect("index is on a UTF-8 boundary");
                 template.push(ch);
+                index += ch.len_utf8();
             }
-            _ if in_string => { /* skip string content */ }
-            _ => template.push(ch),
         }
     }
 
@@ -56,70 +98,126 @@ pub fn parameterize(sql: &str) -> ParameterizedSql {
     }
 }
 
-/// 单条 SQL 的合并统计。
-///
-/// 对应 Druid Java 的 `JdbcSqlStat`，按 SQL 模板聚合。
-#[derive(Debug)]
-pub struct MergedSqlStat {
-    pub sql: String,
-    pub fingerprint: u64,
-    pub execute_count: AtomicU64,
-    pub total_time_ns: AtomicU64,
-    pub max_time_ns: AtomicU64,
-    pub error_count: AtomicU64,
-    pub fetch_row_count: AtomicU64,
-    pub running_count: AtomicU64,
-    pub concurrent_max: AtomicU64,
+fn consume_quoted(bytes: &[u8], mut index: usize, quote: u8) -> usize {
+    index += 1;
+    while index < bytes.len() {
+        if bytes[index] == quote {
+            if bytes.get(index + 1) == Some(&quote) {
+                index += 2;
+                continue;
+            }
+            return index + 1;
+        }
+        if bytes[index] == b'\\' && index + 1 < bytes.len() {
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    bytes.len()
 }
 
-impl MergedSqlStat {
-    pub fn new(sql: String, fingerprint: u64) -> Self {
-        Self {
-            sql,
-            fingerprint,
-            execute_count: AtomicU64::new(0),
-            total_time_ns: AtomicU64::new(0),
-            max_time_ns: AtomicU64::new(0),
-            error_count: AtomicU64::new(0),
-            fetch_row_count: AtomicU64::new(0),
-            running_count: AtomicU64::new(0),
-            concurrent_max: AtomicU64::new(0),
+fn consume_bracket_identifier(bytes: &[u8], mut index: usize) -> usize {
+    index += 1;
+    while index < bytes.len() {
+        if bytes[index] == b']' {
+            if bytes.get(index + 1) == Some(&b']') {
+                index += 2;
+                continue;
+            }
+            return index + 1;
+        }
+        index += 1;
+    }
+    bytes.len()
+}
+
+fn consume_line_comment(bytes: &[u8], mut index: usize) -> usize {
+    while index < bytes.len() && !matches!(bytes[index], b'\n' | b'\r') {
+        index += 1;
+    }
+    index
+}
+
+fn consume_block_comment(bytes: &[u8], mut index: usize) -> usize {
+    index += 2;
+    while index + 1 < bytes.len() {
+        if bytes[index] == b'*' && bytes[index + 1] == b'/' {
+            return index + 2;
+        }
+        index += 1;
+    }
+    bytes.len()
+}
+
+fn is_token_start(bytes: &[u8], index: usize) -> bool {
+    index == 0
+        || bytes[index - 1].is_ascii()
+            && !bytes[index - 1].is_ascii_alphanumeric()
+            && !matches!(bytes[index - 1], b'_' | b'$')
+}
+
+fn consume_number(bytes: &[u8], mut index: usize) -> usize {
+    if bytes[index] == b'.' {
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'0')
+        && bytes
+            .get(index + 1)
+            .is_some_and(|byte| matches!(byte, b'x' | b'X' | b'b' | b'B'))
+    {
+        index += 2;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_hexdigit() || *byte == b'_')
+        {
+            index += 1;
+        }
+        return index;
+    }
+    while bytes
+        .get(index)
+        .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'_')
+    {
+        index += 1;
+    }
+    if bytes.get(index) == Some(&b'.') {
+        index += 1;
+        while bytes
+            .get(index)
+            .is_some_and(|byte| byte.is_ascii_digit() || *byte == b'_')
+        {
+            index += 1;
         }
     }
-
-    /// 记录一次执行。
-    pub fn record(&self, elapsed: Duration, ok: bool) {
-        let nanos = elapsed.as_nanos() as u64;
-        self.execute_count.fetch_add(1, Ordering::Relaxed);
-        self.total_time_ns.fetch_add(nanos, Ordering::Relaxed);
-
-        // 原子 max 更新（fetch_max 无分支，消除 CAS match 分支）
-        self.max_time_ns.fetch_max(nanos, Ordering::Relaxed);
-
-        if !ok {
-            self.error_count.fetch_add(1, Ordering::Relaxed);
+    if bytes
+        .get(index)
+        .is_some_and(|byte| matches!(byte, b'e' | b'E'))
+    {
+        let exponent = index;
+        index += 1;
+        if bytes
+            .get(index)
+            .is_some_and(|byte| matches!(byte, b'+' | b'-'))
+        {
+            index += 1;
+        }
+        let digits = index;
+        while bytes.get(index).is_some_and(u8::is_ascii_digit) {
+            index += 1;
+        }
+        if digits == index {
+            return exponent;
         }
     }
-
-    pub fn execute_count(&self) -> u64 {
-        self.execute_count.load(Ordering::Relaxed)
-    }
-    pub fn total_time_ms(&self) -> f64 {
-        self.total_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0
-    }
-    pub fn max_time_ms(&self) -> f64 {
-        self.max_time_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0
-    }
-    pub fn error_count(&self) -> u64 {
-        self.error_count.load(Ordering::Relaxed)
-    }
+    index
 }
 
 /// SQL 合并器。
 ///
 /// 对应 Druid Java 的 `DruidStatService` 中的 SQL 合并逻辑。
 pub struct SqlMerger {
-    cache: dashmap::DashMap<u64, std::sync::Arc<MergedSqlStat>>,
+    cache: dashmap::DashMap<u64, std::sync::Arc<JdbcSqlStat>>,
 }
 
 impl SqlMerger {
@@ -136,14 +234,14 @@ impl SqlMerger {
             .cache
             .entry(param.fingerprint)
             .or_insert_with(|| {
-                std::sync::Arc::new(MergedSqlStat::new(param.template, param.fingerprint))
+                std::sync::Arc::new(JdbcSqlStat::new(param.template, param.fingerprint))
             })
             .clone();
         stat.record(elapsed, ok);
     }
 
     /// 获取所有 SQL 统计。
-    pub fn all_stats(&self) -> Vec<std::sync::Arc<MergedSqlStat>> {
+    pub fn all_stats(&self) -> Vec<std::sync::Arc<JdbcSqlStat>> {
         self.cache
             .iter()
             .map(|entry| entry.value().clone())
@@ -151,7 +249,7 @@ impl SqlMerger {
     }
 
     /// 获取指定指纹的统计。
-    pub fn get_stat(&self, fingerprint: u64) -> Option<std::sync::Arc<MergedSqlStat>> {
+    pub fn get_stat(&self, fingerprint: u64) -> Option<std::sync::Arc<JdbcSqlStat>> {
         self.cache.get(&fingerprint).map(|v| v.clone())
     }
 
@@ -161,6 +259,11 @@ impl SqlMerger {
     }
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
+    }
+
+    /// 清空全部 SQL 聚合项。
+    pub fn reset(&self) {
+        self.cache.clear();
     }
 }
 

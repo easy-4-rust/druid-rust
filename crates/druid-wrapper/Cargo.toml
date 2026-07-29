@@ -15,11 +15,14 @@ chrono.workspace = true
 deadpool.workspace = true
 druid = { path = "../druid" }
 futures.workspace = true
+parking_lot.workspace = true
 rbdc.workspace = true
 rbs.workspace = true
+serde.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+url.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

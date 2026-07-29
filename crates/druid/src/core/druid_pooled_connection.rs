@@ -1,6 +1,7 @@
 //! 对外池化连接。
 
 use super::connection_defaults::ConnectionDefaults;
+use super::connection_event_listener::ConnectionEventListener;
 use super::connection_recycle_disposition::ConnectionRecycleDisposition;
 use super::druid_connection_holder::DruidConnectionHolder;
 use super::druid_pooled_callable_statement::DruidPooledCallableStatement;
@@ -36,6 +37,24 @@ use std::time::{Duration, Instant};
 pub type DruidConnectionReturnCallback =
     Box<dyn FnOnce(DruidConnectionHolder, ConnectionRecycleDisposition) + Send>;
 
+/// 一次数据库执行的运行中标记，离开作用域时无条件复位。
+struct ExecutionRunningGuard {
+    execution_running: Arc<AtomicBool>,
+}
+
+impl ExecutionRunningGuard {
+    fn new(execution_running: Arc<AtomicBool>) -> Self {
+        execution_running.store(true, Ordering::Release);
+        Self { execution_running }
+    }
+}
+
+impl Drop for ExecutionRunningGuard {
+    fn drop(&mut self) {
+        self.execution_running.store(false, Ordering::Release);
+    }
+}
+
 /// 对外池化连接。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.DruidPooledConnection`。
@@ -54,7 +73,10 @@ pub struct DruidPooledConnection {
     exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     return_connection: Option<DruidConnectionReturnCallback>,
     lease_active: Arc<AtomicBool>,
+    execution_running: Arc<AtomicBool>,
+    borrowed_at: Instant,
     recycled: bool,
+    connection_closed_notified: bool,
 }
 
 impl std::fmt::Debug for DruidPooledConnection {
@@ -86,7 +108,16 @@ impl std::fmt::Debug for DruidPooledConnection {
             .field("exception_sorter", &self.exception_sorter.is_some())
             .field("return_connection", &self.return_connection.is_some())
             .field("lease_active", &self.lease_active.load(Ordering::Acquire))
+            .field(
+                "execution_running",
+                &self.execution_running.load(Ordering::Acquire),
+            )
+            .field("borrowed_at", &self.borrowed_at)
             .field("recycled", &self.recycled)
+            .field(
+                "connection_closed_notified",
+                &self.connection_closed_notified,
+            )
             .finish()
     }
 }
@@ -285,7 +316,10 @@ impl DruidPooledConnection {
             exception_sorter: None,
             return_connection: Some(return_connection),
             lease_active: Arc::new(AtomicBool::new(true)),
+            execution_running: Arc::new(AtomicBool::new(false)),
+            borrowed_at: Instant::now(),
             recycled: false,
+            connection_closed_notified: false,
         }
     }
 
@@ -302,6 +336,31 @@ impl DruidPooledConnection {
     /// 返回连接是否已经归还。
     pub fn is_recycled(&self) -> bool {
         self.recycled
+    }
+
+    /// 返回池管理器使用的租约存活令牌。
+    ///
+    /// Rust-only 内部适配：`removeAbandoned` 仅使令牌失效，不跨线程取得
+    /// `&mut PhysicalConnection`，从而避免 Java 强制关闭方式在 Rust 中造成别名。
+    pub(crate) fn lease_active_token(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.lease_active)
+    }
+
+    /// 返回池管理器使用的执行中令牌。
+    pub(crate) fn execution_running_token(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.execution_running)
+    }
+
+    fn begin_execution(&self) -> Result<ExecutionRunningGuard, DruidError> {
+        if !self.lease_active.load(Ordering::Acquire) {
+            return Err(DruidError::ConnectionLeaked {
+                id: self.id,
+                held_for: self.borrowed_at.elapsed(),
+            });
+        }
+        Ok(ExecutionRunningGuard::new(Arc::clone(
+            &self.execution_running,
+        )))
     }
 
     /// 装配数据源的异常分类器。
@@ -351,6 +410,9 @@ impl DruidPooledConnection {
         result: Result<T, DruidError>,
     ) -> Result<T, DruidError> {
         if let Err(error) = &result {
+            if error.sql_exception().is_some() {
+                self.notify_connection_error(error);
+            }
             self.handle_exception(error);
         }
         result
@@ -375,6 +437,35 @@ impl DruidPooledConnection {
     /// 对应 Java 可通过 `getConnectionHolder()` 访问 holder 的可变对象语义。
     pub fn connection_holder_mut(&mut self) -> Option<&mut DruidConnectionHolder> {
         self.holder.as_mut()
+    }
+
+    /// 添加连接关闭/错误监听器。
+    ///
+    /// 对应 Java: `DruidPooledConnection#addConnectionEventListener`。
+    pub fn add_connection_event_listener(
+        &self,
+        listener: Arc<dyn ConnectionEventListener>,
+    ) -> Result<(), DruidError> {
+        let holder = self
+            .holder
+            .as_ref()
+            .ok_or(DruidError::ConnectionDiscarded)?;
+        holder.add_connection_event_listener(listener);
+        Ok(())
+    }
+
+    /// 按对象身份移除连接监听器。
+    ///
+    /// 对应 Java: `DruidPooledConnection#removeConnectionEventListener`。
+    pub fn remove_connection_event_listener(
+        &self,
+        listener: &Arc<dyn ConnectionEventListener>,
+    ) -> Result<bool, DruidError> {
+        let holder = self
+            .holder
+            .as_ref()
+            .ok_or(DruidError::ConnectionDiscarded)?;
+        Ok(holder.remove_connection_event_listener(listener))
     }
 
     /// 创建默认类型、只读并发和当前保持性的普通池化语句。
@@ -431,6 +522,12 @@ impl DruidPooledConnection {
             .create_physical_statement(options)
             .await;
         let statement = self.classify_result(result)?;
+        if let Some(filter_chain) = &self.filter_chain {
+            let event_result = filter_chain
+                .after_statement_event(&super::StatementEvent::CreateStatement)
+                .await;
+            self.classify_result(event_result)?;
+        }
         Ok(DruidPooledStatement::new(
             statement,
             self.lease_active.clone(),
@@ -598,6 +695,15 @@ impl DruidPooledConnection {
     }
 
     fn physical_mut(&mut self) -> Result<&mut (dyn PhysicalConnection + 'static), DruidError> {
+        if !self.lease_active.load(Ordering::Acquire) {
+            if let Some(holder) = self.holder.as_mut() {
+                holder.mark_discarded();
+            }
+            return Err(DruidError::ConnectionLeaked {
+                id: self.id,
+                held_for: self.borrowed_at.elapsed(),
+            });
+        }
         self.holder
             .as_mut()
             .and_then(DruidConnectionHolder::physical_connection_mut)
@@ -616,13 +722,22 @@ impl DruidPooledConnection {
         &mut self,
         key: PreparedStatementKey,
     ) -> Result<DruidPooledPreparedStatement, DruidError> {
-        self.prepare_from_key(key, false).await
+        let sql = key.sql().to_string();
+        let statement = self.prepare_from_key(key, false).await?;
+        if let Some(filter_chain) = &self.filter_chain {
+            let event_result = filter_chain
+                .after_statement_event(&super::StatementEvent::PrepareStatement(sql))
+                .await;
+            self.classify_result(event_result)?;
+        }
+        Ok(statement)
     }
 
     async fn prepare_call_from_key(
         &mut self,
         key: PreparedStatementKey,
     ) -> Result<DruidPooledCallableStatement, DruidError> {
+        let sql = key.sql().to_string();
         let mut prepared_statement = self.prepare_from_key(key, true).await?;
         if prepared_statement
             .prepared_statement_holder()
@@ -635,7 +750,14 @@ impl DruidPooledConnection {
                 operation: "prepare_physical_call",
             });
         }
-        Ok(DruidPooledCallableStatement::new(prepared_statement))
+        let statement = DruidPooledCallableStatement::new(prepared_statement);
+        if let Some(filter_chain) = &self.filter_chain {
+            let event_result = filter_chain
+                .after_statement_event(&super::StatementEvent::PrepareCall(sql))
+                .await;
+            self.classify_result(event_result)?;
+        }
+        Ok(statement)
     }
 
     async fn prepare_from_key(
@@ -724,11 +846,38 @@ impl DruidPooledConnection {
         if let (Some(holder), Some(return_connection)) =
             (self.holder.take(), self.return_connection.take())
         {
+            holder.clear_connection_event_listeners();
             return_connection(holder, disposition);
         }
     }
 
+    fn notify_connection_closed(&mut self) {
+        if self.connection_closed_notified {
+            return;
+        }
+        self.connection_closed_notified = true;
+        if let Some(holder) = self.holder.as_ref() {
+            for listener in holder.connection_event_listeners() {
+                listener.connection_closed(self.id);
+            }
+        }
+    }
+
+    fn notify_connection_error(&self, error: &DruidError) {
+        if let Some(holder) = self.holder.as_ref() {
+            for listener in holder.connection_event_listeners() {
+                listener.connection_error_occurred(self.id, error);
+            }
+        }
+    }
+
     fn drop_disposition(&mut self) -> ConnectionRecycleDisposition {
+        if !self.lease_active.load(Ordering::Acquire) {
+            if let Some(holder) = self.holder.as_mut() {
+                holder.mark_discarded();
+            }
+            return ConnectionRecycleDisposition::discard();
+        }
         let Some(holder) = self.holder.as_mut() else {
             return ConnectionRecycleDisposition::discard();
         };
@@ -749,6 +898,12 @@ impl DruidPooledConnection {
     }
 
     async fn prepare_for_recycle(&mut self) -> ConnectionRecycleDisposition {
+        if !self.lease_active.load(Ordering::Acquire) {
+            if let Some(holder) = self.holder.as_mut() {
+                holder.mark_discarded();
+            }
+            return ConnectionRecycleDisposition::discard();
+        }
         let already_unusable = self
             .holder
             .as_ref()
@@ -892,6 +1047,7 @@ impl DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
@@ -935,6 +1091,7 @@ impl DruidPooledConnection {
         sql: &str,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let params = Vec::<Value>::new();
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -994,6 +1151,7 @@ impl DruidPooledConnection {
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -1050,6 +1208,7 @@ impl DruidPooledConnection {
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
             .iter()
@@ -1113,6 +1272,7 @@ impl DruidPooledConnection {
         sql: &str,
         statements: &[String],
     ) -> Result<Vec<i32>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
@@ -1161,6 +1321,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: &mut Vec<Vec<PreparedInputParameter>>,
     ) -> Result<Vec<i32>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let snapshot = parameter_sets.clone();
         let scalar_snapshot = snapshot
@@ -1217,6 +1378,7 @@ impl DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
     ) -> Result<Vec<Row>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
@@ -1266,6 +1428,7 @@ impl DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
@@ -1315,6 +1478,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -1355,6 +1519,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<ExecResult, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
             .iter()
@@ -1399,6 +1564,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<Vec<Row>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -1447,6 +1613,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -1493,6 +1660,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Vec<Row>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
             .iter()
@@ -1546,6 +1714,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
             .iter()
@@ -1775,6 +1944,7 @@ impl PhysicalConnection for DruidPooledConnection {
             return Ok(());
         }
 
+        self.notify_connection_closed();
         self.before_connection_event(&ConnectionEvent::Close)
             .await?;
         let filter_chain = self.filter_chain.clone();
@@ -1945,6 +2115,7 @@ impl Drop for DruidPooledConnection {
         if self.recycled {
             return;
         }
+        self.notify_connection_closed();
         let disposition = self.drop_disposition();
         self.recycle_once(disposition);
     }

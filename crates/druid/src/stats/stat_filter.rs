@@ -2,7 +2,7 @@
 //!
 //! 统计 `Filter`，实现 `AfterFilter` 接口。
 
-use super::{collector::StatsCollector, StatFilterContext};
+use super::{StatFilterContext, StatsCollector};
 use crate::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
     ExecContext, ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterChain,

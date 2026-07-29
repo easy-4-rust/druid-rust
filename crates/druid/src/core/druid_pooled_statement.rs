@@ -39,11 +39,20 @@ struct DruidPooledStatementState {
 /// Rust 不允许 Statement 长期持有连接的可变借用，因此执行与会产生驱动错误
 /// 的属性方法显式接收创建它的 `DruidPooledConnection`。同租约身份由共享令牌
 /// 校验，连接归还后旧 Statement 不能进入下一次租约。
+#[derive(Clone)]
 pub struct DruidPooledStatement {
     pub(crate) inner: Arc<DruidPooledStatementInner>,
 }
 
 impl DruidPooledStatement {
+    /// 判断两个句柄是否指向同一个逻辑 Statement。
+    ///
+    /// 用于保留 Java `ResultSet#getStatement()` 的对象身份语义；比较的是共享
+    /// 内核地址，不是字段值或物理语句快照。
+    pub fn is_same_statement(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.inner, &other.inner)
+    }
+
     pub(crate) fn new(
         statement: Arc<dyn PhysicalStatement>,
         lease_active: Arc<AtomicBool>,

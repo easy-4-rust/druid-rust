@@ -193,7 +193,7 @@ workspace 已物理收敛为三个 crate；原十个内部 crate 已删除并迁
 | :--- | :--- | :--- |
 | `druid-core`、`druid-pool`、`druid-sql`、`druid-stats`、`druid-dynamic` | `druid` | `crates/druid/src/{core,pool,sql,stats,dynamic}/` |
 | `druid-toasty` | `druid` | `crates/druid/src/toasty/`，默认启用 |
-| `druid-sqlx`、`druid-rbdc`、`druid-sqlx-bb8`、`druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/{sqlx,rbdc,sqlx_bb8,sqlx_deadpool}/` |
+| `druid-sqlx`、`druid-rbdc`、`druid-sqlx-bb8`、`druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/rbdc/`、`crates/druid-wrapper/src/sqlx/{bb8,deadpool}/` |
 
 - `cargo metadata` 的 workspace member 只有 `druid`、`druid-wrapper`、`druid-admin`。
 - 内部目录不能独立形成公共 API、版本、完成率或发布物。

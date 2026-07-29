@@ -294,6 +294,114 @@ Java/Rust 对象条目遗漏。故不恢复 `docs/migration`。
 507 个测试函数及 144 个需人工复核信号；NString 两重载已从 getString 折叠中
 拆出，并由精确物理方法、短路错误与真实 SQLite Unicode 读取建立证据。
 
+2026-07-29 C2-R48：新增 `CORE-FLT-013` 与 `SEM-FLT-030` 后为 229 行、
+229 个唯一 ID、重复 0；workspace `SEM-*` 为 159 个唯一 ID，删除前 143 个
+旧 ID 仍然遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+508 个测试函数及 144 个需人工复核信号；getMetaData 以拥有物理 SPI 的平台
+句柄进入 Filter，getStatement 动态三身份仍明确开放，没有用快照冒充完成。
+
+2026-07-29 C2-R49：新增 `CORE-FLT-014` 与 `SEM-FLT-031` 后为 231 行、
+231 个唯一 ID、重复 0；workspace `SEM-*` 为 160 个唯一 ID，删除前 143 个
+旧 ID 仍然遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+509 个测试函数及 144 个需人工复核信号；`ResultSet#getStatement()` 已通过
+独立 `ResultSetStatement` 平台对象保留普通、Prepared、Callable 三种动态
+身份和同一逻辑生命周期，并由真实 Toasty SQLite、短路替换、错误计数及三类
+共享关闭测试建立证据，不再列为开放项。
+
+2026-07-29 C2-R50：新增 `CORE-FLT-015` 与 `SEM-FLT-032` 后为 233 行、
+233 个唯一 ID、重复 0；workspace `SEM-*` 为 161 个唯一 ID，删除前 143 个
+旧 ID 仍然遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+511 个测试函数及 144 个需人工复核信号；ResultSet 七个 row-mutation 无参
+调用已从物理直达改为完整 around-chain，并由精确物理方法日志、全方法短路、
+错误计数和真实 Toasty SQLite 七种 capability error 建立证据。列 update
+setter Filter 仍保持开放。
+
+2026-07-29 C2-R51：新增 `CORE-FLT-016` 与 `SEM-FLT-033` 后为 235 行、
+235 个唯一 ID、重复 0；workspace `SEM-*` 为 162 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+513 个测试函数及 144 个需人工复核信号；ResultSet 14 族 index/label 共
+28 个基础列 update setter 已通过四层精确 FilterChain、参数身份、全量短路、
+错误分类和真实 Toasty SQLite capability error 验证。
+
+2026-07-29 C2-R52：新增 `CORE-FLT-017` 与 `SEM-FLT-034` 后为 237 行、
+237 个唯一 ID、重复 0；workspace `SEM-*` 为 163 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+515 个测试函数及 144 个需人工复核信号；ResultSet `updateObject` 的
+plain/scaleOrLength × index/label 四重载已通过四层精确 FilterChain、默认
+descriptor、全重载短路、SQL NULL、负 scale、vendor custom 对象下转、错误
+分类和真实 Toasty SQLite capability error 验证。ResultSet 精确 Filter 调用
+累计 135 个；其余 stream/LOB/resource update setter 仍保持开放。
+
+2026-07-29 C2-R53：新增 `CORE-FLT-018` 与 `SEM-FLT-035` 后为 239 行、
+239 个唯一 ID、重复 0；workspace `SEM-*` 为 164 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+517 个测试函数及 144 个需人工复核信号；ResultSet 的 Ref/Blob/Clob/Array/
+RowId/NClob/SQLXML × index/label 14 个资源对象 setter 已通过四层精确
+FilterChain、默认物理末端、全重载短路、nullable/RowId 参数身份、错误分类和
+真实 Toasty SQLite 14 个 capability error 验证。ResultSet 精确 Filter 调用
+累计 149 个；其余 InputStream/Reader LOB 与流 setter Filter 仍保持开放。
+
+2026-07-29 C2-R54：新增 `CORE-FLT-019` 与 `SEM-FLT-036` 后为 241 行、
+241 个唯一 ID、重复 0；workspace `SEM-*` 为 165 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+519 个测试函数及 144 个需人工复核信号；ResultSet 的 Blob InputStream 与
+Clob/NClob Reader × index/label × 无长度/long 12 个 setter 已通过四层精确
+FilterChain、默认 `Unspecified/Long` 物理末端、全重载短路、nullable、负数/
+极大 long、共享游标、错误分类和真实 Toasty SQLite 12 次 capability error
+验证。ResultSet 精确 Filter 调用累计 161 个；其余标量/字符/二进制流 setter
+Filter 仍保持开放。
+
+2026-07-29 C2-R55：新增 `CORE-FLT-020` 与 `SEM-FLT-037` 后为 243 行、
+243 个唯一 ID、重复 0；workspace `SEM-*` 为 166 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+521 个测试函数及 144 个需人工复核信号；ResultSet 的 ASCII/Binary/Character
+× index/label × 无长度/int/long 18 个 setter，加 NCharacter × index/label ×
+无长度/long 四个 setter，共 22 个入口已通过四层精确 FilterChain、默认
+`Unspecified/Int/Long` descriptor、全重载短路、nullable、int/long 边界、
+共享游标、错误分类及真实 Toasty SQLite 22 次 capability error 验证。
+ResultSet 精确 Filter 调用累计 183 个；update setter Filter 明确只剩
+`updateNString` index/label 两条，整体迁移仍为 `PARTIAL`。
+
+2026-07-29 C2-R56：新增 `CORE-FLT-021` 与 `SEM-FLT-038` 后为 245 行、
+245 个唯一 ID、重复 0；workspace `SEM-*` 为 167 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。静态测试审计为 Java core 475 个测试方法、Rust druid
+523 个测试函数及 144 个需人工复核信号；ResultSet `updateNString` 的
+index/label 两个入口已通过四层精确 FilterChain、默认 NString descriptor、
+nullable Unicode、两重载短路、错误分类及真实 Toasty SQLite 两次 generic
+update capability error 验证。ResultSet 精确 Filter 调用累计 185 个，
+ResultSet update setter Filter 子域已闭合；完整 ResultSet、完整 Filter 与
+druid-core 迁移仍为 `PARTIAL`。
+
+2026-07-29 C2-R57：新增 `CORE-FLT-022` 与 `SEM-FLT-039` 后为 247 行、
+247 个唯一 ID、重复 0；workspace `SEM-*` 为 168 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。Java `FilterAdapter` 的 491 个公开方法经源码直读后建立独立
+`filter_adapter.rs`：生命周期/配置空语义、精确自身 Wrapper、SQL
+before/after 与当前 185 个 ResultSet 默认继续链已由三账本及真实 Toasty
+SQLite 验证。静态测试审计为 Java core 475、Rust druid 525 个测试函数，
+workspace 563/563 通过；该对象只从 `MISSING` 提升为 `PARTIAL`，未迁移 hook
+没有被文件存在或 100% 新文件覆盖率掩盖。
+
+2026-07-29 C2-R58：新增 `CORE-FLT-023` 与 `SEM-FLT-040` 后为 249 行、
+249 个唯一 ID、重复 0；workspace `SEM-*` 为 169 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。Java `FilterEventAdapter` 的 32 个公开入口、13 个模板 hook
+及异常顺序经源码直读后建立独立 `filter_event_adapter.rs`；当前生产链可表达的
+create/prepare/call、execute/query/update/batch、error-after 替换与
+query-after→ResultSet open 已由三账本和真实 Toasty SQLite 验证。静态测试
+审计为 Java core 475、Rust druid 530 个测试函数、145 个人工复核信号，
+workspace 568/568 通过；该对象只从 `MISSING` 提升为 `PARTIAL`，
+StatementProxy 身份、connect 生产接线、downstream-before 局部展开和完整
+Java 错误矩阵仍明确开放。
+
+2026-07-29 C2-R59：新增 `CORE-FLT-024` 与 `SEM-FLT-041` 后为 251 行、
+251 个唯一 ID、重复 0；workspace `SEM-*` 为 170 个唯一 ID，删除前 143 个
+旧 ID 遗漏 0。Java `FilterManager` 的 bundled alias、三 ClassLoader 顺序
+覆盖、UTF-16 `<128` 回退、逗号展开、类名去重、缺失继续与构造失败语义，经
+独立 `filter_manager.rs`、原始 resource 和显式工厂机制迁移；`stat/default`
+alias 已去重进入真实 Toasty SQLite 生产链。静态测试审计为 Java core 475、
+Rust druid 535 个测试函数、145 个人工复核信号，workspace 573/573 通过；
+对象只提升为 `PARTIAL`，自动 classloader、DataSource `setFilters` 配置接线
+及未迁移 alias 实现仍明确开放。
+
 统计方法是将 Git 基线中的 6 份 `docs/migration` 文档拼接为旧集合，将
 `docs/README.md`、两份跨模块文档和三个模块目录拼接为新集合；分别对
 `SEM-[A-Z]+-[0-9]{3}`、Markdown 表格首列反引号 token、含小写字符的

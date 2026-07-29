@@ -1,5 +1,4 @@
-//! 对应 Java 类：`com.alibaba.druid.stat.JdbcDataSourceStat` +
-//! `DruidDataSourceStatManager`
+//! 对应 Java 类：`com.alibaba.druid.stat.JdbcDataSourceStat`。
 //!
 //! 数据源级统计收集器。
 
@@ -11,7 +10,7 @@ use std::time::Duration;
 /// 数据源统计收集器。
 ///
 /// 对应 Druid Java 的 `JdbcDataSourceStat`，聚合池级 + SQL 级统计。
-pub struct StatsCollector {
+pub struct JdbcDataSourceStat {
     pub name: String,
     pub sql_merger: Arc<SqlMerger>,
     /// `ResultSet` 层统计；对应 Java `JdbcDataSourceStat#getResultSetStat()`。
@@ -31,7 +30,7 @@ pub struct StatsCollector {
     pub execute_batch_size_total: AtomicU64,
 }
 
-impl StatsCollector {
+impl JdbcDataSourceStat {
     pub fn new(name: impl Into<String>, slow_sql_threshold: Duration) -> Self {
         Self {
             name: name.into(),
@@ -105,9 +104,21 @@ impl StatsCollector {
     pub fn result_set_stat(&self) -> &JdbcResultSetStat {
         self.result_set_stat.as_ref()
     }
+
+    /// 重置本数据源的累计 SQL、连接、批处理与 ResultSet 统计。
+    pub fn reset(&self) {
+        self.sql_merger.reset();
+        self.result_set_stat.reset();
+        self.connect_count.store(0, Ordering::Release);
+        self.connect_error_count.store(0, Ordering::Release);
+        self.close_count.store(0, Ordering::Release);
+        self.slow_sql_count.store(0, Ordering::Release);
+        self.execute_batch_count.store(0, Ordering::Release);
+        self.execute_batch_size_total.store(0, Ordering::Release);
+    }
 }
 
-impl Default for StatsCollector {
+impl Default for JdbcDataSourceStat {
     fn default() -> Self {
         Self::new("default", Duration::from_secs(2))
     }

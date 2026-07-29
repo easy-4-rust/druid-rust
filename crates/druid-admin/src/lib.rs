@@ -1,9 +1,18 @@
-//! druid-admin: axum-based HTTP endpoints (design-stage placeholder).
-#![allow(dead_code)]
+//! Druid 管理端的 Axum 实现。
+//!
+//! 对应 Java 模块：`druid-admin`。本 crate 保留 Java 管理协议和 JSON
+//! 字段，同时用可注入的发现与 HTTP SPI 替代 Spring Cloud/Kubernetes
+//! 静态依赖。
 
 pub mod admin_state;
-pub use admin_state::AdminState;
+pub mod config;
+pub mod druid_admin_application;
+pub mod model;
+pub mod service;
+pub mod servlet;
+pub mod util;
 
-pub fn endpoint_list() -> &'static str {
-    r#"["/druid/api/datasources","/druid/api/sql/top","/druid/api/sql/slow","/druid/api/wall","/druid/api/active","/metrics"]"#
-}
+pub use admin_state::AdminState;
+pub use druid_admin_application::DruidAdminApplication;
+pub use servlet::monitor_view_servlet::{endpoint_list, MonitorViewServlet};
+pub use servlet::StatViewServlet;
