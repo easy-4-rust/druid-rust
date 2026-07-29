@@ -24,7 +24,7 @@ pub mod wall_violation;
 
 pub use db_type::DbType;
 pub use jdbc_utils::JdbcUtils;
-pub use sql_utils::SqlUtils;
+pub use sql_utils::{SqlFormatOption, SqlUtils};
 pub use wall::Wall;
 pub use wall_check_result::WallCheckResult;
 pub use wall_config::{WallConfig, WallConfigBuilder};

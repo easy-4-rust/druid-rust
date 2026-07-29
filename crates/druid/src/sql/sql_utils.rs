@@ -7,6 +7,82 @@ use sqlparser::dialect::{
 };
 use sqlparser::parser::Parser;
 
+/// SQL 输出格式选项。
+///
+/// 对应 Java：`com.alibaba.druid.sql.SQLUtils.FormatOption`。该对象是
+/// `SQLUtils` 的紧密内部对象，保留大小写、pretty、参数化和脱敏四项可观察
+/// 配置，供 `LogFilterMBean` 等调用方保存配置契约。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SqlFormatOption {
+    ucase: bool,
+    pretty_format: bool,
+    parameterized: bool,
+    desensitize: bool,
+}
+
+impl SqlFormatOption {
+    /// 创建格式选项。对应 Java 三布尔构造器。
+    #[must_use]
+    pub const fn new(ucase: bool, pretty_format: bool, parameterized: bool) -> Self {
+        Self {
+            ucase,
+            pretty_format,
+            parameterized,
+            desensitize: false,
+        }
+    }
+
+    /// 是否输出大写关键字。
+    #[must_use]
+    pub const fn is_ucase(self) -> bool {
+        self.ucase
+    }
+
+    /// 设置是否输出大写关键字。
+    pub fn set_ucase(&mut self, value: bool) {
+        self.ucase = value;
+    }
+
+    /// 是否 pretty-format。
+    #[must_use]
+    pub const fn is_pretty_format(self) -> bool {
+        self.pretty_format
+    }
+
+    /// 设置 pretty-format。
+    pub fn set_pretty_format(&mut self, value: bool) {
+        self.pretty_format = value;
+    }
+
+    /// 是否参数化字面量。
+    #[must_use]
+    pub const fn is_parameterized(self) -> bool {
+        self.parameterized
+    }
+
+    /// 设置是否参数化字面量。
+    pub fn set_parameterized(&mut self, value: bool) {
+        self.parameterized = value;
+    }
+
+    /// 是否启用脱敏输出。
+    #[must_use]
+    pub const fn is_desensitize(self) -> bool {
+        self.desensitize
+    }
+
+    /// 设置是否启用脱敏输出。
+    pub fn set_desensitize(&mut self, value: bool) {
+        self.desensitize = value;
+    }
+}
+
+impl Default for SqlFormatOption {
+    fn default() -> Self {
+        Self::new(true, true, false)
+    }
+}
+
 /// Druid SQL parse/format 门面。
 ///
 /// 对应 Java：`com.alibaba.druid.sql.SQLUtils`。AST 平台按迁移规划替换为
