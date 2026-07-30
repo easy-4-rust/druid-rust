@@ -352,6 +352,9 @@ impl DruidDataSourceFactory {
         builder.configure_filters(&filter_properties, &system_properties)?;
 
         let data_source = builder.build_data_source().await?;
+        if let Some(value) = optional_bool(properties, Self::PROP_RESET_STAT_ENABLE)? {
+            data_source.set_reset_stat_enable(value);
+        }
         if optional_bool(properties, Self::PROP_INIT)?.unwrap_or(false) {
             data_source.init().await?;
         }
@@ -373,6 +376,7 @@ impl DruidDataSourceFactory {
     pub const PROP_INITIAL_SIZE: &'static str = "initialSize";
     pub const PROP_ASYNC_INIT: &'static str = "druid.asyncInit";
     pub const PROP_INIT_EXCEPTION_THROW: &'static str = "druid.initExceptionThrow";
+    pub const PROP_RESET_STAT_ENABLE: &'static str = "druid.resetStatEnable";
     pub const PROP_MAX_WAIT: &'static str = "maxWait";
     pub const PROP_NOT_FULL_TIMEOUT_RETRY_COUNT: &'static str = "druid.notFullTimeoutRetryCount";
     pub const PROP_MAX_WAIT_THREAD_COUNT: &'static str = "druid.maxWaitThreadCount";

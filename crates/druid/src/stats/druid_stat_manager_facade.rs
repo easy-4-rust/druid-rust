@@ -1,7 +1,8 @@
-use super::DruidDataSourceStatManager;
+use super::{DataSourceMonitorable, DruidDataSourceStatManager, JdbcStatManager};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -42,8 +43,29 @@ impl DruidStatManagerFacade {
         if !self.is_reset_enable() {
             return;
         }
-        DruidDataSourceStatManager::global().reset();
+        // Java 顺序：Spring/Web（Rust 平台不适用）→ JdbcStatManager →
+        // DruidDataSourceStatManager → facade resetCount。
+        self.reset_sql_stat();
+        self.reset_data_source_stat();
         self.reset_count.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// 重置所有 Druid 数据源池统计。
+    pub fn reset_data_source_stat(&self) {
+        DruidDataSourceStatManager::global().reset();
+    }
+
+    /// 重置 JDBC 代理层及每个数据源的 JDBC 统计。
+    pub fn reset_sql_stat(&self) {
+        JdbcStatManager::global().reset();
+    }
+
+    /// 发布并重置全部数据源区间统计。
+    pub fn log_and_reset_data_source(&self) {
+        if !self.is_reset_enable() {
+            return;
+        }
+        DruidDataSourceStatManager::global().log_and_reset_data_source();
     }
 
     /// 返回 reset 次数。
@@ -55,9 +77,16 @@ impl DruidStatManagerFacade {
     /// 返回 basic.json 内容。
     #[must_use]
     pub fn basic_stat(&self) -> Value {
+        let drivers = DruidDataSourceStatManager::global()
+            .instances()
+            .into_iter()
+            .filter_map(|(_, data_source)| data_source.driver_name().map(str::to_owned))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
         json!({
             "Version": env!("CARGO_PKG_VERSION"),
-            "Drivers": [],
+            "Drivers": drivers,
             "ResetEnable": self.is_reset_enable(),
             "ResetCount": self.reset_count(),
             // 旧管理前端依赖这些键，但 Rust 进程不存在 JVM；保留 null，
@@ -70,6 +99,16 @@ impl DruidStatManagerFacade {
             "RustTargetOS": std::env::consts::OS,
             "RustTargetArch": std::env::consts::ARCH,
         })
+    }
+
+    /// 按名称返回首个已注册数据源。
+    #[must_use]
+    pub fn data_source_by_name(&self, name: &str) -> Option<Arc<dyn DataSourceMonitorable>> {
+        DruidDataSourceStatManager::global()
+            .instances()
+            .into_iter()
+            .map(|(_, data_source)| data_source)
+            .find(|data_source| data_source.name() == name)
     }
 
     /// 返回 datasource.json 内容。
@@ -147,9 +186,10 @@ impl DruidStatManagerFacade {
     /// 返回指定数据源的活跃连接调用栈。
     #[must_use]
     pub fn active_connection_stack_trace(&self, data_source_id: u64) -> Option<Vec<String>> {
-        DruidDataSourceStatManager::global()
-            .get(data_source_id)
-            .map(|data_source| data_source.active_connection_stack_trace())
+        let data_source = DruidDataSourceStatManager::global().get(data_source_id)?;
+        data_source
+            .is_remove_abandoned()
+            .then(|| data_source.active_connection_stack_trace())
     }
 
     /// 返回合并 Wall 管理结果。

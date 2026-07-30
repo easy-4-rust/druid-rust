@@ -10,7 +10,15 @@ use super::{JavaString, SqlException};
 /// druid-rust 统一错误类型。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DruidError {
+    /// Rust 外部池已关闭，但没有 Druid 数据源的关闭时间元数据。
     PoolClosed,
+    /// 数据源已经关闭，并保留 Java 异常消息使用的关闭时刻。
+    ///
+    /// 对应 Java `DataSourceClosedException`。Rust 不复制 `SQLException`
+    /// 继承层级，但错误分类、关闭时间与可观察消息保持一致。
+    DataSourceClosed {
+        close_time_millis: u64,
+    },
     /// Rust 外部池或驱动层的通用获取超时。
     AcquireTimeout,
     /// Java `GetConnectionTimeoutException` 的 Druid 原生池诊断。
@@ -99,6 +107,17 @@ impl fmt::Display for DruidError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::PoolClosed => write!(f, "connection pool is closed"),
+            Self::DataSourceClosed { close_time_millis } => {
+                use chrono::{Local, TimeZone};
+                write!(f, "dataSource already closed at ")?;
+                match i64::try_from(*close_time_millis)
+                    .ok()
+                    .and_then(|millis| Local.timestamp_millis_opt(millis).single())
+                {
+                    Some(time) => write!(f, "{}", time.format("%a %b %d %H:%M:%S %Z %Y")),
+                    None => write!(f, "{close_time_millis}"),
+                }
+            }
             Self::AcquireTimeout => write!(f, "acquire connection timed out"),
             Self::GetConnectionTimeout {
                 wait_millis,
@@ -236,6 +255,7 @@ impl DruidError {
     pub fn class_name(&self) -> &str {
         match self {
             Self::PoolClosed => "druid::PoolClosed",
+            Self::DataSourceClosed { .. } => "com.alibaba.druid.pool.DataSourceClosedException",
             Self::AcquireTimeout => "druid::AcquireTimeout",
             Self::GetConnectionTimeout { .. } => {
                 "com.alibaba.druid.pool.GetConnectionTimeoutException"
@@ -252,7 +272,7 @@ impl DruidError {
             Self::SqlParseError(_) => "druid::SqlParseError",
             Self::WallViolation(_) => "druid::WallViolation",
             Self::DataSourceNotFound(_) => "druid::DataSourceNotFound",
-            Self::DataSourceDisabled => "druid::DataSourceDisabled",
+            Self::DataSourceDisabled => "com.alibaba.druid.pool.DataSourceDisableException",
             Self::ActiveConnectionsPreventRestart { .. } => {
                 "druid::ActiveConnectionsPreventRestart"
             }

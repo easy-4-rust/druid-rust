@@ -6,6 +6,7 @@ use crate::core::{
     AutoLoad, ConfigFilter, FilterChain, FilterManager, LogFilter, MySQL8DateTimeSqlTypeFilter,
     ValidConnectionChecker,
 };
+use crate::dynamic::RandomDataSourceValidateFilter;
 use crate::sql::{DbType, WallConfig, WallFilter, WallProvider};
 use crate::stats::{MergeStatFilter, StatFilter, StatsCollector};
 use parking_lot::RwLock;
@@ -20,6 +21,8 @@ const WALL_FILTER_CLASS: &str = "com.alibaba.druid.wall.WallFilter";
 const MYSQL8_DATETIME_FILTER_CLASS: &str =
     "com.alibaba.druid.filter.mysql8datetime.MySQL8DateTimeSqlTypeFilter";
 const CONFIG_FILTER_CLASS: &str = "com.alibaba.druid.filter.config.ConfigFilter";
+const HA_RANDOM_VALIDATE_FILTER_CLASS: &str =
+    "com.alibaba.druid.pool.ha.selector.RandomDataSourceValidateFilter";
 const LOG_FILTER_ID: &str = "druid::core::LogFilter";
 
 /// 池内部配置（运行时使用）。
@@ -1076,6 +1079,9 @@ fn default_filter_manager(
         Ok(MySQL8DateTimeSqlTypeFilter::new())
     });
     manager.register_filter(CONFIG_FILTER_CLASS, || Ok(ConfigFilter::new()));
+    manager.register_filter(HA_RANDOM_VALIDATE_FILTER_CLASS, || {
+        Ok(RandomDataSourceValidateFilter)
+    });
     // Rust 原生配置使用 `log`，其唯一实现是 tracing-backed LogFilter。
     // Java Log4j/SLF4J 等类名只出现在迁移说明中，不进入 Rust 运行时注册表。
     manager.register_filter(LOG_FILTER_ID, || Ok(LogFilter::new()));

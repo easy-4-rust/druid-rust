@@ -493,6 +493,33 @@ impl WallProvider {
         self.black_list.entry_count()
     }
 
+    /// 清空 SQL 判定缓存，但保留累计计数和表/函数统计。
+    ///
+    /// 对应 Java `WallProvider#clearCache()`。Rust 当前没有独立
+    /// `mergedSqlCache`，参数化键与原 SQL 键均存放在同一白/黑名单缓存中。
+    pub fn clear_cache(&self) {
+        self.white_list.invalidate_all();
+        self.black_list.invalidate_all();
+    }
+
+    /// 返回当前白名单 SQL 快照。
+    #[must_use]
+    pub fn white_list(&self) -> std::collections::HashSet<String> {
+        self.white_list
+            .iter()
+            .map(|(sql, _)| sql.as_ref().clone())
+            .collect()
+    }
+
+    /// 返回当前黑名单 SQL 快照。
+    #[must_use]
+    pub fn black_list(&self) -> std::collections::HashSet<String> {
+        self.black_list
+            .iter()
+            .map(|(sql, _)| sql.as_ref().clone())
+            .collect()
+    }
+
     /// 清空计数、缓存和拒绝统计。
     pub fn reset(&self) {
         self.check_count.store(0, Ordering::Release);
@@ -502,8 +529,7 @@ impl WallProvider {
         self.syntax_error_count.store(0, Ordering::Release);
         self.violation_count.store(0, Ordering::Release);
         self.violation_effect_row_count.store(0, Ordering::Release);
-        self.white_list.invalidate_all();
-        self.black_list.invalidate_all();
+        self.clear_cache();
         self.table_stats.clear();
         self.function_stats.clear();
         self.comment_denied_stat.reset();

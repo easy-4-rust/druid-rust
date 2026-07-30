@@ -422,11 +422,15 @@ async fn test_stat_filter_after_slow_sql() {
 }
 
 #[tokio::test]
-async fn test_stat_filter_after_connection_close() {
+async fn test_stat_filter_ignores_generic_close_event() {
     let collector = Arc::new(StatsCollector::new("test", Duration::from_millis(100)));
     let filter = StatFilter::new(collector);
-    // after_connection_close is a no-op default, just call it
-    filter.after_connection_close().await.unwrap();
+    // 真实物理关闭只允许进入 BeforeFilter 的有位置 connection_close 链；
+    // 通用 after-event 对 Close 不应再伪造物理关闭副作用。
+    filter
+        .after_connection_event(&druid::core::ConnectionEvent::Close, Duration::ZERO)
+        .await
+        .unwrap();
 }
 
 // ══════════════════════════════════════════════════════════════════

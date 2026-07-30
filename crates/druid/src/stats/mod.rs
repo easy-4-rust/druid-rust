@@ -12,13 +12,17 @@ pub mod jdbc_data_source_stat;
 pub mod jdbc_result_set_stat;
 pub mod jdbc_sql_stat;
 pub mod jdbc_sql_stat_value;
+pub mod jdbc_stat_context;
+pub mod jdbc_stat_manager;
 pub mod jdbc_statement_stat;
+pub mod jdbc_trace_manager;
 pub mod merge;
 pub mod merge_stat_filter;
 pub mod stat_filter;
 pub mod stat_filter_context;
 pub mod stat_filter_context_listener;
 pub mod stat_filter_context_listener_adapter;
+pub mod table_stat;
 
 pub use data_source_monitorable::DataSourceMonitorable;
 pub use druid_data_source_stat_manager::DruidDataSourceStatManager;
@@ -34,10 +38,18 @@ pub type StatsCollector = JdbcDataSourceStat;
 pub use jdbc_result_set_stat::JdbcResultSetStat;
 pub use jdbc_sql_stat::JdbcSqlStat;
 pub use jdbc_sql_stat_value::JdbcSqlStatValue;
+pub use jdbc_stat_context::JdbcStatContext;
+pub use jdbc_stat_manager::JdbcStatManager;
 pub use jdbc_statement_stat::JdbcStatementStat;
+#[allow(deprecated)]
+pub use jdbc_trace_manager::JdbcTraceManager;
 pub use merge::{fingerprint, parameterize, MergedSqlStat, SqlMerger};
 pub use merge_stat_filter::MergeStatFilter;
 pub use stat_filter::StatFilter;
 pub use stat_filter_context::StatFilterContext;
 pub use stat_filter_context_listener::StatFilterContextListener;
 pub use stat_filter_context_listener_adapter::StatFilterContextListenerAdapter;
+pub use table_stat::{
+    TableStat, TableStatColumn, TableStatCondition, TableStatMode, TableStatName,
+    TableStatRelationship,
+};

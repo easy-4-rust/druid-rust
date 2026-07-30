@@ -100,6 +100,7 @@ pub struct DruidConnectionHolder {
     init_schema: Mutex<Option<String>>,
     restore_schema_on_recycle: AtomicBool,
     user_password_version: u64,
+    connection_properties: Arc<HashMap<String, String>>,
     variables: Option<HashMap<String, Value>>,
     global_variables: Option<HashMap<String, Value>>,
     defaults: ConnectionDefaults,
@@ -280,6 +281,7 @@ impl DruidConnectionHolder {
             init_schema: Mutex::new(None),
             restore_schema_on_recycle: AtomicBool::new(false),
             user_password_version,
+            connection_properties: Arc::new(HashMap::new()),
             variables,
             global_variables,
             defaults,
@@ -316,6 +318,20 @@ impl DruidConnectionHolder {
     #[must_use]
     pub fn global_variables(&self) -> Option<&HashMap<String, Value>> {
         self.global_variables.as_ref()
+    }
+
+    /// 保存物理 connect Filter 最终使用的 Properties 快照。
+    pub(crate) fn set_connection_properties(
+        &mut self,
+        connection_properties: Arc<HashMap<String, String>>,
+    ) {
+        self.connection_properties = connection_properties;
+    }
+
+    /// 返回物理 connect Filter 最终使用的 Properties 快照。
+    #[must_use]
+    pub(crate) fn connection_properties(&self) -> Arc<HashMap<String, String>> {
+        Arc::clone(&self.connection_properties)
     }
 
     /// 添加 `javax.sql.ConnectionEventListener` 对应监听器。

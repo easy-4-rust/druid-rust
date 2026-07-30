@@ -56,7 +56,6 @@ parking_lot  = "0.12"
 arc-swap     = "1"
 dashmap      = "6"
 moka         = { version = "0.12", features = ["future"] }
-form_urlencoded = "1"
 encoding_rs = "0.8"
 base64 = "0.22.1"
 quick-xml = { version = "0.41.0", features = ["serialize"] }
@@ -66,6 +65,8 @@ x509-cert = "0.2.5"
 # observability
 tracing              = "0.1"
 tracing-subscriber   = { version = "0.3", features = ["env-filter"] }
+java-properties      = "2.0.0"
+zookeeper-client     = { version = "0.11.2", features = ["tokio"] }
 metrics              = "0.23"
 prometheus           = "0.13"
 

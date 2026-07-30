@@ -16,6 +16,7 @@ use super::{
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -465,6 +466,101 @@ pub struct PhysicalConnectionCloseFilterChain<'a> {
     context: PhysicalConnectionCloseContext,
 }
 
+/// 物理建连 around-chain 的成功结果。
+///
+/// Java `connection_connect` 返回已经分配 ID 的 `ConnectionProxy`。Rust 在
+/// 初始化、校验和入池前暂以阶段对象持有 raw connection，同时保留相同 ID
+/// 分配时点。
+pub struct PhysicalConnectionConnectResult {
+    connection_info: super::PhysicalConnectionInfo,
+    connection_id: u64,
+}
+
+impl PhysicalConnectionConnectResult {
+    /// 由无 Filter 的 canonical 池末端构造建连结果。
+    pub(crate) const fn new(
+        connection_info: super::PhysicalConnectionInfo,
+        connection_id: u64,
+    ) -> Self {
+        Self {
+            connection_info,
+            connection_id,
+        }
+    }
+
+    /// 返回本次 raw connection 的 Druid ID。
+    #[must_use]
+    pub const fn connection_id(&self) -> u64 {
+        self.connection_id
+    }
+
+    /// 拆分连接阶段对象与 ID。
+    #[must_use]
+    pub fn into_parts(self) -> (super::PhysicalConnectionInfo, u64) {
+        (self.connection_info, self.connection_id)
+    }
+}
+
+/// 单次真实物理建连使用的有位置 around-chain。
+///
+/// Filter 可原地修改 Properties、短路返回或传播错误。遍历完成后才执行 driver
+/// factory；login timeout 只包围末端 driver future，不包含 Filter 自身耗时。
+pub struct PhysicalConnectionConnectFilterChain<'a> {
+    filters: &'a [Arc<dyn BeforeFilter>],
+    position: usize,
+    factory: &'a dyn PhysicalConnectionFactory,
+    login_timeout_seconds: i32,
+    next_connection_id: &'a mut (dyn FnMut() -> u64 + Send),
+}
+
+impl<'a> PhysicalConnectionConnectFilterChain<'a> {
+    fn new(
+        filters: &'a [Arc<dyn BeforeFilter>],
+        factory: &'a dyn PhysicalConnectionFactory,
+        login_timeout_seconds: i32,
+        next_connection_id: &'a mut (dyn FnMut() -> u64 + Send),
+    ) -> Self {
+        Self {
+            filters,
+            position: 0,
+            factory,
+            login_timeout_seconds,
+            next_connection_id,
+        }
+    }
+
+    /// 继续执行 `connection_connect` around-chain。
+    pub async fn connection_connect(
+        &mut self,
+        properties: &mut HashMap<String, String>,
+    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.connection_connect(self, properties).await
+        } else {
+            let connection_info = if self.login_timeout_seconds > 0 {
+                match tokio::time::timeout(
+                    Duration::from_secs(self.login_timeout_seconds as u64),
+                    self.factory.create_info_with_properties(properties),
+                )
+                .await
+                {
+                    Ok(result) => result?,
+                    Err(_) => return Err(DruidError::LoginTimeout),
+                }
+            } else {
+                self.factory.create_info_with_properties(properties).await?
+            };
+            let connection_id = (self.next_connection_id)();
+            Ok(PhysicalConnectionConnectResult::new(
+                connection_info,
+                connection_id,
+            ))
+        }
+    }
+}
+
 impl<'a> PhysicalConnectionCloseFilterChain<'a> {
     fn new(
         filters: &'a [Arc<dyn BeforeFilter>],
@@ -765,6 +861,24 @@ impl FilterChainImpl {
         PhysicalConnectionCloseFilterChain::new(&self.before, factory, connection, context)
             .connection_close()
             .await
+    }
+
+    /// 从位置 0 执行一次真实物理建连 around-chain。
+    pub async fn physical_connection_connect(
+        &self,
+        factory: &dyn PhysicalConnectionFactory,
+        properties: &mut HashMap<String, String>,
+        login_timeout_seconds: i32,
+        next_connection_id: &mut (dyn FnMut() -> u64 + Send),
+    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+        PhysicalConnectionConnectFilterChain::new(
+            &self.before,
+            factory,
+            login_timeout_seconds,
+            next_connection_id,
+        )
+        .connection_connect(properties)
+        .await
     }
 
     /// 初始化链中每个 Java Filter 实例。
@@ -1777,22 +1891,6 @@ impl FilterChainImpl {
             filter
                 .after_connection_event_context(&context, elapsed)
                 .await?;
-        }
-        Ok(())
-    }
-
-    /// 按逆序执行连接关闭后置过滤器。
-    pub async fn after_connection_close(&self) -> Result<(), DruidError> {
-        self.after_connection_close_with_identity(0).await
-    }
-
-    /// 按逆序执行携带真实连接 ID 的连接关闭后置过滤器。
-    pub async fn after_connection_close_with_identity(
-        &self,
-        connection_id: u64,
-    ) -> Result<(), DruidError> {
-        for filter in self.after.iter().rev() {
-            filter.after_connection_close_context(connection_id).await?;
         }
         Ok(())
     }

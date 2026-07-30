@@ -1,6 +1,7 @@
 //! 未池化物理连接工厂。
 
 use super::{DruidError, PhysicalConnection, PhysicalConnectionInfo};
+use std::collections::HashMap;
 use std::time::Instant;
 
 /// 未池化物理连接工厂。
@@ -36,6 +37,18 @@ pub trait PhysicalConnectionFactory: Send + Sync {
             connection,
             connect_started_at,
         ))
+    }
+
+    /// 使用单次连接属性创建物理连接。
+    ///
+    /// 对应 Java `Driver#connect(url, Properties)`。默认实现适配已经在构造时
+    /// 固化凭据和选项的 Rust driver factory；需要观察 Filter 改写属性的
+    /// Adapter 应覆盖本方法，并把最终属性传给底层驱动。
+    async fn create_info_with_properties(
+        &self,
+        _properties: &HashMap<String, String>,
+    ) -> Result<PhysicalConnectionInfo, DruidError> {
+        self.create_info().await
     }
 
     /// 验证物理连接是否可继续使用。

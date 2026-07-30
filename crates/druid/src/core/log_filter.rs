@@ -5,8 +5,9 @@ use super::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionEventContext,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
     DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
-    PhysicalConnectionCloseFilterChain, ResultSetFilter, ResultSetFilterChain,
-    ResultSetFilterContext, StatementEvent, StatementEventContext,
+    PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
+    PhysicalConnectionConnectResult, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
+    StatementEvent, StatementEventContext,
 };
 use crate::sql::SqlFormatOption;
 use parking_lot::RwLock;
@@ -599,6 +600,23 @@ impl BeforeFilter for LogFilter {
         Ok(())
     }
 
+    async fn connection_connect(
+        &self,
+        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        properties: &mut HashMap<String, String>,
+    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+        let result = chain.connection_connect(properties).await?;
+        if self.is_connection_connect_after_log_enabled() && self.is_connection_log_enabled() {
+            let category = self.connection_category();
+            tracing::debug!(
+                category,
+                connection_id = result.connection_id(),
+                "connection connected"
+            );
+        }
+        Ok(result)
+    }
+
     async fn connection_close(
         &self,
         chain: &mut PhysicalConnectionCloseFilterChain<'_>,
@@ -637,12 +655,10 @@ impl BeforeFilter for LogFilter {
     }
 
     async fn on_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
-        if matches!(event, ConnectionEvent::Connect)
-            && self.is_connection_connect_before_log_enabled()
-        {
-            let category = self.connection_category();
-            tracing::debug!(category, "connection connect before");
-        }
+        // Java 1.2.28 保留 connectionConnectBeforeLogEnable 属性，但 LogFilter
+        // 没有覆盖 FilterEventAdapter#connection_connectBefore，因此 Connect
+        // 前置事件没有日志副作用；Rust 必须保留这个历史行为。
+        let _ = event;
         Ok(())
     }
 
@@ -650,16 +666,7 @@ impl BeforeFilter for LogFilter {
         &self,
         context: &ConnectionEventContext<'_>,
     ) -> Result<(), DruidError> {
-        if matches!(context.event, ConnectionEvent::Connect)
-            && self.is_connection_connect_before_log_enabled()
-        {
-            let category = self.connection_category();
-            tracing::debug!(
-                category,
-                connection_id = context.connection_id,
-                "connection connect before"
-            );
-        }
+        let _ = context;
         Ok(())
     }
 
@@ -805,29 +812,14 @@ impl AfterFilter for LogFilter {
         Ok(())
     }
 
-    async fn after_connection_close(&self) -> Result<(), DruidError> {
-        if self.is_connection_close_after_log_enabled() {
-            let category = self.connection_category();
-            tracing::debug!(category, "connection closed");
-        }
-        Ok(())
-    }
-
-    async fn after_connection_close_context(&self, connection_id: u64) -> Result<(), DruidError> {
-        if self.is_connection_close_after_log_enabled() {
-            let category = self.connection_category();
-            tracing::debug!(category, connection_id, "connection closed");
-        }
-        Ok(())
-    }
-
     async fn after_connection_event(
         &self,
         event: &ConnectionEvent,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
         let enabled = match event {
-            ConnectionEvent::Connect => self.is_connection_connect_after_log_enabled(),
+            // physical connect 只由 connection_connect around-chain 输出成功事件。
+            ConnectionEvent::Connect => false,
             ConnectionEvent::Commit => self.is_connection_commit_after_log_enabled(),
             ConnectionEvent::Rollback => self.is_connection_rollback_after_log_enabled(),
             ConnectionEvent::Close => self.is_connection_close_after_log_enabled(),
@@ -851,7 +843,7 @@ impl AfterFilter for LogFilter {
         elapsed: Duration,
     ) -> Result<(), DruidError> {
         let enabled = match context.event {
-            ConnectionEvent::Connect => self.is_connection_connect_after_log_enabled(),
+            ConnectionEvent::Connect => false,
             ConnectionEvent::Commit => self.is_connection_commit_after_log_enabled(),
             ConnectionEvent::Rollback => self.is_connection_rollback_after_log_enabled(),
             ConnectionEvent::Close => self.is_connection_close_after_log_enabled(),

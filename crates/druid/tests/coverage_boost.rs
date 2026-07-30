@@ -221,7 +221,9 @@ async fn test_pooled_connection_fetch_empty() {
 #[test]
 fn test_error_all_variants_display() {
     let variants = vec![
-        DruidError::PoolClosed,
+        DruidError::DataSourceClosed {
+            close_time_millis: 0,
+        },
         DruidError::AcquireTimeout,
         DruidError::PoolExhausted,
         DruidError::ValidationFailed("x".into()),
@@ -694,7 +696,9 @@ async fn test_after_filter_all_defaults() {
         }
     }
     let f = F;
-    f.after_connection_close().await.unwrap();
+    f.after_connection_event(&ConnectionEvent::Rollback, Duration::ZERO)
+        .await
+        .unwrap();
 }
 
 // ── ConnectionExt: mock that REUSES default implementations ──

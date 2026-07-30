@@ -8,6 +8,11 @@ pub trait DataSourceMonitorable: Send + Sync {
     /// 返回数据源名称。
     fn name(&self) -> &str;
 
+    /// 返回 Rust 物理驱动/Adapter 名称，供 basic 管理协议枚举驱动。
+    fn driver_name(&self) -> Option<&str> {
+        None
+    }
+
     /// 返回 datasource 管理协议对象。
     fn data_source_stat_data(&self) -> Value;
 
@@ -31,6 +36,19 @@ pub trait DataSourceMonitorable: Send + Sync {
         Vec::new()
     }
 
+    /// 返回是否启用 abandoned connection 追踪。
+    fn is_remove_abandoned(&self) -> bool {
+        false
+    }
+
     /// 重置可重置的累计统计。
     fn reset_stat(&self);
+
+    /// 重置本数据源独立的 `JdbcDataSourceStat`。
+    fn reset_jdbc_stat(&self) {}
+
+    /// 发布并重置一份区间统计；单个 sink 错误不得中断其他数据源。
+    fn log_stats(&self) -> Result<(), crate::core::DruidError> {
+        Ok(())
+    }
 }

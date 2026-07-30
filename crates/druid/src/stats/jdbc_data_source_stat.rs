@@ -3,7 +3,7 @@
 //! 数据源级统计收集器。
 
 use super::{JdbcConnectionStat, JdbcResultSetStat, JdbcSqlStat, JdbcStatementStat, SqlMerger};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +12,7 @@ use std::time::Duration;
 /// 对应 Druid Java 的 `JdbcDataSourceStat`，聚合池级 + SQL 级统计。
 pub struct JdbcDataSourceStat {
     pub name: String,
+    reset_stat_enable: AtomicBool,
     pub sql_merger: Arc<SqlMerger>,
     /// `ResultSet` 层统计；对应 Java `JdbcDataSourceStat#getResultSetStat()`。
     pub result_set_stat: Arc<JdbcResultSetStat>,
@@ -54,6 +55,7 @@ impl JdbcDataSourceStat {
     pub fn new(name: impl Into<String>, slow_sql_threshold: Duration) -> Self {
         Self {
             name: name.into(),
+            reset_stat_enable: AtomicBool::new(true),
             sql_merger: Arc::new(SqlMerger::new()),
             result_set_stat: Arc::new(JdbcResultSetStat::new()),
             connection_stat: Arc::new(JdbcConnectionStat::new()),
@@ -304,6 +306,9 @@ impl JdbcDataSourceStat {
 
     /// 重置本数据源的累计 SQL、连接、批处理与 ResultSet 统计。
     pub fn reset(&self) {
+        if !self.is_reset_stat_enable() {
+            return;
+        }
         self.sql_merger.reset();
         self.result_set_stat.reset();
         self.connection_stat.reset();
@@ -315,6 +320,18 @@ impl JdbcDataSourceStat {
         self.execute_batch_count.store(0, Ordering::Release);
         self.execute_batch_size_total.store(0, Ordering::Release);
         let _ = self.runtime_snapshot_and_reset();
+    }
+
+    /// 返回 Java `JdbcDataSourceStat#isResetStatEnable()`。
+    #[must_use]
+    pub fn is_reset_stat_enable(&self) -> bool {
+        self.reset_stat_enable.load(Ordering::Acquire)
+    }
+
+    /// 设置 Java `JdbcDataSourceStat#setResetStatEnable(boolean)`。
+    pub fn set_reset_stat_enable(&self, reset_stat_enable: bool) {
+        self.reset_stat_enable
+            .store(reset_stat_enable, Ordering::Release);
     }
 }
 

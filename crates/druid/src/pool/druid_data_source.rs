@@ -133,6 +133,28 @@ impl DruidDataSource {
         self.pool.stat_value_and_reset()
     }
 
+    /// 返回 Java `isResetStatEnable()`。
+    #[must_use]
+    pub fn is_reset_stat_enable(&self) -> bool {
+        self.pool.is_reset_stat_enable()
+    }
+
+    /// 设置 Java `resetStatEnable`。
+    pub fn set_reset_stat_enable(&self, reset_stat_enable: bool) {
+        self.pool.set_reset_stat_enable(reset_stat_enable);
+    }
+
+    /// 执行 Java `resetStat()`；禁用时无副作用。
+    pub fn reset_stat(&self) {
+        self.pool.reset_stats();
+    }
+
+    /// 返回实际统计重置次数。
+    #[must_use]
+    pub fn reset_count(&self) -> u64 {
+        self.pool.reset_count()
+    }
+
     /// 立即发布一份区间统计快照。
     pub fn publish_stats(&self) -> Result<(), DruidError> {
         self.pool.publish_stats()
@@ -306,6 +328,10 @@ impl DataSourceMonitorable for DruidDataSource {
         self.pool.name()
     }
 
+    fn driver_name(&self) -> Option<&str> {
+        Some(self.pool.driver_name())
+    }
+
     fn data_source_stat_data(&self) -> serde_json::Value {
         let state = self.state();
         json!({
@@ -377,8 +403,20 @@ impl DataSourceMonitorable for DruidDataSource {
         self.pool.active_connection_stack_trace()
     }
 
+    fn is_remove_abandoned(&self) -> bool {
+        self.pool.is_remove_abandoned()
+    }
+
     fn reset_stat(&self) {
         self.pool.reset_stats();
+    }
+
+    fn reset_jdbc_stat(&self) {
+        self.pool.stats_collector().reset();
+    }
+
+    fn log_stats(&self) -> Result<(), DruidError> {
+        self.pool.publish_stats()
     }
 }
 
@@ -408,6 +446,18 @@ impl Pool for DruidDataSource {
 
     async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
         DruidDataSource::get_timeout(self, timeout).await
+    }
+
+    async fn close_for_removal_if_idle(&self) -> Result<bool, DruidError> {
+        if self.state().active_count > 0 {
+            return Ok(false);
+        }
+        self.close().await;
+        Ok(true)
+    }
+
+    async fn close_pool(&self) {
+        self.close().await;
     }
 
     fn state(&self) -> PoolState {

@@ -3,10 +3,12 @@
 
 use super::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, DruidError, ExecContext,
-    ExecOperation, ExecResult, ExtendedFilter, ResultSetFilter, ResultSetFilterContext,
-    StatementEvent, Wrapper,
+    ExecOperation, ExecResult, ExtendedFilter, PhysicalConnectionConnectFilterChain,
+    PhysicalConnectionConnectResult, ResultSetFilter, ResultSetFilterContext, StatementEvent,
+    Wrapper,
 };
 use std::any::Any;
+use std::collections::HashMap;
 use std::time::Duration;
 
 /// `FilterEventAdapter` 的可覆盖事件模板。
@@ -27,7 +29,7 @@ pub trait FilterEventListener: Send + Sync {
     ///
     /// 对应 Java：`FilterEventAdapter#connection_connectAfter`。
     /// 返回事件处理结果；错误会替代本次连接创建结果。
-    async fn connection_connect_after(&self) -> Result<(), DruidError> {
+    async fn connection_connect_after(&self, _connection_id: u64) -> Result<(), DruidError> {
         Ok(())
     }
 
@@ -241,6 +243,19 @@ where
         self.listener.statement_execute_batch_before(context).await
     }
 
+    async fn connection_connect(
+        &self,
+        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        properties: &mut HashMap<String, String>,
+    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+        self.listener.connection_connect_before().await?;
+        let result = chain.connection_connect(properties).await?;
+        self.listener
+            .connection_connect_after(result.connection_id())
+            .await?;
+        Ok(result)
+    }
+
     async fn on_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
         if event == &ConnectionEvent::Connect {
             self.listener.connection_connect_before().await
@@ -353,18 +368,6 @@ where
             return Err(error);
         }
         Ok(())
-    }
-
-    async fn after_connection_event(
-        &self,
-        event: &ConnectionEvent,
-        _elapsed: Duration,
-    ) -> Result<(), DruidError> {
-        if event == &ConnectionEvent::Connect {
-            self.listener.connection_connect_after().await
-        } else {
-            Ok(())
-        }
     }
 }
 

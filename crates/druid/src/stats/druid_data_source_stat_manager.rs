@@ -9,6 +9,7 @@ use std::sync::{Arc, OnceLock};
 /// JMX/弱引用反射；数据源以显式 `Arc<dyn DataSourceMonitorable>` 注册。
 pub struct DruidDataSourceStatManager {
     next_id: AtomicU64,
+    reset_count: AtomicU64,
     instances: DashMap<u64, Arc<dyn DataSourceMonitorable>>,
 }
 
@@ -19,6 +20,7 @@ impl DruidDataSourceStatManager {
         static INSTANCE: OnceLock<DruidDataSourceStatManager> = OnceLock::new();
         INSTANCE.get_or_init(|| Self {
             next_id: AtomicU64::new(1),
+            reset_count: AtomicU64::new(0),
             instances: DashMap::new(),
         })
     }
@@ -59,5 +61,30 @@ impl DruidDataSourceStatManager {
         for entry in &self.instances {
             entry.value().reset_stat();
         }
+        // Java manager 无论当前是否注册数据源，完成一轮 reset 后都增加一次。
+        self.reset_count.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// 发布并重置全部已注册数据源的区间统计。
+    ///
+    /// 对应 Java `logAndResetDataSource()`：逐个调用 `logStats()`，单个数据源
+    /// 失败只记录并继续，最后 manager resetCount 仍增加一次。
+    pub fn log_and_reset_data_source(&self) {
+        for entry in &self.instances {
+            if let Err(error) = entry.value().log_stats() {
+                tracing::error!(
+                    data_source_id = *entry.key(),
+                    %error,
+                    "publish datasource statistics failed"
+                );
+            }
+        }
+        self.reset_count.fetch_add(1, Ordering::AcqRel);
+    }
+
+    /// 返回 Java `DruidDataSourceStatManager#getResetCount()`。
+    #[must_use]
+    pub fn reset_count(&self) -> u64 {
+        self.reset_count.load(Ordering::Acquire)
     }
 }

@@ -406,7 +406,9 @@ fn test_connection_holder_fingerprint() {
 #[test]
 fn test_error_display_all_variants() {
     let errors = vec![
-        DruidError::PoolClosed,
+        DruidError::DataSourceClosed {
+            close_time_millis: 0,
+        },
         DruidError::AcquireTimeout,
         DruidError::PoolExhausted,
         DruidError::ValidationFailed("timeout".into()),
@@ -425,7 +427,13 @@ fn test_error_display_all_variants() {
         let s = format!("{e}");
         assert!(!s.is_empty(), "Display for {e:?} should not be empty");
     }
-    assert!(format!("{}", DruidError::PoolClosed).contains("closed"));
+    assert!(format!(
+        "{}",
+        DruidError::DataSourceClosed {
+            close_time_millis: 0
+        }
+    )
+    .contains("closed"));
     assert!(format!("{}", DruidError::AcquireTimeout).contains("timed out"));
     assert!(format!("{}", DruidError::PoolExhausted).contains("exhausted"));
     assert!(format!("{}", DruidError::ValidationFailed("x".into())).contains("x"));
@@ -454,7 +462,9 @@ fn test_error_from_string_conversions() {
 
 #[test]
 fn test_error_is_std_error() {
-    let e = DruidError::PoolClosed;
+    let e = DruidError::DataSourceClosed {
+        close_time_millis: 0,
+    };
     let _: &dyn std::error::Error = &e;
 }
 

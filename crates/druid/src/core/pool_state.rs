@@ -61,6 +61,10 @@ pub struct PoolState {
     /// 缓存访问次数。
     pub cached_prepared_statement_access_count: u64,
     pub leak_detection_count: u64,
+    /// Java `resetStatEnable`。
+    pub reset_stat_enable: bool,
+    /// Java `resetCount`，仅实际执行 resetStat 时增加。
+    pub reset_count: u64,
     pub closed: bool,
     pub last_acquire_time: Option<Duration>,
 }

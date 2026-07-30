@@ -1,4 +1,4 @@
-use super::JdbcSqlStatValue;
+use super::{JdbcSqlStatValue, JdbcStatManager};
 use crate::core::DruidError;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -51,6 +51,52 @@ pub struct JdbcSqlStat {
 }
 
 impl JdbcSqlStat {
+    /// 返回当前执行上下文 SQL 名称。
+    #[must_use]
+    pub fn context_sql_name() -> Option<String> {
+        JdbcStatManager::global()
+            .stat_context()
+            .and_then(|context| context.name().map(str::to_owned))
+    }
+
+    /// 设置当前执行上下文 SQL 名称，必要时创建上下文。
+    pub fn set_context_sql_name(value: Option<String>) {
+        let manager = JdbcStatManager::global();
+        let mut context = manager
+            .stat_context()
+            .unwrap_or_else(|| manager.create_stat_context());
+        context.set_name(value);
+        manager.set_stat_context(Some(context));
+    }
+
+    /// 返回当前执行上下文 SQL 文件。
+    #[must_use]
+    pub fn context_sql_file() -> Option<String> {
+        JdbcStatManager::global()
+            .stat_context()
+            .and_then(|context| context.file().map(str::to_owned))
+    }
+
+    /// 设置当前执行上下文 SQL 文件，必要时创建上下文。
+    pub fn set_context_sql_file(value: Option<String>) {
+        let manager = JdbcStatManager::global();
+        let mut context = manager
+            .stat_context()
+            .unwrap_or_else(|| manager.create_stat_context());
+        context.set_file(value);
+        manager.set_stat_context(Some(context));
+    }
+
+    /// 设置当前执行上下文替代 SQL。
+    pub fn set_context_sql(value: Option<String>) {
+        let manager = JdbcStatManager::global();
+        let mut context = manager
+            .stat_context()
+            .unwrap_or_else(|| manager.create_stat_context());
+        context.set_sql(value);
+        manager.set_stat_context(Some(context));
+    }
+
     /// 创建 SQL 统计对象。
     #[must_use]
     pub fn new(sql: String, fingerprint: u64) -> Self {

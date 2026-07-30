@@ -241,7 +241,7 @@ async fn test_druid_pool_get_timeout_closed() {
     let pool = build_pool(2, 2).await;
     pool.close().await;
     let result = pool.get().await;
-    assert!(matches!(result, Err(DruidError::PoolClosed)));
+    assert!(matches!(result, Err(DruidError::DataSourceClosed { .. })));
 }
 
 #[tokio::test]

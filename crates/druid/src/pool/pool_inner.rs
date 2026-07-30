@@ -5,12 +5,13 @@
 use crate::core::fatal_error_handler::FatalErrorHandler;
 use crate::core::Value as JdbcValue;
 use crate::core::{
-    ConnectionEvent, ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder,
-    DruidError, FilterChain, JavaString, PhysicalConnection, PhysicalConnectionFactory,
-    PreparedStatementCacheStats, StatementGeneratedKeys, ValidConnectionCheckerAdapter,
+    ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, FilterChain,
+    JavaString, PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
+    PhysicalConnectionInfo, PreparedStatementCacheStats, StatementGeneratedKeys,
+    ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, JdbcUtils};
-use crate::stats::{JdbcConnectionStatEntry, StatsCollector};
+use crate::stats::StatsCollector;
 use serde_json::{Number as JsonNumber, Value as JsonValue};
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -81,6 +82,8 @@ pub struct PoolInner {
     /// Java `DruidDataSource.enable` 的运行期借用门禁。
     pub(crate) enabled: AtomicBool,
     pub(crate) closed: AtomicBool,
+    /// Java `closeTimeMillis`；尚未关闭时沿用 Java 的 `-1` 哨兵所对应的零值。
+    pub(crate) close_time_millis: AtomicU64,
     fatal_error_state: parking_lot::Mutex<FatalErrorState>,
     create_failure_state: parking_lot::Mutex<CreateFailureState>,
     // 统计
@@ -139,6 +142,7 @@ impl PoolInner {
             lifecycle_generation: AtomicU64::new(0),
             enabled: AtomicBool::new(true),
             closed: AtomicBool::new(false),
+            close_time_millis: AtomicU64::new(0),
             fatal_error_state: parking_lot::Mutex::new(FatalErrorState::default()),
             create_failure_state: parking_lot::Mutex::new(CreateFailureState::default()),
             create_count: AtomicU64::new(0),
@@ -401,9 +405,16 @@ impl PoolInner {
     /// get/recycle 边界生效，因此这些路径不能复用完整借用门禁。
     pub(crate) fn ensure_not_closed(&self) -> Result<(), DruidError> {
         if self.closed.load(Ordering::Acquire) {
-            Err(DruidError::PoolClosed)
+            Err(self.data_source_closed_error())
         } else {
             Ok(())
+        }
+    }
+
+    /// 构造携带实际关闭时刻的 Java `DataSourceClosedException` 对应错误。
+    pub(crate) fn data_source_closed_error(&self) -> DruidError {
+        DruidError::DataSourceClosed {
+            close_time_millis: self.close_time_millis.load(Ordering::Acquire),
         }
     }
 
@@ -538,12 +549,19 @@ impl PoolInner {
     /// 重置数据源累计统计，保留当前连接数量和缓存占用。
     pub(crate) fn reset_stats(&self) {
         let _ = self.stat_snapshot_and_reset();
+        // Java resetStat 把 activePeak 重置为当前 activeCount，而不是 0。
+        self.active_peak
+            .store(self.active_count.load(Ordering::Acquire), Ordering::Release);
+        self.active_peak_time_millis.store(0, Ordering::Release);
         self.recycle_count.store(0, Ordering::Release);
         self.recycle_error_count.store(0, Ordering::Release);
         self.discard_count.store(0, Ordering::Release);
         self.keep_alive_check_error_count
             .store(0, Ordering::Release);
         self.prepared_statement_stats.reset();
+        let mut create_state = self.create_failure_state.lock();
+        create_state.last_create_error = None;
+        create_state.last_create_error_time_millis = 0;
     }
 
     /// 使用数据源配置的 Java `ValidConnectionChecker` 校验物理连接。
@@ -661,7 +679,7 @@ impl PoolInner {
                 Ok(pooling_count) => pooling_count,
                 Err(holder) => {
                     self.destroy_holder(holder);
-                    return Err(DruidError::PoolClosed);
+                    return Err(self.data_source_closed_error());
                 }
             };
             self.record_pooling_count(pooling_count);
@@ -687,7 +705,7 @@ impl PoolInner {
             .await;
         match &result {
             Ok(_) => self.record_create_success(),
-            Err(DruidError::PoolExhausted | DruidError::PoolClosed) => {}
+            Err(DruidError::PoolExhausted | DruidError::DataSourceClosed { .. }) => {}
             Err(error) => self.record_create_error(error),
         }
         result
@@ -715,68 +733,57 @@ impl PoolInner {
 
         let connect_started_at = Instant::now();
         self.create_failure_state.lock().create_started_at = Some(connect_started_at);
-        self.stats_collector.connection_stat().before_connect();
         let filter_chain = self.filter_chain.read().clone();
-        let before_result = match &filter_chain {
+        let mut connection_properties = (*self.config.connection_properties).clone();
+        let create_result = match &filter_chain {
             Some(filter_chain) => {
+                let mut next_connection_id = || self.next_id();
                 filter_chain
-                    .before_connection_event(&ConnectionEvent::Connect)
+                    .physical_connection_connect(
+                        self.factory.as_ref(),
+                        &mut connection_properties,
+                        self.config.login_timeout,
+                        &mut next_connection_id,
+                    )
                     .await
             }
-            None => Ok(()),
-        };
-        let create_result = match before_result {
-            Err(error) => Err(error),
-            Ok(()) if self.config.login_timeout > 0 => {
+            None if self.config.login_timeout > 0 => {
                 match tokio::time::timeout(
                     Duration::from_secs(self.config.login_timeout as u64),
-                    self.factory.create_info(),
+                    self.factory
+                        .create_info_with_properties(&connection_properties),
                 )
                 .await
                 {
-                    Ok(result) => result,
+                    Ok(result) => result.map(|connection_info| {
+                        PhysicalConnectionConnectResult::new(connection_info, self.next_id())
+                    }),
                     Err(_) => Err(DruidError::LoginTimeout),
                 }
             }
-            Ok(()) => self.factory.create_info().await,
+            None => self
+                .factory
+                .create_info_with_properties(&connection_properties)
+                .await
+                .map(|connection_info| {
+                    PhysicalConnectionConnectResult::new(connection_info, self.next_id())
+                }),
         };
 
         match create_result {
-            Ok(mut connection_info) => {
-                let connect_elapsed = connect_started_at.elapsed();
-                // Java FilterChain terminal 在 raw driver 成功后立即分配
-                // ConnectionProxy ID；即使 after hook 失败，该 ID 也已消耗。
-                let connection_id = self.next_id();
-                if let Some(filter_chain) = &filter_chain {
-                    if let Err(error) = filter_chain
-                        .after_connection_event_with_identity(
-                            connection_id,
-                            &ConnectionEvent::Connect,
-                            connect_elapsed,
-                        )
-                        .await
-                    {
-                        if let Some(connection) = connection_info.physical_connection_box_mut() {
-                            let _ = self.factory.close(connection).await;
-                        }
-                        self.record_unregistered_physical_close(connect_elapsed);
-                        self.stats_collector.connection_stat().connect_error(&error);
-                        self.physical_connect_error_count
-                            .fetch_add(1, Ordering::Relaxed);
-                        return Err(error);
-                    }
-                }
-                self.stats_collector
-                    .connection_stat()
-                    .after_connected(connect_elapsed);
+            Ok(connect_result) => {
+                let (mut connection_info, connection_id) = connect_result.into_parts();
                 // Java 在原始驱动连接成功后立即增加 createCount，默认属性初始化失败
                 // 也不回退该计数。
                 self.create_count.fetch_add(1, Ordering::Relaxed);
                 if let Err(error) = self.ensure_not_closed() {
-                    if let Some(connection) = connection_info.physical_connection_box_mut() {
-                        let _ = self.factory.close(connection).await;
-                    }
-                    self.record_unregistered_physical_close(connect_started_at.elapsed());
+                    self.close_connected_connection(
+                        filter_chain.as_ref(),
+                        &mut connection_info,
+                        connection_id,
+                        connect_started_at.elapsed(),
+                    )
+                    .await;
                     self.destroy_count.fetch_add(1, Ordering::Relaxed);
                     return Err(error);
                 }
@@ -791,10 +798,13 @@ impl PoolInner {
                 if let Err(error) = initialize_result {
                     // 对应 Java createPhysicalConnection() 的异常路径：初始化失败时
                     // 关闭刚创建的物理连接，但它从未进入池，不增加 destroyCount。
-                    if let Some(connection) = connection_info.physical_connection_box_mut() {
-                        let _ = self.factory.close(connection).await;
-                    }
-                    self.record_unregistered_physical_close(connect_started_at.elapsed());
+                    self.close_connected_connection(
+                        filter_chain.as_ref(),
+                        &mut connection_info,
+                        connection_id,
+                        connect_started_at.elapsed(),
+                    )
+                    .await;
                     self.physical_connect_error_count
                         .fetch_add(1, Ordering::Relaxed);
                     return Err(error);
@@ -807,10 +817,13 @@ impl PoolInner {
                 {
                     Ok(checked) => checked,
                     Err(error) => {
-                        if let Some(connection) = connection_info.physical_connection_box_mut() {
-                            let _ = self.factory.close(connection).await;
-                        }
-                        self.record_unregistered_physical_close(connect_started_at.elapsed());
+                        self.close_connected_connection(
+                            filter_chain.as_ref(),
+                            &mut connection_info,
+                            connection_id,
+                            connect_started_at.elapsed(),
+                        )
+                        .await;
                         self.physical_connect_error_count
                             .fetch_add(1, Ordering::Relaxed);
                         return Err(error);
@@ -826,10 +839,13 @@ impl PoolInner {
                     }
                 };
                 if let Err(error) = validate_result {
-                    if let Some(connection) = connection_info.physical_connection_box_mut() {
-                        let _ = self.factory.close(connection).await;
-                    }
-                    self.record_unregistered_physical_close(connect_started_at.elapsed());
+                    self.close_connected_connection(
+                        filter_chain.as_ref(),
+                        &mut connection_info,
+                        connection_id,
+                        connect_started_at.elapsed(),
+                    )
+                    .await;
                     self.physical_connect_error_count
                         .fetch_add(1, Ordering::Relaxed);
                     return Err(error);
@@ -841,6 +857,7 @@ impl PoolInner {
                     connection_id,
                     user_password_version,
                 )?;
+                holder.set_connection_properties(Arc::new(connection_properties));
                 holder.configure_statement_pool(
                     self.config.pool_prepared_statements,
                     self.config.max_pool_prepared_statements_per_connection,
@@ -865,27 +882,51 @@ impl PoolInner {
                     .any(|candidate| db_type.eq_ignore_ascii_case(candidate))
                 });
                 holder.set_restore_schema_on_recycle(restore_schema);
-                let entry = Arc::new(JdbcConnectionStatEntry::new(
-                    self.stats_collector.name.clone(),
-                    connection_id,
-                ));
-                entry.set_connect_time_millis(Self::now_millis().saturating_sub(
-                    u64::try_from(connect_elapsed.as_millis()).unwrap_or(u64::MAX),
-                ));
-                entry.set_connect_timespan_nanos(
-                    u64::try_from(connect_elapsed.as_nanos()).unwrap_or(u64::MAX),
-                );
-                entry.mark_established();
-                self.stats_collector.connection_stat().register_entry(entry);
                 reservation.commit();
                 Ok(holder)
             }
             Err(e) => {
-                self.stats_collector.connection_stat().connect_error(&e);
                 self.physical_connect_error_count
                     .fetch_add(1, Ordering::Relaxed);
                 Err(e)
             }
+        }
+    }
+
+    /// 关闭已经由 physical-connect 链创建、但尚未成功进入 holder 的连接。
+    ///
+    /// Java 初始化或校验失败时调用 `ConnectionProxy#close()`，因此必须重新从
+    /// position 0 进入 physical-close 链，让 StatFilter/LogFilter 观察真实
+    /// 关闭；该路径不增加池级 destroyCount。
+    async fn close_connected_connection(
+        &self,
+        filter_chain: Option<&Arc<FilterChain>>,
+        connection_info: &mut PhysicalConnectionInfo,
+        connection_id: u64,
+        physical_age: Duration,
+    ) {
+        let Some(connection) = connection_info.physical_connection_box_mut() else {
+            return;
+        };
+        let result = match filter_chain {
+            Some(filter_chain) if !filter_chain.is_empty() => {
+                filter_chain
+                    .physical_connection_close(
+                        self.factory.as_ref(),
+                        connection,
+                        connection_id,
+                        physical_age,
+                    )
+                    .await
+            }
+            _ => self.factory.close(connection).await,
+        };
+        if let Err(error) = result {
+            tracing::warn!(
+                %error,
+                connection_id,
+                "close failed physical connection failed"
+            );
         }
     }
 
@@ -1218,9 +1259,6 @@ impl PoolInner {
                 }
                 _ => self.factory.close(&mut connection).await,
             };
-            self.stats_collector
-                .connection_stat()
-                .remove_entry(connection_id);
             if let Err(error) = result {
                 tracing::warn!(
                     %error,
@@ -1229,12 +1267,6 @@ impl PoolInner {
                 );
             }
         }
-    }
-
-    fn record_unregistered_physical_close(&self, alive: Duration) {
-        let stat = self.stats_collector.connection_stat();
-        stat.increment_connection_close_count();
-        stat.after_close(alive);
     }
 
     /// 按 Java `DruidDataSource#shrink(checkTime, keepAlive)` 驱逐和保活空闲连接。
@@ -1409,7 +1441,9 @@ impl PoolInner {
     /// 关闭池。
     pub async fn close(&self) {
         self.enabled.store(false, Ordering::Release);
-        self.closed.store(true, Ordering::Relaxed);
+        self.close_time_millis
+            .store(Self::now_millis(), Ordering::Release);
+        self.closed.store(true, Ordering::Release);
         let idle: Vec<DetachedHolder<'_>> = {
             let mut queue = self.idle.lock();
             queue

@@ -45,6 +45,19 @@ impl WallFilter {
         &self.provider
     }
 
+    /// 清空 provider 的 SQL 判定缓存。
+    ///
+    /// 对应 Java `WallFilter#clearProviderCache()`。
+    pub fn clear_provider_cache(&self) {
+        self.provider.clear_cache();
+    }
+
+    /// 返回 provider 当前白名单 SQL。
+    #[must_use]
+    pub fn provider_white_list(&self) -> std::collections::HashSet<String> {
+        self.provider.white_list()
+    }
+
     /// 设置是否记录违规。
     pub fn set_log_violation(&self, log_violation: bool) {
         self.log_violation.store(log_violation, Ordering::Release);

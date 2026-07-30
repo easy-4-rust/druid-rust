@@ -10,8 +10,9 @@ use super::value::Value;
 use super::{
     ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain,
-    DruidPooledConnection, PhysicalConnectionCloseFilterChain, PhysicalDatabaseMetaData,
-    PreparedInputParameter, SqlWarning, StatementWarningFilterChain,
+    DruidPooledConnection, PhysicalConnectionCloseFilterChain,
+    PhysicalConnectionConnectFilterChain, PhysicalConnectionConnectResult,
+    PhysicalDatabaseMetaData, PreparedInputParameter, SqlWarning, StatementWarningFilterChain,
 };
 use std::time::{Duration, Instant};
 
@@ -248,6 +249,19 @@ pub trait BeforeFilter: Send + Sync {
         connection: &mut DruidPooledConnection,
     ) -> Result<(), DruidError> {
         chain.data_source_recycle(connection).await
+    }
+
+    /// 包围一次真实物理连接创建。
+    ///
+    /// 对应 Java：
+    /// `Filter#connection_connect(FilterChain, Properties)`。Filter 可以原地
+    /// 改写连接属性、短路或返回错误；默认继续有位置链，末端才调用驱动。
+    async fn connection_connect(
+        &self,
+        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        properties: &mut std::collections::HashMap<String, String>,
+    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+        chain.connection_connect(properties).await
     }
 
     /// 包围一次真实物理连接关闭。
@@ -538,16 +552,6 @@ pub trait AfterFilter: Send + Sync {
             operation: ExecOperation::Batch,
         };
         self.after(&execute_context, &execute_result, elapsed).await
-    }
-
-    /// 连接关闭后置（对应 Filter.connection_close after）。
-    async fn after_connection_close(&self) -> Result<(), DruidError> {
-        Ok(())
-    }
-
-    /// 带连接身份的关闭后置；默认保持旧 hook 兼容。
-    async fn after_connection_close_context(&self, _connection_id: u64) -> Result<(), DruidError> {
-        self.after_connection_close().await
     }
 
     /// 物理连接事件完成后的回调。

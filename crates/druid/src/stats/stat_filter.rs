@@ -2,20 +2,21 @@
 //!
 //! 统计 `Filter`，实现 `AfterFilter` 接口。
 
-use super::{StatFilterContext, StatsCollector};
+use super::{JdbcStatManager, StatFilterContext, StatsCollector};
 use crate::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
     DruidPooledConnection, ExecContext, ExecOperation, ExecResult, JdbcObject,
-    PhysicalConnectionCloseFilterChain, PreparedInputParameter, ResultSetFilter,
-    ResultSetFilterChain, ResultSetFilterContext, Value,
+    PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
+    PhysicalConnectionConnectResult, PreparedInputParameter, ResultSetFilter, ResultSetFilterChain,
+    ResultSetFilterContext, StatementEventContext, Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// 统计 Filter。
 ///
@@ -204,6 +205,29 @@ impl StatFilter {
         i128::try_from(elapsed.as_millis()).unwrap_or(i128::MAX)
             >= i128::from(self.get_slow_sql_millis())
     }
+
+    fn effective_sql(sql: &str) -> String {
+        JdbcStatManager::global()
+            .stat_context()
+            .and_then(|context| {
+                context
+                    .sql()
+                    .filter(|sql| !sql.is_empty())
+                    .map(str::to_owned)
+            })
+            .unwrap_or_else(|| sql.to_owned())
+    }
+
+    fn context_identity() -> (Option<String>, Option<String>) {
+        JdbcStatManager::global()
+            .stat_context()
+            .map_or((None, None), |context| {
+                (
+                    context.name().map(str::to_owned),
+                    context.file().map(str::to_owned),
+                )
+            })
+    }
 }
 
 #[async_trait::async_trait]
@@ -235,6 +259,46 @@ impl BeforeFilter for StatFilter {
         StatFilterContext::global().pool_connection_close(nanos)
     }
 
+    async fn connection_connect(
+        &self,
+        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        properties: &mut HashMap<String, String>,
+    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+        let started_at = Instant::now();
+        let start_time_millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |elapsed| {
+                u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+            });
+        let connection_stat = self.collector.connection_stat();
+        connection_stat.before_connect();
+        let result = match chain.connection_connect(properties).await {
+            Ok(result) => result,
+            Err(error) => {
+                connection_stat.connect_error(&error);
+                return Err(error);
+            }
+        };
+        let elapsed = started_at.elapsed();
+        connection_stat.after_connected(elapsed);
+
+        let entry = Arc::new(super::JdbcConnectionStatEntry::new(
+            self.collector.name.clone(),
+            result.connection_id(),
+        ));
+        entry.set_connect_time_millis(start_time_millis);
+        entry.set_connect_timespan_nanos(u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX));
+        entry.mark_established();
+        // Java StatFilter 为每条物理连接保存创建栈；Rust 使用原生 Backtrace，
+        // 不迁移 JVM Exception 类型。
+        entry.set_connect_stack_trace(Some(format!(
+            "{:?}",
+            std::backtrace::Backtrace::force_capture()
+        )));
+        connection_stat.register_entry(entry);
+        Ok(result)
+    }
+
     async fn connection_close(
         &self,
         chain: &mut PhysicalConnectionCloseFilterChain<'_>,
@@ -251,19 +315,21 @@ impl BeforeFilter for StatFilter {
     }
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        let effective_sql = Self::effective_sql(&context.sql);
         let sql_stat = self
             .collector
             .sql_merger
-            .prepare(&context.sql, self.is_merge_sql());
+            .prepare(&effective_sql, self.is_merge_sql());
         let db_type = self.get_db_type();
-        sql_stat.set_management_identity(Some(context.data_source), None, db_type.as_deref());
+        let (name, file) = Self::context_identity();
+        sql_stat.set_management_identity(name.as_deref(), file.as_deref(), db_type.as_deref());
         context.fingerprint = Some(sql_stat.fingerprint);
         sql_stat.increment_running_count();
         if context.in_transaction {
             sql_stat.increment_in_transaction_count();
         }
         let result =
-            StatFilterContext::global().execute_before(&context.sql, context.in_transaction);
+            StatFilterContext::global().execute_before(&effective_sql, context.in_transaction);
         if result.is_err() {
             sql_stat.decrement_running_count();
         }
@@ -280,6 +346,19 @@ impl BeforeFilter for StatFilter {
             .and_then(|fingerprint| self.collector.sql_merger.get_stat(fingerprint))
         {
             sql_stat.decrement_running_count();
+        }
+        Ok(())
+    }
+
+    fn on_statement_close_context(
+        &self,
+        _context: &StatementEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        if let Some(mut context) = JdbcStatManager::global().stat_context() {
+            context.set_name(None);
+            context.set_file(None);
+            context.set_sql(None);
+            JdbcStatManager::global().set_stat_context(Some(context));
         }
         Ok(())
     }
@@ -304,19 +383,21 @@ impl BeforeFilter for StatFilter {
         self.collector
             // Java PreparedStatementProxyImpl 不填充继承的 batchSqlList，故为 0。
             .record_execute_batch(context.statements.len());
+        let effective_sql = Self::effective_sql(context.sql);
         let sql_stat = self
             .collector
             .sql_merger
-            .prepare(context.sql, self.is_merge_sql());
+            .prepare(&effective_sql, self.is_merge_sql());
         let db_type = self.get_db_type();
-        sql_stat.set_management_identity(Some(context.data_source), None, db_type.as_deref());
+        let (name, file) = Self::context_identity();
+        sql_stat.set_management_identity(name.as_deref(), file.as_deref(), db_type.as_deref());
         context.fingerprint = Some(sql_stat.fingerprint);
         sql_stat.increment_running_count();
         if context.in_transaction {
             sql_stat.increment_in_transaction_count();
         }
         let result =
-            StatFilterContext::global().execute_before(context.sql, context.in_transaction);
+            StatFilterContext::global().execute_before(&effective_sql, context.in_transaction);
         if result.is_err() {
             sql_stat.decrement_running_count();
         }
@@ -350,11 +431,12 @@ impl AfterFilter for StatFilter {
         result: &Result<ExecResult, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
+        let effective_sql = Self::effective_sql(&ctx.sql);
         let running_stat = ctx
             .fingerprint
             .and_then(|fingerprint| self.collector.sql_merger.get_stat(fingerprint));
         let sql_stat = self.collector.record_sql_with_merge_and_slow_millis_stat(
-            &ctx.sql,
+            &effective_sql,
             elapsed,
             result.is_ok(),
             self.is_merge_sql(),
@@ -381,7 +463,7 @@ impl AfterFilter for StatFilter {
         {
             sql_stat.record_execute_and_result_hold_time(elapsed);
         }
-        self.log_slow_sql(&ctx.sql, elapsed);
+        self.log_slow_sql(&effective_sql, elapsed);
         let context = StatFilterContext::global();
         if let Ok(execution) = result {
             match ctx.operation {
@@ -408,7 +490,7 @@ impl AfterFilter for StatFilter {
             }
         }
         let elapsed_nanos = i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX);
-        context.execute_after(Some(&ctx.sql), elapsed_nanos, result.as_ref().err())
+        context.execute_after(Some(&effective_sql), elapsed_nanos, result.as_ref().err())
     }
 
     async fn after_batch(
@@ -417,11 +499,12 @@ impl AfterFilter for StatFilter {
         result: &Result<Vec<i32>, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
+        let effective_sql = Self::effective_sql(context.sql);
         let running_stat = context
             .fingerprint
             .and_then(|fingerprint| self.collector.sql_merger.get_stat(fingerprint));
         let sql_stat = self.collector.record_sql_with_merge_and_slow_millis_stat(
-            context.sql,
+            &effective_sql,
             elapsed,
             result.is_ok(),
             self.is_merge_sql(),
@@ -447,7 +530,7 @@ impl AfterFilter for StatFilter {
                 .set_last_slow_parameters(Some(build_slow_parameters(params, prepared_parameters)));
         }
         sql_stat.record_execute_and_result_hold_time(elapsed);
-        self.log_slow_sql(context.sql, elapsed);
+        self.log_slow_sql(&effective_sql, elapsed);
         let global = StatFilterContext::global();
         // 普通 Statement 使用 batchSqlList 长度；PreparedStatement 在 Java 代理中
         // 该列表固定为空，因此 BatchExecContext 已按入口保留相同 statements 语义。
@@ -462,10 +545,10 @@ impl AfterFilter for StatFilter {
         let elapsed_nanos = i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX);
         let sql = match (context.kind, result.is_ok()) {
             // Java PreparedStatementProxyImpl#getLastExecuteSql() 固定返回预编译 SQL。
-            (BatchExecKind::PreparedStatement, _) => Some(context.sql),
+            (BatchExecKind::PreparedStatement, _) => Some(effective_sql.as_str()),
             // 普通 Statement 成功 batch 不设置 lastExecuteSql；错误路径使用 batch SQL。
             (BatchExecKind::Statement, true) => None,
-            (BatchExecKind::Statement, false) => Some(context.sql),
+            (BatchExecKind::Statement, false) => Some(effective_sql.as_str()),
         };
         global.execute_after(sql, elapsed_nanos, result.as_ref().err())
     }

@@ -38,6 +38,8 @@ pub struct DruidPool {
     exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     filters_initialized: AtomicBool,
     initialized: AtomicBool,
+    reset_stat_enable: AtomicBool,
+    reset_count: AtomicU64,
     lifecycle_lock: AsyncMutex<()>,
     active_leases: Arc<DashMap<u64, ActiveConnectionLease>>,
     remove_abandoned_count: Arc<AtomicU64>,
@@ -221,6 +223,8 @@ impl DruidPool {
             exception_sorter,
             filters_initialized: AtomicBool::new(false),
             initialized: AtomicBool::new(false),
+            reset_stat_enable: AtomicBool::new(true),
+            reset_count: AtomicU64::new(0),
             lifecycle_lock: AsyncMutex::new(()),
             active_leases: Arc::new(DashMap::new()),
             remove_abandoned_count: Arc::new(AtomicU64::new(0)),
@@ -236,7 +240,6 @@ impl DruidPool {
             close_worker: parking_lot::Mutex::new(Some(ConnectionCloseWorker::new(
                 close_factory,
                 filter_chain.clone(),
-                Arc::clone(&stats_collector),
                 close_receiver,
             ))),
             close_worker_task: parking_lot::Mutex::new(None),
@@ -488,7 +491,6 @@ impl DruidPool {
             *self.close_worker.lock() = Some(ConnectionCloseWorker::new(
                 Arc::clone(&self.inner.factory),
                 self.filter_chain.clone(),
-                Arc::clone(&self.stats_collector),
                 close_receiver,
             ));
         }
@@ -673,11 +675,12 @@ impl DruidPool {
     }
 
     fn ensure_borrow_generation(&self, expected_generation: u64) -> Result<(), DruidError> {
-        self.inner.ensure_available()?;
         if self.inner.lifecycle_generation() != expected_generation {
-            return Err(DruidError::PoolClosed);
+            // Java 只在进入 getConnectionInternal 时检查 closed。已经进入
+            // takeLast/pollLast 的线程被 close 唤醒后走 `!enable` 分支。
+            return Err(DruidError::DataSourceDisabled);
         }
-        Ok(())
+        self.inner.ensure_available()
     }
 
     /// 按 Java creator 的重试阈值创建物理连接，并受本次 maxWait 截止时间约束。
@@ -709,7 +712,7 @@ impl DruidPool {
             match result {
                 Ok(holder) => return Ok(holder),
                 Err(DruidError::PoolExhausted) => return Err(DruidError::PoolExhausted),
-                Err(DruidError::PoolClosed) => return Err(DruidError::PoolClosed),
+                Err(error @ DruidError::DataSourceClosed { .. }) => return Err(error),
                 Err(_error) => {
                     error_count = error_count.saturating_add(1);
                     if error_count <= self.inner.config.connection_error_retry_attempts {
@@ -847,6 +850,8 @@ impl DruidPool {
                 .prepared_statement_stats
                 .cached_prepared_statement_access_count(),
             leak_detection_count: self.remove_abandoned_count.load(Ordering::Relaxed),
+            reset_stat_enable: self.is_reset_stat_enable(),
+            reset_count: self.reset_count(),
             closed: self.inner.closed.load(std::sync::atomic::Ordering::Relaxed),
             ..Default::default()
         }
@@ -871,12 +876,36 @@ impl DruidPool {
         self.inner.config.stat_sink.publish(&stat_value)
     }
 
+    /// 返回 Java `isResetStatEnable()`。
+    #[must_use]
+    pub fn is_reset_stat_enable(&self) -> bool {
+        self.reset_stat_enable.load(Ordering::Acquire)
+    }
+
+    /// 设置 Java `resetStatEnable`。
+    pub fn set_reset_stat_enable(&self, reset_stat_enable: bool) {
+        self.reset_stat_enable
+            .store(reset_stat_enable, Ordering::Release);
+        self.stats_collector
+            .set_reset_stat_enable(reset_stat_enable);
+    }
+
+    /// 返回实际执行 `resetStat()` 的累计次数。
+    #[must_use]
+    pub fn reset_count(&self) -> u64 {
+        self.reset_count.load(Ordering::Acquire)
+    }
+
     /// 重置累计池统计，当前 active/idle/缓存占用保持可见。
+    ///
+    /// Java `resetStatEnable=false` 时整个调用无副作用，也不增加 resetCount。
     pub fn reset_stats(&self) {
+        if !self.is_reset_stat_enable() {
+            return;
+        }
         self.inner.reset_stats();
         self.remove_abandoned_count.store(0, Ordering::Release);
-        self.stats_collector.reset();
-        self.wall_provider.reset();
+        self.reset_count.fetch_add(1, Ordering::AcqRel);
     }
 
     /// 返回与 `StatFilter` 共享的数据源统计对象。
@@ -1070,6 +1099,12 @@ impl DruidPool {
         )
     }
 
+    /// 返回 Java `isRemoveAbandoned()` 配置。
+    #[must_use]
+    pub fn is_remove_abandoned(&self) -> bool {
+        self.inner.config.remove_abandoned
+    }
+
     /// 强制丢弃指定池化连接。
     ///
     /// 对应 Java `discardConnection(Connection)` 的 nullable 参数与 boolean
@@ -1153,10 +1188,11 @@ impl DruidPool {
         if !self.initialized.load(Ordering::Acquire) {
             return;
         }
-        if !self.is_closed() {
-            self.inner.set_enabled(false);
-            self.inner.advance_lifecycle_generation();
+        if self.is_closed() {
+            return;
         }
+        self.inner.set_enabled(false);
+        self.inner.advance_lifecycle_generation();
         self.start_create_worker();
         self.inner.request_create_worker_shutdown();
         self.start_close_worker();
@@ -1298,6 +1334,7 @@ impl DruidPool {
 
     fn wrap_connection(&self, holder: DruidConnectionHolder) -> DruidPooledConnection {
         let connection_id = holder.connection_id();
+        let connection_properties = holder.connection_properties();
         let pool = self.inner.clone();
         let active_leases = Arc::clone(&self.active_leases);
         let recycle_validator = self.inner.config.test_on_return.then(|| {
@@ -1333,7 +1370,7 @@ impl DruidPool {
             Arc::clone(&self.metadata_id_seed),
             Arc::clone(&self.transaction_id_seed),
         );
-        connection.set_connection_properties(Arc::clone(&self.inner.config.connection_properties));
+        connection.set_connection_properties(connection_properties);
         if self.inner.config.remove_abandoned {
             self.active_leases.insert(
                 connection_id,

@@ -185,7 +185,8 @@ pub use filter_chain_impl::{
     ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain,
     DataSourceConnectionProvider, DataSourceGetConnectionFilterChain,
     DataSourceReleaseConnectionFilterChain, FilterChainImpl, PhysicalConnectionCloseContext,
-    PhysicalConnectionCloseFilterChain, StatementWarningFilterChain,
+    PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
+    PhysicalConnectionConnectResult, StatementWarningFilterChain,
 };
 pub use filter_event_adapter::{FilterEventAdapter, FilterEventListener};
 pub use filter_manager::FilterManager;

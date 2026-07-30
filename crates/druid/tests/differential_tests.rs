@@ -456,7 +456,12 @@ async fn test_ping_connection_checker() {
 #[test]
 fn test_error_display_all_variants() {
     let cases = vec![
-        (DruidError::PoolClosed, "connection pool is closed"),
+        (
+            DruidError::DataSourceClosed {
+                close_time_millis: 0,
+            },
+            "dataSource already closed at ",
+        ),
         (DruidError::AcquireTimeout, "acquire connection timed out"),
         (DruidError::PoolExhausted, "connection pool exhausted"),
         (
@@ -814,11 +819,10 @@ async fn test_after_filter_default() {
         ) -> Result<(), DruidError> {
             Ok(())
         }
-        async fn after_connection_close(&self) -> Result<(), DruidError> {
-            Ok(())
-        }
     }
-    M.after_connection_close().await.unwrap();
+    M.after_connection_event(&ConnectionEvent::Commit, Duration::ZERO)
+        .await
+        .unwrap();
 }
 
 // ── PoolConfig defaults ──

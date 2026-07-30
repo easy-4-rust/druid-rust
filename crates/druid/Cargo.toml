@@ -24,7 +24,6 @@ chrono.workspace = true
 dashmap.workspace = true
 encoding_rs.workspace = true
 fastrand.workspace = true
-form_urlencoded.workspace = true
 moka = { workspace = true, features = ["sync"] }
 jiff.workspace = true
 inventory.workspace = true
@@ -42,6 +41,9 @@ toasty.workspace = true
 toasty-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+java-properties.workspace = true
+url.workspace = true
+zookeeper-client.workspace = true
 uuid = { version = "1", features = ["v4"] }
 xxhash-rust.workspace = true
 x509-cert.workspace = true
