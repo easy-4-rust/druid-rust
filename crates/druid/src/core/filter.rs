@@ -8,7 +8,9 @@
 use super::error::DruidError;
 use super::value::Value;
 use super::{
-    ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain, PhysicalDatabaseMetaData,
+    ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain,
+    DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain,
+    DruidPooledConnection, PhysicalConnectionCloseFilterChain, PhysicalDatabaseMetaData,
     PreparedInputParameter, SqlWarning, StatementWarningFilterChain,
 };
 use std::time::{Duration, Instant};
@@ -220,6 +222,45 @@ pub enum ResultSetEvent {
 pub trait BeforeFilter: Send + Sync {
     /// 返回 Filter 名称。
     fn name(&self) -> &str;
+
+    /// 包围一次数据源池化连接获取。
+    ///
+    /// 对应 Java：
+    /// `Filter#dataSource_getConnection(FilterChain,DruidDataSource,long)`。
+    /// 默认继续调用有位置链；实现可以修改 `max_wait`、短路返回自己的池化连接
+    /// 或返回错误。该 hook 与物理 `connection_connect` 是两层独立调用。
+    async fn data_source_get_connection(
+        &self,
+        chain: &mut DataSourceGetConnectionFilterChain<'_>,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        chain.data_source_get_connection(max_wait).await
+    }
+
+    /// 包围一次池化连接归还。
+    ///
+    /// 对应 Java：
+    /// `Filter#dataSource_releaseConnection(FilterChain,DruidPooledConnection)`。
+    /// 默认继续链；Filter 可以在末端回收前后执行逻辑、返回错误或有意短路。
+    async fn data_source_release_connection(
+        &self,
+        chain: &mut DataSourceReleaseConnectionFilterChain<'_>,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<(), DruidError> {
+        chain.data_source_recycle(connection).await
+    }
+
+    /// 包围一次真实物理连接关闭。
+    ///
+    /// 对应 Java：`Filter#connection_close(FilterChain, ConnectionProxy)`。该
+    /// hook 只在驱动连接实际销毁时执行，不得与池化连接的逻辑 `close`/归还
+    /// 混为一谈。默认继续有位置调用链，末端才调用驱动工厂关闭原始连接。
+    async fn connection_close(
+        &self,
+        chain: &mut PhysicalConnectionCloseFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        chain.connection_close().await
+    }
 
     /// 通用前置拦截（对应 Filter 的 before-execute 语义）。
     async fn before(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError>;

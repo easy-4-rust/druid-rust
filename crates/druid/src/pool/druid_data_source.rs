@@ -36,7 +36,34 @@ impl DruidDataSource {
 
     /// 获取连接；禁用时返回 Java `DataSourceDisableException` 对应错误。
     pub async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        self.pool.get().await
+        self.get_connection().await
+    }
+
+    /// 获取池化连接。
+    ///
+    /// 对应 Java：`DruidDataSource#getConnection()`。
+    pub async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
+        self.pool.get_connection().await
+    }
+
+    /// 使用本次 maxWait 获取池化连接。
+    ///
+    /// 对应 Java：`DruidDataSource#getConnection(long)`。
+    pub async fn get_connection_with_max_wait(
+        &self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        self.pool.get_connection_with_max_wait(max_wait).await
+    }
+
+    /// 绕过数据源获取 Filter，直接进入 native pool 状态机。
+    ///
+    /// 对应 Java：`DruidDataSource#getConnectionDirect(long)`。
+    pub async fn get_connection_direct(
+        &self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        self.pool.get_connection_direct(max_wait).await
     }
 
     /// 幂等初始化数据源并预建 `initialSize` 个连接。
@@ -49,7 +76,7 @@ impl DruidDataSource {
         &self,
         timeout: Duration,
     ) -> Result<DruidPooledConnection, DruidError> {
-        self.pool.get_timeout(timeout).await
+        self.get_connection_with_max_wait(timeout).await
     }
 
     /// 返回连接池状态快照。

@@ -5,9 +5,9 @@
 use crate::core::fatal_error_handler::FatalErrorHandler;
 use crate::core::Value as JdbcValue;
 use crate::core::{
-    ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, JavaString,
-    PhysicalConnection, PhysicalConnectionFactory, PreparedStatementCacheStats,
-    StatementGeneratedKeys, ValidConnectionCheckerAdapter,
+    ConnectionEvent, ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder,
+    DruidError, FilterChain, JavaString, PhysicalConnection, PhysicalConnectionFactory,
+    PreparedStatementCacheStats, StatementGeneratedKeys, ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, JdbcUtils};
 use crate::stats::{JdbcConnectionStatEntry, StatsCollector};
@@ -18,6 +18,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
+
+use super::connection_close_worker::ConnectionCloseCommand;
 
 /// `DruidAbstractDataSource` fatal-error 字段的同锁状态。
 ///
@@ -56,6 +58,11 @@ struct CreateFailureState {
 /// 连接池内部状态。
 pub struct PoolInner {
     pub(crate) factory: Arc<dyn PhysicalConnectionFactory>,
+    /// 包围物理驱动建连的 Druid Filter chain。
+    ///
+    /// 受监管 creator 只持有 `PoolInner`，因此该链必须与 factory 同属内部
+    /// 状态，才能覆盖后台和直接创建两条路径。
+    filter_chain: parking_lot::RwLock<Option<Arc<FilterChain>>>,
     pub(crate) config: super::config::PoolInnerConfig,
     pub(crate) idle: parking_lot::Mutex<VecDeque<DruidConnectionHolder>>,
     pub(crate) notify: Notify,
@@ -95,7 +102,7 @@ pub struct PoolInner {
     pub(crate) prepared_statement_stats: Arc<PreparedStatementCacheStats>,
     pub(crate) stats_collector: Arc<StatsCollector>,
     create_sender: parking_lot::RwLock<Option<UnboundedSender<Option<usize>>>>,
-    close_sender: parking_lot::RwLock<Option<UnboundedSender<Option<Box<dyn PhysicalConnection>>>>>,
+    close_sender: parking_lot::RwLock<Option<UnboundedSender<Option<ConnectionCloseCommand>>>>,
 }
 
 impl PoolInner {
@@ -114,6 +121,7 @@ impl PoolInner {
     ) -> Self {
         Self {
             factory,
+            filter_chain: parking_lot::RwLock::new(None),
             config,
             idle: parking_lot::Mutex::new(VecDeque::new()),
             notify: Notify::new(),
@@ -158,7 +166,7 @@ impl PoolInner {
     /// 安装由 canonical `DruidPool` 持有的物理关闭 worker sender。
     pub(crate) fn install_close_sender(
         &self,
-        sender: UnboundedSender<Option<Box<dyn PhysicalConnection>>>,
+        sender: UnboundedSender<Option<ConnectionCloseCommand>>,
     ) {
         *self.close_sender.write() = Some(sender);
     }
@@ -166,6 +174,11 @@ impl PoolInner {
     /// 安装由 canonical `DruidPool` 持有的补池 worker sender。
     pub(crate) fn install_create_sender(&self, sender: UnboundedSender<Option<usize>>) {
         *self.create_sender.write() = Some(sender);
+    }
+
+    /// 安装共享的物理建连 Filter chain。
+    pub(crate) fn install_filter_chain(&self, filter_chain: Option<Arc<FilterChain>>) {
+        *self.filter_chain.write() = filter_chain;
     }
 
     pub fn next_id(&self) -> u64 {
@@ -703,23 +716,56 @@ impl PoolInner {
         let connect_started_at = Instant::now();
         self.create_failure_state.lock().create_started_at = Some(connect_started_at);
         self.stats_collector.connection_stat().before_connect();
-        let create_result = if self.config.login_timeout > 0 {
-            match tokio::time::timeout(
-                Duration::from_secs(self.config.login_timeout as u64),
-                self.factory.create_info(),
-            )
-            .await
-            {
-                Ok(result) => result,
-                Err(_) => Err(DruidError::LoginTimeout),
+        let filter_chain = self.filter_chain.read().clone();
+        let before_result = match &filter_chain {
+            Some(filter_chain) => {
+                filter_chain
+                    .before_connection_event(&ConnectionEvent::Connect)
+                    .await
             }
-        } else {
-            self.factory.create_info().await
+            None => Ok(()),
+        };
+        let create_result = match before_result {
+            Err(error) => Err(error),
+            Ok(()) if self.config.login_timeout > 0 => {
+                match tokio::time::timeout(
+                    Duration::from_secs(self.config.login_timeout as u64),
+                    self.factory.create_info(),
+                )
+                .await
+                {
+                    Ok(result) => result,
+                    Err(_) => Err(DruidError::LoginTimeout),
+                }
+            }
+            Ok(()) => self.factory.create_info().await,
         };
 
         match create_result {
             Ok(mut connection_info) => {
                 let connect_elapsed = connect_started_at.elapsed();
+                // Java FilterChain terminal 在 raw driver 成功后立即分配
+                // ConnectionProxy ID；即使 after hook 失败，该 ID 也已消耗。
+                let connection_id = self.next_id();
+                if let Some(filter_chain) = &filter_chain {
+                    if let Err(error) = filter_chain
+                        .after_connection_event_with_identity(
+                            connection_id,
+                            &ConnectionEvent::Connect,
+                            connect_elapsed,
+                        )
+                        .await
+                    {
+                        if let Some(connection) = connection_info.physical_connection_box_mut() {
+                            let _ = self.factory.close(connection).await;
+                        }
+                        self.record_unregistered_physical_close(connect_elapsed);
+                        self.stats_collector.connection_stat().connect_error(&error);
+                        self.physical_connect_error_count
+                            .fetch_add(1, Ordering::Relaxed);
+                        return Err(error);
+                    }
+                }
                 self.stats_collector
                     .connection_stat()
                     .after_connected(connect_elapsed);
@@ -790,7 +836,6 @@ impl PoolInner {
                 }
                 connection_info.mark_validated();
 
-                let connection_id = self.next_id();
                 let mut holder = DruidConnectionHolder::with_connection_info(
                     connection_info,
                     connection_id,
@@ -1094,22 +1139,33 @@ impl PoolInner {
 
     /// 销毁 canonical holder 中的物理连接。
     pub fn destroy_holder(&self, mut holder: DruidConnectionHolder) {
-        self.record_registered_physical_close(&holder);
+        let connection_id = holder.connection_id();
+        let physical_age = holder.physical_age();
         holder.mark_discarded();
         holder.clear_statement_cache();
         if let Some(connection) = holder.take_physical_connection() {
-            self.destroy_connection(connection);
+            self.destroy_connection(connection_id, physical_age, connection);
         } else {
             self.record_destroy();
         }
     }
 
     /// 销毁连接。
-    pub fn destroy_connection(&self, conn: Box<dyn PhysicalConnection>) {
+    fn destroy_connection(
+        &self,
+        connection_id: u64,
+        physical_age: Duration,
+        connection: Box<dyn PhysicalConnection>,
+    ) {
         self.record_destroy();
         let sender = self.close_sender.read().clone();
         if let Some(sender) = sender {
-            if let Err(error) = sender.send(Some(conn)) {
+            let command = ConnectionCloseCommand {
+                connection_id,
+                physical_age,
+                connection,
+            };
+            if let Err(error) = sender.send(Some(command)) {
                 // worker 已退出时，Drop 仍会释放 driver 资源；禁止重新 spawn
                 // 一条不可追踪任务。
                 drop(error.0);
@@ -1117,7 +1173,7 @@ impl PoolInner {
         } else {
             // 只有直接构造公开 PoolInner 的测试/低层调用会走到这里；canonical
             // DruidPool 在对外可借用前必定安装 worker。
-            drop(conn);
+            drop(connection);
         }
     }
 
@@ -1142,24 +1198,36 @@ impl PoolInner {
 
     /// 等待 holder 中的物理连接完成关闭。
     pub async fn destroy_holder_now(&self, mut holder: DruidConnectionHolder) {
-        self.record_registered_physical_close(&holder);
+        let connection_id = holder.connection_id();
+        let physical_age = holder.physical_age();
         holder.mark_discarded();
         holder.clear_statement_cache();
         self.record_destroy();
         if let Some(mut connection) = holder.take_physical_connection() {
-            let _ = self.factory.close(&mut connection).await;
-        }
-    }
-
-    fn record_registered_physical_close(&self, holder: &DruidConnectionHolder) {
-        if self
-            .stats_collector
-            .connection_stat()
-            .remove_entry(holder.connection_id())
-        {
-            let stat = self.stats_collector.connection_stat();
-            stat.increment_connection_close_count();
-            stat.after_close(holder.physical_age());
+            let filter_chain = self.filter_chain.read().clone();
+            let result = match filter_chain {
+                Some(filter_chain) if !filter_chain.is_empty() => {
+                    filter_chain
+                        .physical_connection_close(
+                            self.factory.as_ref(),
+                            &mut connection,
+                            connection_id,
+                            physical_age,
+                        )
+                        .await
+                }
+                _ => self.factory.close(&mut connection).await,
+            };
+            self.stats_collector
+                .connection_stat()
+                .remove_entry(connection_id);
+            if let Err(error) = result {
+                tracing::warn!(
+                    %error,
+                    connection_id,
+                    "close physical connection immediately failed"
+                );
+            }
         }
     }
 

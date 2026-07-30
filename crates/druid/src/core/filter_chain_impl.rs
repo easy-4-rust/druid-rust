@@ -7,11 +7,12 @@ use super::filter::{
     ExecContext, StatementEvent, StatementEventContext,
 };
 use super::{
-    JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject,
-    JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl,
-    PhysicalConnection, PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet,
-    PhysicalStatement, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
-    ResultSetMetaData, ResultSetOpenContext, ResultSetStatement, SqlWarning, Value,
+    DruidPooledConnection, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream,
+    JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap,
+    JdbcUrl, PhysicalConnection, PhysicalConnectionFactory, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement, PoolState, ResultSetFilter,
+    ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext,
+    ResultSetStatement, SqlWarning, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -402,6 +403,168 @@ pub struct FilterChainImpl {
     filter_class_names: Vec<String>,
 }
 
+/// 数据源获取链末端协议。
+///
+/// 这是 Rust 为避免 core 反向依赖具体 `DruidPool` 引入的支撑协议，对应 Java
+/// `FilterChainImpl` 持有的 `DruidDataSource` 引用，不形成额外迁移对象。
+#[async_trait::async_trait]
+pub trait DataSourceConnectionProvider: Send + Sync {
+    /// 返回数据源名称，供 Filter 观察宿主身份。
+    fn data_source_name(&self) -> &str;
+
+    /// 返回当前数据源状态快照。
+    fn data_source_state(&self) -> PoolState;
+
+    /// 末端直接获取，不再次进入 dataSource_getConnection 链。
+    async fn get_connection_direct_for_filter(
+        &self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError>;
+}
+
+/// 单次 `dataSource_getConnection` 使用的有位置 around-chain。
+///
+/// Filter 可以继续、修改 maxWait、短路返回连接或抛错；只有遍历完所有 Filter
+/// 才调用 provider 的 direct 入口。
+pub struct DataSourceGetConnectionFilterChain<'a> {
+    filters: &'a [Arc<dyn BeforeFilter>],
+    position: usize,
+    provider: &'a dyn DataSourceConnectionProvider,
+}
+
+/// 单次 `dataSource_releaseConnection` 使用的有位置 around-chain。
+///
+/// 末端才调用池化连接的 canonical recycle 状态机。Filter 成功短路时不会
+/// 隐式归还 holder，对齐 Java 自定义 Filter 对连接所有权的责任。
+pub struct DataSourceReleaseConnectionFilterChain<'a> {
+    filters: &'a [Arc<dyn BeforeFilter>],
+    position: usize,
+}
+
+/// 物理连接关闭时提供给 Filter 的不可变身份与寿命。
+///
+/// 这是 Java `ConnectionProxy` 在关闭路径上被 Druid Filter 消费的最小语义
+/// 投影，不模拟 JDBC 对象，也不形成对外驱动标准。
+#[derive(Debug, Clone, Copy)]
+pub struct PhysicalConnectionCloseContext {
+    /// Druid 分配的物理连接 ID。
+    pub connection_id: u64,
+    /// 物理连接从建立成功到本次关闭的存活时间。
+    pub physical_age: Duration,
+}
+
+/// 单次物理连接关闭使用的有位置 around-chain。
+///
+/// Filter 按注册顺序进入；遍历完成后才调用 `PhysicalConnectionFactory#close`。
+/// Filter 可以观察、短路或返回错误，与 Java FilterChain 的所有权规则一致。
+pub struct PhysicalConnectionCloseFilterChain<'a> {
+    filters: &'a [Arc<dyn BeforeFilter>],
+    position: usize,
+    factory: &'a dyn PhysicalConnectionFactory,
+    connection: &'a mut Box<dyn PhysicalConnection>,
+    context: PhysicalConnectionCloseContext,
+}
+
+impl<'a> PhysicalConnectionCloseFilterChain<'a> {
+    fn new(
+        filters: &'a [Arc<dyn BeforeFilter>],
+        factory: &'a dyn PhysicalConnectionFactory,
+        connection: &'a mut Box<dyn PhysicalConnection>,
+        context: PhysicalConnectionCloseContext,
+    ) -> Self {
+        Self {
+            filters,
+            position: 0,
+            factory,
+            connection,
+            context,
+        }
+    }
+
+    /// 返回当前关闭的物理连接身份。
+    #[must_use]
+    pub fn context(&self) -> PhysicalConnectionCloseContext {
+        self.context
+    }
+
+    /// 继续执行 `connection_close` around-chain。
+    pub async fn connection_close(&mut self) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.connection_close(self).await
+        } else {
+            self.factory.close(self.connection).await
+        }
+    }
+}
+
+impl<'a> DataSourceReleaseConnectionFilterChain<'a> {
+    fn new(filters: &'a [Arc<dyn BeforeFilter>]) -> Self {
+        Self {
+            filters,
+            position: 0,
+        }
+    }
+
+    /// 继续执行 `dataSource_releaseConnection` around-chain。
+    pub async fn data_source_recycle(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<(), DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter
+                .data_source_release_connection(self, connection)
+                .await
+        } else {
+            connection.recycle_from_data_source_filter().await
+        }
+    }
+}
+
+impl<'a> DataSourceGetConnectionFilterChain<'a> {
+    fn new(
+        filters: &'a [Arc<dyn BeforeFilter>],
+        provider: &'a dyn DataSourceConnectionProvider,
+    ) -> Self {
+        Self {
+            filters,
+            position: 0,
+            provider,
+        }
+    }
+
+    /// 返回当前数据源名称。
+    #[must_use]
+    pub fn data_source_name(&self) -> &str {
+        self.provider.data_source_name()
+    }
+
+    /// 返回当前数据源状态快照。
+    #[must_use]
+    pub fn data_source_state(&self) -> PoolState {
+        self.provider.data_source_state()
+    }
+
+    /// 继续执行 `dataSource_getConnection` around-chain。
+    pub async fn data_source_get_connection(
+        &mut self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.data_source_get_connection(self, max_wait).await
+        } else {
+            self.provider
+                .get_connection_direct_for_filter(max_wait)
+                .await
+        }
+    }
+}
+
 /// 单次 Connection warning 操作使用的有位置 Filter 调用链。
 ///
 /// 对应 Java：`FilterChainImpl#connection_getWarnings` 与
@@ -564,6 +727,44 @@ impl FilterChainImpl {
             result_set: Vec::new(),
             filter_class_names: Vec::new(),
         }
+    }
+
+    /// 从位置 0 执行一次数据源连接获取 around-chain。
+    pub async fn data_source_get_connection(
+        &self,
+        provider: &dyn DataSourceConnectionProvider,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        DataSourceGetConnectionFilterChain::new(&self.before, provider)
+            .data_source_get_connection(max_wait)
+            .await
+    }
+
+    /// 从位置 0 执行一次数据源连接归还 around-chain。
+    pub async fn data_source_release_connection(
+        &self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<(), DruidError> {
+        DataSourceReleaseConnectionFilterChain::new(&self.before)
+            .data_source_recycle(connection)
+            .await
+    }
+
+    /// 从位置 0 执行一次真实物理连接关闭 around-chain。
+    pub async fn physical_connection_close(
+        &self,
+        factory: &dyn PhysicalConnectionFactory,
+        connection: &mut Box<dyn PhysicalConnection>,
+        connection_id: u64,
+        physical_age: Duration,
+    ) -> Result<(), DruidError> {
+        let context = PhysicalConnectionCloseContext {
+            connection_id,
+            physical_age,
+        };
+        PhysicalConnectionCloseFilterChain::new(&self.before, factory, connection, context)
+            .connection_close()
+            .await
     }
 
     /// 初始化链中每个 Java Filter 实例。

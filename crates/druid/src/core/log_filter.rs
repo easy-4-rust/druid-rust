@@ -3,7 +3,9 @@
 
 use super::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionEventContext,
-    DruidError, ExecContext, ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterChain,
+    DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
+    DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
+    PhysicalConnectionCloseFilterChain, ResultSetFilter, ResultSetFilterChain,
     ResultSetFilterContext, StatementEvent, StatementEventContext,
 };
 use crate::sql::SqlFormatOption;
@@ -564,6 +566,51 @@ impl Default for LogFilter {
 impl BeforeFilter for LogFilter {
     fn name(&self) -> &str {
         "log"
+    }
+
+    async fn data_source_get_connection(
+        &self,
+        chain: &mut DataSourceGetConnectionFilterChain<'_>,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        let connection = chain.data_source_get_connection(max_wait).await?;
+        if self.is_connection_connect_after_log_enabled() && self.is_connection_log_enabled() {
+            let category = self.connection_category();
+            tracing::debug!(
+                category,
+                connection_id = connection.id(),
+                "connection pool-connect"
+            );
+        }
+        Ok(connection)
+    }
+
+    async fn data_source_release_connection(
+        &self,
+        chain: &mut DataSourceReleaseConnectionFilterChain<'_>,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<(), DruidError> {
+        let connection_id = connection.id();
+        chain.data_source_recycle(connection).await?;
+        if self.is_connection_close_after_log_enabled() && self.is_connection_log_enabled() {
+            let category = self.connection_category();
+            tracing::debug!(category, connection_id, "connection pool-recycle");
+        }
+        Ok(())
+    }
+
+    async fn connection_close(
+        &self,
+        chain: &mut PhysicalConnectionCloseFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        let connection_id = chain.context().connection_id;
+        // Java LogFilter 先继续 FilterChain，只有驱动关闭成功才输出 closed。
+        chain.connection_close().await?;
+        if self.is_connection_close_after_log_enabled() && self.is_connection_log_enabled() {
+            let category = self.connection_category();
+            tracing::debug!(category, connection_id, "connection closed");
+        }
+        Ok(())
     }
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {

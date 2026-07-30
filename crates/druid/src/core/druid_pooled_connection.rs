@@ -394,6 +394,20 @@ impl DruidPooledConnection {
         self.id
     }
 
+    /// 重置池化连接持有时间起点。
+    ///
+    /// 对应 Java：`DruidPooledConnection#setConnectedTimeNano()`，由
+    /// `StatFilter#dataSource_getConnection` 在下游成功返回后调用。
+    pub fn set_connected_time_nano(&mut self) {
+        self.borrowed_at = Instant::now();
+    }
+
+    /// 返回从 StatFilter 记录的连接获取时刻起经过的时间。
+    #[must_use]
+    pub fn connection_hold_duration(&self) -> Duration {
+        self.borrowed_at.elapsed()
+    }
+
     /// 返回 Connection proxy attribute 数量。
     #[must_use]
     pub fn attributes_size(&self) -> usize {
@@ -1293,9 +1307,6 @@ impl DruidPooledConnection {
         }
         self.lease_active.store(false, Ordering::Release);
         self.recycled = true;
-        if let Some(stats) = self.stats_collector.as_ref() {
-            stats.record_connection_hold(self.borrowed_at.elapsed());
-        }
         if let (Some(holder), Some(return_connection)) =
             (self.holder.take(), self.return_connection.take())
         {
@@ -1444,6 +1455,21 @@ impl DruidPooledConnection {
         }
 
         ConnectionRecycleDisposition::Reusable
+    }
+
+    /// `dataSource_releaseConnection` around-chain 的末端回收动作。
+    ///
+    /// 该方法不再次进入 Filter，避免递归；回收错误按 Java
+    /// `DruidDataSource#recycle` 规则折叠为 discard disposition。
+    pub(crate) async fn recycle_from_data_source_filter(&mut self) -> Result<(), DruidError> {
+        if self.recycled {
+            return Ok(());
+        }
+        let disposition = self.prepare_for_recycle().await;
+        self.recycle_once(disposition);
+        self.close_count = self.close_count.saturating_add(1);
+        self.end_transaction_info();
+        Ok(())
     }
 
     async fn discard_for_recycle_error(
@@ -2542,17 +2568,28 @@ impl PhysicalConnection for DruidPooledConnection {
         }
 
         self.notify_connection_closed();
-        self.before_connection_event(&ConnectionEvent::Close)
-            .await?;
         let filter_chain = self.filter_chain.clone();
-        let disposition = self.prepare_for_recycle().await;
-        self.recycle_once(disposition);
-        self.close_count = self.close_count.saturating_add(1);
-        self.end_transaction_info();
-        if let Some(filter_chain) = filter_chain {
-            filter_chain
-                .after_connection_close_with_identity(self.id)
-                .await?;
+        let release_result = match filter_chain {
+            Some(filter_chain) if !filter_chain.is_empty() => {
+                filter_chain.data_source_release_connection(self).await
+            }
+            _ => self.recycle_from_data_source_filter().await,
+        };
+        if let Err(error) = release_result {
+            if !self.recycled {
+                // Java 在 Filter 到达 recycle 末端前报错时不会设置 disable；
+                // 下一次 close 会重新通知 ConnectionEventListener 并重试整条链。
+                self.connection_closed_notified = false;
+            }
+            return Err(error);
+        }
+        if !self.recycled {
+            // Java Filter 成功短路后 close 仍设置 disable=true，但 holder 不会
+            // 被数据源回收。标记逻辑租约关闭并丢弃 return callback，保留相同
+            // active-count 泄漏责任，不由 Drop 悄悄修复自定义 Filter。
+            self.lease_active.store(false, Ordering::Release);
+            self.recycled = true;
+            self.return_connection.take();
         }
         Ok(())
     }

@@ -4,8 +4,10 @@
 
 use super::{StatFilterContext, StatsCollector};
 use crate::core::{
-    AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
-    ExecContext, ExecOperation, ExecResult, JdbcObject, PreparedInputParameter, ResultSetFilter,
+    AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent,
+    DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
+    DruidPooledConnection, ExecContext, ExecOperation, ExecResult, JdbcObject,
+    PhysicalConnectionCloseFilterChain, PreparedInputParameter, ResultSetFilter,
     ResultSetFilterChain, ResultSetFilterContext, Value,
 };
 use parking_lot::RwLock;
@@ -208,6 +210,44 @@ impl StatFilter {
 impl BeforeFilter for StatFilter {
     fn name(&self) -> &str {
         "stat"
+    }
+
+    async fn data_source_get_connection(
+        &self,
+        chain: &mut DataSourceGetConnectionFilterChain<'_>,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        let mut connection = chain.data_source_get_connection(max_wait).await?;
+        connection.set_connected_time_nano();
+        StatFilterContext::global().pool_connection_open()?;
+        Ok(connection)
+    }
+
+    async fn data_source_release_connection(
+        &self,
+        chain: &mut DataSourceReleaseConnectionFilterChain<'_>,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<(), DruidError> {
+        chain.data_source_recycle(connection).await?;
+        let elapsed = connection.connection_hold_duration();
+        self.collector.record_connection_hold(elapsed);
+        let nanos = i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX);
+        StatFilterContext::global().pool_connection_close(nanos)
+    }
+
+    async fn connection_close(
+        &self,
+        chain: &mut PhysicalConnectionCloseFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        let context = chain.context();
+        let connection_stat = self.collector.connection_stat();
+        // Java StatFilter 在进入下游关闭前增加 closeCount，并先从连接表移除；
+        // 即使驱动 close 随后失败，这两个可观察动作也不会回滚。
+        connection_stat.increment_connection_close_count();
+        if connection_stat.remove_entry(context.connection_id) {
+            connection_stat.after_close(context.physical_age);
+        }
+        chain.connection_close().await
     }
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {

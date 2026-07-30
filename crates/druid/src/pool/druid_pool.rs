@@ -10,12 +10,13 @@ use super::pool_inner::PoolInner;
 use super::pool_validation_factory::PoolValidationFactory;
 use crate::core::fatal_error_handler::FatalErrorHandler;
 use crate::core::{
-    Db2ExceptionSorter, DruidConnectionHolder, DruidError, DruidPooledConnection, ExceptionSorter,
-    FilterChain, InformixExceptionSorter, MockExceptionSorter, MsSqlValidConnectionChecker,
-    MySqlExceptionSorter, MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter,
-    OceanBaseValidConnectionChecker, OracleExceptionSorter, OracleValidConnectionChecker,
-    PgExceptionSorter, PgValidConnectionChecker, PhoenixExceptionSorter, PhysicalConnectionFactory,
-    PoolState, SybaseExceptionSorter, ValidConnectionChecker,
+    DataSourceConnectionProvider, Db2ExceptionSorter, DruidConnectionHolder, DruidError,
+    DruidPooledConnection, ExceptionSorter, FilterChain, InformixExceptionSorter,
+    MockExceptionSorter, MsSqlValidConnectionChecker, MySqlExceptionSorter,
+    MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker,
+    OracleExceptionSorter, OracleValidConnectionChecker, PgExceptionSorter,
+    PgValidConnectionChecker, PhoenixExceptionSorter, PhysicalConnectionFactory, PoolState,
+    SybaseExceptionSorter, ValidConnectionChecker,
 };
 use crate::sql::WallProvider;
 use crate::stats::{DruidDataSourceStatValue, StatsCollector};
@@ -199,6 +200,7 @@ impl DruidPool {
             config,
             Arc::clone(&stats_collector),
         ));
+        inner.install_filter_chain(filter_chain.clone());
         let (close_sender, close_receiver) = tokio::sync::mpsc::unbounded_channel();
         inner.install_close_sender(close_sender);
         let (create_sender, create_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -215,7 +217,7 @@ impl DruidPool {
             name,
             driver_name,
             inner: Arc::clone(&inner),
-            filter_chain,
+            filter_chain: filter_chain.clone(),
             exception_sorter,
             filters_initialized: AtomicBool::new(false),
             initialized: AtomicBool::new(false),
@@ -233,6 +235,8 @@ impl DruidPool {
             create_worker_task: parking_lot::Mutex::new(None),
             close_worker: parking_lot::Mutex::new(Some(ConnectionCloseWorker::new(
                 close_factory,
+                filter_chain.clone(),
+                Arc::clone(&stats_collector),
                 close_receiver,
             ))),
             close_worker_task: parking_lot::Mutex::new(None),
@@ -303,8 +307,45 @@ impl DruidPool {
     }
 
     pub async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        self.get_with_timeout(self.inner.config.acquire_timeout)
+        self.get_connection().await
+    }
+
+    /// 获取池化连接。
+    ///
+    /// 对应 Java：`DruidDataSource#getConnection()`。保留 `get()` 作为 Rust
+    /// `Pool` 习惯入口，但 canonical Java 迁移名称不能缺失。
+    pub async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
+        self.get_connection_with_max_wait(self.inner.config.acquire_timeout)
             .await
+    }
+
+    /// 使用本次 maxWait 获取池化连接。
+    ///
+    /// 对应 Java：`DruidDataSource#getConnection(long)`。
+    pub async fn get_connection_with_max_wait(
+        &self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        match &self.filter_chain {
+            Some(filter_chain) if !filter_chain.is_empty() => {
+                filter_chain
+                    .data_source_get_connection(self, max_wait)
+                    .await
+            }
+            _ => self.get_connection_direct(max_wait).await,
+        }
+    }
+
+    /// 绕过数据源获取 Filter，直接进入 native pool 状态机。
+    ///
+    /// 对应 Java：`DruidDataSource#getConnectionDirect(long)`。物理驱动建连
+    /// Filter 仍在 PoolInner 内执行；绕过的只是 dataSource_getConnection
+    /// 这一外层 hook。
+    pub async fn get_connection_direct(
+        &self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        self.get_with_timeout(max_wait).await
     }
 
     /// 幂等初始化数据源并按 `initialSize` 预建连接。
@@ -446,6 +487,8 @@ impl DruidPool {
             self.inner.install_close_sender(close_sender);
             *self.close_worker.lock() = Some(ConnectionCloseWorker::new(
                 Arc::clone(&self.inner.factory),
+                self.filter_chain.clone(),
+                Arc::clone(&self.stats_collector),
                 close_receiver,
             ));
         }
@@ -456,7 +499,7 @@ impl DruidPool {
         &self,
         timeout: Duration,
     ) -> Result<DruidPooledConnection, DruidError> {
-        self.get_with_timeout(timeout).await
+        self.get_connection_with_max_wait(timeout).await
     }
 
     async fn get_with_timeout(
@@ -1438,6 +1481,24 @@ fn remove_abandoned_leases(
     }
     remove_abandoned_count.fetch_add(abandoned_ids.len() as u64, Ordering::Relaxed);
     abandoned_ids.len()
+}
+
+#[async_trait::async_trait]
+impl DataSourceConnectionProvider for DruidPool {
+    fn data_source_name(&self) -> &str {
+        self.name()
+    }
+
+    fn data_source_state(&self) -> PoolState {
+        self.state()
+    }
+
+    async fn get_connection_direct_for_filter(
+        &self,
+        max_wait: Duration,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        self.get_connection_direct(max_wait).await
+    }
 }
 
 #[async_trait::async_trait]
