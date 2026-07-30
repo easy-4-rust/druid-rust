@@ -84,7 +84,7 @@ impl WrapperDataSourceFactory {
             .factory(factory)
             .max_open(max_open)
             .acquire_timeout(acquire_timeout);
-        if let Some(db_type) = JdbcUtils::get_db_type(Some(url), Some(&configured_driver_name)) {
+        if let Some(db_type) = JdbcUtils::infer_db_type(Some(url), Some(&configured_driver_name)) {
             builder = builder.db_type_name(db_type.as_str());
         }
         if let Some(value) = first_usize(
@@ -225,7 +225,7 @@ impl WrapperDataSourceFactory {
                     .factory(Arc::new(SqlxConnectionFactory::new(&sqlx_url)))
                     .max_open(max_open)
                     .acquire_timeout(acquire_timeout);
-                if let Some(db_type) = JdbcUtils::get_db_type(Some(&sqlx_url), Some("sqlx")) {
+                if let Some(db_type) = JdbcUtils::infer_db_type(Some(&sqlx_url), Some("sqlx")) {
                     builder = builder.db_type_name(db_type.as_str());
                 }
                 if let Some(value) = first_usize(

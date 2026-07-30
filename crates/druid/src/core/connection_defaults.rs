@@ -98,6 +98,26 @@ impl ConnectionDefaults {
         connection: &mut dyn PhysicalConnection,
         keep_underlying_transaction_isolation: bool,
     ) -> Result<(), DruidError> {
+        self.reset_state(connection, keep_underlying_transaction_isolation)
+            .await?;
+
+        if connection.capabilities().clear_warnings {
+            connection.clear_warnings().await?;
+        }
+
+        Ok(())
+    }
+
+    /// 恢复连接属性，但暂不清理 warning。
+    ///
+    /// 对应 Java `DruidConnectionHolder#reset()` 中位于 statement trace 清理
+    /// 之前的状态恢复阶段。holder 需要在该阶段之后关闭所有遗留 Statement，
+    /// 再执行 `Connection#clearWarnings()`，因此不能把两个阶段合并。
+    pub(crate) async fn reset_state(
+        &self,
+        connection: &mut dyn PhysicalConnection,
+        keep_underlying_transaction_isolation: bool,
+    ) -> Result<(), DruidError> {
         let capabilities = connection.capabilities();
 
         // 顺序严格对应 Java DruidConnectionHolder#reset。
@@ -120,10 +140,6 @@ impl ConnectionDefaults {
 
         if capabilities.auto_commit && connection.auto_commit() != self.auto_commit {
             connection.set_auto_commit(self.auto_commit).await?;
-        }
-
-        if capabilities.clear_warnings {
-            connection.clear_warnings().await?;
         }
 
         Ok(())

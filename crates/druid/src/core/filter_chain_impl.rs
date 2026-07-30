@@ -3,14 +3,15 @@
 use super::connection::ExecResult;
 use super::error::DruidError;
 use super::filter::{
-    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ExecContext, StatementEvent,
+    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionEventContext,
+    ExecContext, StatementEvent, StatementEventContext,
 };
 use super::{
     JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject,
     JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl,
-    PhysicalConnection, PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement,
-    ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData,
-    ResultSetStatement, SqlWarning, Value,
+    PhysicalConnection, PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet,
+    PhysicalStatement, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
+    ResultSetMetaData, ResultSetOpenContext, ResultSetStatement, SqlWarning, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -411,6 +412,51 @@ pub struct ConnectionWarningFilterChain<'a> {
     physical: &'a mut dyn PhysicalConnection,
 }
 
+/// 单次 `Connection#getMetaData()` 使用的有位置 Filter 调用链。
+///
+/// 两个生命周期分别约束 Filter 注册表和物理连接借用；返回 metadata 只绑定
+/// 物理连接，不能因 FilterChain 临时对象结束而失效或被提升为 `'static`。
+pub struct ConnectionDatabaseMetaDataFilterChain<'filters, 'connection> {
+    filters: &'filters [Arc<dyn BeforeFilter>],
+    position: usize,
+    physical: &'connection mut dyn PhysicalConnection,
+    connection_id: u64,
+}
+
+impl<'filters, 'connection> ConnectionDatabaseMetaDataFilterChain<'filters, 'connection> {
+    fn new(
+        filters: &'filters [Arc<dyn BeforeFilter>],
+        physical: &'connection mut dyn PhysicalConnection,
+        connection_id: u64,
+    ) -> Self {
+        Self {
+            filters,
+            position: 0,
+            physical,
+            connection_id,
+        }
+    }
+
+    /// 返回当前 Druid 连接 ID，供 Wall/Stat 等 Filter 判定。
+    #[must_use]
+    pub const fn connection_id(&self) -> u64 {
+        self.connection_id
+    }
+
+    /// 继续分派 `Connection#getMetaData()`，末端借用物理 metadata。
+    pub fn connection_get_meta_data(
+        mut self,
+    ) -> Result<Box<dyn PhysicalDatabaseMetaData + 'connection>, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.connection_get_meta_data(self)
+        } else {
+            self.physical.database_meta_data()
+        }
+    }
+}
+
 impl<'a> ConnectionWarningFilterChain<'a> {
     fn new(filters: &'a [Arc<dyn BeforeFilter>], physical: &'a mut dyn PhysicalConnection) -> Self {
         Self {
@@ -537,6 +583,23 @@ impl FilterChainImpl {
         Ok(())
     }
 
+    /// 按注册顺序向当前显式 Filter 应用连接属性。
+    ///
+    /// 对应 Java：`DruidDataSource#setConnectProperties` 中逐项调用
+    /// `Filter#configFromProperties`。自动 provider 在 Java 中晚于该阶段追加，
+    /// 因而不会被本方法回溯配置。
+    pub(crate) fn configure_filters(
+        &self,
+        properties: &std::collections::HashMap<String, String>,
+        system_properties: &std::collections::HashMap<String, String>,
+    ) -> Result<(), DruidError> {
+        for filter in &self.before {
+            filter.config_from_properties(properties)?;
+            filter.config_from_system_properties(system_properties)?;
+        }
+        Ok(())
+    }
+
     /// 销毁链中每个 Java Filter 实例。
     ///
     /// 对应 Java：`DruidDataSource#close()` 按注册顺序调用
@@ -634,6 +697,19 @@ impl FilterChainImpl {
     ) -> Result<(), DruidError> {
         for filter in self.result_set.iter().rev() {
             filter.result_set_open_after(context)?;
+        }
+        Ok(())
+    }
+
+    /// 在 ResultSet 代理构造边界执行可变 open-after 链。
+    ///
+    /// 默认桥接只读 hook，保持第三方 `ResultSetFilter` 源码兼容。
+    pub fn result_set_open_after_with_proxy(
+        &self,
+        context: &mut ResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        for filter in self.result_set.iter().rev() {
+            filter.result_set_open_after_with_proxy(context)?;
         }
         Ok(())
     }
@@ -1243,10 +1319,41 @@ impl FilterChainImpl {
     }
 
     pub async fn before_execute(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {
-        for f in &self.before {
-            f.before(ctx).await?;
+        for (index, filter) in self.before.iter().enumerate() {
+            if let Err(error) = filter.before(ctx).await {
+                for completed in self.before[..index].iter().rev() {
+                    if let Err(cleanup_error) = completed.before_execute_error(ctx, &error).await {
+                        tracing::warn!(
+                            %cleanup_error,
+                            "Filter before-error cleanup failed; preserving primary error"
+                        );
+                    }
+                }
+                return Err(error);
+            }
         }
         Ok(())
+    }
+
+    /// 按 Filter 注册顺序展开 PreparedStatement/CallableStatement SQL 改写链。
+    ///
+    /// 每个 Filter 观察前一个 Filter 的输出；最终文本同时进入物理 prepare 与
+    /// `PreparedStatementKey`，避免缓存键和实际驱动语句分裂。
+    pub fn prepare_statement_sql(&self, sql: &str) -> Result<String, DruidError> {
+        let mut current = sql.to_owned();
+        for filter in &self.before {
+            current = filter.prepare_statement_sql(&current)?;
+        }
+        Ok(current)
+    }
+
+    /// 按 Filter 注册顺序展开普通 Statement addBatch SQL 改写链。
+    pub fn statement_add_batch_sql(&self, sql: &str) -> Result<String, DruidError> {
+        let mut current = sql.to_owned();
+        for filter in &self.before {
+            current = filter.statement_add_batch_sql(&current)?;
+        }
+        Ok(current)
     }
 
     /// 在 Statement/PreparedStatement/CallableStatement 创建成功后逆序展开事件。
@@ -1254,24 +1361,81 @@ impl FilterChainImpl {
     /// 对应 Java `FilterEventAdapter` 的三个 create/prepare after 模板：最先
     /// 注册的 Filter 最外层包围调用，因此下游成功后最后收到 after 事件。
     pub async fn after_statement_event(&self, event: &StatementEvent) -> Result<(), DruidError> {
+        self.after_statement_event_with_identity(0, 0, event).await
+    }
+
+    /// 在 Statement 创建成功后携带真实 Proxy 身份逆序展开事件。
+    pub async fn after_statement_event_with_identity(
+        &self,
+        connection_id: u64,
+        statement_id: u64,
+        event: &StatementEvent,
+    ) -> Result<(), DruidError> {
+        let context = StatementEventContext {
+            connection_id,
+            statement_id,
+            event,
+        };
         for filter in self.before.iter().rev() {
-            filter.on_statement_event(event).await?;
+            filter.on_statement_event_context(&context).await?;
+        }
+        Ok(())
+    }
+
+    /// 在同步 Statement 关闭成功后携带真实 Proxy 身份逆序展开事件。
+    pub fn after_statement_close_with_identity(
+        &self,
+        connection_id: u64,
+        statement_id: u64,
+    ) -> Result<(), DruidError> {
+        let event = StatementEvent::Close;
+        let context = StatementEventContext {
+            connection_id,
+            statement_id,
+            event: &event,
+        };
+        for filter in self.before.iter().rev() {
+            filter.on_statement_close_context(&context)?;
         }
         Ok(())
     }
 
     /// 按 Java Filter 注册顺序执行一次 batch 前置链。
     pub async fn before_batch(&self, context: &mut BatchExecContext<'_>) -> Result<(), DruidError> {
-        for filter in &self.before {
-            filter.before_batch(context).await?;
+        for (index, filter) in self.before.iter().enumerate() {
+            if let Err(error) = filter.before_batch(context).await {
+                for completed in self.before[..index].iter().rev() {
+                    if let Err(cleanup_error) = completed.before_batch_error(context, &error).await
+                    {
+                        tracing::warn!(
+                            %cleanup_error,
+                            "Filter batch before-error cleanup failed; preserving primary error"
+                        );
+                    }
+                }
+                return Err(error);
+            }
         }
         Ok(())
     }
 
     /// 按注册顺序执行连接事件前置过滤器。
     pub async fn before_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
+        self.before_connection_event_with_identity(0, event).await
+    }
+
+    /// 按注册顺序执行携带真实连接 ID 的前置事件。
+    pub async fn before_connection_event_with_identity(
+        &self,
+        connection_id: u64,
+        event: &ConnectionEvent,
+    ) -> Result<(), DruidError> {
+        let context = ConnectionEventContext {
+            connection_id,
+            event,
+        };
         for filter in &self.before {
-            filter.on_connection_event(event).await?;
+            filter.on_connection_event_context(&context).await?;
         }
         Ok(())
     }
@@ -1294,6 +1458,16 @@ impl FilterChainImpl {
         ConnectionWarningFilterChain::new(&self.before, physical)
             .connection_clear_warnings()
             .await
+    }
+
+    /// 从位置 0 执行一次 `Connection#getMetaData()` around-chain。
+    pub fn connection_database_meta_data<'connection>(
+        &self,
+        physical: &'connection mut dyn PhysicalConnection,
+        connection_id: u64,
+    ) -> Result<Box<dyn PhysicalDatabaseMetaData + 'connection>, DruidError> {
+        ConnectionDatabaseMetaDataFilterChain::new(&self.before, physical, connection_id)
+            .connection_get_meta_data()
     }
 
     /// 从位置 0 执行一次 `Statement#getWarnings()` around-chain。
@@ -1342,8 +1516,16 @@ impl FilterChainImpl {
         result: &Result<ExecResult, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
+        let mut first_error = None;
         for f in self.after.iter().rev() {
-            f.after(ctx, result, elapsed).await?;
+            if let Err(error) = f.after(ctx, result, elapsed).await {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+        if let Some(error) = first_error {
+            return Err(error);
         }
         Ok(())
     }
@@ -1355,8 +1537,16 @@ impl FilterChainImpl {
         result: &Result<Vec<i32>, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
+        let mut first_error = None;
         for filter in self.after.iter().rev() {
-            filter.after_batch(context, result, elapsed).await?;
+            if let Err(error) = filter.after_batch(context, result, elapsed).await {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+        if let Some(error) = first_error {
+            return Err(error);
         }
         Ok(())
     }
@@ -1367,16 +1557,41 @@ impl FilterChainImpl {
         event: &ConnectionEvent,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
+        self.after_connection_event_with_identity(0, event, elapsed)
+            .await
+    }
+
+    /// 按调用栈逆序执行携带真实连接 ID 的物理连接后置事件。
+    pub async fn after_connection_event_with_identity(
+        &self,
+        connection_id: u64,
+        event: &ConnectionEvent,
+        elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        let context = ConnectionEventContext {
+            connection_id,
+            event,
+        };
         for filter in self.after.iter().rev() {
-            filter.after_connection_event(event, elapsed).await?;
+            filter
+                .after_connection_event_context(&context, elapsed)
+                .await?;
         }
         Ok(())
     }
 
     /// 按逆序执行连接关闭后置过滤器。
     pub async fn after_connection_close(&self) -> Result<(), DruidError> {
+        self.after_connection_close_with_identity(0).await
+    }
+
+    /// 按逆序执行携带真实连接 ID 的连接关闭后置过滤器。
+    pub async fn after_connection_close_with_identity(
+        &self,
+        connection_id: u64,
+    ) -> Result<(), DruidError> {
         for filter in self.after.iter().rev() {
-            filter.after_connection_close().await?;
+            filter.after_connection_close_context(connection_id).await?;
         }
         Ok(())
     }

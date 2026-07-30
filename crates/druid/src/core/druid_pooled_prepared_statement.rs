@@ -13,13 +13,17 @@ use super::{
     JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml,
     JdbcStreamLength, JdbcUrl, PhysicalResultSet, PhysicalStatement, PhysicalStatementOptions,
     PreparedInputParameter, PreparedStatementCacheStats, PreparedStatementHolder,
-    PreparedStatementKey, PreparedStatementPool, Row, SqlWarning, Unwrapped, Value, Wrapper,
+    PreparedStatementKey, PreparedStatementPool, Row, SqlWarning, StatementExecuteType, Unwrapped,
+    Value, Wrapper,
 };
+use crate::stats::StatsCollector;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 struct DruidPooledPreparedStatementState {
     parameters: Vec<Option<PreparedInputParameter>>,
@@ -60,7 +64,7 @@ macro_rules! prepared_value_setter {
     };
 }
 
-struct DruidPooledPreparedStatementShared {
+pub(crate) struct DruidPooledPreparedStatementShared {
     holder: Arc<PreparedStatementHolder>,
     pooled: bool,
     statement_pool: Option<Arc<Mutex<PreparedStatementPool>>>,
@@ -122,7 +126,7 @@ impl DruidPooledPreparedStatementShared {
         Ok(())
     }
 
-    fn finish(&self) {
+    pub(crate) fn finish(&self) {
         if self.restore_statement_defaults().is_err() {
             // Drop 没有可用连接上下文，不能运行 ExceptionSorter；但脏 statement
             // 绝不能重新进入缓存，因此记为异常并走删除分支。
@@ -216,6 +220,12 @@ pub struct DruidPooledPreparedStatementHandle {
 }
 
 impl DruidPooledPreparedStatementHandle {
+    /// 返回继承自 Statement proxy 的 ID。
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.statement_base.id()
+    }
+
     pub(crate) fn physical_statement(&self) -> &dyn super::PhysicalPreparedStatement {
         self.shared.holder.statement().as_ref()
     }
@@ -341,13 +351,28 @@ impl std::fmt::Debug for DruidPooledPreparedStatement {
 }
 
 impl DruidPooledPreparedStatement {
+    /// 返回 holder statement trace 使用的共享内核。
+    pub(crate) fn statement_trace_shared(&self) -> Arc<DruidPooledPreparedStatementShared> {
+        Arc::clone(&self.shared)
+    }
+
+    /// 返回该逻辑 PreparedStatement 的对象身份。
+    pub(crate) fn statement_trace_identity(&self) -> usize {
+        Arc::as_ptr(&self.shared) as usize
+    }
+
     pub(crate) fn new(
         holder: Arc<PreparedStatementHolder>,
         pooled: bool,
         statement_pool: Option<Arc<Mutex<PreparedStatementPool>>>,
         stats: Arc<PreparedStatementCacheStats>,
+        connection_id: u64,
+        statement_id: u64,
+        result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
         lease_active: Arc<AtomicBool>,
         filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Option<Arc<StatsCollector>>,
     ) -> Self {
         let defaults = PhysicalStatementOptions::default();
         let key = holder.key();
@@ -386,8 +411,16 @@ impl DruidPooledPreparedStatement {
         let base_physical: Arc<dyn PhysicalStatement> = Arc::new(
             PreparedStatementPhysicalStatement::new(physical_statement, statement_options),
         );
-        let statement_base =
-            DruidPooledStatement::new(base_physical, lease_active.clone(), filter_chain);
+        let statement_base = DruidPooledStatement::new(
+            base_physical,
+            connection_id,
+            statement_id,
+            result_set_id_seed,
+            metadata_id_seed,
+            lease_active.clone(),
+            filter_chain,
+            stats_collector,
+        );
         let shared = Arc::new(DruidPooledPreparedStatementShared {
             holder,
             pooled,
@@ -442,6 +475,12 @@ impl DruidPooledPreparedStatement {
     /// 身份；结果状态、trace 与关闭级联都由同一对象承载。
     pub fn pooled_statement(&self) -> &DruidPooledStatement {
         &self.statement_base
+    }
+
+    /// 返回继承自 Statement proxy 的 ID。
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.statement_base.id()
     }
 
     /// 返回 ResultSet 类型。对应 Java：`Statement#getResultSetType()`。
@@ -648,6 +687,38 @@ impl DruidPooledPreparedStatement {
                 .get(index)
                 .and_then(Clone::clone)
         })
+    }
+
+    /// 返回 Java `PreparedStatementProxy#getParameters()` 的 0-based 参数视图。
+    ///
+    /// Map 包含从 0 到最高已绑定槽位的所有 key；中间未绑定槽位保留为
+    /// `None`，不能从 Map 中删除后伪装成从未分配。
+    #[must_use]
+    pub fn jdbc_parameters(&self) -> HashMap<usize, Option<PreparedInputParameter>> {
+        self.shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .parameters
+            .iter()
+            .cloned()
+            .enumerate()
+            .collect()
+    }
+
+    /// 返回 Java `PreparedStatementProxy#getParameter(int)` 的 0-based 参数。
+    ///
+    /// Java 对越过 parametersSize 的索引和未绑定槽位都返回 null，Rust 均以
+    /// `None` 表达；setter 的公共入口仍保持 JDBC 1-based 下标。
+    #[must_use]
+    pub fn jdbc_parameter(&self, proxy_index: usize) -> Option<PreparedInputParameter> {
+        self.shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .parameters
+            .get(proxy_index)
+            .and_then(Clone::clone)
     }
 
     /// 执行 `setNull(int, int)`。
@@ -1177,7 +1248,7 @@ impl DruidPooledPreparedStatement {
             }
             None => physical.warnings(),
         };
-        match connection.classify_result(result) {
+        match connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql())) {
             Ok(warning) => Ok(warning),
             Err(error) => {
                 self.record_exception();
@@ -1204,7 +1275,7 @@ impl DruidPooledPreparedStatement {
             }
             None => physical.clear_warnings(),
         };
-        match connection.classify_result(result) {
+        match connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql())) {
             Ok(()) => Ok(()),
             Err(error) => {
                 self.record_exception();
@@ -1258,11 +1329,17 @@ impl DruidPooledPreparedStatement {
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<ExecResult, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::ExecuteUpdate,
+        );
         let statement = self.shared.holder.statement().clone();
+        let execute_start = Instant::now();
         let result = connection
-            .exec_prepared_parameters_with_filters(statement.as_ref(), parameters)
+            .exec_prepared_parameters_with_filters(statement.as_ref(), parameters, Some(self.id()))
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         match &result {
             Ok(execution) => self.statement_base.complete_external_update(execution),
             Err(_) => self.record_exception(),
@@ -1276,11 +1353,17 @@ impl DruidPooledPreparedStatement {
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Vec<Row>, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::ExecuteQuery,
+        );
         let statement = self.shared.holder.statement().clone();
+        let execute_start = Instant::now();
         let result = connection
-            .fetch_prepared_parameters_with_filters(statement.as_ref(), parameters)
+            .fetch_prepared_parameters_with_filters(statement.as_ref(), parameters, Some(self.id()))
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         if let Ok(rows) = &result {
             let mut state = self
                 .shared
@@ -1304,11 +1387,21 @@ impl DruidPooledPreparedStatement {
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<DruidPooledResultSet, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::ExecuteQuery,
+        );
         let statement = self.shared.holder.statement().clone();
+        let execute_start = Instant::now();
         let result = connection
-            .fetch_prepared_parameters_result_set_with_filters(statement.as_ref(), parameters)
+            .fetch_prepared_parameters_result_set_with_filters(
+                statement.as_ref(),
+                parameters,
+                Some(self.id()),
+            )
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         match result {
             Ok(physical) => self.complete_physical_query_result_set(physical),
             Err(error) => {
@@ -1324,16 +1417,23 @@ impl DruidPooledPreparedStatement {
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::Execute,
+        );
         let statement = self.shared.holder.statement().clone();
         let generated_keys = self.shared.holder.key().statement_generated_keys();
+        let execute_start = Instant::now();
         let result = connection
             .execute_prepared_parameters_with_filters(
                 statement.as_ref(),
                 parameters,
                 generated_keys,
+                Some(self.id()),
             )
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         match result {
             Ok(results) => Ok(self.statement_base.complete_external_execute(results)),
             Err(error) => {
@@ -1352,11 +1452,17 @@ impl DruidPooledPreparedStatement {
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::ExecuteUpdate,
+        );
         let statement = self.shared.holder.statement().clone();
+        let execute_start = Instant::now();
         let result = connection
-            .exec_prepared_with_filters(statement.as_ref(), params)
+            .exec_prepared_with_filters(statement.as_ref(), params, Some(self.id()))
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         match &result {
             Ok(execution) => self.statement_base.complete_external_update(execution),
             Err(_) => self.record_exception(),
@@ -1371,11 +1477,17 @@ impl DruidPooledPreparedStatement {
         params: Vec<Value>,
     ) -> Result<Vec<Row>, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::ExecuteQuery,
+        );
         let statement = self.shared.holder.statement().clone();
+        let execute_start = Instant::now();
         let result = connection
-            .fetch_prepared_with_filters(statement.as_ref(), params)
+            .fetch_prepared_with_filters(statement.as_ref(), params, Some(self.id()))
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         if let Ok(rows) = &result {
             let mut state = self
                 .shared
@@ -1403,11 +1515,17 @@ impl DruidPooledPreparedStatement {
         params: Vec<Value>,
     ) -> Result<DruidPooledResultSet, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::ExecuteQuery,
+        );
         let statement = self.shared.holder.statement().clone();
+        let execute_start = Instant::now();
         let result = connection
-            .fetch_prepared_result_set_with_filters(statement.as_ref(), params)
+            .fetch_prepared_result_set_with_filters(statement.as_ref(), params, Some(self.id()))
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         match result {
             Ok(physical) => self.complete_physical_query_result_set(physical),
             Err(error) => {
@@ -1440,12 +1558,23 @@ impl DruidPooledPreparedStatement {
         params: Vec<Value>,
     ) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        self.statement_base.begin_external_execution();
+        self.statement_base.begin_external_execution(
+            self.shared.holder.key().sql(),
+            StatementExecuteType::Execute,
+        );
         let statement = self.shared.holder.statement().clone();
         let generated_keys = self.shared.holder.key().statement_generated_keys();
+        let execute_start = Instant::now();
         let result = connection
-            .execute_prepared_with_filters(statement.as_ref(), params, generated_keys)
+            .execute_prepared_with_filters(
+                statement.as_ref(),
+                params,
+                generated_keys,
+                Some(self.id()),
+            )
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         match result {
             Ok(results) => Ok(self.statement_base.complete_external_execute(results)),
             Err(error) => {
@@ -1462,7 +1591,9 @@ impl DruidPooledPreparedStatement {
     ) -> Result<Option<DruidPooledResultSet>, DruidError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_result_set();
-        if let Err(error) = connection.classify_result(getter) {
+        if let Err(error) =
+            connection.classify_result_with_sql(getter, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1482,7 +1613,9 @@ impl DruidPooledPreparedStatement {
     ) -> Result<i64, DruidError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_update_count();
-        if let Err(error) = connection.classify_result(getter) {
+        if let Err(error) =
+            connection.classify_result_with_sql(getter, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1496,7 +1629,9 @@ impl DruidPooledPreparedStatement {
     ) -> Result<DruidPooledResultSet, DruidError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_generated_keys();
-        if let Err(error) = connection.classify_result(getter) {
+        if let Err(error) =
+            connection.classify_result_with_sql(getter, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1536,7 +1671,9 @@ impl DruidPooledPreparedStatement {
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.shared.holder.statement().add_batch(&params);
-        if let Err(error) = connection.classify_result(result) {
+        if let Err(error) =
+            connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1561,7 +1698,9 @@ impl DruidPooledPreparedStatement {
         self.ensure_open_for(connection)?;
         let params = self.bound_parameters_or_record_error()?;
         let result = self.shared.holder.statement().add_parameter_batch(&params);
-        if let Err(error) = connection.classify_result(result) {
+        if let Err(error) =
+            connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1583,7 +1722,9 @@ impl DruidPooledPreparedStatement {
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.shared.holder.statement().clear_parameters();
-        if let Err(error) = connection.classify_result(result) {
+        if let Err(error) =
+            connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1606,7 +1747,9 @@ impl DruidPooledPreparedStatement {
         }
         self.ensure_open_for(connection)?;
         let result = self.shared.holder.statement().clear_batch();
-        if let Err(error) = connection.classify_result(result) {
+        if let Err(error) =
+            connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1630,6 +1773,8 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
     ) -> Result<Vec<i32>, DruidError> {
         self.ensure_open_for(connection)?;
+        self.statement_base.begin_batch_execution();
+        let execute_start = Instant::now();
         let statement = self.shared.holder.statement().clone();
         let mut batch_parameter_sets = {
             let mut state = self
@@ -1640,15 +1785,22 @@ impl DruidPooledPreparedStatement {
             std::mem::take(&mut state.batch_parameter_sets)
         };
         let result = connection
-            .exec_prepared_batch_with_filters(statement.as_ref(), &mut batch_parameter_sets)
+            .exec_prepared_batch_with_filters(
+                statement.as_ref(),
+                &mut batch_parameter_sets,
+                Some(self.id()),
+            )
             .await;
+        self.statement_base
+            .record_external_elapsed(execute_start.elapsed(), connection);
         self.shared
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .batch_parameter_sets = batch_parameter_sets;
-        if result.is_err() {
-            self.record_exception();
+        match &result {
+            Ok(update_counts) => self.statement_base.complete_external_batch(update_counts),
+            Err(_) => self.record_exception(),
         }
         result
     }
@@ -1726,6 +1878,7 @@ impl DruidPooledPreparedStatement {
         }
 
         self.shared.finish();
+        connection.remove_statement_trace(self.statement_trace_identity());
         Ok(())
     }
 
@@ -1758,7 +1911,9 @@ impl DruidPooledPreparedStatement {
             .holder
             .statement()
             .set_parameter(parameter_index, &parameter);
-        if let Err(error) = connection.classify_result(result) {
+        if let Err(error) =
+            connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }
@@ -1896,7 +2051,9 @@ impl DruidPooledPreparedStatement {
     ) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_more_results(current);
-        if let Err(error) = connection.classify_result(getter) {
+        if let Err(error) =
+            connection.classify_result_with_sql(getter, Some(self.shared.holder.key().sql()))
+        {
             self.record_exception();
             return Err(error);
         }

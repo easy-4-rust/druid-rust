@@ -2,16 +2,56 @@
 //!
 //! 连接池内部状态：空闲队列、活跃计数、等待通知。
 
+use crate::core::fatal_error_handler::FatalErrorHandler;
+use crate::core::Value as JdbcValue;
 use crate::core::{
-    ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError,
+    ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, JavaString,
     PhysicalConnection, PhysicalConnectionFactory, PreparedStatementCacheStats,
+    StatementGeneratedKeys, ValidConnectionCheckerAdapter,
 };
-use std::collections::VecDeque;
+use crate::sql::{DbType, JdbcUtils};
+use crate::stats::{JdbcConnectionStatEntry, StatsCollector};
+use serde_json::{Number as JsonNumber, Value as JsonValue};
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
+
+/// `DruidAbstractDataSource` fatal-error 字段的同锁状态。
+///
+/// Java 依赖数据源锁原子更新这些字段；Rust 把它们收拢到同一互斥区，避免多个
+/// 原子字段产生 Java 中不存在的组合快照。计数保留 Java `int` 的 wrapping
+/// 算术。
+#[derive(Default)]
+struct FatalErrorState {
+    on_fatal_error: bool,
+    fatal_error_count: i32,
+    fatal_error_count_last_shrink: i32,
+    last_fatal_error_at: Option<Instant>,
+    last_fatal_error_time_millis: u64,
+    last_fatal_error_sql: Option<JavaString>,
+    last_fatal_error: Option<DruidError>,
+}
+
+/// 单次 shrink 开始时取得的 fatal-error 快照。
+struct FatalShrinkSnapshot {
+    on_fatal_error: bool,
+    fatal_error_increment: i32,
+    last_fatal_error_at: Option<Instant>,
+}
+
+/// Java `createError/lastCreateError/failContinuous` 的同锁快照。
+#[derive(Default)]
+struct CreateFailureState {
+    create_started_at: Option<Instant>,
+    create_error: Option<DruidError>,
+    last_create_error: Option<DruidError>,
+    last_create_error_time_millis: u64,
+    fail_continuous: bool,
+    fail_continuous_time_millis: u64,
+}
 
 /// 连接池内部状态。
 pub struct PoolInner {
@@ -20,22 +60,41 @@ pub struct PoolInner {
     pub(crate) idle: parking_lot::Mutex<VecDeque<DruidConnectionHolder>>,
     pub(crate) notify: Notify,
     pub(crate) active_count: AtomicUsize,
+    pub(crate) active_peak: AtomicUsize,
+    pub(crate) active_peak_time_millis: AtomicU64,
     pub(crate) wait_count: AtomicUsize,
+    /// 正在执行物理 factory 创建的任务数，用于 close/restart 排空旧代次。
+    pub(crate) creating_count: AtomicUsize,
+    creating_idle: Notify,
     pub(crate) total_count: AtomicUsize,
     pub(crate) next_id: AtomicU64,
+    pub(crate) user_password_version: AtomicU64,
+    /// 每次 restart 递增，用于隔离关闭前已经开始的异步获取/创建任务。
+    pub(crate) lifecycle_generation: AtomicU64,
+    /// Java `DruidDataSource.enable` 的运行期借用门禁。
+    pub(crate) enabled: AtomicBool,
     pub(crate) closed: AtomicBool,
+    fatal_error_state: parking_lot::Mutex<FatalErrorState>,
+    create_failure_state: parking_lot::Mutex<CreateFailureState>,
     // 统计
     pub(crate) create_count: AtomicU64,
     pub(crate) close_count: AtomicU64,
     pub(crate) destroy_count: AtomicU64,
     pub(crate) connect_count: AtomicU64,
     pub(crate) connect_error_count: AtomicU64,
+    pub(crate) physical_connect_error_count: AtomicU64,
+    pub(crate) pooling_peak: AtomicUsize,
+    pub(crate) pooling_peak_time_millis: AtomicU64,
+    pub(crate) not_empty_wait_count: AtomicU64,
+    pub(crate) not_empty_wait_nanos: AtomicU64,
     pub(crate) recycle_count: AtomicU64,
     pub(crate) recycle_error_count: AtomicU64,
     pub(crate) discard_count: AtomicU64,
     pub(crate) keep_alive_check_count: AtomicU64,
     pub(crate) keep_alive_check_error_count: AtomicU64,
     pub(crate) prepared_statement_stats: Arc<PreparedStatementCacheStats>,
+    pub(crate) stats_collector: Arc<StatsCollector>,
+    create_sender: parking_lot::RwLock<Option<UnboundedSender<Option<usize>>>>,
     close_sender: parking_lot::RwLock<Option<UnboundedSender<Option<Box<dyn PhysicalConnection>>>>>,
 }
 
@@ -44,27 +103,54 @@ impl PoolInner {
         factory: Arc<dyn PhysicalConnectionFactory>,
         config: super::config::PoolInnerConfig,
     ) -> Self {
+        Self::new_with_stats(factory, config, Arc::new(StatsCollector::default()))
+    }
+
+    /// 使用数据源共享分层统计创建内部池状态。
+    pub(crate) fn new_with_stats(
+        factory: Arc<dyn PhysicalConnectionFactory>,
+        config: super::config::PoolInnerConfig,
+        stats_collector: Arc<StatsCollector>,
+    ) -> Self {
         Self {
             factory,
             config,
             idle: parking_lot::Mutex::new(VecDeque::new()),
             notify: Notify::new(),
             active_count: AtomicUsize::new(0),
+            active_peak: AtomicUsize::new(0),
+            active_peak_time_millis: AtomicU64::new(0),
             wait_count: AtomicUsize::new(0),
+            creating_count: AtomicUsize::new(0),
+            creating_idle: Notify::new(),
             total_count: AtomicUsize::new(0),
-            next_id: AtomicU64::new(1),
+            // Java `createConnectionId()` 从 10000 执行 incrementAndGet，
+            // 因而首个可观察连接 ID 是 10001。
+            next_id: AtomicU64::new(10_001),
+            user_password_version: AtomicU64::new(0),
+            lifecycle_generation: AtomicU64::new(0),
+            enabled: AtomicBool::new(true),
             closed: AtomicBool::new(false),
+            fatal_error_state: parking_lot::Mutex::new(FatalErrorState::default()),
+            create_failure_state: parking_lot::Mutex::new(CreateFailureState::default()),
             create_count: AtomicU64::new(0),
             close_count: AtomicU64::new(0),
             destroy_count: AtomicU64::new(0),
             connect_count: AtomicU64::new(0),
             connect_error_count: AtomicU64::new(0),
+            physical_connect_error_count: AtomicU64::new(0),
+            pooling_peak: AtomicUsize::new(0),
+            pooling_peak_time_millis: AtomicU64::new(0),
+            not_empty_wait_count: AtomicU64::new(0),
+            not_empty_wait_nanos: AtomicU64::new(0),
             recycle_count: AtomicU64::new(0),
             recycle_error_count: AtomicU64::new(0),
             discard_count: AtomicU64::new(0),
             keep_alive_check_count: AtomicU64::new(0),
             keep_alive_check_error_count: AtomicU64::new(0),
             prepared_statement_stats: Arc::new(PreparedStatementCacheStats::default()),
+            stats_collector,
+            create_sender: parking_lot::RwLock::new(None),
             close_sender: parking_lot::RwLock::new(None),
         }
     }
@@ -77,12 +163,276 @@ impl PoolInner {
         *self.close_sender.write() = Some(sender);
     }
 
+    /// 安装由 canonical `DruidPool` 持有的补池 worker sender。
+    pub(crate) fn install_create_sender(&self, sender: UnboundedSender<Option<usize>>) {
+        *self.create_sender.write() = Some(sender);
+    }
+
     pub fn next_id(&self) -> u64 {
         self.next_id.fetch_add(1, Ordering::Relaxed)
     }
 
+    /// 返回当前数据源凭据版本。
+    pub(crate) fn user_password_version(&self) -> u64 {
+        self.user_password_version.load(Ordering::Acquire)
+    }
+
+    /// 标记外部 factory 的 URL/用户名/密码已经更新，并替换旧版空闲连接。
+    ///
+    /// 对应 Java：动态 `config(Properties)` 更新凭据后递增
+    /// `userPasswordVersion` 并替换 pooling connections。调用方必须先原子更新
+    /// factory 内的凭据，再调用本方法；池只保存版本，不复制密码。
+    pub(crate) async fn credentials_changed(&self) -> Result<u64, DruidError> {
+        let new_version = self.user_password_version.fetch_add(1, Ordering::AcqRel) + 1;
+        let target_total = self.total_count.load(Ordering::Acquire);
+        let stale: Vec<DruidConnectionHolder> = {
+            let mut queue = self.idle.lock();
+            let mut retained = VecDeque::with_capacity(queue.len());
+            let mut stale = Vec::new();
+            while let Some(holder) = queue.pop_front() {
+                if holder.user_password_version() < new_version {
+                    stale.push(holder);
+                } else {
+                    retained.push_back(holder);
+                }
+            }
+            *queue = retained;
+            stale
+        };
+
+        for holder in stale {
+            self.discard_count.fetch_add(1, Ordering::Relaxed);
+            // 同步登记销毁并交给受监管 close worker，避免本 future 在逐个
+            // `await close` 期间被取消后，剩余已脱离队列的 holder 绕过计数。
+            self.destroy_holder(holder);
+        }
+        self.fill(target_total).await?;
+        Ok(new_version)
+    }
+
     pub fn can_grow(&self) -> bool {
         self.total_count.load(Ordering::Acquire) < self.config.max_open
+    }
+
+    /// 按 Java 检查顺序验证数据源是否仍可借用。
+    pub(crate) fn ensure_available(&self) -> Result<(), DruidError> {
+        self.ensure_not_closed()?;
+        if !self.enabled.load(Ordering::Acquire) {
+            return Err(DruidError::DataSourceDisabled);
+        }
+        Ok(())
+    }
+
+    /// 增加 Java `connectErrorCount` 逻辑获取失败计数。
+    ///
+    /// Java 某些锁内分支会先显式递增，再由统一的 `catch(SQLException)` 再递增，
+    /// 因而调用方需要传入精确次数，不能在公共 `get` 出口对所有错误笼统计数。
+    pub(crate) fn record_connect_error(&self, count: u64) {
+        self.connect_error_count.fetch_add(count, Ordering::Relaxed);
+    }
+
+    /// 执行 Java `onFatalErrorMaxActive` 借用门限。
+    pub(crate) fn ensure_fatal_error_available(&self) -> Result<(), DruidError> {
+        let active_count = self.active_count.load(Ordering::Acquire);
+        let max_active = self.config.on_fatal_error_max_active;
+        let state = self.fatal_error_state.lock();
+        if !state.on_fatal_error
+            || max_active <= 0
+            || active_count < usize::try_from(max_active).unwrap_or(usize::MAX)
+        {
+            return Ok(());
+        }
+        Err(DruidError::OnFatalError {
+            active_count,
+            max_active,
+            last_error_time_millis: state.last_fatal_error_time_millis,
+            last_sql: state.last_fatal_error_sql.clone(),
+            cause: state.last_fatal_error.clone().map(Box::new),
+        })
+    }
+
+    /// 返回 Java `isOnFatalError()` 状态。
+    pub(crate) fn is_on_fatal_error(&self) -> bool {
+        self.fatal_error_state.lock().on_fatal_error
+    }
+
+    /// 返回配置的 Java `onFatalErrorMaxActive`。
+    pub(crate) fn on_fatal_error_max_active(&self) -> i32 {
+        self.config.on_fatal_error_max_active
+    }
+
+    /// 返回 Java `isFailContinuous()` 状态。
+    pub(crate) fn is_fail_continuous(&self) -> bool {
+        self.create_failure_state.lock().fail_continuous
+    }
+
+    /// 返回最近一次物理创建错误。
+    pub(crate) fn last_create_error(&self) -> Option<DruidError> {
+        self.create_failure_state.lock().last_create_error.clone()
+    }
+
+    /// 返回最近一次物理创建错误时间。
+    pub(crate) fn last_create_error_time_millis(&self) -> u64 {
+        self.create_failure_state
+            .lock()
+            .last_create_error_time_millis
+    }
+
+    /// 返回当前连续创建失败状态的开始/刷新时间。
+    pub(crate) fn fail_continuous_time_millis(&self) -> u64 {
+        self.create_failure_state.lock().fail_continuous_time_millis
+    }
+
+    /// 构造 Java `GetConnectionTimeoutException` 的完整诊断快照。
+    pub(crate) fn connection_timeout_error(&self, waited: Duration) -> DruidError {
+        let active_count = self.active_count.load(Ordering::Acquire);
+        let creating_count = self.creating_count.load(Ordering::Acquire);
+        let create_failure = self.create_failure_state.lock();
+        let create_elapsed_millis = (creating_count > 0)
+            .then(|| create_failure.create_started_at)
+            .flatten()
+            .map(|started_at| started_at.elapsed())
+            .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+            .filter(|elapsed| *elapsed > 0);
+        let cause = create_failure.create_error.clone().map(Box::new);
+        drop(create_failure);
+        let running_sql = self
+            .stats_collector
+            .sql_merger
+            .all_stats()
+            .into_iter()
+            .filter_map(|stat| {
+                let value = stat.stat_value();
+                (value.running_count > 0).then_some((value.running_count, value.sql))
+            })
+            .collect();
+        DruidError::GetConnectionTimeout {
+            wait_millis: u64::try_from(waited.as_millis()).unwrap_or(u64::MAX),
+            active_count,
+            max_active: self.config.max_open,
+            creating_count,
+            create_elapsed_millis,
+            create_error_count: self.physical_connect_error_count.load(Ordering::Acquire),
+            running_sql,
+            cause,
+        }
+    }
+
+    /// 当 failFast 与连续失败同时成立时构造 Java
+    /// `DataSourceNotAvailableException(createError)` 对应错误。
+    pub(crate) fn fail_fast_error(&self) -> Option<DruidError> {
+        let state = self.create_failure_state.lock();
+        (self.config.fail_fast && state.fail_continuous).then(|| {
+            DruidError::DataSourceNotAvailable {
+                cause: state.create_error.clone().map(Box::new),
+            }
+        })
+    }
+
+    /// 更新 Java `failContinuous` 及其时间。
+    pub(crate) fn set_fail_continuous(&self, fail: bool) {
+        let mut state = self.create_failure_state.lock();
+        state.fail_continuous_time_millis = if fail { Self::now_millis() } else { 0 };
+        if state.fail_continuous == fail {
+            return;
+        }
+        state.fail_continuous = fail;
+        tracing::info!(
+            fail_continuous = fail,
+            "datasource physical create continuity changed"
+        );
+        if fail && self.config.fail_fast {
+            self.notify.notify_waiters();
+        }
+    }
+
+    fn record_create_error(&self, error: &DruidError) {
+        let mut state = self.create_failure_state.lock();
+        let now = Self::now_millis();
+        state.create_error = Some(error.clone());
+        state.last_create_error = Some(error.clone());
+        state.last_create_error_time_millis = now;
+    }
+
+    fn record_create_success(&self) {
+        {
+            let mut state = self.create_failure_state.lock();
+            state.create_error = None;
+        }
+        self.set_fail_continuous(false);
+    }
+
+    fn clear_on_fatal_error(&self) {
+        let mut state = self.fatal_error_state.lock();
+        if state.on_fatal_error {
+            state.on_fatal_error = false;
+        }
+    }
+
+    fn fatal_shrink_snapshot(&self) -> FatalShrinkSnapshot {
+        let mut state = self.fatal_error_state.lock();
+        let fatal_error_increment = state
+            .fatal_error_count
+            .wrapping_sub(state.fatal_error_count_last_shrink);
+        state.fatal_error_count_last_shrink = state.fatal_error_count;
+        FatalShrinkSnapshot {
+            on_fatal_error: state.on_fatal_error,
+            fatal_error_increment,
+            last_fatal_error_at: state.last_fatal_error_at,
+        }
+    }
+
+    /// 验证数据源尚未关闭，但不检查运行期借用开关。
+    ///
+    /// Java `init/fill/creator` 在 `enable=false` 时仍可维护物理池；enable 只在
+    /// get/recycle 边界生效，因此这些路径不能复用完整借用门禁。
+    pub(crate) fn ensure_not_closed(&self) -> Result<(), DruidError> {
+        if self.closed.load(Ordering::Acquire) {
+            Err(DruidError::PoolClosed)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 返回运行期 enable 状态。
+    pub(crate) fn is_enabled(&self) -> bool {
+        self.enabled.load(Ordering::Acquire)
+    }
+
+    /// 返回数据源是否已经关闭。
+    pub(crate) fn is_closed(&self) -> bool {
+        self.closed.load(Ordering::Acquire)
+    }
+
+    /// 修改运行期 enable 状态并唤醒所有等待者重新检查门禁。
+    pub(crate) fn set_enabled(&self, enabled: bool) {
+        self.enabled.store(enabled, Ordering::Release);
+        if !enabled {
+            self.notify.notify_waiters();
+        }
+    }
+
+    /// 返回当前生命周期代次。
+    pub(crate) fn lifecycle_generation(&self) -> u64 {
+        self.lifecycle_generation.load(Ordering::Acquire)
+    }
+
+    /// 使旧代次的异步获取、创建和等待任务失效。
+    pub(crate) fn advance_lifecycle_generation(&self) -> u64 {
+        let generation = self.lifecycle_generation.fetch_add(1, Ordering::AcqRel) + 1;
+        self.notify.notify_waiters();
+        generation
+    }
+
+    /// 为 Java `restart()` 恢复尚未初始化的数据源状态。
+    ///
+    /// 调用方必须已经持有生命周期锁、完成旧 worker 的排空，并确认没有活动连接。
+    pub(crate) fn prepare_restart(&self) {
+        self.closed.store(false, Ordering::Release);
+        self.enabled.store(true, Ordering::Release);
+        // restart 的 activeCount 门禁保证此处没有可归还的 holder。唤醒等待者，
+        // 使旧代次任务立即观察 generation 变化。
+        self.notify.notify_waiters();
     }
 
     pub fn should_evict(&self) -> bool {
@@ -90,17 +440,94 @@ impl PoolInner {
         idle_count > self.config.min_idle
     }
 
+    /// 记录一次成功借出并维护 Java `activePeak`。
+    pub(crate) fn record_active_acquire(&self) {
+        let active_count = self.active_count.fetch_add(1, Ordering::AcqRel) + 1;
+        self.connect_count.fetch_add(1, Ordering::Relaxed);
+        Self::record_peak(
+            active_count,
+            &self.active_peak,
+            &self.active_peak_time_millis,
+        );
+    }
+
+    /// 记录当前空闲连接数并维护 Java `poolingPeak`。
+    pub(crate) fn record_pooling_count(&self, pooling_count: usize) {
+        Self::record_peak(
+            pooling_count,
+            &self.pooling_peak,
+            &self.pooling_peak_time_millis,
+        );
+    }
+
+    /// 记录一次进入 `notEmpty` 等待队列的实际等待时长。
+    pub(crate) fn record_not_empty_wait(&self, elapsed: Duration) {
+        self.not_empty_wait_count.fetch_add(1, Ordering::Relaxed);
+        self.not_empty_wait_nanos.fetch_add(
+            u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
+
+    fn record_peak(value: usize, peak: &AtomicUsize, peak_time_millis: &AtomicU64) {
+        let mut current = peak.load(Ordering::Acquire);
+        while value > current {
+            match peak.compare_exchange_weak(current, value, Ordering::AcqRel, Ordering::Acquire) {
+                Ok(_) => {
+                    peak_time_millis.store(Self::now_millis(), Ordering::Release);
+                    break;
+                }
+                Err(observed) => current = observed,
+            }
+        }
+    }
+
+    fn now_millis() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+            .try_into()
+            .unwrap_or(u64::MAX)
+    }
+
+    /// 原子取得 Java `getStatValueAndReset()` 的池级区间统计。
+    pub(crate) fn stat_snapshot_and_reset(&self) -> PoolStatSnapshot {
+        let pooling_count = self.idle.lock().len();
+        PoolStatSnapshot {
+            active_count: self.active_count.load(Ordering::Acquire),
+            active_peak: self.active_peak.swap(0, Ordering::AcqRel),
+            active_peak_time_millis: self.active_peak_time_millis.swap(0, Ordering::AcqRel),
+            pooling_count,
+            pooling_peak: self.pooling_peak.swap(0, Ordering::AcqRel),
+            pooling_peak_time_millis: self.pooling_peak_time_millis.swap(0, Ordering::AcqRel),
+            connect_count: self.connect_count.swap(0, Ordering::AcqRel),
+            close_count: self.close_count.swap(0, Ordering::AcqRel),
+            wait_thread_count: self.wait_count.load(Ordering::Acquire),
+            not_empty_wait_count: self.not_empty_wait_count.swap(0, Ordering::AcqRel),
+            not_empty_wait_nanos: self.not_empty_wait_nanos.swap(0, Ordering::AcqRel),
+            logic_connect_error_count: self.connect_error_count.swap(0, Ordering::AcqRel),
+            physical_connect_count: self.create_count.swap(0, Ordering::AcqRel),
+            physical_close_count: self.destroy_count.swap(0, Ordering::AcqRel),
+            physical_connect_error_count: self
+                .physical_connect_error_count
+                .swap(0, Ordering::AcqRel),
+            keep_alive_check_count: self.keep_alive_check_count.swap(0, Ordering::AcqRel),
+            pstmt_cache_hit_count: self
+                .prepared_statement_stats
+                .take_cached_prepared_statement_hit_count(),
+            pstmt_cache_miss_count: self
+                .prepared_statement_stats
+                .take_cached_prepared_statement_miss_count(),
+        }
+    }
+
     /// 重置数据源累计统计，保留当前连接数量和缓存占用。
     pub(crate) fn reset_stats(&self) {
-        self.create_count.store(0, Ordering::Release);
-        self.close_count.store(0, Ordering::Release);
-        self.destroy_count.store(0, Ordering::Release);
-        self.connect_count.store(0, Ordering::Release);
-        self.connect_error_count.store(0, Ordering::Release);
+        let _ = self.stat_snapshot_and_reset();
         self.recycle_count.store(0, Ordering::Release);
         self.recycle_error_count.store(0, Ordering::Release);
         self.discard_count.store(0, Ordering::Release);
-        self.keep_alive_check_count.store(0, Ordering::Release);
         self.keep_alive_check_error_count
             .store(0, Ordering::Release);
         self.prepared_statement_stats.reset();
@@ -111,7 +538,11 @@ impl PoolInner {
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), DruidError> {
-        if let Some(checker) = self.config.valid_connection_checker.as_ref() {
+        let result = if connection.is_closed() {
+            Err(DruidError::ValidationFailed(
+                "validateConnection: connection closed".to_owned(),
+            ))
+        } else if let Some(checker) = self.config.valid_connection_checker.as_ref() {
             let valid = checker
                 .is_valid_connection(
                     connection,
@@ -119,21 +550,68 @@ impl PoolInner {
                     self.config.validation_query_timeout,
                 )
                 .await?;
-            return if valid {
+            if valid {
                 Ok(())
             } else {
                 Err(DruidError::ValidationFailed(
                     "ValidConnectionChecker returned false".to_owned(),
                 ))
-            };
+            }
+        } else if let Some(validation_query) = self.config.validation_query.as_deref() {
+            let valid = ValidConnectionCheckerAdapter::exec_valid_query(
+                connection,
+                validation_query,
+                self.config.validation_query_timeout,
+            )
+            .await?;
+            if valid {
+                Ok(())
+            } else {
+                Err(DruidError::ValidationFailed(
+                    "validationQuery didn't return a row".to_owned(),
+                ))
+            }
+        } else {
+            Ok(())
+        };
+        if result.is_ok() {
+            self.clear_on_fatal_error();
         }
-        self.factory.validate(connection).await
+        result
+    }
+
+    /// 执行 Java `testConnectionInternal` 的吞错布尔校验。
+    ///
+    /// 与公开 `validateConnection` 不同，本方法把 checker、验证 SQL、timeout
+    /// 和 driver 的所有错误折叠为 false，供 borrow/return/keepAlive 使用。
+    pub(crate) async fn test_connection_internal(
+        &self,
+        connection: &mut Box<dyn PhysicalConnection>,
+    ) -> bool {
+        self.validate_connection(connection).await.is_ok()
     }
 
     /// 按 Java `initialSize` 预建空闲物理连接。
     pub(crate) async fn fill_initial(&self) -> Result<(), DruidError> {
-        self.fill(self.config.initial_size).await?;
-        Ok(())
+        if self.config.async_init {
+            self.request_refill(self.config.initial_size);
+            return Ok(());
+        }
+
+        loop {
+            match self.fill(self.config.initial_size).await {
+                Ok(_) => return Ok(()),
+                Err(error) if self.config.init_exception_throw || self.is_closed() => {
+                    return Err(error);
+                }
+                Err(error) => {
+                    // Java initExceptionThrow=false 固定 sleep 3000ms 后继续，
+                    // 不复用 creator 的 timeBetweenConnectErrorMillis。
+                    tracing::error!(%error, "init datasource error, retry after 3000ms");
+                    tokio::time::sleep(Duration::from_secs(3)).await;
+                }
+            }
+        }
     }
 
     /// 将池内物理连接总数填充到指定数量，返回本次创建数。
@@ -141,11 +619,39 @@ impl PoolInner {
     /// 对应 Java：`DruidDataSource#fill(int)`。目标会被 `maxActive` 截断；
     /// 已有活跃连接计入总数，新连接只进入空闲队列。
     pub(crate) async fn fill(&self, to_count: usize) -> Result<usize, DruidError> {
+        self.ensure_not_closed()?;
         let target = to_count.min(self.config.max_open);
         let mut created = 0usize;
         while self.total_count.load(Ordering::Acquire) < target {
-            let holder = self.create_connection().await?;
-            self.idle.lock().push_back(holder);
+            let holder = match self.create_connection_to_limit(target).await {
+                Ok(holder) => holder,
+                // 其他并发 fill/borrow 已经占满目标时，与 Java 第二次
+                // isFillable(toCount) 检查一样正常结束，而不是报告池耗尽。
+                Err(DruidError::PoolExhausted) => break,
+                Err(error) => return Err(error),
+            };
+            if holder.user_password_version() < self.user_password_version() {
+                self.discard_count.fetch_add(1, Ordering::Relaxed);
+                self.destroy_holder(holder);
+                continue;
+            }
+            let pooling_count = {
+                let mut idle = self.idle.lock();
+                if self.closed.load(Ordering::Acquire) {
+                    Err(holder)
+                } else {
+                    idle.push_back(holder);
+                    Ok(idle.len())
+                }
+            };
+            let pooling_count = match pooling_count {
+                Ok(pooling_count) => pooling_count,
+                Err(holder) => {
+                    self.destroy_holder(holder);
+                    return Err(DruidError::PoolClosed);
+                }
+            };
+            self.record_pooling_count(pooling_count);
             created += 1;
         }
         if created > 0 {
@@ -156,43 +662,140 @@ impl PoolInner {
 
     /// 创建新连接。
     pub async fn create_connection(&self) -> Result<DruidConnectionHolder, DruidError> {
+        self.create_connection_to_limit(self.config.max_open).await
+    }
+
+    async fn create_connection_to_limit(
+        &self,
+        capacity_limit: usize,
+    ) -> Result<DruidConnectionHolder, DruidError> {
+        let result = self
+            .create_connection_to_limit_internal(capacity_limit)
+            .await;
+        match &result {
+            Ok(_) => self.record_create_success(),
+            Err(DruidError::PoolExhausted | DruidError::PoolClosed) => {}
+            Err(error) => self.record_create_error(error),
+        }
+        result
+    }
+
+    async fn create_connection_to_limit_internal(
+        &self,
+        capacity_limit: usize,
+    ) -> Result<DruidConnectionHolder, DruidError> {
+        self.ensure_not_closed()?;
         let reserved = self
             .total_count
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
-                (current < self.config.max_open).then_some(current + 1)
+                (current < capacity_limit).then_some(current + 1)
             })
             .is_ok();
         if !reserved {
             return Err(DruidError::PoolExhausted);
         }
         let mut reservation = ConnectionSlotReservation::new(&self.total_count);
+        let _creating = CreatingTaskRegistration::new(&self.creating_count, &self.creating_idle);
+        // 必须在调用 factory 之前冻结版本；若凭据在连接建立期间更新，使用旧
+        // 凭据创建出的 holder 会保留旧版本并在借出/归还门禁被淘汰。
+        let user_password_version = self.user_password_version();
 
-        let create_started = Instant::now();
-        match self.factory.create().await {
-            Ok(mut conn) => {
+        let connect_started_at = Instant::now();
+        self.create_failure_state.lock().create_started_at = Some(connect_started_at);
+        self.stats_collector.connection_stat().before_connect();
+        let create_result = if self.config.login_timeout > 0 {
+            match tokio::time::timeout(
+                Duration::from_secs(self.config.login_timeout as u64),
+                self.factory.create_info(),
+            )
+            .await
+            {
+                Ok(result) => result,
+                Err(_) => Err(DruidError::LoginTimeout),
+            }
+        } else {
+            self.factory.create_info().await
+        };
+
+        match create_result {
+            Ok(mut connection_info) => {
+                let connect_elapsed = connect_started_at.elapsed();
+                self.stats_collector
+                    .connection_stat()
+                    .after_connected(connect_elapsed);
                 // Java 在原始驱动连接成功后立即增加 createCount，默认属性初始化失败
                 // 也不回退该计数。
                 self.create_count.fetch_add(1, Ordering::Relaxed);
-                if self.closed.load(Ordering::Acquire) {
-                    let _ = self.factory.close(&mut conn).await;
+                if let Err(error) = self.ensure_not_closed() {
+                    if let Some(connection) = connection_info.physical_connection_box_mut() {
+                        let _ = self.factory.close(connection).await;
+                    }
+                    self.record_unregistered_physical_close(connect_started_at.elapsed());
                     self.destroy_count.fetch_add(1, Ordering::Relaxed);
-                    return Err(DruidError::PoolClosed);
-                }
-
-                if let Err(error) = self.initialize_physical_connection(conn.as_mut()).await {
-                    // 对应 Java createPhysicalConnection() 的异常路径：初始化失败时
-                    // 关闭刚创建的物理连接，但它从未进入池，不增加 destroyCount。
-                    let _ = self.factory.close(&mut conn).await;
-                    self.connect_error_count.fetch_add(1, Ordering::Relaxed);
                     return Err(error);
                 }
 
-                let mut holder = DruidConnectionHolder::with_connection(
-                    conn,
-                    self.next_id(),
-                    create_started.elapsed(),
-                    0,
-                );
+                let initialize_result = match connection_info.physical_connection_box_mut() {
+                    Some(connection) => {
+                        self.initialize_physical_connection(connection.as_mut())
+                            .await
+                    }
+                    None => Err(DruidError::ConnectionDiscarded),
+                };
+                if let Err(error) = initialize_result {
+                    // 对应 Java createPhysicalConnection() 的异常路径：初始化失败时
+                    // 关闭刚创建的物理连接，但它从未进入池，不增加 destroyCount。
+                    if let Some(connection) = connection_info.physical_connection_box_mut() {
+                        let _ = self.factory.close(connection).await;
+                    }
+                    self.record_unregistered_physical_close(connect_started_at.elapsed());
+                    self.physical_connect_error_count
+                        .fetch_add(1, Ordering::Relaxed);
+                    return Err(error);
+                }
+                connection_info.mark_initialized();
+
+                let init_sql_checked = match self
+                    .initialize_sqls_and_variables(&mut connection_info)
+                    .await
+                {
+                    Ok(checked) => checked,
+                    Err(error) => {
+                        if let Some(connection) = connection_info.physical_connection_box_mut() {
+                            let _ = self.factory.close(connection).await;
+                        }
+                        self.record_unregistered_physical_close(connect_started_at.elapsed());
+                        self.physical_connect_error_count
+                            .fetch_add(1, Ordering::Relaxed);
+                        return Err(error);
+                    }
+                };
+
+                let validate_result = if init_sql_checked {
+                    Ok(())
+                } else {
+                    match connection_info.physical_connection_box_mut() {
+                        Some(connection) => self.validate_connection(connection).await,
+                        None => Err(DruidError::ConnectionDiscarded),
+                    }
+                };
+                if let Err(error) = validate_result {
+                    if let Some(connection) = connection_info.physical_connection_box_mut() {
+                        let _ = self.factory.close(connection).await;
+                    }
+                    self.record_unregistered_physical_close(connect_started_at.elapsed());
+                    self.physical_connect_error_count
+                        .fetch_add(1, Ordering::Relaxed);
+                    return Err(error);
+                }
+                connection_info.mark_validated();
+
+                let connection_id = self.next_id();
+                let mut holder = DruidConnectionHolder::with_connection_info(
+                    connection_info,
+                    connection_id,
+                    user_password_version,
+                )?;
                 holder.configure_statement_pool(
                     self.config.pool_prepared_statements,
                     self.config.max_pool_prepared_statements_per_connection,
@@ -217,11 +820,25 @@ impl PoolInner {
                     .any(|candidate| db_type.eq_ignore_ascii_case(candidate))
                 });
                 holder.set_restore_schema_on_recycle(restore_schema);
+                let entry = Arc::new(JdbcConnectionStatEntry::new(
+                    self.stats_collector.name.clone(),
+                    connection_id,
+                ));
+                entry.set_connect_time_millis(Self::now_millis().saturating_sub(
+                    u64::try_from(connect_elapsed.as_millis()).unwrap_or(u64::MAX),
+                ));
+                entry.set_connect_timespan_nanos(
+                    u64::try_from(connect_elapsed.as_nanos()).unwrap_or(u64::MAX),
+                );
+                entry.mark_established();
+                self.stats_collector.connection_stat().register_entry(entry);
                 reservation.commit();
                 Ok(holder)
             }
             Err(e) => {
-                self.connect_error_count.fetch_add(1, Ordering::Relaxed);
+                self.stats_collector.connection_stat().connect_error(&e);
+                self.physical_connect_error_count
+                    .fetch_add(1, Ordering::Relaxed);
                 Err(e)
             }
         }
@@ -263,12 +880,107 @@ impl PoolInner {
         Ok(())
     }
 
+    /// 在 raw connection 上执行初始化 SQL并按 Java 规则采集 MySQL 变量。
+    ///
+    /// 返回值对应 Java `initSqls(...)` 的 `checked`：只要执行过初始化 SQL或
+    /// MySQL variables 查询，创建流程就不再追加 validation query。
+    async fn initialize_sqls_and_variables(
+        &self,
+        connection_info: &mut crate::core::PhysicalConnectionInfo,
+    ) -> Result<bool, DruidError> {
+        let mut variables = self.config.init_variants.then(HashMap::new);
+        let mut global_variables = self.config.init_global_variants.then(HashMap::new);
+        let connection = connection_info
+            .physical_connection_box_mut()
+            .ok_or(DruidError::ConnectionDiscarded)?;
+        let mut checked = false;
+
+        for sql in &self.config.connection_init_sqls {
+            connection
+                .execute(sql, Vec::new(), StatementGeneratedKeys::None)
+                .await?;
+            checked = true;
+        }
+
+        let is_mysql_family = self
+            .config
+            .db_type_name
+            .as_deref()
+            .and_then(DbType::of)
+            .is_some_and(JdbcUtils::is_mysql_db_type);
+        if is_mysql_family {
+            if let Some(values) = variables.as_mut() {
+                let rows = connection.fetch("show variables", Vec::new()).await?;
+                Self::collect_variable_rows(values, rows);
+                checked = true;
+            }
+            if let Some(values) = global_variables.as_mut() {
+                let rows = connection
+                    .fetch("show global variables", Vec::new())
+                    .await?;
+                Self::collect_variable_rows(values, rows);
+                checked = true;
+            }
+        }
+
+        connection_info.set_variables(variables);
+        connection_info.set_global_variables(global_variables);
+        Ok(checked)
+    }
+
+    fn collect_variable_rows(target: &mut HashMap<String, JsonValue>, rows: Vec<crate::core::Row>) {
+        for row in rows {
+            let Some(name) = row.get(0).and_then(Self::variable_name) else {
+                continue;
+            };
+            let value = row.get(1).map_or(JsonValue::Null, Self::jdbc_value_to_json);
+            target.insert(name, value);
+        }
+    }
+
+    fn variable_name(value: &JdbcValue) -> Option<String> {
+        match value {
+            JdbcValue::Null => None,
+            JdbcValue::String(value) => Some(value.clone()),
+            JdbcValue::Bytes(value) => String::from_utf8(value.clone()).ok(),
+            JdbcValue::Bool(value) => Some(value.to_string()),
+            JdbcValue::Int(value) => Some(value.to_string()),
+            JdbcValue::Float(value) => Some(value.to_string()),
+            JdbcValue::Decimal(value) => Some(value.to_string()),
+            JdbcValue::Date(value) => Some(value.to_string()),
+            JdbcValue::Time(value) => Some(value.to_string()),
+            JdbcValue::Timestamp(value) => Some(value.to_string()),
+        }
+    }
+
+    fn jdbc_value_to_json(value: &JdbcValue) -> JsonValue {
+        match value {
+            JdbcValue::Null => JsonValue::Null,
+            JdbcValue::Bool(value) => JsonValue::Bool(*value),
+            JdbcValue::Int(value) => JsonValue::Number((*value).into()),
+            JdbcValue::Float(value) => JsonNumber::from_f64(*value)
+                .map(JsonValue::Number)
+                .unwrap_or_else(|| JsonValue::String(value.to_string())),
+            JdbcValue::Decimal(value) => JsonValue::String(value.to_string()),
+            JdbcValue::Date(value) => JsonValue::String(value.to_string()),
+            JdbcValue::Time(value) => JsonValue::String(value.to_string()),
+            JdbcValue::Timestamp(value) => JsonValue::String(value.to_string()),
+            JdbcValue::String(value) => JsonValue::String(value.clone()),
+            JdbcValue::Bytes(value) => JsonValue::Array(
+                value
+                    .iter()
+                    .map(|byte| JsonValue::Number((*byte).into()))
+                    .collect(),
+            ),
+        }
+    }
+
     /// 归还连接到空闲队列。
     pub fn return_connection(
         &self,
         holder: DruidConnectionHolder,
         disposition: ConnectionRecycleDisposition,
-    ) {
+    ) -> bool {
         // 所有 return 分支结束后再决定是否关闭 worker，保证最后一条
         // connection command 一定排在 shutdown command 之前。
         let _termination = CloseWorkerTerminationGuard { inner: self };
@@ -280,8 +992,7 @@ impl PoolInner {
             .is_ok();
         if !was_active {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
-            self.destroy_holder(holder);
-            return;
+            return self.discard_recycled_holder(holder);
         }
 
         // Java closeCount 统计逻辑池化连接关闭，而不是物理 socket 关闭。
@@ -293,16 +1004,18 @@ impl PoolInner {
         }
         if !holder_was_active || !disposition.is_reusable() {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
-            self.destroy_holder(holder);
-            return;
+            return self.discard_recycled_holder(holder);
         }
 
         let unusable = holder
             .physical_connection()
             .is_none_or(|connection| connection.is_closed() || connection.is_discarded());
-        if self.closed.load(Ordering::Acquire) || unusable || holder.is_discard() {
-            self.destroy_holder(holder);
-            return;
+        if self.closed.load(Ordering::Acquire)
+            || !self.enabled.load(Ordering::Acquire)
+            || unusable
+            || holder.is_discard()
+        {
+            return self.discard_recycled_holder(holder);
         }
 
         let physical_age = holder.physical_age();
@@ -313,10 +1026,14 @@ impl PoolInner {
             .is_some_and(|timeout| !timeout.is_zero() && physical_age > timeout);
         let max_use_count_reached =
             self.config.max_use_count > 0 && holder.use_count() >= self.config.max_use_count as u64;
-        if lifetime_expired || physical_timeout_expired || max_use_count_reached {
+        let credentials_stale = holder.user_password_version() < self.user_password_version();
+        if lifetime_expired
+            || physical_timeout_expired
+            || max_use_count_reached
+            || credentials_stale
+        {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
-            self.destroy_holder(holder);
-            return;
+            return self.discard_recycled_holder(holder);
         }
 
         let returned = {
@@ -327,21 +1044,57 @@ impl PoolInner {
                 Err(holder)
             } else {
                 queue.push_back(holder);
-                Ok(())
+                Ok(queue.len())
             }
         };
 
         // Java 在 putLast 尝试完成后递增 recycleCount，即使池满导致 putLast=false。
         self.recycle_count.fetch_add(1, Ordering::Relaxed);
-        if let Err(holder) = returned {
-            self.destroy_holder(holder);
-        } else {
-            self.notify.notify_one();
+        match returned {
+            Err(holder) => self.discard_recycled_holder(holder),
+            Ok(pooling_count) => {
+                self.record_pooling_count(pooling_count);
+                self.notify.notify_one();
+                false
+            }
+        }
+    }
+
+    fn discard_recycled_holder(&self, holder: DruidConnectionHolder) -> bool {
+        self.destroy_holder(holder);
+        self.request_refill(self.config.min_idle)
+    }
+
+    /// 请求受监管 creator 把 active + pooling 补到目标值。
+    pub(crate) fn request_refill(&self, to_count: usize) -> bool {
+        // Rust waiter 自己承担 Java creator 的直接建连分支；容量释放后即使
+        // minIdle 为零也必须唤醒它重新竞争。boolean 只表示是否额外请求后台补池。
+        self.notify.notify_waiters();
+        if self.closed.load(Ordering::Acquire) || to_count == 0 {
+            return false;
+        }
+        let target = to_count.min(self.config.max_open);
+        if self.total_count.load(Ordering::Acquire) >= target {
+            return false;
+        }
+        let signalled = self
+            .create_sender
+            .read()
+            .clone()
+            .is_some_and(|sender| sender.send(Some(target)).is_ok());
+        signalled
+    }
+
+    /// 请求 creator 在此前补池命令处理完成后退出。
+    pub(crate) fn request_create_worker_shutdown(&self) {
+        if let Some(sender) = self.create_sender.read().clone() {
+            let _ = sender.send(None);
         }
     }
 
     /// 销毁 canonical holder 中的物理连接。
     pub fn destroy_holder(&self, mut holder: DruidConnectionHolder) {
+        self.record_registered_physical_close(&holder);
         holder.mark_discarded();
         holder.clear_statement_cache();
         if let Some(connection) = holder.take_physical_connection() {
@@ -389,12 +1142,31 @@ impl PoolInner {
 
     /// 等待 holder 中的物理连接完成关闭。
     pub async fn destroy_holder_now(&self, mut holder: DruidConnectionHolder) {
+        self.record_registered_physical_close(&holder);
         holder.mark_discarded();
         holder.clear_statement_cache();
         self.record_destroy();
         if let Some(mut connection) = holder.take_physical_connection() {
             let _ = self.factory.close(&mut connection).await;
         }
+    }
+
+    fn record_registered_physical_close(&self, holder: &DruidConnectionHolder) {
+        if self
+            .stats_collector
+            .connection_stat()
+            .remove_entry(holder.connection_id())
+        {
+            let stat = self.stats_collector.connection_stat();
+            stat.increment_connection_close_count();
+            stat.after_close(holder.physical_age());
+        }
+    }
+
+    fn record_unregistered_physical_close(&self, alive: Duration) {
+        let stat = self.stats_collector.connection_stat();
+        stat.increment_connection_close_count();
+        stat.after_close(alive);
     }
 
     /// 按 Java `DruidDataSource#shrink(checkTime, keepAlive)` 驱逐和保活空闲连接。
@@ -406,11 +1178,9 @@ impl PoolInner {
         if self.closed.load(Ordering::Acquire) {
             return;
         }
+        let fatal = self.fatal_shrink_snapshot();
         let (evict_connections, keep_alive_connections) = {
             let mut queue = self.idle.lock();
-            if queue.is_empty() {
-                return;
-            }
 
             let check_count = queue.len().saturating_sub(self.config.min_idle);
             let mut retained = VecDeque::with_capacity(queue.len());
@@ -419,6 +1189,18 @@ impl PoolInner {
             let mut index = 0usize;
 
             while let Some(holder) = queue.pop_front() {
+                let predates_fatal_error = fatal
+                    .last_fatal_error_at
+                    .is_some_and(|fatal_at| holder.created_at < fatal_at);
+                if (fatal.on_fatal_error || fatal.fatal_error_increment > 0) && predates_fatal_error
+                {
+                    // Java 把 fatal 前建立的空闲连接放入 keepAliveConnections，
+                    // 无论调用方 keepAlive 参数是否开启，都必须重新校验。
+                    keep_alive_candidates.push(holder);
+                    index += 1;
+                    continue;
+                }
+
                 if !check_time {
                     if index < check_count {
                         evicted.push(holder);
@@ -494,6 +1276,9 @@ impl PoolInner {
             if keep_alive && self.total_count.load(Ordering::Acquire) < self.config.min_idle {
                 let _ = self.fill(self.config.min_idle).await;
             }
+            if fatal.fatal_error_increment > 0 {
+                self.request_fatal_error_refill();
+            }
             return;
         }
 
@@ -507,7 +1292,7 @@ impl PoolInner {
                 holder.try_transition(ConnectionState::Idle, ConnectionState::Validating);
             let valid = if entered_validation {
                 match holder.physical_connection_box_mut() {
-                    Some(connection) => self.validate_connection(connection).await.is_ok(),
+                    Some(connection) => self.test_connection_internal(connection).await,
                     None => false,
                 }
             } else {
@@ -537,6 +1322,7 @@ impl PoolInner {
                 }
                 returned.append(&mut queue);
                 *queue = returned;
+                self.record_pooling_count(queue.len());
                 self.notify.notify_waiters();
             }
         }
@@ -547,10 +1333,14 @@ impl PoolInner {
         if keep_alive && self.total_count.load(Ordering::Acquire) < self.config.min_idle {
             let _ = self.fill(self.config.min_idle).await;
         }
+        if fatal.fatal_error_increment > 0 {
+            self.request_fatal_error_refill();
+        }
     }
 
     /// 关闭池。
     pub async fn close(&self) {
+        self.enabled.store(false, Ordering::Release);
         self.closed.store(true, Ordering::Relaxed);
         let idle: Vec<DetachedHolder<'_>> = {
             let mut queue = self.idle.lock();
@@ -564,6 +1354,82 @@ impl PoolInner {
         }
         self.notify.notify_waiters();
     }
+
+    /// 等待关闭前已经进入物理 factory 的创建任务完成或取消。
+    ///
+    /// 创建任务自身在观察 closed 后负责关闭尚未注册的物理连接；只有全部退出后，
+    /// close worker 才能安全接收 FIFO shutdown，restart 才能恢复下一代次。
+    pub(crate) async fn wait_for_creators(&self) {
+        loop {
+            let notified = self.creating_idle.notified();
+            if self.creating_count.load(Ordering::Acquire) == 0 {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
+
+impl FatalErrorHandler for PoolInner {
+    fn handle_fatal_error(&self, error: &DruidError, sql: Option<&str>) -> bool {
+        let mut state = self.fatal_error_state.lock();
+        let now = Instant::now();
+        state.last_fatal_error_at = Some(now);
+        state.last_fatal_error_time_millis = Self::now_millis();
+        state.fatal_error_count = state.fatal_error_count.wrapping_add(1);
+        let increment = state
+            .fatal_error_count
+            .wrapping_sub(state.fatal_error_count_last_shrink);
+        if increment > self.config.on_fatal_error_max_active {
+            // Java 主动推进 lastShrink 一次，避免随后 shrink 重复触发同一轮
+            // emptySignal。
+            state.fatal_error_count_last_shrink =
+                state.fatal_error_count_last_shrink.wrapping_add(1);
+            state.on_fatal_error = true;
+        } else {
+            state.on_fatal_error = false;
+        }
+        state.last_fatal_error = Some(error.clone());
+        state.last_fatal_error_sql = sql.map(|sql| {
+            let mut code_units = sql.encode_utf16().collect::<Vec<_>>();
+            if code_units.len() > 1024 {
+                code_units.truncate(1024);
+            }
+            JavaString::from_utf16(code_units)
+        });
+        state.on_fatal_error
+    }
+
+    fn request_fatal_error_refill(&self) {
+        // Java `emptySignal()` 请求一次创建，不受 minIdle 是否为零影响。
+        self.request_refill(1);
+    }
+
+    fn clear_on_fatal_error(&self) {
+        PoolInner::clear_on_fatal_error(self);
+    }
+}
+
+/// Java `DruidDataSource#getStatValueAndReset()` 的池级区间快照。
+pub(crate) struct PoolStatSnapshot {
+    pub(crate) active_count: usize,
+    pub(crate) active_peak: usize,
+    pub(crate) active_peak_time_millis: u64,
+    pub(crate) pooling_count: usize,
+    pub(crate) pooling_peak: usize,
+    pub(crate) pooling_peak_time_millis: u64,
+    pub(crate) connect_count: u64,
+    pub(crate) close_count: u64,
+    pub(crate) wait_thread_count: usize,
+    pub(crate) not_empty_wait_count: u64,
+    pub(crate) not_empty_wait_nanos: u64,
+    pub(crate) logic_connect_error_count: u64,
+    pub(crate) physical_connect_count: u64,
+    pub(crate) physical_close_count: u64,
+    pub(crate) physical_connect_error_count: u64,
+    pub(crate) keep_alive_check_count: u64,
+    pub(crate) pstmt_cache_hit_count: u64,
+    pub(crate) pstmt_cache_miss_count: u64,
 }
 
 /// 物理连接创建期间的容量预留守卫。
@@ -574,6 +1440,30 @@ impl PoolInner {
 struct ConnectionSlotReservation<'a> {
     total_count: &'a AtomicUsize,
     committed: bool,
+}
+
+/// 统计正在进行的物理创建任务，并在最后一个任务退出时唤醒生命周期等待者。
+struct CreatingTaskRegistration<'a> {
+    creating_count: &'a AtomicUsize,
+    creating_idle: &'a Notify,
+}
+
+impl<'a> CreatingTaskRegistration<'a> {
+    fn new(creating_count: &'a AtomicUsize, creating_idle: &'a Notify) -> Self {
+        creating_count.fetch_add(1, Ordering::AcqRel);
+        Self {
+            creating_count,
+            creating_idle,
+        }
+    }
+}
+
+impl Drop for CreatingTaskRegistration<'_> {
+    fn drop(&mut self) {
+        if self.creating_count.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.creating_idle.notify_waiters();
+        }
+    }
 }
 
 impl<'a> ConnectionSlotReservation<'a> {

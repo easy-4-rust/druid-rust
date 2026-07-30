@@ -1746,6 +1746,8 @@ dependencies = [
  "encoding_rs",
  "fastrand",
  "form_urlencoded",
+ "indexmap",
+ "inventory",
  "jiff",
  "moka",
  "parking_lot",

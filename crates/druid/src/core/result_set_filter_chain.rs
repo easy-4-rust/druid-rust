@@ -1505,4 +1505,12 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn context(&self) -> &ResultSetFilterContext {
         self.context
     }
+
+    /// 直接读取当前物理行的 1-based 列值，不重新进入 Filter 链。
+    ///
+    /// 对应 Java：`ResultSetProxy#getResultSetRaw().getObject(columnIndex)`；
+    /// `WallFilter#resultSet_next` 用它向租户回调报告真实列值。
+    pub fn raw_value(&self, column_index: usize) -> Result<Value, DruidError> {
+        self.physical.value(column_index)
+    }
 }

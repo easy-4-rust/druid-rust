@@ -6,8 +6,10 @@
 
 pub mod toasty_connection_adapter;
 pub mod toasty_connection_factory;
+pub mod toasty_database_meta_data;
 pub mod toasty_prepared_statement;
 
 pub use toasty_connection_adapter::ToastyConnectionAdapter;
 pub use toasty_connection_factory::ToastyConnectionFactory;
+pub use toasty_database_meta_data::ToastyDatabaseMetaData;
 pub use toasty_prepared_statement::ToastyPreparedStatement;

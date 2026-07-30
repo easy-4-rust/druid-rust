@@ -28,6 +28,10 @@ impl SqlxConnectionFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for SqlxConnectionFactory {
+    fn connection_url(&self) -> Option<&str> {
+        Some(&self.url)
+    }
+
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         let connection = SqlxConnectionAdapter::connect(&self.url).await?;
         Ok(Box::new(connection))

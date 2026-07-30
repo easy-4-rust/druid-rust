@@ -5,8 +5,8 @@ use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
-    Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, Value,
+    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
+    PreparedStatementKey, Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, Value,
 };
 use futures::StreamExt;
 use std::sync::Arc;
@@ -446,6 +446,15 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             catalog: false,
             schema: false,
         }
+    }
+
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        if self.closed || self.discarded {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        Ok(Box::new(
+            super::rbdc_database_meta_data::RbdcDatabaseMetaData::new(&self.driver_name),
+        ))
     }
 
     fn auto_commit(&self) -> bool {

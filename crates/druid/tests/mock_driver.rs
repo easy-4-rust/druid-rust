@@ -276,7 +276,9 @@ async fn test_before_filter_block_drop() {
 
     let params = vec![];
     let mut ctx = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 0,
+        statement_id: None,
+        sql: "SELECT 1".to_owned(),
         params: &params,
         prepared_parameters: None,
         data_source: "test",
@@ -287,7 +289,7 @@ async fn test_before_filter_block_drop() {
     };
     assert!(filter.before(&mut ctx).await.is_ok());
 
-    ctx.sql = "DROP TABLE users";
+    ctx.sql = "DROP TABLE users".to_owned();
     assert!(filter.before(&mut ctx).await.is_err());
 }
 
@@ -299,7 +301,9 @@ async fn test_after_filter_count() {
     };
     let params = vec![];
     let ctx = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 0,
+        statement_id: None,
+        sql: "SELECT 1".to_owned(),
         params: &params,
         prepared_parameters: None,
         data_source: "test",
@@ -334,7 +338,9 @@ async fn test_filter_chain_before_short_circuit() {
 
     let params = vec![];
     let mut ctx = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 0,
+        statement_id: None,
+        sql: "SELECT 1".to_owned(),
         params: &params,
         prepared_parameters: None,
         data_source: "test",
@@ -345,7 +351,7 @@ async fn test_filter_chain_before_short_circuit() {
     };
     assert!(chain.before_execute(&mut ctx).await.is_ok());
 
-    ctx.sql = "DROP TABLE x";
+    ctx.sql = "DROP TABLE x".to_owned();
     assert!(chain.before_execute(&mut ctx).await.is_err());
 }
 
@@ -359,7 +365,9 @@ async fn test_filter_chain_after_reverse_order() {
 
     let params = vec![];
     let ctx = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 0,
+        statement_id: None,
+        sql: "SELECT 1".to_owned(),
         params: &params,
         prepared_parameters: None,
         data_source: "test",
@@ -389,6 +397,8 @@ async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
     }));
     let statements = vec!["UPDATE a".to_string(), "UPDATE b".to_string()];
     let mut context = BatchExecContext {
+        connection_id: 0,
+        statement_id: None,
         sql: "UPDATE a\n;\nUPDATE b",
         statements: &statements,
         parameter_sets: &[],
@@ -396,6 +406,7 @@ async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
         kind: druid::core::BatchExecKind::Statement,
         data_source: "batch-default",
         start: std::time::Instant::now(),
+        fingerprint: None,
         in_transaction: true,
     };
     chain.before_batch(&mut context).await.unwrap();
@@ -411,6 +422,8 @@ async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
 
     let blocked = vec!["UPDATE a".to_string(), "DROP TABLE b".to_string()];
     let mut blocked_context = BatchExecContext {
+        connection_id: 0,
+        statement_id: None,
         sql: "UPDATE a\n;\nDROP TABLE b",
         statements: &blocked,
         parameter_sets: &[],
@@ -418,6 +431,7 @@ async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
         kind: druid::core::BatchExecKind::Statement,
         data_source: "batch-default",
         start: std::time::Instant::now(),
+        fingerprint: None,
         in_transaction: false,
     };
     assert!(matches!(

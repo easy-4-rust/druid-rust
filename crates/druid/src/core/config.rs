@@ -33,10 +33,16 @@ pub struct PoolConfig {
     pub min_idle: usize,
     /// 初始连接数（对应 initialSize，默认 0）
     pub initial_size: usize,
+    /// 是否异步创建初始连接（对应 asyncInit，默认 false）
+    pub async_init: bool,
+    /// 初始建连失败是否抛错（对应 initExceptionThrow，默认 true）
+    pub init_exception_throw: bool,
 
     // ── 超时 ───────────────────────────────────────────────────
     /// 获取连接超时（对应 maxWait，默认 30s）
     pub acquire_timeout: Duration,
+    /// 池未满时的超时重试次数（对应 notFullTimeoutRetryCount，默认 0）
+    pub not_full_timeout_retry_count: i32,
     /// 连接最大生命周期（对应 maxEvictableIdleTimeMillis，默认 7h）
     pub max_lifetime: Duration,
     /// 空闲驱逐间隔（对应 timeBetweenEvictionRunsMillis，默认 60s）
@@ -99,6 +105,8 @@ pub struct PoolConfig {
     pub break_after_acquire_failure: bool,
     /// 连接错误重试次数（对应 connectionErrorRetryAttempts，默认 1）
     pub connection_error_retry_attempts: usize,
+    /// 致命错误时允许的最大活动连接数（对应 onFatalErrorMaxActive，默认 0）
+    pub on_fatal_error_max_active: i32,
     /// 异步关闭连接（对应 asyncCloseConnectionEnable，默认 false）
     pub async_close_connection: bool,
 
@@ -109,8 +117,6 @@ pub struct PoolConfig {
     // ── 其他 ───────────────────────────────────────────────────
     /// 丢弃连接时记录日志（对应 dupCloseLogEnable，默认 true）
     pub dup_close_log_enable: bool,
-    /// 嵌套池（对应 statLoggerClassName）
-    pub stat_logger_class: Option<String>,
 }
 
 impl Default for PoolConfig {
@@ -125,9 +131,12 @@ impl Default for PoolConfig {
             max_open: 8,
             min_idle: 0,
             initial_size: 0,
+            async_init: false,
+            init_exception_throw: true,
             // Java Druid 的 maxWait 与 phyTimeoutMillis 默认均为 -1（禁用）。
             // 公共兼容配置以 Duration::MAX 表达该状态。
             acquire_timeout: Duration::MAX,
+            not_full_timeout_retry_count: 0,
             max_lifetime: Duration::MAX,
             eviction_interval: Duration::from_secs(60),
             min_evictable_idle: Duration::from_secs(1800),
@@ -152,10 +161,10 @@ impl Default for PoolConfig {
             use_unfair_lock: true,
             break_after_acquire_failure: false,
             connection_error_retry_attempts: 1,
+            on_fatal_error_max_active: 0,
             async_close_connection: false,
             valid_connection_check_class: None,
             dup_close_log_enable: true,
-            stat_logger_class: None,
         }
     }
 }
@@ -202,8 +211,20 @@ impl PoolConfigBuilder {
         self.0.initial_size = v;
         self
     }
+    pub fn async_init(mut self, v: bool) -> Self {
+        self.0.async_init = v;
+        self
+    }
+    pub fn init_exception_throw(mut self, v: bool) -> Self {
+        self.0.init_exception_throw = v;
+        self
+    }
     pub fn acquire_timeout(mut self, v: Duration) -> Self {
         self.0.acquire_timeout = v;
+        self
+    }
+    pub fn not_full_timeout_retry_count(mut self, v: i32) -> Self {
+        self.0.not_full_timeout_retry_count = v;
         self
     }
     pub fn max_lifetime(mut self, v: Duration) -> Self {
@@ -264,6 +285,10 @@ impl PoolConfigBuilder {
     }
     pub fn connection_error_retry_attempts(mut self, v: usize) -> Self {
         self.0.connection_error_retry_attempts = v;
+        self
+    }
+    pub fn on_fatal_error_max_active(mut self, v: i32) -> Self {
+        self.0.on_fatal_error_max_active = v;
         self
     }
     pub fn async_close_connection(mut self, v: bool) -> Self {

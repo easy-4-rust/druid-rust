@@ -27,6 +27,8 @@ fastrand.workspace = true
 form_urlencoded.workspace = true
 moka = { workspace = true, features = ["sync"] }
 jiff.workspace = true
+inventory.workspace = true
+indexmap.workspace = true
 parking_lot.workspace = true
 prometheus.workspace = true
 quick-xml.workspace = true

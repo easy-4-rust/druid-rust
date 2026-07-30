@@ -6,8 +6,8 @@
 
 use super::{
     DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob,
-    JdbcInputStream, JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml,
-    JdbcStreamLength, JdbcUrl, Value,
+    JdbcInputStream, JdbcNClob, JdbcObject, JdbcParameter, JdbcParameterType, JdbcParameterValue,
+    JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcUrl, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -304,5 +304,227 @@ impl PreparedInputParameter {
                 operation: "prepared_object_requires_native_adapter",
             }),
         }
+    }
+}
+
+impl JdbcParameter for PreparedInputParameter {
+    fn value(&self) -> Option<JdbcParameterValue> {
+        let object = |value| Some(JdbcParameterValue::Object(value));
+        match self {
+            Self::RustValue(value) => object(JdbcObject::Scalar(value.clone())),
+            Self::Null { .. } => None,
+            Self::Boolean(value) => object(JdbcObject::Boolean(*value)),
+            Self::Byte(value) => object(JdbcObject::Byte(*value)),
+            Self::Short(value) => object(JdbcObject::Short(*value)),
+            Self::Int(value) => object(JdbcObject::Integer(*value)),
+            Self::Long(value) => object(JdbcObject::Long(*value)),
+            Self::Float(value) => object(JdbcObject::Float(*value)),
+            Self::Double(value) => object(JdbcObject::Double(*value)),
+            Self::BigDecimal(value) => value
+                .clone()
+                .map(JdbcObject::BigDecimal)
+                .map(JdbcParameterValue::Object),
+            Self::String(value) => value
+                .clone()
+                .map(JdbcObject::String)
+                .map(JdbcParameterValue::Object),
+            Self::NString(value) => value
+                .clone()
+                .map(JdbcObject::NString)
+                .map(JdbcParameterValue::Object),
+            Self::Bytes(value) => value
+                .clone()
+                .map(JdbcObject::Bytes)
+                .map(JdbcParameterValue::Object),
+            Self::Date { value, .. } => value.map(JdbcObject::Date).map(JdbcParameterValue::Object),
+            Self::Time { value, .. } => value.map(JdbcObject::Time).map(JdbcParameterValue::Object),
+            Self::Timestamp { value, .. } => value
+                .map(JdbcObject::Timestamp)
+                .map(JdbcParameterValue::Object),
+            Self::AsciiStream { stream, .. }
+            | Self::BinaryStream { stream, .. }
+            | Self::BlobStream { stream, .. } => {
+                stream.clone().map(JdbcParameterValue::InputStream)
+            }
+            Self::UnicodeStream { stream, .. } => {
+                stream.clone().map(JdbcParameterValue::InputStream)
+            }
+            Self::CharacterStream { reader, .. }
+            | Self::NCharacterStream { reader, .. }
+            | Self::ClobReader { reader, .. }
+            | Self::NClobReader { reader, .. } => reader.clone().map(JdbcParameterValue::Reader),
+            Self::Object { value, .. } => value.clone().map(JdbcParameterValue::Object),
+            Self::Ref(value) => value
+                .clone()
+                .map(JdbcObject::Ref)
+                .map(JdbcParameterValue::Object),
+            Self::Blob(value) => value
+                .clone()
+                .map(JdbcObject::Blob)
+                .map(JdbcParameterValue::Object),
+            Self::Clob(value) => value
+                .clone()
+                .map(JdbcObject::Clob)
+                .map(JdbcParameterValue::Object),
+            Self::NClob(value) => value
+                .clone()
+                .map(JdbcObject::NClob)
+                .map(JdbcParameterValue::Object),
+            Self::Array(value) => value
+                .clone()
+                .map(JdbcObject::Array)
+                .map(JdbcParameterValue::Object),
+            Self::Url(value) => value
+                .clone()
+                .map(JdbcObject::Url)
+                .map(JdbcParameterValue::Object),
+            Self::RowId(value) => value
+                .clone()
+                .map(JdbcObject::RowId)
+                .map(JdbcParameterValue::Object),
+            Self::SqlXml(value) => value
+                .clone()
+                .map(JdbcObject::SqlXml)
+                .map(JdbcParameterValue::Object),
+        }
+    }
+
+    fn length(&self) -> i64 {
+        match self {
+            Self::Null { .. }
+            | Self::Int(_)
+            | Self::Long(_)
+            | Self::BigDecimal(_)
+            | Self::String(_) => 0,
+            Self::Date { value, calendar } => {
+                if value.is_none() || matches!(calendar, JdbcCalendarArgument::Unspecified) {
+                    0
+                } else {
+                    -1
+                }
+            }
+            Self::Timestamp { value, calendar } => {
+                if value.is_none() || matches!(calendar, JdbcCalendarArgument::Unspecified) {
+                    0
+                } else {
+                    -1
+                }
+            }
+            Self::Time { value, .. } => {
+                if value.is_none() {
+                    0
+                } else {
+                    -1
+                }
+            }
+            Self::AsciiStream { stream, length }
+            | Self::BinaryStream { stream, length }
+            | Self::BlobStream { stream, length } => {
+                stream.as_ref().map_or(0, |_| stream_length(*length))
+            }
+            Self::UnicodeStream { stream, length } => {
+                stream.as_ref().map_or(0, |_| i64::from(*length))
+            }
+            Self::CharacterStream { reader, length }
+            | Self::NCharacterStream { reader, length }
+            | Self::ClobReader { reader, length }
+            | Self::NClobReader { reader, length } => {
+                reader.as_ref().map_or(0, |_| character_length(*length))
+            }
+            Self::Object { value, .. } => value.as_ref().map_or(0, |_| -1),
+            Self::NString(value) => value.as_ref().map_or(0, |_| -1),
+            Self::Bytes(value) => value.as_ref().map_or(0, |_| -1),
+            Self::Ref(value) => value.as_ref().map_or(0, |_| -1),
+            Self::Blob(value) => value.as_ref().map_or(0, |_| -1),
+            Self::Clob(value) => value.as_ref().map_or(0, |_| -1),
+            Self::NClob(value) => value.as_ref().map_or(0, |_| -1),
+            Self::Array(value) => value.as_ref().map_or(0, |_| -1),
+            Self::Url(value) => value.as_ref().map_or(0, |_| -1),
+            Self::RowId(value) => value.as_ref().map_or(0, |_| -1),
+            Self::SqlXml(value) => value.as_ref().map_or(0, |_| -1),
+            Self::RustValue(_)
+            | Self::Boolean(_)
+            | Self::Byte(_)
+            | Self::Short(_)
+            | Self::Float(_)
+            | Self::Double(_) => -1,
+        }
+    }
+
+    fn calendar(&self) -> Option<super::JdbcCalendar> {
+        match self {
+            Self::Date {
+                value: Some(_),
+                calendar: JdbcCalendarArgument::Specified(calendar),
+            }
+            | Self::Time {
+                value: Some(_),
+                calendar: JdbcCalendarArgument::Specified(calendar),
+            }
+            | Self::Timestamp {
+                value: Some(_),
+                calendar: JdbcCalendarArgument::Specified(calendar),
+            } => calendar.clone(),
+            _ => None,
+        }
+    }
+
+    fn sql_type(&self) -> i32 {
+        match self {
+            Self::RustValue(_) => 1_111,
+            Self::Null { sql_type, .. } => {
+                if *sql_type == -6 {
+                    4
+                } else {
+                    *sql_type
+                }
+            }
+            Self::Boolean(_) => 16,
+            Self::Byte(_) => -6,
+            Self::Short(_) => 5,
+            Self::Int(_) => 4,
+            Self::Long(_) => -5,
+            Self::Float(_) => 6,
+            Self::Double(_) => 8,
+            Self::BigDecimal(_) => 3,
+            Self::String(_) => 12,
+            Self::NString(_) => -9,
+            Self::Bytes(_) => JdbcParameterType::BYTES,
+            Self::Date { .. } => 91,
+            Self::Time { .. } => 92,
+            Self::Timestamp { .. } => 93,
+            Self::AsciiStream { .. } => JdbcParameterType::ASCII_INPUT_STREAM,
+            Self::UnicodeStream { .. } => JdbcParameterType::UNICODE_STREAM,
+            Self::BinaryStream { .. } => JdbcParameterType::BINARY_INPUT_STREAM,
+            Self::CharacterStream { .. } => JdbcParameterType::CHARACTER_INPUT_STREAM,
+            Self::NCharacterStream { .. } => JdbcParameterType::NCHARACTER_INPUT_STREAM,
+            Self::Object {
+                target_sql_type, ..
+            } => target_sql_type.unwrap_or(1_111),
+            Self::Ref(_) => 2_006,
+            Self::Blob(_) | Self::BlobStream { .. } => 2_004,
+            Self::Clob(_) | Self::ClobReader { .. } => 2_005,
+            Self::NClob(_) | Self::NClobReader { .. } => 2_011,
+            Self::Array(_) => 2_003,
+            Self::Url(_) => JdbcParameterType::URL,
+            Self::RowId(_) => -8,
+            Self::SqlXml(_) => 2_009,
+        }
+    }
+}
+
+fn stream_length(length: JdbcStreamLength) -> i64 {
+    match length {
+        JdbcStreamLength::Unspecified => -1,
+        JdbcStreamLength::Int(length) => i64::from(length),
+        JdbcStreamLength::Long(length) => length,
+    }
+}
+
+fn character_length(length: JdbcCharacterLength) -> i64 {
+    match length {
+        JdbcCharacterLength::Unspecified => -1,
+        JdbcCharacterLength::Int(length) => i64::from(length),
+        JdbcCharacterLength::Long(length) => length,
     }
 }

@@ -139,7 +139,9 @@ async fn test_stat_filter_as_after_filter() {
 
     let params = vec![];
     let ctx = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 7,
+        statement_id: Some(20_001),
+        sql: "SELECT 1".to_owned(),
         params: &params,
         prepared_parameters: None,
         data_source: "test",

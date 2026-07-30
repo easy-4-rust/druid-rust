@@ -69,6 +69,14 @@ impl WallSqlStat {
         &self.violations
     }
 
+    /// 返回解析阶段是否发生语法错误。
+    ///
+    /// 对应 Java：`WallSqlStat#isSyntaxError()`。
+    #[must_use]
+    pub const fn is_syntax_error(&self) -> bool {
+        self.syntax_error
+    }
+
     /// 返回该 SQL 涉及的表及操作次数。
     #[must_use]
     pub fn table_stats(&self) -> &HashMap<String, WallSqlTableStat> {

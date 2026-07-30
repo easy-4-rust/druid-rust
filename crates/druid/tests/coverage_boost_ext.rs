@@ -94,7 +94,6 @@ fn test_pool_config_default_values() {
     assert!(!cfg.async_close_connection);
     assert!(cfg.valid_connection_check_class.is_none());
     assert!(cfg.dup_close_log_enable);
-    assert!(cfg.stat_logger_class.is_none());
 }
 
 #[test]

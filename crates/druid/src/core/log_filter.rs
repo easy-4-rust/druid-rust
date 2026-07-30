@@ -2,9 +2,9 @@
 //! 来源文件：`core/src/main/java/com/alibaba/druid/filter/logging/LogFilter.java`。
 
 use super::{
-    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, DruidError, ExecContext,
-    ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
-    StatementEvent,
+    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionEventContext,
+    DruidError, ExecContext, ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterChain,
+    ResultSetFilterContext, StatementEvent, StatementEventContext,
 };
 use crate::sql::SqlFormatOption;
 use parking_lot::RwLock;
@@ -12,18 +12,18 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-/// Java 日志 Filter 家族共享的 tracing 语义实现。
+/// Druid 可观测事件的 `tracing` Filter。
 ///
-/// Java 的 Log4j、Log4j2、SLF4J 和 Commons Logging 子类只负责选择日志后端；
-/// Rust 将后端统一为 `tracing`，但保留四个 logger 名称、各生命周期开关、参数/
-/// 可执行 SQL 开关、错误开关以及 ResultSet 事件开关。当前 Filter 协议尚未携带
+/// Java 的 Log4j、Log4j2、SLF4J 和 Commons Logging 类型不属于迁移目标。
+/// 本对象只迁移 Druid 自身的连接、Statement、ResultSet 事件及其开关，并通过
+/// Rust `tracing` 发出结构化事件。Java logger name 不进入 Rust 公共 API，
+/// 事件分类由原生 category 属性表达。当前 Filter 协议尚未携带
 /// Java proxy id 和所有列值，无法表达的格式细节继续在迁移台账中保持 PARTIAL。
 pub struct LogFilter {
-    backend_name: &'static str,
-    data_source_logger_name: RwLock<String>,
-    connection_logger_name: RwLock<String>,
-    statement_logger_name: RwLock<String>,
-    result_set_logger_name: RwLock<String>,
+    data_source_category: RwLock<String>,
+    connection_category: RwLock<String>,
+    statement_category: RwLock<String>,
+    result_set_category: RwLock<String>,
     connection_connect_before_log_enabled: AtomicBool,
     connection_connect_after_log_enabled: AtomicBool,
     connection_commit_after_log_enabled: AtomicBool,
@@ -58,12 +58,11 @@ impl LogFilter {
     /// 创建 Java 默认配置的 tracing LogFilter。
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            backend_name: "tracing",
-            data_source_logger_name: RwLock::new("druid.sql.DataSource".to_owned()),
-            connection_logger_name: RwLock::new("druid.sql.Connection".to_owned()),
-            statement_logger_name: RwLock::new("druid.sql.Statement".to_owned()),
-            result_set_logger_name: RwLock::new("druid.sql.ResultSet".to_owned()),
+        let filter = Self {
+            data_source_category: RwLock::new("druid.sql.DataSource".to_owned()),
+            connection_category: RwLock::new("druid.sql.Connection".to_owned()),
+            statement_category: RwLock::new("druid.sql.Statement".to_owned()),
+            result_set_category: RwLock::new("druid.sql.ResultSet".to_owned()),
             connection_connect_before_log_enabled: AtomicBool::new(true),
             connection_connect_after_log_enabled: AtomicBool::new(true),
             connection_commit_after_log_enabled: AtomicBool::new(true),
@@ -92,7 +91,23 @@ impl LogFilter {
             result_set_log_error_enabled: AtomicBool::new(true),
             statement_sql_format_option: RwLock::new(SqlFormatOption::new(false, true, false)),
             statement_sql_pretty_format: AtomicBool::new(false),
-        }
+        };
+        // Java LogFilter 构造器先读取 System properties，init 时再由数据源
+        // connection properties 覆盖。Rust 只桥接该对象实际识别的七个键。
+        let system_properties = [
+            "druid.log.conn",
+            "druid.log.stmt",
+            "druid.log.rs",
+            "druid.log.stmt.executableSql",
+            "druid.log.conn.logError",
+            "druid.log.stmt.logError",
+            "druid.log.rs.logError",
+        ]
+        .into_iter()
+        .filter_map(|key| std::env::var(key).ok().map(|value| (key.to_owned(), value)))
+        .collect();
+        filter.config_from_properties(&system_properties);
+        filter
     }
 
     /// 按 Java `configFromProperties` 的精确键和大小写规则更新七个全局开关。
@@ -138,54 +153,48 @@ impl LogFilter {
         flag.load(Ordering::Acquire)
     }
 
-    /// 返回日志后端语义名称。
+    /// 返回 DataSource 结构化事件分类。
     #[must_use]
-    pub const fn backend_name(&self) -> &'static str {
-        self.backend_name
+    pub fn data_source_category(&self) -> String {
+        self.data_source_category.read().clone()
     }
 
-    /// 返回 DataSource logger 名称。
+    /// 设置 DataSource 结构化事件分类。
+    pub fn set_data_source_category(&self, category: impl Into<String>) {
+        *self.data_source_category.write() = category.into();
+    }
+
+    /// 返回 Connection 结构化事件分类。
     #[must_use]
-    pub fn data_source_logger_name(&self) -> String {
-        self.data_source_logger_name.read().clone()
+    pub fn connection_category(&self) -> String {
+        self.connection_category.read().clone()
     }
 
-    /// 设置 DataSource logger 名称。
-    pub fn set_data_source_logger_name(&self, logger_name: impl Into<String>) {
-        *self.data_source_logger_name.write() = logger_name.into();
+    /// 设置 Connection 结构化事件分类。
+    pub fn set_connection_category(&self, category: impl Into<String>) {
+        *self.connection_category.write() = category.into();
     }
 
-    /// 返回 Connection logger 名称。
+    /// 返回 Statement 结构化事件分类。
     #[must_use]
-    pub fn connection_logger_name(&self) -> String {
-        self.connection_logger_name.read().clone()
+    pub fn statement_category(&self) -> String {
+        self.statement_category.read().clone()
     }
 
-    /// 设置 Connection logger 名称。
-    pub fn set_connection_logger_name(&self, logger_name: impl Into<String>) {
-        *self.connection_logger_name.write() = logger_name.into();
+    /// 设置 Statement 结构化事件分类。
+    pub fn set_statement_category(&self, category: impl Into<String>) {
+        *self.statement_category.write() = category.into();
     }
 
-    /// 返回 Statement logger 名称。
+    /// 返回 ResultSet 结构化事件分类。
     #[must_use]
-    pub fn statement_logger_name(&self) -> String {
-        self.statement_logger_name.read().clone()
+    pub fn result_set_category(&self) -> String {
+        self.result_set_category.read().clone()
     }
 
-    /// 设置 Statement logger 名称。
-    pub fn set_statement_logger_name(&self, logger_name: impl Into<String>) {
-        *self.statement_logger_name.write() = logger_name.into();
-    }
-
-    /// 返回 ResultSet logger 名称。
-    #[must_use]
-    pub fn result_set_logger_name(&self) -> String {
-        self.result_set_logger_name.read().clone()
-    }
-
-    /// 设置 ResultSet logger 名称。
-    pub fn set_result_set_logger_name(&self, logger_name: impl Into<String>) {
-        *self.result_set_logger_name.write() = logger_name.into();
+    /// 设置 ResultSet 结构化事件分类。
+    pub fn set_result_set_category(&self, category: impl Into<String>) {
+        *self.result_set_category.write() = category.into();
     }
 
     /// 是否记录 DataSource。
@@ -559,10 +568,11 @@ impl BeforeFilter for LogFilter {
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {
         if self.is_statement_parameter_set_log_enabled() && !context.params.is_empty() {
-            let logger = self.statement_logger_name();
+            let category = self.statement_category();
             tracing::debug!(
-                backend = self.backend_name,
-                logger,
+                category,
+                connection_id = context.connection_id,
+                statement_id = context.statement_id,
                 data_source = context.data_source,
                 parameters = ?context.params,
                 "statement parameters"
@@ -571,14 +581,35 @@ impl BeforeFilter for LogFilter {
         Ok(())
     }
 
+    fn config_from_properties(
+        &self,
+        properties: &HashMap<String, String>,
+    ) -> Result<(), DruidError> {
+        LogFilter::config_from_properties(self, properties);
+        Ok(())
+    }
+
     async fn on_connection_event(&self, event: &ConnectionEvent) -> Result<(), DruidError> {
         if matches!(event, ConnectionEvent::Connect)
             && self.is_connection_connect_before_log_enabled()
         {
-            let logger = self.connection_logger_name();
+            let category = self.connection_category();
+            tracing::debug!(category, "connection connect before");
+        }
+        Ok(())
+    }
+
+    async fn on_connection_event_context(
+        &self,
+        context: &ConnectionEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        if matches!(context.event, ConnectionEvent::Connect)
+            && self.is_connection_connect_before_log_enabled()
+        {
+            let category = self.connection_category();
             tracing::debug!(
-                backend = self.backend_name,
-                logger,
+                category,
+                connection_id = context.connection_id,
                 "connection connect before"
             );
         }
@@ -594,12 +625,47 @@ impl BeforeFilter for LogFilter {
             _ => false,
         };
         if enabled {
-            let logger = self.statement_logger_name();
+            let category = self.statement_category();
+            tracing::debug!(category, ?event, "statement event");
+        }
+        Ok(())
+    }
+
+    async fn on_statement_event_context(
+        &self,
+        context: &StatementEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        let enabled = match context.event {
+            StatementEvent::CreateStatement => self.is_statement_create_after_log_enabled(),
+            StatementEvent::PrepareStatement(_) => self.is_statement_prepare_after_log_enabled(),
+            StatementEvent::PrepareCall(_) => self.is_statement_prepare_call_after_log_enabled(),
+            StatementEvent::Close => self.is_statement_close_after_log_enabled(),
+            _ => false,
+        };
+        if enabled {
+            let category = self.statement_category();
             tracing::debug!(
-                backend = self.backend_name,
-                logger,
-                ?event,
+                category,
+                connection_id = context.connection_id,
+                statement_id = context.statement_id,
+                event = ?context.event,
                 "statement event"
+            );
+        }
+        Ok(())
+    }
+
+    fn on_statement_close_context(
+        &self,
+        context: &StatementEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        if self.is_statement_close_after_log_enabled() {
+            let category = self.statement_category();
+            tracing::debug!(
+                category,
+                connection_id = context.connection_id,
+                statement_id = context.statement_id,
+                "statement closed"
             );
         }
         Ok(())
@@ -618,12 +684,13 @@ impl AfterFilter for LogFilter {
         result: &Result<ExecResult, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
-        let logger = self.statement_logger_name();
+        let category = self.statement_category();
         match result {
             Ok(result) if self.operation_success_enabled(context.operation) => {
                 tracing::debug!(
-                    backend = self.backend_name,
-                    logger,
+                    category,
+                    connection_id = context.connection_id,
+                    statement_id = context.statement_id,
                     data_source = context.data_source,
                     sql = context.sql,
                     parameters = ?context.params,
@@ -637,8 +704,9 @@ impl AfterFilter for LogFilter {
             }
             Err(error) if self.is_statement_log_error_enabled() => {
                 tracing::error!(
-                    backend = self.backend_name,
-                    logger,
+                    category,
+                    connection_id = context.connection_id,
+                    statement_id = context.statement_id,
                     data_source = context.data_source,
                     sql = context.sql,
                     parameters = ?context.params,
@@ -659,12 +727,13 @@ impl AfterFilter for LogFilter {
         result: &Result<Vec<i32>, DruidError>,
         elapsed: Duration,
     ) -> Result<(), DruidError> {
-        let logger = self.statement_logger_name();
+        let category = self.statement_category();
         match result {
             Ok(update_counts) if self.is_statement_execute_batch_after_log_enabled() => {
                 tracing::debug!(
-                    backend = self.backend_name,
-                    logger,
+                    category,
+                    connection_id = context.connection_id,
+                    statement_id = context.statement_id,
                     data_source = context.data_source,
                     sql = context.sql,
                     update_counts = ?update_counts,
@@ -674,8 +743,9 @@ impl AfterFilter for LogFilter {
             }
             Err(error) if self.is_statement_log_error_enabled() => {
                 tracing::error!(
-                    backend = self.backend_name,
-                    logger,
+                    category,
+                    connection_id = context.connection_id,
+                    statement_id = context.statement_id,
                     data_source = context.data_source,
                     sql = context.sql,
                     elapsed_ms = elapsed.as_millis(),
@@ -690,8 +760,16 @@ impl AfterFilter for LogFilter {
 
     async fn after_connection_close(&self) -> Result<(), DruidError> {
         if self.is_connection_close_after_log_enabled() {
-            let logger = self.connection_logger_name();
-            tracing::debug!(backend = self.backend_name, logger, "connection closed");
+            let category = self.connection_category();
+            tracing::debug!(category, "connection closed");
+        }
+        Ok(())
+    }
+
+    async fn after_connection_close_context(&self, connection_id: u64) -> Result<(), DruidError> {
+        if self.is_connection_close_after_log_enabled() {
+            let category = self.connection_category();
+            tracing::debug!(category, connection_id, "connection closed");
         }
         Ok(())
     }
@@ -709,11 +787,35 @@ impl AfterFilter for LogFilter {
             _ => self.is_connection_log_enabled(),
         };
         if enabled {
-            let logger = self.connection_logger_name();
+            let category = self.connection_category();
             tracing::debug!(
-                backend = self.backend_name,
-                logger,
+                category,
                 ?event,
+                elapsed_ms = elapsed.as_millis(),
+                "connection event after"
+            );
+        }
+        Ok(())
+    }
+
+    async fn after_connection_event_context(
+        &self,
+        context: &ConnectionEventContext<'_>,
+        elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        let enabled = match context.event {
+            ConnectionEvent::Connect => self.is_connection_connect_after_log_enabled(),
+            ConnectionEvent::Commit => self.is_connection_commit_after_log_enabled(),
+            ConnectionEvent::Rollback => self.is_connection_rollback_after_log_enabled(),
+            ConnectionEvent::Close => self.is_connection_close_after_log_enabled(),
+            _ => self.is_connection_log_enabled(),
+        };
+        if enabled {
+            let category = self.connection_category();
+            tracing::debug!(
+                category,
+                connection_id = context.connection_id,
+                event = ?context.event,
                 elapsed_ms = elapsed.as_millis(),
                 "connection event after"
             );
@@ -725,10 +827,12 @@ impl AfterFilter for LogFilter {
 impl ResultSetFilter for LogFilter {
     fn result_set_open_after(&self, context: &ResultSetFilterContext) -> Result<(), DruidError> {
         if self.is_result_set_open_after_log_enabled() {
-            let logger = self.result_set_logger_name();
+            let category = self.result_set_category();
             tracing::debug!(
-                backend = self.backend_name,
-                logger,
+                category,
+                connection_id = context.connection_id(),
+                statement_id = context.statement_id(),
+                result_set_id = context.result_set_id(),
                 fetch_row_count = context.fetch_row_count(),
                 "result set open"
             );
@@ -740,12 +844,28 @@ impl ResultSetFilter for LogFilter {
         let more_rows = chain.result_set_next();
         match more_rows {
             Ok(true) if self.is_result_set_next_after_log_enabled() => {
-                let logger = self.result_set_logger_name();
-                tracing::debug!(backend = self.backend_name, logger, "result set next");
+                let category = self.result_set_category();
+                let context = chain.context();
+                tracing::debug!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    fetch_row_count = context.fetch_row_count(),
+                    "result set next"
+                );
             }
             Err(ref error) if self.is_result_set_log_error_enabled() => {
-                let logger = self.result_set_logger_name();
-                tracing::error!(backend = self.backend_name, logger, %error, "result set next error");
+                let category = self.result_set_category();
+                let context = chain.context();
+                tracing::error!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    %error,
+                    "result set next error"
+                );
             }
             _ => {}
         }
@@ -756,12 +876,28 @@ impl ResultSetFilter for LogFilter {
         let result = chain.result_set_close();
         match result {
             Ok(()) if self.is_result_set_close_after_log_enabled() => {
-                let logger = self.result_set_logger_name();
-                tracing::debug!(backend = self.backend_name, logger, "result set closed");
+                let category = self.result_set_category();
+                let context = chain.context();
+                tracing::debug!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    fetch_row_count = context.fetch_row_count(),
+                    "result set closed"
+                );
             }
             Err(ref error) if self.is_result_set_log_error_enabled() => {
-                let logger = self.result_set_logger_name();
-                tracing::error!(backend = self.backend_name, logger, %error, "result set close error");
+                let category = self.result_set_category();
+                let context = chain.context();
+                tracing::error!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    %error,
+                    "result set close error"
+                );
             }
             _ => {}
         }

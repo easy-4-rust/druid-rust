@@ -12,6 +12,11 @@ pub type ExceptionSorterProperties = BTreeMap<String, String>;
 /// `SQLException` 的 error code、SQLState、具体异常类型、消息与 cause 链，
 /// 不能再用 `(error_code, message)` 近似。
 pub trait ExceptionSorter: Send + Sync {
+    /// 返回具体 Rust Sorter 类型名，供管理快照识别实际装配。
+    fn class_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+
     /// 返回异常是否为致命连接异常。
     ///
     /// 参数 `exception` 对应 Java `SQLException e`；返回 `true` 时连接池必须

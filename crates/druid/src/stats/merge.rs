@@ -2,6 +2,11 @@
 //!
 //! SQL 合并统计：把参数化后的 SQL 模板作为 key，聚合执行统计。
 
+use indexmap::IndexMap;
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use super::JdbcSqlStat;
@@ -217,13 +222,19 @@ fn consume_number(bytes: &[u8], mut index: usize) -> usize {
 ///
 /// 对应 Druid Java 的 `DruidStatService` 中的 SQL 合并逻辑。
 pub struct SqlMerger {
-    cache: dashmap::DashMap<u64, std::sync::Arc<JdbcSqlStat>>,
+    cache: RwLock<IndexMap<u64, Arc<JdbcSqlStat>>>,
+    active_sql_stats: RwLock<HashMap<String, u64>>,
+    max_sql_size: AtomicI32,
+    skip_sql_count: AtomicU64,
 }
 
 impl SqlMerger {
     pub fn new() -> Self {
         Self {
-            cache: dashmap::DashMap::new(),
+            cache: RwLock::new(IndexMap::new()),
+            active_sql_stats: RwLock::new(HashMap::new()),
+            max_sql_size: AtomicI32::new(1_000),
+            skip_sql_count: AtomicU64::new(0),
         }
     }
 
@@ -238,48 +249,142 @@ impl SqlMerger {
     /// Druid 参数化合并。对应 Java：
     /// `StatFilter#createSqlStat(StatementProxy, String)`。
     pub fn record_with_merge(&self, sql: &str, elapsed: Duration, ok: bool, merge_sql: bool) {
-        let param = if merge_sql {
-            parameterize(sql)
-        } else {
-            ParameterizedSql {
-                template: sql.to_owned(),
-                fingerprint: fingerprint(sql),
+        self.record_with_merge_stat(sql, elapsed, ok, merge_sql);
+    }
+
+    /// 按配置记录 SQL 并返回本次命中的统计对象。
+    ///
+    /// 返回对象供 `StatFilter` 在同一次执行后继续累加 update/fetch 行数，
+    /// 避免重新计算 SQL key 或在容量淘汰期间命中不同对象。
+    pub fn record_with_merge_stat(
+        &self,
+        sql: &str,
+        elapsed: Duration,
+        ok: bool,
+        merge_sql: bool,
+    ) -> Arc<JdbcSqlStat> {
+        let stat = self.prepare(sql, merge_sql);
+        stat.record(elapsed, ok);
+        stat
+    }
+
+    /// 在执行前创建或取得 SQL 统计对象，但不增加完成计数。
+    pub fn prepare(&self, sql: &str, merge_sql: bool) -> Arc<JdbcSqlStat> {
+        let param = sql_key(sql, merge_sql);
+        let fingerprint = param.fingerprint;
+        let stat = {
+            let mut cache = self.cache.write();
+            if let Some(stat) = cache.get(&param.fingerprint) {
+                Arc::clone(stat)
+            } else {
+                let stat = Arc::new(JdbcSqlStat::new(param.template, param.fingerprint));
+                cache.insert(param.fingerprint, Arc::clone(&stat));
+                let max_sql_size = self.max_sql_size.load(Ordering::Acquire);
+                if i64::try_from(cache.len()).unwrap_or(i64::MAX) > i64::from(max_sql_size) {
+                    if let Some((_, eldest)) = cache.shift_remove_index(0) {
+                        let value = eldest.stat_value();
+                        if value.running_count > 0 || value.execute_count > 0 {
+                            self.skip_sql_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }
+                stat
             }
         };
-        let stat = self
-            .cache
-            .entry(param.fingerprint)
-            .or_insert_with(|| {
-                std::sync::Arc::new(JdbcSqlStat::new(param.template, param.fingerprint))
-            })
-            .clone();
-        stat.record(elapsed, ok);
+        // Java StatementProxy 直接持有本次 JdbcSqlStat。Rust 的物理 Statement
+        // 与 Filter 上下文解耦，因此保留原始 SQL 到本次统计对象的关联，供
+        // ResultSet/CallableStatement 在后续打开 LOB 时更新同一个对象。
+        self.active_sql_stats
+            .write()
+            .insert(sql.to_owned(), fingerprint);
+        stat
     }
 
     /// 获取所有 SQL 统计。
-    pub fn all_stats(&self) -> Vec<std::sync::Arc<JdbcSqlStat>> {
-        self.cache
-            .iter()
-            .map(|entry| entry.value().clone())
-            .collect()
+    pub fn all_stats(&self) -> Vec<Arc<JdbcSqlStat>> {
+        self.cache.read().values().cloned().collect()
     }
 
     /// 获取指定指纹的统计。
-    pub fn get_stat(&self, fingerprint: u64) -> Option<std::sync::Arc<JdbcSqlStat>> {
-        self.cache.get(&fingerprint).map(|v| v.clone())
+    pub fn get_stat(&self, fingerprint: u64) -> Option<Arc<JdbcSqlStat>> {
+        self.cache.read().get(&fingerprint).cloned()
+    }
+
+    /// 返回最近一次为原始 SQL 绑定的统计对象。
+    ///
+    /// 对应 Java `StatementProxy#getSqlStat()` 的关联语义。若统计对象已因容量
+    /// 限制淘汰，则返回 `None`，不会为一次 LOB 读取重新创建 SQL 条目。
+    pub fn active_stat_for_sql(&self, sql: &str) -> Option<Arc<JdbcSqlStat>> {
+        let fingerprint = self.active_sql_stats.read().get(sql).copied()?;
+        self.get_stat(fingerprint)
     }
 
     /// SQL 模板数量。
     pub fn len(&self) -> usize {
-        self.cache.len()
+        self.cache.read().len()
     }
     pub fn is_empty(&self) -> bool {
-        self.cache.is_empty()
+        self.cache.read().is_empty()
     }
 
-    /// 清空全部 SQL 聚合项。
+    /// 返回 Java `maxSqlSize`。
+    pub fn max_sql_size(&self) -> i32 {
+        self.max_sql_size.load(Ordering::Acquire)
+    }
+
+    /// 设置最大 SQL 条目数，并按 Java 插入顺序删除现有最旧条目。
+    pub fn set_max_sql_size(&self, value: i32) {
+        let old = self.max_sql_size.swap(value, Ordering::AcqRel);
+        if value >= old {
+            return;
+        }
+        let mut cache = self.cache.write();
+        // Java 实现删除的是 `oldMax - newMax` 个最旧条目，而不是简单裁剪到
+        // `newMax`。当当前条目数远小于 oldMax 时，这个历史行为可能清空整个表。
+        let remove_count = i64::from(old).saturating_sub(i64::from(value)).max(0);
+        for _ in 0..usize::try_from(remove_count).unwrap_or(usize::MAX) {
+            if cache.shift_remove_index(0).is_none() {
+                break;
+            }
+        }
+    }
+
+    /// 返回被容量淘汰的已执行 SQL 数。
+    pub fn skip_sql_count(&self) -> u64 {
+        self.skip_sql_count.load(Ordering::Acquire)
+    }
+
+    /// 原子取得并重置被容量淘汰的已执行 SQL 数。
+    pub(crate) fn take_skip_sql_count(&self) -> u64 {
+        self.skip_sql_count.swap(0, Ordering::AcqRel)
+    }
+
+    /// 按 Java `JdbcDataSourceStat#reset()` 重置 SQL 聚合项。
+    ///
+    /// 从未成功执行且当前未运行的条目被移除；其余条目保留 SQL 身份并清零区间
+    /// 统计。不能直接清空 cache，否则管理端 reset 后会丢失活跃 SQL 对象。
     pub fn reset(&self) {
-        self.cache.clear();
+        let mut cache = self.cache.write();
+        cache.retain(|_, stat| {
+            if stat.execute_count() == 0 && stat.running_count.load(Ordering::Acquire) == 0 {
+                false
+            } else {
+                stat.reset();
+                true
+            }
+        });
+        self.skip_sql_count.store(0, Ordering::Release);
+    }
+}
+
+fn sql_key(sql: &str, merge_sql: bool) -> ParameterizedSql {
+    if merge_sql {
+        parameterize(sql)
+    } else {
+        ParameterizedSql {
+            template: sql.to_owned(),
+            fingerprint: fingerprint(sql),
+        }
     }
 }
 

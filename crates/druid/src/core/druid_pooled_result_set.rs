@@ -17,6 +17,7 @@ use super::{
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::any::{Any, TypeId};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Weak};
 
@@ -539,6 +540,8 @@ impl DruidPooledResultSetTrace {
 /// 关闭生命周期。Rust 需要显式传入原 `DruidPooledConnection` 才能把物理
 /// ResultSet 错误交给同一连接的 `ExceptionSorter`。
 pub struct DruidPooledResultSet {
+    id: u64,
+    attributes: super::ProxyAttributes,
     statement: DruidPooledStatement,
     prepared_statement: Option<DruidPooledPreparedStatementHandle>,
     callable_statement: Option<DruidPooledCallableStatementHandle>,
@@ -547,6 +550,9 @@ pub struct DruidPooledResultSet {
     cursor_index: AtomicI32,
     filter_chain: Option<Arc<FilterChain>>,
     filter_context: Arc<ResultSetFilterContext>,
+    logic_column_map: Option<HashMap<i32, i32>>,
+    physical_column_map: Option<HashMap<i32, i32>>,
+    hidden_columns: Option<Vec<i32>>,
 }
 
 impl DruidPooledResultSet {
@@ -555,8 +561,20 @@ impl DruidPooledResultSet {
         physical: Arc<dyn PhysicalResultSet>,
     ) -> Result<Self, DruidError> {
         let filter_chain = statement.filter_chain.clone();
-        let filter_context = Arc::new(ResultSetFilterContext::new());
-        let result_set = Self {
+        let statement_handle = DruidPooledStatement::from_inner(Arc::clone(&statement));
+        let result_set_id = statement.result_set_id_seed.fetch_add(1, Ordering::AcqRel);
+        let filter_context = Arc::new(
+            ResultSetFilterContext::with_identity_sql_and_execute_elapsed(
+                statement.connection_id,
+                statement.id,
+                result_set_id,
+                statement_handle.last_sql(),
+                statement_handle.last_execute_elapsed(),
+            ),
+        );
+        let mut result_set = Self {
+            id: result_set_id,
+            attributes: super::ProxyAttributes::default(),
             statement: DruidPooledStatement::from_inner(statement),
             prepared_statement: None,
             callable_statement: None,
@@ -565,9 +583,21 @@ impl DruidPooledResultSet {
             cursor_index: AtomicI32::new(0),
             filter_chain,
             filter_context,
+            logic_column_map: None,
+            physical_column_map: None,
+            hidden_columns: None,
         };
         if let Some(filter_chain) = &result_set.filter_chain {
-            filter_chain.result_set_open_after(&result_set.filter_context)?;
+            let mut open_context = super::ResultSetOpenContext::new(
+                &result_set.filter_context,
+                result_set.physical.as_ref(),
+            );
+            filter_chain.result_set_open_after_with_proxy(&mut open_context)?;
+            let (logic_column_map, physical_column_map, hidden_columns) =
+                open_context.into_column_mappings();
+            result_set.logic_column_map = logic_column_map;
+            result_set.physical_column_map = physical_column_map;
+            result_set.hidden_columns = hidden_columns;
         }
         Ok(result_set)
     }
@@ -602,6 +632,149 @@ impl DruidPooledResultSet {
     /// 对应 Java：`DruidPooledResultSet#getPoolableStatement()`。
     pub fn poolable_statement(&self) -> &DruidPooledStatement {
         &self.statement
+    }
+
+    /// 返回 Druid 数据源分配的 ResultSet proxy ID。
+    ///
+    /// 对应 Java：`WrapperProxy#getId()`；每个数据源从 50000 开始递增。
+    #[must_use]
+    pub const fn id(&self) -> u64 {
+        self.id
+    }
+
+    /// 返回 ResultSet proxy attribute 数量。
+    #[must_use]
+    pub fn attributes_size(&self) -> usize {
+        self.attributes.len()
+    }
+
+    /// 清空 ResultSet proxy attributes。
+    pub fn clear_attributes(&self) {
+        self.attributes.clear();
+    }
+
+    /// 返回 ResultSet proxy attributes 快照。
+    #[must_use]
+    pub fn attributes(&self) -> std::collections::HashMap<String, super::ProxyAttributeValue> {
+        self.attributes.snapshot()
+    }
+
+    /// 返回指定 ResultSet proxy attribute。
+    #[must_use]
+    pub fn attribute(&self, key: &str) -> Option<super::ProxyAttributeValue> {
+        self.attributes.get(key)
+    }
+
+    /// 保存或覆盖 ResultSet proxy attribute。
+    pub fn put_attribute(
+        &self,
+        key: impl Into<String>,
+        value: super::ProxyAttributeValue,
+    ) -> Option<super::ProxyAttributeValue> {
+        self.attributes.put(key, value)
+    }
+
+    /// 返回当前逻辑游标位置。
+    ///
+    /// 对应 Java：`ResultSetProxy#getCursorIndex()`。
+    #[must_use]
+    pub fn cursor_index(&self) -> i32 {
+        self.cursor_index.load(Ordering::Acquire)
+    }
+
+    /// 返回成功完成的 ResultSet close Filter 链次数。
+    #[must_use]
+    pub fn close_count(&self) -> u64 {
+        self.filter_context.close_count()
+    }
+
+    /// 返回从 ResultSet open Filter 时点到当前的耗时。
+    ///
+    /// Rust `Instant` 不伪造 Java `System.nanoTime()` 的绝对数值，只保留其可比较
+    /// 的单调耗时语义。
+    #[must_use]
+    pub fn construct_elapsed(&self) -> Option<std::time::Duration> {
+        self.filter_context.elapsed()
+    }
+
+    /// 返回产生本 ResultSet 的 SQL。
+    #[must_use]
+    pub fn sql(&self) -> Option<&str> {
+        self.filter_context.sql()
+    }
+
+    /// 返回累计读取的 Java UTF-16 字符数。
+    #[must_use]
+    pub fn read_string_length(&self) -> u64 {
+        self.filter_context.read_string_length()
+    }
+
+    /// 返回累计读取的字节数。
+    #[must_use]
+    pub fn read_bytes_length(&self) -> u64 {
+        self.filter_context.read_bytes_length()
+    }
+
+    /// 返回打开 InputStream 的次数。
+    #[must_use]
+    pub fn open_input_stream_count(&self) -> u64 {
+        self.filter_context.open_input_stream_count()
+    }
+
+    /// 返回打开 Reader 的次数。
+    #[must_use]
+    pub fn open_reader_count(&self) -> u64 {
+        self.filter_context.open_reader_count()
+    }
+
+    /// 把逻辑列号映射为物理列号。
+    ///
+    /// Java map 存在但 key 缺失时会因拆箱抛出 NPE；Rust 用 `None` 显式表达该
+    /// 非法映射。未设置 map 时返回原列号。
+    #[must_use]
+    pub fn physical_column(&self, logic_column: i32) -> Option<i32> {
+        self.logic_column_map
+            .as_ref()
+            .map_or(Some(logic_column), |columns| {
+                columns.get(&logic_column).copied()
+            })
+    }
+
+    /// 把物理列号映射为逻辑列号；未设置 map 时返回原列号。
+    #[must_use]
+    pub fn logic_column(&self, physical_column: i32) -> Option<i32> {
+        self.physical_column_map
+            .as_ref()
+            .map_or(Some(physical_column), |columns| {
+                columns.get(&physical_column).copied()
+            })
+    }
+
+    /// 返回隐藏列数量。
+    #[must_use]
+    pub fn hidden_column_count(&self) -> usize {
+        self.hidden_columns.as_ref().map_or(0, Vec::len)
+    }
+
+    /// 返回隐藏列快照借用；尚未配置时保留 Java null 语义。
+    #[must_use]
+    pub fn hidden_columns(&self) -> Option<&[i32]> {
+        self.hidden_columns.as_deref()
+    }
+
+    /// 替换逻辑列到物理列的映射；`None` 恢复恒等映射。
+    pub fn set_logic_column_map(&mut self, logic_column_map: Option<HashMap<i32, i32>>) {
+        self.logic_column_map = logic_column_map;
+    }
+
+    /// 替换物理列到逻辑列的映射；`None` 恢复恒等映射。
+    pub fn set_physical_column_map(&mut self, physical_column_map: Option<HashMap<i32, i32>>) {
+        self.physical_column_map = physical_column_map;
+    }
+
+    /// 替换隐藏列列表；`None` 保留 Java null。
+    pub fn set_hidden_columns(&mut self, hidden_columns: Option<Vec<i32>>) {
+        self.hidden_columns = hidden_columns;
     }
 
     /// 返回底层物理结果集 SPI。
@@ -819,7 +992,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(value) = result.as_ref() {
+            self.record_object_lob_open(value);
+        }
+        result
     }
 
     /// 按标签和 SQL 类型映射读取对象。
@@ -846,7 +1023,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(value) = result.as_ref() {
+            self.record_object_lob_open(value);
+        }
+        result
     }
 
     /// 按下标和目标类型读取对象。
@@ -871,7 +1052,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(value) = result.as_ref() {
+            self.record_object_lob_open(value);
+        }
+        result
     }
 
     /// 按标签和目标类型读取对象。
@@ -895,7 +1080,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(value) = result.as_ref() {
+            self.record_object_lob_open(value);
+        }
+        result
     }
 
     /// 按下标读取字符串；SQL NULL 返回 `None`。
@@ -915,7 +1104,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(Some(value)) = result.as_ref() {
+            self.filter_context.add_read_string_length(value);
+        }
+        result
     }
 
     /// 按标签读取字符串。
@@ -935,7 +1128,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(Some(value)) = result.as_ref() {
+            self.filter_context.add_read_string_length(value);
+        }
+        result
     }
 
     /// 按下标读取布尔值；SQL NULL 与 JDBC 一致返回 false。
@@ -1231,7 +1428,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(Some(value)) = result.as_ref() {
+            self.filter_context.add_read_bytes_length(value.len());
+        }
+        result
     }
 
     /// 按标签读取字节。
@@ -1251,7 +1452,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if let Ok(Some(value)) = result.as_ref() {
+            self.filter_context.add_read_bytes_length(value.len());
+        }
+        result
     }
 
     /// 按下标读取任意精度 Decimal。
@@ -1571,7 +1776,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_blob_open();
+        }
+        result
     }
 
     /// 按标签读取 JDBC `Blob`。
@@ -1591,7 +1800,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_blob_open();
+        }
+        result
     }
 
     /// 按下标读取 JDBC `Clob`。
@@ -1611,7 +1824,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_clob_open();
+        }
+        result
     }
 
     /// 按标签读取 JDBC `Clob`。
@@ -1631,7 +1848,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_clob_open();
+        }
+        result
     }
 
     /// 按下标读取 JDBC `Array`。
@@ -2570,7 +2791,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.filter_context.increment_open_input_stream_count();
+        }
+        result
     }
 
     /// 按标签读取 ASCII 输入流。
@@ -2590,7 +2815,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.filter_context.increment_open_input_stream_count();
+        }
+        result
     }
 
     /// 按下标读取已废弃的 Unicode 输入流。
@@ -2650,7 +2879,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.filter_context.increment_open_input_stream_count();
+        }
+        result
     }
 
     /// 按标签读取二进制输入流。
@@ -2670,7 +2903,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.filter_context.increment_open_input_stream_count();
+        }
+        result
     }
 
     /// 按下标读取字符 Reader。
@@ -2690,7 +2927,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.filter_context.increment_open_reader_count();
+        }
+        result
     }
 
     /// 按标签读取字符 Reader。
@@ -2710,7 +2951,11 @@ impl DruidPooledResultSet {
                 )
             },
         );
-        self.classify(connection, result)
+        let result = self.classify(connection, result);
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.filter_context.increment_open_reader_count();
+        }
+        result
     }
 
     /// 按下标读取 NCharacterStream。
@@ -3061,6 +3306,28 @@ impl DruidPooledResultSet {
             |chain| chain.result_set_get_meta_data(self.physical.as_ref(), &self.filter_context),
         );
         self.classify(connection, result)
+    }
+
+    /// 返回带 Druid Proxy 身份的结果列 metadata。
+    ///
+    /// 对应 Java：`ResultSetMetaDataProxyImpl`。底层 21 个列描述方法仍由
+    /// `ResultSetMetaData` 精确委托；代理层增加 metadata ID、所属 ResultSet
+    /// ID、attributes 与 raw unwrap。
+    pub fn meta_data_proxy(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<super::ResultSetMetaDataProxyImpl, DruidError> {
+        let raw = self.meta_data(connection)?;
+        let metadata_id = self
+            .statement
+            .inner
+            .metadata_id_seed
+            .fetch_add(1, Ordering::AcqRel);
+        Ok(super::ResultSetMetaDataProxyImpl::new(
+            raw,
+            metadata_id,
+            self.id,
+        ))
     }
 
     /// 返回当前行是否被更新。
@@ -3587,11 +3854,32 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         result: Result<T, DruidError>,
     ) -> Result<T, DruidError> {
-        let result = connection.classify_result(result);
+        // Java `DruidPooledStatement#checkException` 只为 Prepared/Callable
+        // Statement 传入固定 SQL；普通 Statement 的 ResultSet 错误传 null。
+        let sql = (self.prepared_statement.is_some() || self.callable_statement.is_some())
+            .then(|| self.filter_context.sql())
+            .flatten();
+        let result = connection.classify_result_with_sql(result, sql);
         if result.is_err() {
             self.statement.record_result_set_exception();
         }
         result
+    }
+
+    fn record_blob_open(&self) {
+        self.statement.record_blob_open();
+    }
+
+    fn record_object_lob_open(&self, value: &JdbcObject) {
+        match value {
+            JdbcObject::Blob(_) => self.record_blob_open(),
+            JdbcObject::Clob(_) | JdbcObject::NClob(_) => self.record_clob_open(),
+            _ => {}
+        }
+    }
+
+    fn record_clob_open(&self) {
+        self.statement.record_clob_open();
     }
 }
 

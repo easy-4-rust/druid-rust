@@ -8,7 +8,8 @@
 use super::error::DruidError;
 use super::value::Value;
 use super::{
-    ConnectionWarningFilterChain, PreparedInputParameter, SqlWarning, StatementWarningFilterChain,
+    ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain, PhysicalDatabaseMetaData,
+    PreparedInputParameter, SqlWarning, StatementWarningFilterChain,
 };
 use std::time::{Duration, Instant};
 
@@ -24,8 +25,12 @@ pub mod mysql8datetime;
 /// 对应 DruidJava Filter 方法的各种参数。
 #[derive(Debug)]
 pub struct ExecContext<'a> {
+    /// 创建本次执行的 Druid 连接 ID。
+    pub connection_id: u64,
+    /// 创建本次执行的逻辑 Statement ID；直接通过连接 SPI 执行时为空。
+    pub statement_id: Option<u64>,
     /// SQL 文本
-    pub sql: &'a str,
+    pub sql: String,
     /// SQL 参数
     pub params: &'a [Value],
     /// PreparedStatement setter 的完整参数描述符。
@@ -51,6 +56,10 @@ pub struct ExecContext<'a> {
 /// Java 的 `"\n;\n"` 连接规则，`statements` 保留每条 SQL 和批次大小。
 #[derive(Debug)]
 pub struct BatchExecContext<'a> {
+    /// 创建本次批处理的 Druid 连接 ID。
+    pub connection_id: u64,
+    /// 创建本次批处理的逻辑 Statement ID；直接通过连接 SPI 执行时为空。
+    pub statement_id: Option<u64>,
     /// 合并后的批处理 SQL。
     pub sql: &'a str,
     /// 按 `addBatch` 顺序保存的 SQL。
@@ -68,6 +77,8 @@ pub struct BatchExecContext<'a> {
     pub data_source: &'a str,
     /// 批处理开始时间。
     pub start: Instant,
+    /// SQL 统计对象的 key；由统计 Filter 在 before 阶段填充。
+    pub fingerprint: Option<u64>,
     /// 当前物理连接是否处于显式事务。
     pub in_transaction: bool,
 }
@@ -141,6 +152,15 @@ pub enum ConnectionEvent {
     GetNetworkTimeout,
 }
 
+/// 携带 Druid 连接身份的连接 Filter 事件。
+#[derive(Debug, Clone, Copy)]
+pub struct ConnectionEventContext<'a> {
+    /// Druid 物理连接 ID。
+    pub connection_id: u64,
+    /// Java 连接事件。
+    pub event: &'a ConnectionEvent,
+}
+
 /// 语句事件类型，对应 DruidJava 的 statement_* / preparedStatement_* hook 系列。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementEvent {
@@ -160,6 +180,17 @@ pub enum StatementEvent {
     Close,
     /// 批量执行（对应 statement_executeBatch）
     ExecuteBatch,
+}
+
+/// 携带 Connection/Statement Proxy 身份的语句事件。
+#[derive(Debug, Clone, Copy)]
+pub struct StatementEventContext<'a> {
+    /// 创建语句的 Druid 连接 ID。
+    pub connection_id: u64,
+    /// 逻辑 Statement ID。
+    pub statement_id: u64,
+    /// Java Statement 事件。
+    pub event: &'a StatementEvent,
 }
 
 /// 结果集事件类型，对应 DruidJava 的 resultSet_* hook 系列。
@@ -193,6 +224,56 @@ pub trait BeforeFilter: Send + Sync {
     /// 通用前置拦截（对应 Filter 的 before-execute 语义）。
     async fn before(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError>;
 
+    /// 在创建物理 PreparedStatement/CallableStatement 前检查并改写 SQL。
+    ///
+    /// 对应 Java `Filter#connection_prepareStatement/prepareCall` around-chain。
+    /// 默认保持文本不变；返回值必须作为物理 prepare 和缓存键的共同 SQL。
+    fn prepare_statement_sql(&self, sql: &str) -> Result<String, DruidError> {
+        Ok(sql.to_owned())
+    }
+
+    /// 在普通 Statement 保存 batch SQL 前检查并改写文本。
+    ///
+    /// 对应 Java `Filter#statement_addBatch` around-chain；改写必须发生在
+    /// `PhysicalStatement#add_batch` 前，而不是 executeBatch 时临时替换副本。
+    fn statement_add_batch_sql(&self, sql: &str) -> Result<String, DruidError> {
+        Ok(sql.to_owned())
+    }
+
+    /// 本 Filter 的 before 已成功，但后续 Filter 在执行前短路时逆序回调。
+    ///
+    /// 对应 Java around-chain 在下游异常时的栈展开。默认没有待清理状态。
+    async fn before_execute_error(
+        &self,
+        _context: &ExecContext<'_>,
+        _error: &DruidError,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// 应用数据源连接属性。
+    ///
+    /// 对应 Java：`Filter#configFromProperties(Properties)`。Java 在
+    /// `setConnectProperties` 时对当时已存在的显式 Filter 依注册顺序调用；
+    /// Rust 使用共享引用配合 Filter 内部同步原语保留同一时序。
+    fn config_from_properties(
+        &self,
+        _properties: &std::collections::HashMap<String, String>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// 应用宿主 system properties。
+    ///
+    /// Java Filter 对 system properties 的时序并不统一；默认不应用，由
+    /// `StatFilter` 等明确读取系统属性的对象覆盖。
+    fn config_from_system_properties(
+        &self,
+        _properties: &std::collections::HashMap<String, String>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
     /// 批处理前置拦截。
     ///
     /// 默认适配到一次通用 `before`，不得逐条触发 Filter；需要观察原始批次的
@@ -204,7 +285,9 @@ pub trait BeforeFilter: Send + Sync {
             .map(Vec::as_slice)
             .unwrap_or_default();
         let mut execute_context = ExecContext {
-            sql: context.sql,
+            connection_id: context.connection_id,
+            statement_id: context.statement_id,
+            sql: context.sql.to_owned(),
             params,
             prepared_parameters: context
                 .prepared_parameter_sets
@@ -212,17 +295,54 @@ pub trait BeforeFilter: Send + Sync {
                 .map(Vec::as_slice),
             data_source: context.data_source,
             start: context.start,
-            fingerprint: None,
+            fingerprint: context.fingerprint,
             in_transaction: context.in_transaction,
             operation: ExecOperation::Batch,
         };
         self.before(&mut execute_context).await
     }
 
+    /// batch 前置链在后续 Filter 短路时逆序回调。
+    async fn before_batch_error(
+        &self,
+        context: &BatchExecContext<'_>,
+        error: &DruidError,
+    ) -> Result<(), DruidError> {
+        let params = context
+            .parameter_sets
+            .last()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let execute_context = ExecContext {
+            connection_id: context.connection_id,
+            statement_id: context.statement_id,
+            sql: context.sql.to_owned(),
+            params,
+            prepared_parameters: context
+                .prepared_parameter_sets
+                .and_then(|sets| sets.last())
+                .map(Vec::as_slice),
+            data_source: context.data_source,
+            start: context.start,
+            fingerprint: context.fingerprint,
+            in_transaction: context.in_transaction,
+            operation: ExecOperation::Batch,
+        };
+        self.before_execute_error(&execute_context, error).await
+    }
+
     /// 连接事件拦截（对应 Filter 的 connection_* 系列 hook）。
     /// 返回 Ok(()) 放行，Err 短路。
     async fn on_connection_event(&self, _event: &ConnectionEvent) -> Result<(), DruidError> {
         Ok(()) // 默认放行
+    }
+
+    /// 带连接身份的事件入口；默认保持旧 Filter 实现兼容。
+    async fn on_connection_event_context(
+        &self,
+        context: &ConnectionEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        self.on_connection_event(context.event).await
     }
 
     /// 包围 `Connection#getWarnings()`。
@@ -246,9 +366,40 @@ pub trait BeforeFilter: Send + Sync {
         chain.connection_clear_warnings().await
     }
 
+    /// 包围 `Connection#getMetaData()`。
+    ///
+    /// 对应 Java：`Filter#connection_getMetaData`。链按注册顺序执行，末端才向
+    /// 当前物理连接借用 metadata；Filter 可阻断或用保持同一连接生命周期的
+    /// Adapter 包装返回值。
+    fn connection_get_meta_data<'filters, 'connection>(
+        &self,
+        chain: ConnectionDatabaseMetaDataFilterChain<'filters, 'connection>,
+    ) -> Result<Box<dyn PhysicalDatabaseMetaData + 'connection>, DruidError> {
+        chain.connection_get_meta_data()
+    }
+
     /// 语句事件拦截（对应 Filter 的 statement_* / preparedStatement_* 系列 hook）。
     async fn on_statement_event(&self, _event: &StatementEvent) -> Result<(), DruidError> {
         Ok(()) // 默认放行
+    }
+
+    /// 带 Connection/Statement 身份的事件入口；默认转发旧事件 hook。
+    async fn on_statement_event_context(
+        &self,
+        context: &StatementEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        self.on_statement_event(context.event).await
+    }
+
+    /// 同步 Statement close 后置事件。
+    ///
+    /// Rust 的 Statement/PreparedStatement `close` 与 Drop 状态机是同步的；
+    /// 该 hook 只允许观察已经完成的逻辑关闭，不得执行异步 I/O。
+    fn on_statement_close_context(
+        &self,
+        _context: &StatementEventContext<'_>,
+    ) -> Result<(), DruidError> {
+        Ok(())
     }
 
     /// 包围 `Statement#getWarnings()`；PreparedStatement 继承同一调用链。
@@ -331,7 +482,9 @@ pub trait AfterFilter: Send + Sync {
             .map(Vec::as_slice)
             .unwrap_or_default();
         let execute_context = ExecContext {
-            sql: context.sql,
+            connection_id: context.connection_id,
+            statement_id: context.statement_id,
+            sql: context.sql.to_owned(),
             params,
             prepared_parameters: context
                 .prepared_parameter_sets
@@ -351,6 +504,11 @@ pub trait AfterFilter: Send + Sync {
         Ok(())
     }
 
+    /// 带连接身份的关闭后置；默认保持旧 hook 兼容。
+    async fn after_connection_close_context(&self, _connection_id: u64) -> Result<(), DruidError> {
+        self.after_connection_close().await
+    }
+
     /// 物理连接事件完成后的回调。
     ///
     /// 对应 Java Filter 在 `chain.connection_*` 成功返回后执行的逻辑。
@@ -360,6 +518,15 @@ pub trait AfterFilter: Send + Sync {
         _elapsed: Duration,
     ) -> Result<(), DruidError> {
         Ok(())
+    }
+
+    /// 带连接身份的后置事件；默认转发旧 hook。
+    async fn after_connection_event_context(
+        &self,
+        context: &ConnectionEventContext<'_>,
+        elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        self.after_connection_event(context.event, elapsed).await
     }
 }
 

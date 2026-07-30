@@ -25,6 +25,8 @@ pub enum WallViolation {
     AlwaysTrueCondition(String),
     /// SQL 必须参数化。
     MustParameterized,
+    /// UPDATE 业务一致性检查失败。
+    UpdateCheckFailed,
     /// LIMIT 0 被拒绝。
     LimitZeroNotAllowed,
     /// 禁止的表
@@ -51,6 +53,7 @@ impl fmt::Display for WallViolation {
                 write!(f, "always true {clause} condition not allowed")
             }
             Self::MustParameterized => write!(f, "sql must be parameterized"),
+            Self::UpdateCheckFailed => write!(f, "update check failed."),
             Self::LimitZeroNotAllowed => write!(f, "LIMIT 0 not allowed"),
             Self::DeniedTable(t) => write!(f, "denied table: {t}"),
             Self::DeniedSchema(schema) => write!(f, "denied schema: {schema}"),

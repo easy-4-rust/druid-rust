@@ -99,15 +99,20 @@ impl DruidDataSourceFactory {
             .get(Self::PROP_DRIVER_CLASS_NAME)
             .cloned()
             .unwrap_or_else(|| default_driver_name.into());
+        let connection_properties = physical_connection_properties(properties);
         let mut builder = DruidPoolBuilder::new()
             .factory(factory)
-            .driver_name(&driver_name);
+            .driver_name(&driver_name)
+            .connection_properties(connection_properties);
+        if let Some(url) = properties.get(Self::PROP_URL) {
+            builder = builder.url(url).raw_url(url);
+        }
 
         // Java DruidDataSource#init 会在未显式设置时从 jdbcUrl 推断 dbType。
         // Rust 同时接受 JDBC URL 与 sqlx/toasty URL，确保 Wall、校验器和
         // ExceptionSorter 使用同一个数据库身份。
         let db_type = properties.get(Self::PROP_DB_TYPE).cloned().or_else(|| {
-            JdbcUtils::get_db_type(
+            JdbcUtils::infer_db_type(
                 properties.get(Self::PROP_URL).map(String::as_str),
                 Some(&driver_name),
             )
@@ -138,6 +143,15 @@ impl DruidDataSourceFactory {
         if let Some(value) = properties.get(Self::PROP_DEFAULT_CATALOG) {
             builder = builder.default_catalog(value);
         }
+        if let Some(value) = optional_bool(properties, Self::PROP_INIT_VARIANTS)? {
+            builder = builder.init_variants(value);
+        }
+        if let Some(value) = optional_bool(properties, Self::PROP_INIT_GLOBAL_VARIANTS)? {
+            builder = builder.init_global_variants(value);
+        }
+        if let Some(value) = properties.get(Self::PROP_INIT_CONNECTION_SQLS) {
+            builder = builder.connection_init_sqls(value.split(';'));
+        }
         if let Some(value) = optional_usize(properties, Self::PROP_MAX_ACTIVE)? {
             builder = builder.max_open(value);
         }
@@ -150,12 +164,24 @@ impl DruidDataSourceFactory {
         if let Some(value) = optional_usize(properties, Self::PROP_INITIAL_SIZE)? {
             builder = builder.initial_size(value);
         }
+        if let Some(value) = optional_bool(properties, Self::PROP_ASYNC_INIT)? {
+            builder = builder.async_init(value);
+        }
+        if let Some(value) = optional_bool(properties, Self::PROP_INIT_EXCEPTION_THROW)? {
+            builder = builder.init_exception_throw(value);
+        }
         if let Some(value) = optional_i64(properties, Self::PROP_MAX_WAIT)? {
             builder = builder.acquire_timeout(if value < 0 {
                 Duration::MAX
             } else {
                 Duration::from_millis(value as u64)
             });
+        }
+        if let Some(value) = optional_i64(properties, Self::PROP_NOT_FULL_TIMEOUT_RETRY_COUNT)? {
+            builder = builder.not_full_timeout_retry_count(i32_property(
+                Self::PROP_NOT_FULL_TIMEOUT_RETRY_COUNT,
+                value,
+            )?);
         }
         if let Some(value) = optional_i64(properties, Self::PROP_MAX_WAIT_THREAD_COUNT)? {
             builder = builder.max_wait_thread_count(if value <= 0 {
@@ -193,6 +219,12 @@ impl DruidDataSourceFactory {
         }
         if let Some(value) = optional_bool(properties, Self::PROP_FAIL_FAST)? {
             builder = builder.fail_fast(value);
+        }
+        if let Some(value) = optional_i64(properties, Self::PROP_ON_FATAL_ERROR_MAX_ACTIVE)? {
+            builder = builder.on_fatal_error_max_active(i32_property(
+                Self::PROP_ON_FATAL_ERROR_MAX_ACTIVE,
+                value,
+            )?);
         }
         if let Some(value) = optional_bool(properties, Self::PROP_TEST_ON_BORROW)? {
             builder = builder.test_on_borrow(value);
@@ -241,6 +273,21 @@ impl DruidDataSourceFactory {
                 ))
             })?;
             builder = builder.validation_query_timeout(Duration::from_secs(seconds));
+        }
+        if let Some(value) = optional_i64(properties, Self::PROP_QUERY_TIMEOUT)? {
+            builder = builder.query_timeout(i32_property(Self::PROP_QUERY_TIMEOUT, value)?);
+        }
+        if let Some(value) = optional_i64(properties, Self::PROP_TRANSACTION_QUERY_TIMEOUT)? {
+            builder = builder.transaction_query_timeout(i32_property(
+                Self::PROP_TRANSACTION_QUERY_TIMEOUT,
+                value,
+            )?);
+        }
+        if let Some(value) = optional_i64(properties, Self::PROP_LOGIN_TIMEOUT)? {
+            builder = builder.login_timeout(i32_property(Self::PROP_LOGIN_TIMEOUT, value)?);
+        }
+        if let Some(value) = optional_i64(properties, Self::PROP_STAT_SQL_MAX_SIZE)? {
+            builder = builder.max_sql_size(i32_property(Self::PROP_STAT_SQL_MAX_SIZE, value)?);
         }
         if let Some(value) = optional_bool(properties, Self::PROP_REMOVE_ABANDONED)? {
             builder = builder.remove_abandoned(value);
@@ -293,7 +340,16 @@ impl DruidDataSourceFactory {
         if let Some(value) = optional_bool(properties, "druid.clearFiltersEnable")? {
             builder = builder.clear_filters_enable(value);
         }
+        if let Some(value) = optional_bool(properties, "druid.loadSpifilterSkip")? {
+            builder = builder.load_spi_filter_skip(value);
+        }
         builder.set_filters(properties.get(Self::PROP_FILTERS).map(String::as_str))?;
+        let filter_properties = properties
+            .get("connectionProperties")
+            .map(|source| parse_connection_properties(source))
+            .unwrap_or_default();
+        let system_properties = stat_filter_system_properties();
+        builder.configure_filters(&filter_properties, &system_properties)?;
 
         let data_source = builder.build_data_source().await?;
         if optional_bool(properties, Self::PROP_INIT)?.unwrap_or(false) {
@@ -306,13 +362,19 @@ impl DruidDataSourceFactory {
     pub const PROP_DEFAULT_READ_ONLY: &'static str = "defaultReadOnly";
     pub const PROP_DEFAULT_TRANSACTION_ISOLATION: &'static str = "defaultTransactionIsolation";
     pub const PROP_DEFAULT_CATALOG: &'static str = "defaultCatalog";
+    pub const PROP_INIT_VARIANTS: &'static str = "druid.initVariants";
+    pub const PROP_INIT_GLOBAL_VARIANTS: &'static str = "druid.initGlobalVariants";
+    pub const PROP_INIT_CONNECTION_SQLS: &'static str = "druid.initConnectionSqls";
     pub const PROP_DRIVER_CLASS_NAME: &'static str = "driverClassName";
     pub const PROP_DB_TYPE: &'static str = "dbType";
     pub const PROP_MAX_ACTIVE: &'static str = "maxActive";
     pub const PROP_MAX_IDLE: &'static str = "maxIdle";
     pub const PROP_MIN_IDLE: &'static str = "minIdle";
     pub const PROP_INITIAL_SIZE: &'static str = "initialSize";
+    pub const PROP_ASYNC_INIT: &'static str = "druid.asyncInit";
+    pub const PROP_INIT_EXCEPTION_THROW: &'static str = "druid.initExceptionThrow";
     pub const PROP_MAX_WAIT: &'static str = "maxWait";
+    pub const PROP_NOT_FULL_TIMEOUT_RETRY_COUNT: &'static str = "druid.notFullTimeoutRetryCount";
     pub const PROP_MAX_WAIT_THREAD_COUNT: &'static str = "druid.maxWaitThreadCount";
     pub const PROP_CONNECTION_ERROR_RETRY_ATTEMPTS: &'static str =
         "druid.connectionErrorRetryAttempts";
@@ -320,6 +382,7 @@ impl DruidDataSourceFactory {
     pub const PROP_TIME_BETWEEN_CONNECT_ERROR_MILLIS: &'static str =
         "druid.timeBetweenConnectErrorMillis";
     pub const PROP_FAIL_FAST: &'static str = "druid.failFast";
+    pub const PROP_ON_FATAL_ERROR_MAX_ACTIVE: &'static str = "druid.onFatalErrorMaxActive";
     pub const PROP_TEST_ON_BORROW: &'static str = "testOnBorrow";
     pub const PROP_TEST_ON_RETURN: &'static str = "testOnReturn";
     pub const PROP_TEST_WHILE_IDLE: &'static str = "testWhileIdle";
@@ -333,6 +396,10 @@ impl DruidDataSourceFactory {
     pub const PROP_URL: &'static str = "url";
     pub const PROP_VALIDATION_QUERY: &'static str = "validationQuery";
     pub const PROP_VALIDATION_QUERY_TIMEOUT: &'static str = "validationQueryTimeout";
+    pub const PROP_QUERY_TIMEOUT: &'static str = "queryTimeout";
+    pub const PROP_TRANSACTION_QUERY_TIMEOUT: &'static str = "transactionQueryTimeout";
+    pub const PROP_LOGIN_TIMEOUT: &'static str = "loginTimeout";
+    pub const PROP_STAT_SQL_MAX_SIZE: &'static str = "druid.stat.sql.MaxSize";
     pub const PROP_REMOVE_ABANDONED: &'static str = "removeAbandoned";
     pub const PROP_REMOVE_ABANDONED_TIMEOUT: &'static str = "removeAbandonedTimeout";
     pub const PROP_LOG_ABANDONED: &'static str = "logAbandoned";
@@ -346,6 +413,12 @@ impl DruidDataSourceFactory {
     pub const PROP_FILTERS: &'static str = "filters";
     pub const PROP_INIT: &'static str = "init";
     pub const PROP_NAME: &'static str = "name";
+}
+
+fn i32_property(name: &str, value: i64) -> Result<i32, DruidError> {
+    i32::try_from(value).map_err(|_| {
+        DruidError::InvalidArgument(format!("{name} is outside Java int range: {value}"))
+    })
 }
 
 fn wall_config_from_properties(
@@ -514,6 +587,51 @@ fn non_negative_duration(name: &'static str, value: i64) -> Result<Duration, Dru
     u64::try_from(value)
         .map(Duration::from_millis)
         .map_err(|_| DruidError::InvalidArgument(format!("{name} must not be negative: {value}")))
+}
+
+fn parse_connection_properties(source: &str) -> HashMap<String, String> {
+    source
+        .split(';')
+        .filter(|entry| !entry.is_empty())
+        .map(|entry| {
+            entry.find('=').filter(|index| *index > 0).map_or_else(
+                || (entry.to_owned(), String::new()),
+                |index| (entry[..index].to_owned(), entry[index + 1..].to_owned()),
+            )
+        })
+        .collect()
+}
+
+fn physical_connection_properties(properties: &HashMap<String, String>) -> HashMap<String, String> {
+    let mut connection_properties = properties
+        .get("connectionProperties")
+        .map(|source| parse_connection_properties(source))
+        .unwrap_or_default();
+    if let Some(user) = properties
+        .get(DruidDataSourceFactory::PROP_USERNAME)
+        .filter(|value| !value.is_empty())
+    {
+        connection_properties.insert("user".to_owned(), user.clone());
+    }
+    if let Some(password) = properties
+        .get(DruidDataSourceFactory::PROP_PASSWORD)
+        .filter(|value| !value.is_empty())
+    {
+        connection_properties.insert("password".to_owned(), password.clone());
+    }
+    connection_properties
+}
+
+fn stat_filter_system_properties() -> HashMap<String, String> {
+    [
+        "druid.stat.mergeSql",
+        "druid.stat.slowSqlMillis",
+        "druid.stat.logSlowSql",
+        "druid.stat.slowSqlLogLevel",
+    ]
+    .into_iter()
+    .filter_map(|key| std::env::var(key).ok().map(|value| (key.to_owned(), value)))
+    .collect()
 }
 
 fn parse_transaction_isolation(value: &str) -> Result<Option<u8>, DruidError> {

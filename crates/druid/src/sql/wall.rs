@@ -4,13 +4,15 @@
 
 use super::wall_config::WallConfig;
 use super::wall_violation::WallViolation;
-use super::{DbType, SqlUtils};
+use super::{DbType, SqlUtils, WallContext, WallUpdateCheckItem};
 use parking_lot::RwLock;
 use sqlparser::ast::{
-    visit_expressions, BinaryOperator, Expr, FromTable, ObjectName, ObjectType, Query, Select,
-    SelectItem, SetExpr, Statement, TableFactor, Value,
+    visit_expressions, AssignmentTarget, BinaryOperator, Expr, FromTable, ObjectName, ObjectType,
+    Query, Select, SelectItem, SetExpr, Statement, TableFactor, Value,
 };
 use sqlparser::parser::Parser;
+use sqlparser::tokenizer::{Token, Tokenizer, Whitespace};
+use std::collections::HashMap;
 use std::ops::ControlFlow;
 use std::sync::Arc;
 
@@ -62,12 +64,37 @@ impl Wall {
         let dialect = SqlUtils::dialect(self.db_type());
         let ast = Parser::parse_sql(dialect.as_ref(), sql)
             .map_err(|e| vec![WallViolation::SyntaxError(e.to_string())])?;
+        let (violations, _) = self.check_parsed(sql, &ast);
+        if violations.is_empty() {
+            Ok(())
+        } else {
+            Err(violations)
+        }
+    }
+
+    pub(crate) fn check_parsed(
+        &self,
+        sql: &str,
+        ast: &[Statement],
+    ) -> (Vec<WallViolation>, Option<Vec<WallUpdateCheckItem>>) {
+        if !self.config.comment_allow && contains_disallowed_comment(sql, self.config.hint_allow) {
+            return (
+                vec![WallViolation::OperationNotAllowed("COMMENT".to_owned())],
+                None,
+            );
+        }
+        if self.config.comment_allow {
+            self.collect_comment_warnings(sql);
+        }
         let mut violations = Vec::new();
         if ast.len() > 1 && !self.config.multi_statement_allow {
             violations.push(WallViolation::MultiStatementNotAllowed);
         }
-        for stmt in &ast {
+        let mut update_check_items = Vec::new();
+        for stmt in ast {
             self.check_statement(stmt, &mut violations);
+            self.collect_wall_context_warnings(stmt);
+            self.collect_update_check_items(stmt, &mut violations, &mut update_check_items);
             let _: ControlFlow<()> = visit_expressions(stmt, |expression| {
                 if let Expr::Function(function) = expression {
                     let function_name = function.name.to_string().to_ascii_lowercase();
@@ -91,11 +118,12 @@ impl Wall {
                 ControlFlow::Continue(())
             });
         }
-        if violations.is_empty() {
-            Ok(())
+        let update_check_items = if update_check_items.is_empty() {
+            None
         } else {
-            Err(violations)
-        }
+            Some(update_check_items)
+        };
+        (violations, update_check_items)
     }
 
     fn check_statement(&self, stmt: &Statement, v: &mut Vec<WallViolation>) {
@@ -327,6 +355,294 @@ impl Wall {
             violations.push(violation);
         }
     }
+
+    fn collect_wall_context_warnings(&self, statement: &Statement) {
+        let Some(context) = WallContext::current() else {
+            return;
+        };
+        let mut context = context.lock();
+        match statement {
+            Statement::Update {
+                selection: None, ..
+            } => context.increment_update_none_condition_warnings(),
+            Statement::Delete(delete)
+                if delete.selection.is_none()
+                    && delete.using.is_none()
+                    && !from_has_join(&delete.from) =>
+            {
+                context.increment_delete_none_condition_warnings();
+            }
+            _ => {}
+        }
+
+        let _: ControlFlow<()> = visit_expressions(statement, |expression| {
+            if let Expr::Like { expr, pattern, .. } = expression {
+                if is_number_literal(expr) || is_number_literal(pattern) {
+                    context.increment_like_number_warnings();
+                }
+            }
+            ControlFlow::Continue(())
+        });
+    }
+
+    fn collect_comment_warnings(&self, sql: &str) {
+        let Some(context) = WallContext::current() else {
+            return;
+        };
+        let dialect = SqlUtils::dialect(self.db_type());
+        let Ok(tokens) = Tokenizer::new(dialect.as_ref(), sql).tokenize() else {
+            return;
+        };
+        let mut previous = None;
+        let mut count = 0_u32;
+        for token in tokens {
+            match &token {
+                Token::Whitespace(
+                    Whitespace::SingleLineComment { .. } | Whitespace::MultiLineComment(_),
+                ) => {
+                    if previous
+                        .as_ref()
+                        .is_some_and(|previous| !comment_is_accepted_after(previous))
+                    {
+                        count = count.wrapping_add(1);
+                    }
+                }
+                Token::Whitespace(_) | Token::EOF => {}
+                _ => previous = Some(token),
+            }
+        }
+        let mut context = context.lock();
+        for _ in 0..count {
+            context.increment_comment_count();
+        }
+    }
+
+    fn collect_update_check_items(
+        &self,
+        statement: &Statement,
+        violations: &mut Vec<WallViolation>,
+        update_check_items: &mut Vec<WallUpdateCheckItem>,
+    ) {
+        let Statement::Update {
+            table,
+            assignments,
+            selection: Some(selection),
+            ..
+        } = statement
+        else {
+            return;
+        };
+        let TableFactor::Table { name, .. } = &table.relation else {
+            return;
+        };
+        let Some(handler) = self.config.update_check_handler() else {
+            return;
+        };
+        let table_name = simple_name(name);
+        let Some(check_column) = self
+            .config
+            .update_check_table(&table_name)
+            .and_then(|columns| columns.first().cloned())
+        else {
+            return;
+        };
+        let Some(value_expression) = assignments.iter().find_map(|assignment| {
+            let AssignmentTarget::ColumnName(column) = &assignment.target else {
+                return None;
+            };
+            simple_name(column)
+                .eq_ignore_ascii_case(&check_column)
+                .then_some(&assignment.value)
+        }) else {
+            return;
+        };
+
+        let placeholder_indices = placeholder_indices(statement);
+        let mut conditions = Vec::new();
+        split_boolean_and(selection, &mut conditions);
+        let mut filter_value_expressions = Vec::new();
+        for condition in conditions {
+            match condition {
+                Expr::BinaryOp {
+                    left,
+                    op: BinaryOperator::Eq,
+                    right,
+                } if expression_contains_column(condition, &check_column) => {
+                    if is_literal_or_placeholder(left) {
+                        filter_value_expressions.push(left.as_ref());
+                    } else if is_literal_or_placeholder(right) {
+                        filter_value_expressions.push(right.as_ref());
+                    }
+                }
+                Expr::InList {
+                    expr,
+                    list,
+                    negated: false,
+                } if expression_is_column(expr, &check_column) => {
+                    filter_value_expressions.extend(list);
+                }
+                _ => {}
+            }
+        }
+        let value_parameter_index =
+            expression_parameter_index(value_expression, &placeholder_indices);
+        let filter_parameter_indices = filter_value_expressions
+            .iter()
+            .map(|expression| expression_parameter_index(expression, &placeholder_indices))
+            .collect();
+        let filter_values = filter_value_expressions
+            .into_iter()
+            .cloned()
+            .collect::<Vec<_>>();
+        let item = WallUpdateCheckItem::with_parameter_indices(
+            table_name,
+            check_column,
+            value_expression.clone(),
+            value_parameter_index,
+            filter_values,
+            filter_parameter_indices,
+        );
+        if let Some((set_value, filter_values)) = item.literal_values() {
+            if !handler.check(
+                &item.table_name,
+                &item.column_name,
+                &set_value,
+                &filter_values,
+            ) {
+                Self::push_unique(violations, WallViolation::UpdateCheckFailed);
+            }
+        } else {
+            update_check_items.push(item);
+        }
+    }
+}
+
+fn from_has_join(from: &FromTable) -> bool {
+    let tables = match from {
+        FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables) => tables,
+    };
+    tables.iter().any(|table| !table.joins.is_empty())
+}
+
+fn comment_is_accepted_after(token: &Token) -> bool {
+    let Token::Word(word) = token else {
+        return false;
+    };
+    if word.quote_style.is_some() {
+        return false;
+    }
+    matches!(
+        word.value.to_ascii_uppercase().as_str(),
+        "SELECT"
+            | "INSERT"
+            | "DELETE"
+            | "UPDATE"
+            | "TRUNCATE"
+            | "SET"
+            | "CREATE"
+            | "ALTER"
+            | "DROP"
+            | "SHOW"
+            | "REPLACE"
+    )
+}
+
+fn is_number_literal(expression: &Expr) -> bool {
+    matches!(expression, Expr::Value(Value::Number(_, _)))
+}
+
+fn simple_name(name: &ObjectName) -> String {
+    name.0
+        .last()
+        .map(|identifier| {
+            identifier
+                .value
+                .trim_matches(['`', '"', '[', ']'])
+                .to_lowercase()
+        })
+        .unwrap_or_default()
+}
+
+fn split_boolean_and<'a>(expression: &'a Expr, conditions: &mut Vec<&'a Expr>) {
+    match expression {
+        Expr::BinaryOp {
+            left,
+            op: BinaryOperator::And,
+            right,
+        } => {
+            split_boolean_and(left, conditions);
+            split_boolean_and(right, conditions);
+        }
+        Expr::Nested(expression) => split_boolean_and(expression, conditions),
+        _ => conditions.push(expression),
+    }
+}
+
+fn expression_contains_column(expression: &Expr, column_name: &str) -> bool {
+    let mut found = false;
+    let _: ControlFlow<()> = visit_expressions(expression, |candidate| {
+        if expression_is_column(candidate, column_name) {
+            found = true;
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    found
+}
+
+fn expression_is_column(expression: &Expr, column_name: &str) -> bool {
+    match expression {
+        Expr::Identifier(identifier) => identifier.value.eq_ignore_ascii_case(column_name),
+        Expr::CompoundIdentifier(identifiers) => identifiers
+            .last()
+            .is_some_and(|identifier| identifier.value.eq_ignore_ascii_case(column_name)),
+        _ => false,
+    }
+}
+
+fn is_literal_or_placeholder(expression: &Expr) -> bool {
+    matches!(expression, Expr::Value(_))
+}
+
+fn placeholder_indices(statement: &Statement) -> HashMap<usize, usize> {
+    let mut indices = HashMap::new();
+    let mut occurrence = 0_usize;
+    let _: ControlFlow<()> = visit_expressions(statement, |expression| {
+        if let Expr::Value(Value::Placeholder(placeholder)) = expression {
+            occurrence += 1;
+            let index = explicit_parameter_index(placeholder).unwrap_or(occurrence);
+            indices.insert(expression as *const Expr as usize, index);
+        }
+        ControlFlow::Continue(())
+    });
+    indices
+}
+
+fn expression_parameter_index(
+    expression: &Expr,
+    placeholder_indices: &HashMap<usize, usize>,
+) -> Option<usize> {
+    if !matches!(expression, Expr::Value(Value::Placeholder(_))) {
+        return None;
+    }
+    placeholder_indices
+        .get(&(expression as *const Expr as usize))
+        .copied()
+        .or_else(|| {
+            let Expr::Value(Value::Placeholder(placeholder)) = expression else {
+                return None;
+            };
+            explicit_parameter_index(placeholder)
+        })
+}
+
+fn explicit_parameter_index(placeholder: &str) -> Option<usize> {
+    placeholder
+        .strip_prefix('$')
+        .or_else(|| placeholder.strip_prefix('?'))
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<usize>().ok())
 }
 
 fn is_zero_literal(expression: &Expr) -> bool {

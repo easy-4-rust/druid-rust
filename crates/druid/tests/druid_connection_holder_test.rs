@@ -282,6 +282,7 @@ async fn pooled_mysql_schema_is_restored_after_validation_position() {
         Box::new(move |_holder, disposition| {
             assert!(disposition.is_reusable());
             returned_for_callback.fetch_add(1, Ordering::Relaxed);
+            false
         }),
     );
 

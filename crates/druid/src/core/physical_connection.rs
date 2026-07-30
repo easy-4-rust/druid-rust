@@ -4,6 +4,7 @@ use super::error::DruidError;
 use super::exec_result::ExecResult;
 use super::jdbc_result_set::{PhysicalResultSet, RowSetResultSet};
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
+use super::physical_database_meta_data::PhysicalDatabaseMetaData;
 use super::physical_prepared_statement::PhysicalPreparedStatement;
 use super::physical_statement::{
     PhysicalStatement, PhysicalStatementOptions, SqlTextStatement, StatementExecuteResult,
@@ -352,6 +353,17 @@ pub trait PhysicalConnection: Any + Send {
     /// 返回 Adapter 明确支持的能力。
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
         PhysicalConnectionCapabilities::default()
+    }
+
+    /// 创建借用当前物理连接的数据库 metadata SPI。
+    ///
+    /// 对应 Java：`Connection#getMetaData()`。返回对象的生命周期受当前可变
+    /// 连接借用约束，不会复制连接或创建嵌套池。Adapter 必须返回真实实现；
+    /// 未支持时保持明确 capability error。
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_get_meta_data",
+        })
     }
 
     /// 返回自动提交状态。

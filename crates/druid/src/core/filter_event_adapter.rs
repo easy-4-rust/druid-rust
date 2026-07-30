@@ -299,7 +299,7 @@ where
                                 execution.rows_affected
                             ));
                             self.listener
-                                .statement_execute_error_after(context.sql, &error)
+                                .statement_execute_error_after(&context.sql, &error)
                                 .await?;
                             return Err(error);
                         }
@@ -313,14 +313,14 @@ where
             Err(error) => {
                 return self
                     .listener
-                    .statement_execute_error_after(context.sql, error)
+                    .statement_execute_error_after(&context.sql, error)
                     .await;
             }
         };
 
         if let Err(error) = success {
             self.listener
-                .statement_execute_error_after(context.sql, &error)
+                .statement_execute_error_after(&context.sql, &error)
                 .await?;
             return Err(error);
         }

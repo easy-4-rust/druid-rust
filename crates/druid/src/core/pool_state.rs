@@ -1,4 +1,5 @@
-//! 对应 Java 类：com.alibaba.druid.pool.DruidDataSourceStatValue
+//! 早期 Rust 兼容状态视图；Java 完整区间对象由
+//! `stats::DruidDataSourceStatValue` 独立承载。
 
 use std::time::Duration;
 
@@ -10,8 +11,14 @@ pub struct PoolState {
     pub url: String,
     pub max_open: usize,
     pub active_count: usize,
+    pub active_peak: usize,
+    pub active_peak_time_millis: u64,
     pub idle_count: usize,
+    pub pooling_peak: usize,
+    pub pooling_peak_time_millis: u64,
     pub wait_count: usize,
+    pub not_empty_wait_count: u64,
+    pub not_empty_wait_nanos: u64,
     /// Java `maxWaitThreadCount`；`None` 对应 `-1`。
     pub max_wait_thread_count: Option<usize>,
     pub create_count: u64,
@@ -21,6 +28,16 @@ pub struct PoolState {
     pub destroy_count: u64,
     pub connect_count: u64,
     pub connect_error_count: u64,
+    /// 物理连接创建、初始化或校验失败次数。
+    pub physical_connect_error_count: u64,
+    /// Java `isFailContinuous()`。
+    pub fail_continuous: bool,
+    /// 最近一次进入连续创建失败状态的 epoch millis；未处于失败时为 0。
+    pub fail_continuous_time_millis: u64,
+    /// Java `getLastCreateError()` 的稳定字符串视图。
+    pub last_create_error: Option<String>,
+    /// Java `getLastCreateErrorTimeMillis()`。
+    pub last_create_error_time_millis: u64,
     pub recycle_count: u64,
     /// 回收过程发生异常的次数，对应 Java `recycleErrorCount`。
     pub recycle_error_count: u64,

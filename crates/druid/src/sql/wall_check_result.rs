@@ -1,4 +1,4 @@
-use super::{WallSqlStat, WallViolation};
+use super::{WallSqlStat, WallUpdateCheckItem, WallViolation};
 use std::sync::Arc;
 
 /// 一次 Wall 检查的结构化结果。
@@ -10,7 +10,8 @@ pub struct WallCheckResult {
     statements: Vec<sqlparser::ast::Statement>,
     violations: Vec<WallViolation>,
     syntax_error: bool,
-    sql_stat: Arc<WallSqlStat>,
+    sql_stat: Option<Arc<WallSqlStat>>,
+    update_check_items: Option<Vec<WallUpdateCheckItem>>,
 }
 
 impl WallCheckResult {
@@ -28,7 +29,24 @@ impl WallCheckResult {
             statements,
             violations,
             syntax_error,
-            sql_stat,
+            sql_stat: Some(sql_stat),
+            update_check_items: None,
+        }
+    }
+
+    /// 创建 privileged 快速通行结果。
+    ///
+    /// 对应 Java `WallProvider#checkInternal` 的 privileged 分支：只保存原 SQL，
+    /// 不产生 AST、违规或 `WallSqlStat`。
+    #[must_use]
+    pub fn privileged(sql: String) -> Self {
+        Self {
+            sql,
+            statements: Vec::new(),
+            violations: Vec::new(),
+            syntax_error: false,
+            sql_stat: None,
+            update_check_items: None,
         }
     }
 
@@ -58,7 +76,18 @@ impl WallCheckResult {
 
     /// 返回共享 SQL 统计对象。
     #[must_use]
-    pub fn sql_stat(&self) -> &Arc<WallSqlStat> {
-        &self.sql_stat
+    pub fn sql_stat(&self) -> Option<&Arc<WallSqlStat>> {
+        self.sql_stat.as_ref()
+    }
+
+    /// 返回 UPDATE 赋值/过滤检查项。
+    #[must_use]
+    pub fn update_check_items(&self) -> Option<&[WallUpdateCheckItem]> {
+        self.update_check_items.as_deref()
+    }
+
+    /// 设置 UPDATE 赋值/过滤检查项；`None` 与空列表保持不同。
+    pub fn set_update_check_items(&mut self, update_check_items: Option<Vec<WallUpdateCheckItem>>) {
+        self.update_check_items = update_check_items;
     }
 }

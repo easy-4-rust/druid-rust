@@ -5,8 +5,8 @@
 use super::{
     DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream, JdbcNClob,
     JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl,
-    ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData, ResultSetStatement,
-    SqlWarning, Value,
+    ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext,
+    ResultSetStatement, SqlWarning, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -350,6 +350,17 @@ pub trait ResultSetFilter: Send + Sync {
     /// 对应 Java：`FilterEventAdapter#resultSetOpenAfter(ResultSetProxy)`。
     fn result_set_open_after(&self, _context: &ResultSetFilterContext) -> Result<(), DruidError> {
         Ok(())
+    }
+
+    /// 查询成功后执行可读取 raw ResultSet、可修改代理列映射的扩展 hook。
+    ///
+    /// 默认桥接原 `result_set_open_after`，已有自定义 Filter 无需修改。
+    /// 对应 Java：`WallFilter#preprocessResultSet(ResultSetProxy)`。
+    fn result_set_open_after_with_proxy(
+        &self,
+        context: &mut ResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        self.result_set_open_after(context.filter_context())
     }
 
     /// 包围 `ResultSet#next()`。

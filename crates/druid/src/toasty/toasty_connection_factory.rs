@@ -132,6 +132,10 @@ impl ToastyConnectionFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for ToastyConnectionFactory {
+    fn connection_url(&self) -> Option<&str> {
+        Some(&self.url)
+    }
+
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         let connection = self
             .driver
@@ -145,6 +149,7 @@ impl PhysicalConnectionFactory for ToastyConnectionFactory {
             connection,
             Arc::clone(&self.schema),
             self.driver.capability(),
+            self.url.clone(),
         )))
     }
 

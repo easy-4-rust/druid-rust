@@ -109,6 +109,18 @@ impl PreparedStatementCacheStats {
             .load(Ordering::Relaxed)
     }
 
+    /// 原子取得并重置缓存命中次数。
+    pub(crate) fn take_cached_prepared_statement_hit_count(&self) -> u64 {
+        self.cached_prepared_statement_hit_count
+            .swap(0, Ordering::AcqRel)
+    }
+
+    /// 原子取得并重置缓存未命中次数。
+    pub(crate) fn take_cached_prepared_statement_miss_count(&self) -> u64 {
+        self.cached_prepared_statement_miss_count
+            .swap(0, Ordering::AcqRel)
+    }
+
     /// 返回缓存访问次数，即 hit + miss。
     pub fn cached_prepared_statement_access_count(&self) -> u64 {
         self.cached_prepared_statement_hit_count()

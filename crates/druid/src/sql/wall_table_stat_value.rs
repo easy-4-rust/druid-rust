@@ -26,6 +26,22 @@ pub struct WallTableStatValue {
 }
 
 impl WallTableStatValue {
+    /// 返回 Java `getTotalExecuteCount()` 的操作计数和。
+    ///
+    /// Java 历史实现不包含 `alterCount`，这里刻意保持该行为。
+    #[must_use]
+    pub fn total_execute_count(&self) -> u64 {
+        self.select_count
+            .saturating_add(self.select_into_count)
+            .saturating_add(self.insert_count)
+            .saturating_add(self.update_count)
+            .saturating_add(self.delete_count)
+            .saturating_add(self.truncate_count)
+            .saturating_add(self.create_count)
+            .saturating_add(self.drop_count)
+            .saturating_add(self.replace_count)
+    }
+
     /// 返回 Java 管理页面使用的字段映射。
     #[must_use]
     pub fn to_map(&self) -> Map<String, Value> {

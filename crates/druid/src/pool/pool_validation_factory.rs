@@ -30,7 +30,13 @@ impl PhysicalConnectionFactory for PoolValidationFactory {
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), DruidError> {
-        self.pool.validate_connection(connection).await
+        if self.pool.test_connection_internal(connection).await {
+            Ok(())
+        } else {
+            Err(DruidError::ValidationFailed(
+                "testConnectionInternal returned false".to_owned(),
+            ))
+        }
     }
 
     async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), DruidError> {

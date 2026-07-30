@@ -37,6 +37,10 @@ impl RbdcConnectionFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for RbdcConnectionFactory {
+    fn connection_url(&self) -> Option<&str> {
+        Some(&self.url)
+    }
+
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         let connection = self.driver.connect(&self.url).await.map_err(|error| {
             DruidError::SqlException(Box::new(

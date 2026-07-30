@@ -11,6 +11,11 @@ use super::DruidError;
 /// 对应 Java: `com.alibaba.druid.pool.ValidConnectionChecker`。
 #[async_trait::async_trait]
 pub trait ValidConnectionChecker: Send + Sync {
+    /// 返回具体 Rust Checker 类型名，供管理快照识别实际装配。
+    fn class_name(&self) -> &'static str {
+        std::any::type_name::<Self>()
+    }
+
     /// 使用验证 SQL 或驱动原生校验检查物理连接。
     ///
     /// `query` 对应 Java `validationQuery`，`validation_query_timeout` 对应秒级

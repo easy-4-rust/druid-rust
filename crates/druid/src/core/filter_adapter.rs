@@ -19,8 +19,10 @@ use std::time::Duration;
 /// - Extended hook、生命周期和属性配置使用对应 trait 的默认空语义；
 /// - [`Wrapper`] 只识别并返回当前 `FilterAdapter` 对象。
 ///
-/// Java 尚未迁移的 CallableStatement、Connection、Statement、Clob、DataSource
-/// 与 metadata 精确 hook 仍由各自迁移账目跟踪，不能因本对象存在而视为完成。
+/// Java 尚未迁移的 CallableStatement、其他 Connection/Statement、Clob 与
+/// DataSource 精确 hook 仍由各自迁移账目跟踪；`Connection#getMetaData` 和
+/// ResultSet metadata 已进入真实 around-chain，但不能据此把全部 384 hook
+/// 视为完成。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct FilterAdapter;
 

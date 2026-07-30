@@ -1,7 +1,9 @@
 use super::DruidDataSourceStatManager;
+use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Druid 管理统计统一门面。
 ///
@@ -9,6 +11,7 @@ use std::sync::OnceLock;
 pub struct DruidStatManagerFacade {
     reset_enable: AtomicBool,
     reset_count: AtomicU64,
+    start_time_millis: u64,
 }
 
 impl DruidStatManagerFacade {
@@ -19,6 +22,7 @@ impl DruidStatManagerFacade {
         INSTANCE.get_or_init(|| Self {
             reset_enable: AtomicBool::new(true),
             reset_count: AtomicU64::new(0),
+            start_time_millis: epoch_millis(),
         })
     }
 
@@ -56,8 +60,15 @@ impl DruidStatManagerFacade {
             "Drivers": [],
             "ResetEnable": self.is_reset_enable(),
             "ResetCount": self.reset_count(),
+            // 旧管理前端依赖这些键，但 Rust 进程不存在 JVM；保留 null，
+            // 不能用 Rust 信息冒充 Java 运行时。
+            "JavaVMName": Value::Null,
             "JavaVersion": Value::Null,
-            "RustVersion": option_env!("RUSTC_VERSION"),
+            "JavaClassPath": Value::Null,
+            "StartTime": self.start_time_millis,
+            "RustMSRV": env!("CARGO_PKG_RUST_VERSION"),
+            "RustTargetOS": std::env::consts::OS,
+            "RustTargetArch": std::env::consts::ARCH,
         })
     }
 
@@ -97,17 +108,7 @@ impl DruidStatManagerFacade {
             .instances()
             .into_iter()
             .filter(|(id, _)| data_source_id.is_none_or(|expected| expected == *id))
-            .flat_map(|(id, data_source)| {
-                data_source
-                    .sql_stat_data()
-                    .into_iter()
-                    .map(move |mut value| {
-                        if let Some(map) = value.as_object_mut() {
-                            map.insert("DataSource".to_owned(), id.into());
-                        }
-                        value
-                    })
-            })
+            .flat_map(|(_, data_source)| data_source.sql_stat_data())
             .collect()
     }
 
@@ -154,39 +155,134 @@ impl DruidStatManagerFacade {
     /// 返回合并 Wall 管理结果。
     #[must_use]
     pub fn wall_stat_data(&self, data_source_id: Option<u64>) -> Value {
-        let values = DruidDataSourceStatManager::global()
+        DruidDataSourceStatManager::global()
             .instances()
             .into_iter()
             .filter(|(id, _)| data_source_id.is_none_or(|expected| expected == *id))
             .map(|(_, data_source)| data_source.wall_stat_data())
-            .collect::<Vec<_>>();
-        let mut merged = serde_json::Map::new();
-        for field in [
-            "checkCount",
-            "hardCheckCount",
-            "violationCount",
-            "violationEffectRowCount",
-            "blackListHitCount",
-            "blackListSize",
-            "whiteListHitCount",
-            "whiteListSize",
-            "syntaxErrorCount",
-        ] {
-            let sum = values
-                .iter()
-                .filter_map(|value| value.get(field).and_then(Value::as_u64))
-                .sum::<u64>();
-            merged.insert(field.to_owned(), sum.into());
-        }
-        for field in ["tables", "functions", "blackList", "whiteList"] {
-            let entries = values
-                .iter()
-                .filter_map(|value| value.get(field).and_then(Value::as_array))
-                .flatten()
-                .cloned()
-                .collect::<Vec<_>>();
-            merged.insert(field.to_owned(), entries.into());
-        }
-        Value::Object(merged)
+            .fold(Value::Object(serde_json::Map::new()), |merged, value| {
+                merge_wall_stat(&merged, &value)
+            })
     }
+}
+
+/// 递归合并两个 Wall 管理快照。
+///
+/// 对应 Java：`DruidStatManagerFacade#mergeWallStat(Map, Map)`。
+fn merge_wall_stat(left: &Value, right: &Value) -> Value {
+    let Some(right) = right.as_object() else {
+        return right.clone();
+    };
+    let Some(left) = left.as_object() else {
+        return Value::Object(right.clone());
+    };
+    if left.is_empty() {
+        return Value::Object(right.clone());
+    }
+    if right.is_empty() {
+        return Value::Object(left.clone());
+    }
+
+    let mut merged = serde_json::Map::new();
+    // Java 历史实现只遍历 mapB 的键；两侧 WallProvider map 键集合正常一致。
+    for (key, right_value) in right {
+        let left_value = left.get(key);
+        let value = match left_value {
+            None => right_value.clone(),
+            Some(left_value) if left_value.is_null() => right_value.clone(),
+            Some(left_value) if right_value.is_null() => left_value.clone(),
+            Some(left_value) if key == "blackList" => merge_black_list(left_value, right_value),
+            Some(left_value) => merge_wall_value(left_value, right_value),
+        };
+        merged.insert(key.clone(), value);
+    }
+    Value::Object(merged)
+}
+
+fn merge_wall_value(left: &Value, right: &Value) -> Value {
+    match (left, right) {
+        (Value::Object(_), Value::Object(_)) => merge_wall_stat(left, right),
+        (Value::Array(left), Value::Array(right))
+            if left.iter().all(Value::is_number) && right.iter().all(Value::is_number) =>
+        {
+            // Java 对 long[] 的历史实现误加了数组长度而不是元素值；迁移保留
+            // 该可观察行为，不能“顺手修正”。
+            let length = left.len().max(right.len());
+            (0..length)
+                .map(|index| {
+                    let mut value = 0_u64;
+                    if index < left.len() {
+                        value = value.wrapping_add(left.len() as u64);
+                    }
+                    if index < right.len() {
+                        value = value.wrapping_add(right.len() as u64);
+                    }
+                    Value::from(value)
+                })
+                .collect::<Vec<_>>()
+                .into()
+        }
+        (Value::Array(left), Value::Array(right)) => merge_named_list(left, right),
+        (Value::String(_), Value::String(_)) => left.clone(),
+        (Value::Number(left), Value::Number(right)) => Value::from(
+            left.as_u64()
+                .unwrap_or_default()
+                .wrapping_add(right.as_u64().unwrap_or_default()),
+        ),
+        _ => right.clone(),
+    }
+}
+
+fn merge_black_list(left: &Value, right: &Value) -> Value {
+    let mut entries = IndexMap::<String, Value>::new();
+    for value in left
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(right.as_array().into_iter().flatten())
+    {
+        if entries.len() >= 1_000 {
+            break;
+        }
+        let Some(sql) = value.get("sql").and_then(Value::as_str) else {
+            continue;
+        };
+        let merged = entries
+            .get(sql)
+            .map_or_else(|| value.clone(), |old| merge_wall_stat(old, value));
+        entries.insert(sql.to_owned(), merged);
+    }
+    entries.into_values().collect::<Vec<_>>().into()
+}
+
+fn merge_named_list(left: &[Value], right: &[Value]) -> Value {
+    let mut mapped = std::collections::HashMap::<Option<String>, &Value>::new();
+    for value in left {
+        mapped.insert(
+            value.get("name").and_then(Value::as_str).map(str::to_owned),
+            value,
+        );
+    }
+    right
+        .iter()
+        .map(|right_value| {
+            let name = right_value
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            mapped.get(&name).map_or_else(
+                || right_value.clone(),
+                |left_value| merge_wall_stat(left_value, right_value),
+            )
+        })
+        .collect::<Vec<_>>()
+        .into()
+}
+
+fn epoch_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX)
+        })
 }

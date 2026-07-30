@@ -34,6 +34,8 @@ pub enum DbType {
     Drds,
     ClickHouse,
     Blink,
+    /// 对应 Java 已废弃的 `antspark`；与 `spark` 共享 mask。
+    AntSpark,
     Spark,
     OceanBaseOracle,
     PolarDb,
@@ -69,7 +71,6 @@ pub enum DbType {
     As400,
     SapDb,
     Kdb,
-    Log4Jdbc,
     Xugu,
     FirebirdSql,
     JsqlConnect,
@@ -83,17 +84,31 @@ pub enum DbType {
 }
 
 impl DbType {
-    /// 按 Java enum 名称和两个兼容别名解析。
+    /// 按 Java `DbType.of(String)` 的规则解析。
+    ///
+    /// 对应 Java：`DbType#of(String)`。除 `aliyun_ads` 和 `maxcompute`
+    /// 两个兼容别名忽略大小写外，枚举名称严格区分大小写，也不会修剪空白。
+    /// Java 专属的 log4jdbc 包装驱动不形成 Rust 数据库类型，因此
+    /// `log4jdbc` 返回 `None`；旧 JDBC URL 仍由 `JdbcUtils` 归一化到真实
+    /// vendor。
     #[must_use]
     pub fn of(name: &str) -> Option<Self> {
-        let normalized = name.trim().to_ascii_lowercase().replace('-', "_");
-        Some(match normalized.as_str() {
+        if name.is_empty() {
+            return None;
+        }
+        if name.eq_ignore_ascii_case("aliyun_ads") {
+            return Some(Self::Ads);
+        }
+        if name.eq_ignore_ascii_case("maxcompute") {
+            return Some(Self::Odps);
+        }
+        Some(match name {
             "other" => Self::Other,
             "jtds" => Self::Jtds,
-            "hsql" | "hsqldb" => Self::Hsql,
+            "hsql" => Self::Hsql,
             "db2" => Self::Db2,
-            "postgresql" | "postgres" | "pg" => Self::PostgreSql,
-            "sqlserver" | "mssql" => Self::SqlServer,
+            "postgresql" => Self::PostgreSql,
+            "sqlserver" => Self::SqlServer,
             "oracle" => Self::Oracle,
             "mysql" => Self::MySql,
             "mariadb" => Self::MariaDb,
@@ -101,24 +116,25 @@ impl DbType {
             "hive" => Self::Hive,
             "h2" => Self::H2,
             "dm" => Self::Dm,
-            "kingbase" | "kingbase8" => Self::Kingbase,
+            "kingbase" => Self::Kingbase,
             "gbase" => Self::Gbase,
             "oceanbase" => Self::OceanBase,
             "informix" => Self::Informix,
-            "odps" | "maxcompute" => Self::Odps,
+            "odps" => Self::Odps,
             "teradata" => Self::Teradata,
             "phoenix" => Self::Phoenix,
             "edb" => Self::Edb,
             "kylin" => Self::Kylin,
             "sqlite" => Self::SQLite,
-            "ads" | "aliyun_ads" => Self::Ads,
+            "ads" => Self::Ads,
             "presto" => Self::Presto,
-            "elastic_search" | "elasticsearch" => Self::ElasticSearch,
+            "elastic_search" => Self::ElasticSearch,
             "hbase" => Self::Hbase,
             "drds" => Self::Drds,
             "clickhouse" => Self::ClickHouse,
             "blink" => Self::Blink,
-            "spark" | "antspark" => Self::Spark,
+            "antspark" => Self::AntSpark,
+            "spark" => Self::Spark,
             "oceanbase_oracle" => Self::OceanBaseOracle,
             "polardb" => Self::PolarDb,
             "ali_oracle" => Self::AliOracle,
@@ -126,7 +142,7 @@ impl DbType {
             "sybase" => Self::Sybase,
             "highgo" => Self::HighGo,
             "greenplum" => Self::Greenplum,
-            "gaussdb" | "opengauss" => Self::GaussDb,
+            "gaussdb" => Self::GaussDb,
             "trino" => Self::Trino,
             "oscar" => Self::Oscar,
             "tidb" => Self::TiDb,
@@ -153,11 +169,10 @@ impl DbType {
             "as400" => Self::As400,
             "sapdb" => Self::SapDb,
             "kdb" => Self::Kdb,
-            "log4jdbc" => Self::Log4Jdbc,
             "xugu" => Self::Xugu,
             "firebirdsql" => Self::FirebirdSql,
-            "jsqlconnect" => Self::JsqlConnect,
-            "jturbo" => Self::JTurbo,
+            "JSQLConnect" => Self::JsqlConnect,
+            "JTurbo" => Self::JTurbo,
             "interbase" => Self::Interbase,
             "pointbase" => Self::Pointbase,
             "edbc" => Self::Edbc,
@@ -202,6 +217,7 @@ impl DbType {
             Self::Drds => "drds",
             Self::ClickHouse => "clickhouse",
             Self::Blink => "blink",
+            Self::AntSpark => "antspark",
             Self::Spark => "spark",
             Self::OceanBaseOracle => "oceanbase_oracle",
             Self::PolarDb => "polardb",
@@ -237,7 +253,6 @@ impl DbType {
             Self::As400 => "as400",
             Self::SapDb => "sapdb",
             Self::Kdb => "kdb",
-            Self::Log4Jdbc => "log4jdbc",
             Self::Xugu => "xugu",
             Self::FirebirdSql => "firebirdsql",
             Self::JsqlConnect => "JSQLConnect",
@@ -285,6 +300,7 @@ impl DbType {
             Self::Drds => Some(27),
             Self::ClickHouse => Some(28),
             Self::Blink => Some(29),
+            Self::AntSpark => Some(30),
             Self::Spark => Some(30),
             Self::OceanBaseOracle => Some(31),
             Self::PolarDb => Some(32),
@@ -329,6 +345,42 @@ impl DbType {
             self,
             Self::PostgreSql | Self::Edb | Self::Greenplum | Self::Hologres
         )
+    }
+
+    /// 返回 Java 构造器保存的 `hashCode64`。
+    ///
+    /// 对应 Java：`new DbType(mask)` 中的
+    /// `FnvHash.hashCode64(name())`，按 UTF-16 code unit 对 ASCII 大写
+    /// 归一化后执行 FNV-1a 64 位运算。当前枚举外部名称均为 ASCII。
+    #[must_use]
+    pub fn hash_code_64(self) -> u64 {
+        const BASIC: u64 = 0xcbf2_9ce4_8422_2325;
+        const PRIME: u64 = 0x0000_0100_0000_01b3;
+
+        self.as_str().bytes().fold(BASIC, |hash, byte| {
+            let normalized = if byte.is_ascii_uppercase() {
+                byte.to_ascii_lowercase()
+            } else {
+                byte
+            };
+            (hash ^ u64::from(normalized)).wrapping_mul(PRIME)
+        })
+    }
+
+    /// 合并多个数据库类型的 Java mask。
+    ///
+    /// 对应 Java：`DbType.of(DbType...)`。
+    #[must_use]
+    pub fn mask_of(types: impl IntoIterator<Item = Self>) -> u64 {
+        types
+            .into_iter()
+            .fold(0_u64, |mask, db_type| mask | db_type.mask())
+    }
+
+    /// 判断字符串是否按 Java `equals(String)` 解析为当前类型。
+    #[must_use]
+    pub fn equals_name(self, other: &str) -> bool {
+        Self::of(other) == Some(self)
     }
 }
 

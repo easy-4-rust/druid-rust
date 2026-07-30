@@ -38,6 +38,12 @@ pub struct DruidPooledCallableStatementHandle {
 }
 
 impl DruidPooledCallableStatementHandle {
+    /// 返回继承自 Statement proxy 的 ID。
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.prepared_statement.id()
+    }
+
     /// 返回完整缓存键。
     pub fn key(&self) -> &PreparedStatementKey {
         self.prepared_statement.key()
@@ -148,6 +154,12 @@ impl std::fmt::Debug for DruidPooledCallableStatement {
 }
 
 impl DruidPooledCallableStatement {
+    /// 返回继承自 Statement proxy 的 ID。
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.prepared_statement.id()
+    }
+
     pub(crate) fn new(prepared_statement: DruidPooledPreparedStatement) -> Self {
         Self { prepared_statement }
     }
@@ -273,6 +285,18 @@ impl DruidPooledCallableStatement {
     /// 关闭逻辑 CallableStatement。
     pub fn close(&mut self) -> Result<(), DruidError> {
         self.prepared_statement.close()
+    }
+
+    /// 在原池化连接上下文中关闭 CallableStatement。
+    ///
+    /// 对应 Java：`DruidPooledConnection#closePoolableStatement`。除执行
+    /// PreparedStatement 的缓存归还与异常分类外，还会从 holder 的
+    /// statement trace 中移除该逻辑对象。
+    pub fn close_with_connection(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+    ) -> Result<(), DruidError> {
+        self.prepared_statement.close_with_connection(connection)
     }
 
     fn result_set_statement_handle(&self) -> DruidPooledCallableStatementHandle {
@@ -1001,7 +1025,11 @@ impl DruidPooledCallableStatement {
         type_map: Option<&JdbcTypeMap>,
     ) -> Result<JdbcObject, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.out_parameter_with_type_map(&parameter, type_map))
+        let result = self.apply_callable(|statement| {
+            statement.out_parameter_with_type_map(&parameter, type_map)
+        });
+        self.record_object_lob_result(&result);
+        result
     }
 
     /// 使用 Java 类型 Map 读取命名对象。
@@ -1011,7 +1039,11 @@ impl DruidPooledCallableStatement {
         type_map: Option<&JdbcTypeMap>,
     ) -> Result<JdbcObject, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.out_parameter_with_type_map(&parameter, type_map))
+        let result = self.apply_callable(|statement| {
+            statement.out_parameter_with_type_map(&parameter, type_map)
+        });
+        self.record_object_lob_result(&result);
+        result
     }
 
     /// 使用 Java `Class<T>` 对应目标类型读取索引对象。
@@ -1412,7 +1444,11 @@ impl DruidPooledCallableStatement {
     /// 对应 Java：`getBlob(int parameterIndex)`。
     pub fn get_blob(&mut self, parameter_index: usize) -> Result<Option<JdbcBlob>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.blob_out_parameter(&parameter))
+        let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_blob_open();
+        }
+        result
     }
 
     /// 读取命名 Blob OUT 参数。
@@ -1420,19 +1456,31 @@ impl DruidPooledCallableStatement {
     /// 对应 Java：`getBlob(String parameterName)`。
     pub fn get_named_blob(&mut self, parameter_name: &str) -> Result<Option<JdbcBlob>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.blob_out_parameter(&parameter))
+        let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_blob_open();
+        }
+        result
     }
 
     /// 读取索引 Clob OUT 参数。
     pub fn get_clob(&mut self, parameter_index: usize) -> Result<Option<JdbcClob>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.clob_out_parameter(&parameter))
+        let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_clob_open();
+        }
+        result
     }
 
     /// 读取命名 Clob OUT 参数。
     pub fn get_named_clob(&mut self, parameter_name: &str) -> Result<Option<JdbcClob>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.clob_out_parameter(&parameter))
+        let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
+        if result.as_ref().is_ok_and(Option::is_some) {
+            self.record_clob_open();
+        }
+        result
     }
 
     /// 读取索引 NClob OUT 参数。
@@ -1522,7 +1570,9 @@ impl DruidPooledCallableStatement {
     }
 
     fn get(&mut self, parameter: CallableParameter) -> Result<JdbcObject, DruidError> {
-        self.apply_callable(|statement| statement.out_parameter(&parameter))
+        let result = self.apply_callable(|statement| statement.out_parameter(&parameter));
+        self.record_object_lob_result(&result);
+        result
     }
 
     fn apply_callable<T>(
@@ -1554,5 +1604,28 @@ impl DruidPooledCallableStatement {
             self.prepared_statement.record_exception();
         }
         result
+    }
+
+    fn record_blob_open(&self) {
+        self.prepared_statement
+            .pooled_statement()
+            .record_blob_open();
+    }
+
+    fn record_object_lob_result(&self, result: &Result<JdbcObject, DruidError>) {
+        let Ok(value) = result.as_ref() else {
+            return;
+        };
+        match value {
+            JdbcObject::Blob(_) => self.record_blob_open(),
+            JdbcObject::Clob(_) | JdbcObject::NClob(_) => self.record_clob_open(),
+            _ => {}
+        }
+    }
+
+    fn record_clob_open(&self) {
+        self.prepared_statement
+            .pooled_statement()
+            .record_clob_open();
     }
 }

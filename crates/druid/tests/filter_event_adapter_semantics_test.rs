@@ -152,7 +152,9 @@ async fn default_anonymous_adapter_preserves_every_java_no_op_template() {
 
     let start = Instant::now();
     let mut context = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 7,
+        statement_id: Some(20_001),
+        sql: "SELECT 1".to_owned(),
         params: &[],
         prepared_parameters: None,
         data_source: "default-event-adapter",
@@ -197,6 +199,8 @@ async fn default_anonymous_adapter_preserves_every_java_no_op_template() {
 
     let batch_statements = vec!["UPDATE a".to_string(), "UPDATE b".to_string()];
     let mut batch_context = BatchExecContext {
+        connection_id: 7,
+        statement_id: Some(20_002),
         sql: "UPDATE a\n;\nUPDATE b",
         statements: &batch_statements,
         parameter_sets: &[],
@@ -204,6 +208,7 @@ async fn default_anonymous_adapter_preserves_every_java_no_op_template() {
         kind: BatchExecKind::Statement,
         data_source: "default-event-adapter",
         start,
+        fingerprint: None,
         in_transaction: false,
     };
     BeforeFilter::before_batch(&adapter, &mut batch_context)
@@ -351,7 +356,9 @@ async fn success_callback_failure_enters_error_after_and_remains_primary() {
         events: Arc::clone(&event_log),
     });
     let context = ExecContext {
-        sql: "SELECT 1",
+        connection_id: 7,
+        statement_id: Some(20_003),
+        sql: "SELECT 1".to_owned(),
         params: &[],
         prepared_parameters: None,
         data_source: "event-test",
@@ -402,7 +409,9 @@ impl FilterEventListener for ReplacingErrorListener {
 async fn error_callback_failure_replaces_the_original_execution_error() {
     let adapter = FilterEventAdapter::with_listener(ReplacingErrorListener);
     let context = ExecContext {
-        sql: "BROKEN SQL",
+        connection_id: 7,
+        statement_id: Some(20_004),
+        sql: "BROKEN SQL".to_owned(),
         params: &[],
         prepared_parameters: None,
         data_source: "event-test",

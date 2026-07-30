@@ -1,15 +1,15 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use parking_lot::RwLock;
 
-use crate::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use crate::stats::{DataSourceMonitorable, DruidDataSourceStatManager};
+use crate::core::{DruidError, DruidPooledConnection, PhysicalConnectionFactory, Pool, PoolState};
+use crate::stats::{DataSourceMonitorable, DruidDataSourceStatManager, DruidDataSourceStatValue};
 use serde_json::json;
 use std::sync::Arc;
 
 use super::managed_data_source::ManagedDataSource;
-use super::DruidPool;
+use super::{DataSourceProxy, DruidPool};
 
 /// Druid 的 canonical 数据源门面。
 ///
@@ -19,8 +19,8 @@ use super::DruidPool;
 /// 不会形成 pool-in-pool。
 pub struct DruidDataSource {
     pool: DruidPool,
-    enable: AtomicBool,
     object_name: RwLock<Option<String>>,
+    data_source_id: OnceLock<u64>,
 }
 
 impl DruidDataSource {
@@ -29,20 +29,18 @@ impl DruidDataSource {
     pub fn from_pool(pool: DruidPool) -> Self {
         Self {
             pool,
-            enable: AtomicBool::new(true),
             object_name: RwLock::new(None),
+            data_source_id: OnceLock::new(),
         }
     }
 
     /// 获取连接；禁用时返回 Java `DataSourceDisableException` 对应错误。
     pub async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        self.ensure_enabled()?;
         self.pool.get().await
     }
 
     /// 幂等初始化数据源并预建 `initialSize` 个连接。
     pub async fn init(&self) -> Result<(), DruidError> {
-        self.ensure_enabled()?;
         self.pool.init().await
     }
 
@@ -51,7 +49,6 @@ impl DruidDataSource {
         &self,
         timeout: Duration,
     ) -> Result<DruidPooledConnection, DruidError> {
-        self.ensure_enabled()?;
         self.pool.get_timeout(timeout).await
     }
 
@@ -61,9 +58,67 @@ impl DruidDataSource {
         self.pool.state()
     }
 
+    /// 返回数据源当前是否处于 Java `onFatalError` 状态。
+    #[must_use]
+    pub fn is_on_fatal_error(&self) -> bool {
+        self.pool.is_on_fatal_error()
+    }
+
+    /// 返回 fatal-error 活动连接门限。
+    #[must_use]
+    pub fn on_fatal_error_max_active(&self) -> i32 {
+        self.pool.on_fatal_error_max_active()
+    }
+
+    /// 返回是否异步创建 initialSize 个连接。
+    #[must_use]
+    pub fn is_async_init(&self) -> bool {
+        self.pool.is_async_init()
+    }
+
+    /// 返回同步初始化建连失败时是否抛错。
+    #[must_use]
+    pub fn is_init_exception_throw(&self) -> bool {
+        self.pool.is_init_exception_throw()
+    }
+
+    /// 返回数据源是否处于连续物理创建失败状态。
+    #[must_use]
+    pub fn is_fail_continuous(&self) -> bool {
+        self.pool.is_fail_continuous()
+    }
+
+    /// 返回最近一次物理创建错误。
+    #[must_use]
+    pub fn last_create_error(&self) -> Option<DruidError> {
+        self.pool.last_create_error()
+    }
+
+    /// 返回最近一次物理创建错误时间。
+    #[must_use]
+    pub fn last_create_error_time_millis(&self) -> u64 {
+        self.pool.last_create_error_time_millis()
+    }
+
+    /// 取得并重置数据源区间统计快照。
+    #[must_use]
+    pub fn stat_value_and_reset(&self) -> DruidDataSourceStatValue {
+        self.pool.stat_value_and_reset()
+    }
+
+    /// 立即发布一份区间统计快照。
+    pub fn publish_stats(&self) -> Result<(), DruidError> {
+        self.pool.publish_stats()
+    }
+
     /// 执行默认空闲连接收缩。
     pub async fn shrink(&self) {
         self.pool.shrink().await;
+    }
+
+    /// 按数据源 keepAlive 配置执行指定 checkTime 的收缩。
+    pub async fn shrink_check_time(&self, check_time: bool) {
+        self.pool.shrink_check_time(check_time).await;
     }
 
     /// 按时间和保活选项执行空闲连接收缩。
@@ -78,21 +133,69 @@ impl DruidDataSource {
         self.pool.remove_abandoned()
     }
 
-    /// 将池内物理连接总数填充到 `minIdle`。
+    /// 强制丢弃指定池化连接；`None` 对应 Java null 并返回 false。
+    pub fn discard_connection(&self, connection: Option<&mut DruidPooledConnection>) -> bool {
+        self.pool.discard_connection(connection)
+    }
+
+    /// 将池内物理连接总数填充到 `maxActive`。
     pub async fn fill(&self) -> Result<usize, DruidError> {
-        self.ensure_enabled()?;
         self.pool.fill().await
     }
 
     /// 将池内物理连接总数填充到指定数量。
-    pub async fn fill_to(&self, to_count: usize) -> Result<usize, DruidError> {
-        self.ensure_enabled()?;
+    pub async fn fill_to(&self, to_count: i32) -> Result<usize, DruidError> {
         self.pool.fill_to(to_count).await
+    }
+
+    /// 仅在当前已有 pooling connection 时尝试获取，不触发 init 或建连。
+    pub async fn try_get_connection(&self) -> Result<Option<DruidPooledConnection>, DruidError> {
+        self.pool.try_get_connection().await
+    }
+
+    /// 返回 active + pooling 是否已经达到 maxActive。
+    #[must_use]
+    pub fn is_full(&self) -> bool {
+        self.pool.is_full()
+    }
+
+    /// 通知数据源：外部物理连接 factory 的 URL/用户名/密码已经更新。
+    ///
+    /// 池不会保存新密码；调用方须先更新 factory，再调用本方法完成旧连接替换。
+    pub async fn notify_credentials_changed(&self) -> Result<u64, DruidError> {
+        self.pool.notify_credentials_changed().await
+    }
+
+    /// 返回当前数据源凭据版本。
+    #[must_use]
+    pub fn user_password_version(&self) -> u64 {
+        self.pool.user_password_version()
     }
 
     /// 关闭数据源及全部空闲物理连接。
     pub async fn close(&self) {
         self.pool.close().await;
+    }
+
+    /// 关闭旧代次并恢复为尚未初始化的数据源。
+    ///
+    /// 活动连接不为零时返回
+    /// [`DruidError::ActiveConnectionsPreventRestart`]；成功后 enable 恢复为
+    /// `true`，下一次 `init/get/fill` 才创建新代次连接和后台任务。
+    pub async fn restart(&self) -> Result<(), DruidError> {
+        self.pool.restart().await
+    }
+
+    /// 返回数据源是否已经完成至少一次初始化且尚未 restart。
+    #[must_use]
+    pub fn is_initialized(&self) -> bool {
+        self.pool.is_initialized()
+    }
+
+    /// 返回数据源是否已经关闭。
+    #[must_use]
+    pub fn is_closed(&self) -> bool {
+        self.pool.is_closed()
     }
 
     /// 返回底层 native pool；仅用于管理与兼容层，不改变所有权。
@@ -106,16 +209,68 @@ impl DruidDataSource {
     /// Java 通过 JMX/弱引用在 `init()` 中注册；Rust 需要调用者持有 `Arc`，
     /// 因而把所有权要求显式放到类型签名中。
     pub fn register_monitoring(self: &Arc<Self>) -> u64 {
-        let monitorable: Arc<dyn DataSourceMonitorable> = Arc::clone(self) as Arc<_>;
-        DruidDataSourceStatManager::global().register(monitorable)
+        *self.data_source_id.get_or_init(|| {
+            let monitorable: Arc<dyn DataSourceMonitorable> = Arc::clone(self) as Arc<_>;
+            DruidDataSourceStatManager::global().register(monitorable)
+        })
+    }
+}
+
+impl DataSourceProxy for DruidDataSource {
+    fn data_source_stat(&self) -> &Arc<crate::stats::StatsCollector> {
+        self.pool.stats_collector()
     }
 
-    fn ensure_enabled(&self) -> Result<(), DruidError> {
-        if self.is_enable() {
-            Ok(())
-        } else {
-            Err(DruidError::DataSourceDisabled)
-        }
+    fn data_source_id(&self) -> u64 {
+        self.data_source_id.get().copied().unwrap_or(0)
+    }
+
+    fn name(&self) -> &str {
+        self.pool.name()
+    }
+
+    fn db_type(&self) -> Option<&str> {
+        self.pool.db_type_name()
+    }
+
+    fn raw_driver(&self) -> &dyn PhysicalConnectionFactory {
+        self.pool.raw_driver()
+    }
+
+    fn url(&self) -> Option<&str> {
+        self.pool.url()
+    }
+
+    fn raw_jdbc_url(&self) -> Option<&str> {
+        self.pool.raw_url()
+    }
+
+    fn proxy_filter_names(&self) -> Vec<String> {
+        self.pool.filter_class_names()
+    }
+
+    fn create_connection_id(&self) -> u64 {
+        self.pool.create_connection_id()
+    }
+
+    fn create_statement_id(&self) -> u64 {
+        self.pool.create_statement_id()
+    }
+
+    fn create_result_set_id(&self) -> u64 {
+        self.pool.create_result_set_id()
+    }
+
+    fn create_metadata_id(&self) -> u64 {
+        self.pool.create_metadata_id()
+    }
+
+    fn create_transaction_id(&self) -> u64 {
+        self.pool.create_transaction_id()
+    }
+
+    fn connect_properties(&self) -> &std::collections::HashMap<String, String> {
+        self.pool.connect_properties()
     }
 }
 
@@ -132,8 +287,15 @@ impl DataSourceMonitorable for DruidDataSource {
             "DriverClassName": state.driver_name,
             "MaxActive": state.max_open,
             "ActiveCount": state.active_count,
+            "ActivePeak": state.active_peak,
+            "ActivePeakTime": state.active_peak_time_millis,
             "PoolingCount": state.idle_count,
+            "PoolingPeak": state.pooling_peak,
+            "PoolingPeakTime": state.pooling_peak_time_millis,
             "WaitThreadCount": state.wait_count,
+            "NotEmptyWaitCount": state.not_empty_wait_count,
+            "NotEmptyWaitNanos": state.not_empty_wait_nanos,
+            "NotEmptyWaitMillis": state.not_empty_wait_nanos / 1_000_000,
             "MaxWaitThreadCount": state.max_wait_thread_count
                 .and_then(|value| i64::try_from(value).ok())
                 .unwrap_or(-1),
@@ -142,6 +304,7 @@ impl DataSourceMonitorable for DruidDataSource {
             "ConnectCount": state.connect_count,
             "CloseCount": state.close_count,
             "ConnectErrorCount": state.connect_error_count,
+            "CreateErrorCount": state.physical_connect_error_count,
             "RecycleCount": state.recycle_count,
             "RecycleErrorCount": state.recycle_error_count,
             "DiscardCount": state.discard_count,
@@ -163,53 +326,20 @@ impl DataSourceMonitorable for DruidDataSource {
             .sql_merger
             .all_stats()
             .into_iter()
-            .filter_map(|stat| {
-                let mut value = serde_json::to_value(stat.stat_value()).ok()?;
-                value
-                    .as_object_mut()?
-                    .insert("DataSource".to_owned(), self.pool.name().into());
-                Some(value)
+            // Java facade 不返回尚未完成且当前也未运行的预创建 SQL 条目。
+            .filter(|stat| {
+                stat.execute_count() != 0
+                    || stat
+                        .running_count
+                        .load(std::sync::atomic::Ordering::Acquire)
+                        != 0
             })
+            .filter_map(|stat| serde_json::to_value(stat.stat_value()).ok())
             .collect()
     }
 
     fn wall_stat_data(&self) -> serde_json::Value {
-        let provider = self.pool.wall_provider();
-        let white_list = provider
-            .white_list_values(false)
-            .into_iter()
-            .map(|value| serde_json::Value::Object(value.to_map()))
-            .collect::<Vec<_>>();
-        let black_list = provider
-            .black_list_values(false)
-            .into_iter()
-            .map(|value| serde_json::Value::Object(value.to_map()))
-            .collect::<Vec<_>>();
-        let tables = provider
-            .table_stat_values(false)
-            .into_iter()
-            .map(|value| serde_json::Value::Object(value.to_map()))
-            .collect::<Vec<_>>();
-        let functions = provider
-            .function_stat_values(false)
-            .into_iter()
-            .map(|value| serde_json::Value::Object(value.to_map()))
-            .collect::<Vec<_>>();
-        json!({
-            "checkCount": provider.check_count(),
-            "hardCheckCount": provider.hard_check_count(),
-            "violationCount": provider.violation_count(),
-            "violationEffectRowCount": provider.violation_effect_row_count(),
-            "blackListHitCount": provider.black_list_hit_count(),
-            "blackListSize": provider.black_list_size(),
-            "whiteListHitCount": provider.white_list_hit_count(),
-            "whiteListSize": provider.white_list_size(),
-            "syntaxErrorCount": provider.syntax_error_count(),
-            "tables": tables,
-            "functions": functions,
-            "blackList": black_list,
-            "whiteList": white_list,
-        })
+        serde_json::Value::Object(self.pool.wall_provider().stats_map())
     }
 
     fn pooling_connection_info(&self) -> Vec<serde_json::Value> {
@@ -227,11 +357,11 @@ impl DataSourceMonitorable for DruidDataSource {
 
 impl ManagedDataSource for DruidDataSource {
     fn is_enable(&self) -> bool {
-        self.enable.load(Ordering::Acquire)
+        self.pool.is_enabled()
     }
 
     fn set_enable(&self, value: bool) {
-        self.enable.store(value, Ordering::Release);
+        self.pool.set_enabled(value);
     }
 
     fn object_name(&self) -> Option<String> {

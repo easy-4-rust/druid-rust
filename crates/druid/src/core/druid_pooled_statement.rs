@@ -9,21 +9,35 @@ use super::druid_pooled_result_set::DruidPooledResultSetTrace;
 use super::{
     DruidError, DruidPooledConnection, DruidPooledResultSet, ExecResult, FilterChain,
     PhysicalResultSet, PhysicalStatement, Row, RowSetResultSet, SqlWarning, StatementExecuteResult,
-    StatementGeneratedKeys, Unwrapped, Value, Wrapper,
+    StatementExecuteType, StatementGeneratedKeys, Unwrapped, Value, Wrapper,
 };
+use super::{ProxyAttributeValue, ProxyAttributes};
+use crate::stats::StatsCollector;
 use std::any::{Any, TypeId};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 pub(crate) struct DruidPooledStatementInner {
+    pub(crate) connection_id: u64,
+    pub(crate) id: u64,
     pub(crate) statement: Arc<dyn PhysicalStatement>,
+    pub(crate) result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
+    pub(crate) metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
+    attributes: ProxyAttributes,
     pub(crate) lease_active: Arc<AtomicBool>,
     pub(crate) filter_chain: Option<Arc<FilterChain>>,
+    pub(crate) stats_collector: Option<Arc<StatsCollector>>,
     state: Mutex<DruidPooledStatementState>,
 }
 
 struct DruidPooledStatementState {
     closed: bool,
+    last_sql: Option<String>,
+    last_execute_type: Option<StatementExecuteType>,
+    last_execute_started_at: Option<Instant>,
+    last_execute_elapsed: Option<Duration>,
+    first_result_set: bool,
     fetch_row_peak: i32,
     exception_count: u64,
     update_count: i64,
@@ -55,16 +69,32 @@ impl DruidPooledStatement {
 
     pub(crate) fn new(
         statement: Arc<dyn PhysicalStatement>,
+        connection_id: u64,
+        id: u64,
+        result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
         lease_active: Arc<AtomicBool>,
         filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Option<Arc<StatsCollector>>,
     ) -> Self {
         Self {
             inner: Arc::new(DruidPooledStatementInner {
+                connection_id,
+                id,
                 statement,
+                result_set_id_seed,
+                metadata_id_seed,
+                attributes: ProxyAttributes::default(),
                 lease_active,
                 filter_chain,
+                stats_collector,
                 state: Mutex::new(DruidPooledStatementState {
                     closed: false,
+                    last_sql: None,
+                    last_execute_type: None,
+                    last_execute_started_at: None,
+                    last_execute_elapsed: None,
+                    first_result_set: false,
                     fetch_row_peak: -1,
                     exception_count: 0,
                     update_count: -1,
@@ -80,6 +110,56 @@ impl DruidPooledStatement {
 
     pub(crate) fn from_inner(inner: Arc<DruidPooledStatementInner>) -> Self {
         Self { inner }
+    }
+
+    /// 返回 holder statement trace 使用的共享内核。
+    pub(crate) fn statement_trace_inner(&self) -> Arc<DruidPooledStatementInner> {
+        Arc::clone(&self.inner)
+    }
+
+    /// 返回该逻辑 Statement 的对象身份。
+    pub(crate) fn statement_trace_identity(&self) -> usize {
+        Arc::as_ptr(&self.inner) as usize
+    }
+
+    /// 返回 Druid 数据源分配的 Statement proxy ID。
+    ///
+    /// 对应 Java：`WrapperProxy#getId()`；每个数据源从 20000 开始递增。
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.inner.id
+    }
+
+    /// 返回 Statement proxy attribute 数量。
+    #[must_use]
+    pub fn attributes_size(&self) -> usize {
+        self.inner.attributes.len()
+    }
+
+    /// 清空 Statement proxy attributes。
+    pub fn clear_attributes(&self) {
+        self.inner.attributes.clear();
+    }
+
+    /// 返回 Statement proxy attributes 快照。
+    #[must_use]
+    pub fn attributes(&self) -> std::collections::HashMap<String, ProxyAttributeValue> {
+        self.inner.attributes.snapshot()
+    }
+
+    /// 返回指定 Statement proxy attribute。
+    #[must_use]
+    pub fn attribute(&self, key: &str) -> Option<ProxyAttributeValue> {
+        self.inner.attributes.get(key)
+    }
+
+    /// 保存或覆盖 Statement proxy attribute。
+    pub fn put_attribute(
+        &self,
+        key: impl Into<String>,
+        value: ProxyAttributeValue,
+    ) -> Option<ProxyAttributeValue> {
+        self.inner.attributes.put(key, value)
     }
 
     /// 返回底层普通语句 SPI。
@@ -116,13 +196,16 @@ impl DruidPooledStatement {
         sql: &str,
     ) -> Result<Vec<Row>, DruidError> {
         self.ensure_open_for(connection)?;
-        self.begin_single_execution();
+        self.begin_single_execution(sql, StatementExecuteType::ExecuteQuery);
+        let execute_start = Instant::now();
         let result = connection
-            .fetch_with_filters(sql, Vec::<Value>::new())
+            .fetch_with_filters(sql, Vec::<Value>::new(), Some(self.id()))
             .await;
+        self.record_external_elapsed(execute_start.elapsed(), connection);
         match &result {
             Ok(rows) => {
                 let mut state = self.state_mut();
+                state.first_result_set = true;
                 state.fetch_row_peak = state.fetch_row_peak.max(rows.len() as i32);
                 state.update_count = -1;
                 state.execute_results = vec![StatementExecuteResult::ResultSet(rows.clone())];
@@ -145,10 +228,12 @@ impl DruidPooledStatement {
         sql: &str,
     ) -> Result<DruidPooledResultSet, DruidError> {
         self.ensure_open_for(connection)?;
-        self.begin_single_execution();
+        self.begin_single_execution(sql, StatementExecuteType::ExecuteQuery);
+        let execute_start = Instant::now();
         let result = connection
-            .fetch_result_set_with_filters(sql, Vec::<Value>::new())
+            .fetch_result_set_with_filters(sql, Vec::<Value>::new(), Some(self.id()))
             .await;
+        self.record_external_elapsed(execute_start.elapsed(), connection);
         let physical = match result {
             Ok(physical) => physical,
             Err(error) => {
@@ -158,6 +243,7 @@ impl DruidPooledStatement {
         };
         {
             let mut state = self.state_mut();
+            state.first_result_set = true;
             state.update_count = -1;
             state.execute_results.clear();
             state.current_physical_result_set = Some(Arc::clone(&physical));
@@ -191,11 +277,16 @@ impl DruidPooledStatement {
         sql: &str,
     ) -> Result<ExecResult, DruidError> {
         self.ensure_open_for(connection)?;
-        self.begin_single_execution();
-        let result = connection.exec_with_filters(sql, Vec::<Value>::new()).await;
+        self.begin_single_execution(sql, StatementExecuteType::ExecuteUpdate);
+        let execute_start = Instant::now();
+        let result = connection
+            .exec_with_filters(sql, Vec::<Value>::new(), Some(self.id()))
+            .await;
+        self.record_external_elapsed(execute_start.elapsed(), connection);
         match &result {
             Ok(execution) => {
                 let mut state = self.state_mut();
+                state.first_result_set = false;
                 state.update_count = i64::try_from(execution.rows_affected).unwrap_or(i64::MAX);
                 state.execute_results = vec![StatementExecuteResult::Update(execution.clone())];
                 state.current_result_index = 0;
@@ -344,7 +435,11 @@ impl DruidPooledStatement {
         sql: &str,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
-        let result = self.inner.statement.add_batch(sql);
+        let rewritten_sql = self.inner.filter_chain.as_ref().map_or_else(
+            || Ok(sql.to_owned()),
+            |filter_chain| filter_chain.statement_add_batch_sql(sql),
+        )?;
+        let result = self.inner.statement.add_batch(&rewritten_sql);
         self.classify(connection, result)
     }
 
@@ -373,17 +468,21 @@ impl DruidPooledStatement {
         connection: &mut DruidPooledConnection,
     ) -> Result<Vec<i32>, DruidError> {
         self.ensure_open_for(connection)?;
-        self.invalidate_result_sets_for_execute();
+        self.begin_batch_execution();
         let batch_result = self.inner.statement.batch();
         let batch = self.classify(connection, batch_result)?;
         let merged_sql = batch.join("\n;\n");
+        let execute_start = Instant::now();
         let result = connection
-            .exec_batch_with_filters(&merged_sql, &batch)
+            .exec_batch_with_filters(&merged_sql, &batch, Some(self.id()))
             .await;
+        self.record_external_elapsed(execute_start.elapsed(), connection);
         match result {
             Ok(update_counts) => {
                 // Java StatementProxyImpl 只有单元素数组才更新 getUpdateCount。
-                self.state_mut().update_count = if update_counts.len() == 1 {
+                let mut state = self.state_mut();
+                state.first_result_set = false;
+                state.update_count = if update_counts.len() == 1 {
                     i64::from(update_counts[0])
                 } else {
                     -1
@@ -658,6 +757,14 @@ impl DruidPooledStatement {
         let result = self.classify(connection, result);
         if result.is_ok() {
             self.state_mut().closed = true;
+            if let Some(stats) = self.inner.stats_collector.as_ref() {
+                stats.statement_stat().increment_statement_close_counter();
+            }
+            connection.remove_statement_trace(self.statement_trace_identity());
+            if let Some(filter_chain) = &self.inner.filter_chain {
+                filter_chain
+                    .after_statement_close_with_identity(self.inner.connection_id, self.inner.id)?;
+            }
         }
         result
     }
@@ -681,8 +788,12 @@ impl DruidPooledStatement {
         generated_keys: StatementGeneratedKeys,
     ) -> Result<bool, DruidError> {
         self.ensure_open_for(connection)?;
-        self.begin_single_execution();
-        let result = connection.execute_with_filters(sql, generated_keys).await;
+        self.begin_single_execution(sql, StatementExecuteType::Execute);
+        let execute_start = Instant::now();
+        let result = connection
+            .execute_with_filters(sql, generated_keys, Some(self.id()))
+            .await;
+        self.record_external_elapsed(execute_start.elapsed(), connection);
         match result {
             Ok(results) => Ok(self.complete_external_execute(results)),
             Err(error) => {
@@ -739,9 +850,14 @@ impl DruidPooledStatement {
         }
     }
 
-    pub(crate) fn begin_external_execution(&self) {
+    pub(crate) fn begin_external_execution(&self, sql: &str, execute_type: StatementExecuteType) {
         self.invalidate_result_sets_for_execute();
         let mut state = self.state_mut();
+        state.last_sql = Some(sql.to_owned());
+        state.last_execute_type = Some(execute_type);
+        state.last_execute_started_at = Some(Instant::now());
+        state.last_execute_elapsed = None;
+        state.first_result_set = false;
         state.execute_results.clear();
         state.current_physical_result_set = None;
         state.current_result_index = 0;
@@ -749,8 +865,64 @@ impl DruidPooledStatement {
         state.generated_keys.clear();
     }
 
-    fn begin_single_execution(&self) {
-        self.begin_external_execution();
+    fn begin_single_execution(&self, sql: &str, execute_type: StatementExecuteType) {
+        self.begin_external_execution(sql, execute_type);
+    }
+
+    pub(crate) fn begin_batch_execution(&self) {
+        self.invalidate_result_sets_for_execute();
+        let mut state = self.state_mut();
+        state.last_execute_type = Some(StatementExecuteType::ExecuteBatch);
+        state.last_execute_started_at = Some(Instant::now());
+        state.last_execute_elapsed = None;
+        state.first_result_set = false;
+        state.execute_results.clear();
+        state.current_physical_result_set = None;
+        state.current_result_index = 0;
+        state.update_count = -1;
+        state.generated_keys.clear();
+    }
+
+    /// 返回最近一次执行使用的 SQL，供 ResultSet 关闭时回写 SQL 统计。
+    pub fn last_sql(&self) -> Option<String> {
+        self.state().last_sql.clone()
+    }
+
+    /// 返回最近一次执行耗时，供 ResultSet hold 统计组合。
+    pub fn last_execute_elapsed(&self) -> Option<Duration> {
+        self.state().last_execute_elapsed
+    }
+
+    /// 返回最近一次执行入口类型。
+    #[must_use]
+    pub fn last_execute_type(&self) -> Option<StatementExecuteType> {
+        self.state().last_execute_type
+    }
+
+    /// 返回最近一次执行开始至当前的单调耗时。
+    #[must_use]
+    pub fn last_execute_start_elapsed(&self) -> Option<Duration> {
+        self.state()
+            .last_execute_started_at
+            .map(|started_at| started_at.elapsed())
+    }
+
+    /// 返回最近一次 generic/query 执行的首结果是否为 ResultSet。
+    #[must_use]
+    pub fn is_first_result_set(&self) -> bool {
+        self.state().first_result_set
+    }
+
+    /// 保存外部 Statement/PreparedStatement 执行耗时。
+    pub(crate) fn record_external_elapsed(
+        &self,
+        elapsed: Duration,
+        connection: &DruidPooledConnection,
+    ) {
+        self.state_mut().last_execute_elapsed = Some(elapsed);
+        if let Some(sql) = connection.last_execute_sql() {
+            self.state_mut().last_sql = Some(sql.to_owned());
+        }
     }
 
     /// 保存外部 `PreparedStatement` generic execute 的有序结果。
@@ -774,6 +946,7 @@ impl DruidPooledStatement {
             })
             .unwrap_or_default();
         let mut state = self.state_mut();
+        state.first_result_set = first_is_result_set;
         state.execute_results = results;
         state.current_physical_result_set = None;
         state.current_result_index = 0;
@@ -785,6 +958,7 @@ impl DruidPooledStatement {
     /// 保存 `PreparedStatement` 查询结果到共享 `Statement` 状态机。
     pub(crate) fn complete_external_query(&self, rows: Vec<Row>) {
         let mut state = self.state_mut();
+        state.first_result_set = true;
         state.fetch_row_peak = state
             .fetch_row_peak
             .max(i32::try_from(rows.len()).unwrap_or(i32::MAX));
@@ -801,6 +975,7 @@ impl DruidPooledStatement {
         result_set: Arc<dyn PhysicalResultSet>,
     ) {
         let mut state = self.state_mut();
+        state.first_result_set = true;
         state.update_count = -1;
         state.execute_results.clear();
         state.current_physical_result_set = Some(result_set);
@@ -811,6 +986,7 @@ impl DruidPooledStatement {
     /// 保存 `PreparedStatement` 更新结果到共享 `Statement` 状态机。
     pub(crate) fn complete_external_update(&self, execution: &ExecResult) {
         let mut state = self.state_mut();
+        state.first_result_set = false;
         state.update_count = i64::try_from(execution.rows_affected).unwrap_or(i64::MAX);
         state.execute_results = vec![StatementExecuteResult::Update(execution.clone())];
         state.current_physical_result_set = None;
@@ -818,11 +994,36 @@ impl DruidPooledStatement {
         state.generated_keys = Self::generated_key_rows(execution);
     }
 
+    /// 保存 PreparedStatement batch 的首结果状态。
+    pub(crate) fn complete_external_batch(&self, update_counts: &[i32]) {
+        let mut state = self.state_mut();
+        state.first_result_set = false;
+        state.update_count = if update_counts.len() == 1 {
+            i64::from(update_counts[0])
+        } else {
+            -1
+        };
+        state.execute_results.clear();
+        state.current_physical_result_set = None;
+        state.current_result_index = 0;
+        state.generated_keys.clear();
+    }
+
     /// 关闭嵌入在 `PreparedStatement` 中的 `Statement` 基类状态与所有 `ResultSet`。
     pub(crate) fn close_embedded_base(&self) {
+        if self.is_closed() {
+            return;
+        }
         self.clear_result_sets();
         let _ = self.inner.statement.close();
         self.state_mut().closed = true;
+        if let Some(stats) = self.inner.stats_collector.as_ref() {
+            stats.statement_stat().increment_statement_close_counter();
+        }
+        if let Some(filter_chain) = &self.inner.filter_chain {
+            let _ = filter_chain
+                .after_statement_close_with_identity(self.inner.connection_id, self.inner.id);
+        }
     }
 
     fn classify<T>(
@@ -850,6 +1051,40 @@ impl DruidPooledStatement {
     pub(crate) fn record_result_set_exception(&self) {
         let mut state = self.state_mut();
         state.exception_count = state.exception_count.saturating_add(1);
+    }
+
+    /// 同时更新数据源与当前 SQL 的 Blob 打开计数。
+    ///
+    /// 对应 Java：`StatFilter#blobOpenAfter(...)`。
+    pub(crate) fn record_blob_open(&self) {
+        let Some(stats) = self.inner.stats_collector.as_ref() else {
+            return;
+        };
+        stats.record_blob_open();
+        if let Some(sql_stat) = self
+            .last_sql()
+            .as_deref()
+            .and_then(|sql| stats.sql_merger.active_stat_for_sql(sql))
+        {
+            sql_stat.increment_blob_open_count();
+        }
+    }
+
+    /// 同时更新数据源与当前 SQL 的 Clob/NClob 打开计数。
+    ///
+    /// 对应 Java：`StatFilter#clobOpenAfter(...)`。
+    pub(crate) fn record_clob_open(&self) {
+        let Some(stats) = self.inner.stats_collector.as_ref() else {
+            return;
+        };
+        stats.record_clob_open();
+        if let Some(sql_stat) = self
+            .last_sql()
+            .as_deref()
+            .and_then(|sql| stats.sql_merger.active_stat_for_sql(sql))
+        {
+            sql_stat.increment_clob_open_count();
+        }
     }
 
     fn add_result_set_trace(&self, result_set: DruidPooledResultSetTrace) {

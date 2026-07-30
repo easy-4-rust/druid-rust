@@ -59,8 +59,14 @@ fn bundled_aliases_and_java_utf16_fallback_match_filter_manager_contract() {
         Some(STAT_CLASS)
     );
     assert_eq!(
+        manager.get_filter(Some("log")).as_deref(),
+        Some("druid::core::LogFilter")
+    );
+    // Java 日志框架名不是 Rust Filter alias；未知短名称仍遵循 FilterManager
+    // 的直接标识符回退规则。
+    assert_eq!(
         manager.get_filter(Some("commonLogging")).as_deref(),
-        Some("com.alibaba.druid.filter.logging.CommonsLogFilter")
+        Some("commonLogging")
     );
     assert_eq!(manager.get_filter(Some("Stat")).as_deref(), Some("Stat"));
     assert_eq!(manager.get_filter(None), None);

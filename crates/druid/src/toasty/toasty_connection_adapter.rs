@@ -3,7 +3,7 @@
 use super::ToastyPreparedStatement;
 use crate::core::{
     DruidError, ExecResult, JdbcCharacterLength, JdbcInputStream, JdbcObject, JdbcReader,
-    JdbcStreamLength, PhysicalConnection, PhysicalConnectionCapabilities,
+    JdbcStreamLength, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
     PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
     Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, StatementExecuteResult,
     StatementGeneratedKeys, Value,
@@ -36,6 +36,7 @@ fn parse_naive_datetime(value: &str) -> Result<Value, DruidError> {
 pub struct ToastyConnectionAdapter {
     connection: Option<Box<dyn ToastyConnection>>,
     schema: Arc<Schema>,
+    url: String,
     driver_name: &'static str,
     auto_commit: bool,
     read_only: bool,
@@ -63,10 +64,12 @@ impl ToastyConnectionAdapter {
         connection: Box<dyn ToastyConnection>,
         schema: Arc<Schema>,
         capability: &'static Capability,
+        url: String,
     ) -> Self {
         Self {
             connection: Some(connection),
             schema,
+            url,
             driver_name: capability.driver_name,
             auto_commit: true,
             read_only: false,
@@ -818,6 +821,17 @@ impl PhysicalConnection for ToastyConnectionAdapter {
             catalog: false,
             schema: false,
         }
+    }
+
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        self.connection_mut()?;
+        Ok(Box::new(
+            super::toasty_database_meta_data::ToastyDatabaseMetaData::new(
+                &self.url,
+                self.driver_name,
+                self.read_only,
+            ),
+        ))
     }
 
     fn auto_commit(&self) -> bool {

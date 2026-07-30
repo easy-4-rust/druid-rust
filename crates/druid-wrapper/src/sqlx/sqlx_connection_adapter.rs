@@ -5,9 +5,9 @@ use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
-    Row, RowSetResultSet, Savepoint, SqlWarning, StatementExecuteResult, StatementGeneratedKeys,
-    Value,
+    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
+    PreparedStatementKey, Row, RowSetResultSet, Savepoint, SqlWarning, StatementExecuteResult,
+    StatementGeneratedKeys, Value,
 };
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
 use sqlx::sqlite::{SqliteArguments, SqliteRow, SqliteTransactionManager};
@@ -42,6 +42,7 @@ enum SqlxConnectionBackend {
 /// MySQL、PostgreSQL 使用 SQLx Any 的统一连接边界。
 pub struct SqlxConnectionAdapter {
     connection: Option<SqlxConnectionBackend>,
+    url: String,
     savepoint_sequence: u64,
     discarded: bool,
 }
@@ -67,6 +68,7 @@ impl SqlxConnectionAdapter {
         };
         Ok(Self {
             connection: Some(connection),
+            url: url.to_owned(),
             savepoint_sequence: 0,
             discarded: false,
         })
@@ -81,7 +83,7 @@ impl SqlxConnectionAdapter {
             .ok_or(DruidError::ConnectionDiscarded)
     }
 
-    fn driver_error(error: sqlx::Error) -> DruidError {
+    pub(super) fn driver_error(error: sqlx::Error) -> DruidError {
         match error {
             sqlx::Error::Database(database_error) => {
                 let sql_state = database_error.code().map(std::borrow::Cow::into_owned);
@@ -868,6 +870,25 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             clear_warnings: true,
             catalog: false,
             schema: false,
+        }
+    }
+
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        if self.discarded {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        let url = self.url.as_str();
+        match self
+            .connection
+            .as_mut()
+            .ok_or(DruidError::ConnectionDiscarded)?
+        {
+            SqlxConnectionBackend::Any(connection) => Ok(Box::new(
+                super::sqlx_database_meta_data::SqlxDatabaseMetaData::any(connection, url),
+            )),
+            SqlxConnectionBackend::Sqlite(connection) => Ok(Box::new(
+                super::sqlx_database_meta_data::SqlxDatabaseMetaData::sqlite(connection, url),
+            )),
         }
     }
 
