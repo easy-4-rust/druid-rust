@@ -1,8 +1,9 @@
 use super::{
-    DbType, SqlUtils, Wall, WallCheckResult, WallConfig, WallContext, WallDenyStat,
-    WallFunctionStat, WallFunctionStatValue, WallProviderStatValue, WallSqlFunctionStat,
-    WallSqlStat, WallSqlStatValue, WallSqlTableStat, WallTableStat, WallTableStatValue,
-    WallViolation, WallVisitorUtils,
+    ClickhouseWallVisitor, Db2WallVisitor, DbType, MySqlWallVisitor, OracleWallVisitor,
+    PgWallVisitor, SQLiteWallVisitor, SqlServerWallVisitor, SqlUtils, Wall, WallCheckResult,
+    WallConfig, WallContext, WallDenyStat, WallFunctionStat, WallFunctionStatValue,
+    WallProviderStatValue, WallSqlFunctionStat, WallSqlStat, WallSqlStatValue, WallSqlTableStat,
+    WallTableStat, WallTableStatValue, WallViolation, WallVisitor, WallVisitorUtils,
 };
 use crate::core::{DruidError, Value};
 use dashmap::DashMap;
@@ -195,6 +196,15 @@ impl WallProvider {
             .unwrap_or_else(|error| panic!("{error}"))
     }
 
+    /// 判断 SQL 是否没有任何 Wall 违规。
+    ///
+    /// 对应 Java：`WallProvider#checkValid(String)`。内部仍执行完整缓存、统计、
+    /// context 建立与清理；Rust 用 `Result` 显式承载 Java runtime exception。
+    pub fn check_valid(&self, sql: &str) -> Result<bool, DruidError> {
+        self.try_check(sql)
+            .map(|result| result.violations().is_empty())
+    }
+
     /// 检查并按 Wall Visitor 规则改写 SQL。
     ///
     /// 与 Java 可能抛出 `IllegalStateException` 的 `check` 相比，本入口把不支持
@@ -292,10 +302,25 @@ impl WallProvider {
         let mut statements = parsed.clone().unwrap_or_default();
         let sql_modified = rewrite_tenant
             && WallVisitorUtils::rewrite_for_multi_tenant(&mut statements, self.config())?;
-        let (violations, update_check_items) = match &parsed {
-            Ok(statements) => self.wall.check_parsed(sql, statements),
+        let (mut violations, mut update_check_items) = match &parsed {
+            Ok(_) => self.wall.check_parsed(sql, &statements),
             Err(error) => (vec![WallViolation::SyntaxError(error.to_string())], None),
         };
+        if parsed.is_ok() {
+            if let Some(mut visitor) = self.create_wall_visitor() {
+                visitor.check(sql, &statements);
+                for violation in visitor.violations() {
+                    if !violations.contains(violation) {
+                        violations.push(violation.clone());
+                    }
+                }
+                if let Some(visitor_items) = visitor.update_check_items() {
+                    update_check_items
+                        .get_or_insert_with(Vec::new)
+                        .extend_from_slice(visitor_items);
+                }
+            }
+        }
         let syntax_error = parsed.is_err()
             || violations
                 .iter()
@@ -332,6 +357,19 @@ impl WallProvider {
             WallCheckResult::new(result_sql, statements, violations, syntax_error, stat);
         result.set_update_check_items(update_check_items);
         Ok(result)
+    }
+
+    fn create_wall_visitor(&self) -> Option<Box<dyn WallVisitor + '_>> {
+        match self.db_type() {
+            DbType::MySql => Some(Box::new(MySqlWallVisitor::new(self))),
+            DbType::PostgreSql => Some(Box::new(PgWallVisitor::new(self))),
+            DbType::Oracle => Some(Box::new(OracleWallVisitor::new(self))),
+            DbType::SqlServer => Some(Box::new(SqlServerWallVisitor::new(self))),
+            DbType::Db2 => Some(Box::new(Db2WallVisitor::new(self))),
+            DbType::SQLite => Some(Box::new(SQLiteWallVisitor::new(self))),
+            DbType::ClickHouse => Some(Box::new(ClickhouseWallVisitor::new(self))),
+            _ => None,
+        }
     }
 
     /// 查询白/黑名单中的 SQL 统计。

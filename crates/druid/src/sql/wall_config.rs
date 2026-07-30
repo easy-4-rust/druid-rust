@@ -6,13 +6,22 @@
 use super::{TenantCallBack, WallUpdateCheckHandler};
 use indexmap::{IndexMap, IndexSet};
 use parking_lot::RwLock;
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// Wall 配置，每个 boolean 默认值与 Druid Java 一致。
+#[derive(Clone)]
 pub struct WallConfig {
+    pub none_base_statement_allow: bool,
+    pub call_allow: bool,
     pub select_allow: bool,
     pub select_all_column_allow: bool,
     pub select_into_allow: bool,
+    pub select_into_outfile_allow: bool,
+    pub select_union_check: bool,
+    pub select_minus_check: bool,
+    pub select_except_check: bool,
+    pub select_intersect_check: bool,
     pub insert_allow: bool,
     pub update_allow: bool,
     pub delete_allow: bool,
@@ -20,6 +29,9 @@ pub struct WallConfig {
     pub truncate_allow: bool,
     pub alter_table_allow: bool,
     pub create_table_allow: bool,
+    pub rename_table_allow: bool,
+    pub lock_table_allow: bool,
+    pub block_allow: bool,
     pub commit_allow: bool,
     pub rollback_allow: bool,
     pub use_allow: bool,
@@ -27,7 +39,13 @@ pub struct WallConfig {
     pub describe_allow: bool,
     pub start_transaction_allow: bool,
     pub set_allow: bool,
+    pub merge_allow: bool,
+    pub minus_allow: bool,
+    pub intersect_allow: bool,
+    pub replace_allow: bool,
+    /// Rust 兼容字段；精确对应 Java `updateWhereNoneCheck`。
     pub update_must_have_where: bool,
+    /// Rust 兼容字段；精确对应 Java `deleteWhereNoneCheck`。
     pub delete_must_have_where: bool,
     pub select_where_alway_true_check: bool,
     pub select_having_alway_true_check: bool,
@@ -37,44 +55,72 @@ pub struct WallConfig {
     pub condition_and_alway_false_allow: bool,
     pub condition_double_const_allow: bool,
     pub condition_like_true_allow: bool,
+    pub condition_op_xor_allow: bool,
+    pub condition_op_bitwise_allow: bool,
     pub case_condition_const_allow: bool,
     pub multi_statement_allow: bool,
     pub hint_allow: bool,
-    pub none_base_statement_allow: bool,
     pub limit_zero_allow: bool,
     pub comment_allow: bool,
+    pub strict_syntax_check: bool,
+    pub const_arithmetic_allow: bool,
+    pub schema_check: bool,
+    pub table_check: bool,
+    pub function_check: bool,
+    pub object_check: bool,
     pub variant_check: bool,
     pub must_parameterized: bool,
     pub do_privileged_allow: bool,
     pub metadata_allow: bool,
     pub wrap_allow: bool,
+    pub complete_insert_values_check: bool,
+    pub insert_values_check_size: i32,
+    pub select_limit: i32,
+    pub dir: Option<String>,
+    pub inited: bool,
     pub deny_tables: Vec<String>,
     pub deny_functions: Vec<String>,
     pub deny_schemas: Vec<String>,
     pub deny_variants: Vec<String>,
+    pub deny_objects: Vec<String>,
+    pub permit_tables: Vec<String>,
+    pub permit_functions: Vec<String>,
+    pub permit_schemas: Vec<String>,
+    pub permit_variants: Vec<String>,
+    pub read_only_tables: Vec<String>,
     pub select_white_list: bool,
     pub function_white_list: bool,
     pub schema_white_list: bool,
     pub tenant_column: String,
     pub tenant_table_pattern: String,
-    tenant_call_back: RwLock<Option<Arc<dyn TenantCallBack>>>,
-    update_check_columns: RwLock<IndexMap<String, IndexSet<String>>>,
-    update_check_handler: RwLock<Option<Arc<dyn WallUpdateCheckHandler>>>,
+    tenant_call_back: Arc<RwLock<Option<Arc<dyn TenantCallBack>>>>,
+    update_check_columns: Arc<RwLock<IndexMap<String, IndexSet<String>>>>,
+    update_check_handler: Arc<RwLock<Option<Arc<dyn WallUpdateCheckHandler>>>>,
 }
 
 impl Default for WallConfig {
     fn default() -> Self {
         Self {
+            none_base_statement_allow: false,
+            call_allow: true,
             select_allow: true,
             select_all_column_allow: true,
             select_into_allow: true,
+            select_into_outfile_allow: false,
+            select_union_check: true,
+            select_minus_check: true,
+            select_except_check: true,
+            select_intersect_check: true,
             insert_allow: true,
             update_allow: true,
             delete_allow: true,
-            drop_table_allow: false,
-            truncate_allow: false,
+            drop_table_allow: true,
+            truncate_allow: true,
             alter_table_allow: true,
             create_table_allow: true,
+            rename_table_allow: true,
+            lock_table_allow: true,
+            block_allow: true,
             commit_allow: true,
             rollback_allow: true,
             use_allow: true,
@@ -82,39 +128,61 @@ impl Default for WallConfig {
             describe_allow: true,
             start_transaction_allow: true,
             set_allow: true,
-            update_must_have_where: true,
-            delete_must_have_where: true,
+            merge_allow: true,
+            minus_allow: true,
+            intersect_allow: true,
+            replace_allow: true,
+            update_must_have_where: false,
+            delete_must_have_where: false,
             select_where_alway_true_check: true,
             select_having_alway_true_check: true,
             update_where_alway_true_check: true,
             delete_where_alway_true_check: true,
-            condition_and_alway_true_allow: false,
+            condition_and_alway_true_allow: true,
             condition_and_alway_false_allow: false,
             condition_double_const_allow: false,
             condition_like_true_allow: true,
-            case_condition_const_allow: true,
+            condition_op_xor_allow: false,
+            condition_op_bitwise_allow: true,
+            case_condition_const_allow: false,
             multi_statement_allow: false,
             hint_allow: true,
-            none_base_statement_allow: true,
             limit_zero_allow: false,
-            comment_allow: true,
+            comment_allow: false,
+            strict_syntax_check: true,
+            const_arithmetic_allow: true,
+            schema_check: true,
+            table_check: true,
+            function_check: true,
+            object_check: true,
             variant_check: true,
             must_parameterized: false,
             do_privileged_allow: false,
             metadata_allow: true,
             wrap_allow: true,
+            complete_insert_values_check: false,
+            insert_values_check_size: 3,
+            select_limit: -1,
+            dir: None,
+            inited: false,
             deny_tables: Vec::new(),
             deny_functions: Vec::new(),
             deny_schemas: Vec::new(),
             deny_variants: Vec::new(),
+            deny_objects: Vec::new(),
+            permit_tables: Vec::new(),
+            permit_functions: Vec::new(),
+            permit_schemas: Vec::new(),
+            permit_variants: Vec::new(),
+            read_only_tables: Vec::new(),
             select_white_list: false,
             function_white_list: false,
             schema_white_list: false,
             tenant_column: String::new(),
             tenant_table_pattern: String::new(),
-            tenant_call_back: RwLock::new(None),
-            update_check_columns: RwLock::new(IndexMap::new()),
-            update_check_handler: RwLock::new(None),
+            tenant_call_back: Arc::new(RwLock::new(None)),
+            update_check_columns: Arc::new(RwLock::new(IndexMap::new())),
+            update_check_handler: Arc::new(RwLock::new(None)),
         }
     }
 }
@@ -126,6 +194,52 @@ impl WallConfig {
     #[must_use]
     pub fn builder() -> WallConfigBuilder {
         WallConfigBuilder(WallConfig::default())
+    }
+
+    /// 使用 Java Druid 内置规则目录创建配置。
+    ///
+    /// 对应 Java：`new WallConfig(String)`。目录末尾 `/` 会被移除，随后按
+    /// Java 固定顺序合并 deny、readonly 与 permit 文件。Rust 没有
+    /// ClassLoader；crate 自带资源就是 canonical classpath 基线。
+    #[must_use]
+    pub fn with_config_dir(dir: impl Into<String>) -> Self {
+        let mut config = Self::default();
+        config.load_config(dir);
+        config
+    }
+
+    /// 重新加载指定内置规则目录。
+    ///
+    /// 与 Java 一样，本方法只向集合追加并去重，不先清空调用方已有规则。
+    pub fn load_config(&mut self, dir: impl Into<String>) {
+        let dir = dir.into().trim_end_matches('/').to_owned();
+        self.dir = Some(dir.clone());
+        load_resource(&mut self.deny_variants, &format!("{dir}/deny-variant.txt"));
+        load_resource(&mut self.deny_schemas, &format!("{dir}/deny-schema.txt"));
+        load_resource(
+            &mut self.deny_functions,
+            &format!("{dir}/deny-function.txt"),
+        );
+        load_resource(&mut self.deny_tables, &format!("{dir}/deny-table.txt"));
+        load_resource(&mut self.deny_objects, &format!("{dir}/deny-object.txt"));
+        load_resource(
+            &mut self.read_only_tables,
+            &format!("{dir}/readonly-table.txt"),
+        );
+        load_resource(
+            &mut self.permit_functions,
+            &format!("{dir}/permit-function.txt"),
+        );
+        load_resource(&mut self.permit_tables, &format!("{dir}/permit-table.txt"));
+        load_resource(
+            &mut self.permit_schemas,
+            &format!("{dir}/permit-schema.txt"),
+        );
+        load_resource(
+            &mut self.permit_variants,
+            &format!("{dir}/permit-variant.txt"),
+        );
+        self.inited = true;
     }
 
     /// 增加 `table.column` UPDATE 检查配置。
@@ -264,15 +378,15 @@ impl WallConfigBuilder {
         self
     }
     pub fn deny_table(mut self, t: impl Into<String>) -> Self {
-        self.0.deny_tables.push(t.into());
+        insert_rule(&mut self.0.deny_tables, t.into());
         self
     }
     pub fn deny_function(mut self, f: impl Into<String>) -> Self {
-        self.0.deny_functions.push(f.into());
+        insert_rule(&mut self.0.deny_functions, f.into());
         self
     }
     pub fn deny_schema(mut self, s: impl Into<String>) -> Self {
-        self.0.deny_schemas.push(s.into());
+        insert_rule(&mut self.0.deny_schemas, s.into());
         self
     }
     pub fn tenant_column(mut self, v: impl Into<String>) -> Self {
@@ -318,4 +432,96 @@ fn normalize_identifier(identifier: &str) -> String {
         .trim()
         .trim_matches(['`', '"', '[', ']'])
         .to_lowercase()
+}
+
+fn insert_rule(target: &mut Vec<String>, rule: String) {
+    let rule = rule.trim().to_lowercase();
+    if !rule.is_empty() && !target.contains(&rule) {
+        target.push(rule);
+        target.sort_unstable();
+    }
+}
+
+fn load_resource(target: &mut Vec<String>, resource: &str) {
+    let Some(content) = bundled_resource(resource) else {
+        return;
+    };
+    let mut names = target.iter().cloned().collect::<BTreeSet<_>>();
+    names.extend(
+        content
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_lowercase),
+    );
+    *target = names.into_iter().collect();
+}
+
+fn bundled_resource(resource: &str) -> Option<&'static str> {
+    const ROOT: &str = "META-INF/druid/wall/";
+    let resource = resource.strip_prefix('/').unwrap_or(resource);
+    let relative = resource.strip_prefix(ROOT)?;
+    match relative {
+        "clickhouse/deny-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/clickhouse/deny-function.txt"
+        )),
+        "clickhouse/deny-schema.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/clickhouse/deny-schema.txt"
+        )),
+        "mysql/deny-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/mysql/deny-function.txt"
+        )),
+        "mysql/deny-schema.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/mysql/deny-schema.txt"
+        )),
+        "mysql/deny-variant.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/mysql/deny-variant.txt"
+        )),
+        "mysql/permit-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/mysql/permit-function.txt"
+        )),
+        "mysql/permit-variant.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/mysql/permit-variant.txt"
+        )),
+        "oracle/deny-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/oracle/deny-function.txt"
+        )),
+        "oracle/deny-object.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/oracle/deny-object.txt"
+        )),
+        "oracle/deny-schema.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/oracle/deny-schema.txt"
+        )),
+        "oracle/deny-table.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/oracle/deny-table.txt"
+        )),
+        "oracle/deny-variant.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/oracle/deny-variant.txt"
+        )),
+        "oracle/permit-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/oracle/permit-function.txt"
+        )),
+        "postgres/deny-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/postgres/deny-function.txt"
+        )),
+        "postgres/deny-table.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/postgres/deny-table.txt"
+        )),
+        "sqlserver/deny-function.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/sqlserver/deny-function.txt"
+        )),
+        "sqlserver/deny-object.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/sqlserver/deny-object.txt"
+        )),
+        "sqlserver/deny-schema.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/sqlserver/deny-schema.txt"
+        )),
+        "sqlserver/deny-table.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/sqlserver/deny-table.txt"
+        )),
+        "sqlserver/deny-variant.txt" => Some(include_str!(
+            "../../resources/META-INF/druid/wall/sqlserver/deny-variant.txt"
+        )),
+        _ => None,
+    }
 }

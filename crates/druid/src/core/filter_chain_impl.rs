@@ -7,12 +7,13 @@ use super::filter::{
     ExecContext, StatementEvent, StatementEventContext,
 };
 use super::{
-    DruidPooledConnection, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream,
-    JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap,
-    JdbcUrl, PhysicalConnection, PhysicalConnectionFactory, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement, PoolState, ResultSetFilter,
-    ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext,
-    ResultSetStatement, SqlWarning, Value,
+    ClobProxy, DruidPooledConnection, JavaString, JdbcArray, JdbcBlob, JdbcCalendarArgument,
+    JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcOutputStream, JdbcReader, JdbcRef,
+    JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl, JdbcWriter, PhysicalConnection,
+    PhysicalConnectionFactory, PhysicalDatabaseMetaData, PhysicalPreparedStatement,
+    PhysicalResultSet, PhysicalStatement, PoolState, ResultSetFilter, ResultSetFilterChain,
+    ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext, ResultSetStatement,
+    SqlWarning, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -476,6 +477,187 @@ pub struct PhysicalConnectionConnectResult {
     connection_id: u64,
 }
 
+/// 单次 Clob 操作使用的有位置 Filter around-chain。
+///
+/// Java 每次 `ClobProxyImpl` 调用都创建新的 `FilterChainImpl`，因此 Rust 也为
+/// 每个调用从 position=0 开始，并在末端委托同一 raw Clob。
+pub struct ClobFilterChain<'a> {
+    filters: &'a [Arc<dyn BeforeFilter>],
+    position: usize,
+    wrapper: &'a dyn ClobProxy,
+}
+
+impl<'a> ClobFilterChain<'a> {
+    fn new(filters: &'a [Arc<dyn BeforeFilter>], wrapper: &'a dyn ClobProxy) -> Self {
+        Self {
+            filters,
+            position: 0,
+            wrapper,
+        }
+    }
+
+    /// 返回当前 Druid Clob Proxy。
+    #[must_use]
+    pub fn wrapper(&self) -> &dyn ClobProxy {
+        self.wrapper
+    }
+
+    /// 继续 `Clob#length` 链。
+    pub fn clob_length(&mut self) -> Result<i64, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_length(self)
+        } else {
+            self.wrapper.raw_clob().length()
+        }
+    }
+
+    /// 继续 `Clob#getSubString` 链。
+    pub fn clob_get_sub_string(
+        &mut self,
+        position: i64,
+        length: i32,
+    ) -> Result<JavaString, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_get_sub_string(self, position, length)
+        } else {
+            self.wrapper.raw_clob().get_sub_string(position, length)
+        }
+    }
+
+    /// 继续无范围 `Clob#getCharacterStream` 链。
+    pub fn clob_get_character_stream(&mut self) -> Result<JdbcReader, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_get_character_stream(self)
+        } else {
+            self.wrapper.raw_clob().get_character_stream()
+        }
+    }
+
+    /// 继续 `Clob#getAsciiStream` 链。
+    pub fn clob_get_ascii_stream(&mut self) -> Result<JdbcInputStream, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_get_ascii_stream(self)
+        } else {
+            self.wrapper.raw_clob().get_ascii_stream()
+        }
+    }
+
+    /// 继续 `Clob#position(String,long)` 链。
+    pub fn clob_position_string(
+        &mut self,
+        pattern: &JavaString,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_position_string(self, pattern, start)
+        } else {
+            self.wrapper.raw_clob().position_string(pattern, start)
+        }
+    }
+
+    /// 继续 `Clob#position(Clob,long)` 链。
+    pub fn clob_position_clob(
+        &mut self,
+        pattern: &JdbcClob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_position_clob(self, pattern, start)
+        } else {
+            self.wrapper.raw_clob().position_clob(pattern, start)
+        }
+    }
+
+    /// 继续 `Clob#setString(long,String)` 链。
+    pub fn clob_set_string(
+        &mut self,
+        position: i64,
+        value: &JavaString,
+    ) -> Result<i32, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_set_string(self, position, value)
+        } else {
+            self.wrapper.raw_clob().set_string(position, value)
+        }
+    }
+
+    /// 继续 `Clob#setString(long,String,int,int)` 链。
+    pub fn clob_set_string_range(
+        &mut self,
+        position: i64,
+        value: &JavaString,
+        offset: i32,
+        length: i32,
+    ) -> Result<i32, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_set_string_range(self, position, value, offset, length)
+        } else {
+            self.wrapper
+                .raw_clob()
+                .set_string_range(position, value, offset, length)
+        }
+    }
+
+    /// 继续 `Clob#setAsciiStream` 链。
+    pub fn clob_set_ascii_stream(&mut self, position: i64) -> Result<JdbcOutputStream, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_set_ascii_stream(self, position)
+        } else {
+            self.wrapper.raw_clob().set_ascii_stream(position)
+        }
+    }
+
+    /// 继续 `Clob#setCharacterStream` 链。
+    pub fn clob_set_character_stream(&mut self, position: i64) -> Result<JdbcWriter, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_set_character_stream(self, position)
+        } else {
+            self.wrapper.raw_clob().set_character_stream(position)
+        }
+    }
+
+    /// 继续 `Clob#truncate` 链。
+    pub fn clob_truncate(&mut self, length: i64) -> Result<(), DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_truncate(self, length)
+        } else {
+            self.wrapper.raw_clob().truncate(length)
+        }
+    }
+
+    /// 继续 `Clob#free` 链。
+    pub fn clob_free(&mut self) -> Result<(), DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_free(self)
+        } else {
+            self.wrapper.raw_clob().free()
+        }
+    }
+
+    /// 继续范围 `Clob#getCharacterStream` 链。
+    pub fn clob_get_character_stream_range(
+        &mut self,
+        position: i64,
+        length: i64,
+    ) -> Result<JdbcReader, DruidError> {
+        if let Some(filter) = self.next_filter() {
+            filter.clob_get_character_stream_range(self, position, length)
+        } else {
+            self.wrapper
+                .raw_clob()
+                .get_character_stream_range(position, length)
+        }
+    }
+
+    fn next_filter(&mut self) -> Option<Arc<dyn BeforeFilter>> {
+        let filter = self.filters.get(self.position).cloned();
+        if filter.is_some() {
+            self.position += 1;
+        }
+        filter
+    }
+}
+
 impl PhysicalConnectionConnectResult {
     /// 由无 Filter 的 canonical 池末端构造建连结果。
     pub(crate) const fn new(
@@ -669,6 +851,60 @@ pub struct ConnectionWarningFilterChain<'a> {
     filters: &'a [Arc<dyn BeforeFilter>],
     position: usize,
     physical: &'a mut dyn PhysicalConnection,
+}
+
+/// 单次 Connection LOB 创建使用的有位置 Filter 调用链。
+///
+/// 对应 Java `FilterChainImpl#connection_createBlob/createClob/createNClob`。
+/// 每个公开调用都创建新链并从位置 0 开始；Filter 可以替换返回句柄、短路或
+/// 返回错误，遍历完成后才进入同一物理连接。
+pub struct ConnectionLobFilterChain<'a> {
+    filters: &'a [Arc<dyn BeforeFilter>],
+    position: usize,
+    physical: &'a mut dyn PhysicalConnection,
+}
+
+impl<'a> ConnectionLobFilterChain<'a> {
+    fn new(filters: &'a [Arc<dyn BeforeFilter>], physical: &'a mut dyn PhysicalConnection) -> Self {
+        Self {
+            filters,
+            position: 0,
+            physical,
+        }
+    }
+
+    /// 继续分派 `Connection#createBlob()`。
+    pub async fn connection_create_blob(&mut self) -> Result<JdbcBlob, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.connection_create_blob(self).await
+        } else {
+            self.physical.create_blob().await
+        }
+    }
+
+    /// 继续分派 `Connection#createClob()`。
+    pub async fn connection_create_clob(&mut self) -> Result<JdbcClob, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.connection_create_clob(self).await
+        } else {
+            self.physical.create_clob().await
+        }
+    }
+
+    /// 继续分派 `Connection#createNClob()`。
+    pub async fn connection_create_n_clob(&mut self) -> Result<JdbcNClob, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.connection_create_n_clob(self).await
+        } else {
+            self.physical.create_n_clob().await
+        }
+    }
 }
 
 /// 单次 `Connection#getMetaData()` 使用的有位置 Filter 调用链。
@@ -879,6 +1115,119 @@ impl FilterChainImpl {
         )
         .connection_connect(properties)
         .await
+    }
+
+    /// 从位置 0 执行 `Clob#length()`。
+    pub fn clob_length(&self, wrapper: &dyn ClobProxy) -> Result<i64, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_length()
+    }
+
+    /// 从位置 0 执行 `Clob#getSubString(long,int)`。
+    pub fn clob_get_sub_string(
+        &self,
+        wrapper: &dyn ClobProxy,
+        position: i64,
+        length: i32,
+    ) -> Result<JavaString, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_get_sub_string(position, length)
+    }
+
+    /// 从位置 0 执行 `Clob#getCharacterStream()`。
+    pub fn clob_get_character_stream(
+        &self,
+        wrapper: &dyn ClobProxy,
+    ) -> Result<JdbcReader, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_get_character_stream()
+    }
+
+    /// 从位置 0 执行 `Clob#getAsciiStream()`。
+    pub fn clob_get_ascii_stream(
+        &self,
+        wrapper: &dyn ClobProxy,
+    ) -> Result<JdbcInputStream, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_get_ascii_stream()
+    }
+
+    /// 从位置 0 执行 `Clob#position(String,long)`。
+    pub fn clob_position_string(
+        &self,
+        wrapper: &dyn ClobProxy,
+        pattern: &JavaString,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_position_string(pattern, start)
+    }
+
+    /// 从位置 0 执行 `Clob#position(Clob,long)`。
+    pub fn clob_position_clob(
+        &self,
+        wrapper: &dyn ClobProxy,
+        pattern: &JdbcClob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_position_clob(pattern, start)
+    }
+
+    /// 从位置 0 执行 `Clob#setString(long,String)`。
+    pub fn clob_set_string(
+        &self,
+        wrapper: &dyn ClobProxy,
+        position: i64,
+        value: &JavaString,
+    ) -> Result<i32, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_set_string(position, value)
+    }
+
+    /// 从位置 0 执行 `Clob#setString(long,String,int,int)`。
+    pub fn clob_set_string_range(
+        &self,
+        wrapper: &dyn ClobProxy,
+        position: i64,
+        value: &JavaString,
+        offset: i32,
+        length: i32,
+    ) -> Result<i32, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_set_string_range(position, value, offset, length)
+    }
+
+    /// 从位置 0 执行 `Clob#setAsciiStream(long)`。
+    pub fn clob_set_ascii_stream(
+        &self,
+        wrapper: &dyn ClobProxy,
+        position: i64,
+    ) -> Result<JdbcOutputStream, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_set_ascii_stream(position)
+    }
+
+    /// 从位置 0 执行 `Clob#setCharacterStream(long)`。
+    pub fn clob_set_character_stream(
+        &self,
+        wrapper: &dyn ClobProxy,
+        position: i64,
+    ) -> Result<JdbcWriter, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_set_character_stream(position)
+    }
+
+    /// 从位置 0 执行 `Clob#truncate(long)`。
+    pub fn clob_truncate(&self, wrapper: &dyn ClobProxy, length: i64) -> Result<(), DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_truncate(length)
+    }
+
+    /// 从位置 0 执行 `Clob#free()`。
+    pub fn clob_free(&self, wrapper: &dyn ClobProxy) -> Result<(), DruidError> {
+        ClobFilterChain::new(&self.before, wrapper).clob_free()
+    }
+
+    /// 从位置 0 执行 `Clob#getCharacterStream(long,long)`。
+    pub fn clob_get_character_stream_range(
+        &self,
+        wrapper: &dyn ClobProxy,
+        position: i64,
+        length: i64,
+    ) -> Result<JdbcReader, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_get_character_stream_range(position, length)
     }
 
     /// 初始化链中每个 Java Filter 实例。
@@ -1772,6 +2121,36 @@ impl FilterChainImpl {
     ) -> Result<(), DruidError> {
         ConnectionWarningFilterChain::new(&self.before, physical)
             .connection_clear_warnings()
+            .await
+    }
+
+    /// 从位置 0 执行一次 `Connection#createBlob()` around-chain。
+    pub async fn connection_create_blob(
+        &self,
+        physical: &mut dyn PhysicalConnection,
+    ) -> Result<JdbcBlob, DruidError> {
+        ConnectionLobFilterChain::new(&self.before, physical)
+            .connection_create_blob()
+            .await
+    }
+
+    /// 从位置 0 执行一次 `Connection#createClob()` around-chain。
+    pub async fn connection_create_clob(
+        &self,
+        physical: &mut dyn PhysicalConnection,
+    ) -> Result<JdbcClob, DruidError> {
+        ConnectionLobFilterChain::new(&self.before, physical)
+            .connection_create_clob()
+            .await
+    }
+
+    /// 从位置 0 执行一次 `Connection#createNClob()` around-chain。
+    pub async fn connection_create_n_clob(
+        &self,
+        physical: &mut dyn PhysicalConnection,
+    ) -> Result<JdbcNClob, DruidError> {
+        ConnectionLobFilterChain::new(&self.before, physical)
+            .connection_create_n_clob()
             .await
     }
 

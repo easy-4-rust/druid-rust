@@ -2,6 +2,9 @@
 
 use super::error::DruidError;
 use super::exec_result::ExecResult;
+use super::jdbc_blob::JdbcBlob;
+use super::jdbc_clob::JdbcClob;
+use super::jdbc_n_clob::JdbcNClob;
 use super::jdbc_result_set::{PhysicalResultSet, RowSetResultSet};
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
 use super::physical_database_meta_data::PhysicalDatabaseMetaData;
@@ -331,6 +334,36 @@ pub trait PhysicalConnection: Any + Send {
     async fn release_savepoint(&mut self, _savepoint: &Savepoint) -> Result<(), DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "release_savepoint",
+        })
+    }
+
+    /// 创建驱动拥有的 Blob 句柄。
+    ///
+    /// 对应 Java：`Connection#createBlob()`。默认实现明确报告驱动能力缺失；
+    /// Adapter 不得用内存 `Vec<u8>` 冒充数据库 LOB。
+    async fn create_blob(&mut self) -> Result<JdbcBlob, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_create_blob",
+        })
+    }
+
+    /// 创建驱动拥有的 Clob 句柄。
+    ///
+    /// 对应 Java：`Connection#createClob()`。返回 raw 句柄，由 Druid 连接
+    /// FilterChain 在池化边界包装为 `ClobProxyImpl`。
+    async fn create_clob(&mut self) -> Result<JdbcClob, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_create_clob",
+        })
+    }
+
+    /// 创建驱动拥有的 NClob 句柄。
+    ///
+    /// 对应 Java：`Connection#createNClob()`。NClob 必须保持独立类型身份，
+    /// 不能降级成普通 Clob。
+    async fn create_n_clob(&mut self) -> Result<JdbcNClob, DruidError> {
+        Err(DruidError::UnsupportedOperation {
+            operation: "connection_create_n_clob",
         })
     }
 

@@ -8,11 +8,13 @@
 use super::error::DruidError;
 use super::value::Value;
 use super::{
-    ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain,
-    DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain,
-    DruidPooledConnection, PhysicalConnectionCloseFilterChain,
-    PhysicalConnectionConnectFilterChain, PhysicalConnectionConnectResult,
-    PhysicalDatabaseMetaData, PreparedInputParameter, SqlWarning, StatementWarningFilterChain,
+    ClobFilterChain, ConnectionDatabaseMetaDataFilterChain, ConnectionLobFilterChain,
+    ConnectionWarningFilterChain, DataSourceGetConnectionFilterChain,
+    DataSourceReleaseConnectionFilterChain, DruidPooledConnection, JavaString, JdbcBlob, JdbcClob,
+    JdbcInputStream, JdbcNClob, JdbcOutputStream, JdbcReader, JdbcWriter,
+    PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
+    PhysicalConnectionConnectResult, PhysicalDatabaseMetaData, PreparedInputParameter, SqlWarning,
+    StatementWarningFilterChain,
 };
 use std::time::{Duration, Instant};
 
@@ -276,6 +278,33 @@ pub trait BeforeFilter: Send + Sync {
         chain.connection_close().await
     }
 
+    /// 包围 `Connection#createBlob()`。
+    ///
+    /// 默认继续位置化链，末端才调用同一物理连接。Java Druid 不包装 Blob，
+    /// 因而返回值保持驱动 `JdbcBlob` 身份。
+    async fn connection_create_blob(
+        &self,
+        chain: &mut ConnectionLobFilterChain<'_>,
+    ) -> Result<JdbcBlob, DruidError> {
+        chain.connection_create_blob().await
+    }
+
+    /// 包围 `Connection#createClob()`，返回尚未包装的驱动 Clob。
+    async fn connection_create_clob(
+        &self,
+        chain: &mut ConnectionLobFilterChain<'_>,
+    ) -> Result<JdbcClob, DruidError> {
+        chain.connection_create_clob().await
+    }
+
+    /// 包围 `Connection#createNClob()`，保持 national-character 类型身份。
+    async fn connection_create_n_clob(
+        &self,
+        chain: &mut ConnectionLobFilterChain<'_>,
+    ) -> Result<JdbcNClob, DruidError> {
+        chain.connection_create_n_clob().await
+    }
+
     /// 通用前置拦截（对应 Filter 的 before-execute 语义）。
     async fn before(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError>;
 
@@ -480,6 +509,121 @@ pub trait BeforeFilter: Send + Sync {
     /// 结果集事件拦截（对应 Filter 的 resultSet_* 系列 hook）。
     async fn on_result_set_event(&self, _event: &ResultSetEvent) -> Result<(), DruidError> {
         Ok(()) // 默认放行
+    }
+
+    /// 包围 `Clob#length()`。
+    fn clob_length(&self, chain: &mut ClobFilterChain<'_>) -> Result<i64, DruidError> {
+        chain.clob_length()
+    }
+
+    /// 包围 `Clob#getSubString(long,int)`。
+    fn clob_get_sub_string(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        length: i32,
+    ) -> Result<JavaString, DruidError> {
+        chain.clob_get_sub_string(position, length)
+    }
+
+    /// 包围 `Clob#getCharacterStream()`。
+    fn clob_get_character_stream(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+    ) -> Result<JdbcReader, DruidError> {
+        chain.clob_get_character_stream()
+    }
+
+    /// 包围 `Clob#getAsciiStream()`。
+    fn clob_get_ascii_stream(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+    ) -> Result<JdbcInputStream, DruidError> {
+        chain.clob_get_ascii_stream()
+    }
+
+    /// 包围 `Clob#position(String,long)`。
+    fn clob_position_string(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        pattern: &JavaString,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        chain.clob_position_string(pattern, start)
+    }
+
+    /// 包围 `Clob#position(Clob,long)`。
+    fn clob_position_clob(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        pattern: &JdbcClob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        chain.clob_position_clob(pattern, start)
+    }
+
+    /// 包围 `Clob#setString(long,String)`。
+    fn clob_set_string(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        value: &JavaString,
+    ) -> Result<i32, DruidError> {
+        chain.clob_set_string(position, value)
+    }
+
+    /// 包围 `Clob#setString(long,String,int,int)`。
+    fn clob_set_string_range(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        value: &JavaString,
+        offset: i32,
+        length: i32,
+    ) -> Result<i32, DruidError> {
+        chain.clob_set_string_range(position, value, offset, length)
+    }
+
+    /// 包围 `Clob#setAsciiStream(long)`。
+    fn clob_set_ascii_stream(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+    ) -> Result<JdbcOutputStream, DruidError> {
+        chain.clob_set_ascii_stream(position)
+    }
+
+    /// 包围 `Clob#setCharacterStream(long)`。
+    fn clob_set_character_stream(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+    ) -> Result<JdbcWriter, DruidError> {
+        chain.clob_set_character_stream(position)
+    }
+
+    /// 包围 `Clob#truncate(long)`。
+    fn clob_truncate(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        length: i64,
+    ) -> Result<(), DruidError> {
+        chain.clob_truncate(length)
+    }
+
+    /// 包围 `Clob#free()`。
+    fn clob_free(&self, chain: &mut ClobFilterChain<'_>) -> Result<(), DruidError> {
+        chain.clob_free()
+    }
+
+    /// 包围 `Clob#getCharacterStream(long,long)`。
+    fn clob_get_character_stream_range(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        length: i64,
+    ) -> Result<JdbcReader, DruidError> {
+        chain.clob_get_character_stream_range(position, length)
     }
 
     /// 过滤器生命周期（对应 Filter.init()）。

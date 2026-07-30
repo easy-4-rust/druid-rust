@@ -35,6 +35,14 @@ pub enum WallViolation {
     DeniedSchema(String),
     /// 禁止的函数
     DeniedFunction(String),
+    /// 禁止的数据库变量。
+    DeniedVariant(String),
+    /// 禁止的数据库对象。
+    DeniedObject(String),
+    /// 只读表被写入。
+    ReadOnlyTable(String),
+    /// SELECT INTO OUTFILE 被拒绝。
+    SelectIntoOutfileNotAllowed,
     /// SQL 解析错误
     SyntaxError(String),
 }
@@ -58,6 +66,10 @@ impl fmt::Display for WallViolation {
             Self::DeniedTable(t) => write!(f, "denied table: {t}"),
             Self::DeniedSchema(schema) => write!(f, "denied schema: {schema}"),
             Self::DeniedFunction(fn_) => write!(f, "denied function: {fn_}"),
+            Self::DeniedVariant(variant) => write!(f, "denied variant: {variant}"),
+            Self::DeniedObject(object) => write!(f, "denied object: {object}"),
+            Self::ReadOnlyTable(table) => write!(f, "read only table: {table}"),
+            Self::SelectIntoOutfileNotAllowed => write!(f, "select into outfile not allowed"),
             Self::SyntaxError(msg) => write!(f, "syntax error: {msg}"),
         }
     }

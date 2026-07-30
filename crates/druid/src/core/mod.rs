@@ -12,6 +12,8 @@ pub mod auto_load;
 pub mod callable_input_parameter;
 pub mod callable_out_parameter;
 pub mod callable_parameter;
+pub mod clob_proxy;
+pub mod clob_proxy_impl;
 pub mod config;
 pub mod conn_state;
 pub mod connection;
@@ -79,6 +81,8 @@ pub mod mock_exception_sorter;
 pub mod ms_sql_valid_connection_checker;
 pub mod my_sql_exception_sorter;
 pub mod my_sql_valid_connection_checker;
+pub mod n_clob_proxy;
+pub mod n_clob_proxy_impl;
 pub mod null_exception_sorter;
 pub mod ocean_base_oracle_exception_sorter;
 pub mod ocean_base_valid_connection_checker;
@@ -142,6 +146,8 @@ pub use auto_load::AutoLoad;
 pub use callable_input_parameter::CallableInputParameter;
 pub use callable_out_parameter::CallableOutParameter;
 pub use callable_parameter::CallableParameter;
+pub use clob_proxy::ClobProxy;
+pub use clob_proxy_impl::ClobProxyImpl;
 pub use config::{PoolConfig, PoolConfigBuilder};
 pub use conn_state::ConnState;
 pub use connection_defaults::ConnectionDefaults;
@@ -182,8 +188,8 @@ pub use filter::{ConnectionEvent, ResultSetEvent, StatementEvent};
 pub use filter_adapter::FilterAdapter;
 pub use filter_chain::FilterChain;
 pub use filter_chain_impl::{
-    ConnectionDatabaseMetaDataFilterChain, ConnectionWarningFilterChain,
-    DataSourceConnectionProvider, DataSourceGetConnectionFilterChain,
+    ClobFilterChain, ConnectionDatabaseMetaDataFilterChain, ConnectionLobFilterChain,
+    ConnectionWarningFilterChain, DataSourceConnectionProvider, DataSourceGetConnectionFilterChain,
     DataSourceReleaseConnectionFilterChain, FilterChainImpl, PhysicalConnectionCloseContext,
     PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
     PhysicalConnectionConnectResult, StatementWarningFilterChain,
@@ -233,6 +239,8 @@ pub use mock_exception_sorter::MockExceptionSorter;
 pub use ms_sql_valid_connection_checker::MsSqlValidConnectionChecker;
 pub use my_sql_exception_sorter::MySqlExceptionSorter;
 pub use my_sql_valid_connection_checker::MySqlValidConnectionChecker;
+pub use n_clob_proxy::NClobProxy;
+pub use n_clob_proxy_impl::NClobProxyImpl;
 pub use null_exception_sorter::NullExceptionSorter;
 pub use ocean_base_oracle_exception_sorter::OceanBaseOracleExceptionSorter;
 pub use ocean_base_valid_connection_checker::OceanBaseValidConnectionChecker;

@@ -3,8 +3,8 @@
 //! 池内部配置，从 PoolConfig 翻译而来。
 
 use crate::core::{
-    AutoLoad, ConfigFilter, FilterChain, FilterManager, LogFilter, MySQL8DateTimeSqlTypeFilter,
-    ValidConnectionChecker,
+    AutoLoad, ConfigFilter, EncodingConvertFilter, FilterChain, FilterManager, LogFilter,
+    MySQL8DateTimeSqlTypeFilter, ValidConnectionChecker,
 };
 use crate::dynamic::RandomDataSourceValidateFilter;
 use crate::sql::{DbType, WallConfig, WallFilter, WallProvider};
@@ -21,6 +21,7 @@ const WALL_FILTER_CLASS: &str = "com.alibaba.druid.wall.WallFilter";
 const MYSQL8_DATETIME_FILTER_CLASS: &str =
     "com.alibaba.druid.filter.mysql8datetime.MySQL8DateTimeSqlTypeFilter";
 const CONFIG_FILTER_CLASS: &str = "com.alibaba.druid.filter.config.ConfigFilter";
+const ENCODING_FILTER_CLASS: &str = "com.alibaba.druid.filter.encoding.EncodingConvertFilter";
 const HA_RANDOM_VALIDATE_FILTER_CLASS: &str =
     "com.alibaba.druid.pool.ha.selector.RandomDataSourceValidateFilter";
 const LOG_FILTER_ID: &str = "druid::core::LogFilter";
@@ -233,6 +234,7 @@ pub struct DruidPoolBuilder {
     load_spi_filter_skip: bool,
     stats_collector: Arc<StatsCollector>,
     wall_provider: Arc<WallProvider>,
+    wall_config_explicit: bool,
 }
 
 impl DruidPoolBuilder {
@@ -309,12 +311,14 @@ impl DruidPoolBuilder {
             load_spi_filter_skip: false,
             stats_collector,
             wall_provider,
+            wall_config_explicit: false,
         }
     }
 
     pub fn name(mut self, v: impl Into<String>) -> Self {
         self.name = v.into();
         self.filter_data_source_name.write().clone_from(&self.name);
+        self.wall_provider.set_name(Some(self.name.clone()));
         self
     }
     pub fn driver_name(mut self, v: impl Into<String>) -> Self {
@@ -328,7 +332,22 @@ impl DruidPoolBuilder {
     pub fn db_type_name(mut self, db_type_name: impl Into<String>) -> Self {
         let db_type_name = db_type_name.into();
         if let Some(db_type) = DbType::of(&db_type_name) {
-            self.wall_provider.set_db_type(db_type);
+            let config = self
+                .wall_config_explicit
+                .then(|| self.wall_provider.config().clone());
+            if let Ok(provider) = WallFilter::create_provider(
+                non_empty_string(&self.name),
+                self.url.as_deref(),
+                Some(db_type),
+                config,
+            ) {
+                self.wall_provider = provider;
+                self.filter_manager = default_filter_manager(
+                    Arc::clone(&self.filter_data_source_name),
+                    Arc::clone(&self.stats_collector),
+                    Arc::clone(&self.wall_provider),
+                );
+            }
         }
         self.db_type_name = Some(db_type_name);
         self
@@ -351,12 +370,21 @@ impl DruidPoolBuilder {
     /// 对应 Java `WallFilter#configFromProperties` 在数据源初始化前应用规则。
     /// 必须在 `set_filters` 前调用；已显式配置的 FilterChain 不回溯替换。
     pub fn wall_config(mut self, wall_config: WallConfig) -> Self {
-        self.wall_provider = Arc::new(WallProvider::new(wall_config));
-        if let Some(db_type_name) = self.db_type_name.as_deref() {
-            if let Some(db_type) = DbType::of(db_type_name) {
-                self.wall_provider.set_db_type(db_type);
-            }
-        }
+        self.wall_config_explicit = true;
+        self.wall_provider = self
+            .db_type_name
+            .as_deref()
+            .and_then(DbType::of)
+            .and_then(|db_type| {
+                WallFilter::create_provider(
+                    non_empty_string(&self.name),
+                    self.url.as_deref(),
+                    Some(db_type),
+                    Some(wall_config.clone()),
+                )
+                .ok()
+            })
+            .unwrap_or_else(|| Arc::new(WallProvider::new(wall_config)));
         self.filter_manager = default_filter_manager(
             Arc::clone(&self.filter_data_source_name),
             Arc::clone(&self.stats_collector),
@@ -1079,6 +1107,9 @@ fn default_filter_manager(
         Ok(MySQL8DateTimeSqlTypeFilter::new())
     });
     manager.register_filter(CONFIG_FILTER_CLASS, || Ok(ConfigFilter::new()));
+    manager.register_filter(ENCODING_FILTER_CLASS, || {
+        EncodingConvertFilter::new(None, None)
+    });
     manager.register_filter(HA_RANDOM_VALIDATE_FILTER_CLASS, || {
         Ok(RandomDataSourceValidateFilter)
     });
@@ -1090,4 +1121,8 @@ fn default_filter_manager(
 
 fn trim_java_string(value: &str) -> &str {
     value.trim_matches(|character| character <= '\u{20}')
+}
+
+fn non_empty_string(value: &str) -> Option<&str> {
+    (!value.is_empty()).then_some(value)
 }

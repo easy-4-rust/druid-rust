@@ -2,17 +2,21 @@
 
 use super::CharsetConvert;
 use crate::core::{
-    DruidError, JdbcObject, JdbcReader, ResultSetFilter, ResultSetFilterChain, Value,
+    AfterFilter, BeforeFilter, ClobFilterChain, DruidError, ExecContext, ExecResult, JavaString,
+    JdbcObject, JdbcReader, ResultSetFilter, ResultSetFilterChain, Value,
 };
+use parking_lot::RwLock;
+use std::collections::HashMap;
+use std::time::Duration;
 
 /// JDBC SQL、参数和结果字符编码转换 Filter。
 ///
 /// 本对象实现 Java 的字符串/Reader 值转换以及 ResultSet around-chain。
 /// SQL prepare/execute 入参的生产接线由连接/Statement FilterChain 继续承接，
 /// 不能把此对象的存在误记为整个 `SEM-FLT-015` 已完成。
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct EncodingConvertFilter {
-    charset_convert: CharsetConvert,
+    charset_convert: RwLock<CharsetConvert>,
 }
 
 impl EncodingConvertFilter {
@@ -29,18 +33,18 @@ impl EncodingConvertFilter {
         server_encoding: Option<&str>,
     ) -> Result<Self, DruidError> {
         Ok(Self {
-            charset_convert: CharsetConvert::new(client_encoding, server_encoding)?,
+            charset_convert: RwLock::new(CharsetConvert::new(client_encoding, server_encoding)?),
         })
     }
 
     /// 编码 SQL 或字符串参数。
     pub fn encode(&self, value: &str) -> Result<String, DruidError> {
-        self.charset_convert.encode(value)
+        self.charset_convert.read().encode(value)
     }
 
     /// 解码字符串结果。
     pub fn decode(&self, value: &str) -> Result<String, DruidError> {
-        self.charset_convert.decode(value)
+        self.charset_convert.read().decode(value)
     }
 
     /// 编码 JDBC 标量参数；非字符串值原样返回。
@@ -78,6 +82,135 @@ impl EncodingConvertFilter {
             }
             object => Ok(object),
         }
+    }
+
+    fn encode_java_string(&self, value: &JavaString) -> Result<JavaString, DruidError> {
+        let value = String::from_utf16_lossy(value.as_utf16());
+        self.encode(&value).map(JavaString::from)
+    }
+
+    fn decode_java_string(&self, value: JavaString) -> Result<JavaString, DruidError> {
+        let value = String::from_utf16_lossy(value.as_utf16());
+        self.decode(&value).map(JavaString::from)
+    }
+}
+
+impl Clone for EncodingConvertFilter {
+    fn clone(&self) -> Self {
+        Self {
+            charset_convert: RwLock::new(self.charset_convert.read().clone()),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for EncodingConvertFilter {
+    fn name(&self) -> &str {
+        "encoding"
+    }
+
+    async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        context.sql = self.encode(&context.sql)?;
+        Ok(())
+    }
+
+    fn prepare_statement_sql(&self, sql: &str) -> Result<String, DruidError> {
+        self.encode(sql)
+    }
+
+    fn statement_add_batch_sql(&self, sql: &str) -> Result<String, DruidError> {
+        self.encode(sql)
+    }
+
+    fn config_from_properties(
+        &self,
+        properties: &HashMap<String, String>,
+    ) -> Result<(), DruidError> {
+        let client = properties
+            .get(Self::CLIENT_ENCODING_KEY)
+            .map(String::as_str);
+        let server = properties
+            .get(Self::SERVER_ENCODING_KEY)
+            .map(String::as_str);
+        *self.charset_convert.write() = CharsetConvert::new(client, server)?;
+        Ok(())
+    }
+
+    fn clob_position_string(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        pattern: &JavaString,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        let pattern = self.encode_java_string(pattern)?;
+        chain.clob_position_string(&pattern, start)
+    }
+
+    fn clob_get_sub_string(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        length: i32,
+    ) -> Result<JavaString, DruidError> {
+        self.decode_java_string(chain.clob_get_sub_string(position, length)?)
+    }
+
+    fn clob_get_character_stream(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+    ) -> Result<JdbcReader, DruidError> {
+        let text = chain.clob_get_character_stream()?.read_to_string()?;
+        self.decode(&text).map(JdbcReader::from_string)
+    }
+
+    fn clob_get_character_stream_range(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        length: i64,
+    ) -> Result<JdbcReader, DruidError> {
+        let text = chain
+            .clob_get_character_stream_range(position, length)?
+            .read_to_string()?;
+        self.decode(&text).map(JdbcReader::from_string)
+    }
+
+    fn clob_set_string(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        value: &JavaString,
+    ) -> Result<i32, DruidError> {
+        let value = self.encode_java_string(value)?;
+        chain.clob_set_string(position, &value)
+    }
+
+    fn clob_set_string_range(
+        &self,
+        chain: &mut ClobFilterChain<'_>,
+        position: i64,
+        value: &JavaString,
+        offset: i32,
+        length: i32,
+    ) -> Result<i32, DruidError> {
+        let value = self.encode_java_string(value)?;
+        chain.clob_set_string_range(position, &value, offset, length)
+    }
+}
+
+#[async_trait::async_trait]
+impl AfterFilter for EncodingConvertFilter {
+    fn name(&self) -> &str {
+        "encoding"
+    }
+
+    async fn after(
+        &self,
+        _context: &ExecContext<'_>,
+        _result: &Result<ExecResult, DruidError>,
+        _elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        Ok(())
     }
 }
 

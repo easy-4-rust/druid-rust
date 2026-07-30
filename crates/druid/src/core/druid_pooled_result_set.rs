@@ -7,12 +7,12 @@
 
 use super::druid_pooled_statement::DruidPooledStatementInner;
 use super::{
-    DruidError, DruidPooledCallableStatementHandle, DruidPooledConnection,
+    ClobProxyImpl, DruidError, DruidPooledCallableStatementHandle, DruidPooledConnection,
     DruidPooledPreparedStatementHandle, DruidPooledStatement, FilterChain, JdbcArray, JdbcBlob,
     JdbcCalendar, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob,
     JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
-    JdbcTypeMap, JdbcUrl, PhysicalResultSet, ResultSetFilterContext, ResultSetMetaData,
-    ResultSetStatement, ResultSetUpdate, SqlWarning, Unwrapped, Value, Wrapper,
+    JdbcTypeMap, JdbcUrl, NClobProxyImpl, PhysicalResultSet, ResultSetFilterContext,
+    ResultSetMetaData, ResultSetStatement, ResultSetUpdate, SqlWarning, Unwrapped, Value, Wrapper,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -1855,6 +1855,39 @@ impl DruidPooledResultSet {
         result
     }
 
+    /// 按下标读取并包装 canonical Druid `ClobProxyImpl`。
+    ///
+    /// Java `ResultSet#getClob` 在 FilterChain 末端返回 ClobProxy；保留原
+    /// `clob` 平台入口供 Adapter 内部使用，本入口恢复 Druid 对外代理语义。
+    pub fn clob_proxy(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        column_index: usize,
+    ) -> Result<Option<ClobProxyImpl>, DruidError> {
+        let connection_id = connection.id();
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        self.clob(connection, column_index)
+            .map(|clob| clob.map(|clob| ClobProxyImpl::new(connection_id, clob, filter_chain)))
+    }
+
+    /// 按标签读取并包装 canonical Druid `ClobProxyImpl`。
+    pub fn clob_proxy_by_label(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        column_label: &str,
+    ) -> Result<Option<ClobProxyImpl>, DruidError> {
+        let connection_id = connection.id();
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        self.clob_by_label(connection, column_label)
+            .map(|clob| clob.map(|clob| ClobProxyImpl::new(connection_id, clob, filter_chain)))
+    }
+
     /// 按下标读取 JDBC `Array`。
     pub fn array(
         &mut self,
@@ -2009,6 +2042,39 @@ impl DruidPooledResultSet {
             },
         );
         self.classify(connection, result)
+    }
+
+    /// 按下标读取并包装 canonical Druid `NClobProxyImpl`。
+    pub fn n_clob_proxy(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        column_index: usize,
+    ) -> Result<Option<NClobProxyImpl>, DruidError> {
+        let connection_id = connection.id();
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        self.n_clob(connection, column_index).map(|n_clob| {
+            n_clob.map(|n_clob| NClobProxyImpl::new(connection_id, n_clob, filter_chain))
+        })
+    }
+
+    /// 按标签读取并包装 canonical Druid `NClobProxyImpl`。
+    pub fn n_clob_proxy_by_label(
+        &mut self,
+        connection: &mut DruidPooledConnection,
+        column_label: &str,
+    ) -> Result<Option<NClobProxyImpl>, DruidError> {
+        let connection_id = connection.id();
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        self.n_clob_by_label(connection, column_label)
+            .map(|n_clob| {
+                n_clob.map(|n_clob| NClobProxyImpl::new(connection_id, n_clob, filter_chain))
+            })
     }
 
     /// 按下标读取 JDBC `SQLXML`。

@@ -1,4 +1,8 @@
-use super::{TenantStatementType, WallConfig, WallProvider, WallSqlStat};
+use super::{
+    registered_wall_provider_creators, CkWallProvider, Db2WallProvider, DbType, MySqlWallProvider,
+    OracleWallProvider, PgWallProvider, SQLiteWallProvider, SqlServerWallProvider,
+    TenantStatementType, WallConfig, WallProvider, WallSqlStat,
+};
 use crate::core::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionDatabaseMetaDataFilterChain, DruidError,
     ExecContext, ExecResult, PhysicalDatabaseMetaData, ResultSetFilter, ResultSetFilterChain,
@@ -37,6 +41,92 @@ impl WallFilter {
     #[must_use]
     pub fn with_config(config: WallConfig) -> Self {
         Self::new(Arc::new(WallProvider::new(config)))
+    }
+
+    /// 按 Java `WallFilter#initWallProviderInternal` 选择方言 Provider。
+    ///
+    /// 内置数据库族使用七个 canonical Provider；其他类型交给
+    /// `WallProviderCreator` inventory。无法匹配时返回与 Java 相同分类的错误。
+    pub fn create_provider(
+        data_source_name: Option<&str>,
+        data_source_url: Option<&str>,
+        db_type: Option<DbType>,
+        config: Option<WallConfig>,
+    ) -> Result<Arc<WallProvider>, DruidError> {
+        let provider = match db_type {
+            Some(
+                DbType::MySql
+                | DbType::OceanBase
+                | DbType::Drds
+                | DbType::MariaDb
+                | DbType::TiDb
+                | DbType::H2
+                | DbType::Lealone
+                | DbType::Presto
+                | DbType::Trino
+                | DbType::SuperSql
+                | DbType::PolarDbX,
+            ) => config.map_or_else(
+                || MySqlWallProvider::new().into_inner(),
+                |config| MySqlWallProvider::with_config(config).into_inner(),
+            ),
+            Some(
+                DbType::Oracle | DbType::AliOracle | DbType::OceanBaseOracle | DbType::PolarDb2,
+            ) => config.map_or_else(
+                || OracleWallProvider::new().into_inner(),
+                |config| OracleWallProvider::with_config(config).into_inner(),
+            ),
+            Some(DbType::SqlServer | DbType::Jtds) => config.map_or_else(
+                || SqlServerWallProvider::new().into_inner(),
+                |config| SqlServerWallProvider::with_config(config).into_inner(),
+            ),
+            Some(
+                DbType::PostgreSql
+                | DbType::Edb
+                | DbType::PolarDb
+                | DbType::Greenplum
+                | DbType::GaussDb,
+            ) => config.map_or_else(
+                || PgWallProvider::new().into_inner(),
+                |config| PgWallProvider::with_config(config).into_inner(),
+            ),
+            Some(DbType::Db2) => config.map_or_else(
+                || Db2WallProvider::new().into_inner(),
+                |config| Db2WallProvider::with_config(config).into_inner(),
+            ),
+            Some(DbType::SQLite) => config.map_or_else(
+                || SQLiteWallProvider::new().into_inner(),
+                |config| SQLiteWallProvider::with_config(config).into_inner(),
+            ),
+            Some(DbType::ClickHouse) => config.map_or_else(
+                || CkWallProvider::new().into_inner(),
+                |config| CkWallProvider::with_config(config).into_inner(),
+            ),
+            other => {
+                let provider =
+                    registered_wall_provider_creators()
+                        .into_iter()
+                        .find_map(|creator| {
+                            creator.create_wall_config(
+                                data_source_name,
+                                data_source_url,
+                                config.as_ref(),
+                                other,
+                            )
+                        });
+                provider.ok_or_else(|| {
+                    DruidError::InvalidArgument(format!(
+                        "dbType not support : {}, url {}",
+                        other.map(|db_type| db_type.as_str()).unwrap_or("null"),
+                        data_source_url.unwrap_or("null")
+                    ))
+                })?
+            }
+        };
+        if let Some(name) = data_source_name {
+            provider.set_name(Some(name.to_owned()));
+        }
+        Ok(Arc::new(provider))
     }
 
     /// 返回 provider。

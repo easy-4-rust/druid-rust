@@ -1902,6 +1902,7 @@ dependencies = [
  "java-properties",
  "jiff",
  "moka",
+ "num-bigint",
  "parking_lot",
  "prometheus",
  "quick-xml",

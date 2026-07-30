@@ -1,5 +1,6 @@
 //! 对外池化连接。
 
+use super::clob_proxy_impl::ClobProxyImpl;
 use super::connection_defaults::ConnectionDefaults;
 use super::connection_event_listener::ConnectionEventListener;
 use super::connection_recycle_disposition::ConnectionRecycleDisposition;
@@ -14,7 +15,9 @@ use super::exec_result::ExecResult;
 use super::fatal_error_handler::FatalErrorHandler;
 use super::filter::{ConnectionEvent, ExecContext};
 use super::filter_chain::FilterChain;
+use super::jdbc_blob::JdbcBlob;
 use super::jdbc_result_set::PhysicalResultSet;
+use super::n_clob_proxy_impl::NClobProxyImpl;
 use super::physical_connection::PhysicalConnection;
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
 use super::physical_connection_factory::PhysicalConnectionFactory;
@@ -848,6 +851,52 @@ impl DruidPooledConnection {
         self.holder
             .as_ref()
             .is_some_and(|holder| holder.remove_statement_trace(identity))
+    }
+
+    /// 创建驱动 Blob。
+    ///
+    /// 对应 Java：`DruidPooledConnection#createBlob()`。Java Druid 对 Blob
+    /// 只做连接状态检查和 FilterChain 转发，不创建 `BlobProxy`。
+    pub async fn create_blob(&mut self) -> Result<JdbcBlob, DruidError> {
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        let result = filter_chain
+            .connection_create_blob(self.physical_mut()?)
+            .await;
+        self.classify_result(result)
+    }
+
+    /// 创建经 Druid FilterChain 包装的 Clob。
+    ///
+    /// 对应 Java：`ConnectionProxyImpl#createClob()` 与
+    /// `FilterChainImpl#wrap(ConnectionProxy, Clob)`。
+    pub async fn create_clob(&mut self) -> Result<ClobProxyImpl, DruidError> {
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        let result = filter_chain
+            .connection_create_clob(self.physical_mut()?)
+            .await;
+        let clob = self.classify_result(result)?;
+        Ok(ClobProxyImpl::new(self.id, clob, filter_chain))
+    }
+
+    /// 创建经 Druid FilterChain 包装并保持类型身份的 NClob。
+    ///
+    /// 对应 Java：`ConnectionProxyImpl#createNClob()`。
+    pub async fn create_n_clob(&mut self) -> Result<NClobProxyImpl, DruidError> {
+        let filter_chain = self
+            .filter_chain
+            .clone()
+            .unwrap_or_else(|| Arc::new(FilterChain::new()));
+        let result = filter_chain
+            .connection_create_n_clob(self.physical_mut()?)
+            .await;
+        let n_clob = self.classify_result(result)?;
+        Ok(NClobProxyImpl::new(self.id, n_clob, filter_chain))
     }
 
     /// 创建默认类型、只读并发和当前保持性的普通池化语句。
