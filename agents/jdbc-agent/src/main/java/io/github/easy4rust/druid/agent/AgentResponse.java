@@ -18,7 +18,7 @@ public record AgentResponse(String jsonrpc, long id, JsonNode result, AgentRpcEr
     }
 
     /** 创建失败响应。 */
-    public static AgentResponse failure(long id, Throwable throwable) {
-        return new AgentResponse("2.0", id, null, AgentRpcError.from(throwable));
+    public static AgentResponse failure(long id, String sessionId, Throwable throwable) {
+        return new AgentResponse("2.0", id, null, AgentRpcError.from(id, sessionId, throwable));
     }
 }

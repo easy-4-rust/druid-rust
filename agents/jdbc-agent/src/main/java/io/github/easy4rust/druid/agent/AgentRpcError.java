@@ -13,15 +13,15 @@ import java.util.Objects;
 public record AgentRpcError(int code, String message, AgentError data) {
 
     /** 从执行异常构造协议错误。 */
-    public static AgentRpcError from(Throwable throwable) {
+    public static AgentRpcError from(long requestId, String sessionId, Throwable throwable) {
         Objects.requireNonNull(throwable, "throwable");
+        AgentError data = AgentError.from(requestId, sessionId, throwable);
         if (throwable instanceof UnsupportedOperationException) {
-            return new AgentRpcError(-32601, Objects.toString(throwable.getMessage(), "method not found"), null);
+            return new AgentRpcError(-32601, Objects.toString(throwable.getMessage(), "method not found"), data);
         }
         if (throwable instanceof IllegalArgumentException || throwable instanceof NullPointerException) {
-            return new AgentRpcError(-32602, Objects.toString(throwable.getMessage(), "invalid params"), null);
+            return new AgentRpcError(-32602, Objects.toString(throwable.getMessage(), "invalid params"), data);
         }
-        AgentError data = AgentError.from(throwable);
         int code = throwable instanceof SQLException ? -32001 : -32000;
         return new AgentRpcError(code, data.message(), data);
     }

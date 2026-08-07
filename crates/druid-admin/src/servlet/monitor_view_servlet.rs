@@ -10,6 +10,8 @@ use axum::{Json, Router};
 use axum_valid::Valid;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
+#[cfg(feature = "jdbc-agent")]
+use std::fmt::Write;
 use tokio_metrics::TaskMonitor;
 
 use crate::service::{MonitorStatService, StatQuery};
@@ -392,7 +394,8 @@ impl MonitorViewServlet {
 
     async fn metrics(State(state): State<Self>) -> Response {
         let metrics = state.task_monitor.cumulative();
-        let body = format!(
+        #[allow(unused_mut)]
+        let mut body = format!(
             concat!(
                 "# TYPE druid_admin_tasks_instrumented_total counter\n",
                 "druid_admin_tasks_instrumented_total {}\n",
@@ -408,6 +411,49 @@ impl MonitorViewServlet {
             metrics.total_poll_count,
             metrics.total_slow_poll_count
         );
+        #[cfg(feature = "jdbc-agent")]
+        {
+            let agent = druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics::snapshot();
+            write!(
+                &mut body,
+                concat!(
+                    "# TYPE druid_jdbc_agent_processes gauge\n",
+                    "druid_jdbc_agent_processes {}\n",
+                    "# TYPE druid_jdbc_agent_active_sessions gauge\n",
+                    "druid_jdbc_agent_active_sessions {}\n",
+                    "# TYPE druid_jdbc_agent_starts_total counter\n",
+                    "druid_jdbc_agent_starts_total {}\n",
+                    "# TYPE druid_jdbc_agent_crashes_total counter\n",
+                    "druid_jdbc_agent_crashes_total {}\n",
+                    "# TYPE druid_jdbc_agent_rpc_total counter\n",
+                    "druid_jdbc_agent_rpc_total {}\n",
+                    "# TYPE druid_jdbc_agent_rpc_errors_total counter\n",
+                    "druid_jdbc_agent_rpc_errors_total {}\n",
+                    "# TYPE druid_jdbc_agent_rpc_latency_microseconds_total counter\n",
+                    "druid_jdbc_agent_rpc_latency_microseconds_total {}\n",
+                    "# TYPE druid_jdbc_agent_rpc_latency_microseconds_max gauge\n",
+                    "druid_jdbc_agent_rpc_latency_microseconds_max {}\n",
+                    "# TYPE druid_jdbc_agent_timeouts_total counter\n",
+                    "druid_jdbc_agent_timeouts_total {}\n",
+                    "# TYPE druid_jdbc_agent_cancellations_total counter\n",
+                    "druid_jdbc_agent_cancellations_total {}\n",
+                    "# TYPE druid_jdbc_agent_protocol_errors_total counter\n",
+                    "druid_jdbc_agent_protocol_errors_total {}\n"
+                ),
+                agent.process_count(),
+                agent.active_sessions(),
+                agent.start_count(),
+                agent.crash_count(),
+                agent.rpc_count(),
+                agent.rpc_error_count(),
+                agent.rpc_latency_micros_total(),
+                agent.rpc_latency_micros_max(),
+                agent.timeout_count(),
+                agent.cancellation_count(),
+                agent.protocol_error_count(),
+            )
+            .expect("writing metrics into String cannot fail");
+        }
         (
             StatusCode::OK,
             [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],

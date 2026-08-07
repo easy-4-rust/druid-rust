@@ -48,33 +48,108 @@ class AgentServerTest {
             write(requests, request(1, "handshake", handshakePayload()));
             assertEquals(1, read(responses).path("result").path("protocolVersion").asInt());
 
-            write(requests, request(2, "session.open", connectPayload()));
+            write(requests, request(2, "open_session", connectPayload()));
             String firstSession = read(responses).at("/result/sessionId").asText();
-            write(requests, request(3, "session.open", connectPayload()));
+            write(requests, request(3, "open_session", connectPayload()));
             String secondSession = read(responses).at("/result/sessionId").asText();
             assertNotEquals(firstSession, secondSession);
 
-            write(requests, request(4, "session.exec", sessionPayload(
+            write(requests, request(4, "execute", sessionPayload(
                     firstSession,
                     sqlPayload("CREATE TABLE sample(id BIGINT PRIMARY KEY, name VARCHAR(32))",
                             JsonNodeFactory.instance.arrayNode()))));
             assertEquals(0, read(responses).at("/result/rowsAffected").asLong());
-            write(requests, request(5, "session.exec", sessionPayload(
-                    firstSession,
-                    sqlPayload("INSERT INTO sample(id, name) VALUES (?, ?)", parameters()))));
-            assertEquals(1, read(responses).at("/result/rowsAffected").asLong());
 
-            write(requests, request(6, "session.fetch", sessionPayload(
+            ObjectNode prepare = sessionOnly(firstSession);
+            prepare.put("sql", "INSERT INTO sample(id, name) VALUES (?, ?)");
+            prepare.set("generatedKeys", generatedKeys());
+            write(requests, request(5, "prepare", prepare));
+            String statementId = read(responses).at("/result/statementId").asText();
+            ObjectNode executePrepared = sessionOnly(firstSession);
+            executePrepared.put("statementId", statementId);
+            executePrepared.put("mode", "update");
+            executePrepared.set("params", parameters());
+            write(requests, request(6, "execute_prepared", executePrepared));
+            assertEquals(1, read(responses).at("/result/rowsAffected").asLong());
+            ObjectNode closeStatement = sessionOnly(firstSession);
+            closeStatement.put("statementId", statementId);
+            write(requests, request(7, "close_statement", closeStatement));
+            read(responses);
+
+            write(requests, request(8, "execute", sessionPayload(
+                    firstSession,
+                    sqlPayload(
+                            "INSERT INTO sample "
+                                    + "SELECT X, 'name-' || X FROM SYSTEM_RANGE(1, 1200) WHERE X <> 7",
+                            JsonNodeFactory.instance.arrayNode()))));
+            assertEquals(1199, read(responses).at("/result/rowsAffected").asLong());
+
+            ObjectNode queryPayload = sessionPayload(
                     secondSession,
                     sqlPayload("SELECT id, name FROM sample ORDER BY id",
-                            JsonNodeFactory.instance.arrayNode()))));
+                            JsonNodeFactory.instance.arrayNode()));
+            queryPayload.put("pageSize", 500);
+            write(requests, request(9, "execute_query", queryPayload));
             JsonNode query = read(responses).path("result");
-            assertEquals(1, query.path("rows").size());
-            assertEquals("sample", query.path("rows").path(0).path(1).path("value").asText());
+            assertEquals(500, query.path("rows").size());
+            assertEquals(true, query.path("hasMore").asBoolean());
+            String cursorId = query.path("cursorId").asText();
 
-            write(requests, request(7, "session.close", sessionOnly(firstSession)));
+            ObjectNode fetchPage = sessionOnly(secondSession);
+            fetchPage.put("cursorId", cursorId);
+            fetchPage.put("pageSize", 500);
+            write(requests, request(10, "fetch_page", fetchPage));
+            JsonNode secondPage = read(responses).path("result");
+            assertEquals(500, secondPage.path("rows").size());
+            assertEquals(true, secondPage.path("hasMore").asBoolean());
+
+            write(requests, request(11, "fetch_page", fetchPage));
+            JsonNode finalPage = read(responses).path("result");
+            assertEquals(200, finalPage.path("rows").size());
+            assertEquals(false, finalPage.path("hasMore").asBoolean());
+
+            ObjectNode setAutoCommit = sessionOnly(firstSession);
+            setAutoCommit.put("value", false);
+            write(requests, request(12, "set_auto_commit", setAutoCommit));
             read(responses);
-            write(requests, request(8, "session.close", sessionOnly(secondSession)));
+            write(requests, request(13, "get_auto_commit", sessionOnly(firstSession)));
+            assertEquals(false, read(responses).at("/result/value").asBoolean());
+            setAutoCommit.put("value", true);
+            write(requests, request(14, "set_auto_commit", setAutoCommit));
+            read(responses);
+
+            write(requests, request(15, "database_metadata", sessionOnly(secondSession)));
+            assertEquals("H2", read(responses).at("/result/databaseProductName").asText());
+
+            write(requests, request(16, "execute", sessionPayload(
+                    firstSession,
+                    sqlPayload(
+                            "CREATE ALIAS IF NOT EXISTS SLEEP FOR 'java.lang.Thread.sleep(long)'",
+                            JsonNodeFactory.instance.arrayNode()))));
+            read(responses);
+            write(requests, request(17, "execute_query", sessionPayload(
+                    firstSession,
+                    sqlPayload("CALL SLEEP(400)", JsonNodeFactory.instance.arrayNode()))));
+            Thread.sleep(100);
+            ObjectNode cancel = sessionOnly(firstSession);
+            cancel.put("targetRequestId", 17);
+            write(requests, request(18, "cancel", cancel));
+            JsonNode firstConcurrentResponse = read(responses);
+            JsonNode secondConcurrentResponse = read(responses);
+            JsonNode cancelResponse = firstConcurrentResponse.path("id").asLong() == 18
+                    ? firstConcurrentResponse
+                    : secondConcurrentResponse;
+            assertEquals(true, cancelResponse.at("/result/cancelled").asBoolean());
+
+            write(requests, request(19, "unknown_method", sessionOnly(firstSession)));
+            JsonNode error = read(responses).path("error");
+            assertEquals(-32601, error.path("code").asInt());
+            assertEquals(firstSession, error.at("/data/sessionId").asText());
+            assertEquals(19, error.at("/data/requestId").asLong());
+
+            write(requests, request(20, "close_session", sessionOnly(firstSession)));
+            read(responses);
+            write(requests, request(21, "close_session", sessionOnly(secondSession)));
             read(responses);
             requests.close();
             serverTask.get();
@@ -122,7 +197,14 @@ class AgentServerTest {
         ObjectNode payload = JsonNodeFactory.instance.objectNode();
         payload.put("sql", sql);
         payload.set("params", parameters);
+        payload.set("generatedKeys", generatedKeys());
         return payload;
+    }
+
+    private ObjectNode generatedKeys() {
+        ObjectNode generatedKeys = JsonNodeFactory.instance.objectNode();
+        generatedKeys.put("mode", "none");
+        return generatedKeys;
     }
 
     private ArrayNode parameters() {

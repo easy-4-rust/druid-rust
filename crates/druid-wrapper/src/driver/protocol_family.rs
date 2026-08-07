@@ -20,3 +20,20 @@ pub enum ProtocolFamily {
     #[serde(rename = "http_sql")]
     HttpSql,
 }
+
+impl ProtocolFamily {
+    /// 返回驱动标识和诊断使用的稳定协议族名称。
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MySql => "mysql",
+            Self::PostgreSql => "postgresql",
+            Self::SQLite => "sqlite",
+            Self::Oracle => "oracle",
+            Self::SqlServer => "sqlserver",
+            Self::Embedded => "embedded",
+            Self::Jdbc => "jdbc",
+            Self::HttpSql => "http_sql",
+        }
+    }
+}

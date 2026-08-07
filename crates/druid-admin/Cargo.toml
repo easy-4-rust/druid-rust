@@ -25,6 +25,7 @@ workspace = true
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false }
+fs2           = { workspace = true }
 tokio         = { workspace = true }
 axum          = { workspace = true }
 axum-valid    = { workspace = true }

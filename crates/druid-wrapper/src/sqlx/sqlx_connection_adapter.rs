@@ -10,10 +10,12 @@ use druid::core::{
     StatementGeneratedKeys, Value,
 };
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
+use sqlx::mysql::{MySqlArguments, MySqlConnection, MySqlRow, MySqlTransactionManager};
+use sqlx::postgres::{PgArguments, PgConnection, PgRow, PgTransactionManager};
 use sqlx::sqlite::{SqliteArguments, SqliteRow, SqliteTransactionManager};
 use sqlx::{
-    Any, AnyConnection, Column, Connection as SqlxConnection, Executor, Row as SqlxRow, Sqlite,
-    SqliteConnection, Statement, TransactionManager, TypeInfo, ValueRef,
+    Any, AnyConnection, Column, Connection as SqlxConnection, Executor, MySql, Postgres,
+    Row as SqlxRow, Sqlite, SqliteConnection, Statement, TransactionManager, TypeInfo, ValueRef,
 };
 use std::sync::Arc;
 
@@ -31,6 +33,8 @@ fn any_bind_unsupported(value_type: &'static str) -> DruidError {
 
 enum SqlxConnectionBackend {
     Any(AnyConnection),
+    MySql(MySqlConnection),
+    PostgreSql(PgConnection),
     Sqlite(SqliteConnection),
 }
 
@@ -38,8 +42,8 @@ enum SqlxConnectionBackend {
 ///
 /// 对应 Java 平台依赖: `java.sql.Connection` 的驱动实现。
 /// 本对象只包装一个 SQLx Connection，不包含 SQLx Pool、bb8 或 deadpool，
-/// 因而不会形成 pool-in-pool。SQLite 使用原生连接以保留 BOOLEAN 等类型；
-/// MySQL、PostgreSQL 使用 SQLx Any 的统一连接边界。
+/// 因而不会形成 pool-in-pool。SQLite、MySQL、PostgreSQL 使用各自原生连接，
+/// 以保留 Decimal 和日期时间等强类型；未知 SQLx scheme 才回退到 `Any`。
 pub struct SqlxConnectionAdapter {
     connection: Option<SqlxConnectionBackend>,
     url: String,
@@ -55,6 +59,18 @@ impl SqlxConnectionAdapter {
         let connection = if url.starts_with("sqlite:") {
             SqlxConnectionBackend::Sqlite(
                 SqliteConnection::connect(url)
+                    .await
+                    .map_err(Self::driver_error)?,
+            )
+        } else if url.starts_with("mysql:") {
+            SqlxConnectionBackend::MySql(
+                MySqlConnection::connect(url)
+                    .await
+                    .map_err(Self::driver_error)?,
+            )
+        } else if url.starts_with("postgres:") || url.starts_with("postgresql:") {
+            SqlxConnectionBackend::PostgreSql(
+                PgConnection::connect(url)
                     .await
                     .map_err(Self::driver_error)?,
             )
@@ -81,6 +97,16 @@ impl SqlxConnectionAdapter {
         self.connection
             .as_mut()
             .ok_or(DruidError::ConnectionDiscarded)
+    }
+
+    fn backend_key(&self) -> &'static str {
+        match self.connection {
+            Some(SqlxConnectionBackend::Any(_)) => "any",
+            Some(SqlxConnectionBackend::MySql(_)) => "mysql",
+            Some(SqlxConnectionBackend::PostgreSql(_)) => "postgresql",
+            Some(SqlxConnectionBackend::Sqlite(_)) => "sqlite",
+            None => "closed",
+        }
     }
 
     pub(super) fn driver_error(error: sqlx::Error) -> DruidError {
@@ -185,6 +211,50 @@ impl SqlxConnectionAdapter {
         query
     }
 
+    fn bind_mysql_values<'query>(
+        sql: &'query str,
+        params: Vec<Value>,
+    ) -> sqlx::query::Query<'query, MySql, MySqlArguments> {
+        let mut query = sqlx::query(sql);
+        for value in params {
+            query = match value {
+                Value::Null => query.bind(Option::<String>::None),
+                Value::Bool(value) => query.bind(value),
+                Value::Int(value) => query.bind(value),
+                Value::Float(value) => query.bind(value),
+                Value::Decimal(value) => query.bind(value),
+                Value::Date(value) => query.bind(value),
+                Value::Time(value) => query.bind(value),
+                Value::Timestamp(value) => query.bind(value),
+                Value::String(value) => query.bind(value),
+                Value::Bytes(value) => query.bind(value),
+            };
+        }
+        query
+    }
+
+    fn bind_postgresql_values<'query>(
+        sql: &'query str,
+        params: Vec<Value>,
+    ) -> sqlx::query::Query<'query, Postgres, PgArguments> {
+        let mut query = sqlx::query(sql);
+        for value in params {
+            query = match value {
+                Value::Null => query.bind(Option::<String>::None),
+                Value::Bool(value) => query.bind(value),
+                Value::Int(value) => query.bind(value),
+                Value::Float(value) => query.bind(value),
+                Value::Decimal(value) => query.bind(value),
+                Value::Date(value) => query.bind(value),
+                Value::Time(value) => query.bind(value),
+                Value::Timestamp(value) => query.bind(value),
+                Value::String(value) => query.bind(value),
+                Value::Bytes(value) => query.bind(value),
+            };
+        }
+        query
+    }
+
     fn bind_any_prepared_values<'query>(
         statement: &'query sqlx::any::AnyStatement<'query>,
         params: Vec<Value>,
@@ -219,6 +289,50 @@ impl SqlxConnectionAdapter {
                 Value::Int(value) => query.bind(value),
                 Value::Float(value) => query.bind(value),
                 Value::Decimal(value) => query.bind(value.to_string()),
+                Value::Date(value) => query.bind(value),
+                Value::Time(value) => query.bind(value),
+                Value::Timestamp(value) => query.bind(value),
+                Value::String(value) => query.bind(value),
+                Value::Bytes(value) => query.bind(value),
+            };
+        }
+        query
+    }
+
+    fn bind_mysql_prepared_values<'query>(
+        statement: &'query sqlx::mysql::MySqlStatement<'query>,
+        params: Vec<Value>,
+    ) -> sqlx::query::Query<'query, MySql, MySqlArguments> {
+        let mut query = statement.query();
+        for value in params {
+            query = match value {
+                Value::Null => query.bind(Option::<String>::None),
+                Value::Bool(value) => query.bind(value),
+                Value::Int(value) => query.bind(value),
+                Value::Float(value) => query.bind(value),
+                Value::Decimal(value) => query.bind(value),
+                Value::Date(value) => query.bind(value),
+                Value::Time(value) => query.bind(value),
+                Value::Timestamp(value) => query.bind(value),
+                Value::String(value) => query.bind(value),
+                Value::Bytes(value) => query.bind(value),
+            };
+        }
+        query
+    }
+
+    fn bind_postgresql_prepared_values<'query>(
+        statement: &'query sqlx::postgres::PgStatement<'query>,
+        params: Vec<Value>,
+    ) -> sqlx::query::Query<'query, Postgres, PgArguments> {
+        let mut query = statement.query();
+        for value in params {
+            query = match value {
+                Value::Null => query.bind(Option::<String>::None),
+                Value::Bool(value) => query.bind(value),
+                Value::Int(value) => query.bind(value),
+                Value::Float(value) => query.bind(value),
+                Value::Decimal(value) => query.bind(value),
                 Value::Date(value) => query.bind(value),
                 Value::Time(value) => query.bind(value),
                 Value::Timestamp(value) => query.bind(value),
@@ -266,6 +380,111 @@ impl SqlxConnectionAdapter {
                 }
                 AnyTypeInfoKind::Blob => {
                     Value::Bytes(row.try_get(index).map_err(Self::driver_error)?)
+                }
+            };
+            values.push(value);
+        }
+        Ok(Row::new(values))
+    }
+
+    fn decode_mysql_row(row: MySqlRow) -> Result<Row, DruidError> {
+        let mut values = Vec::with_capacity(row.columns().len());
+        for (index, column) in row.columns().iter().enumerate() {
+            let raw = row.try_get_raw(index).map_err(Self::driver_error)?;
+            if raw.is_null() {
+                values.push(Value::Null);
+                continue;
+            }
+            let type_name = column.type_info().name().to_ascii_uppercase();
+            let value = match type_name.as_str() {
+                "BOOLEAN" | "BOOL" => Value::Bool(row.try_get(index).map_err(Self::driver_error)?),
+                "TINYINT" => {
+                    let value: i8 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Int(i64::from(value))
+                }
+                "SMALLINT" => {
+                    let value: i16 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Int(i64::from(value))
+                }
+                "MEDIUMINT" | "INT" | "INTEGER" => {
+                    let value: i32 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Int(i64::from(value))
+                }
+                "BIGINT" => Value::Int(row.try_get(index).map_err(Self::driver_error)?),
+                "FLOAT" => {
+                    let value: f32 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Float(f64::from(value))
+                }
+                "DOUBLE" | "REAL" => Value::Float(row.try_get(index).map_err(Self::driver_error)?),
+                "DECIMAL" | "NUMERIC" | "NEWDECIMAL" => {
+                    Value::Decimal(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                "DATE" => Value::Date(row.try_get(index).map_err(Self::driver_error)?),
+                "TIME" => Value::Time(row.try_get(index).map_err(Self::driver_error)?),
+                "DATETIME" | "TIMESTAMP" => {
+                    Value::Timestamp(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                name if name.contains("BLOB") || name.contains("BINARY") => {
+                    Value::Bytes(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                name if name.contains("CHAR")
+                    || name.contains("TEXT")
+                    || matches!(name, "ENUM" | "SET" | "JSON") =>
+                {
+                    Value::String(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                unsupported => {
+                    return Err(DruidError::DriverError(format!(
+                        "MySQL type {unsupported} is not represented by druid::core::Value"
+                    )));
+                }
+            };
+            values.push(value);
+        }
+        Ok(Row::new(values))
+    }
+
+    fn decode_postgresql_row(row: PgRow) -> Result<Row, DruidError> {
+        let mut values = Vec::with_capacity(row.columns().len());
+        for (index, column) in row.columns().iter().enumerate() {
+            let raw = row.try_get_raw(index).map_err(Self::driver_error)?;
+            if raw.is_null() {
+                values.push(Value::Null);
+                continue;
+            }
+            let type_name = column.type_info().name().to_ascii_uppercase();
+            let value = match type_name.as_str() {
+                "BOOL" | "BOOLEAN" => Value::Bool(row.try_get(index).map_err(Self::driver_error)?),
+                "INT2" | "SMALLINT" => {
+                    let value: i16 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Int(i64::from(value))
+                }
+                "INT4" | "INTEGER" => {
+                    let value: i32 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Int(i64::from(value))
+                }
+                "INT8" | "BIGINT" => Value::Int(row.try_get(index).map_err(Self::driver_error)?),
+                "FLOAT4" | "REAL" => {
+                    let value: f32 = row.try_get(index).map_err(Self::driver_error)?;
+                    Value::Float(f64::from(value))
+                }
+                "FLOAT8" | "DOUBLE PRECISION" => {
+                    Value::Float(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                "NUMERIC" | "DECIMAL" => {
+                    Value::Decimal(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                "DATE" => Value::Date(row.try_get(index).map_err(Self::driver_error)?),
+                "TIME" => Value::Time(row.try_get(index).map_err(Self::driver_error)?),
+                "TIMESTAMP" => Value::Timestamp(row.try_get(index).map_err(Self::driver_error)?),
+                "BYTEA" => Value::Bytes(row.try_get(index).map_err(Self::driver_error)?),
+                "TEXT" | "VARCHAR" | "CHAR" | "BPCHAR" | "NAME" => {
+                    Value::String(row.try_get(index).map_err(Self::driver_error)?)
+                }
+                unsupported => {
+                    return Err(DruidError::DriverError(format!(
+                        "PostgreSQL type {unsupported} is not represented by druid::core::Value"
+                    )));
                 }
             };
             values.push(value);
@@ -370,6 +589,52 @@ impl SqlxConnectionAdapter {
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok((rows, labels))
             }
+            SqlxConnectionBackend::MySql(connection) => {
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let labels = statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.name().to_owned())
+                    .collect();
+                let rows = Self::bind_mysql_prepared_values(&statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let rows = rows
+                    .into_iter()
+                    .map(Self::decode_mysql_row)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((rows, labels))
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let labels = statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.name().to_owned())
+                    .collect();
+                let rows = Self::bind_postgresql_prepared_values(&statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let rows = rows
+                    .into_iter()
+                    .map(Self::decode_postgresql_row)
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok((rows, labels))
+            }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let statement = {
                     let statement = (&mut *connection)
@@ -404,6 +669,18 @@ impl SqlxConnectionAdapter {
                     .await
                     .map_err(Self::driver_error)?;
             }
+            SqlxConnectionBackend::MySql(connection) => {
+                sqlx::query(sql)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                sqlx::query(sql)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
             SqlxConnectionBackend::Sqlite(connection) => {
                 sqlx::query(sql)
                     .execute(connection)
@@ -427,6 +704,29 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 Ok(ExecResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id: result.last_insert_id(),
+                    row_count: None,
+                })
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let result = Self::bind_mysql_values(sql, params)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(ExecResult {
+                    rows_affected: result.rows_affected(),
+                    last_insert_id: (result.last_insert_id() != 0)
+                        .then(|| i64::try_from(result.last_insert_id()).unwrap_or(i64::MAX)),
+                    row_count: None,
+                })
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let result = Self::bind_postgresql_values(sql, params)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(ExecResult {
+                    rows_affected: result.rows_affected(),
+                    last_insert_id: None,
                     row_count: None,
                 })
             }
@@ -475,6 +775,22 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 let statement = Statement::to_owned(&statement);
                 Arc::new(SqlxPreparedStatement::any(sql, statement))
             }
+            SqlxConnectionBackend::MySql(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(key.sql())
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = Statement::to_owned(&statement);
+                Arc::new(SqlxPreparedStatement::mysql(sql, statement))
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(key.sql())
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = Statement::to_owned(&statement);
+                Arc::new(SqlxPreparedStatement::postgresql(sql, statement))
+            }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let statement = (&mut *connection)
                     .prepare(key.sql())
@@ -503,8 +819,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         if statement.is_closed() {
             return Err(DruidError::ConnectionDiscarded);
         }
-        let sqlite = matches!(self.connection, Some(SqlxConnectionBackend::Sqlite(_)));
-        if !statement.matches_backend(sqlite) {
+        if !statement.matches_backend(self.backend_key()) {
             return Err(DruidError::DriverError(
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
@@ -523,6 +838,39 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 Ok(ExecResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id: result.last_insert_id(),
+                    row_count: None,
+                })
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let statement = statement.mysql_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let result = Self::bind_mysql_prepared_values(statement, params)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(ExecResult {
+                    rows_affected: result.rows_affected(),
+                    last_insert_id: (result.last_insert_id() != 0)
+                        .then(|| i64::try_from(result.last_insert_id()).unwrap_or(i64::MAX)),
+                    row_count: None,
+                })
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let statement = statement.postgresql_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let result = Self::bind_postgresql_prepared_values(statement, params)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(ExecResult {
+                    rows_affected: result.rows_affected(),
+                    last_insert_id: None,
                     row_count: None,
                 })
             }
@@ -563,15 +911,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         _generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
         let statement_ref = Self::prepared_statement(statement)?;
-        let returns_rows = statement_ref
-            .sqlite_statement()
-            .map(|statement| !statement.columns().is_empty())
-            .or_else(|| {
-                statement_ref
-                    .any_statement()
-                    .map(|statement| !statement.columns().is_empty())
-            })
-            .unwrap_or(false);
+        let returns_rows = statement_ref.returns_rows();
         if returns_rows {
             self.fetch_prepared(statement, params)
                 .await
@@ -652,8 +992,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         if statement.is_closed() {
             return Err(DruidError::ConnectionDiscarded);
         }
-        let sqlite = matches!(self.connection, Some(SqlxConnectionBackend::Sqlite(_)));
-        if !statement.matches_backend(sqlite) {
+        if !statement.matches_backend(self.backend_key()) {
             return Err(DruidError::DriverError(
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
@@ -670,6 +1009,30 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     .await
                     .map_err(Self::driver_error)?;
                 rows.into_iter().map(Self::decode_any_row).collect()
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let statement = statement.mysql_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let rows = Self::bind_mysql_prepared_values(statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                rows.into_iter().map(Self::decode_mysql_row).collect()
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let statement = statement.postgresql_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let rows = Self::bind_postgresql_prepared_values(statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                rows.into_iter().map(Self::decode_postgresql_row).collect()
             }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let statement = statement.sqlite_statement().ok_or_else(|| {
@@ -708,25 +1071,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     "prepared statement was not created by SqlxConnectionAdapter".to_string(),
                 )
             })?;
-        let labels = sqlx_statement
-            .any_statement()
-            .map(|statement| {
-                statement
-                    .columns()
-                    .iter()
-                    .map(|column| column.name().to_string())
-                    .collect::<Vec<_>>()
-            })
-            .or_else(|| {
-                sqlx_statement.sqlite_statement().map(|statement| {
-                    statement
-                        .columns()
-                        .iter()
-                        .map(|column| column.name().to_string())
-                        .collect::<Vec<_>>()
-                })
-            })
-            .unwrap_or_default();
+        let labels = sqlx_statement.column_labels();
         let rows = self.fetch_prepared(statement, params).await?;
         Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
     }
@@ -747,6 +1092,16 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     .await
                     .map_err(Self::driver_error)
             }
+            SqlxConnectionBackend::MySql(connection) => {
+                MySqlTransactionManager::begin(connection, None)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                PgTransactionManager::begin(connection, None)
+                    .await
+                    .map_err(Self::driver_error)
+            }
             SqlxConnectionBackend::Sqlite(connection) => {
                 SqliteTransactionManager::begin(connection, None)
                     .await
@@ -760,6 +1115,14 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             SqlxConnectionBackend::Any(connection) => AnyTransactionManager::commit(connection)
                 .await
                 .map_err(Self::driver_error),
+            SqlxConnectionBackend::MySql(connection) => MySqlTransactionManager::commit(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                PgTransactionManager::commit(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
             SqlxConnectionBackend::Sqlite(connection) => {
                 SqliteTransactionManager::commit(connection)
                     .await
@@ -773,6 +1136,16 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             SqlxConnectionBackend::Any(connection) => AnyTransactionManager::rollback(connection)
                 .await
                 .map_err(Self::driver_error),
+            SqlxConnectionBackend::MySql(connection) => {
+                MySqlTransactionManager::rollback(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                PgTransactionManager::rollback(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
             SqlxConnectionBackend::Sqlite(connection) => {
                 SqliteTransactionManager::rollback(connection)
                     .await
@@ -832,6 +1205,12 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             SqlxConnectionBackend::Any(connection) => SqlxConnection::ping(connection)
                 .await
                 .map_err(Self::driver_error),
+            SqlxConnectionBackend::MySql(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::PostgreSql(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
             SqlxConnectionBackend::Sqlite(connection) => SqlxConnection::ping(connection)
                 .await
                 .map_err(Self::driver_error),
@@ -841,6 +1220,16 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     async fn close(&mut self) -> Result<(), DruidError> {
         match self.connection.take() {
             Some(SqlxConnectionBackend::Any(connection)) => {
+                SqlxConnection::close(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            Some(SqlxConnectionBackend::MySql(connection)) => {
+                SqlxConnection::close(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            Some(SqlxConnectionBackend::PostgreSql(connection)) => {
                 SqlxConnection::close(connection)
                     .await
                     .map_err(Self::driver_error)?;
@@ -886,6 +1275,12 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             SqlxConnectionBackend::Any(connection) => Ok(Box::new(
                 super::sqlx_database_meta_data::SqlxDatabaseMetaData::any(connection, url),
             )),
+            SqlxConnectionBackend::MySql(connection) => Ok(Box::new(
+                super::sqlx_database_meta_data::SqlxDatabaseMetaData::mysql(connection, url),
+            )),
+            SqlxConnectionBackend::PostgreSql(connection) => Ok(Box::new(
+                super::sqlx_database_meta_data::SqlxDatabaseMetaData::postgresql(connection, url),
+            )),
             SqlxConnectionBackend::Sqlite(connection) => Ok(Box::new(
                 super::sqlx_database_meta_data::SqlxDatabaseMetaData::sqlite(connection, url),
             )),
@@ -896,6 +1291,12 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         match &self.connection {
             Some(SqlxConnectionBackend::Any(connection)) => {
                 AnyTransactionManager::get_transaction_depth(connection) == 0
+            }
+            Some(SqlxConnectionBackend::MySql(connection)) => {
+                MySqlTransactionManager::get_transaction_depth(connection) == 0
+            }
+            Some(SqlxConnectionBackend::PostgreSql(connection)) => {
+                PgTransactionManager::get_transaction_depth(connection) == 0
             }
             Some(SqlxConnectionBackend::Sqlite(connection)) => {
                 SqliteTransactionManager::get_transaction_depth(connection) == 0
@@ -948,6 +1349,8 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     fn driver_name(&self) -> &str {
         match &self.connection {
             Some(SqlxConnectionBackend::Any(connection)) => connection.backend_name(),
+            Some(SqlxConnectionBackend::MySql(_)) => "MySQL",
+            Some(SqlxConnectionBackend::PostgreSql(_)) => "PostgreSQL",
             Some(SqlxConnectionBackend::Sqlite(_)) => "SQLite",
             None => "sqlx-closed",
         }

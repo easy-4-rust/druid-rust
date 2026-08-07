@@ -38,6 +38,7 @@ missing_panics_doc = "allow"
 tokio        = { version = "1.53.1", features = ["full"] }
 async-trait  = "0.1"
 futures      = "0.3"
+fs2          = "0.4.3"
 rbdc         = { version = "4.9.10", default-features = false }
 rbs          = "4.8.4"
 toasty       = { version = "0.9.0", default-features = false, features = ["bigdecimal", "jiff"] }

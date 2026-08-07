@@ -19,10 +19,22 @@ pub enum DriverInstallerError {
     ChecksumMismatch { expected: String, actual: String },
     #[error("no installed artifact is active for '{0}'")]
     NotInstalled(String),
+    #[error("artifact version '{sha256}' is not installed for '{profile_id}'")]
+    ArtifactVersionNotFound { profile_id: String, sha256: String },
+    #[error("artifact version '{sha256}' is active for '{profile_id}' and cannot be removed")]
+    ActiveArtifact { profile_id: String, sha256: String },
+    #[error("no verified Java runtime is installed")]
+    JavaRuntimeNotInstalled,
+    #[error("Java 17 or newer is required; detected Java {0}")]
+    UnsupportedJavaVersion(u16),
     #[error("download failed: {0}")]
     Download(#[from] reqwest::Error),
     #[error("driver download exceeded the administrative timeout: {0}")]
     DownloadTimeout(String),
+    #[error("network installation is disabled in offline mode: {0}")]
+    OfflineMode(String),
+    #[error("timed out waiting for artifact installation lock: {0}")]
+    LockTimeout(String),
     #[error("invalid Java classpath: {0}")]
     ClassPath(#[from] std::env::JoinPathsError),
     #[error("filesystem operation failed: {0}")]

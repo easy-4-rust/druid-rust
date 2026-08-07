@@ -3,8 +3,8 @@
 //! 池内部配置，从 PoolConfig 翻译而来。
 
 use crate::core::{
-    AutoLoad, ConfigFilter, EncodingConvertFilter, FilterChain, FilterManager, LogFilter,
-    MySQL8DateTimeSqlTypeFilter, ValidConnectionChecker,
+    AutoLoad, ConfigFilter, EncodingConvertFilter, ExceptionSorter, FilterChain, FilterManager,
+    LogFilter, MySQL8DateTimeSqlTypeFilter, ValidConnectionChecker,
 };
 use crate::dynamic::RandomDataSourceValidateFilter;
 use crate::sql::{DbType, WallConfig, WallFilter, WallProvider};
@@ -208,6 +208,7 @@ pub struct DruidPoolBuilder {
     transaction_query_timeout: i32,
     login_timeout: i32,
     valid_connection_checker: Option<Arc<dyn ValidConnectionChecker>>,
+    exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     remove_abandoned: bool,
     remove_abandoned_timeout: Duration,
     log_abandoned: bool,
@@ -285,6 +286,7 @@ impl DruidPoolBuilder {
             transaction_query_timeout: 0,
             login_timeout: 0,
             valid_connection_checker: None,
+            exception_sorter: None,
             remove_abandoned: false,
             remove_abandoned_timeout: Duration::from_secs(300),
             log_abandoned: false,
@@ -645,6 +647,12 @@ impl DruidPoolBuilder {
         valid_connection_checker: Arc<dyn ValidConnectionChecker>,
     ) -> Self {
         self.valid_connection_checker = Some(valid_connection_checker);
+        self
+    }
+
+    /// 设置显式 `ExceptionSorter`，优先于按 `dbType`/driver name 自动推断。
+    pub fn exception_sorter(mut self, exception_sorter: Arc<dyn ExceptionSorter>) -> Self {
+        self.exception_sorter = Some(exception_sorter);
         self
     }
 
@@ -1054,7 +1062,7 @@ impl DruidPoolBuilder {
         } else {
             Some(Arc::new(self.filter_chain))
         };
-        let pool = super::DruidPool::new_with_observability(
+        let pool = super::DruidPool::new_with_observability_and_exception_sorter(
             self.name,
             self.driver_name,
             factory,
@@ -1062,6 +1070,7 @@ impl DruidPoolBuilder {
             filter_chain,
             self.stats_collector,
             self.wall_provider,
+            self.exception_sorter,
         );
         if pool.filter_chain().is_some() {
             pool.mark_filters_initialized();

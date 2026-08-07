@@ -15,25 +15,22 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Date;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
-import java.sql.Types;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Iterator;
 import java.util.Map;
@@ -41,6 +38,10 @@ import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** JSON-RPC 2.0 NDJSON 服务端；一个共享进程可隔离承载多个 JDBC session。 */
 @Slf4j
@@ -48,15 +49,18 @@ public final class AgentServer implements Closeable {
 
     private static final int PROTOCOL_VERSION = 1;
     private static final int MAX_FRAME_BYTES = 16 * 1024 * 1024;
-    private static final DateTimeFormatter TIMESTAMP_FORMAT =
-            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
+    private static final int DEFAULT_PAGE_SIZE = 500;
+    private static final int MAX_PAGE_SIZE = 10_000;
+    private static final int DEFAULT_RESPONSE_BYTES = 8 * 1024 * 1024;
+    private static final int MIN_RESPONSE_BYTES = 1024;
 
     private final BufferedReader input;
     private final BufferedWriter output;
     private final ObjectMapper objectMapper;
     private final Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
-    private Connection connection;
-    private String validationQuery;
+    private final ExecutorService requests = Executors.newCachedThreadPool();
+    private final AtomicBoolean shuttingDown = new AtomicBoolean();
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     /**
      * 创建使用指定字节流的服务端。
@@ -72,7 +76,7 @@ public final class AgentServer implements Closeable {
         this.objectMapper = new ObjectMapper();
     }
 
-    /** 发送 ready 通知并执行 JSON-RPC 请求循环，直到 EOF。 */
+    /** 发送 ready 通知并并发调度 JSON-RPC 请求，直到 EOF 或 shutdown。 */
     public void run() throws IOException {
         ObjectNode ready = JsonNodeFactory.instance.objectNode();
         ready.put("jsonrpc", "2.0");
@@ -83,123 +87,143 @@ public final class AgentServer implements Closeable {
         readyParams.putArray("capabilities")
                 .add("multi-session")
                 .add("structured-errors")
-                .add("tagged-values");
+                .add("tagged-values")
+                .add("concurrent-requests")
+                .add("cursor-paging")
+                .add("cancel")
+                .add("remote-prepare");
         writeLine(ready);
 
-        String line;
-        while (Objects.nonNull(line = input.readLine())) {
-            AgentRequest request = null;
-            AgentResponse response;
-            try {
-                if (line.getBytes(StandardCharsets.UTF_8).length > MAX_FRAME_BYTES) {
-                    throw new IOException("JSON-RPC request exceeds maximum frame size");
-                }
-                request = objectMapper.readValue(line, AgentRequest.class);
-                validateRequest(request);
-                JsonNode result = dispatch(request.method(), request.params());
-                response = AgentResponse.success(request.id(), result);
-            } catch (Exception exception) {
-                long requestId = Objects.isNull(request) ? 0 : request.id();
-                response = AgentResponse.failure(requestId, exception);
-                log.debug("JDBC operation failed: requestId={}", requestId, exception);
+        try {
+            String line;
+            while (!shuttingDown.get() && Objects.nonNull(line = input.readLine())) {
+                String frame = line;
+                requests.submit(() -> handleFrame(frame));
             }
-            writeLine(objectMapper.valueToTree(response));
+        } catch (IOException exception) {
+            if (!shuttingDown.get()) {
+                throw exception;
+            }
+        } finally {
+            requests.shutdown();
+            awaitRequests();
+        }
+    }
+
+    private void handleFrame(String line) {
+        AgentRequest request = null;
+        String sessionId = null;
+        try {
+            if (line.getBytes(StandardCharsets.UTF_8).length > MAX_FRAME_BYTES) {
+                throw new IOException("JSON-RPC request exceeds maximum frame size");
+            }
+            request = objectMapper.readValue(line, AgentRequest.class);
+            validateRequest(request);
+            sessionId = nullableText(request.params(), "sessionId");
+            JsonNode result = dispatch(request);
+            writeLine(objectMapper.valueToTree(AgentResponse.success(request.id(), result)));
+            if ("shutdown".equals(request.method())) {
+                requestShutdown();
+            }
+        } catch (Exception exception) {
+            long requestId = Objects.isNull(request) ? 0 : request.id();
+            try {
+                writeLine(objectMapper.valueToTree(
+                        AgentResponse.failure(requestId, sessionId, exception)));
+            } catch (IOException writeException) {
+                log.error("Unable to write JDBC Agent error response", writeException);
+                requestShutdown();
+            }
+            log.debug("JDBC operation failed: requestId={}", requestId, exception);
         }
     }
 
     private void validateRequest(AgentRequest request) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(request.method(), "method");
+        Objects.requireNonNull(request.params(), "params");
         if (!"2.0".equals(request.jsonrpc())) {
             throw new IllegalArgumentException("unsupported jsonrpc version " + request.jsonrpc());
         }
     }
 
-    private JsonNode dispatch(String method, JsonNode params) throws SQLException, IOException {
-        if ("handshake".equals(method)) {
-            if (params.path("protocolVersion").asInt() != PROTOCOL_VERSION) {
-                throw new IllegalArgumentException("unsupported protocolVersion "
-                        + params.path("protocolVersion").asInt());
-            }
-            ObjectNode result = JsonNodeFactory.instance.objectNode();
-            result.put("protocolVersion", PROTOCOL_VERSION);
-            result.put("agentVersion", "0.0.0-design");
-            return result;
-        }
-        if ("session.open".equals(method)) {
-            return openSession(params);
-        }
-        if ("session.close".equals(method)) {
-            return closeSession(params);
-        }
-        String operation = method.startsWith("session.") ? method.substring("session.".length()) : method;
-        return withSession(params, () -> switch (operation) {
-            case "exec" -> exec(params);
-            case "fetch" -> fetch(params);
-            case "execute" -> execute(params);
-            case "begin" -> begin();
-            case "commit" -> commit();
-            case "rollback" -> rollback();
-            case "ping" -> ping();
-            case "set_auto_commit" -> setAutoCommit(params);
-            case "set_read_only" -> setReadOnly(params);
-            case "set_transaction_isolation" -> setTransactionIsolation(params);
-            default -> throw new UnsupportedOperationException("unsupported method " + method);
-        });
+    private JsonNode dispatch(AgentRequest request) throws SQLException, IOException {
+        String method = request.method();
+        JsonNode params = request.params();
+        return switch (method) {
+            case "handshake" -> handshake(params);
+            case "open_session", "session.open" -> openSession(params);
+            case "close_session", "session.close" -> closeSession(params);
+            case "cancel" -> cancel(params);
+            case "shutdown" -> JsonNodeFactory.instance.objectNode();
+            default -> withSession(params, session -> dispatchSession(
+                    normalizeMethod(method), request.id(), session, params));
+        };
     }
 
-    private JsonNode openSession(JsonNode payload) throws SQLException {
-        JsonNode result = connect(payload);
-        String sessionId = UUID.randomUUID().toString();
-        sessions.put(sessionId, new AgentSession(connection, validationQuery));
-        connection = null;
-        validationQuery = null;
-        ((ObjectNode) result).put("sessionId", sessionId);
+    private String normalizeMethod(String method) {
+        String operation = method.startsWith("session.")
+                ? method.substring("session.".length())
+                : method;
+        return switch (operation) {
+            case "exec" -> "execute_update";
+            case "fetch" -> "execute_query";
+            case "ping" -> "validate_connection";
+            default -> operation;
+        };
+    }
+
+    private JsonNode dispatchSession(
+            String method,
+            long requestId,
+            AgentSession session,
+            JsonNode params) throws SQLException, IOException {
+        return switch (method) {
+            case "validate_connection" -> validateConnection(session);
+            case "execute_update" -> executeUpdate(requestId, session, params);
+            case "execute_query" -> executeQuery(requestId, session, params);
+            case "execute" -> execute(requestId, session, params);
+            case "prepare" -> prepare(session, params);
+            case "execute_prepared" -> executePrepared(requestId, session, params);
+            case "close_statement" -> closeStatement(session, params);
+            case "fetch_page" -> fetchPage(requestId, session, params);
+            case "close_cursor" -> closeCursor(session, params);
+            case "begin" -> begin(session);
+            case "commit" -> commit(session);
+            case "rollback" -> rollback(session);
+            case "set_auto_commit" -> setAutoCommit(session, params);
+            case "get_auto_commit" -> value(session.connection().getAutoCommit());
+            case "set_read_only" -> setReadOnly(session, params);
+            case "get_read_only" -> value(session.connection().isReadOnly());
+            case "set_transaction_isolation" -> setTransactionIsolation(session, params);
+            case "get_transaction_isolation" -> value(session.connection().getTransactionIsolation());
+            case "set_catalog" -> setCatalog(session, params);
+            case "get_catalog" -> nullableValue(session.connection().getCatalog());
+            case "set_schema" -> setSchema(session, params);
+            case "get_schema" -> nullableValue(session.connection().getSchema());
+            case "list_catalogs" -> listCatalogs(session);
+            case "list_schemas" -> listSchemas(session);
+            case "database_metadata" -> databaseMetadata(session);
+            default -> throw new UnsupportedOperationException("unsupported method " + method);
+        };
+    }
+
+    private JsonNode handshake(JsonNode params) {
+        if (params.path("protocolVersion").asInt() != PROTOCOL_VERSION) {
+            throw new IllegalArgumentException("unsupported protocolVersion "
+                    + params.path("protocolVersion").asInt());
+        }
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.put("protocolVersion", PROTOCOL_VERSION);
+        result.put("agentVersion", "0.0.0-design");
+        result.put("defaultPageSize", DEFAULT_PAGE_SIZE);
+        result.put("maxResponseBytes", DEFAULT_RESPONSE_BYTES);
         return result;
     }
 
-    private JsonNode closeSession(JsonNode payload) throws SQLException {
-        String sessionId = requiredText(payload, "sessionId");
-        AgentSession session = sessions.remove(sessionId);
-        if (Objects.isNull(session)) {
-            return JsonNodeFactory.instance.objectNode();
-        }
-        try {
-            session.connection().close();
-        } finally {
-            connection = null;
-            validationQuery = null;
-        }
-        return JsonNodeFactory.instance.objectNode();
-    }
-
-    private JsonNode withSession(JsonNode payload, SessionOperation operation) throws SQLException, IOException {
-        String sessionId = requiredText(payload, "sessionId");
-        AgentSession session = sessions.get(sessionId);
-        if (Objects.isNull(session) || session.connection().isClosed()) {
-            throw new SQLException("JDBC Agent session is not open: " + sessionId);
-        }
-        connection = session.connection();
-        validationQuery = session.validationQuery();
-        try {
-            return operation.execute();
-        } finally {
-            connection = null;
-            validationQuery = null;
-        }
-    }
-
-    @FunctionalInterface
-    private interface SessionOperation {
-        JsonNode execute() throws SQLException, IOException;
-    }
-
-    private JsonNode connect(JsonNode payload) throws SQLException {
-        if (Objects.nonNull(connection)) {
-            throw new IllegalStateException("JDBC connection is already initialized");
-        }
+    private JsonNode openSession(JsonNode payload) throws SQLException {
         Objects.requireNonNull(payload, "connect payload");
-        JsonNode urlNode = Objects.requireNonNull(payload.get("url"), "url");
+        String url = requiredText(payload, "url");
         Properties properties = new Properties();
         JsonNode propertyNode = payload.get("properties");
         if (Objects.nonNull(propertyNode) && propertyNode.isObject()) {
@@ -209,148 +233,331 @@ public final class AgentServer implements Closeable {
                 properties.setProperty(field.getKey(), field.getValue().asText());
             }
         }
-        JsonNode validationNode = payload.get("validationQuery");
-        validationQuery = Objects.isNull(validationNode) || validationNode.isNull()
-                ? null
-                : validationNode.asText();
-        connection = DriverManager.getConnection(urlNode.asText(), properties);
-        DatabaseMetaData metadata = connection.getMetaData();
+        String validationQuery = nullableText(payload, "validationQuery");
+        Connection connection = DriverManager.getConnection(url, properties);
+        try {
+            DatabaseMetaData metadata = connection.getMetaData();
+            String sessionId = UUID.randomUUID().toString();
+            sessions.put(sessionId, new AgentSession(connection, validationQuery));
+            ObjectNode result = JsonNodeFactory.instance.objectNode();
+            result.put("sessionId", sessionId);
+            result.put("agentVersion", "0.0.0-design");
+            result.put("driverName", metadata.getDriverName());
+            result.put("driverVersion", metadata.getDriverVersion());
+            result.put("databaseProductName", metadata.getDatabaseProductName());
+            result.put("databaseProductVersion", metadata.getDatabaseProductVersion());
+            result.put("autoCommit", connection.getAutoCommit());
+            result.put("readOnly", connection.isReadOnly());
+            result.put("transactionIsolation", connection.getTransactionIsolation());
+            putNullable(result, "catalog", safeCatalog(connection));
+            putNullable(result, "schema", safeSchema(connection));
+            ObjectNode capabilities = result.putObject("capabilities");
+            capabilities.put("transactions", metadata.supportsTransactions());
+            capabilities.put("autoCommit", true);
+            capabilities.put("readOnly", true);
+            capabilities.put("transactionIsolation", true);
+            capabilities.put("catalog", supportsCatalog(metadata));
+            capabilities.put("schema", supportsSchema(metadata));
+            return result;
+        } catch (SQLException | RuntimeException exception) {
+            connection.close();
+            throw exception;
+        }
+    }
+
+    private JsonNode closeSession(JsonNode payload) throws IOException {
+        AgentSession session = sessions.remove(requiredText(payload, "sessionId"));
+        if (Objects.nonNull(session)) {
+            session.close();
+        }
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode withSession(JsonNode payload, SessionOperation operation)
+            throws SQLException, IOException {
+        String sessionId = requiredText(payload, "sessionId");
+        AgentSession session = sessions.get(sessionId);
+        if (Objects.isNull(session) || session.connection().isClosed()) {
+            throw new SQLException("JDBC Agent session is not open: " + sessionId);
+        }
+        session.operationLock().lock();
+        try {
+            return operation.execute(session);
+        } finally {
+            session.operationLock().unlock();
+        }
+    }
+
+    @FunctionalInterface
+    private interface SessionOperation {
+        JsonNode execute(AgentSession session) throws SQLException, IOException;
+    }
+
+    private JsonNode executeUpdate(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException, IOException {
+        try (PreparedStatement statement = session.connection().prepareStatement(
+                requiredText(payload, "sql"), Statement.RETURN_GENERATED_KEYS)) {
+            bind(statement, payload.path("params"));
+            session.activate(requestId, statement);
+            try {
+                return updateResult(statement, Math.max(0, statement.executeUpdate()));
+            } finally {
+                session.deactivate(requestId);
+            }
+        }
+    }
+
+    private JsonNode executeQuery(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException, IOException {
+        PreparedStatement statement = session.connection().prepareStatement(requiredText(payload, "sql"));
+        try {
+            bind(statement, payload.path("params"));
+            session.activate(requestId, statement);
+            ResultSet resultSet;
+            try {
+                resultSet = statement.executeQuery();
+            } finally {
+                session.deactivate(requestId);
+            }
+            return firstPage(session, new AgentCursor(
+                    statement, resultSet, true, null, objectMapper), payload);
+        } catch (SQLException | IOException | RuntimeException exception) {
+            statement.close();
+            throw exception;
+        }
+    }
+
+    private JsonNode execute(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException, IOException {
+        PreparedStatement statement = prepareForExecute(
+                session.connection(), requiredText(payload, "sql"), payload.path("generatedKeys"));
+        try {
+            bind(statement, payload.path("params"));
+            session.activate(requestId, statement);
+            boolean query;
+            try {
+                query = statement.execute();
+            } finally {
+                session.deactivate(requestId);
+            }
+            if (query) {
+                return firstPage(session, new AgentCursor(
+                        statement, statement.getResultSet(), true, null, objectMapper), payload);
+            }
+            ObjectNode result = updateResult(statement, Math.max(0, statement.getUpdateCount()));
+            statement.close();
+            return result;
+        } catch (SQLException | IOException | RuntimeException exception) {
+            statement.close();
+            throw exception;
+        }
+    }
+
+    private JsonNode prepare(AgentSession session, JsonNode payload) throws SQLException {
+        PreparedStatement statement = prepareForExecute(
+                session.connection(), requiredText(payload, "sql"), payload.path("generatedKeys"));
         ObjectNode result = JsonNodeFactory.instance.objectNode();
-        result.put("agentVersion", "0.0.0-design");
-        result.put("driverName", metadata.getDriverName());
-        result.put("driverVersion", metadata.getDriverVersion());
-        result.put("databaseProductName", metadata.getDatabaseProductName());
-        result.put("databaseProductVersion", metadata.getDatabaseProductVersion());
+        result.put("statementId", session.registerPreparedStatement(statement));
         return result;
     }
 
-    private JsonNode exec(JsonNode payload) throws SQLException, IOException {
-        Connection activeConnection = activeConnection();
-        try (PreparedStatement statement = activeConnection.prepareStatement(
-                requiredText(payload, "sql"), Statement.RETURN_GENERATED_KEYS)) {
-            bind(statement, payload.path("params"));
-            long rowsAffected = Math.max(0, statement.executeUpdate());
-            return updateResult(statement, rowsAffected);
+    private JsonNode executePrepared(
+            long requestId,
+            AgentSession session,
+            JsonNode payload) throws SQLException, IOException {
+        String statementId = requiredText(payload, "statementId");
+        PreparedStatement statement = session.preparedStatement(statementId);
+        statement.clearParameters();
+        bind(statement, payload.path("params"));
+        String mode = payload.path("mode").asText("execute");
+        session.activate(requestId, statement);
+        try {
+            return switch (mode) {
+                case "query" -> firstPage(session, new AgentCursor(
+                        statement, statement.executeQuery(), false, statementId, objectMapper), payload);
+                case "update" -> updateResult(statement, Math.max(0, statement.executeUpdate()));
+                case "execute" -> executePreparedAny(session, statementId, statement, payload);
+                default -> throw new IllegalArgumentException("unsupported execute_prepared mode " + mode);
+            };
+        } finally {
+            session.deactivate(requestId);
         }
     }
 
-    private JsonNode fetch(JsonNode payload) throws SQLException, IOException {
-        Connection activeConnection = activeConnection();
-        try (PreparedStatement statement = activeConnection.prepareStatement(requiredText(payload, "sql"))) {
-            bind(statement, payload.path("params"));
-            try (ResultSet resultSet = statement.executeQuery()) {
-                return queryResult(resultSet);
+    private JsonNode executePreparedAny(
+            AgentSession session,
+            String statementId,
+            PreparedStatement statement,
+            JsonNode payload) throws SQLException, IOException {
+        if (statement.execute()) {
+            return firstPage(session, new AgentCursor(
+                    statement, statement.getResultSet(), false, statementId, objectMapper), payload);
+        }
+        return updateResult(statement, Math.max(0, statement.getUpdateCount()));
+    }
+
+    private JsonNode closeStatement(AgentSession session, JsonNode payload) throws SQLException {
+        session.closePreparedStatement(requiredText(payload, "statementId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode firstPage(AgentSession session, AgentCursor cursor, JsonNode payload)
+            throws SQLException, IOException {
+        String cursorId = UUID.randomUUID().toString();
+        try {
+            ObjectNode page = cursor.fetchPage(
+                    cursorId, pageSize(payload), responseBytes(payload));
+            if (cursor.hasMore()) {
+                session.registerCursor(cursorId, cursor);
             }
+            return page;
+        } catch (SQLException | IOException | RuntimeException exception) {
+            cursor.close();
+            throw exception;
         }
     }
 
-    private JsonNode execute(JsonNode payload) throws SQLException, IOException {
-        Connection activeConnection = activeConnection();
-        try (PreparedStatement statement = prepareForExecute(
-                activeConnection,
-                requiredText(payload, "sql"),
-                payload.path("generatedKeys"))) {
-            bind(statement, payload.path("params"));
-            boolean query = statement.execute();
-            if (query) {
-                try (ResultSet resultSet = statement.getResultSet()) {
-                    return queryResult(resultSet);
-                }
+    private JsonNode fetchPage(long requestId, AgentSession session, JsonNode payload)
+            throws SQLException, IOException {
+        String cursorId = requiredText(payload, "cursorId");
+        AgentCursor cursor = session.cursor(cursorId);
+        session.activate(requestId, cursor.statement());
+        try {
+            ObjectNode page = cursor.fetchPage(
+                    cursorId, pageSize(payload), responseBytes(payload));
+            if (!cursor.hasMore()) {
+                session.closeCursor(cursorId);
             }
-            return updateResult(statement, Math.max(0, statement.getUpdateCount()));
+            return page;
+        } finally {
+            session.deactivate(requestId);
         }
+    }
+
+    private JsonNode closeCursor(AgentSession session, JsonNode payload) throws SQLException {
+        session.closeCursor(requiredText(payload, "cursorId"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode cancel(JsonNode payload) throws SQLException {
+        AgentSession session = sessions.get(requiredText(payload, "sessionId"));
+        boolean cancelled = false;
+        if (Objects.nonNull(session)) {
+            String statementId = nullableText(payload, "statementId");
+            cancelled = Objects.nonNull(statementId)
+                    ? session.cancelPreparedStatement(statementId)
+                    : session.cancel(payload.path("targetRequestId").asLong());
+        }
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.put("cancelled", cancelled);
+        return result;
     }
 
     private PreparedStatement prepareForExecute(
-            Connection activeConnection,
+            Connection connection,
             String sql,
             JsonNode generatedKeys) throws SQLException {
         String mode = generatedKeys.path("mode").asText("none");
         return switch (mode) {
-            case "auto" -> activeConnection.prepareStatement(sql, generatedKeys.path("value").asInt());
-            case "column_indexes" -> activeConnection.prepareStatement(sql, intArray(generatedKeys.path("value")));
-            case "column_names" -> activeConnection.prepareStatement(sql, stringArray(generatedKeys.path("value")));
-            case "none" -> activeConnection.prepareStatement(sql);
+            case "auto" -> connection.prepareStatement(sql, generatedKeys.path("value").asInt());
+            case "column_indexes" -> connection.prepareStatement(sql, intArray(generatedKeys.path("value")));
+            case "column_names" -> connection.prepareStatement(sql, stringArray(generatedKeys.path("value")));
+            case "none" -> connection.prepareStatement(sql);
             default -> throw new IllegalArgumentException("unsupported generatedKeys mode " + mode);
         };
     }
 
-    private JsonNode begin() throws SQLException {
-        activeConnection().setAutoCommit(false);
+    private JsonNode begin(AgentSession session) throws SQLException {
+        session.connection().setAutoCommit(false);
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode commit() throws SQLException {
-        activeConnection().commit();
+    private JsonNode commit(AgentSession session) throws SQLException {
+        session.connection().commit();
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode rollback() throws SQLException {
-        activeConnection().rollback();
+    private JsonNode rollback(AgentSession session) throws SQLException {
+        session.connection().rollback();
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode ping() throws SQLException {
-        Connection activeConnection = activeConnection();
+    private JsonNode validateConnection(AgentSession session) throws SQLException {
         try {
-            if (activeConnection.isValid(5)) {
+            if (session.connection().isValid(5)) {
                 return JsonNodeFactory.instance.objectNode();
             }
         } catch (SQLFeatureNotSupportedException ignored) {
             log.debug("JDBC driver does not implement Connection.isValid");
         }
-        if (Objects.nonNull(validationQuery)) {
-            try (Statement statement = activeConnection.createStatement()) {
-                statement.execute(validationQuery);
+        if (Objects.nonNull(session.validationQuery())) {
+            try (Statement statement = session.connection().createStatement()) {
+                statement.execute(session.validationQuery());
                 return JsonNodeFactory.instance.objectNode();
             }
         }
         throw new SQLException("JDBC connection validation failed");
     }
 
-    private JsonNode setAutoCommit(JsonNode payload) throws SQLException {
-        activeConnection().setAutoCommit(payload.path("value").asBoolean());
+    private JsonNode setAutoCommit(AgentSession session, JsonNode payload) throws SQLException {
+        session.connection().setAutoCommit(payload.path("value").asBoolean());
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode setReadOnly(JsonNode payload) throws SQLException {
-        activeConnection().setReadOnly(payload.path("value").asBoolean());
+    private JsonNode setReadOnly(AgentSession session, JsonNode payload) throws SQLException {
+        session.connection().setReadOnly(payload.path("value").asBoolean());
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode setTransactionIsolation(JsonNode payload) throws SQLException {
-        activeConnection().setTransactionIsolation(payload.path("value").asInt());
+    private JsonNode setTransactionIsolation(AgentSession session, JsonNode payload) throws SQLException {
+        session.connection().setTransactionIsolation(payload.path("value").asInt());
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode closeConnection() throws SQLException {
-        if (Objects.nonNull(connection)) {
-            connection.close();
-            connection = null;
-        }
+    private JsonNode setCatalog(AgentSession session, JsonNode payload) throws SQLException {
+        session.connection().setCatalog(nullableText(payload, "value"));
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private ObjectNode queryResult(ResultSet resultSet) throws SQLException {
-        ResultSetMetaData metadata = resultSet.getMetaData();
-        int columnCount = metadata.getColumnCount();
-        ArrayNode columns = JsonNodeFactory.instance.arrayNode();
-        for (int index = 1; index <= columnCount; index++) {
-            ObjectNode column = columns.addObject();
-            column.put("label", metadata.getColumnLabel(index));
-            column.put("jdbcType", metadata.getColumnType(index));
-        }
-        ArrayNode rows = JsonNodeFactory.instance.arrayNode();
-        while (resultSet.next()) {
-            ArrayNode row = rows.addArray();
-            for (int index = 1; index <= columnCount; index++) {
-                row.add(objectMapper.valueToTree(readValue(resultSet, metadata.getColumnType(index), index)));
+    private JsonNode setSchema(AgentSession session, JsonNode payload) throws SQLException {
+        session.connection().setSchema(nullableText(payload, "value"));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode listCatalogs(AgentSession session) throws SQLException {
+        ArrayNode values = JsonNodeFactory.instance.arrayNode();
+        try (ResultSet resultSet = session.connection().getMetaData().getCatalogs()) {
+            while (resultSet.next()) {
+                values.add(resultSet.getString(1));
             }
         }
         ObjectNode result = JsonNodeFactory.instance.objectNode();
-        result.put("kind", "result_set");
-        result.set("columns", columns);
-        result.set("rows", rows);
+        result.set("values", values);
+        return result;
+    }
+
+    private JsonNode listSchemas(AgentSession session) throws SQLException {
+        ArrayNode values = JsonNodeFactory.instance.arrayNode();
+        try (ResultSet resultSet = session.connection().getMetaData().getSchemas()) {
+            while (resultSet.next()) {
+                values.add(resultSet.getString(1));
+            }
+        }
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.set("values", values);
+        return result;
+    }
+
+    private JsonNode databaseMetadata(AgentSession session) throws SQLException {
+        DatabaseMetaData metadata = session.connection().getMetaData();
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.put("driverName", metadata.getDriverName());
+        result.put("driverVersion", metadata.getDriverVersion());
+        result.put("databaseProductName", metadata.getDatabaseProductName());
+        result.put("databaseProductVersion", metadata.getDatabaseProductVersion());
+        result.put("url", metadata.getURL());
+        result.put("userName", metadata.getUserName());
+        result.put("supportsTransactions", metadata.supportsTransactions());
         return result;
     }
 
@@ -399,42 +606,58 @@ public final class AgentServer implements Closeable {
         }
     }
 
-    private AgentValue readValue(ResultSet resultSet, int jdbcType, int index) throws SQLException {
-        Object raw = resultSet.getObject(index);
-        if (Objects.isNull(raw)) {
-            return new AgentValue("null", null);
-        }
-        JsonNodeFactory nodes = JsonNodeFactory.instance;
-        return switch (jdbcType) {
-            case Types.BOOLEAN, Types.BIT -> new AgentValue("bool", nodes.booleanNode(resultSet.getBoolean(index)));
-            case Types.TINYINT, Types.SMALLINT, Types.INTEGER, Types.BIGINT ->
-                    new AgentValue("int", nodes.numberNode(resultSet.getLong(index)));
-            case Types.FLOAT, Types.REAL, Types.DOUBLE ->
-                    new AgentValue("float", nodes.numberNode(resultSet.getDouble(index)));
-            case Types.NUMERIC, Types.DECIMAL ->
-                    new AgentValue("decimal", nodes.textNode(resultSet.getBigDecimal(index).toPlainString()));
-            case Types.DATE -> new AgentValue("date", nodes.textNode(resultSet.getDate(index).toLocalDate().toString()));
-            case Types.TIME, Types.TIME_WITH_TIMEZONE ->
-                    new AgentValue("time", nodes.textNode(resultSet.getTime(index).toLocalTime().toString()));
-            case Types.TIMESTAMP, Types.TIMESTAMP_WITH_TIMEZONE -> new AgentValue(
-                    "timestamp",
-                    nodes.textNode(resultSet.getTimestamp(index).toLocalDateTime().format(TIMESTAMP_FORMAT)));
-            case Types.BINARY, Types.VARBINARY, Types.LONGVARBINARY, Types.BLOB ->
-                    new AgentValue("bytes", nodes.textNode(Base64.getEncoder().encodeToString(resultSet.getBytes(index))));
-            default -> new AgentValue("string", nodes.textNode(resultSet.getString(index)));
-        };
+    private ObjectNode value(boolean value) {
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.put("value", value);
+        return result;
     }
 
-    private Connection activeConnection() throws SQLException {
-        if (Objects.isNull(connection) || connection.isClosed()) {
-            throw new SQLException("JDBC Agent connection is not open");
+    private ObjectNode value(int value) {
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.put("value", value);
+        return result;
+    }
+
+    private ObjectNode nullableValue(String value) {
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        putNullable(result, "value", value);
+        return result;
+    }
+
+    private void putNullable(ObjectNode target, String field, String value) {
+        if (Objects.isNull(value)) {
+            target.putNull(field);
+        } else {
+            target.put(field, value);
         }
-        return connection;
     }
 
     private String requiredText(JsonNode payload, String field) {
         Objects.requireNonNull(payload, "payload");
-        return Objects.requireNonNull(payload.get(field), field).asText();
+        JsonNode value = Objects.requireNonNull(payload.get(field), field);
+        String text = value.asText();
+        if (text.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return text;
+    }
+
+    private String nullableText(JsonNode payload, String field) {
+        if (Objects.isNull(payload)) {
+            return null;
+        }
+        JsonNode value = payload.get(field);
+        return Objects.isNull(value) || value.isNull() ? null : value.asText();
+    }
+
+    private int pageSize(JsonNode payload) {
+        int requested = payload.path("pageSize").asInt(DEFAULT_PAGE_SIZE);
+        return Math.max(1, Math.min(requested, MAX_PAGE_SIZE));
+    }
+
+    private int responseBytes(JsonNode payload) {
+        int requested = payload.path("maxResponseBytes").asInt(DEFAULT_RESPONSE_BYTES);
+        return Math.max(MIN_RESPONSE_BYTES, Math.min(requested, DEFAULT_RESPONSE_BYTES));
     }
 
     private int[] intArray(JsonNode values) {
@@ -453,7 +676,39 @@ public final class AgentServer implements Closeable {
         return result;
     }
 
-    private void writeLine(JsonNode value) throws IOException {
+    private String safeCatalog(Connection connection) {
+        try {
+            return connection.getCatalog();
+        } catch (SQLException | AbstractMethodError ignored) {
+            return null;
+        }
+    }
+
+    private String safeSchema(Connection connection) {
+        try {
+            return connection.getSchema();
+        } catch (SQLException | AbstractMethodError ignored) {
+            return null;
+        }
+    }
+
+    private boolean supportsCatalog(DatabaseMetaData metadata) {
+        try {
+            return metadata.supportsCatalogsInDataManipulation();
+        } catch (SQLException | AbstractMethodError ignored) {
+            return false;
+        }
+    }
+
+    private boolean supportsSchema(DatabaseMetaData metadata) {
+        try {
+            return metadata.supportsSchemasInDataManipulation();
+        } catch (SQLException | AbstractMethodError ignored) {
+            return false;
+        }
+    }
+
+    private synchronized void writeLine(JsonNode value) throws IOException {
         String line = objectMapper.writeValueAsString(value);
         if (line.getBytes(StandardCharsets.UTF_8).length > MAX_FRAME_BYTES) {
             throw new IOException("JSON-RPC response exceeds maximum frame size");
@@ -463,24 +718,54 @@ public final class AgentServer implements Closeable {
         output.flush();
     }
 
-    /** 关闭全部 session 和协议流。 */
+    private void requestShutdown() {
+        if (!shuttingDown.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            input.close();
+        } catch (IOException exception) {
+            log.debug("Unable to close JDBC Agent input during shutdown", exception);
+        }
+    }
+
+    private void awaitRequests() {
+        try {
+            if (!requests.awaitTermination(10, TimeUnit.SECONDS)) {
+                requests.shutdownNow();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            requests.shutdownNow();
+        }
+    }
+
+    /** 关闭全部 session、请求执行器和协议流。 */
     @Override
     public void close() throws IOException {
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        requestShutdown();
+        requests.shutdownNow();
         IOException failure = null;
-        try {
-            for (AgentSession session : sessions.values()) {
-                try {
-                    session.connection().close();
-                } catch (SQLException exception) {
-                    if (Objects.isNull(failure)) {
-                        failure = new IOException("failed to close JDBC session", exception);
-                    }
-                }
+        for (AgentSession session : sessions.values()) {
+            try {
+                session.close();
+            } catch (IOException exception) {
+                failure = exception;
             }
-            sessions.clear();
-        } finally {
-            input.close();
+        }
+        sessions.clear();
+        try {
             output.close();
+        } catch (IOException exception) {
+            failure = exception;
+        }
+        try {
+            input.close();
+        } catch (IOException exception) {
+            failure = exception;
         }
         if (Objects.nonNull(failure)) {
             throw failure;

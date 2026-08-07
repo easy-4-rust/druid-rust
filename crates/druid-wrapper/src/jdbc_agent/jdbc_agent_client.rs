@@ -1,4 +1,4 @@
-use super::{AgentRuntimeLease, JdbcAgentOptions};
+use super::{AgentRequestHandle, AgentRuntimeLease, JdbcAgentOptions};
 use druid::core::DruidError;
 use serde_json::{json, Value as JsonValue};
 
@@ -14,24 +14,27 @@ impl JdbcAgentClient {
     pub(crate) async fn connect(
         options: JdbcAgentOptions,
         connect_payload: JsonValue,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<(Self, JsonValue), DruidError> {
         let runtime = super::agent_runtime_manager::AgentRuntimeManager::acquire(&options).await?;
-        let result = runtime.request("session.open", connect_payload).await?;
+        let result = runtime.request("open_session", connect_payload).await?;
         let session_id = result
             .get("sessionId")
             .and_then(JsonValue::as_str)
             .filter(|session_id| !session_id.is_empty())
             .ok_or_else(|| {
                 DruidError::DriverError(
-                    "JDBC Agent session.open did not return sessionId".to_owned(),
+                    "JDBC Agent open_session did not return sessionId".to_owned(),
                 )
             })?
             .to_owned();
-        Ok(Self {
-            runtime,
-            session_id,
-            closed: false,
-        })
+        Ok((
+            Self {
+                runtime,
+                session_id,
+                closed: false,
+            },
+            result,
+        ))
     }
 
     /// 在当前 session 中执行一次请求。
@@ -57,7 +60,7 @@ impl JdbcAgentClient {
             JsonValue::String(self.session_id.clone()),
         );
         self.runtime
-            .request(&format!("session.{operation}"), JsonValue::Object(params))
+            .request(operation, JsonValue::Object(params))
             .await
     }
 
@@ -68,7 +71,7 @@ impl JdbcAgentClient {
         }
         let result = self
             .runtime
-            .request("session.close", json!({"sessionId": self.session_id}))
+            .request("close_session", json!({"sessionId": self.session_id}))
             .await
             .map(|_| ());
         self.closed = true;
@@ -78,5 +81,10 @@ impl JdbcAgentClient {
 
     pub(crate) fn is_unusable(&self) -> bool {
         self.closed || self.runtime.is_unusable()
+    }
+
+    /// 返回 Statement 同步 close/cancel 可使用的轻量运行时句柄和 session ID。
+    pub(crate) fn statement_context(&self) -> (AgentRequestHandle, String) {
+        (self.runtime.request_handle(), self.session_id.clone())
     }
 }

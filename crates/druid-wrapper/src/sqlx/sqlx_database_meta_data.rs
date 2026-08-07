@@ -3,7 +3,10 @@
 use druid::core::{
     DruidError, PhysicalDatabaseMetaData, PhysicalResultSet, Row, RowSetResultSet, Value,
 };
-use sqlx::{Any, AnyConnection, Row as SqlxRow, Sqlite, SqliteConnection};
+use sqlx::{
+    Any, AnyConnection, MySql, MySqlConnection, PgConnection, Postgres, Row as SqlxRow, Sqlite,
+    SqliteConnection,
+};
 use std::sync::Arc;
 
 const JDBC_TYPE_NULL: i32 = 0;
@@ -40,6 +43,10 @@ struct SqliteForeignKey {
 pub(super) enum SqlxDatabaseMetaDataBackend<'connection> {
     /// SQLx Any（MySQL/PostgreSQL 等）。
     Any(&'connection mut AnyConnection),
+    /// 原生 MySQL 协议连接。
+    MySql(&'connection mut MySqlConnection),
+    /// 原生 PostgreSQL 协议连接。
+    PostgreSql(&'connection mut PgConnection),
     /// 原生 SQLite。
     Sqlite(&'connection mut SqliteConnection),
 }
@@ -70,6 +77,28 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
     ) -> Self {
         Self {
             backend: SqlxDatabaseMetaDataBackend::Sqlite(connection),
+            url,
+        }
+    }
+
+    /// 创建原生 MySQL metadata。
+    pub(super) fn mysql(
+        connection: &'connection mut MySqlConnection,
+        url: &'connection str,
+    ) -> Self {
+        Self {
+            backend: SqlxDatabaseMetaDataBackend::MySql(connection),
+            url,
+        }
+    }
+
+    /// 创建原生 PostgreSQL metadata。
+    pub(super) fn postgresql(
+        connection: &'connection mut PgConnection,
+        url: &'connection str,
+    ) -> Self {
+        Self {
+            backend: SqlxDatabaseMetaDataBackend::PostgreSql(connection),
             url,
         }
     }
@@ -108,6 +137,18 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
             }
             SqlxDatabaseMetaDataBackend::Any(connection) if is_mysql => {
                 sqlx::query_scalar::<Any, String>("select version()")
+                    .fetch_one(&mut **connection)
+                    .await
+                    .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)
+            }
+            SqlxDatabaseMetaDataBackend::MySql(connection) => {
+                sqlx::query_scalar::<MySql, String>("select version()")
+                    .fetch_one(&mut **connection)
+                    .await
+                    .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)
+            }
+            SqlxDatabaseMetaDataBackend::PostgreSql(connection) => {
+                sqlx::query_scalar::<Postgres, String>("show server_version")
                     .fetch_one(&mut **connection)
                     .await
                     .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)
@@ -158,7 +199,9 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
     ) -> Result<&mut SqliteConnection, DruidError> {
         match &mut self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(connection) => Ok(&mut **connection),
-            SqlxDatabaseMetaDataBackend::Any(_) => {
+            SqlxDatabaseMetaDataBackend::Any(_)
+            | SqlxDatabaseMetaDataBackend::MySql(_)
+            | SqlxDatabaseMetaDataBackend::PostgreSql(_) => {
                 Err(DruidError::UnsupportedOperation { operation })
             }
         }
@@ -167,7 +210,9 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
     fn require_sqlite(&self, operation: &'static str) -> Result<(), DruidError> {
         match self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => Ok(()),
-            SqlxDatabaseMetaDataBackend::Any(_) => {
+            SqlxDatabaseMetaDataBackend::Any(_)
+            | SqlxDatabaseMetaDataBackend::MySql(_)
+            | SqlxDatabaseMetaDataBackend::PostgreSql(_) => {
                 Err(DruidError::UnsupportedOperation { operation })
             }
         }
@@ -1061,6 +1106,8 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     async fn get_database_product_name(&mut self) -> Result<Option<String>, DruidError> {
         let product = match &self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => "SQLite",
+            SqlxDatabaseMetaDataBackend::MySql(_) => "MySQL",
+            SqlxDatabaseMetaDataBackend::PostgreSql(_) => "PostgreSQL",
             SqlxDatabaseMetaDataBackend::Any(_) if self.is_postgresql() => "PostgreSQL",
             SqlxDatabaseMetaDataBackend::Any(_) if self.is_mysql() => "MySQL",
             SqlxDatabaseMetaDataBackend::Any(_) => {
@@ -1171,7 +1218,9 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         // Xerial SQLite 只报告 TRANSACTION_SERIALIZABLE（JDBC 常量 8）。
         Ok(match &self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => level == 8,
-            SqlxDatabaseMetaDataBackend::Any(_) => level == 2,
+            SqlxDatabaseMetaDataBackend::Any(_)
+            | SqlxDatabaseMetaDataBackend::MySql(_)
+            | SqlxDatabaseMetaDataBackend::PostgreSql(_) => level == 2,
         })
     }
 

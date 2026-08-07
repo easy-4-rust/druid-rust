@@ -28,6 +28,7 @@ rbdc.workspace = true
 rbs.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 tokio.workspace = true

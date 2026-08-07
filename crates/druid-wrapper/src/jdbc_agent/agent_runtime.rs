@@ -1,25 +1,81 @@
-use super::{AgentRequest, AgentResponse, JdbcAgentOptions};
+use super::{AgentRequest, AgentResponse, JdbcAgentOptions, JdbcAgentRuntimeMetrics};
 use druid::core::DruidError;
 use serde_json::{json, Value as JsonValue};
+use std::collections::HashMap;
+use std::fs::File;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
+use tokio::sync::{mpsc, oneshot};
+
+type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<JsonValue, DruidError>>>>>;
+
+struct OutboundFrame {
+    request_id: u64,
+    bytes: Vec<u8>,
+}
+
+/// 已发送、等待按 JSON-RPC ID 关联响应的 Agent 请求。
+pub(crate) struct AgentPendingRequest {
+    request_id: u64,
+    receiver: oneshot::Receiver<Result<JsonValue, DruidError>>,
+    pending: PendingRequests,
+}
+
+impl AgentPendingRequest {
+    /// 返回请求 ID，供超时后的 `cancel` 定位原 JDBC Statement。
+    pub(crate) const fn request_id(&self) -> u64 {
+        self.request_id
+    }
+
+    /// 等待 Agent 响应；传输任务终止时返回连接已丢弃。
+    pub(crate) async fn wait(mut self) -> Result<JsonValue, DruidError> {
+        let result = (&mut self.receiver)
+            .await
+            .unwrap_or(Err(DruidError::ConnectionDiscarded));
+        Self::remove_pending(&self.pending, self.request_id);
+        result
+    }
+
+    fn remove_pending(pending: &PendingRequests, request_id: u64) {
+        pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&request_id);
+    }
+}
+
+impl Drop for AgentPendingRequest {
+    fn drop(&mut self) {
+        Self::remove_pending(&self.pending, self.request_id);
+    }
+}
 
 /// 一个可承载多个 JDBC session 的 Agent 子进程。
 ///
-/// Rust 侧串行化标准输入输出交换；数据库连接隔离由协议中的 `sessionId`
-/// 保证。对应 Java: `AgentServer` JSON-RPC 循环。
+/// 独立写任务保证 NDJSON 帧不交错，独立读任务按 request ID 将乱序响应投递给
+/// 等待者；数据库连接隔离由协议中的 `sessionId` 保证。对应 Java:
+/// `AgentServer` JSON-RPC 循环。
 pub(crate) struct AgentRuntime {
-    child: Child,
-    stdin: ChildStdin,
-    stdout: BufReader<ChildStdout>,
-    next_request_id: u64,
+    child: Mutex<Child>,
+    outbound: mpsc::UnboundedSender<OutboundFrame>,
+    pending: PendingRequests,
+    next_request_id: AtomicU64,
     frame_limit: usize,
+    healthy: Arc<AtomicBool>,
+    expected_shutdown: Arc<AtomicBool>,
+    counted_process: bool,
+    _artifact_leases: Vec<Arc<File>>,
 }
 
 impl AgentRuntime {
     /// 启动 Agent，校验 ready 通知并完成版本/能力握手。
-    pub(crate) async fn start(options: &JdbcAgentOptions) -> Result<Self, DruidError> {
+    pub(crate) async fn start(
+        options: &JdbcAgentOptions,
+        healthy: Arc<AtomicBool>,
+    ) -> Result<Self, DruidError> {
         let mut command = Command::new(options.program());
         command
             .args(options.arguments())
@@ -38,14 +94,8 @@ impl AgentRuntime {
             .stdout
             .take()
             .ok_or_else(|| DruidError::DriverError("JDBC Agent stdout was not piped".to_owned()))?;
-        let mut runtime = Self {
-            child,
-            stdin,
-            stdout: BufReader::new(stdout),
-            next_request_id: 1,
-            frame_limit: options.frame_limit(),
-        };
-        let ready = runtime.read_json_line().await?;
+        let mut stdout = BufReader::new(stdout);
+        let ready = Self::read_json_line(&mut stdout, options.frame_limit()).await?;
         if ready.get("jsonrpc").and_then(JsonValue::as_str) != Some("2.0")
             || ready.get("method").and_then(JsonValue::as_str) != Some("ready")
             || ready
@@ -57,58 +107,211 @@ impl AgentRuntime {
                 "JDBC Agent sent an invalid ready notification: {ready}"
             )));
         }
+
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+        let expected_shutdown = Arc::new(AtomicBool::new(false));
+        let (outbound, outbound_receiver) = mpsc::unbounded_channel();
+        tokio::spawn(Self::write_loop(
+            stdin,
+            outbound_receiver,
+            Arc::clone(&pending),
+            Arc::clone(&healthy),
+            Arc::clone(&expected_shutdown),
+        ));
+        tokio::spawn(Self::read_loop(
+            stdout,
+            options.frame_limit(),
+            Arc::clone(&pending),
+            Arc::clone(&healthy),
+            Arc::clone(&expected_shutdown),
+        ));
+
+        let mut runtime = Self {
+            child: Mutex::new(child),
+            outbound,
+            pending,
+            next_request_id: AtomicU64::new(1),
+            frame_limit: options.frame_limit(),
+            healthy,
+            expected_shutdown,
+            counted_process: false,
+            _artifact_leases: options.artifact_leases(),
+        };
         runtime
             .request(
                 "handshake",
                 json!({
                     "protocolVersion": 1,
                     "client": "druid-rust",
-                    "capabilities": ["multi-session", "structured-errors", "tagged-values"]
+                    "capabilities": [
+                        "multi-session",
+                        "structured-errors",
+                        "tagged-values",
+                        "concurrent-requests",
+                        "cursor-paging",
+                        "cancel"
+                    ]
                 }),
             )
             .await?;
+        JdbcAgentRuntimeMetrics::process_started();
+        runtime.counted_process = true;
         Ok(runtime)
     }
 
-    /// 发送一个 JSON-RPC 请求并按 ID 关联响应。
-    pub(crate) async fn request(
-        &mut self,
+    /// 创建并发送请求，返回可独立等待的关联句柄。
+    pub(crate) fn begin_request(
+        &self,
         method: &str,
         params: JsonValue,
-    ) -> Result<JsonValue, DruidError> {
-        let request_id = self.next_request_id;
-        self.next_request_id = self.next_request_id.wrapping_add(1).max(1);
+    ) -> Result<AgentPendingRequest, DruidError> {
+        if !self.healthy.load(Ordering::Acquire) {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        if method == "shutdown" {
+            self.expected_shutdown.store(true, Ordering::Release);
+        }
+        let request_id = self.next_request_id.fetch_add(1, Ordering::AcqRel).max(1);
         let request = AgentRequest::new(request_id, method, params);
         let mut bytes = serde_json::to_vec(&request).map_err(Self::protocol_error)?;
         self.validate_frame_size(bytes.len())?;
         bytes.push(b'\n');
-        self.stdin.write_all(&bytes).await.map_err(Self::io_error)?;
-        self.stdin.flush().await.map_err(Self::io_error)?;
 
-        let response_bytes = self.read_line().await?;
-        let mut response: AgentResponse =
-            serde_json::from_slice(&response_bytes).map_err(Self::protocol_error)?;
-        if !response.validate_version() || response.request_id() != request_id {
-            return Err(DruidError::DriverError(format!(
-                "JDBC Agent response correlation failed: requestId={} expected={request_id}",
-                response.request_id()
-            )));
+        let (sender, receiver) = oneshot::channel();
+        self.pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(request_id, sender);
+        if self
+            .outbound
+            .send(OutboundFrame { request_id, bytes })
+            .is_err()
+        {
+            AgentPendingRequest::remove_pending(&self.pending, request_id);
+            self.healthy.store(false, Ordering::Release);
+            return Err(DruidError::ConnectionDiscarded);
         }
-        if let Some(error) = response.take_error() {
-            return Err(error.into_druid_error());
-        }
-        Ok(response.take_result().unwrap_or(JsonValue::Null))
+        Ok(AgentPendingRequest {
+            request_id,
+            receiver,
+            pending: Arc::clone(&self.pending),
+        })
     }
 
-    async fn read_json_line(&mut self) -> Result<JsonValue, DruidError> {
-        let bytes = self.read_line().await?;
+    /// 发送一个 JSON-RPC 请求并按 ID 关联响应。
+    pub(crate) async fn request(
+        &self,
+        method: &str,
+        params: JsonValue,
+    ) -> Result<JsonValue, DruidError> {
+        self.begin_request(method, params)?.wait().await
+    }
+
+    async fn write_loop(
+        mut stdin: ChildStdin,
+        mut outbound: mpsc::UnboundedReceiver<OutboundFrame>,
+        pending: PendingRequests,
+        healthy: Arc<AtomicBool>,
+        expected_shutdown: Arc<AtomicBool>,
+    ) {
+        while let Some(frame) = outbound.recv().await {
+            if let Err(error) = stdin.write_all(&frame.bytes).await {
+                Self::fail_transport(
+                    &pending,
+                    &healthy,
+                    &expected_shutdown,
+                    format!("JDBC Agent transport write error: {error}"),
+                );
+                return;
+            }
+            if let Err(error) = stdin.flush().await {
+                Self::fail_transport(
+                    &pending,
+                    &healthy,
+                    &expected_shutdown,
+                    format!("JDBC Agent transport flush error: {error}"),
+                );
+                return;
+            }
+            if !healthy.load(Ordering::Acquire) {
+                AgentPendingRequest::remove_pending(&pending, frame.request_id);
+                return;
+            }
+        }
+    }
+
+    async fn read_loop(
+        mut stdout: BufReader<ChildStdout>,
+        frame_limit: usize,
+        pending: PendingRequests,
+        healthy: Arc<AtomicBool>,
+        expected_shutdown: Arc<AtomicBool>,
+    ) {
+        loop {
+            let response_bytes = match Self::read_line(&mut stdout, frame_limit).await {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    if error.to_string().contains("frame size") {
+                        JdbcAgentRuntimeMetrics::protocol_error();
+                    }
+                    Self::fail_transport(&pending, &healthy, &expected_shutdown, error.to_string());
+                    return;
+                }
+            };
+            let mut response: AgentResponse = match serde_json::from_slice(&response_bytes) {
+                Ok(response) => response,
+                Err(error) => {
+                    Self::fail_transport(
+                        &pending,
+                        &healthy,
+                        &expected_shutdown,
+                        format!("JDBC Agent protocol error: {error}"),
+                    );
+                    JdbcAgentRuntimeMetrics::protocol_error();
+                    return;
+                }
+            };
+            if !response.validate_version() {
+                Self::fail_transport(
+                    &pending,
+                    &healthy,
+                    &expected_shutdown,
+                    "JDBC Agent response has an invalid JSON-RPC version".to_owned(),
+                );
+                JdbcAgentRuntimeMetrics::protocol_error();
+                return;
+            }
+            let request_id = response.request_id();
+            let sender = pending
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .remove(&request_id);
+            // 超时请求的迟到响应没有等待者，安全丢弃即可。
+            if let Some(sender) = sender {
+                let result = if let Some(error) = response.take_error() {
+                    Err(error.into_druid_error())
+                } else {
+                    Ok(response.take_result().unwrap_or(JsonValue::Null))
+                };
+                let _ = sender.send(result);
+            }
+        }
+    }
+
+    async fn read_json_line(
+        stdout: &mut BufReader<ChildStdout>,
+        frame_limit: usize,
+    ) -> Result<JsonValue, DruidError> {
+        let bytes = Self::read_line(stdout, frame_limit).await?;
         serde_json::from_slice(&bytes).map_err(Self::protocol_error)
     }
 
-    async fn read_line(&mut self) -> Result<Vec<u8>, DruidError> {
+    async fn read_line(
+        stdout: &mut BufReader<ChildStdout>,
+        frame_limit: usize,
+    ) -> Result<Vec<u8>, DruidError> {
         let mut bytes = Vec::new();
-        let length = self
-            .stdout
+        let length = stdout
             .read_until(b'\n', &mut bytes)
             .await
             .map_err(Self::io_error)?;
@@ -123,7 +326,12 @@ impl AgentRuntime {
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
         }
-        self.validate_frame_size(bytes.len())?;
+        if bytes.len() > frame_limit {
+            return Err(DruidError::DriverError(format!(
+                "JDBC Agent frame size {} exceeds configured limit {frame_limit}",
+                bytes.len()
+            )));
+        }
         Ok(bytes)
     }
 
@@ -137,6 +345,26 @@ impl AgentRuntime {
         Ok(())
     }
 
+    fn fail_transport(
+        pending: &PendingRequests,
+        healthy: &AtomicBool,
+        expected_shutdown: &AtomicBool,
+        message: String,
+    ) {
+        if healthy.swap(false, Ordering::AcqRel) && !expected_shutdown.load(Ordering::Acquire) {
+            JdbcAgentRuntimeMetrics::process_crashed();
+        }
+        let senders = pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain()
+            .map(|(_, sender)| sender)
+            .collect::<Vec<_>>();
+        for sender in senders {
+            let _ = sender.send(Err(DruidError::DriverError(message.clone())));
+        }
+    }
+
     fn io_error(error: std::io::Error) -> DruidError {
         DruidError::DriverError(format!("JDBC Agent transport error: {error}"))
     }
@@ -148,6 +376,13 @@ impl AgentRuntime {
 
 impl Drop for AgentRuntime {
     fn drop(&mut self) {
-        let _ = self.child.start_kill();
+        self.expected_shutdown.store(true, Ordering::Release);
+        self.healthy.store(false, Ordering::Release);
+        if self.counted_process {
+            JdbcAgentRuntimeMetrics::process_stopped();
+        }
+        if let Ok(mut child) = self.child.lock() {
+            let _ = child.start_kill();
+        }
     }
 }

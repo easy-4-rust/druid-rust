@@ -13,7 +13,7 @@ pub struct DriverManifest {
 }
 
 impl DriverManifest {
-    pub(crate) const CURRENT_SCHEMA_VERSION: u32 = 2;
+    pub(crate) const CURRENT_SCHEMA_VERSION: u32 = 3;
 
     /// 加载内置的数据库产品目录。
     pub fn builtin() -> Result<Self, DriverRegistryError> {
@@ -94,7 +94,7 @@ impl DriverManifest {
             }
             if profile
                 .evidence()
-                .is_none_or(|evidence| !evidence.validates_support_contract())
+                .is_none_or(|evidence| !evidence.validates_support_contract(profile.runtime_mode()))
             {
                 return Err(DriverRegistryError::InvalidManifest(format!(
                     "verified profile '{}' lacks Linux/macOS/Windows evidence",

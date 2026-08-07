@@ -7,13 +7,17 @@ use druid::core::{
     PreparedInputParameter, SqlTextStatement, Value,
 };
 use sqlx::any::AnyStatement;
+use sqlx::mysql::MySqlStatement;
+use sqlx::postgres::PgStatement;
 use sqlx::sqlite::SqliteStatement;
-use sqlx::Statement;
+use sqlx::{Column, Statement};
 use std::any::Any;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 enum SqlxPreparedStatementBackend {
     Any(AnyStatement<'static>),
+    MySql(MySqlStatement<'static>),
+    PostgreSql(PgStatement<'static>),
     Sqlite(SqliteStatement<'static>),
 }
 
@@ -50,11 +54,39 @@ impl SqlxPreparedStatement {
         }
     }
 
+    pub(crate) fn mysql(sql: impl Into<String>, statement: MySqlStatement<'static>) -> Self {
+        Self {
+            sql: sql.into(),
+            backend: SqlxPreparedStatementBackend::MySql(statement),
+            closed: AtomicBool::new(false),
+            statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
+            parameter_state: PreparedParameterState::new(),
+        }
+    }
+
+    pub(crate) fn postgresql(sql: impl Into<String>, statement: PgStatement<'static>) -> Self {
+        Self {
+            sql: sql.into(),
+            backend: SqlxPreparedStatementBackend::PostgreSql(statement),
+            closed: AtomicBool::new(false),
+            statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
+            parameter_state: PreparedParameterState::new(),
+        }
+    }
+
     /// 返回 `SQLx` statement 是否来自当前 Adapter 后端。
-    pub(crate) fn matches_backend(&self, sqlite: bool) -> bool {
-        match (&self.backend, sqlite) {
-            (SqlxPreparedStatementBackend::Sqlite(statement), true) => statement.sql() == self.sql,
-            (SqlxPreparedStatementBackend::Any(statement), false) => statement.sql() == self.sql,
+    pub(crate) fn matches_backend(&self, backend: &str) -> bool {
+        match (&self.backend, backend) {
+            (SqlxPreparedStatementBackend::Any(statement), "any") => statement.sql() == self.sql,
+            (SqlxPreparedStatementBackend::MySql(statement), "mysql") => {
+                statement.sql() == self.sql
+            }
+            (SqlxPreparedStatementBackend::PostgreSql(statement), "postgresql") => {
+                statement.sql() == self.sql
+            }
+            (SqlxPreparedStatementBackend::Sqlite(statement), "sqlite") => {
+                statement.sql() == self.sql
+            }
             _ => false,
         }
     }
@@ -63,7 +95,29 @@ impl SqlxPreparedStatement {
     pub(crate) fn any_statement(&self) -> Option<&AnyStatement<'static>> {
         match &self.backend {
             SqlxPreparedStatementBackend::Any(statement) => Some(statement),
-            SqlxPreparedStatementBackend::Sqlite(_) => None,
+            SqlxPreparedStatementBackend::MySql(_)
+            | SqlxPreparedStatementBackend::PostgreSql(_)
+            | SqlxPreparedStatementBackend::Sqlite(_) => None,
+        }
+    }
+
+    /// 返回 `SQLx MySQL` 的真实预编译语句。
+    pub(crate) fn mysql_statement(&self) -> Option<&MySqlStatement<'static>> {
+        match &self.backend {
+            SqlxPreparedStatementBackend::MySql(statement) => Some(statement),
+            SqlxPreparedStatementBackend::Any(_)
+            | SqlxPreparedStatementBackend::PostgreSql(_)
+            | SqlxPreparedStatementBackend::Sqlite(_) => None,
+        }
+    }
+
+    /// 返回 `SQLx PostgreSQL` 的真实预编译语句。
+    pub(crate) fn postgresql_statement(&self) -> Option<&PgStatement<'static>> {
+        match &self.backend {
+            SqlxPreparedStatementBackend::PostgreSql(statement) => Some(statement),
+            SqlxPreparedStatementBackend::Any(_)
+            | SqlxPreparedStatementBackend::MySql(_)
+            | SqlxPreparedStatementBackend::Sqlite(_) => None,
         }
     }
 
@@ -71,7 +125,43 @@ impl SqlxPreparedStatement {
     pub(crate) fn sqlite_statement(&self) -> Option<&SqliteStatement<'static>> {
         match &self.backend {
             SqlxPreparedStatementBackend::Sqlite(statement) => Some(statement),
-            SqlxPreparedStatementBackend::Any(_) => None,
+            SqlxPreparedStatementBackend::Any(_)
+            | SqlxPreparedStatementBackend::MySql(_)
+            | SqlxPreparedStatementBackend::PostgreSql(_) => None,
+        }
+    }
+
+    pub(crate) fn returns_rows(&self) -> bool {
+        match &self.backend {
+            SqlxPreparedStatementBackend::Any(statement) => !statement.columns().is_empty(),
+            SqlxPreparedStatementBackend::MySql(statement) => !statement.columns().is_empty(),
+            SqlxPreparedStatementBackend::PostgreSql(statement) => !statement.columns().is_empty(),
+            SqlxPreparedStatementBackend::Sqlite(statement) => !statement.columns().is_empty(),
+        }
+    }
+
+    pub(crate) fn column_labels(&self) -> Vec<String> {
+        match &self.backend {
+            SqlxPreparedStatementBackend::Any(statement) => statement
+                .columns()
+                .iter()
+                .map(|column| column.name().to_owned())
+                .collect(),
+            SqlxPreparedStatementBackend::MySql(statement) => statement
+                .columns()
+                .iter()
+                .map(|column| column.name().to_owned())
+                .collect(),
+            SqlxPreparedStatementBackend::PostgreSql(statement) => statement
+                .columns()
+                .iter()
+                .map(|column| column.name().to_owned())
+                .collect(),
+            SqlxPreparedStatementBackend::Sqlite(statement) => statement
+                .columns()
+                .iter()
+                .map(|column| column.name().to_owned())
+                .collect(),
         }
     }
 

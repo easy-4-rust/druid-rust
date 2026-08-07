@@ -1,3 +1,3 @@
 # cargo-public-api 0.52.0; nightly-2026-08-07; -sss --all-features
-c1d54041bdbe7fdcccc93a31cfd33ef2f1015e4fbff9727c839968bce0b8ad9e  druid
-422e2caf08281a31c0db916ae0541fa09316e103e71872704e0f37dbd7f38007  druid-wrapper
+eb2a2bd2e1415bc669ccd05813a14bd5c0c2ca83bd3fed81d95570ea0f5628de  druid
+acc9823e2242e110e14d386a2a28b576b4380a536450da5f1ff53d4f203fc701  druid-wrapper

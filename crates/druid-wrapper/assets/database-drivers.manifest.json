@@ -1,6 +1,6 @@
 {
-  "schemaVersion": 2,
-  "catalogVersion": "2026.08.1",
+  "schemaVersion": 3,
+  "catalogVersion": "2026.08.2",
   "profiles": [
     {"profileId":"mysql","displayName":"MySQL","dbType":"mysql","protocolFamily":"mysql","runtimeMode":"sqlx","providerId":"sqlx","artifactId":"mysql","exceptionSorter":"auto","defaultPort":3306,"supportStatus":"experimental","wallMode":"dedicated","deliveryPhase":1,"validationQuery":"SELECT 1","capabilities":{"query":true,"update":true,"preparedStatements":true,"batch":true,"transactions":true,"savepoints":true,"autoCommit":true,"metadata":true}},
     {"profileId":"mariadb","displayName":"MariaDB","dbType":"mariadb","protocolFamily":"mysql","runtimeMode":"sqlx","providerId":"sqlx","artifactId":"mariadb","exceptionSorter":"auto","defaultPort":3306,"supportStatus":"experimental","wallMode":"dedicated","deliveryPhase":1,"validationQuery":"SELECT 1","capabilities":{"query":true,"update":true,"preparedStatements":true,"batch":true,"transactions":true,"savepoints":true,"autoCommit":true,"metadata":true}},

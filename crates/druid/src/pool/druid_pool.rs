@@ -185,13 +185,38 @@ impl DruidPool {
         name: String,
         driver_name: String,
         factory: Arc<dyn PhysicalConnectionFactory>,
-        mut config: super::config::PoolInnerConfig,
+        config: super::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
         stats_collector: Arc<StatsCollector>,
         wall_provider: Arc<WallProvider>,
     ) -> Self {
-        let exception_sorter =
-            Self::select_exception_sorter(config.db_type_name.as_deref(), &driver_name);
+        Self::new_with_observability_and_exception_sorter(
+            name,
+            driver_name,
+            factory,
+            config,
+            filter_chain,
+            stats_collector,
+            wall_provider,
+            None,
+        )
+    }
+
+    /// 创建具有共享 Stat/Wall 对象及显式异常分类器的池。
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_observability_and_exception_sorter(
+        name: String,
+        driver_name: String,
+        factory: Arc<dyn PhysicalConnectionFactory>,
+        mut config: super::config::PoolInnerConfig,
+        filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Arc<StatsCollector>,
+        wall_provider: Arc<WallProvider>,
+        exception_sorter: Option<Arc<dyn ExceptionSorter>>,
+    ) -> Self {
+        let exception_sorter = exception_sorter.or_else(|| {
+            Self::select_exception_sorter(config.db_type_name.as_deref(), &driver_name)
+        });
         if config.valid_connection_checker.is_none() {
             config.valid_connection_checker =
                 Self::select_valid_connection_checker(config.db_type_name.as_deref(), &driver_name);

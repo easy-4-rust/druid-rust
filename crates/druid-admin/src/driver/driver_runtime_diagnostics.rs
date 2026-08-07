@@ -1,5 +1,6 @@
 use super::{DriverInstaller, DriverInstallerError, DriverRuntimeReport};
 use druid_wrapper::driver::{DatabaseProfileId, DruidDriverRegistry};
+use druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics;
 use std::ffi::OsString;
 use std::process::Stdio;
 use std::time::Duration;
@@ -40,7 +41,7 @@ impl DriverRuntimeDiagnostics {
         let catalog_status = format!("{:?}", profile.support_status());
         let agent = self.installer.active_installation("jdbc-agent").await;
         let driver = self.installer.active_installation(profile_id).await;
-        let java_available = Self::java_available(&self.java_program).await;
+        let java_version = Self::java_version(&self.java_program).await;
         let mut messages = Vec::new();
         if agent.is_err() {
             messages.push("JDBC Agent uber-jar is not installed".to_owned());
@@ -48,10 +49,15 @@ impl DriverRuntimeDiagnostics {
         if driver.is_err() {
             messages.push(format!("JDBC driver for '{profile_id}' is not installed"));
         }
-        if !java_available {
+        if java_version.is_none() {
             messages.push("Java runtime is not executable".to_owned());
+        } else if java_version.is_some_and(|version| version < 17) {
+            messages.push(format!(
+                "Java 17 or newer is required; detected Java {}",
+                java_version.unwrap_or_default()
+            ));
         }
-        if agent.is_ok() && driver.is_ok() && java_available {
+        if agent.is_ok() && driver.is_ok() && java_version.is_some_and(|version| version >= 17) {
             messages.push(
                 "local runtime is ready; live database connectivity remains unverified".to_owned(),
             );
@@ -59,23 +65,52 @@ impl DriverRuntimeDiagnostics {
         Ok(DriverRuntimeReport::new(
             profile_id.to_owned(),
             catalog_status,
+            format!("{:?}", profile.runtime_mode()),
+            profile.artifact_id().to_owned(),
+            profile.artifact_version().map(ToOwned::to_owned),
+            agent
+                .as_ref()
+                .ok()
+                .map(|installation| installation.artifact_version().to_owned()),
+            driver
+                .as_ref()
+                .ok()
+                .map(|installation| installation.artifact_version().to_owned()),
             agent.is_ok(),
             driver.is_ok(),
-            java_available,
+            java_version,
+            JdbcAgentRuntimeMetrics::snapshot(),
             messages,
         ))
     }
 
-    async fn java_available(java_program: &OsString) -> bool {
+    async fn java_version(java_program: &OsString) -> Option<u16> {
         let mut command = Command::new(java_program);
         command
             .arg("-version")
             .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .kill_on_drop(true);
-        tokio::time::timeout(Duration::from_secs(5), command.status())
+        let output = tokio::time::timeout(Duration::from_secs(5), command.output())
             .await
-            .is_ok_and(|status| status.is_ok_and(|status| status.success()))
+            .ok()?
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        let text = String::from_utf8_lossy(&output.stderr);
+        let text = if text.trim().is_empty() {
+            String::from_utf8_lossy(&output.stdout)
+        } else {
+            text
+        };
+        let version = text.split('"').nth(1)?.split('.').next()?;
+        let major = version.parse::<u16>().ok()?;
+        if major == 1 {
+            text.split('"').nth(1)?.split('.').nth(1)?.parse().ok()
+        } else {
+            Some(major)
+        }
     }
 }

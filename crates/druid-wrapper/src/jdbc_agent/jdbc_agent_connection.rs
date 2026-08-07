@@ -12,9 +12,12 @@ use std::sync::Arc;
 #[allow(clippy::struct_excessive_bools)]
 pub struct JdbcAgentConnection {
     client: JdbcAgentClient,
+    capabilities: PhysicalConnectionCapabilities,
     auto_commit: bool,
     read_only: bool,
     transaction_isolation: u8,
+    catalog: Option<String>,
+    schema: Option<String>,
     closed: bool,
     discarded: bool,
 }
@@ -27,7 +30,7 @@ impl JdbcAgentConnection {
         properties: HashMap<String, String>,
         options: JdbcAgentOptions,
     ) -> Result<Self, DruidError> {
-        let client = JdbcAgentClient::connect(
+        let (client, session) = JdbcAgentClient::connect(
             options,
             json!({
                 "url": url,
@@ -36,11 +39,46 @@ impl JdbcAgentConnection {
             }),
         )
         .await?;
+        let capability = |name: &str| {
+            session
+                .pointer(&format!("/capabilities/{name}"))
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false)
+        };
         Ok(Self {
             client,
-            auto_commit: true,
-            read_only: false,
-            transaction_isolation: 2,
+            capabilities: PhysicalConnectionCapabilities {
+                transactions: capability("transactions"),
+                savepoints: false,
+                auto_commit: capability("autoCommit"),
+                read_only: capability("readOnly"),
+                transaction_isolation: capability("transactionIsolation"),
+                holdability: false,
+                clear_warnings: false,
+                catalog: capability("catalog"),
+                schema: capability("schema"),
+            },
+            auto_commit: session
+                .get("autoCommit")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(true),
+            read_only: session
+                .get("readOnly")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false),
+            transaction_isolation: session
+                .get("transactionIsolation")
+                .and_then(JsonValue::as_u64)
+                .and_then(|value| u8::try_from(value).ok())
+                .unwrap_or(2),
+            catalog: session
+                .get("catalog")
+                .and_then(JsonValue::as_str)
+                .map(ToOwned::to_owned),
+            schema: session
+                .get("schema")
+                .and_then(JsonValue::as_str)
+                .map(ToOwned::to_owned),
             closed: false,
             discarded: false,
         })
@@ -74,6 +112,62 @@ impl JdbcAgentConnection {
                     .map(Row::new)
             })
             .collect()
+    }
+
+    async fn collect_query_payload(
+        &mut self,
+        mut payload: JsonValue,
+    ) -> Result<Vec<Row>, DruidError> {
+        let mut result = Vec::new();
+        loop {
+            let has_more = payload
+                .get("hasMore")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false);
+            let cursor_id = payload
+                .get("cursorId")
+                .and_then(JsonValue::as_str)
+                .map(ToOwned::to_owned);
+            match Self::rows(&payload) {
+                Ok(mut rows) => result.append(&mut rows),
+                Err(error) => {
+                    if let Some(cursor_id) = cursor_id {
+                        let _ = self
+                            .client
+                            .request("close_cursor", json!({"cursorId": cursor_id}))
+                            .await;
+                    }
+                    return Err(error);
+                }
+            }
+            if !has_more {
+                return Ok(result);
+            }
+            let cursor_id = cursor_id.ok_or_else(|| {
+                Self::protocol_error("paged result hasMore=true but cursorId is absent")
+            })?;
+            payload = match self
+                .client
+                .request(
+                    "fetch_page",
+                    json!({
+                        "cursorId": cursor_id,
+                        "pageSize": 500,
+                        "maxResponseBytes": 8 * 1024 * 1024,
+                    }),
+                )
+                .await
+            {
+                Ok(payload) => payload,
+                Err(error) => {
+                    let _ = self
+                        .client
+                        .request("close_cursor", json!({"cursorId": cursor_id}))
+                        .await;
+                    return Err(error);
+                }
+            };
+        }
     }
 
     fn exec_result(payload: &JsonValue) -> Result<ExecResult, DruidError> {
@@ -149,9 +243,9 @@ impl JdbcAgentConnection {
             )
             .await?;
         match payload.get("kind").and_then(JsonValue::as_str) {
-            Some("result_set") => Ok(vec![StatementExecuteResult::ResultSet(Self::rows(
-                &payload,
-            )?)]),
+            Some("result_set") => Ok(vec![StatementExecuteResult::ResultSet(
+                self.collect_query_payload(payload).await?,
+            )]),
             Some("update") => Ok(vec![StatementExecuteResult::Update(Self::exec_result(
                 &payload,
             )?)]),
@@ -182,14 +276,16 @@ impl std::fmt::Debug for JdbcAgentConnection {
 impl PhysicalConnection for JdbcAgentConnection {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.ensure_open()?;
-        let payload = self
-            .client
-            .request(
-                "exec",
-                json!({"sql": sql, "params": Self::parameters(params)?}),
-            )
+        let results = self
+            .execute_request(sql, params, StatementGeneratedKeys::AutoGeneratedKeys(1))
             .await?;
-        Self::exec_result(&payload)
+        match results.into_iter().next() {
+            Some(StatementExecuteResult::Update(result)) => Ok(result),
+            Some(StatementExecuteResult::ResultSet(_)) => Err(Self::protocol_error(
+                "exec received a result set instead of an update count",
+            )),
+            None => Err(Self::protocol_error("execute returned no result")),
+        }
     }
 
     async fn execute(
@@ -207,11 +303,11 @@ impl PhysicalConnection for JdbcAgentConnection {
         let payload = self
             .client
             .request(
-                "fetch",
+                "execute_query",
                 json!({"sql": sql, "params": Self::parameters(params)?}),
             )
             .await?;
-        Self::rows(&payload)
+        self.collect_query_payload(payload).await
     }
 
     async fn prepare_physical_statement(
@@ -219,7 +315,29 @@ impl PhysicalConnection for JdbcAgentConnection {
         key: &PreparedStatementKey,
     ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
         self.ensure_open()?;
-        Ok(Arc::new(JdbcAgentPreparedStatement::new(key)))
+        let result = self
+            .client
+            .request(
+                "prepare",
+                json!({
+                    "sql": key.sql(),
+                    "generatedKeys": Self::generated_keys(key.statement_generated_keys()),
+                }),
+            )
+            .await?;
+        let statement_id = result
+            .get("statementId")
+            .and_then(JsonValue::as_str)
+            .filter(|statement_id| !statement_id.is_empty())
+            .ok_or_else(|| Self::protocol_error("prepare response does not contain statementId"))?
+            .to_owned();
+        let (request_handle, session_id) = self.client.statement_context();
+        Ok(Arc::new(JdbcAgentPreparedStatement::new(
+            key,
+            statement_id,
+            session_id,
+            request_handle,
+        )))
     }
 
     async fn exec_prepared(
@@ -227,8 +345,20 @@ impl PhysicalConnection for JdbcAgentConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
-        let sql = Self::statement(statement)?.sql().to_owned();
-        self.exec(&sql, params).await
+        self.ensure_open()?;
+        let statement_id = Self::statement(statement)?.statement_id().to_owned();
+        let payload = self
+            .client
+            .request(
+                "execute_prepared",
+                json!({
+                    "statementId": statement_id,
+                    "params": Self::parameters(params)?,
+                    "mode": "update",
+                }),
+            )
+            .await?;
+        Self::exec_result(&payload)
     }
 
     async fn execute_prepared(
@@ -237,8 +367,34 @@ impl PhysicalConnection for JdbcAgentConnection {
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
-        let sql = Self::statement(statement)?.sql().to_owned();
-        self.execute(&sql, params, generated_keys).await
+        self.ensure_open()?;
+        let statement_id = Self::statement(statement)?.statement_id().to_owned();
+        let payload = self
+            .client
+            .request(
+                "execute_prepared",
+                json!({
+                    "statementId": statement_id,
+                    "params": Self::parameters(params)?,
+                    "mode": "execute",
+                    "generatedKeys": Self::generated_keys(generated_keys),
+                }),
+            )
+            .await?;
+        match payload.get("kind").and_then(JsonValue::as_str) {
+            Some("result_set") => Ok(vec![StatementExecuteResult::ResultSet(
+                self.collect_query_payload(payload).await?,
+            )]),
+            Some("update") => Ok(vec![StatementExecuteResult::Update(Self::exec_result(
+                &payload,
+            )?)]),
+            Some(kind) => Err(Self::protocol_error(format!(
+                "unsupported execute_prepared result kind '{kind}'"
+            ))),
+            None => Err(Self::protocol_error(
+                "execute_prepared response does not contain kind",
+            )),
+        }
     }
 
     async fn fetch_prepared(
@@ -246,8 +402,20 @@ impl PhysicalConnection for JdbcAgentConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<Vec<Row>, DruidError> {
-        let sql = Self::statement(statement)?.sql().to_owned();
-        self.fetch(&sql, params).await
+        self.ensure_open()?;
+        let statement_id = Self::statement(statement)?.statement_id().to_owned();
+        let payload = self
+            .client
+            .request(
+                "execute_prepared",
+                json!({
+                    "statementId": statement_id,
+                    "params": Self::parameters(params)?,
+                    "mode": "query",
+                }),
+            )
+            .await?;
+        self.collect_query_payload(payload).await
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
@@ -271,7 +439,9 @@ impl PhysicalConnection for JdbcAgentConnection {
 
     async fn ping(&mut self) -> Result<(), DruidError> {
         self.ensure_open()?;
-        self.client.request("ping", JsonValue::Null).await?;
+        self.client
+            .request("validate_connection", JsonValue::Null)
+            .await?;
         Ok(())
     }
 
@@ -289,17 +459,7 @@ impl PhysicalConnection for JdbcAgentConnection {
     }
 
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        PhysicalConnectionCapabilities {
-            transactions: true,
-            savepoints: false,
-            auto_commit: true,
-            read_only: true,
-            transaction_isolation: true,
-            holdability: false,
-            clear_warnings: false,
-            catalog: false,
-            schema: false,
-        }
+        self.capabilities
     }
 
     fn auto_commit(&self) -> bool {
@@ -338,6 +498,32 @@ impl PhysicalConnection for JdbcAgentConnection {
             .request("set_transaction_isolation", json!({"value": level}))
             .await?;
         self.transaction_isolation = level;
+        Ok(())
+    }
+
+    fn catalog(&self) -> Option<&str> {
+        self.catalog.as_deref()
+    }
+
+    async fn set_catalog(&mut self, catalog: &str) -> Result<(), DruidError> {
+        self.ensure_open()?;
+        self.client
+            .request("set_catalog", json!({"value": catalog}))
+            .await?;
+        self.catalog = Some(catalog.to_owned());
+        Ok(())
+    }
+
+    fn schema(&self) -> Option<&str> {
+        self.schema.as_deref()
+    }
+
+    async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
+        self.ensure_open()?;
+        self.client
+            .request("set_schema", json!({"value": schema}))
+            .await?;
+        self.schema = Some(schema.to_owned());
         Ok(())
     }
 

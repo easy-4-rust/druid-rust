@@ -117,6 +117,55 @@ jobs:
           toolchain: 1.97.1
       - run: cargo test --workspace
 
+  sqlite-product-contract:
+    name: SQLite contract (${{ matrix.platform.target }}, Rust ${{ matrix.rust.label }})
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - label: "1.95"
+            toolchain: "1.95"
+          - label: default
+            toolchain: "1.97.1"
+        platform:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust.toolchain }}
+      - name: Run real SQLite product contract
+        shell: bash
+        env:
+          DRUID_REQUIRE_DATABASE_PROFILE_CONTRACT: "1"
+          DRUID_DATABASE_PROFILE: sqlite
+          DRUID_DATABASE_URL: sqlite://druid_contract.db?mode=rwc
+          DRUID_DATABASE_BAD_URL: sqlite://druid_contract_missing.db?mode=rw
+          DRUID_CONTRACT_TARGET: ${{ matrix.platform.target }}
+          DRUID_CONTRACT_RUST_VERSION: ${{ matrix.rust.label }}
+          DRUID_CONTRACT_EVIDENCE_PATH: target/contract-evidence/sqlite.json
+          DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p target/contract-evidence
+          cargo test -p druid-wrapper --all-features --test database_profile_live_contract_test -- --nocapture
+      - name: Upload auditable contract record
+        uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-${{ matrix.platform.target }}-rust-${{ matrix.rust.label }}
+          path: target/contract-evidence/sqlite.json
+          if-no-files-found: error
+          retention-days: 90
+
   semver:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest

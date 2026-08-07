@@ -1,8 +1,14 @@
 use super::{DatabaseConnectionConfig, DriverRegistryError, DruidDriverRegistry};
 #[cfg(feature = "jdbc-agent")]
 use crate::jdbc_agent::JdbcAgentOptions;
+use druid::core::{
+    ExceptionSorter, MsSqlValidConnectionChecker, MySqlExceptionSorter,
+    MySqlValidConnectionChecker, OracleExceptionSorter, OracleValidConnectionChecker,
+    PgExceptionSorter, PgValidConnectionChecker, ValidConnectionChecker,
+};
 use druid::pool::{DruidPool, DruidPoolBuilder};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// 使用数据库产品档案配置现有 Druid native pool 的兼容建池入口。
 pub struct DruidDatabasePoolBuilder {
@@ -95,10 +101,21 @@ impl DruidDatabasePoolBuilder {
         let profile = resolved.profile();
         let mut builder = DruidPool::builder()
             .name(self.name.unwrap_or_else(|| profile.id().to_string()))
-            .driver_name(format!("{}:{}", profile.provider_id(), profile.id()))
+            .driver_name(format!(
+                "{}:{}:{}",
+                profile.provider_id(),
+                profile.protocol_family().as_str(),
+                profile.id()
+            ))
             .db_type_name(profile.db_type().as_str())
             .url(resolved.url())
             .factory(resolved.factory());
+        if let Some(sorter) = Self::family_exception_sorter(profile.protocol_family()) {
+            builder = builder.exception_sorter(sorter);
+        }
+        if let Some(checker) = Self::family_connection_checker(profile.protocol_family()) {
+            builder = builder.valid_connection_checker(checker);
+        }
         if let Some(validation_query) = profile.validation_query() {
             builder = builder.validation_query(validation_query);
         }
@@ -106,5 +123,33 @@ impl DruidDatabasePoolBuilder {
             builder = configure(builder);
         }
         builder.build().await.map_err(Into::into)
+    }
+
+    fn family_exception_sorter(family: super::ProtocolFamily) -> Option<Arc<dyn ExceptionSorter>> {
+        match family {
+            super::ProtocolFamily::MySql => Some(Arc::new(MySqlExceptionSorter)),
+            super::ProtocolFamily::PostgreSql => Some(Arc::new(PgExceptionSorter)),
+            super::ProtocolFamily::Oracle => Some(Arc::new(OracleExceptionSorter::new())),
+            super::ProtocolFamily::SQLite
+            | super::ProtocolFamily::SqlServer
+            | super::ProtocolFamily::Embedded
+            | super::ProtocolFamily::Jdbc
+            | super::ProtocolFamily::HttpSql => None,
+        }
+    }
+
+    fn family_connection_checker(
+        family: super::ProtocolFamily,
+    ) -> Option<Arc<dyn ValidConnectionChecker>> {
+        match family {
+            super::ProtocolFamily::MySql => Some(Arc::new(MySqlValidConnectionChecker::new())),
+            super::ProtocolFamily::PostgreSql => Some(Arc::new(PgValidConnectionChecker)),
+            super::ProtocolFamily::Oracle => Some(Arc::new(OracleValidConnectionChecker::new())),
+            super::ProtocolFamily::SqlServer => Some(Arc::new(MsSqlValidConnectionChecker)),
+            super::ProtocolFamily::SQLite
+            | super::ProtocolFamily::Embedded
+            | super::ProtocolFamily::Jdbc
+            | super::ProtocolFamily::HttpSql => None,
+        }
     }
 }
