@@ -12,6 +12,8 @@
 .settings
 .springBeans
 bin/
+!crates/druid-admin/src/bin/
+!crates/druid-admin/src/bin/druid-driver.rs
 codes/
 
 ### IntelliJ IDEA ###

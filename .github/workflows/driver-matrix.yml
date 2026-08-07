@@ -56,6 +56,10 @@ jobs:
 
   public-api:
     runs-on: macos-latest
+    env:
+      # cargo-public-api uses the active nightly when it is explicitly selected;
+      # otherwise it falls back to an unversioned `nightly` toolchain.
+      RUSTUP_TOOLCHAIN: nightly-2026-08-07
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@nightly
