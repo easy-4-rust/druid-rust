@@ -19,6 +19,9 @@ pub mod dbcp2;
 /// 以 Druid 物理连接 SPI 为核心的多数据库驱动目录与解析入口。
 #[cfg(feature = "driver-catalog")]
 pub mod driver;
+/// DuckDB 原生未池化物理连接 Adapter。
+#[cfg(feature = "duckdb-native")]
+pub mod duckdb;
 /// Druid 自有 JDBC Agent 协议、进程运行时与物理连接 Adapter。
 #[cfg(feature = "jdbc-agent")]
 pub mod jdbc_agent;

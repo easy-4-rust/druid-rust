@@ -10,9 +10,10 @@ repository.workspace = true
 [features]
 default = ["driver-catalog"]
 driver-catalog = []
+duckdb-native = ["driver-catalog", "dep:duckdb"]
 jdbc-agent = ["driver-catalog"]
 managed-driver-install = ["driver-catalog"]
-all-databases = ["driver-catalog", "jdbc-agent", "managed-driver-install"]
+all-databases = ["driver-catalog", "duckdb-native", "jdbc-agent", "managed-driver-install"]
 
 [dependencies]
 async-trait.workspace = true
@@ -22,6 +23,7 @@ bigdecimal.workspace = true
 chrono.workspace = true
 deadpool.workspace = true
 druid = { version = "0.0.0-design", path = "../druid" }
+duckdb = { workspace = true, optional = true }
 futures.workspace = true
 parking_lot.workspace = true
 rbdc.workspace = true

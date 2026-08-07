@@ -26,10 +26,12 @@ async fn database_profile_live_contract_when_configured() {
         .profiles()
         .find(|profile| profile.id().as_str() == profile_id)
         .unwrap_or_else(|| panic!("unknown database profile {profile_id}"));
-    assert_eq!(
-        profile.runtime_mode(),
-        DriverRuntimeMode::Sqlx,
-        "本契约运行器当前只认证 SQLx 产品档案"
+    assert!(
+        matches!(
+            profile.runtime_mode(),
+            DriverRuntimeMode::Sqlx | DriverRuntimeMode::Native
+        ),
+        "本契约运行器当前认证 SQLx 与 Native 产品档案"
     );
 
     let table = contract_table_name();
@@ -201,7 +203,7 @@ async fn database_profile_live_contract_when_configured() {
     assert!(state.cached_prepared_statement_hit_count > 0);
     assert!(state.cached_prepared_statement_miss_count > 0);
 
-    verify_bad_credentials_if_configured(&profile_id).await;
+    verify_rejected_connection_if_configured(&profile_id).await;
     write_basic_evidence_if_configured(profile, &database_version);
     pool.close().await;
     assert!(pool.state().closed);
@@ -309,7 +311,7 @@ async fn database_version(
     }
 }
 
-async fn verify_bad_credentials_if_configured(profile_id: &str) {
+async fn verify_rejected_connection_if_configured(profile_id: &str) {
     let required = std::env::var("DRUID_REQUIRE_DATABASE_PROFILE_CONTRACT").as_deref() == Ok("1");
     let bad_url = match std::env::var("DRUID_DATABASE_BAD_URL") {
         Ok(value) => value,
@@ -327,7 +329,10 @@ async fn verify_bad_credentials_if_configured(profile_id: &str) {
         .build()
         .await
         .expect("错误凭据池配置本身应可构建");
-    assert!(pool.get().await.is_err(), "错误凭据必须拒绝建连");
+    assert!(
+        pool.get().await.is_err(),
+        "错误凭据或不可打开的数据库路径必须拒绝建连"
+    );
     pool.close().await;
 }
 
@@ -351,8 +356,8 @@ fn write_basic_evidence_if_configured(
         "databaseVersion": database_version,
         "rustVersion": rust_version,
         "javaVersions": [],
-        "runtimeMode": "sqlx",
-        "installationPaths": ["native"],
+        "runtimeMode": runtime_mode_label(profile.runtime_mode()),
+        "installationPaths": installation_paths(profile.runtime_mode()),
         "contractChecks": [
             "connection-lifecycle",
             "validation",
@@ -375,6 +380,24 @@ fn write_basic_evidence_if_configured(
         std::fs::create_dir_all(parent).expect("必须能创建 CI 契约证据目录");
     }
     std::fs::write(path, record.to_string()).expect("必须能写入 CI 契约证据工件");
+}
+
+fn runtime_mode_label(runtime_mode: DriverRuntimeMode) -> &'static str {
+    match runtime_mode {
+        DriverRuntimeMode::Sqlx => "sqlx",
+        DriverRuntimeMode::Native => "native",
+        DriverRuntimeMode::JdbcAgent => "jdbc_agent",
+        DriverRuntimeMode::HttpSql => "http_sql",
+    }
+}
+
+fn installation_paths(runtime_mode: DriverRuntimeMode) -> Vec<&'static str> {
+    match runtime_mode {
+        DriverRuntimeMode::Native => vec!["bundled-native"],
+        DriverRuntimeMode::Sqlx => vec!["native"],
+        DriverRuntimeMode::JdbcAgent => vec!["jdbc-agent"],
+        DriverRuntimeMode::HttpSql => vec!["http-sql"],
+    }
 }
 
 fn current_target() -> String {

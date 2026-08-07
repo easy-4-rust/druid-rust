@@ -2,6 +2,8 @@ use super::{
     DatabaseConnectionConfig, DatabaseProfile, DatabaseProfileId, DriverManifest,
     DriverRegistryError, DriverRuntimeMode, ProtocolFamily, ResolvedDatabaseDriver,
 };
+#[cfg(feature = "duckdb-native")]
+use crate::duckdb::DuckDbConnectionFactory;
 #[cfg(feature = "jdbc-agent")]
 use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use crate::sqlx::SqlxConnectionFactory;
@@ -129,6 +131,31 @@ impl DruidDriverRegistry {
                         factory = factory.property(name, value);
                     }
                     let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                    Ok(ResolvedDatabaseDriver::new(
+                        profile,
+                        config.url().to_owned(),
+                        factory,
+                    ))
+                }
+            }
+            DriverRuntimeMode::Native => {
+                #[cfg(not(feature = "duckdb-native"))]
+                {
+                    return Err(DriverRegistryError::UnsupportedRuntime {
+                        profile: profile.id().to_string(),
+                        runtime: "Native feature disabled".to_owned(),
+                    });
+                }
+                #[cfg(feature = "duckdb-native")]
+                {
+                    if profile.id().as_str() != "duckdb" || !config.url().starts_with("duckdb:") {
+                        return Err(DriverRegistryError::InvalidUrl {
+                            profile: profile.id().to_string(),
+                            url: config.url().to_owned(),
+                        });
+                    }
+                    let factory: Arc<dyn PhysicalConnectionFactory> =
+                        Arc::new(DuckDbConnectionFactory::new(config.url()));
                     Ok(ResolvedDatabaseDriver::new(
                         profile,
                         config.url().to_owned(),
