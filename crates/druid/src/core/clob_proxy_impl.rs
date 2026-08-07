@@ -26,72 +26,92 @@ impl ClobProxyImpl {
     }
 
     /// 对应 Java：`Clob#free()`。
-    pub fn free(&self) -> Result<(), DruidError> {
-        self.filter_chain.clob_free(self)
+    pub async fn free(&self) -> Result<(), DruidError> {
+        self.filter_chain.clob_free(self).await
     }
 
     /// 对应 Java：`Clob#getAsciiStream()`。
-    pub fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
-        self.filter_chain.clob_get_ascii_stream(self)
+    pub async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+        self.filter_chain.clob_get_ascii_stream(self).await
     }
 
     /// 对应 Java：`Clob#getCharacterStream()`。
-    pub fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
-        self.filter_chain.clob_get_character_stream(self)
+    pub async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+        self.filter_chain.clob_get_character_stream(self).await
     }
 
     /// 对应 Java：`Clob#getCharacterStream(long,long)`。
-    pub fn get_character_stream_range(
+    pub async fn get_character_stream_range(
         &self,
         position: i64,
         length: i64,
     ) -> Result<RdbcReader, DruidError> {
         self.filter_chain
             .clob_get_character_stream_range(self, position, length)
+            .await
     }
 
     /// 对应 Java：`Clob#getSubString(long,int)`。
-    pub fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
+    pub async fn get_sub_string(
+        &self,
+        position: i64,
+        length: i32,
+    ) -> Result<RdbcString, DruidError> {
         self.filter_chain
             .clob_get_sub_string(self, position, length)
+            .await
     }
 
     /// 对应 Java：`Clob#length()`。
-    pub fn length(&self) -> Result<i64, DruidError> {
-        self.filter_chain.clob_length(self)
+    pub async fn length(&self) -> Result<i64, DruidError> {
+        self.filter_chain.clob_length(self).await
     }
 
     /// 对应 Java：`Clob#position(String,long)`。
-    pub fn position_string(
+    pub async fn position_string(
         &self,
         pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
-        self.filter_chain.clob_position_string(self, pattern, start)
+        self.filter_chain
+            .clob_position_string(self, pattern, start)
+            .await
     }
 
     /// 对应 Java：`Clob#position(Clob,long)`。
-    pub fn position_clob(&self, pattern: &RdbcClob, start: i64) -> Result<Option<i64>, DruidError> {
-        self.filter_chain.clob_position_clob(self, pattern, start)
+    pub async fn position_clob(
+        &self,
+        pattern: &RdbcClob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        self.filter_chain
+            .clob_position_clob(self, pattern, start)
+            .await
     }
 
     /// 对应 Java：`Clob#setAsciiStream(long)`。
-    pub fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
-        self.filter_chain.clob_set_ascii_stream(self, position)
+    pub async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+        self.filter_chain
+            .clob_set_ascii_stream(self, position)
+            .await
     }
 
     /// 对应 Java：`Clob#setCharacterStream(long)`。
-    pub fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
-        self.filter_chain.clob_set_character_stream(self, position)
+    pub async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
+        self.filter_chain
+            .clob_set_character_stream(self, position)
+            .await
     }
 
     /// 对应 Java：`Clob#setString(long,String)`。
-    pub fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
-        self.filter_chain.clob_set_string(self, position, value)
+    pub async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
+        self.filter_chain
+            .clob_set_string(self, position, value)
+            .await
     }
 
     /// 对应 Java：`Clob#setString(long,String,int,int)`。
-    pub fn set_string_range(
+    pub async fn set_string_range(
         &self,
         position: i64,
         value: &RdbcString,
@@ -100,11 +120,12 @@ impl ClobProxyImpl {
     ) -> Result<i32, DruidError> {
         self.filter_chain
             .clob_set_string_range(self, position, value, offset, length)
+            .await
     }
 
     /// 对应 Java：`Clob#truncate(long)`。
-    pub fn truncate(&self, length: i64) -> Result<(), DruidError> {
-        self.filter_chain.clob_truncate(self, length)
+    pub async fn truncate(&self, length: i64) -> Result<(), DruidError> {
+        self.filter_chain.clob_truncate(self, length).await
     }
 }
 

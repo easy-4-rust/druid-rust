@@ -4,10 +4,32 @@ use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
 use druid::core::{DruidError, PreparedInputParameter, Value};
 use std::sync::Mutex;
 
-/// 保存物理 setter 已物化值及 `addBatch` 快照。
+#[derive(Clone)]
+enum StoredPreparedParameter {
+    Materialized(Value),
+    Deferred(PreparedInputParameter),
+}
+
+impl StoredPreparedParameter {
+    async fn materialize(self) -> Result<Value, DruidError> {
+        match self {
+            Self::Materialized(value) => Ok(value),
+            Self::Deferred(parameter) => {
+                PreparedParameterMaterializer::materialize(&parameter).await
+            }
+        }
+    }
+}
+
+enum StoredPreparedBatch {
+    Parameters(Vec<StoredPreparedParameter>),
+    Values(Vec<Value>),
+}
+
+/// 保存物理 setter 已物化值及必须延迟到异步执行边界的 RDBC 资源句柄。
 pub(crate) struct PreparedParameterState {
-    parameters: Mutex<Vec<Option<Value>>>,
-    batches: Mutex<Vec<Vec<Value>>>,
+    parameters: Mutex<Vec<Option<StoredPreparedParameter>>>,
+    batches: Mutex<Vec<StoredPreparedBatch>>,
 }
 
 impl PreparedParameterState {
@@ -19,7 +41,7 @@ impl PreparedParameterState {
         }
     }
 
-    /// 在物理 setter 时点物化并保存一个参数。
+    /// 在 setter 时物化本地值；仅异步 RDBC 资源保留参数描述符。
     pub(crate) fn set(
         &self,
         parameter_index: usize,
@@ -30,7 +52,10 @@ impl PreparedParameterState {
                 "parameterIndex must be at least 1".to_string(),
             ));
         }
-        let value = PreparedParameterMaterializer::materialize(parameter)?;
+        let stored = PreparedParameterMaterializer::materialize_immediate(parameter)?.map_or_else(
+            || StoredPreparedParameter::Deferred(parameter.clone()),
+            StoredPreparedParameter::Materialized,
+        );
         let mut parameters = self
             .parameters
             .lock()
@@ -38,23 +63,29 @@ impl PreparedParameterState {
         if parameters.len() < parameter_index {
             parameters.resize(parameter_index, None);
         }
-        parameters[parameter_index - 1] = Some(value);
+        parameters[parameter_index - 1] = Some(stored);
         Ok(())
     }
 
     /// 返回连续参数槽的物理值。
-    pub(crate) fn values(&self, parameter_count: usize) -> Result<Vec<Value>, DruidError> {
+    pub(crate) async fn values(&self, parameter_count: usize) -> Result<Vec<Value>, DruidError> {
         let parameters = self
             .parameters
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        (0..parameter_count)
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let parameters = (0..parameter_count)
             .map(|index| {
                 parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
                     DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut values = Vec::with_capacity(parameters.len());
+        for parameter in parameters {
+            values.push(parameter.materialize().await?);
+        }
+        Ok(values)
     }
 
     /// 清空当前参数槽。
@@ -70,7 +101,7 @@ impl PreparedParameterState {
         self.batches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(params.to_vec());
+            .push(StoredPreparedBatch::Values(params.to_vec()));
     }
 
     /// 保存当前物理参数槽快照。
@@ -78,11 +109,21 @@ impl PreparedParameterState {
         &self,
         params: &[PreparedInputParameter],
     ) -> Result<(), DruidError> {
-        let values = self.values(params.len())?;
+        let parameters = self
+            .parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let snapshot = (0..params.len())
+            .map(|index| {
+                parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
+                    DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         self.batches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(values);
+            .push(StoredPreparedBatch::Parameters(snapshot));
         Ok(())
     }
 
@@ -95,24 +136,40 @@ impl PreparedParameterState {
     }
 
     /// 按 wrapper 数量消费物理 batch。
-    pub(crate) fn take_batches(
+    pub(crate) async fn take_batches(
         &self,
         expected_count: usize,
     ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
-        let mut batches = self
-            .batches
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if batches.is_empty() {
-            return Ok(None);
+        let batches = {
+            let mut batches = self
+                .batches
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if batches.is_empty() {
+                return Ok(None);
+            }
+            if batches.len() != expected_count {
+                return Err(DruidError::InvalidArgument(format!(
+                    "physical prepared batch count {}, wrapper batch count {expected_count}",
+                    batches.len(),
+                )));
+            }
+            std::mem::take(&mut *batches)
+        };
+        let mut values = Vec::with_capacity(batches.len());
+        for batch in batches {
+            match batch {
+                StoredPreparedBatch::Values(batch) => values.push(batch),
+                StoredPreparedBatch::Parameters(batch) => {
+                    let mut materialized = Vec::with_capacity(batch.len());
+                    for parameter in batch {
+                        materialized.push(parameter.materialize().await?);
+                    }
+                    values.push(materialized);
+                }
+            }
         }
-        if batches.len() != expected_count {
-            return Err(DruidError::InvalidArgument(format!(
-                "physical prepared batch count {}, wrapper batch count {expected_count}",
-                batches.len()
-            )));
-        }
-        Ok(Some(std::mem::take(&mut *batches)))
+        Ok(Some(values))
     }
 }
 
@@ -121,18 +178,18 @@ mod tests {
     use super::PreparedParameterState;
     use druid::core::{PreparedInputParameter, Value};
 
-    #[test]
-    fn preserves_one_based_slots_batch_snapshots_and_mismatch_errors() {
+    #[tokio::test]
+    async fn preserves_one_based_slots_batch_snapshots_and_mismatch_errors() {
         let state = PreparedParameterState::new();
         assert!(state.set(0, &PreparedInputParameter::Int(1)).is_err());
 
         state
             .set(2, &PreparedInputParameter::String(Some("two".to_string())))
             .unwrap();
-        assert!(state.values(2).is_err());
+        assert!(state.values(2).await.is_err());
         state.set(1, &PreparedInputParameter::Int(1)).unwrap();
         assert_eq!(
-            state.values(2).unwrap(),
+            state.values(2).await.unwrap(),
             vec![Value::Int(1), Value::String("two".to_string())]
         );
 
@@ -142,18 +199,18 @@ mod tests {
                 PreparedInputParameter::String(Some("two".to_string())),
             ])
             .unwrap();
-        assert!(state.take_batches(2).is_err());
+        assert!(state.take_batches(2).await.is_err());
         assert_eq!(
-            state.take_batches(1).unwrap(),
+            state.take_batches(1).await.unwrap(),
             Some(vec![vec![Value::Int(1), Value::String("two".to_string())]])
         );
-        assert_eq!(state.take_batches(0).unwrap(), None);
+        assert_eq!(state.take_batches(0).await.unwrap(), None);
 
         state.add_values(&[Value::Bool(true)]);
         state.clear_batches();
-        assert_eq!(state.take_batches(0).unwrap(), None);
+        assert_eq!(state.take_batches(0).await.unwrap(), None);
 
         state.clear_parameters();
-        assert!(state.values(1).is_err());
+        assert!(state.values(1).await.is_err());
     }
 }

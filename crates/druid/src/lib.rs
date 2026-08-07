@@ -12,6 +12,8 @@ pub mod pool;
 /// 与 Java RDBC 4.2 命名、职责和错误语义对齐的 Rust 数据库连接门面。
 #[path = "rdbc.rs"]
 pub mod rdbc;
+/// Public driver extension points for connection-bound RDBC resources.
+pub mod spi;
 /// SQL 解析与 Wall 实现。
 pub mod sql;
 /// Druid 统计实现。

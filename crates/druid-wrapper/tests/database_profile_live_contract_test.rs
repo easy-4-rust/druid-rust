@@ -399,6 +399,7 @@ fn configured_connection_config(profile_id: &str, url: &str) -> DatabaseConnecti
     config
 }
 
+#[cfg(feature = "jdbc-agent")]
 fn configured_properties() -> std::collections::HashMap<String, String> {
     let mut properties = std::collections::HashMap::new();
     for (environment, property) in [

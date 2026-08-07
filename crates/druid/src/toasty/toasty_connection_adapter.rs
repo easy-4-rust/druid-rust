@@ -261,43 +261,9 @@ impl ToastyConnectionAdapter {
         })
     }
 
-    fn rdbc_object_parameter(value: &RdbcObject) -> Result<Value, DruidError> {
+    fn immediate_rdbc_object_parameter(value: &RdbcObject) -> Result<Value, DruidError> {
         match value {
             RdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
-            RdbcObject::SqlXml(value) => value.string()?.to_rust_string().map(Value::String),
-            RdbcObject::Blob(value) => {
-                let length = value.length()?;
-                let length = i32::try_from(length).map_err(|_| {
-                    DruidError::InvalidArgument(
-                        "Blob length exceeds RDBC getBytes int range".to_string(),
-                    )
-                })?;
-                value.get_bytes(1, length).map(Value::Bytes)
-            }
-            RdbcObject::Clob(value) => {
-                let length = value.length()?;
-                let length = i32::try_from(length).map_err(|_| {
-                    DruidError::InvalidArgument(
-                        "Clob length exceeds RDBC getSubString int range".to_string(),
-                    )
-                })?;
-                value
-                    .get_sub_string(1, length)?
-                    .to_rust_string()
-                    .map(Value::String)
-            }
-            RdbcObject::NClob(value) => {
-                let length = value.length()?;
-                let length = i32::try_from(length).map_err(|_| {
-                    DruidError::InvalidArgument(
-                        "NClob length exceeds RDBC getSubString int range".to_string(),
-                    )
-                })?;
-                value
-                    .get_sub_string(1, length)?
-                    .to_rust_string()
-                    .map(Value::String)
-            }
             RdbcObject::CharacterStream(value) | RdbcObject::NCharacterStream(value) => {
                 Self::read_reader(value, RdbcCharacterLength::Unspecified).map(Value::String)
             }
@@ -305,9 +271,70 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    pub(super) fn prepared_parameter(
+    async fn deferred_rdbc_object_parameter(value: &RdbcObject) -> Result<Value, DruidError> {
+        match value {
+            RdbcObject::SqlXml(value) => value.string().await?.to_rust_string().map(Value::String),
+            RdbcObject::Blob(value) => {
+                let length = value.length().await?;
+                let length = i32::try_from(length).map_err(|_| {
+                    DruidError::InvalidArgument(
+                        "Blob length exceeds RDBC getBytes int range".to_string(),
+                    )
+                })?;
+                value.get_bytes(1, length).await.map(Value::Bytes)
+            }
+            RdbcObject::Clob(value) => {
+                let length = value.length().await?;
+                let length = i32::try_from(length).map_err(|_| {
+                    DruidError::InvalidArgument(
+                        "Clob length exceeds RDBC getSubString int range".to_string(),
+                    )
+                })?;
+                value
+                    .get_sub_string(1, length)
+                    .await?
+                    .to_rust_string()
+                    .map(Value::String)
+            }
+            RdbcObject::NClob(value) => {
+                let length = value.length().await?;
+                let length = i32::try_from(length).map_err(|_| {
+                    DruidError::InvalidArgument(
+                        "NClob length exceeds RDBC getSubString int range".to_string(),
+                    )
+                })?;
+                value
+                    .get_sub_string(1, length)
+                    .await?
+                    .to_rust_string()
+                    .map(Value::String)
+            }
+            _ => Self::immediate_rdbc_object_parameter(value),
+        }
+    }
+
+    pub(super) fn prepared_parameter_immediate(
         parameter: &PreparedInputParameter,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Option<Value>, DruidError> {
+        if matches!(
+            parameter,
+            PreparedInputParameter::Blob(Some(_))
+                | PreparedInputParameter::Clob(Some(_))
+                | PreparedInputParameter::NClob(Some(_))
+                | PreparedInputParameter::SqlXml(Some(_))
+                | PreparedInputParameter::Object {
+                    value: Some(
+                        RdbcObject::Blob(_)
+                            | RdbcObject::Clob(_)
+                            | RdbcObject::NClob(_)
+                            | RdbcObject::SqlXml(_)
+                    ),
+                    ..
+                }
+        ) {
+            return Ok(None);
+        }
+
         match parameter {
             PreparedInputParameter::AsciiStream { stream, length } => stream
                 .as_ref()
@@ -322,7 +349,7 @@ impl ToastyConnectionAdapter {
                         })
                 })
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
+                .map(|value| Some(value.unwrap_or(Value::Null))),
             PreparedInputParameter::UnicodeStream { stream, length } => stream
                 .as_ref()
                 .map(|stream| {
@@ -337,13 +364,13 @@ impl ToastyConnectionAdapter {
                         })
                 })
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
+                .map(|value| Some(value.unwrap_or(Value::Null))),
             PreparedInputParameter::BinaryStream { stream, length }
             | PreparedInputParameter::BlobStream { stream, length } => stream
                 .as_ref()
                 .map(|stream| Self::read_stream(stream, *length).map(Value::Bytes))
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
+                .map(|value| Some(value.unwrap_or(Value::Null))),
             PreparedInputParameter::CharacterStream { reader, length }
             | PreparedInputParameter::NCharacterStream { reader, length }
             | PreparedInputParameter::ClobReader { reader, length }
@@ -351,41 +378,62 @@ impl ToastyConnectionAdapter {
                 .as_ref()
                 .map(|reader| Self::read_reader(reader, *length).map(Value::String))
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
-            PreparedInputParameter::Blob(Some(value)) => {
-                Self::rdbc_object_parameter(&RdbcObject::Blob(value.clone()))
-            }
-            PreparedInputParameter::Clob(Some(value)) => {
-                Self::rdbc_object_parameter(&RdbcObject::Clob(value.clone()))
-            }
-            PreparedInputParameter::NClob(Some(value)) => {
-                Self::rdbc_object_parameter(&RdbcObject::NClob(value.clone()))
-            }
-            PreparedInputParameter::RowId(Some(value)) => Ok(Value::Bytes(value.bytes().to_vec())),
-            PreparedInputParameter::SqlXml(Some(value)) => {
-                value.string()?.to_rust_string().map(Value::String)
+                .map(|value| Some(value.unwrap_or(Value::Null))),
+            PreparedInputParameter::RowId(Some(value)) => {
+                Ok(Some(Value::Bytes(value.bytes().to_vec())))
             }
             PreparedInputParameter::Object {
                 value: Some(value), ..
-            } => Self::rdbc_object_parameter(value),
-            _ => parameter.scalar_value(),
+            } => Self::immediate_rdbc_object_parameter(value).map(Some),
+            _ => parameter.scalar_value().map(Some),
         }
     }
 
-    fn converted_prepared_parameters(
-        parameters: &[PreparedInputParameter],
-    ) -> Result<Vec<Value>, DruidError> {
-        parameters.iter().map(Self::prepared_parameter).collect()
+    pub(super) async fn prepared_parameter(
+        parameter: &PreparedInputParameter,
+    ) -> Result<Value, DruidError> {
+        if let Some(value) = Self::prepared_parameter_immediate(parameter)? {
+            return Ok(value);
+        }
+
+        match parameter {
+            PreparedInputParameter::Blob(Some(value)) => {
+                Self::deferred_rdbc_object_parameter(&RdbcObject::Blob(value.clone())).await
+            }
+            PreparedInputParameter::Clob(Some(value)) => {
+                Self::deferred_rdbc_object_parameter(&RdbcObject::Clob(value.clone())).await
+            }
+            PreparedInputParameter::NClob(Some(value)) => {
+                Self::deferred_rdbc_object_parameter(&RdbcObject::NClob(value.clone())).await
+            }
+            PreparedInputParameter::SqlXml(Some(value)) => {
+                value.string().await?.to_rust_string().map(Value::String)
+            }
+            PreparedInputParameter::Object {
+                value: Some(value), ..
+            } => Self::deferred_rdbc_object_parameter(value).await,
+            _ => unreachable!("immediate parameters already returned"),
+        }
     }
 
-    fn prepared_parameters(
+    async fn converted_prepared_parameters(
+        parameters: &[PreparedInputParameter],
+    ) -> Result<Vec<Value>, DruidError> {
+        let mut values = Vec::with_capacity(parameters.len());
+        for parameter in parameters {
+            values.push(Self::prepared_parameter(parameter).await?);
+        }
+        Ok(values)
+    }
+
+    async fn prepared_parameters(
         statement: &dyn PhysicalPreparedStatement,
         parameters: &[PreparedInputParameter],
     ) -> Result<Vec<Value>, DruidError> {
         if let Some(statement) = statement.as_any().downcast_ref::<ToastyPreparedStatement>() {
-            statement.materialized_parameters(parameters.len())
+            statement.materialized_parameters(parameters.len()).await
         } else {
-            Self::converted_prepared_parameters(parameters)
+            Self::converted_prepared_parameters(parameters).await
         }
     }
 
@@ -600,7 +648,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<ExecResult, DruidError> {
-        let params = Self::prepared_parameters(statement, &parameters)?;
+        let params = Self::prepared_parameters(statement, &parameters).await?;
         self.exec_prepared(statement, params).await
     }
 
@@ -610,7 +658,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
-        let params = Self::prepared_parameters(statement, &parameters)?;
+        let params = Self::prepared_parameters(statement, &parameters).await?;
         self.execute_prepared(statement, params, generated_keys)
             .await
     }
@@ -624,23 +672,27 @@ impl PhysicalConnection for ToastyConnectionAdapter {
             return Err(DruidError::ConnectionDiscarded);
         }
 
-        let materialized_batches = statement
-            .as_any()
-            .downcast_ref::<ToastyPreparedStatement>()
-            .map(|statement| statement.take_batches(parameter_sets.len()))
-            .transpose()?
-            .flatten();
+        let materialized_batches =
+            if let Some(statement) = statement.as_any().downcast_ref::<ToastyPreparedStatement>() {
+                statement.take_batches(parameter_sets.len()).await?
+            } else {
+                None
+            };
         let parameter_sets = if let Some(materialized_batches) = materialized_batches {
             materialized_batches
         } else {
-            parameter_sets
-                .iter()
-                .map(|parameters| Self::converted_prepared_parameters(parameters))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|error| DruidError::BatchUpdateException {
-                    update_counts: Vec::new(),
-                    cause: Box::new(error),
-                })?
+            let mut materialized = Vec::with_capacity(parameter_sets.len());
+            for parameters in &parameter_sets {
+                materialized.push(
+                    Self::converted_prepared_parameters(parameters)
+                        .await
+                        .map_err(|error| DruidError::BatchUpdateException {
+                            update_counts: Vec::new(),
+                            cause: Box::new(error),
+                        })?,
+                );
+            }
+            materialized
         };
         let mut update_counts = Vec::with_capacity(parameter_sets.len());
         for params in parameter_sets {
@@ -664,7 +716,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Vec<Row>, DruidError> {
-        let params = Self::prepared_parameters(statement, &parameters)?;
+        let params = Self::prepared_parameters(statement, &parameters).await?;
         self.fetch_prepared(statement, params).await
     }
 
@@ -682,7 +734,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let params = Self::prepared_parameters(statement, &parameters)?;
+        let params = Self::prepared_parameters(statement, &parameters).await?;
         self.fetch_prepared_result_set(statement, params).await
     }
 

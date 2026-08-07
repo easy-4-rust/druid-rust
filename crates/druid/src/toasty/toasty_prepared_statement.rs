@@ -10,15 +10,36 @@ use crate::core::{
 use std::any::Any;
 use std::sync::Mutex;
 
-/// 在 RDBC setter 边界物化参数的 Toasty 预编译语句句柄。
+#[derive(Clone)]
+enum ToastyStoredParameter {
+    Materialized(Value),
+    Deferred(PreparedInputParameter),
+}
+
+impl ToastyStoredParameter {
+    async fn materialize(self) -> Result<Value, DruidError> {
+        match self {
+            Self::Materialized(value) => Ok(value),
+            Self::Deferred(parameter) => {
+                ToastyConnectionAdapter::prepared_parameter(&parameter).await
+            }
+        }
+    }
+}
+
+enum ToastyStoredBatch {
+    Parameters(Vec<ToastyStoredParameter>),
+    Values(Vec<Value>),
+}
+
+/// 在 RDBC setter 边界保存已物化值和异步资源描述符的 Toasty 预编译语句句柄。
 ///
-/// Toasty 的 raw SQL API 没有独立 PreparedStatement 参数槽，因此本对象在
-/// `setXxx` 时执行驱动转换并保存值，使负长度、提前 EOF 等错误与 Java Druid
-/// 一样由 setter 返回，而不是延迟到 execute。池化层仍只保存原始描述符。
+/// Toasty 的 raw SQL API 没有独立 `PreparedStatement` 参数槽，因此本对象在
+/// `setXxx` 保留本地流和标量的既有时点，仅异步 RDBC 资源在 execute future 中转换。
 pub struct ToastyPreparedStatement {
     inner: SqlTextPreparedStatement,
-    parameters: Mutex<Vec<Option<Value>>>,
-    batches: Mutex<Vec<Vec<Value>>>,
+    parameters: Mutex<Vec<Option<ToastyStoredParameter>>>,
+    batches: Mutex<Vec<ToastyStoredBatch>>,
 }
 
 impl ToastyPreparedStatement {
@@ -32,42 +53,64 @@ impl ToastyPreparedStatement {
     }
 
     /// 返回当前已物化参数；参数槽不完整时拒绝执行。
-    pub(super) fn materialized_parameters(
+    pub(super) async fn materialized_parameters(
         &self,
         parameter_count: usize,
     ) -> Result<Vec<Value>, DruidError> {
         let parameters = self
             .parameters
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        (0..parameter_count)
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
+        let parameters = (0..parameter_count)
             .map(|index| {
                 parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
                     DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
                 })
             })
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut values = Vec::with_capacity(parameters.len());
+        for parameter in parameters {
+            values.push(parameter.materialize().await?);
+        }
+        Ok(values)
     }
 
     /// 消费物理句柄中已由 `addBatch` 保存的有序参数批次。
-    pub(super) fn take_batches(
+    pub(super) async fn take_batches(
         &self,
         expected_count: usize,
     ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
-        let mut batches = self
-            .batches
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        if batches.is_empty() {
-            return Ok(None);
+        let batches = {
+            let mut batches = self
+                .batches
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if batches.is_empty() {
+                return Ok(None);
+            }
+            if batches.len() != expected_count {
+                return Err(DruidError::InvalidArgument(format!(
+                    "physical prepared batch count {}, wrapper batch count {expected_count}",
+                    batches.len(),
+                )));
+            }
+            std::mem::take(&mut *batches)
+        };
+        let mut values = Vec::with_capacity(batches.len());
+        for batch in batches {
+            match batch {
+                ToastyStoredBatch::Values(batch) => values.push(batch),
+                ToastyStoredBatch::Parameters(batch) => {
+                    let mut materialized = Vec::with_capacity(batch.len());
+                    for parameter in batch {
+                        materialized.push(parameter.materialize().await?);
+                    }
+                    values.push(materialized);
+                }
+            }
         }
-        if batches.len() != expected_count {
-            return Err(DruidError::InvalidArgument(format!(
-                "physical prepared batch count {}, wrapper batch count {expected_count}",
-                batches.len()
-            )));
-        }
-        Ok(Some(std::mem::take(&mut *batches)))
+        Ok(Some(values))
     }
 }
 
@@ -154,7 +197,11 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
                 "parameterIndex must be at least 1".to_string(),
             ));
         }
-        let value = ToastyConnectionAdapter::prepared_parameter(parameter)?;
+        let parameter = ToastyConnectionAdapter::prepared_parameter_immediate(parameter)?
+            .map_or_else(
+                || ToastyStoredParameter::Deferred(parameter.clone()),
+                ToastyStoredParameter::Materialized,
+            );
         let mut parameters = self
             .parameters
             .lock()
@@ -162,7 +209,7 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         if parameters.len() < parameter_index {
             parameters.resize(parameter_index, None);
         }
-        parameters[parameter_index - 1] = Some(value);
+        parameters[parameter_index - 1] = Some(parameter);
         Ok(())
     }
 
@@ -178,16 +225,26 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         self.batches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(params.to_vec());
+            .push(ToastyStoredBatch::Values(params.to_vec()));
         Ok(())
     }
 
     fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), DruidError> {
-        let values = self.materialized_parameters(params.len())?;
+        let parameters = self
+            .parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let snapshot = (0..params.len())
+            .map(|index| {
+                parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
+                    DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         self.batches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(values);
+            .push(ToastyStoredBatch::Parameters(snapshot));
         Ok(())
     }
 
@@ -220,15 +277,15 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
 mod tests {
     use super::*;
 
-    #[test]
-    fn physical_parameter_slots_and_batches_reject_inconsistent_state() {
+    #[tokio::test]
+    async fn physical_parameter_slots_and_batches_reject_inconsistent_state() {
         let statement = ToastyPreparedStatement::new("SELECT ?1");
         assert_eq!(
             statement.statement_options(),
             PhysicalStatementOptions::default()
         );
         assert!(matches!(
-            statement.materialized_parameters(1),
+            statement.materialized_parameters(1).await,
             Err(DruidError::InvalidArgument(_))
         ));
         assert!(matches!(
@@ -240,19 +297,19 @@ mod tests {
             .set_parameter(1, &PreparedInputParameter::Int(7))
             .unwrap();
         assert_eq!(
-            statement.materialized_parameters(1).unwrap(),
+            statement.materialized_parameters(1).await.unwrap(),
             vec![Value::Int(7)]
         );
         statement.add_batch(&[Value::Int(7)]).unwrap();
         assert!(matches!(
-            statement.take_batches(2),
+            statement.take_batches(2).await,
             Err(DruidError::InvalidArgument(_))
         ));
         assert_eq!(
-            statement.take_batches(1).unwrap(),
+            statement.take_batches(1).await.unwrap(),
             Some(vec![vec![Value::Int(7)]])
         );
-        assert_eq!(statement.take_batches(0).unwrap(), None);
+        assert_eq!(statement.take_batches(0).await.unwrap(), None);
 
         statement.clear_parameters().unwrap();
         assert!(matches!(

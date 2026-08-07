@@ -1,11 +1,13 @@
 //! java.sql.Clob/NClob 与 java.io.Reader/Writer 的资源语义契约。
 
 use druid::core::{
-    DruidError, PhysicalCharacterReader, PhysicalCharacterWriter, PhysicalClob, PhysicalNClob,
-    RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString,
-    RdbcWriter,
+    DruidError, PhysicalCharacterReader, PhysicalCharacterWriter, RdbcClob, RdbcInputStream,
+    RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
-use std::any::Any;
+use druid::spi::{
+    RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
+    RdbcResourceFactory,
+};
 use std::io::{Error, Write};
 use std::sync::{Arc, Mutex};
 
@@ -16,11 +18,11 @@ struct ClobState {
 }
 
 #[derive(Debug)]
-struct InMemoryPhysicalClob {
+struct InMemoryClobAccess {
     state: Arc<Mutex<ClobState>>,
 }
 
-impl InMemoryPhysicalClob {
+impl InMemoryClobAccess {
     fn new(value: RdbcString) -> Self {
         Self {
             state: Arc::new(Mutex::new(ClobState {
@@ -90,7 +92,7 @@ impl PhysicalCharacterWriter for ClobCharacterWriter {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let length = InMemoryPhysicalClob::write_units(&mut state, self.position, code_units)?;
+        let length = InMemoryClobAccess::write_units(&mut state, self.position, code_units)?;
         self.position += length;
         Ok(length)
     }
@@ -119,7 +121,7 @@ impl Write for ClobAsciiWriter {
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let length = InMemoryPhysicalClob::write_units(&mut state, self.position, &code_units)
+        let length = InMemoryClobAccess::write_units(&mut state, self.position, &code_units)
             .map_err(|error| Error::other(error.to_string()))?;
         self.position += length;
         Ok(length)
@@ -130,12 +132,23 @@ impl Write for ClobAsciiWriter {
     }
 }
 
-impl PhysicalClob for InMemoryPhysicalClob {
-    fn as_any(&self) -> &dyn Any {
-        self
+#[async_trait::async_trait]
+impl RdbcResourceAccess for InMemoryClobAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::clob()
     }
 
-    fn length(&self) -> Result<i64, DruidError> {
+    async fn free(&self) -> Result<(), DruidError> {
+        let mut state = self.state();
+        state.freed = true;
+        state.code_units.clear();
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcClobAccess for InMemoryClobAccess {
+    async fn length(&self) -> Result<i64, DruidError> {
         let state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Clob has been freed".to_string()));
@@ -144,7 +157,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
             .map_err(|_| DruidError::DriverError("Clob length exceeds i64".to_string()))
     }
 
-    fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
+    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
         let state = self.state();
         let start = Self::checked_start(&state, position)?;
         let length = Self::checked_length(i64::from(length))?;
@@ -157,7 +170,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         ))
     }
 
-    fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
         let state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Clob has been freed".to_string()));
@@ -165,7 +178,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         Ok(RdbcReader::from_utf16(state.code_units.clone()))
     }
 
-    fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
         let state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Clob has been freed".to_string()));
@@ -182,7 +195,11 @@ impl PhysicalClob for InMemoryPhysicalClob {
         Ok(RdbcInputStream::from_bytes(bytes))
     }
 
-    fn position_string(&self, pattern: &RdbcString, start: i64) -> Result<Option<i64>, DruidError> {
+    async fn position_string(
+        &self,
+        pattern: &RdbcString,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
         let state = self.state();
         let start = Self::checked_start(&state, start)?;
         let pattern = pattern.as_utf16();
@@ -202,19 +219,24 @@ impl PhysicalClob for InMemoryPhysicalClob {
             .transpose()
     }
 
-    fn position_clob(&self, pattern: &RdbcClob, start: i64) -> Result<Option<i64>, DruidError> {
-        let length = i32::try_from(pattern.length()?)
+    async fn position_clob(
+        &self,
+        pattern: &RdbcClob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        let length = i32::try_from(pattern.length().await?)
             .map_err(|_| DruidError::DriverError("pattern Clob is too large".to_string()))?;
-        self.position_string(&pattern.get_sub_string(1, length)?, start)
+        let value = pattern.get_sub_string(1, length).await?;
+        self.position_string(&value, start).await
     }
 
-    fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
+    async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
         let length = i32::try_from(value.len())
             .map_err(|_| DruidError::DriverError("Clob write is too large".to_string()))?;
-        self.set_string_range(position, value, 0, length)
+        self.set_string_range(position, value, 0, length).await
     }
 
-    fn set_string_range(
+    async fn set_string_range(
         &self,
         position: i64,
         value: &RdbcString,
@@ -234,7 +256,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
             .map_err(|_| DruidError::DriverError("Clob write exceeds i32".to_string()))
     }
 
-    fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
         let state = self.state();
         let position = Self::checked_start(&state, position)?;
         drop(state);
@@ -244,7 +266,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         }))
     }
 
-    fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
         let state = self.state();
         let position = Self::checked_start(&state, position)?;
         drop(state);
@@ -254,7 +276,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         }))
     }
 
-    fn truncate(&self, length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, length: i64) -> Result<(), DruidError> {
         let mut state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Clob has been freed".to_string()));
@@ -269,18 +291,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         Ok(())
     }
 
-    fn free(&self) -> Result<(), DruidError> {
-        let mut state = self.state();
-        state.freed = true;
-        state.code_units.clear();
-        Ok(())
-    }
-
-    fn is_freed(&self) -> bool {
-        self.state().freed
-    }
-
-    fn get_character_stream_range(
+    async fn get_character_stream_range(
         &self,
         position: i64,
         length: i64,
@@ -298,14 +309,14 @@ impl PhysicalClob for InMemoryPhysicalClob {
     }
 }
 
-impl PhysicalNClob for InMemoryPhysicalClob {}
+impl RdbcNClobAccess for InMemoryClobAccess {}
 
 fn clob(value: impl Into<RdbcString>) -> RdbcClob {
-    RdbcClob::new(Arc::new(InMemoryPhysicalClob::new(value.into())))
+    RdbcResourceFactory::clob(Arc::new(InMemoryClobAccess::new(value.into())))
 }
 
 fn n_clob(value: impl Into<RdbcString>) -> RdbcNClob {
-    RdbcNClob::new(Arc::new(InMemoryPhysicalClob::new(value.into())))
+    RdbcResourceFactory::n_clob(Arc::new(InMemoryClobAccess::new(value.into())))
 }
 
 #[derive(Debug)]
@@ -391,21 +402,20 @@ fn rdbc_string_and_reader_preserve_utf16_identity_cursor_and_close() {
     assert!(failing.is_closed());
 }
 
-#[test]
-fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
+#[tokio::test]
+async fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
     let value = clob("abcdef");
     assert_eq!(value, value.clone());
     assert_ne!(value, clob("abcdef"));
     assert!(format!("{value:?}").contains("RdbcClob"));
     assert!(value
-        .physical()
-        .as_any()
-        .downcast_ref::<InMemoryPhysicalClob>()
-        .is_some());
-    assert_eq!(value.length().unwrap(), 6);
+        .capabilities()
+        .contains(RdbcResourceCapabilities::STREAM));
+    assert_eq!(value.length().await.unwrap(), 6);
     assert_eq!(
         value
             .get_sub_string(2, 3)
+            .await
             .unwrap()
             .to_rust_string()
             .unwrap(),
@@ -414,41 +424,55 @@ fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
     assert_eq!(
         value
             .get_character_stream()
+            .await
             .unwrap()
             .read_to_string()
             .unwrap(),
         "abcdef"
     );
     assert_eq!(
-        value.get_ascii_stream().unwrap().read_to_end().unwrap(),
+        value
+            .get_ascii_stream()
+            .await
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
         b"abcdef"
     );
     assert_eq!(
-        value.position_string(&RdbcString::from("cd"), 1).unwrap(),
+        value
+            .position_string(&RdbcString::from("cd"), 1)
+            .await
+            .unwrap(),
         Some(3)
     );
-    assert_eq!(value.position_clob(&clob("de"), 1).unwrap(), Some(4));
+    assert_eq!(value.position_clob(&clob("de"), 1).await.unwrap(), Some(4));
 
-    assert_eq!(value.set_string(2, &RdbcString::from("XY")).unwrap(), 2);
+    assert_eq!(
+        value.set_string(2, &RdbcString::from("XY")).await.unwrap(),
+        2
+    );
     assert_eq!(
         value
             .set_string_range(4, &RdbcString::from("12ZZ"), 2, 2)
+            .await
             .unwrap(),
         2
     );
     assert_eq!(
         value
             .get_sub_string(1, 6)
+            .await
             .unwrap()
             .to_rust_string()
             .unwrap(),
         "aXYZZf"
     );
 
-    let ascii_writer = value.set_ascii_stream(6).unwrap();
+    let ascii_writer = value.set_ascii_stream(6).await.unwrap();
     assert_eq!(ascii_writer.write(b"789").unwrap(), 3);
     ascii_writer.close().unwrap();
-    let character_writer = value.set_character_stream(2).unwrap();
+    let character_writer = value.set_character_stream(2).await.unwrap();
     let character_writer_clone = character_writer.clone();
     assert_eq!(character_writer, character_writer_clone);
     assert_eq!(character_writer.write_str("中").unwrap(), 1);
@@ -469,37 +493,38 @@ fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
     assert_eq!(
         value
             .get_character_stream_range(2, 2)
+            .await
             .unwrap()
             .read_to_string()
             .unwrap(),
         "中文"
     );
-    value.truncate(5).unwrap();
-    assert_eq!(value.length().unwrap(), 5);
-    assert!(value.get_sub_string(0, 1).is_err());
+    value.truncate(5).await.unwrap();
+    assert_eq!(value.length().await.unwrap(), 5);
+    assert!(value.get_sub_string(0, 1).await.is_err());
     assert!(value
         .set_string_range(1, &RdbcString::from("x"), -1, 1)
+        .await
         .is_err());
-    assert!(value.truncate(6).is_err());
+    assert!(value.truncate(6).await.is_err());
 
     let national = n_clob("国家字符");
     assert_eq!(national, national.clone());
     assert_ne!(national, n_clob("国家字符"));
-    assert_eq!(national.length().unwrap(), 4);
+    assert_eq!(national.length().await.unwrap(), 4);
     assert_eq!(
         national
             .as_clob()
             .get_sub_string(1, 2)
+            .await
             .unwrap()
             .to_rust_string()
             .unwrap(),
         "国家"
     );
     assert!(national
-        .physical_n_clob()
-        .as_any()
-        .downcast_ref::<InMemoryPhysicalClob>()
-        .is_some());
+        .capabilities()
+        .contains(RdbcResourceCapabilities::READ));
     assert!(format!("{national:?}").contains("RdbcNClob"));
     assert_eq!(format!("{}", RdbcObject::Clob(value.clone())), "<Clob>");
     assert_eq!(format!("{}", RdbcObject::NClob(national)), "<NClob>");
@@ -518,12 +543,12 @@ fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
         "<NCharacterStream>"
     );
 
-    value.free().unwrap();
-    value.free().unwrap();
+    value.free().await.unwrap();
+    value.free().await.unwrap();
     assert!(value.is_freed());
-    assert!(value.length().is_err());
-    assert!(value.get_character_stream().is_err());
-    assert!(value.get_ascii_stream().is_err());
+    assert!(value.length().await.is_err());
+    assert!(value.get_character_stream().await.is_err());
+    assert!(value.get_ascii_stream().await.is_err());
 
     let failing_writer = RdbcWriter::new(FailingWriter);
     assert!(failing_writer.write_str("x").is_err());

@@ -81,12 +81,8 @@ mod prepared_statement_physical_statement;
 pub mod prepared_statement_pool;
 pub mod proxy_attributes;
 pub mod rdbc4_valid_connection_checker;
-pub mod rdbc_array;
-pub mod rdbc_blob;
 pub mod rdbc_calendar;
-pub mod rdbc_clob;
 pub mod rdbc_input_stream;
-pub mod rdbc_n_clob;
 pub mod rdbc_object;
 pub mod rdbc_opaque_object;
 pub mod rdbc_output_stream;
@@ -100,10 +96,8 @@ pub mod rdbc_parameter_null;
 pub mod rdbc_parameter_string;
 pub mod rdbc_parameter_timestamp;
 pub mod rdbc_reader;
-pub mod rdbc_ref;
 pub mod rdbc_result_set;
 pub mod rdbc_row_id;
-pub mod rdbc_sql_xml;
 pub mod rdbc_string;
 pub mod rdbc_target_type;
 pub mod rdbc_type_map;
@@ -139,6 +133,7 @@ pub mod value;
 pub mod wrapper;
 pub mod wrapper_adapter;
 
+pub use crate::rdbc::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
 pub use abstract_oracle_exception_sorter::{
     AbstractOracleExceptionSorter, ORACLE_FATAL_ERROR_CODES_PROPERTY,
 };
@@ -238,15 +233,11 @@ pub use prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodTy
 pub use prepared_statement_pool::PreparedStatementPool;
 pub use proxy_attributes::{ProxyAttributeValue, ProxyAttributes};
 pub use rdbc4_valid_connection_checker::{PingConnectionChecker, Rdbc4ValidConnectionChecker};
-pub use rdbc_array::{PhysicalArray, RdbcArray};
-pub use rdbc_blob::{PhysicalBlob, RdbcBlob};
 pub use rdbc_calendar::{
     RdbcCalendar, RdbcCalendar as CallableCalendar, RdbcCalendarArgument,
     RdbcCalendarArgument as CallableCalendarArgument,
 };
-pub use rdbc_clob::{PhysicalClob, RdbcClob};
 pub use rdbc_input_stream::{RdbcInputStream, RdbcStreamLength};
-pub use rdbc_n_clob::{PhysicalNClob, RdbcNClob};
 pub use rdbc_object::{RdbcObject, RdbcObject as CallableOutputValue};
 pub use rdbc_opaque_object::{PhysicalRdbcOpaqueObject, RdbcOpaqueObject};
 pub use rdbc_output_stream::RdbcOutputStream;
@@ -260,10 +251,8 @@ pub use rdbc_parameter_null::RdbcParameterNull;
 pub use rdbc_parameter_string::RdbcParameterString;
 pub use rdbc_parameter_timestamp::RdbcParameterTimestamp;
 pub use rdbc_reader::{PhysicalCharacterReader, RdbcCharacterLength, RdbcReader};
-pub use rdbc_ref::{PhysicalRef, RdbcRef};
 pub use rdbc_result_set::{PhysicalResultSet, RdbcResultSet, RowSetResultSet};
 pub use rdbc_row_id::RdbcRowId;
-pub use rdbc_sql_xml::{PhysicalSqlXml, RdbcSqlXml};
 pub use rdbc_string::RdbcString;
 pub use rdbc_target_type::RdbcTargetType;
 pub use rdbc_target_type::RdbcTargetType as CallableTargetType;

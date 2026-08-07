@@ -11,14 +11,12 @@ use super::physical_statement::{
 };
 use super::prepared_input_parameter::PreparedInputParameter;
 use super::prepared_statement_key::PreparedStatementKey;
-use super::rdbc_blob::RdbcBlob;
-use super::rdbc_clob::RdbcClob;
-use super::rdbc_n_clob::RdbcNClob;
 use super::rdbc_result_set::{PhysicalResultSet, RowSetResultSet};
 use super::row::Row;
 use super::savepoint::Savepoint;
 use super::sql_warning::SqlWarning;
 use super::value::Value;
+use super::{RdbcBlob, RdbcClob, RdbcNClob};
 use std::any::Any;
 use std::sync::Arc;
 

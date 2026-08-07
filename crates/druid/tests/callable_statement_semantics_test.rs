@@ -11,17 +11,19 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidError, DruidPooledCallableStatement,
-    DruidPooledCallableStatementHandle, ExecResult, PhysicalArray, PhysicalBlob,
-    PhysicalCallableStatement, PhysicalClob, PhysicalConnection, PhysicalNClob,
-    PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
-    PreparedStatementMethodType, RdbcArray, RdbcBlob, RdbcCharacterLength, RdbcClob,
-    RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef, RdbcResultSet,
-    RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcString, RdbcTargetType, RdbcTypeMap, RdbcUrl,
-    RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, ResultSetStatement, Row,
-    SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
-    WrapperExt,
+    DruidPooledCallableStatementHandle, ExecResult, PhysicalCallableStatement, PhysicalConnection,
+    PhysicalPreparedStatement, PreparedStatementKey, PreparedStatementMethodType, RdbcBlob,
+    RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream,
+    RdbcReader, RdbcResultSet, RdbcRowId, RdbcStreamLength, RdbcString, RdbcTargetType,
+    RdbcTypeMap, RdbcUrl, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource,
+    ResultSetStatement, Row, SqlTextPreparedStatement, StatementExecuteResult,
+    StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
 use druid::pool::DruidPool;
+use druid::spi::{
+    RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
+    RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory, RdbcSqlXmlAccess,
+};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -33,12 +35,12 @@ struct UnsupportedUnwrapType;
 
 /// Callable 契约测试使用的只读物理 Blob。
 #[derive(Debug)]
-struct TestPhysicalBlob {
+struct TestBlobAccess {
     bytes: Vec<u8>,
     freed: AtomicBool,
 }
 
-impl TestPhysicalBlob {
+impl TestBlobAccess {
     fn ensure_open(&self) -> Result<(), DruidError> {
         if self.freed.load(Ordering::Acquire) {
             Err(DruidError::DriverError("Blob has been freed".to_string()))
@@ -48,17 +50,26 @@ impl TestPhysicalBlob {
     }
 }
 
-impl PhysicalBlob for TestPhysicalBlob {
-    fn as_any(&self) -> &dyn Any {
-        self
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestBlobAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::blob()
     }
 
-    fn length(&self) -> Result<i64, DruidError> {
+    async fn free(&self) -> Result<(), DruidError> {
+        self.freed.store(true, Ordering::Release);
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcBlobAccess for TestBlobAccess {
+    async fn length(&self) -> Result<i64, DruidError> {
         self.ensure_open()?;
         Ok(i64::try_from(self.bytes.len()).expect("test Blob length fits i64"))
     }
 
-    fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
+    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
         self.ensure_open()?;
         let start = usize::try_from(position - 1)
             .map_err(|_| DruidError::DriverError("invalid Blob position".to_string()))?;
@@ -74,12 +85,12 @@ impl PhysicalBlob for TestPhysicalBlob {
             .ok_or_else(|| DruidError::DriverError("invalid Blob range".to_string()))
     }
 
-    fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         self.ensure_open()?;
         Ok(RdbcInputStream::from_bytes(self.bytes.clone()))
     }
 
-    fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
+    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
         self.ensure_open()?;
         let start = usize::try_from(start - 1)
             .map_err(|_| DruidError::DriverError("invalid Blob position".to_string()))?;
@@ -94,19 +105,24 @@ impl PhysicalBlob for TestPhysicalBlob {
             .map(|position| i64::try_from(start + position + 1).expect("test position fits i64")))
     }
 
-    fn position_blob(&self, pattern: &RdbcBlob, start: i64) -> Result<Option<i64>, DruidError> {
-        let length = i32::try_from(pattern.length()?)
+    async fn position_blob(
+        &self,
+        pattern: &RdbcBlob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        let length = i32::try_from(pattern.length().await?)
             .map_err(|_| DruidError::DriverError("test pattern is too large".to_string()))?;
-        self.position_bytes(&pattern.get_bytes(1, length)?, start)
+        let bytes = pattern.get_bytes(1, length).await?;
+        self.position_bytes(&bytes, start).await
     }
 
-    fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, DruidError> {
+    async fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_blob_set_bytes",
         })
     }
 
-    fn set_bytes_range(
+    async fn set_bytes_range(
         &self,
         _position: i64,
         _bytes: &[u8],
@@ -118,28 +134,19 @@ impl PhysicalBlob for TestPhysicalBlob {
         })
     }
 
-    fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_blob_set_binary_stream",
         })
     }
 
-    fn truncate(&self, _length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_blob_truncate",
         })
     }
 
-    fn free(&self) -> Result<(), DruidError> {
-        self.freed.store(true, Ordering::Release);
-        Ok(())
-    }
-
-    fn is_freed(&self) -> bool {
-        self.freed.load(Ordering::Acquire)
-    }
-
-    fn get_binary_stream_range(
+    async fn get_binary_stream_range(
         &self,
         position: i64,
         length: i64,
@@ -147,13 +154,13 @@ impl PhysicalBlob for TestPhysicalBlob {
         let length = i32::try_from(length)
             .map_err(|_| DruidError::DriverError("invalid Blob range length".to_string()))?;
         Ok(RdbcInputStream::from_bytes(
-            self.get_bytes(position, length)?,
+            self.get_bytes(position, length).await?,
         ))
     }
 }
 
 fn test_blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
-    RdbcBlob::new(Arc::new(TestPhysicalBlob {
+    RdbcResourceFactory::blob(Arc::new(TestBlobAccess {
         bytes: bytes.into(),
         freed: AtomicBool::new(false),
     }))
@@ -161,12 +168,12 @@ fn test_blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
 
 /// Callable 契约测试使用的只读物理 Clob/NClob。
 #[derive(Debug)]
-struct TestPhysicalClob {
+struct TestClobAccess {
     code_units: Vec<u16>,
     freed: AtomicBool,
 }
 
-impl TestPhysicalClob {
+impl TestClobAccess {
     fn ensure_open(&self) -> Result<(), DruidError> {
         if self.freed.load(Ordering::Acquire) {
             Err(DruidError::DriverError("Clob has been freed".to_string()))
@@ -185,17 +192,26 @@ impl TestPhysicalClob {
     }
 }
 
-impl PhysicalClob for TestPhysicalClob {
-    fn as_any(&self) -> &dyn Any {
-        self
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestClobAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::clob()
     }
 
-    fn length(&self) -> Result<i64, DruidError> {
+    async fn free(&self) -> Result<(), DruidError> {
+        self.freed.store(true, Ordering::Release);
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcClobAccess for TestClobAccess {
+    async fn length(&self) -> Result<i64, DruidError> {
         self.ensure_open()?;
         Ok(i64::try_from(self.code_units.len()).expect("test Clob length fits i64"))
     }
 
-    fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
+    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
         let start = self.start(position)?;
         let length = usize::try_from(length)
             .map_err(|_| DruidError::DriverError("invalid Clob length".to_string()))?;
@@ -206,12 +222,12 @@ impl PhysicalClob for TestPhysicalClob {
         Ok(RdbcString::from_utf16(self.code_units[start..end].to_vec()))
     }
 
-    fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
         self.ensure_open()?;
         Ok(RdbcReader::from_utf16(self.code_units.clone()))
     }
 
-    fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
         self.ensure_open()?;
         let bytes = self
             .code_units
@@ -225,7 +241,11 @@ impl PhysicalClob for TestPhysicalClob {
         Ok(RdbcInputStream::from_bytes(bytes))
     }
 
-    fn position_string(&self, pattern: &RdbcString, start: i64) -> Result<Option<i64>, DruidError> {
+    async fn position_string(
+        &self,
+        pattern: &RdbcString,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
         let start = self.start(start)?;
         let position = if pattern.is_empty() {
             Some(start)
@@ -239,19 +259,24 @@ impl PhysicalClob for TestPhysicalClob {
             .map(|position| i64::try_from(position + 1).expect("test Clob position fits i64")))
     }
 
-    fn position_clob(&self, pattern: &RdbcClob, start: i64) -> Result<Option<i64>, DruidError> {
-        let length = i32::try_from(pattern.length()?)
+    async fn position_clob(
+        &self,
+        pattern: &RdbcClob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        let length = i32::try_from(pattern.length().await?)
             .map_err(|_| DruidError::DriverError("test Clob pattern is too large".to_string()))?;
-        self.position_string(&pattern.get_sub_string(1, length)?, start)
+        let value = pattern.get_sub_string(1, length).await?;
+        self.position_string(&value, start).await
     }
 
-    fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
+    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_set_string",
         })
     }
 
-    fn set_string_range(
+    async fn set_string_range(
         &self,
         _position: i64,
         _value: &RdbcString,
@@ -263,34 +288,25 @@ impl PhysicalClob for TestPhysicalClob {
         })
     }
 
-    fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_set_ascii_stream",
         })
     }
 
-    fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_set_character_stream",
         })
     }
 
-    fn truncate(&self, _length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_truncate",
         })
     }
 
-    fn free(&self) -> Result<(), DruidError> {
-        self.freed.store(true, Ordering::Release);
-        Ok(())
-    }
-
-    fn is_freed(&self) -> bool {
-        self.freed.load(Ordering::Acquire)
-    }
-
-    fn get_character_stream_range(
+    async fn get_character_stream_range(
         &self,
         position: i64,
         length: i64,
@@ -298,155 +314,176 @@ impl PhysicalClob for TestPhysicalClob {
         let length = i32::try_from(length)
             .map_err(|_| DruidError::DriverError("invalid Clob range length".to_string()))?;
         Ok(RdbcReader::from_utf16(
-            self.get_sub_string(position, length)?.as_utf16().to_vec(),
+            self.get_sub_string(position, length)
+                .await?
+                .as_utf16()
+                .to_vec(),
         ))
     }
 }
 
-impl PhysicalNClob for TestPhysicalClob {}
+impl RdbcNClobAccess for TestClobAccess {}
 
 fn test_clob(value: &str) -> RdbcClob {
-    RdbcClob::new(Arc::new(TestPhysicalClob {
+    RdbcResourceFactory::clob(Arc::new(TestClobAccess {
         code_units: value.encode_utf16().collect(),
         freed: AtomicBool::new(false),
     }))
 }
 
 fn test_n_clob(value: &str) -> RdbcNClob {
-    RdbcNClob::new(Arc::new(TestPhysicalClob {
+    RdbcResourceFactory::n_clob(Arc::new(TestClobAccess {
         code_units: value.encode_utf16().collect(),
         freed: AtomicBool::new(false),
     }))
 }
 
 #[derive(Debug)]
-struct TestPhysicalRef;
+struct TestRefAccess;
 
-impl PhysicalRef for TestPhysicalRef {
-    fn base_type_name(&self) -> Result<String, DruidError> {
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestRefAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::reference()
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcRefAccess for TestRefAccess {
+    async fn base_type_name(&self) -> Result<String, DruidError> {
         Ok("schema.kind".to_string())
     }
 
-    fn object(&self) -> Result<RdbcObject, DruidError> {
+    async fn object(&self) -> Result<RdbcObject, DruidError> {
         Ok(RdbcObject::from(Value::String("ref-value".to_string())))
     }
 
-    fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, DruidError> {
-        self.object()
+    async fn object_with_type_map(
+        &self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcObject, DruidError> {
+        self.object().await
     }
 
-    fn set_object(&self, _value: RdbcObject) -> Result<(), DruidError> {
+    async fn set_object(&self, _value: RdbcObject) -> Result<(), DruidError> {
         Ok(())
     }
 }
 
 #[derive(Debug)]
-struct TestPhysicalArray;
+struct TestArrayAccess;
 
-impl PhysicalArray for TestPhysicalArray {
-    fn base_type_name(&self) -> Result<String, DruidError> {
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestArrayAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::array()
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcArrayAccess for TestArrayAccess {
+    async fn base_type_name(&self) -> Result<String, DruidError> {
         Ok("INTEGER".to_string())
     }
 
-    fn base_type(&self) -> Result<i32, DruidError> {
+    async fn base_type(&self) -> Result<i32, DruidError> {
         Ok(4)
     }
 
-    fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
         Ok(vec![RdbcObject::from(Value::Int(1))])
     }
 
-    fn values_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<Vec<RdbcObject>, DruidError> {
-        self.values()
+    async fn values_with_type_map(
+        &self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Vec<RdbcObject>, DruidError> {
+        self.values().await
     }
 
-    fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<RdbcObject>, DruidError> {
-        self.values()
+    async fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<RdbcObject>, DruidError> {
+        self.values().await
     }
 
-    fn values_range_with_type_map(
+    async fn values_range_with_type_map(
         &self,
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
     ) -> Result<Vec<RdbcObject>, DruidError> {
-        self.values_range(index, count)
+        self.values_range(index, count).await
     }
 
-    fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
+    async fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_array_result_set",
         })
     }
 
-    fn result_set_with_type_map(
+    async fn result_set_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
     ) -> Result<RdbcResultSet, DruidError> {
-        self.result_set()
+        self.result_set().await
     }
 
-    fn result_set_range(&self, _index: i64, _count: i32) -> Result<RdbcResultSet, DruidError> {
-        self.result_set()
+    async fn result_set_range(
+        &self,
+        _index: i64,
+        _count: i32,
+    ) -> Result<RdbcResultSet, DruidError> {
+        self.result_set().await
     }
 
-    fn result_set_range_with_type_map(
+    async fn result_set_range_with_type_map(
         &self,
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
     ) -> Result<RdbcResultSet, DruidError> {
-        self.result_set_range(index, count)
-    }
-
-    fn free(&self) -> Result<(), DruidError> {
-        Ok(())
-    }
-
-    fn is_freed(&self) -> bool {
-        false
+        self.result_set_range(index, count).await
     }
 }
 
 #[derive(Debug)]
-struct TestPhysicalSqlXml;
+struct TestSqlXmlAccess;
 
-impl PhysicalSqlXml for TestPhysicalSqlXml {
-    fn free(&self) -> Result<(), DruidError> {
-        Ok(())
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestSqlXmlAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::sql_xml()
     }
+}
 
-    fn is_freed(&self) -> bool {
-        false
-    }
-
-    fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+#[async_trait::async_trait]
+impl RdbcSqlXmlAccess for TestSqlXmlAccess {
+    async fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         Ok(RdbcInputStream::from_bytes(b"<x/>".to_vec()))
     }
 
-    fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
         Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    fn character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn character_stream(&self) -> Result<RdbcReader, DruidError> {
         Ok(RdbcReader::from_string("<x/>"))
     }
 
-    fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_sql_xml_writer",
         })
     }
 
-    fn string(&self) -> Result<RdbcString, DruidError> {
+    async fn string(&self) -> Result<RdbcString, DruidError> {
         Ok(RdbcString::from("<x/>"))
     }
 
-    fn set_string(&self, _value: &RdbcString) -> Result<(), DruidError> {
+    async fn set_string(&self, _value: &RdbcString) -> Result<(), DruidError> {
         Ok(())
     }
 
-    fn source(
+    async fn source(
         &self,
         _representation: &RdbcXmlRepresentationType,
     ) -> Result<RdbcXmlSource, DruidError> {
@@ -455,7 +492,7 @@ impl PhysicalSqlXml for TestPhysicalSqlXml {
         })
     }
 
-    fn result(
+    async fn result(
         &self,
         _representation: &RdbcXmlRepresentationType,
     ) -> Result<RdbcXmlResult, DruidError> {
@@ -487,10 +524,10 @@ impl TestCallableStatement {
         let clob = test_clob("callable-clob");
         let n_clob = test_n_clob("国家字符");
         let url = RdbcUrl::new("https://example.test/callable");
-        let reference = RdbcRef::new(Arc::new(TestPhysicalRef));
-        let array = RdbcArray::new(Arc::new(TestPhysicalArray));
+        let reference = RdbcResourceFactory::reference(Arc::new(TestRefAccess));
+        let array = RdbcResourceFactory::array(Arc::new(TestArrayAccess));
         let row_id = RdbcRowId::new(vec![1, 2, 3]);
-        let sql_xml = RdbcSqlXml::new(Arc::new(TestPhysicalSqlXml));
+        let sql_xml = RdbcResourceFactory::sql_xml(Arc::new(TestSqlXmlAccess));
         Self {
             sql: sql.into(),
             closed: AtomicBool::new(false),
@@ -1233,10 +1270,11 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         Some(vec![1, 2, 3])
     );
     let output_blob = callable.get_blob(9).unwrap().unwrap();
-    assert_eq!(output_blob.length().unwrap(), 13);
+    assert_eq!(output_blob.length().await.unwrap(), 13);
     assert_eq!(
         output_blob
             .get_binary_stream()
+            .await
             .unwrap()
             .read_to_end()
             .unwrap(),
@@ -1251,6 +1289,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert_eq!(
         output_clob
             .get_character_stream()
+            .await
             .unwrap()
             .read_to_string()
             .unwrap(),
@@ -1265,6 +1304,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert_eq!(
         output_n_clob
             .get_character_stream()
+            .await
             .unwrap()
             .read_to_string()
             .unwrap(),
@@ -1340,6 +1380,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .unwrap()
             .base_type_name()
+            .await
             .unwrap(),
         "schema.kind"
     );
@@ -1349,6 +1390,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .unwrap()
             .object()
+            .await
             .unwrap(),
         RdbcObject::from(Value::String("ref-value".to_string()))
     );
@@ -1358,6 +1400,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .unwrap()
             .base_type()
+            .await
             .unwrap(),
         4
     );
@@ -1367,6 +1410,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .unwrap()
             .values()
+            .await
             .unwrap(),
         vec![RdbcObject::from(Value::Int(1))]
     );
@@ -1388,6 +1432,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .unwrap()
             .string()
+            .await
             .unwrap()
             .to_rust_string()
             .unwrap(),
@@ -1399,6 +1444,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .unwrap()
             .binary_stream()
+            .await
             .unwrap()
             .read_to_end()
             .unwrap(),

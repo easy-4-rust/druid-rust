@@ -227,11 +227,13 @@ impl SqlxConnectionAdapter {
             })
     }
 
-    fn materialized_parameters(
+    async fn materialized_parameters(
         statement: &dyn PhysicalPreparedStatement,
         parameters: &[PreparedInputParameter],
     ) -> Result<Vec<Value>, DruidError> {
-        Self::prepared_statement(statement)?.materialized_parameters(parameters.len())
+        Self::prepared_statement(statement)?
+            .materialized_parameters(parameters.len())
+            .await
     }
 
     fn bind_any_values<'query>(
@@ -992,7 +994,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<ExecResult, DruidError> {
-        let params = Self::materialized_parameters(statement, &parameters)?;
+        let params = Self::materialized_parameters(statement, &parameters).await?;
         self.exec_prepared(statement, params).await
     }
 
@@ -1021,7 +1023,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
-        let params = Self::materialized_parameters(statement, &parameters)?;
+        let params = Self::materialized_parameters(statement, &parameters).await?;
         self.execute_prepared(statement, params, generated_keys)
             .await
     }
@@ -1033,22 +1035,24 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     ) -> Result<Vec<i32>, DruidError> {
         let statement_ref = Self::prepared_statement(statement)?;
         let parameter_sets =
-            if let Some(parameter_sets) = statement_ref.take_batches(parameter_sets.len())? {
+            if let Some(parameter_sets) = statement_ref.take_batches(parameter_sets.len()).await? {
                 parameter_sets
             } else {
-                parameter_sets
-                    .iter()
-                    .map(|parameters| {
-                        parameters
-                            .iter()
-                            .map(SqlxPreparedStatement::materialize_parameter)
-                            .collect::<Result<Vec<_>, _>>()
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| DruidError::BatchUpdateException {
-                        update_counts: Vec::new(),
-                        cause: Box::new(error),
-                    })?
+                let mut materialized_sets = Vec::with_capacity(parameter_sets.len());
+                for parameters in &parameter_sets {
+                    let mut materialized = Vec::with_capacity(parameters.len());
+                    for parameter in parameters {
+                        let value = SqlxPreparedStatement::materialize_parameter(parameter)
+                            .await
+                            .map_err(|error| DruidError::BatchUpdateException {
+                                update_counts: Vec::new(),
+                                cause: Box::new(error),
+                            })?;
+                        materialized.push(value);
+                    }
+                    materialized_sets.push(materialized);
+                }
+                materialized_sets
             };
 
         let mut update_counts = Vec::with_capacity(parameter_sets.len());
@@ -1167,7 +1171,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Vec<Row>, DruidError> {
-        let params = Self::materialized_parameters(statement, &parameters)?;
+        let params = Self::materialized_parameters(statement, &parameters).await?;
         self.fetch_prepared(statement, params).await
     }
 
@@ -1194,7 +1198,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let params = Self::materialized_parameters(statement, &parameters)?;
+        let params = Self::materialized_parameters(statement, &parameters).await?;
         self.fetch_prepared_result_set(statement, params).await
     }
 

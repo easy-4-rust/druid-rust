@@ -268,7 +268,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
-        let params = statement.materialized_parameters(parameters.len())?;
+        let params = statement.materialized_parameters(parameters.len()).await?;
         self.exec_prepared(statement, params).await
     }
 
@@ -286,7 +286,8 @@ impl PhysicalConnection for RbdcConnectionAdapter {
                 )
             })?;
         let parameter_sets = rbdc_statement
-            .take_batches(parameter_sets.len())?
+            .take_batches(parameter_sets.len())
+            .await?
             .ok_or_else(|| {
                 DruidError::InvalidArgument(
                     "RBDC physical prepared batch has not been populated".to_string(),
@@ -322,7 +323,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
-        let params = statement.materialized_parameters(parameters.len())?;
+        let params = statement.materialized_parameters(parameters.len()).await?;
         self.fetch_prepared(statement, params).await
     }
 
@@ -351,7 +352,9 @@ impl PhysicalConnection for RbdcConnectionAdapter {
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
-        let params = rbdc_statement.materialized_parameters(parameters.len())?;
+        let params = rbdc_statement
+            .materialized_parameters(parameters.len())
+            .await?;
         self.fetch_prepared_result_set(statement, params).await
     }
 

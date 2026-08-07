@@ -503,86 +503,92 @@ impl<'a> ClobFilterChain<'a> {
     }
 
     /// 继续 `Clob#length` 链。
-    pub fn clob_length(&mut self) -> Result<i64, DruidError> {
+    pub async fn clob_length(&mut self) -> Result<i64, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_length(self)
+            filter.clob_length(self).await
         } else {
-            self.wrapper.raw_clob().length()
+            self.wrapper.raw_clob().length().await
         }
     }
 
     /// 继续 `Clob#getSubString` 链。
-    pub fn clob_get_sub_string(
+    pub async fn clob_get_sub_string(
         &mut self,
         position: i64,
         length: i32,
     ) -> Result<RdbcString, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_get_sub_string(self, position, length)
+            filter.clob_get_sub_string(self, position, length).await
         } else {
-            self.wrapper.raw_clob().get_sub_string(position, length)
+            self.wrapper
+                .raw_clob()
+                .get_sub_string(position, length)
+                .await
         }
     }
 
     /// 继续无范围 `Clob#getCharacterStream` 链。
-    pub fn clob_get_character_stream(&mut self) -> Result<RdbcReader, DruidError> {
+    pub async fn clob_get_character_stream(&mut self) -> Result<RdbcReader, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_get_character_stream(self)
+            filter.clob_get_character_stream(self).await
         } else {
-            self.wrapper.raw_clob().get_character_stream()
+            self.wrapper.raw_clob().get_character_stream().await
         }
     }
 
     /// 继续 `Clob#getAsciiStream` 链。
-    pub fn clob_get_ascii_stream(&mut self) -> Result<RdbcInputStream, DruidError> {
+    pub async fn clob_get_ascii_stream(&mut self) -> Result<RdbcInputStream, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_get_ascii_stream(self)
+            filter.clob_get_ascii_stream(self).await
         } else {
-            self.wrapper.raw_clob().get_ascii_stream()
+            self.wrapper.raw_clob().get_ascii_stream().await
         }
     }
 
     /// 继续 `Clob#position(String,long)` 链。
-    pub fn clob_position_string(
+    pub async fn clob_position_string(
         &mut self,
         pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_position_string(self, pattern, start)
+            filter.clob_position_string(self, pattern, start).await
         } else {
-            self.wrapper.raw_clob().position_string(pattern, start)
+            self.wrapper
+                .raw_clob()
+                .position_string(pattern, start)
+                .await
         }
     }
 
     /// 继续 `Clob#position(Clob,long)` 链。
-    pub fn clob_position_clob(
+    pub async fn clob_position_clob(
         &mut self,
         pattern: &RdbcClob,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_position_clob(self, pattern, start)
+            filter.clob_position_clob(self, pattern, start).await
         } else {
-            self.wrapper.raw_clob().position_clob(pattern, start)
+            self.wrapper.raw_clob().position_clob(pattern, start).await
         }
     }
 
     /// 继续 `Clob#setString(long,String)` 链。
-    pub fn clob_set_string(
+    pub async fn clob_set_string(
         &mut self,
         position: i64,
         value: &RdbcString,
     ) -> Result<i32, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_set_string(self, position, value)
+            filter.clob_set_string(self, position, value).await
         } else {
-            self.wrapper.raw_clob().set_string(position, value)
+            self.wrapper.raw_clob().set_string(position, value).await
         }
     }
 
     /// 继续 `Clob#setString(long,String,int,int)` 链。
-    pub fn clob_set_string_range(
+    pub async fn clob_set_string_range(
         &mut self,
         position: i64,
         value: &RdbcString,
@@ -590,62 +596,74 @@ impl<'a> ClobFilterChain<'a> {
         length: i32,
     ) -> Result<i32, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_set_string_range(self, position, value, offset, length)
+            filter
+                .clob_set_string_range(self, position, value, offset, length)
+                .await
         } else {
             self.wrapper
                 .raw_clob()
                 .set_string_range(position, value, offset, length)
+                .await
         }
     }
 
     /// 继续 `Clob#setAsciiStream` 链。
-    pub fn clob_set_ascii_stream(&mut self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    pub async fn clob_set_ascii_stream(
+        &mut self,
+        position: i64,
+    ) -> Result<RdbcOutputStream, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_set_ascii_stream(self, position)
+            filter.clob_set_ascii_stream(self, position).await
         } else {
-            self.wrapper.raw_clob().set_ascii_stream(position)
+            self.wrapper.raw_clob().set_ascii_stream(position).await
         }
     }
 
     /// 继续 `Clob#setCharacterStream` 链。
-    pub fn clob_set_character_stream(&mut self, position: i64) -> Result<RdbcWriter, DruidError> {
+    pub async fn clob_set_character_stream(
+        &mut self,
+        position: i64,
+    ) -> Result<RdbcWriter, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_set_character_stream(self, position)
+            filter.clob_set_character_stream(self, position).await
         } else {
-            self.wrapper.raw_clob().set_character_stream(position)
+            self.wrapper.raw_clob().set_character_stream(position).await
         }
     }
 
     /// 继续 `Clob#truncate` 链。
-    pub fn clob_truncate(&mut self, length: i64) -> Result<(), DruidError> {
+    pub async fn clob_truncate(&mut self, length: i64) -> Result<(), DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_truncate(self, length)
+            filter.clob_truncate(self, length).await
         } else {
-            self.wrapper.raw_clob().truncate(length)
+            self.wrapper.raw_clob().truncate(length).await
         }
     }
 
     /// 继续 `Clob#free` 链。
-    pub fn clob_free(&mut self) -> Result<(), DruidError> {
+    pub async fn clob_free(&mut self) -> Result<(), DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_free(self)
+            filter.clob_free(self).await
         } else {
-            self.wrapper.raw_clob().free()
+            self.wrapper.raw_clob().free().await
         }
     }
 
     /// 继续范围 `Clob#getCharacterStream` 链。
-    pub fn clob_get_character_stream_range(
+    pub async fn clob_get_character_stream_range(
         &mut self,
         position: i64,
         length: i64,
     ) -> Result<RdbcReader, DruidError> {
         if let Some(filter) = self.next_filter() {
-            filter.clob_get_character_stream_range(self, position, length)
+            filter
+                .clob_get_character_stream_range(self, position, length)
+                .await
         } else {
             self.wrapper
                 .raw_clob()
                 .get_character_stream_range(position, length)
+                .await
         }
     }
 
@@ -1118,68 +1136,82 @@ impl FilterChainImpl {
     }
 
     /// 从位置 0 执行 `Clob#length()`。
-    pub fn clob_length(&self, wrapper: &dyn ClobProxy) -> Result<i64, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_length()
+    pub async fn clob_length(&self, wrapper: &dyn ClobProxy) -> Result<i64, DruidError> {
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_length()
+            .await
     }
 
     /// 从位置 0 执行 `Clob#getSubString(long,int)`。
-    pub fn clob_get_sub_string(
+    pub async fn clob_get_sub_string(
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
         length: i32,
     ) -> Result<RdbcString, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_get_sub_string(position, length)
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_get_sub_string(position, length)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#getCharacterStream()`。
-    pub fn clob_get_character_stream(
+    pub async fn clob_get_character_stream(
         &self,
         wrapper: &dyn ClobProxy,
     ) -> Result<RdbcReader, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_get_character_stream()
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_get_character_stream()
+            .await
     }
 
     /// 从位置 0 执行 `Clob#getAsciiStream()`。
-    pub fn clob_get_ascii_stream(
+    pub async fn clob_get_ascii_stream(
         &self,
         wrapper: &dyn ClobProxy,
     ) -> Result<RdbcInputStream, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_get_ascii_stream()
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_get_ascii_stream()
+            .await
     }
 
     /// 从位置 0 执行 `Clob#position(String,long)`。
-    pub fn clob_position_string(
+    pub async fn clob_position_string(
         &self,
         wrapper: &dyn ClobProxy,
         pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_position_string(pattern, start)
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_position_string(pattern, start)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#position(Clob,long)`。
-    pub fn clob_position_clob(
+    pub async fn clob_position_clob(
         &self,
         wrapper: &dyn ClobProxy,
         pattern: &RdbcClob,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_position_clob(pattern, start)
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_position_clob(pattern, start)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#setString(long,String)`。
-    pub fn clob_set_string(
+    pub async fn clob_set_string(
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
         value: &RdbcString,
     ) -> Result<i32, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_set_string(position, value)
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_set_string(position, value)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#setString(long,String,int,int)`。
-    pub fn clob_set_string_range(
+    pub async fn clob_set_string_range(
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
@@ -1189,38 +1221,51 @@ impl FilterChainImpl {
     ) -> Result<i32, DruidError> {
         ClobFilterChain::new(&self.before, wrapper)
             .clob_set_string_range(position, value, offset, length)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#setAsciiStream(long)`。
-    pub fn clob_set_ascii_stream(
+    pub async fn clob_set_ascii_stream(
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
     ) -> Result<RdbcOutputStream, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_set_ascii_stream(position)
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_set_ascii_stream(position)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#setCharacterStream(long)`。
-    pub fn clob_set_character_stream(
+    pub async fn clob_set_character_stream(
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
     ) -> Result<RdbcWriter, DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_set_character_stream(position)
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_set_character_stream(position)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#truncate(long)`。
-    pub fn clob_truncate(&self, wrapper: &dyn ClobProxy, length: i64) -> Result<(), DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_truncate(length)
+    pub async fn clob_truncate(
+        &self,
+        wrapper: &dyn ClobProxy,
+        length: i64,
+    ) -> Result<(), DruidError> {
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_truncate(length)
+            .await
     }
 
     /// 从位置 0 执行 `Clob#free()`。
-    pub fn clob_free(&self, wrapper: &dyn ClobProxy) -> Result<(), DruidError> {
-        ClobFilterChain::new(&self.before, wrapper).clob_free()
+    pub async fn clob_free(&self, wrapper: &dyn ClobProxy) -> Result<(), DruidError> {
+        ClobFilterChain::new(&self.before, wrapper)
+            .clob_free()
+            .await
     }
 
     /// 从位置 0 执行 `Clob#getCharacterStream(long,long)`。
-    pub fn clob_get_character_stream_range(
+    pub async fn clob_get_character_stream_range(
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
@@ -1228,6 +1273,7 @@ impl FilterChainImpl {
     ) -> Result<RdbcReader, DruidError> {
         ClobFilterChain::new(&self.before, wrapper)
             .clob_get_character_stream_range(position, length)
+            .await
     }
 
     /// 初始化链中每个 Java Filter 实例。

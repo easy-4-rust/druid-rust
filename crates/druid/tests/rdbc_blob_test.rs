@@ -1,9 +1,9 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
-use druid::core::{
-    DruidError, PhysicalBlob, RdbcBlob, RdbcInputStream, RdbcObject, RdbcOutputStream,
+use druid::core::{DruidError, RdbcBlob, RdbcInputStream, RdbcObject, RdbcOutputStream};
+use druid::spi::{
+    RdbcBlobAccess, RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory,
 };
-use std::any::Any;
 use std::io::{Error, Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -14,11 +14,11 @@ struct BlobState {
 }
 
 #[derive(Debug)]
-struct InMemoryPhysicalBlob {
+struct InMemoryBlobAccess {
     state: Arc<Mutex<BlobState>>,
 }
 
-impl InMemoryPhysicalBlob {
+impl InMemoryBlobAccess {
     fn new(bytes: impl Into<Vec<u8>>) -> Self {
         Self {
             state: Arc::new(Mutex::new(BlobState {
@@ -131,12 +131,23 @@ impl Write for BlobWriteCursor {
     }
 }
 
-impl PhysicalBlob for InMemoryPhysicalBlob {
-    fn as_any(&self) -> &dyn Any {
-        self
+#[async_trait::async_trait]
+impl RdbcResourceAccess for InMemoryBlobAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::blob()
     }
 
-    fn length(&self) -> Result<i64, DruidError> {
+    async fn free(&self) -> Result<(), DruidError> {
+        let mut state = self.state();
+        state.freed = true;
+        state.bytes.clear();
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcBlobAccess for InMemoryBlobAccess {
+    async fn length(&self) -> Result<i64, DruidError> {
         let state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Blob has been freed".to_string()));
@@ -145,7 +156,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
             .map_err(|_| DruidError::DriverError("Blob length exceeds i64".to_string()))
     }
 
-    fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
+    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
         let state = self.state();
         let start = Self::checked_start(&state, position, true)?;
         let length = Self::checked_length(i64::from(length))?;
@@ -156,7 +167,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
         Ok(state.bytes[start..end].to_vec())
     }
 
-    fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         let state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Blob has been freed".to_string()));
@@ -164,7 +175,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
         Ok(RdbcInputStream::from_bytes(state.bytes.clone()))
     }
 
-    fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
+    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
         let state = self.state();
         let start = Self::checked_start(&state, start, true)?;
         let result = if pattern.is_empty() {
@@ -183,20 +194,25 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
             .transpose()
     }
 
-    fn position_blob(&self, pattern: &RdbcBlob, start: i64) -> Result<Option<i64>, DruidError> {
-        let length = pattern.length()?;
+    async fn position_blob(
+        &self,
+        pattern: &RdbcBlob,
+        start: i64,
+    ) -> Result<Option<i64>, DruidError> {
+        let length = pattern.length().await?;
         let length = i32::try_from(length)
             .map_err(|_| DruidError::DriverError("pattern Blob is too large".to_string()))?;
-        self.position_bytes(&pattern.get_bytes(1, length)?, start)
+        let bytes = pattern.get_bytes(1, length).await?;
+        self.position_bytes(&bytes, start).await
     }
 
-    fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, DruidError> {
+    async fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, DruidError> {
         let length = i32::try_from(bytes.len())
             .map_err(|_| DruidError::DriverError("Blob write is too large".to_string()))?;
-        self.set_bytes_range(position, bytes, 0, length)
+        self.set_bytes_range(position, bytes, 0, length).await
     }
 
-    fn set_bytes_range(
+    async fn set_bytes_range(
         &self,
         position: i64,
         bytes: &[u8],
@@ -222,7 +238,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
             .map_err(|_| DruidError::DriverError("Blob write exceeds i32".to_string()))
     }
 
-    fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
         let state = self.state();
         let position = Self::checked_start(&state, position, true)?;
         drop(state);
@@ -232,7 +248,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
         }))
     }
 
-    fn truncate(&self, length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, length: i64) -> Result<(), DruidError> {
         let mut state = self.state();
         if state.freed {
             return Err(DruidError::DriverError("Blob has been freed".to_string()));
@@ -247,18 +263,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
         Ok(())
     }
 
-    fn free(&self) -> Result<(), DruidError> {
-        let mut state = self.state();
-        state.freed = true;
-        state.bytes.clear();
-        Ok(())
-    }
-
-    fn is_freed(&self) -> bool {
-        self.state().freed
-    }
-
-    fn get_binary_stream_range(
+    async fn get_binary_stream_range(
         &self,
         position: i64,
         length: i64,
@@ -277,7 +282,7 @@ impl PhysicalBlob for InMemoryPhysicalBlob {
 }
 
 fn blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
-    RdbcBlob::new(Arc::new(InMemoryPhysicalBlob::new(bytes)))
+    RdbcResourceFactory::blob(Arc::new(InMemoryBlobAccess::new(bytes)))
 }
 
 #[test]
@@ -303,34 +308,37 @@ fn input_stream_clones_share_cursor_and_close_state() {
     assert!(failing.read_to_end().is_err());
 }
 
-#[test]
-fn blob_delegates_complete_rdbc_resource_contract_without_eager_materialization() {
+#[tokio::test]
+async fn blob_delegates_complete_rdbc_resource_contract_without_eager_materialization() {
     let value = blob(b"abcdef".to_vec());
     assert_eq!(value, value.clone());
     assert_ne!(value, blob(b"abcdef".to_vec()));
     assert!(value
-        .physical()
-        .as_any()
-        .downcast_ref::<InMemoryPhysicalBlob>()
-        .is_some());
+        .capabilities()
+        .contains(RdbcResourceCapabilities::STREAM));
     assert!(format!("{value:?}").contains("RdbcBlob"));
     assert_eq!(format!("{}", RdbcObject::Blob(value.clone())), "<Blob>");
-    assert_eq!(value.length().unwrap(), 6);
-    assert_eq!(value.get_bytes(2, 3).unwrap(), b"bcd");
-    assert_eq!(value.position_bytes(b"cd", 1).unwrap(), Some(3));
+    assert_eq!(value.length().await.unwrap(), 6);
+    assert_eq!(value.get_bytes(2, 3).await.unwrap(), b"bcd");
+    assert_eq!(value.position_bytes(b"cd", 1).await.unwrap(), Some(3));
     assert_eq!(
-        value.position_blob(&blob(b"de".to_vec()), 1).unwrap(),
+        value.position_blob(&blob(b"de".to_vec()), 1).await.unwrap(),
         Some(4)
     );
 
-    assert_eq!(value.set_bytes(2, b"XY").unwrap(), 2);
-    assert_eq!(value.set_bytes_range(4, b"12ZZ", 2, 2).unwrap(), 2);
+    assert_eq!(value.set_bytes(2, b"XY").await.unwrap(), 2);
+    assert_eq!(value.set_bytes_range(4, b"12ZZ", 2, 2).await.unwrap(), 2);
     assert_eq!(
-        value.get_binary_stream().unwrap().read_to_end().unwrap(),
+        value
+            .get_binary_stream()
+            .await
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
         b"aXYZZf"
     );
 
-    let writer = value.set_binary_stream(6).unwrap();
+    let writer = value.set_binary_stream(6).await.unwrap();
     let writer_clone = writer.clone();
     assert_eq!(writer, writer_clone);
     assert_eq!(writer.write(b"789").unwrap(), 3);
@@ -340,27 +348,28 @@ fn blob_delegates_complete_rdbc_resource_contract_without_eager_materialization(
     assert!(writer_clone.is_closed());
     assert!(format!("{writer_clone:?}").contains("closed: true"));
     assert!(writer_clone.write(b"!").is_err());
-    assert_eq!(value.get_bytes(1, 8).unwrap(), b"aXYZZ789");
+    assert_eq!(value.get_bytes(1, 8).await.unwrap(), b"aXYZZ789");
 
     assert_eq!(
         value
             .get_binary_stream_range(2, 3)
+            .await
             .unwrap()
             .read_to_end()
             .unwrap(),
         b"XYZ"
     );
-    value.truncate(5).unwrap();
-    assert_eq!(value.length().unwrap(), 5);
-    assert!(value.get_bytes(0, 1).is_err());
-    assert!(value.set_bytes_range(1, b"x", -1, 1).is_err());
-    assert!(value.truncate(6).is_err());
+    value.truncate(5).await.unwrap();
+    assert_eq!(value.length().await.unwrap(), 5);
+    assert!(value.get_bytes(0, 1).await.is_err());
+    assert!(value.set_bytes_range(1, b"x", -1, 1).await.is_err());
+    assert!(value.truncate(6).await.is_err());
 
-    value.free().unwrap();
+    value.free().await.unwrap();
     assert!(value.is_freed());
-    value.free().unwrap();
-    assert!(value.length().is_err());
-    assert!(value.get_binary_stream().is_err());
+    value.free().await.unwrap();
+    assert!(value.length().await.is_err());
+    assert!(value.get_binary_stream().await.is_err());
 
     let write_failure = RdbcOutputStream::new(FailingWriter {
         failure: WriterFailure::Write,

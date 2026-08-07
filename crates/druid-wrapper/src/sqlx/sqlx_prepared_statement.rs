@@ -180,26 +180,26 @@ impl SqlxPreparedStatement {
     }
 
     /// 在 `SQLx` 物理 setter 边界物化一个完整 JDBC 参数描述符。
-    pub(crate) fn materialize_parameter(
+    pub(crate) async fn materialize_parameter(
         parameter: &PreparedInputParameter,
     ) -> Result<Value, DruidError> {
-        PreparedParameterMaterializer::materialize(parameter)
+        PreparedParameterMaterializer::materialize(parameter).await
     }
 
     /// 返回物理 setter 已经保存的参数值。
-    pub(crate) fn materialized_parameters(
+    pub(crate) async fn materialized_parameters(
         &self,
         parameter_count: usize,
     ) -> Result<Vec<Value>, DruidError> {
-        self.parameter_state.values(parameter_count)
+        self.parameter_state.values(parameter_count).await
     }
 
     /// 消费物理句柄保存的有序参数批次。
-    pub(crate) fn take_batches(
+    pub(crate) async fn take_batches(
         &self,
         expected_count: usize,
     ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
-        self.parameter_state.take_batches(expected_count)
+        self.parameter_state.take_batches(expected_count).await
     }
 
     /// 执行一个真实 SQLx future，并同时监听 Statement timeout 与显式 cancel。

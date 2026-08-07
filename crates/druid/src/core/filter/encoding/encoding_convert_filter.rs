@@ -136,56 +136,57 @@ impl BeforeFilter for EncodingConvertFilter {
         Ok(())
     }
 
-    fn clob_position_string(
+    async fn clob_position_string(
         &self,
         chain: &mut ClobFilterChain<'_>,
         pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         let pattern = self.encode_rdbc_string(pattern)?;
-        chain.clob_position_string(&pattern, start)
+        chain.clob_position_string(&pattern, start).await
     }
 
-    fn clob_get_sub_string(
+    async fn clob_get_sub_string(
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         length: i32,
     ) -> Result<RdbcString, DruidError> {
-        self.decode_rdbc_string(chain.clob_get_sub_string(position, length)?)
+        self.decode_rdbc_string(chain.clob_get_sub_string(position, length).await?)
     }
 
-    fn clob_get_character_stream(
+    async fn clob_get_character_stream(
         &self,
         chain: &mut ClobFilterChain<'_>,
     ) -> Result<RdbcReader, DruidError> {
-        let text = chain.clob_get_character_stream()?.read_to_string()?;
+        let text = chain.clob_get_character_stream().await?.read_to_string()?;
         self.decode(&text).map(RdbcReader::from_string)
     }
 
-    fn clob_get_character_stream_range(
+    async fn clob_get_character_stream_range(
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         length: i64,
     ) -> Result<RdbcReader, DruidError> {
         let text = chain
-            .clob_get_character_stream_range(position, length)?
+            .clob_get_character_stream_range(position, length)
+            .await?
             .read_to_string()?;
         self.decode(&text).map(RdbcReader::from_string)
     }
 
-    fn clob_set_string(
+    async fn clob_set_string(
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         value: &RdbcString,
     ) -> Result<i32, DruidError> {
         let value = self.encode_rdbc_string(value)?;
-        chain.clob_set_string(position, &value)
+        chain.clob_set_string(position, &value).await
     }
 
-    fn clob_set_string_range(
+    async fn clob_set_string_range(
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
@@ -194,7 +195,9 @@ impl BeforeFilter for EncodingConvertFilter {
         length: i32,
     ) -> Result<i32, DruidError> {
         let value = self.encode_rdbc_string(value)?;
-        chain.clob_set_string_range(position, &value, offset, length)
+        chain
+            .clob_set_string_range(position, &value, offset, length)
+            .await
     }
 }
 

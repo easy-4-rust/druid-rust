@@ -88,11 +88,11 @@ mod types;
 #[path = "sql/wrapper.rs"]
 mod wrapper;
 
-pub use array::Array;
-pub use blob::Blob;
+pub use array::{Array, RdbcArray};
+pub use blob::{Blob, RdbcBlob};
 pub use callable_statement::CallableStatement;
 pub use client_info_status::ClientInfoStatus;
-pub use clob::Clob;
+pub use clob::{Clob, RdbcClob};
 pub use common_data_source::{CommonDataSource, RdbcLogWriter};
 pub use connection::Connection;
 pub use data_source::DataSource;
@@ -111,14 +111,14 @@ pub use exceptions::{
     SqlTransientException, SqlWarning,
 };
 pub use exceptions::{SqlException as SQLException, SqlWarning as SQLWarning};
-pub use n_clob::NClob;
+pub use n_clob::{NClob, RdbcNClob};
 pub use parameter_meta_data::{ParameterMetaData, ParameterMode, ParameterNullability};
 pub use prepared_statement::PreparedStatement;
 pub use pseudo_column_usage::PseudoColumnUsage;
 pub use rdbc_type::RdbcType;
 pub use rdbc_type::RdbcType as RDBCType;
 pub use rdbc_url::RdbcUrl;
-pub use ref_value::Ref;
+pub use ref_value::{RdbcRef, Ref};
 pub use result_set::ResultSet;
 pub use result_set_meta_data::ResultSetMetaData;
 pub use row_id::RowId;
@@ -133,8 +133,8 @@ pub use sql_output::SqlOutput as SQLOutput;
 pub use sql_permission::SqlPermission;
 pub use sql_type::SqlType;
 pub use sql_type::SqlType as SQLType;
-pub use sql_xml::SqlXml;
 pub use sql_xml::SqlXml as SQLXML;
+pub use sql_xml::{RdbcSqlXml, SqlXml};
 pub use statement::Statement;
 pub use struct_value::Struct;
 pub use time::Time;
@@ -142,7 +142,7 @@ pub use timestamp::Timestamp;
 pub use types::Types;
 pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
 
-// RDBC resource adapters preserve Java SQL stream and UTF-16 value semantics while exposing
+// RDBC resource handles preserve Java SQL stream and UTF-16 value semantics while exposing
 // Rust-native ownership and naming. They remain single physical resources; cloning a handle
 // shares its cursor and closed state.
 pub use crate::core::{

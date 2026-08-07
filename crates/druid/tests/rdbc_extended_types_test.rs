@@ -1,10 +1,14 @@
 //! URL/Ref/Array/RowId/SQLXML 平台对象完整资源契约。
 
 use druid::core::{
-    DruidError, PhysicalArray, PhysicalCharacterWriter, PhysicalRef, PhysicalResultSet,
-    PhysicalSqlXml, PhysicalXmlResult, PhysicalXmlSource, RdbcArray, RdbcInputStream, RdbcObject,
-    RdbcOutputStream, RdbcRef, RdbcResultSet, RdbcRowId, RdbcSqlXml, RdbcString, RdbcTargetType,
-    RdbcTypeMap, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
+    DruidError, PhysicalCharacterWriter, PhysicalResultSet, PhysicalXmlResult, PhysicalXmlSource,
+    RdbcArray, RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcResultSet, RdbcRowId, RdbcString,
+    RdbcTargetType, RdbcTypeMap, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult,
+    RdbcXmlSource, Value,
+};
+use druid::spi::{
+    RdbcArrayAccess, RdbcRefAccess, RdbcResourceAccess, RdbcResourceCapabilities,
+    RdbcResourceFactory, RdbcSqlXmlAccess,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -64,31 +68,47 @@ impl TestArray {
     }
 }
 
-impl PhysicalArray for TestArray {
-    fn base_type_name(&self) -> Result<String, DruidError> {
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestArray {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::array()
+    }
+
+    async fn free(&self) -> Result<(), DruidError> {
+        self.freed.store(true, Ordering::Release);
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcArrayAccess for TestArray {
+    async fn base_type_name(&self) -> Result<String, DruidError> {
         self.ensure_open()?;
         Ok("INTEGER".to_string())
     }
 
-    fn base_type(&self) -> Result<i32, DruidError> {
+    async fn base_type(&self) -> Result<i32, DruidError> {
         self.ensure_open()?;
         Ok(4)
     }
 
-    fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
         self.ensure_open()?;
         Ok(self.values.clone())
     }
 
-    fn values_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<Vec<RdbcObject>, DruidError> {
-        self.values()
+    async fn values_with_type_map(
+        &self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Vec<RdbcObject>, DruidError> {
+        self.values().await
     }
 
-    fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, DruidError> {
         self.range(index, count)
     }
 
-    fn values_range_with_type_map(
+    async fn values_range_with_type_map(
         &self,
         index: i64,
         count: i32,
@@ -97,44 +117,35 @@ impl PhysicalArray for TestArray {
         self.range(index, count)
     }
 
-    fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
+    async fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
         self.ensure_open()?;
         Ok(result_set())
     }
 
-    fn result_set_with_type_map(
+    async fn result_set_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
     ) -> Result<RdbcResultSet, DruidError> {
-        self.result_set()
+        self.result_set().await
     }
 
-    fn result_set_range(&self, index: i64, count: i32) -> Result<RdbcResultSet, DruidError> {
+    async fn result_set_range(&self, index: i64, count: i32) -> Result<RdbcResultSet, DruidError> {
         self.range(index, count)?;
         Ok(result_set())
     }
 
-    fn result_set_range_with_type_map(
+    async fn result_set_range_with_type_map(
         &self,
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
     ) -> Result<RdbcResultSet, DruidError> {
-        self.result_set_range(index, count)
-    }
-
-    fn free(&self) -> Result<(), DruidError> {
-        self.freed.store(true, Ordering::Release);
-        Ok(())
-    }
-
-    fn is_freed(&self) -> bool {
-        self.freed.load(Ordering::Acquire)
+        self.result_set_range(index, count).await
     }
 }
 
 fn array() -> RdbcArray {
-    RdbcArray::new(Arc::new(TestArray {
+    RdbcResourceFactory::array(Arc::new(TestArray {
         values: vec![
             RdbcObject::from(Value::Int(10)),
             RdbcObject::from(Value::Int(20)),
@@ -149,12 +160,20 @@ struct TestRef {
     value: Mutex<RdbcObject>,
 }
 
-impl PhysicalRef for TestRef {
-    fn base_type_name(&self) -> Result<String, DruidError> {
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestRef {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::reference()
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcRefAccess for TestRef {
+    async fn base_type_name(&self) -> Result<String, DruidError> {
         Ok("schema.kind".to_string())
     }
 
-    fn object(&self) -> Result<RdbcObject, DruidError> {
+    async fn object(&self) -> Result<RdbcObject, DruidError> {
         Ok(self
             .value
             .lock()
@@ -162,11 +181,14 @@ impl PhysicalRef for TestRef {
             .clone())
     }
 
-    fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, DruidError> {
-        self.object()
+    async fn object_with_type_map(
+        &self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcObject, DruidError> {
+        self.object().await
     }
 
-    fn set_object(&self, value: RdbcObject) -> Result<(), DruidError> {
+    async fn set_object(&self, value: RdbcObject) -> Result<(), DruidError> {
         *self
             .value
             .lock()
@@ -216,29 +238,33 @@ impl TestSqlXml {
     }
 }
 
-impl PhysicalSqlXml for TestSqlXml {
-    fn free(&self) -> Result<(), DruidError> {
+#[async_trait::async_trait]
+impl RdbcResourceAccess for TestSqlXml {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::sql_xml()
+    }
+
+    async fn free(&self) -> Result<(), DruidError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
+}
 
-    fn is_freed(&self) -> bool {
-        self.freed.load(Ordering::Acquire)
-    }
-
-    fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+#[async_trait::async_trait]
+impl RdbcSqlXmlAccess for TestSqlXml {
+    async fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         self.ensure_open()?;
         Ok(RdbcInputStream::from_bytes(
-            self.string()?.to_rust_string()?.into_bytes(),
+            self.string().await?.to_rust_string()?.into_bytes(),
         ))
     }
 
-    fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
         self.ensure_open()?;
         Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    fn character_stream(&self) -> Result<druid::core::RdbcReader, DruidError> {
+    async fn character_stream(&self) -> Result<druid::core::RdbcReader, DruidError> {
         self.ensure_open()?;
         Ok(druid::core::RdbcReader::from_utf16(
             self.value
@@ -249,12 +275,12 @@ impl PhysicalSqlXml for TestSqlXml {
         ))
     }
 
-    fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
         self.ensure_open()?;
         Ok(RdbcWriter::new(TestCharacterWriter))
     }
 
-    fn string(&self) -> Result<RdbcString, DruidError> {
+    async fn string(&self) -> Result<RdbcString, DruidError> {
         self.ensure_open()?;
         Ok(self
             .value
@@ -263,7 +289,7 @@ impl PhysicalSqlXml for TestSqlXml {
             .clone())
     }
 
-    fn set_string(&self, value: &RdbcString) -> Result<(), DruidError> {
+    async fn set_string(&self, value: &RdbcString) -> Result<(), DruidError> {
         self.ensure_open()?;
         *self
             .value
@@ -272,7 +298,7 @@ impl PhysicalSqlXml for TestSqlXml {
         Ok(())
     }
 
-    fn source(
+    async fn source(
         &self,
         _representation: &RdbcXmlRepresentationType,
     ) -> Result<RdbcXmlSource, DruidError> {
@@ -280,7 +306,7 @@ impl PhysicalSqlXml for TestSqlXml {
         Ok(RdbcXmlSource::new(Arc::new(TestXmlSource)))
     }
 
-    fn result(
+    async fn result(
         &self,
         _representation: &RdbcXmlRepresentationType,
     ) -> Result<RdbcXmlResult, DruidError> {
@@ -289,8 +315,8 @@ impl PhysicalSqlXml for TestSqlXml {
     }
 }
 
-#[test]
-fn array_and_ref_preserve_complete_rdbc_operations_and_identity() {
+#[tokio::test]
+async fn array_and_ref_preserve_complete_rdbc_operations_and_identity() {
     let mut type_map = RdbcTypeMap::new();
     assert!(type_map.is_empty());
     assert_eq!(type_map.insert("schema.kind", RdbcTargetType::String), None);
@@ -303,29 +329,36 @@ fn array_and_ref_preserve_complete_rdbc_operations_and_identity() {
     let value = array();
     assert_eq!(value, value.clone());
     assert_ne!(value, array());
-    assert!(format!("{value:?}").contains("freed: false"));
-    assert_eq!(value.base_type_name().unwrap(), "INTEGER");
-    assert_eq!(value.base_type().unwrap(), 4);
-    assert_eq!(value.values().unwrap().len(), 3);
-    assert_eq!(value.values_with_type_map(&type_map).unwrap().len(), 3);
+    assert!(format!("{value:?}").contains("state: Open"));
+    assert_eq!(value.base_type_name().await.unwrap(), "INTEGER");
+    assert_eq!(value.base_type().await.unwrap(), 4);
+    assert_eq!(value.values().await.unwrap().len(), 3);
     assert_eq!(
-        value.values_range(2, 2).unwrap(),
+        value.values_with_type_map(&type_map).await.unwrap().len(),
+        3
+    );
+    assert_eq!(
+        value.values_range(2, 2).await.unwrap(),
         vec![
             RdbcObject::from(Value::Int(20)),
             RdbcObject::from(Value::Int(30))
         ]
     );
     assert_eq!(
-        value.values_range_with_type_map(1, 1, &type_map).unwrap(),
+        value
+            .values_range_with_type_map(1, 1, &type_map)
+            .await
+            .unwrap(),
         vec![RdbcObject::from(Value::Int(10))]
     );
-    assert!(value.values_range(0, 1).is_err());
+    assert!(value.values_range(0, 1).await.is_err());
     for result_set in [
-        value.result_set().unwrap(),
-        value.result_set_with_type_map(&type_map).unwrap(),
-        value.result_set_range(1, 1).unwrap(),
+        value.result_set().await.unwrap(),
+        value.result_set_with_type_map(&type_map).await.unwrap(),
+        value.result_set_range(1, 1).await.unwrap(),
         value
             .result_set_range_with_type_map(2, 1, &type_map)
+            .await
             .unwrap(),
     ] {
         assert!(!result_set.is_closed());
@@ -334,31 +367,32 @@ fn array_and_ref_preserve_complete_rdbc_operations_and_identity() {
         assert!(result_set.is_closed());
     }
     assert!(!value.is_freed());
-    value.free().unwrap();
+    value.free().await.unwrap();
     assert!(value.is_freed());
-    assert!(value.values().is_err());
+    assert!(value.values().await.is_err());
 
-    let reference = RdbcRef::new(Arc::new(TestRef {
+    let reference = RdbcResourceFactory::reference(Arc::new(TestRef {
         value: Mutex::new(RdbcObject::from(Value::Int(1))),
     }));
     assert_eq!(reference, reference.clone());
     assert!(format!("{reference:?}").contains("RdbcRef"));
-    assert_eq!(reference.base_type_name().unwrap(), "schema.kind");
+    assert_eq!(reference.base_type_name().await.unwrap(), "schema.kind");
     assert_eq!(
-        reference.object_with_type_map(&type_map).unwrap(),
+        reference.object_with_type_map(&type_map).await.unwrap(),
         RdbcObject::from(Value::Int(1))
     );
     reference
         .set_object(RdbcObject::from(Value::String("next".to_string())))
+        .await
         .unwrap();
     assert_eq!(
-        reference.object().unwrap(),
+        reference.object().await.unwrap(),
         RdbcObject::from(Value::String("next".to_string()))
     );
 }
 
-#[test]
-fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle() {
+#[tokio::test]
+async fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle() {
     let row_id = RdbcRowId::new(vec![0, 1, 255]);
     assert_eq!(row_id.bytes(), &[0, 1, 255]);
     assert_eq!(row_id, RdbcRowId::new(vec![0, 1, 255]));
@@ -367,38 +401,48 @@ fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle() {
     assert_eq!(url.external_form(), "https://example.test/a?b=1#c");
     assert_eq!(url, druid::core::RdbcUrl::from(url.external_form()));
 
-    let xml = RdbcSqlXml::new(Arc::new(TestSqlXml {
+    let xml = RdbcResourceFactory::sql_xml(Arc::new(TestSqlXml {
         value: Mutex::new(RdbcString::from("<root>值</root>")),
         freed: AtomicBool::new(false),
     }));
     assert_eq!(xml, xml.clone());
-    assert!(format!("{xml:?}").contains("freed: false"));
+    assert!(format!("{xml:?}").contains("state: Open"));
     assert_eq!(
-        xml.binary_stream().unwrap().read_to_end().unwrap(),
+        xml.binary_stream().await.unwrap().read_to_end().unwrap(),
         "<root>值</root>".as_bytes()
     );
     assert_eq!(
-        xml.character_stream().unwrap().read_to_string().unwrap(),
+        xml.character_stream()
+            .await
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
         "<root>值</root>"
     );
     xml.set_binary_stream()
+        .await
         .unwrap()
         .write(b"<binary/>")
         .unwrap();
     xml.set_character_stream()
+        .await
         .unwrap()
         .write_str("<character/>")
         .unwrap();
     xml.set_string(&RdbcString::from_utf16(vec![0xD800]))
+        .await
         .unwrap();
-    assert_eq!(xml.string().unwrap().as_utf16(), &[0xD800]);
-    let source = xml.source(&RdbcXmlRepresentationType::Dom).unwrap();
+    assert_eq!(xml.string().await.unwrap().as_utf16(), &[0xD800]);
+    let source = xml.source(&RdbcXmlRepresentationType::Dom).await.unwrap();
     assert_eq!(source, source.clone());
     assert!(format!("{source:?}").contains("RdbcXmlSource"));
-    let result = xml.result(&RdbcXmlRepresentationType::Stream).unwrap();
+    let result = xml
+        .result(&RdbcXmlRepresentationType::Stream)
+        .await
+        .unwrap();
     assert_eq!(result, result.clone());
     assert!(format!("{result:?}").contains("RdbcXmlResult"));
-    xml.free().unwrap();
+    xml.free().await.unwrap();
     assert!(xml.is_freed());
-    assert!(xml.string().is_err());
+    assert!(xml.string().await.is_err());
 }

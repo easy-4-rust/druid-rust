@@ -250,6 +250,30 @@ impl std::error::Error for DruidError {
 }
 
 impl DruidError {
+    /// Creates the standard RDBC exception used when a driver does not implement an operation.
+    #[must_use]
+    pub fn feature_not_supported(operation: &'static str) -> Self {
+        Self::SqlException(Box::new(
+            SqlException::new(
+                0,
+                Some("0A000".to_string()),
+                Some(format!("RDBC operation is not supported: {operation}")),
+            )
+            .with_class_name("java.sql.SQLFeatureNotSupportedException")
+            .with_assignable_type("java.sql.SQLNonTransientException"),
+        ))
+    }
+
+    /// Creates the standard SQL exception raised after a resource was freed or invalidated.
+    #[must_use]
+    pub fn rdbc_resource_closed(resource_name: &'static str) -> Self {
+        Self::SqlException(Box::new(SqlException::new(
+            0,
+            Some("HY010".to_string()),
+            Some(format!("{resource_name} has been freed or invalidated")),
+        )))
+    }
+
     /// 返回稳定的错误类型名称，供统计管理面映射 Java `Throwable#getClass()`。
     #[must_use]
     pub fn class_name(&self) -> &str {

@@ -26,19 +26,19 @@ impl RbdcPreparedStatement {
     }
 
     /// 返回当前连续参数槽。
-    pub(crate) fn materialized_parameters(
+    pub(crate) async fn materialized_parameters(
         &self,
         parameter_count: usize,
     ) -> Result<Vec<Value>, DruidError> {
-        self.parameter_state.values(parameter_count)
+        self.parameter_state.values(parameter_count).await
     }
 
     /// 消费物理 batch 快照。
-    pub(crate) fn take_batches(
+    pub(crate) async fn take_batches(
         &self,
         expected_count: usize,
     ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
-        self.parameter_state.take_batches(expected_count)
+        self.parameter_state.take_batches(expected_count).await
     }
 }
 
@@ -164,8 +164,8 @@ mod tests {
     use super::RbdcPreparedStatement;
     use druid::core::{PhysicalPreparedStatement, PreparedInputParameter, Value};
 
-    #[test]
-    fn delegates_statement_state_and_owns_parameter_lifecycle() {
+    #[tokio::test]
+    async fn delegates_statement_state_and_owns_parameter_lifecycle() {
         let statement = RbdcPreparedStatement::new("select ?");
         assert_eq!(statement.sql(), "select ?");
         assert!(statement.as_any().is::<RbdcPreparedStatement>());
@@ -193,21 +193,21 @@ mod tests {
             .set_parameter(1, &PreparedInputParameter::Int(7))
             .unwrap();
         assert_eq!(
-            statement.materialized_parameters(1).unwrap(),
+            statement.materialized_parameters(1).await.unwrap(),
             vec![Value::Int(7)]
         );
         statement
             .add_parameter_batch(&[PreparedInputParameter::Int(7)])
             .unwrap();
         assert_eq!(
-            statement.take_batches(1).unwrap(),
+            statement.take_batches(1).await.unwrap(),
             Some(vec![vec![Value::Int(7)]])
         );
         statement.add_batch(&[Value::Int(8)]).unwrap();
         statement.clear_batch().unwrap();
-        assert_eq!(statement.take_batches(0).unwrap(), None);
+        assert_eq!(statement.take_batches(0).await.unwrap(), None);
         statement.clear_parameters().unwrap();
-        assert!(statement.materialized_parameters(1).is_err());
+        assert!(statement.materialized_parameters(1).await.is_err());
 
         statement.close().unwrap();
         assert!(statement.is_closed());

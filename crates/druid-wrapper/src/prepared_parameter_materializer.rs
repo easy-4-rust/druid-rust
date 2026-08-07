@@ -84,40 +84,9 @@ impl PreparedParameterMaterializer {
         })
     }
 
-    fn rdbc_object(value: &RdbcObject) -> Result<Value, DruidError> {
+    fn immediate_rdbc_object(value: &RdbcObject) -> Result<Value, DruidError> {
         match value {
             RdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
-            RdbcObject::SqlXml(value) => value.string()?.to_rust_string().map(Value::String),
-            RdbcObject::Blob(value) => {
-                let length = i32::try_from(value.length()?).map_err(|_| {
-                    DruidError::InvalidArgument(
-                        "Blob length exceeds RDBC getBytes int range".to_string(),
-                    )
-                })?;
-                value.get_bytes(1, length).map(Value::Bytes)
-            }
-            RdbcObject::Clob(value) => {
-                let length = i32::try_from(value.length()?).map_err(|_| {
-                    DruidError::InvalidArgument(
-                        "Clob length exceeds RDBC getSubString int range".to_string(),
-                    )
-                })?;
-                value
-                    .get_sub_string(1, length)?
-                    .to_rust_string()
-                    .map(Value::String)
-            }
-            RdbcObject::NClob(value) => {
-                let length = i32::try_from(value.length()?).map_err(|_| {
-                    DruidError::InvalidArgument(
-                        "NClob length exceeds RDBC getSubString int range".to_string(),
-                    )
-                })?;
-                value
-                    .get_sub_string(1, length)?
-                    .to_rust_string()
-                    .map(Value::String)
-            }
             RdbcObject::CharacterStream(value) | RdbcObject::NCharacterStream(value) => {
                 Self::read_reader(value, RdbcCharacterLength::Unspecified).map(Value::String)
             }
@@ -125,8 +94,71 @@ impl PreparedParameterMaterializer {
         }
     }
 
-    /// 在物理 setter 边界物化一个完整参数描述符。
-    pub(crate) fn materialize(parameter: &PreparedInputParameter) -> Result<Value, DruidError> {
+    async fn deferred_rdbc_object(value: &RdbcObject) -> Result<Value, DruidError> {
+        match value {
+            RdbcObject::SqlXml(value) => value.string().await?.to_rust_string().map(Value::String),
+            RdbcObject::Blob(value) => {
+                let length = i32::try_from(value.length().await?).map_err(|_| {
+                    DruidError::InvalidArgument(
+                        "Blob length exceeds RDBC getBytes int range".to_string(),
+                    )
+                })?;
+                value.get_bytes(1, length).await.map(Value::Bytes)
+            }
+            RdbcObject::Clob(value) => {
+                let length = i32::try_from(value.length().await?).map_err(|_| {
+                    DruidError::InvalidArgument(
+                        "Clob length exceeds RDBC getSubString int range".to_string(),
+                    )
+                })?;
+                value
+                    .get_sub_string(1, length)
+                    .await?
+                    .to_rust_string()
+                    .map(Value::String)
+            }
+            RdbcObject::NClob(value) => {
+                let length = i32::try_from(value.length().await?).map_err(|_| {
+                    DruidError::InvalidArgument(
+                        "NClob length exceeds RDBC getSubString int range".to_string(),
+                    )
+                })?;
+                value
+                    .get_sub_string(1, length)
+                    .await?
+                    .to_rust_string()
+                    .map(Value::String)
+            }
+            _ => Self::immediate_rdbc_object(value),
+        }
+    }
+
+    /// Materializes parameters that do not require asynchronous RDBC resource access.
+    ///
+    /// `None` means that the descriptor must be retained and materialized by `materialize()` at
+    /// the asynchronous execution boundary.
+    pub(crate) fn materialize_immediate(
+        parameter: &PreparedInputParameter,
+    ) -> Result<Option<Value>, DruidError> {
+        if matches!(
+            parameter,
+            PreparedInputParameter::Blob(Some(_))
+                | PreparedInputParameter::Clob(Some(_))
+                | PreparedInputParameter::NClob(Some(_))
+                | PreparedInputParameter::SqlXml(Some(_))
+                | PreparedInputParameter::Object {
+                    value: Some(
+                        RdbcObject::Blob(_)
+                            | RdbcObject::Clob(_)
+                            | RdbcObject::NClob(_)
+                            | RdbcObject::SqlXml(_)
+                    ),
+                    ..
+                }
+        ) {
+            return Ok(None);
+        }
+
         match parameter {
             PreparedInputParameter::AsciiStream { stream, length } => stream
                 .as_ref()
@@ -141,7 +173,7 @@ impl PreparedParameterMaterializer {
                         })
                 })
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
+                .map(|value| Some(value.unwrap_or(Value::Null))),
             PreparedInputParameter::UnicodeStream { stream, length } => stream
                 .as_ref()
                 .map(|stream| {
@@ -155,13 +187,13 @@ impl PreparedParameterMaterializer {
                         })
                 })
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
+                .map(|value| Some(value.unwrap_or(Value::Null))),
             PreparedInputParameter::BinaryStream { stream, length }
             | PreparedInputParameter::BlobStream { stream, length } => stream
                 .as_ref()
                 .map(|stream| Self::read_stream(stream, *length).map(Value::Bytes))
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
+                .map(|value| Some(value.unwrap_or(Value::Null))),
             PreparedInputParameter::CharacterStream { reader, length }
             | PreparedInputParameter::NCharacterStream { reader, length }
             | PreparedInputParameter::ClobReader { reader, length }
@@ -169,24 +201,42 @@ impl PreparedParameterMaterializer {
                 .as_ref()
                 .map(|reader| Self::read_reader(reader, *length).map(Value::String))
                 .transpose()
-                .map(|value| value.unwrap_or(Value::Null)),
-            PreparedInputParameter::Blob(Some(value)) => {
-                Self::rdbc_object(&RdbcObject::Blob(value.clone()))
-            }
-            PreparedInputParameter::Clob(Some(value)) => {
-                Self::rdbc_object(&RdbcObject::Clob(value.clone()))
-            }
-            PreparedInputParameter::NClob(Some(value)) => {
-                Self::rdbc_object(&RdbcObject::NClob(value.clone()))
-            }
-            PreparedInputParameter::RowId(Some(value)) => Ok(Value::Bytes(value.bytes().to_vec())),
-            PreparedInputParameter::SqlXml(Some(value)) => {
-                value.string()?.to_rust_string().map(Value::String)
+                .map(|value| Some(value.unwrap_or(Value::Null))),
+            PreparedInputParameter::RowId(Some(value)) => {
+                Ok(Some(Value::Bytes(value.bytes().to_vec())))
             }
             PreparedInputParameter::Object {
                 value: Some(value), ..
-            } => Self::rdbc_object(value),
-            _ => parameter.scalar_value(),
+            } => Self::immediate_rdbc_object(value).map(Some),
+            _ => parameter.scalar_value().map(Some),
+        }
+    }
+
+    /// Materializes one complete descriptor at an asynchronous execution boundary.
+    pub(crate) async fn materialize(
+        parameter: &PreparedInputParameter,
+    ) -> Result<Value, DruidError> {
+        if let Some(value) = Self::materialize_immediate(parameter)? {
+            return Ok(value);
+        }
+
+        match parameter {
+            PreparedInputParameter::Blob(Some(value)) => {
+                Self::deferred_rdbc_object(&RdbcObject::Blob(value.clone())).await
+            }
+            PreparedInputParameter::Clob(Some(value)) => {
+                Self::deferred_rdbc_object(&RdbcObject::Clob(value.clone())).await
+            }
+            PreparedInputParameter::NClob(Some(value)) => {
+                Self::deferred_rdbc_object(&RdbcObject::NClob(value.clone())).await
+            }
+            PreparedInputParameter::SqlXml(Some(value)) => {
+                value.string().await?.to_rust_string().map(Value::String)
+            }
+            PreparedInputParameter::Object {
+                value: Some(value), ..
+            } => Self::deferred_rdbc_object(value).await,
+            _ => unreachable!("immediate parameters already returned"),
         }
     }
 }
@@ -199,14 +249,15 @@ mod tests {
         RdbcRowId, RdbcStreamLength, Value,
     };
 
-    #[test]
-    fn materializes_stream_reader_object_and_null_families_at_setter_time() {
+    #[tokio::test]
+    async fn materializes_stream_reader_object_and_null_families_at_execution_time() {
         let ascii = RdbcInputStream::from_bytes(b"ascii-tail".to_vec());
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::AsciiStream {
                 stream: Some(ascii.clone()),
                 length: RdbcStreamLength::Int(5),
             })
+            .await
             .unwrap(),
             Value::String("ascii".to_string())
         );
@@ -217,6 +268,7 @@ mod tests {
                 stream: Some(RdbcInputStream::from_bytes("国字".as_bytes().to_vec())),
                 length: i32::try_from("国字".len()).unwrap(),
             })
+            .await
             .unwrap(),
             Value::String("国字".to_string())
         );
@@ -225,6 +277,7 @@ mod tests {
                 stream: Some(RdbcInputStream::from_bytes([1, 2, 3])),
                 length: RdbcStreamLength::Long(3),
             })
+            .await
             .unwrap(),
             Value::Bytes(vec![1, 2, 3])
         );
@@ -233,6 +286,7 @@ mod tests {
                 reader: Some(RdbcReader::from_string("A😀B")),
                 length: RdbcCharacterLength::Int(3),
             })
+            .await
             .unwrap(),
             Value::String("A😀".to_string())
         );
@@ -244,6 +298,7 @@ mod tests {
                 target_sql_type: None,
                 scale_or_length: None,
             })
+            .await
             .unwrap(),
             Value::String("对象".to_string())
         );
@@ -251,6 +306,7 @@ mod tests {
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::RowId(Some(
                 RdbcRowId::new([7, 8])
             )))
+            .await
             .unwrap(),
             Value::Bytes(vec![7, 8])
         );
@@ -271,14 +327,16 @@ mod tests {
             PreparedInputParameter::RowId(None),
         ] {
             assert_eq!(
-                PreparedParameterMaterializer::materialize(&parameter).unwrap(),
+                PreparedParameterMaterializer::materialize(&parameter)
+                    .await
+                    .unwrap(),
                 Value::Null
             );
         }
     }
 
-    #[test]
-    fn rejects_invalid_lengths_short_resources_and_invalid_encodings() {
+    #[tokio::test]
+    async fn rejects_invalid_lengths_short_resources_and_invalid_encodings() {
         let cases = [
             PreparedInputParameter::BinaryStream {
                 stream: Some(RdbcInputStream::from_bytes([1])),
@@ -298,7 +356,9 @@ mod tests {
             },
         ];
         for parameter in cases {
-            assert!(PreparedParameterMaterializer::materialize(&parameter).is_err());
+            assert!(PreparedParameterMaterializer::materialize(&parameter)
+                .await
+                .is_err());
         }
 
         for parameter in [
@@ -319,7 +379,9 @@ mod tests {
                 length: RdbcCharacterLength::Int(1),
             },
         ] {
-            assert!(PreparedParameterMaterializer::materialize(&parameter).is_err());
+            assert!(PreparedParameterMaterializer::materialize(&parameter)
+                .await
+                .is_err());
         }
     }
 }
