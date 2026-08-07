@@ -252,6 +252,7 @@ async fn real_sqlite_database_error_flows_through_sorter_and_discards_physical_c
             *disposition_for_callback
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(disposition);
+            false
         }),
     )
     .with_exception_sorter(Arc::new(SqliteDatabaseErrorSorter));
@@ -267,9 +268,17 @@ async fn real_sqlite_database_error_flows_through_sorter_and_discards_physical_c
     assert!(exception.message().is_some_and(|message| {
         message.contains("table_that_does_not_exist") || message.contains("no such table")
     }));
-    assert!(connection
-        .connection_holder()
-        .is_some_and(druid::core::DruidConnectionHolder::is_discard));
+    // Java handleFatalError 当场 discard；回调已经取得物理连接，逻辑对象不再
+    // 保留一个仅标记 discard 的 holder。
+    assert!(connection.connection_holder().is_none());
+    assert!(matches!(
+        *observed_disposition
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        Some(ConnectionRecycleDisposition::Discard {
+            recycle_error: None
+        })
+    ));
 
     connection
         .close()

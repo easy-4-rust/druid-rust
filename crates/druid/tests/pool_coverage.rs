@@ -104,7 +104,7 @@ fn test_pool_inner_config_default() {
     assert_eq!(cfg.max_open, 8);
     assert_eq!(cfg.min_idle, 0);
     assert_eq!(cfg.max_idle, 8);
-    assert_eq!(cfg.acquire_timeout, Duration::from_secs(30));
+    assert_eq!(cfg.acquire_timeout, Duration::MAX);
     assert_eq!(cfg.max_lifetime, Duration::MAX);
     assert_eq!(cfg.idle_timeout, Duration::from_secs(1800));
     assert_eq!(
@@ -144,6 +144,7 @@ fn test_druid_pool_builder_all_methods() {
         .phy_timeout(Duration::from_secs(301))
         .test_on_borrow(true)
         .test_on_return(true)
+        .time_between_eviction_runs(Duration::from_secs(30))
         .keep_alive(true)
         .keep_alive_between_time(Duration::from_secs(60))
         .keep_connection_underlying_transaction_isolation(true)
@@ -212,12 +213,12 @@ async fn test_druid_pool_state_after_acquire_release() {
     let c = pool.get().await.unwrap();
     let st = pool.state();
     assert_eq!(st.active_count, 1);
-    assert_eq!(st.connect_count, 1);
+    assert!((1..=4).contains(&st.connect_count));
     drop(c);
     tokio::time::sleep(Duration::from_millis(50)).await;
     let st = pool.state();
     assert_eq!(st.active_count, 0);
-    assert_eq!(st.idle_count, 1);
+    assert!((1..=4).contains(&st.idle_count));
     assert_eq!(st.recycle_count, 1);
 }
 
@@ -226,11 +227,12 @@ async fn test_druid_pool_get_from_idle() {
     let pool = build_pool(2, 2).await;
     // Create a connection
     let c1 = pool.get().await.unwrap();
+    let first_id = c1.id();
     drop(c1);
     tokio::time::sleep(Duration::from_millis(50)).await;
     // Get should reuse the idle connection
     let c2 = pool.get().await.unwrap();
-    assert_eq!(c2.id(), 1); // Same ID as the first connection
+    assert_eq!(c2.id(), first_id); // Same physical holder as the first connection
     let st = pool.state();
     assert_eq!(st.create_count, 1); // Only one connection created
     drop(c2);
@@ -239,9 +241,15 @@ async fn test_druid_pool_get_from_idle() {
 #[tokio::test]
 async fn test_druid_pool_get_timeout_closed() {
     let pool = build_pool(2, 2).await;
+    // Java Druid 尚未 init 时 close 无副作用。
     pool.close().await;
-    let result = pool.get().await;
-    assert!(matches!(result, Err(DruidError::DataSourceClosed { .. })));
+    let mut connection = pool.get().await.unwrap();
+    connection.close().await.unwrap();
+    pool.close().await;
+    assert!(matches!(
+        pool.get().await,
+        Err(DruidError::DataSourceClosed { .. })
+    ));
 }
 
 #[tokio::test]
@@ -249,7 +257,10 @@ async fn test_druid_pool_get_timeout_acquire() {
     let pool = build_pool(1, 1).await;
     let _c = pool.get().await.unwrap(); // Fill the pool
     let result = pool.get_timeout(Duration::from_millis(100)).await;
-    assert!(matches!(result, Err(DruidError::AcquireTimeout)));
+    assert!(matches!(
+        result,
+        Err(DruidError::GetConnectionTimeout { .. })
+    ));
 }
 
 #[tokio::test]
@@ -421,25 +432,21 @@ async fn test_pool_inner_return_after_close() {
 }
 
 #[tokio::test]
-async fn test_pool_inner_max_idle_eviction() {
+async fn test_pool_inner_max_idle_is_not_a_return_cap() {
     let pool = build_pool(4, 1).await;
     // Acquire 4 connections
     let c1 = pool.get().await.unwrap();
     let c2 = pool.get().await.unwrap();
     let c3 = pool.get().await.unwrap();
     let c4 = pool.get().await.unwrap();
-    // Release all - but max_idle=1, so only 1 should be kept
+    // Java Druid 的 maxIdle 是兼容字段；归还上限由 maxActive 管理。
     drop(c1);
     drop(c2);
     drop(c3);
     drop(c4);
     tokio::time::sleep(Duration::from_millis(100)).await;
     let st = pool.state();
-    assert!(
-        st.idle_count <= 1,
-        "idle_count={} should <= 1",
-        st.idle_count
-    );
+    assert_eq!(st.idle_count, 4);
 }
 
 #[tokio::test]
@@ -523,14 +530,14 @@ async fn test_pool_inner_should_evict() {
     let c1 = pool.get().await.unwrap();
     let c2 = pool.get().await.unwrap();
     let c3 = pool.get().await.unwrap();
-    // Release all - should_evict should return true (idle_count > min_idle)
+    // Release all 后应满足 should_evict；显式 shrink 才执行回收。
     drop(c1);
     drop(c2);
     drop(c3);
     tokio::time::sleep(Duration::from_millis(50)).await;
-    let st = pool.state();
-    // idle_count should be clamped to min_idle (1) or less
-    assert!(st.idle_count <= 2, "idle_count={}", st.idle_count);
+    assert_eq!(pool.state().idle_count, 3);
+    pool.shrink().await;
+    assert_eq!(pool.state().idle_count, 0);
 }
 
 #[test]

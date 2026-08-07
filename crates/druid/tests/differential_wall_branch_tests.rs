@@ -37,21 +37,26 @@ fn test_wall_multi_statement_single() {
 
 #[test]
 fn test_wall_multi_statement_two_valid() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(WallConfig::builder().multi_statement_allow(true).build());
     // Two valid statements separated by semicolon
     assert!(wall.check("SELECT 1; SELECT 2").is_ok());
 }
 
 #[test]
 fn test_wall_multi_statement_one_drop() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(
+        WallConfig::builder()
+            .multi_statement_allow(true)
+            .drop_table_allow(false)
+            .build(),
+    );
     let result = wall.check("SELECT 1; DROP TABLE users");
     assert!(result.is_err());
 }
 
 #[test]
 fn test_wall_multi_statement_all_valid() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(WallConfig::builder().multi_statement_allow(true).build());
     let result =
         wall.check("SELECT 1; INSERT INTO t (c) VALUES (1); UPDATE t SET c = 1 WHERE id = 1");
     assert!(result.is_ok());

@@ -46,8 +46,10 @@ impl StatQuery {
     pub fn from_parameters(
         parameters: &HashMap<String, String>,
     ) -> Result<Self, MonitorStatServiceError> {
-        let mut query = Self::default();
-        query.service_name = parameters.get("serviceName").cloned();
+        let mut query = Self {
+            service_name: parameters.get("serviceName").cloned(),
+            ..Self::default()
+        };
         if let Some(order_by) = parameters.get("orderBy") {
             query.order_by.clone_from(order_by);
         }

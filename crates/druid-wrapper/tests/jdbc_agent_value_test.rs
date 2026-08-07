@@ -1,3 +1,5 @@
+#![cfg(feature = "jdbc-agent")]
+
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::Value;

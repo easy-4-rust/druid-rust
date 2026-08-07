@@ -500,13 +500,13 @@ impl Lexer {
                 return Ok(self.finish_simple(Token::Eof, self.pos, 0));
             }
 
-            if self.ch == u16::from(b'N') || self.ch == u16::from(b'n') {
-                if self.char_at(self.pos + 1) == u16::from(b'\'') {
-                    self.pos += 1;
-                    self.ch = u16::from(b'\'');
-                    self.scan_string(Token::LiteralNchars)?;
-                    return Ok(Token::LiteralNchars);
-                }
+            if (self.ch == u16::from(b'N') || self.ch == u16::from(b'n'))
+                && self.char_at(self.pos + 1) == u16::from(b'\'')
+            {
+                self.pos += 1;
+                self.ch = u16::from(b'\'');
+                self.scan_string(Token::LiteralNchars)?;
+                return Ok(Token::LiteralNchars);
             }
 
             // Java CharTypes 会把全角左括号判为 identifier 首字符，Lexer 在进入

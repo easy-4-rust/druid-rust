@@ -1186,6 +1186,7 @@ impl DruidPool {
 
     async fn close_resources(&self) {
         if !self.initialized.load(Ordering::Acquire) {
+            self.destroy_initialized_filters().await;
             return;
         }
         if self.is_closed() {
@@ -1224,6 +1225,10 @@ impl DruidPool {
                 let _ = close_worker_task.await;
             }
         }
+        self.destroy_initialized_filters().await;
+    }
+
+    async fn destroy_initialized_filters(&self) {
         if self
             .filters_initialized
             .compare_exchange(true, false, Ordering::AcqRel, Ordering::Acquire)

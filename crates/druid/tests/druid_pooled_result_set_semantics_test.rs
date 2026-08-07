@@ -3496,7 +3496,7 @@ fn assert_default_scalar_successes(result_set: &RowSetResultSet) {
     assert!(result_set.boolean(3).unwrap());
     assert!(result_set.boolean(4).unwrap());
     assert!(result_set.boolean(5).unwrap());
-    assert_eq!(result_set.boolean_by_label("c6").unwrap(), false);
+    assert!(!result_set.boolean_by_label("c6").unwrap());
     assert_eq!(result_set.long(1).unwrap(), 0);
     assert_eq!(result_set.long(2).unwrap(), 1);
     assert_eq!(result_set.long(3).unwrap(), 42);

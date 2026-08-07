@@ -2,10 +2,13 @@
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 //! 对照对象：
+//!
 //! - `DruidPooledConnection#close()`
 //! - `DruidDataSource#recycle(DruidPooledConnection)`
 //! - `DruidConnectionHolder#reset()`
+//!
 //! 对照测试：
+//!
 //! - `DruidDataSourceTest_recycle`
 //! - `DruidDataSourceTest_recycle2`
 //! - `DruidDataSourceTest9_phyMaxUseCount`
@@ -13,7 +16,7 @@
 
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalConnectionFactory, Row, Value,
+    PhysicalConnectionFactory, Row, ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -72,7 +75,7 @@ impl PhysicalConnection for TrackingConnection {
     }
 
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
-        Ok(Vec::new())
+        Ok(vec![Row::new(vec![Value::Int(1)])])
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
@@ -221,15 +224,38 @@ impl PhysicalConnection for TrackingConnection {
 struct TrackingFactory {
     sequence: AtomicU64,
     states: Mutex<Vec<Arc<Mutex<ConnectionState>>>>,
-    validation_count: AtomicUsize,
-    validation_succeeds: AtomicBool,
+    validation_count: Arc<AtomicUsize>,
+    validation_succeeds: Arc<AtomicBool>,
     initial_state: Mutex<Option<ConnectionState>>,
+}
+
+struct TrackingValidConnectionChecker {
+    validation_count: Arc<AtomicUsize>,
+    validation_succeeds: Arc<AtomicBool>,
+}
+
+#[async_trait::async_trait]
+impl ValidConnectionChecker for TrackingValidConnectionChecker {
+    async fn is_valid_connection(
+        &self,
+        connection: &mut Box<dyn PhysicalConnection>,
+        _query: Option<&str>,
+        _validation_query_timeout: Duration,
+    ) -> Result<bool, DruidError> {
+        self.validation_count.fetch_add(1, Ordering::Relaxed);
+        if self.validation_succeeds.load(Ordering::Relaxed) {
+            connection.ping().await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 impl TrackingFactory {
     fn new() -> Self {
         Self {
-            validation_succeeds: AtomicBool::new(true),
+            validation_succeeds: Arc::new(AtomicBool::new(true)),
             ..Self::default()
         }
     }
@@ -414,11 +440,21 @@ async fn rollback_failure_is_swallowed_counted_and_connection_discarded() {
 #[tokio::test]
 async fn test_on_return_validates_and_invalid_connection_is_not_recycled() {
     let factory = Arc::new(TrackingFactory::new());
-    let pool = build_pool(factory.clone(), |builder| builder.test_on_return(true)).await;
+    let checker = Arc::new(TrackingValidConnectionChecker {
+        validation_count: Arc::clone(&factory.validation_count),
+        validation_succeeds: Arc::clone(&factory.validation_succeeds),
+    });
+    let pool = build_pool(factory.clone(), |builder| {
+        builder
+            .test_on_return(true)
+            .valid_connection_checker(checker)
+    })
+    .await;
 
     let mut first = pool.get().await.expect("connection must open");
     first.close().await.expect("valid connection must recycle");
-    assert_eq!(factory.validation_count.load(Ordering::Relaxed), 1);
+    // 一次物理创建校验 + 一次 testOnReturn 校验。
+    assert_eq!(factory.validation_count.load(Ordering::Relaxed), 2);
     assert_eq!(pool.state().recycle_count, 1);
 
     let mut second = pool.get().await.expect("idle connection must open");
@@ -429,7 +465,7 @@ async fn test_on_return_validates_and_invalid_connection_is_not_recycled() {
         .expect("validation failure is swallowed on close");
 
     let pool_state = pool.state();
-    assert_eq!(factory.validation_count.load(Ordering::Relaxed), 2);
+    assert_eq!(factory.validation_count.load(Ordering::Relaxed), 3);
     assert_eq!(pool_state.idle_count, 0);
     assert_eq!(pool_state.recycle_count, 1);
     assert_eq!(pool_state.recycle_error_count, 0);
@@ -636,16 +672,23 @@ async fn initialization_failure_closes_connection_and_releases_capacity() {
         fail_operation: Some("set_read_only"),
         ..ConnectionState::default()
     });
-    let pool = build_pool(factory.clone(), |builder| builder.default_read_only(true)).await;
+    let pool = build_pool(factory.clone(), |builder| {
+        builder
+            .default_read_only(true)
+            .initial_size(1)
+            .init_exception_throw(true)
+    })
+    .await;
 
     let error = pool
-        .get()
+        .init()
         .await
         .expect_err("default initialization must fail");
     assert!(matches!(error, DruidError::DriverError(_)));
     let pool_state = pool.state();
     assert_eq!(pool_state.create_count, 1);
-    assert_eq!(pool_state.connect_error_count, 1);
+    // init 失败属于物理创建阶段，不是一次公共 get 的逻辑获取失败。
+    assert_eq!(pool_state.connect_error_count, 0);
     assert_eq!(pool_state.destroy_count, 0);
     assert_eq!(pool_state.active_count, 0);
     assert_eq!(pool_state.idle_count, 0);

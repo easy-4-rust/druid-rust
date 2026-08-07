@@ -27,6 +27,12 @@ impl RoundRobinBalancer {
     }
 }
 
+impl Default for RoundRobinBalancer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait::async_trait]
 impl LoadBalancer for RoundRobinBalancer {
     fn name(&self) -> &str {

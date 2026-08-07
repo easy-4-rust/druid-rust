@@ -238,7 +238,9 @@ Toasty 是 `druid` 模块内部的默认 ORM/driver 入口，其他连接生态�
 | `postgresql` | 内置可选 SQL 数据源 | feature 编译通过；真实容器待补 |
 | `mysql` | 内置可选 SQL 数据源 | feature 编译通过；真实容器待补 |
 | `turso` | 内置可选 SQL 数据源 | feature 编译通过；真实服务门禁待补 |
-| `dynamodb` | Toasty 非 SQL ORM 扩展 | 不进入 `PhysicalConnection` |
+
+Toasty 的 DynamoDB 等非 SQL provider 不暴露为 Druid feature，也不进入
+`PhysicalConnection` 与数据库支持计数。
 
 SQLite 与 SQLx 同时启用时必须只有一个 `libsqlite3-sys` 链接版本。当前
 `vendor/toasty-driver-sqlite` 保留 Toasty 0.9.0 源码，只把 `rusqlite` 固定到

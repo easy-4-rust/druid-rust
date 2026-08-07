@@ -140,6 +140,7 @@ impl SqlxBb8Pool {
                 }
                 // 丢弃透明租约桥接会触发 bb8 自身唯一的归还路径。
                 drop(connection);
+                false
             }),
         ))
     }

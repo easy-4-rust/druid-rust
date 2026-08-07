@@ -1556,7 +1556,7 @@ fn value_to_boolean(value: Value) -> Result<bool, DruidError> {
         Value::Bool(value) => Ok(value),
         Value::Int(value) => Ok(value != 0),
         Value::Float(value) => Ok(value != 0.0),
-        Value::Decimal(value) => Ok(value != BigDecimal::from(0)),
+        Value::Decimal(value) => Ok(value != 0),
         Value::String(value) => Ok(value == "1" || value.eq_ignore_ascii_case("true")),
         actual => Err(result_set_type_error("Boolean", &actual)),
     }

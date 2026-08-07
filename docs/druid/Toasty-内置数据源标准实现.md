@@ -87,7 +87,7 @@ DruidPooledConnection
 | `toasty-driver-turso` | Turso driver |
 | `toasty-driver-postgresql` | PostgreSQL driver |
 | `toasty-driver-mysql` | MySQL driver |
-| `toasty-driver-dynamodb` | DynamoDB driver；不属于 Druid SQL connection |
+| `toasty-driver-dynamodb` | 非 SQL driver；Druid 不启用、不纳入支持范围 |
 
 ## 3. 对象级映射
 
@@ -167,7 +167,8 @@ feature 全部由唯一 `druid` crate 暴露，`sqlite` 默认启用，其他 dr
 | `postgresql` | PostgreSQL | 内置可选，待 container gate |
 | `mysql` | MySQL | 内置可选，待 container gate |
 | `turso` | Turso | 内置可选，待服务 gate |
-| `dynamodb` | DynamoDB | Toasty ORM 可用；Druid SQL factory 明确拒绝 |
+
+DynamoDB 等非 SQL driver 不对外提供 Druid feature；URL 防御性拒绝仍保留。
 
 Toasty 0.9 的 MSRV 是 Rust 1.95。工作区 `rust-version` 升为 1.95，
 `rust-toolchain.toml` 使用 1.97.1 执行 fmt/clippy/test/coverage。

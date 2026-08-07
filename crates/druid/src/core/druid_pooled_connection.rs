@@ -49,6 +49,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub type DruidConnectionReturnCallback =
     Box<dyn FnOnce(DruidConnectionHolder, ConnectionRecycleDisposition) -> bool + Send>;
 
+/// 兼容旧构造入口的物理连接回收回调。
+pub type PhysicalConnectionReturnCallback =
+    Box<dyn FnOnce(Box<dyn PhysicalConnection>, u64, ConnectionRecycleDisposition) -> bool + Send>;
+
 /// 一次数据库执行的运行中标记，离开作用域时无条件复位。
 struct ExecutionRunningGuard {
     execution_running: Arc<AtomicBool>,
@@ -249,6 +253,7 @@ impl DruidPooledConnection {
             None,
             Box::new(move |connection, connection_id, _disposition| {
                 return_connection(connection, connection_id);
+                false
             }),
         )
     }
@@ -273,9 +278,7 @@ impl DruidPooledConnection {
         filter_chain: Option<Arc<FilterChain>>,
         keep_underlying_transaction_isolation: bool,
         recycle_validator: Option<Arc<dyn PhysicalConnectionFactory>>,
-        return_connection: Box<
-            dyn FnOnce(Box<dyn PhysicalConnection>, u64, ConnectionRecycleDisposition) + Send,
-        >,
+        return_connection: PhysicalConnectionReturnCallback,
     ) -> Self {
         let connection_defaults = ConnectionDefaults::capture(physical_connection.as_ref());
         Self::with_recycle_policy_and_defaults(
@@ -303,9 +306,7 @@ impl DruidPooledConnection {
         connection_defaults: ConnectionDefaults,
         keep_underlying_transaction_isolation: bool,
         recycle_validator: Option<Arc<dyn PhysicalConnectionFactory>>,
-        return_connection: Box<
-            dyn FnOnce(Box<dyn PhysicalConnection>, u64, ConnectionRecycleDisposition) + Send,
-        >,
+        return_connection: PhysicalConnectionReturnCallback,
     ) -> Self {
         let holder = DruidConnectionHolder::with_connection_and_defaults(
             physical_connection,
@@ -1224,7 +1225,12 @@ impl DruidPooledConnection {
             .as_callable()
             .is_none()
         {
+            let statement_identity = prepared_statement.statement_trace_identity();
             prepared_statement.record_exception();
+            if let Some(holder) = self.holder.as_ref() {
+                holder.remove_statement_trace(statement_identity);
+            }
+            drop(prepared_statement);
             return Err(DruidError::UnsupportedOperation {
                 operation: "prepare_physical_call",
             });
@@ -2660,7 +2666,7 @@ impl PhysicalConnection for DruidPooledConnection {
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::physical_connection)
-            .map_or(true, |connection| connection.auto_commit())
+            .is_none_or(|connection| connection.auto_commit())
     }
 
     async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {

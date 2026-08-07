@@ -187,9 +187,9 @@ impl ZookeeperNodeListener {
             properties.insert(mapped_name, value);
         }
         let url_key = format!("{prefix}.{node_name}.url");
-        if !properties.contains_key(&url_key) {
-            properties.insert(url_key, self.format_url(&full));
-        }
+        properties
+            .entry(url_key)
+            .or_insert_with(|| self.format_url(&full));
         properties
     }
 

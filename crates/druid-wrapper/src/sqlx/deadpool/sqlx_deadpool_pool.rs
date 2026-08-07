@@ -158,6 +158,7 @@ impl SqlxDeadpoolPool {
                 }
                 // 丢弃透明租约桥接会触发 deadpool 自身唯一的归还路径。
                 drop(connection);
+                false
             }),
         ))
     }

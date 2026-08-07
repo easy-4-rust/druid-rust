@@ -10,7 +10,7 @@ fn test_pool_config_defaults_match_druid_java() {
     assert_eq!(c.initial_size, 0);
     assert_eq!(c.max_open, 8);
     assert_eq!(c.min_idle, 0);
-    assert_eq!(c.acquire_timeout, std::time::Duration::from_secs(30));
+    assert_eq!(c.acquire_timeout, std::time::Duration::MAX);
     assert_eq!(c.min_evictable_idle, std::time::Duration::from_secs(1800));
     assert_eq!(c.eviction_interval, std::time::Duration::from_secs(60));
     assert!(!c.test_on_borrow);
@@ -90,7 +90,7 @@ fn test_value_display_all() {
     assert_eq!(format!("{}", Value::Null), "NULL");
     assert_eq!(format!("{}", Value::Bool(true)), "true");
     assert_eq!(format!("{}", Value::Int(42)), "42");
-    assert_eq!(format!("{}", Value::Float(3.14)), "3.14");
+    assert_eq!(format!("{}", Value::Float(3.125)), "3.125");
     assert_eq!(format!("{}", Value::String("hello".into())), "'hello'");
     assert_eq!(format!("{}", Value::Bytes(vec![1, 2, 3])), "<3 bytes>");
 }
@@ -878,8 +878,8 @@ fn test_value_all_from_conversions() {
     assert_eq!(v, Value::Int(42));
     let v: Value = 42i32.into();
     assert_eq!(v, Value::Int(42));
-    let v: Value = 3.14f64.into();
-    assert_eq!(v, Value::Float(3.14));
+    let v: Value = 3.125f64.into();
+    assert_eq!(v, Value::Float(3.125));
     let v: Value = String::from("hi").into();
     assert_eq!(v, Value::String("hi".into()));
     let v: Value = "hi".into();

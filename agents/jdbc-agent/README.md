@@ -2,8 +2,8 @@
 
 This directory builds the Druid-owned JVM release asset used by
 `druid-wrapper::jdbc_agent`. It is not a fourth Rust crate and does not contain a
-connection pool. One process owns one raw JDBC `Connection`; DruidPool remains the
-only pooling authority.
+connection pool. One process hosts multiple isolated raw JDBC sessions; DruidPool
+remains the only pooling authority and matching runtime identities share the process.
 
 ## Build and test
 
@@ -14,18 +14,20 @@ drivers are deliberately not shaded into it.
 mvn verify
 ```
 
-The contract test uses H2 in Maven test scope and covers framed connect, DDL, bound
-update, query, typed rows, and close. The repository workflow defines the complete
+The contract test uses H2 in Maven test scope and covers handshake, two concurrent
+sessions, DDL, bound update, query, typed rows, and close. The repository workflow defines the complete
 Rust-to-Agent H2 contract for JDK 17/21 on Linux, macOS, and Windows; the first remote
 matrix result is still pending.
 
-## DAP1 boundary
+## JSON-RPC 2.0 NDJSON boundary
 
-Each message is a four-byte big-endian length followed by UTF-8 JSON. Both peers
-enforce a 16 MiB frame limit. Requests carry `protocolVersion`, `requestId`,
-`operation`, and `payload`; responses echo the first two fields and return either a
-payload or a structured JDBC exception. Standard output is protocol-only and SLF4J
-logs go to standard error.
+Each message is one UTF-8 JSON value followed by a newline. Both peers enforce a
+16 MiB line limit. The Agent emits a `ready` notification before accepting requests;
+the Rust side then performs an explicit version/capability handshake. Requests carry
+`jsonrpc`, `id`, `method`, and `params`; responses correlate `id` and return either a
+`result` or a structured JSON-RPC/JDBC error. Session operations use
+`session.open`, `session.*`, and `session.close`. Standard output is protocol-only and
+SLF4J logs go to standard error.
 
 Supported operations currently include connect, query, update, prepared parameter
 binding, generic execute, begin/commit/rollback, liveness, auto-commit, read-only,

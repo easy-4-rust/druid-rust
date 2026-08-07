@@ -106,9 +106,9 @@ async fn test_max_open_limit() {
     assert!(result.is_err() || result.unwrap().is_err());
 }
 
-// FR-021: max_idle 限制
+// FR-021: max_idle Java 兼容字段
 #[tokio::test]
-async fn test_max_idle_limit() {
+async fn test_max_idle_is_not_a_return_cap() {
     let pool = build_pool(4, 2).await;
 
     // 借出 4 个
@@ -117,7 +117,7 @@ async fn test_max_idle_limit() {
     let c3 = pool.get().await.unwrap();
     let c4 = pool.get().await.unwrap();
 
-    // 归还全部，但 max_idle=2，多余的应该被销毁
+    // Java Druid 的 maxIdle 不作为归还硬上限。
     drop(c1);
     drop(c2);
     drop(c3);
@@ -125,12 +125,7 @@ async fn test_max_idle_limit() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     let st = pool.state();
-    // 空闲连接不应超过 max_idle
-    assert!(
-        st.idle_count <= 2,
-        "idle_count={} should <= 2",
-        st.idle_count
-    );
+    assert_eq!(st.idle_count, 4);
 }
 
 // FR-022: acquire_timeout 返回
@@ -143,7 +138,10 @@ async fn test_acquire_timeout() {
     // 第 2 个应该超时
     let result = pool.get_timeout(Duration::from_millis(100)).await;
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DruidError::AcquireTimeout));
+    assert!(matches!(
+        result.unwrap_err(),
+        DruidError::GetConnectionTimeout { .. }
+    ));
 }
 
 // FR-023: PooledConnection::drop 归还

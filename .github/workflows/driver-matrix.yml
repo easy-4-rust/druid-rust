@@ -33,7 +33,7 @@ jobs:
         env:
           DRUID_JDBC_AGENT_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/druid-jdbc-agent.jar
           DRUID_JDBC_DRIVER_JAR: ${{ github.workspace }}/agents/jdbc-agent/target/driver-libs/h2-2.3.232.jar
-        run: cargo test -p druid-wrapper --test jdbc_agent_h2_contract_test
+        run: cargo test -p druid-wrapper --features jdbc-agent --test jdbc_agent_h2_contract_test
 
   rust-contracts:
     runs-on: ubuntu-latest
@@ -45,5 +45,86 @@ jobs:
           components: rustfmt, clippy
       - run: cargo fmt --all -- --check
       - run: cargo check --workspace --all-targets
-      - run: cargo test -p druid-wrapper --test driver_registry_test --test jdbc_agent_value_test
-      - run: cargo test -p druid-admin --test driver_installer_test --test driver_runtime_diagnostics_test
+      - run: cargo check -p druid-wrapper --no-default-features
+      - run: cargo check --workspace --all-targets --all-features
+      # 历史代码启用了 pedantic lint 组；常规 Rust/Clippy 告警仍全部拒绝，
+      # pedantic 作为渐进治理清单单独处理，避免一次性机械改写公共 API。
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings -A clippy::pedantic
+      - run: cargo test --workspace
+      - run: cargo test --workspace --all-features
+      - run: cargo doc --workspace --all-features --no-deps
+
+  public-api:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          toolchain: nightly-2026-08-07
+          targets: aarch64-apple-darwin
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-public-api@0.52.0
+      - name: Verify public API snapshots
+        shell: bash
+        run: |
+          for crate in druid druid-wrapper; do
+            expected="$(awk -v crate="$crate" '$2 == crate { print $1 }' api/public-api.aarch64-apple-darwin.sha256)"
+            actual="$(cargo public-api -p "$crate" -sss --all-features --target aarch64-apple-darwin | shasum -a 256 | awk '{ print $1 }')"
+            test -n "$expected"
+            test "$actual" = "$expected"
+          done
+
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95"
+      - run: cargo check --workspace --all-targets
+
+  supply-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+      # RUSTSEC-2023-0071 currently has no fixed rsa release and is also pulled
+      # by SQLx MySQL. Keep the exception narrow and visible in both audit tools.
+      - run: cargo audit --ignore RUSTSEC-2023-0071
+      - run: cargo deny check
+
+  rust-platforms:
+    name: Rust contracts (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - run: cargo test --workspace
+
+  semver:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-semver-checks
+      - run: cargo semver-checks check-release -p druid --baseline-rev origin/${{ github.base_ref }}
+      - run: cargo semver-checks check-release -p druid-wrapper --baseline-rev origin/${{ github.base_ref }}

@@ -278,7 +278,7 @@ flowchart LR
     Registry -->|JDBC Agent| AgentFactory["JdbcAgentConnectionFactory"]
     Admin["druid-driver<br/>explicit install + SHA-256 + doctor"] --> Jar["Agent JAR + vendor driver JAR"]
     Jar --> AgentFactory
-    AgentFactory --> Process["bounded DAP1 subprocess<br/>one raw JDBC Connection"]
+    AgentFactory --> Process["shared JSON-RPC Agent<br/>isolated JDBC sessions"]
     Native --> Pool["DruidPool<br/>single pooling authority"]
     Process --> Pool
     Pool --> Public["DruidPooledConnection"]
@@ -286,9 +286,10 @@ flowchart LR
 
 The core pool never downloads a driver. Downloads are explicit HTTPS administrative
 operations and require a SHA-256 checksum; commercial drivers are supplied locally
-by an authorized user. The Agent is spawned without a shell, uses bounded
-length-prefixed DAP1 frames with request correlation and timeouts, and owns one raw
-JDBC connection rather than another pool. `driver-matrix.yml` defines the H2 contract
+by an authorized user. The Agent is spawned without a shell, uses bounded JSON-RPC
+2.0 NDJSON messages with request correlation and timeouts, and hosts isolated raw
+JDBC sessions rather than another pool. A process is shared by matching runtime
+identity and evicted after an idle TTL. `driver-matrix.yml` defines the H2 contract
 for Linux, macOS, and Windows, but its first remote result is still pending; each vendor
 also needs its own live evidence gate.
 
@@ -309,7 +310,9 @@ The Toasty feature contract is exposed directly by `druid`:
 | `postgresql` | ❌ | Toasty PostgreSQL driver | real container pending |
 | `mysql` | ❌ | Toasty MySQL driver | real container pending |
 | `turso` | ❌ | Toasty Turso driver | real service pending |
-| `dynamodb` | ❌ | Toasty DynamoDB driver | non-SQL; excluded from `PhysicalConnection` |
+
+Non-SQL Toasty providers such as DynamoDB are intentionally not exposed as Druid
+features and do not enter the database support count.
 
 ```bash
 cargo check -p druid --all-features

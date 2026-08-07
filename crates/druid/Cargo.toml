@@ -13,7 +13,6 @@ sqlite = ["toasty/sqlite"]
 postgresql = ["toasty/postgresql"]
 mysql = ["toasty/mysql"]
 turso = ["toasty/turso"]
-dynamodb = ["toasty/dynamodb"]
 
 [dependencies]
 arc-swap.workspace = true

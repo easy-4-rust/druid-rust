@@ -361,6 +361,7 @@ impl DruidPooledPreparedStatement {
         Arc::as_ptr(&self.shared) as usize
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         holder: Arc<PreparedStatementHolder>,
         pooled: bool,

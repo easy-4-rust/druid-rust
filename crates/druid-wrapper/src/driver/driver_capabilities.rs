@@ -10,6 +10,7 @@ pub struct DriverCapabilities {
     pub prepared_statements: bool,
     pub batch: bool,
     pub generated_keys: bool,
+    pub multiple_results: bool,
     pub transactions: bool,
     pub savepoints: bool,
     pub auto_commit: bool,
@@ -21,5 +22,9 @@ pub struct DriverCapabilities {
     pub cancellation: bool,
     pub paged_results: bool,
     pub lob: bool,
+    pub blob: bool,
+    pub clob: bool,
+    pub n_clob: bool,
+    pub array: bool,
     pub sql_xml: bool,
 }

@@ -397,7 +397,7 @@ fn parse_connection_properties(source: &str) -> HashMap<String, String> {
         .collect()
 }
 
-fn first_non_empty<'a, const N: usize>(values: [Option<&'a String>; N]) -> Option<&'a String> {
+fn first_non_empty<const N: usize>(values: [Option<&String>; N]) -> Option<&String> {
     values.into_iter().flatten().find(|value| !value.is_empty())
 }
 

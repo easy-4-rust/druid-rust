@@ -25,10 +25,9 @@ impl DataSourceCreator {
         let raw_url = url.ok_or_else(|| {
             DruidError::InvalidArgument(format!("{node_name}.url must not be empty"))
         })?;
-        let rust_url =
-            JdbcUtils::to_rust_url(raw_url).ok_or_else(|| DruidError::UnsupportedOperation {
-                operation: "ha_node_driver_adapter_required",
-            })?;
+        let rust_url = JdbcUtils::to_rust_url(raw_url).ok_or(DruidError::UnsupportedOperation {
+            operation: "ha_node_driver_adapter_required",
+        })?;
         let driver_url = Self::apply_credentials(rust_url.as_ref(), username, password)?;
         let factory = Arc::new(ToastyConnectionFactory::new(&driver_url).await?);
         let config = high_available_data_source.config.read().clone();

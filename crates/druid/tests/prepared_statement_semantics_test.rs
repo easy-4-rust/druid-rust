@@ -176,8 +176,10 @@ impl PhysicalConnection for PreparedConnection {
 
 #[derive(Default)]
 struct PreparedExecuteRecorder {
-    events: Mutex<Vec<(String, ExecOperation, Vec<Value>, bool, Option<u64>)>>,
+    events: Mutex<Vec<PreparedExecuteEvent>>,
 }
+
+type PreparedExecuteEvent = (String, ExecOperation, Vec<Value>, bool, Option<u64>);
 
 #[async_trait::async_trait]
 impl BeforeFilter for PreparedExecuteRecorder {
@@ -1244,7 +1246,7 @@ impl PhysicalConnection for CleanupFailingConnection {
     }
 
     async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
-        Ok(Vec::new())
+        Ok(vec![Row::new(vec![Value::Int(1)])])
     }
 
     async fn prepare_physical_statement(
@@ -1506,8 +1508,8 @@ async fn assert_prepared_getter_failure_discards_connection(failure: CleanupFail
             let result_set = statement.result_set(&mut connection).unwrap().unwrap();
             let error = statement.more_results(&mut connection).unwrap_err();
             assert!(
-                !result_set.is_closed(),
-                "驱动推进失败不能提前关闭旧 ResultSet wrapper"
+                result_set.is_closed(),
+                "fatal 驱动错误会立即 discard 连接并级联关闭旧 ResultSet wrapper"
             );
             error
         }
@@ -1728,13 +1730,15 @@ async fn prepared_statement_cannot_cross_connection_lease_boundary() {
         .await
         .unwrap();
     replacement.close().unwrap();
-    assert_eq!(prepare_count.load(Ordering::Relaxed), 2);
+    // 旧逻辑 wrapper 已被第一租约 close，但底层缓存语句可由同一物理连接的
+    // 下一租约安全复用；跨租约禁止的是逻辑对象，而不是物理缓存条目。
+    assert_eq!(prepare_count.load(Ordering::Relaxed), 1);
 
     drop(leaked);
     let state = pool.state();
     assert_eq!(state.cached_prepared_statement_count, 1);
-    assert_eq!(state.cached_prepared_statement_delete_count, 1);
-    assert_eq!(state.closed_prepared_statement_count, 1);
+    assert_eq!(state.cached_prepared_statement_delete_count, 0);
+    assert_eq!(state.closed_prepared_statement_count, 0);
 
     second_connection.close().await.unwrap();
     pool.close().await;

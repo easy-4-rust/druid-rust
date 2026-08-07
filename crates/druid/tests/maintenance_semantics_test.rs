@@ -5,7 +5,8 @@
 //! 对照测试：`DruidDataSourceShrinkTest`、`MaxPhyTimeMillisTest`。
 
 use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row,
+    ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -71,8 +72,8 @@ impl PhysicalConnection for MaintenanceConnection {
 
 struct MaintenanceFactory {
     create_count: AtomicU64,
-    validate_count: AtomicU64,
-    validation_succeeds: AtomicBool,
+    validate_count: Arc<AtomicU64>,
+    validation_succeeds: Arc<AtomicBool>,
     closed_count: Arc<AtomicU64>,
 }
 
@@ -80,10 +81,35 @@ impl MaintenanceFactory {
     fn new() -> Self {
         Self {
             create_count: AtomicU64::new(0),
-            validate_count: AtomicU64::new(0),
-            validation_succeeds: AtomicBool::new(true),
+            validate_count: Arc::new(AtomicU64::new(0)),
+            validation_succeeds: Arc::new(AtomicBool::new(true)),
             closed_count: Arc::new(AtomicU64::new(0)),
         }
+    }
+
+    fn checker(&self) -> Arc<dyn ValidConnectionChecker> {
+        Arc::new(MaintenanceChecker {
+            validate_count: Arc::clone(&self.validate_count),
+            validation_succeeds: Arc::clone(&self.validation_succeeds),
+        })
+    }
+}
+
+struct MaintenanceChecker {
+    validate_count: Arc<AtomicU64>,
+    validation_succeeds: Arc<AtomicBool>,
+}
+
+#[async_trait::async_trait]
+impl ValidConnectionChecker for MaintenanceChecker {
+    async fn is_valid_connection(
+        &self,
+        _connection: &mut Box<dyn PhysicalConnection>,
+        _query: Option<&str>,
+        _validation_query_timeout: Duration,
+    ) -> Result<bool, DruidError> {
+        self.validate_count.fetch_add(1, Ordering::Relaxed);
+        Ok(self.validation_succeeds.load(Ordering::Relaxed))
     }
 }
 
@@ -209,20 +235,26 @@ async fn keep_alive_validates_due_connections_and_preserves_queue_order() {
         .max_idle(2)
         .min_idle(2)
         .idle_timeout(Duration::from_secs(60))
+        .time_between_eviction_runs(Duration::ZERO)
         .keep_alive(true)
         .keep_alive_between_time(Duration::from_millis(5))
+        .valid_connection_checker(factory.checker())
         .build()
         .await
         .unwrap();
 
     fill_idle(&pool, 2).await;
+    let validate_before = factory.validate_count.load(Ordering::Relaxed);
     tokio::time::sleep(Duration::from_millis(10)).await;
     pool.shrink_check_time(true).await;
 
     assert_eq!(pool.state().idle_count, 2);
     assert_eq!(pool.state().keep_alive_check_count, 2);
     assert_eq!(pool.state().keep_alive_check_error_count, 0);
-    assert_eq!(factory.validate_count.load(Ordering::Relaxed), 2);
+    assert_eq!(
+        factory.validate_count.load(Ordering::Relaxed) - validate_before,
+        2
+    );
 
     let first_id = pool.get().await.unwrap().id();
     let second_id = pool.get().await.unwrap().id();
@@ -232,21 +264,22 @@ async fn keep_alive_validates_due_connections_and_preserves_queue_order() {
 #[tokio::test]
 async fn keep_alive_failure_discards_and_counts_each_physical_connection() {
     let factory = Arc::new(MaintenanceFactory::new());
-    factory.validation_succeeds.store(false, Ordering::Relaxed);
     let pool = DruidPool::builder()
         .name("keep-alive-failure")
         .driver_name("maintenance")
         .factory(factory.clone())
         .max_open(2)
         .max_idle(2)
-        .min_idle(2)
+        .min_idle(0)
         .idle_timeout(Duration::from_secs(60))
         .keep_alive_between_time(Duration::from_millis(5))
+        .valid_connection_checker(factory.checker())
         .build()
         .await
         .unwrap();
 
     fill_idle(&pool, 2).await;
+    factory.validation_succeeds.store(false, Ordering::Relaxed);
     tokio::time::sleep(Duration::from_millis(10)).await;
     pool.shrink_with_options(true, true).await;
 

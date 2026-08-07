@@ -1,0 +1,34 @@
+[advisories]
+unmaintained = "workspace"
+ignore = [
+    # RUSTSEC-2023-0071 has no fixed rsa release. The crate is required by
+    # SQLx MySQL authentication and Druid's Java-compatible config decryptor;
+    # private-key operations must remain local and outside attacker-timed paths.
+    "RUSTSEC-2023-0071",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+
+[licenses]
+confidence-threshold = 0.8
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "OpenSSL",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

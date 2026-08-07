@@ -67,6 +67,7 @@ impl DruidPooledStatement {
         Arc::ptr_eq(&self.inner, &other.inner)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         statement: Arc<dyn PhysicalStatement>,
         connection_id: u64,

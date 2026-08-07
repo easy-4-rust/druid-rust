@@ -7,57 +7,96 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
-/** JDBC Agent 进程协议与真实 H2 JDBC 驱动的最小契约测试。 */
+/** JDBC Agent JSON-RPC、多 session 与真实 H2 JDBC 驱动的最小契约测试。 */
 class AgentServerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void executesFramedJdbcLifecycle() throws Exception {
-        ByteArrayOutputStream requestBytes = new ByteArrayOutputStream();
-        try (DataOutputStream requests = new DataOutputStream(requestBytes)) {
-            write(requests, request(1, "connect", connectPayload()));
-            write(requests, request(2, "exec", sqlPayload(
-                    "CREATE TABLE sample(id BIGINT PRIMARY KEY, name VARCHAR(32))",
-                    JsonNodeFactory.instance.arrayNode())));
-            write(requests, request(3, "exec", sqlPayload(
-                    "INSERT INTO sample(id, name) VALUES (?, ?)",
-                    parameters())));
-            write(requests, request(4, "fetch", sqlPayload(
-                    "SELECT id, name FROM sample ORDER BY id",
-                    JsonNodeFactory.instance.arrayNode())));
-            write(requests, request(5, "close", JsonNodeFactory.instance.nullNode()));
-        }
+    void executesJsonRpcLifecycleAcrossTwoSessions() throws Exception {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try (PipedInputStream serverInput = new PipedInputStream();
+             PipedOutputStream requestOutput = new PipedOutputStream(serverInput);
+             PipedInputStream responseInput = new PipedInputStream();
+             PipedOutputStream serverOutput = new PipedOutputStream(responseInput);
+             BufferedWriter requests = new BufferedWriter(new OutputStreamWriter(requestOutput, StandardCharsets.UTF_8));
+             BufferedReader responses = new BufferedReader(new InputStreamReader(responseInput, StandardCharsets.UTF_8));
+             AgentServer server = new AgentServer(serverInput, serverOutput)) {
+            Future<?> serverTask = executor.submit(() -> {
+                server.run();
+                return null;
+            });
 
-        ByteArrayOutputStream responseBytes = new ByteArrayOutputStream();
-        try (AgentServer server = new AgentServer(
-                new ByteArrayInputStream(requestBytes.toByteArray()), responseBytes)) {
-            server.run();
-        }
+            JsonNode ready = read(responses);
+            assertEquals("ready", ready.path("method").asText());
+            assertEquals(1, ready.at("/params/protocolVersion").asInt());
 
-        try (DataInputStream responses = new DataInputStream(
-                new ByteArrayInputStream(responseBytes.toByteArray()))) {
-            assertTrue(read(responses).success());
-            assertTrue(read(responses).success());
-            AgentResponse insert = read(responses);
-            assertEquals(1, insert.payload().path("rowsAffected").asLong());
-            AgentResponse query = read(responses);
-            assertEquals(1, query.payload().path("rows").size());
-            assertEquals("sample", query.payload().path("rows").path(0).path(1).path("value").asText());
-            assertTrue(read(responses).success());
+            write(requests, request(1, "handshake", handshakePayload()));
+            assertEquals(1, read(responses).path("result").path("protocolVersion").asInt());
+
+            write(requests, request(2, "session.open", connectPayload()));
+            String firstSession = read(responses).at("/result/sessionId").asText();
+            write(requests, request(3, "session.open", connectPayload()));
+            String secondSession = read(responses).at("/result/sessionId").asText();
+            assertNotEquals(firstSession, secondSession);
+
+            write(requests, request(4, "session.exec", sessionPayload(
+                    firstSession,
+                    sqlPayload("CREATE TABLE sample(id BIGINT PRIMARY KEY, name VARCHAR(32))",
+                            JsonNodeFactory.instance.arrayNode()))));
+            assertEquals(0, read(responses).at("/result/rowsAffected").asLong());
+            write(requests, request(5, "session.exec", sessionPayload(
+                    firstSession,
+                    sqlPayload("INSERT INTO sample(id, name) VALUES (?, ?)", parameters()))));
+            assertEquals(1, read(responses).at("/result/rowsAffected").asLong());
+
+            write(requests, request(6, "session.fetch", sessionPayload(
+                    secondSession,
+                    sqlPayload("SELECT id, name FROM sample ORDER BY id",
+                            JsonNodeFactory.instance.arrayNode()))));
+            JsonNode query = read(responses).path("result");
+            assertEquals(1, query.path("rows").size());
+            assertEquals("sample", query.path("rows").path(0).path(1).path("value").asText());
+
+            write(requests, request(7, "session.close", sessionOnly(firstSession)));
+            read(responses);
+            write(requests, request(8, "session.close", sessionOnly(secondSession)));
+            read(responses);
+            requests.close();
+            serverTask.get();
+        } finally {
+            executor.shutdownNow();
         }
     }
 
-    private AgentRequest request(long requestId, String operation, JsonNode payload) {
-        return new AgentRequest(1, requestId, operation, payload);
+    private ObjectNode request(long id, String method, JsonNode params) {
+        ObjectNode request = JsonNodeFactory.instance.objectNode();
+        request.put("jsonrpc", "2.0");
+        request.put("id", id);
+        request.put("method", method);
+        request.set("params", params);
+        return request;
+    }
+
+    private ObjectNode handshakePayload() {
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("protocolVersion", 1);
+        payload.put("client", "agent-test");
+        return payload;
     }
 
     private ObjectNode connectPayload() {
@@ -65,6 +104,17 @@ class AgentServerTest {
         payload.put("url", "jdbc:h2:mem:agent;DB_CLOSE_DELAY=-1");
         payload.set("properties", JsonNodeFactory.instance.objectNode());
         payload.put("validationQuery", "SELECT 1");
+        return payload;
+    }
+
+    private ObjectNode sessionPayload(String sessionId, ObjectNode payload) {
+        payload.put("sessionId", sessionId);
+        return payload;
+    }
+
+    private ObjectNode sessionOnly(String sessionId) {
+        ObjectNode payload = JsonNodeFactory.instance.objectNode();
+        payload.put("sessionId", sessionId);
         return payload;
     }
 
@@ -84,14 +134,13 @@ class AgentServerTest {
         return parameters;
     }
 
-    private void write(DataOutputStream output, AgentRequest request) throws Exception {
-        byte[] frame = objectMapper.writeValueAsBytes(request);
-        output.writeInt(frame.length);
-        output.write(frame);
+    private void write(BufferedWriter output, JsonNode request) throws Exception {
+        output.write(objectMapper.writeValueAsString(request));
+        output.newLine();
+        output.flush();
     }
 
-    private AgentResponse read(DataInputStream input) throws Exception {
-        int length = input.readInt();
-        return objectMapper.readValue(input.readNBytes(length), AgentResponse.class);
+    private JsonNode read(BufferedReader input) throws Exception {
+        return objectMapper.readTree(input.readLine());
     }
 }

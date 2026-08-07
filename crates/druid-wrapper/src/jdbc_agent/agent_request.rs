@@ -1,25 +1,24 @@
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 
-/// Druid JDBC Agent Protocol v1 请求帧。
+/// JDBC Agent JSON-RPC 2.0 请求。
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AgentRequest {
-    protocol_version: u32,
-    request_id: u64,
-    operation: String,
-    payload: JsonValue,
+pub struct AgentRequest<'a> {
+    jsonrpc: &'static str,
+    id: u64,
+    method: &'a str,
+    params: JsonValue,
 }
 
-impl AgentRequest {
-    /// 创建协议版本固定为 1 的请求。
+impl<'a> AgentRequest<'a> {
+    /// 创建带关联 ID 的 JSON-RPC 请求。
     #[must_use]
-    pub fn new(request_id: u64, operation: impl Into<String>, payload: JsonValue) -> Self {
+    pub const fn new(id: u64, method: &'a str, params: JsonValue) -> Self {
         Self {
-            protocol_version: 1,
-            request_id,
-            operation: operation.into(),
-            payload,
+            jsonrpc: "2.0",
+            id,
+            method,
+            params,
         }
     }
 }

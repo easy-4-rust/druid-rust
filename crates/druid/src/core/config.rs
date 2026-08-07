@@ -39,11 +39,11 @@ pub struct PoolConfig {
     pub init_exception_throw: bool,
 
     // ── 超时 ───────────────────────────────────────────────────
-    /// 获取连接超时（对应 maxWait，默认 30s）
+    /// 获取连接超时（对应 maxWait，Java 默认 -1；Rust 使用 `Duration::MAX`）
     pub acquire_timeout: Duration,
     /// 池未满时的超时重试次数（对应 notFullTimeoutRetryCount，默认 0）
     pub not_full_timeout_retry_count: i32,
-    /// 连接最大生命周期（对应 maxEvictableIdleTimeMillis，默认 7h）
+    /// 物理连接最大生命周期（对应 phyTimeoutMillis，Java 默认 -1；Rust 使用 `Duration::MAX`）
     pub max_lifetime: Duration,
     /// 空闲驱逐间隔（对应 timeBetweenEvictionRunsMillis，默认 60s）
     pub eviction_interval: Duration,

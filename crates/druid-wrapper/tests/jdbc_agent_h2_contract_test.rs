@@ -1,3 +1,5 @@
+#![cfg(feature = "jdbc-agent")]
+
 use druid::core::{PhysicalConnectionFactory, Value};
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use std::path::PathBuf;
@@ -21,6 +23,10 @@ async fn jdbc_agent_h2_contract_when_configured() {
         options,
     );
     let mut connection = factory.create().await.expect("必须建立 H2 JDBC 连接");
+    let mut shared_runtime_connection = factory
+        .create()
+        .await
+        .expect("第二个 session 必须复用共享 Agent 进程");
 
     connection
         .exec(
@@ -43,6 +49,11 @@ async fn jdbc_agent_h2_contract_when_configured() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].values[0], Value::Int(1));
     assert_eq!(rows[0].values[1], Value::String("druid".to_owned()));
+    let shared_rows = shared_runtime_connection
+        .fetch("SELECT id, name FROM sample", Vec::new())
+        .await
+        .expect("第二 session 必须访问同一 Agent 进程中的 H2 内存库");
+    assert_eq!(shared_rows.len(), 1);
 
     connection.begin().await.expect("必须开始事务");
     connection
@@ -59,5 +70,9 @@ async fn jdbc_agent_h2_contract_when_configured() {
         1
     );
     connection.ping().await.expect("必须验证连接");
-    connection.close().await.expect("必须关闭连接和 Agent");
+    shared_runtime_connection
+        .close()
+        .await
+        .expect("必须关闭第二个 session");
+    connection.close().await.expect("必须关闭连接 session");
 }

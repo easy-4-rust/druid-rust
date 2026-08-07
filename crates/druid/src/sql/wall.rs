@@ -179,11 +179,9 @@ impl Wall {
             Statement::Drop {
                 object_type, names, ..
             } => {
-                if *object_type == ObjectType::Table {
-                    if !self.config.drop_table_allow {
-                        for name in names {
-                            v.push(WallViolation::DropTableNotAllowed(name.to_string()));
-                        }
+                if *object_type == ObjectType::Table && !self.config.drop_table_allow {
+                    for name in names {
+                        v.push(WallViolation::DropTableNotAllowed(name.to_string()));
                     }
                 }
             }

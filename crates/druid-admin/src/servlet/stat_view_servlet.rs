@@ -28,7 +28,6 @@ impl StatViewServlet {
     }
 
     /// 返回可独立 merge/nest 的 Axum Router。
-    #[must_use]
     pub fn router(self) -> Router {
         let context_path = self.context_path.clone();
         let routes = Router::new()

@@ -201,8 +201,8 @@ async fn holder_owns_connection_and_resets_java_default_state_in_order() {
     assert_eq!(holder.user_password_version(), 7);
     assert_eq!(holder.create_duration(), Duration::from_micros(25));
     assert!(holder.has_physical_connection());
-    assert_eq!(holder.defaults().auto_commit(), true);
-    assert_eq!(holder.defaults().read_only(), false);
+    assert!(holder.defaults().auto_commit());
+    assert!(!holder.defaults().read_only());
     assert_eq!(holder.defaults().holdability(), 1);
     assert_eq!(holder.defaults().transaction_isolation(), 2);
 

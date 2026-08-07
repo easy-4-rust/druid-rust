@@ -262,15 +262,15 @@ impl WallFilter {
 
             // Java metadata 可以返回 null；Rust SPI 用空字符串表达未知表名。
             // 其余匹配规则逐分支复刻 ServletPathMatcher。
-            if option_is_empty(&hidden_column) || option_is_empty(&tenant_column) {
-                if table_name.is_empty() || servlet_path_matches(tenant_table_pattern, &table_name)
-                {
-                    if option_is_empty(&hidden_column) {
-                        hidden_column = non_empty(config.tenant_column.as_str());
-                    }
-                    if option_is_empty(&tenant_column) {
-                        tenant_column = non_empty(config.tenant_column.as_str());
-                    }
+            if (option_is_empty(&hidden_column) || option_is_empty(&tenant_column))
+                && (table_name.is_empty()
+                    || servlet_path_matches(tenant_table_pattern, &table_name))
+            {
+                if option_is_empty(&hidden_column) {
+                    hidden_column = non_empty(config.tenant_column.as_str());
+                }
+                if option_is_empty(&tenant_column) {
+                    tenant_column = non_empty(config.tenant_column.as_str());
                 }
             }
 

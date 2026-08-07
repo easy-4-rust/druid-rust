@@ -7,15 +7,15 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.Closeable;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -39,8 +39,10 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
-/** DAP1 有界帧服务端；每个进程只拥有一个物理 JDBC Connection。 */
+/** JSON-RPC 2.0 NDJSON 服务端；一个共享进程可隔离承载多个 JDBC session。 */
 @Slf4j
 public final class AgentServer implements Closeable {
 
@@ -49,76 +51,147 @@ public final class AgentServer implements Closeable {
     private static final DateTimeFormatter TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS");
 
-    private final DataInputStream input;
-    private final DataOutputStream output;
+    private final BufferedReader input;
+    private final BufferedWriter output;
     private final ObjectMapper objectMapper;
+    private final Map<String, AgentSession> sessions = new ConcurrentHashMap<>();
     private Connection connection;
     private String validationQuery;
 
     /**
      * 创建使用指定字节流的服务端。
      *
-     * @param input  DAP1 输入流
-     * @param output DAP1 输出流
+     * @param input  JSON-RPC NDJSON 输入流
+     * @param output JSON-RPC NDJSON 输出流
      */
     public AgentServer(InputStream input, OutputStream output) {
-        this.input = new DataInputStream(new BufferedInputStream(Objects.requireNonNull(input, "input")));
-        this.output = new DataOutputStream(new BufferedOutputStream(Objects.requireNonNull(output, "output")));
+        this.input = new BufferedReader(new InputStreamReader(
+                Objects.requireNonNull(input, "input"), StandardCharsets.UTF_8));
+        this.output = new BufferedWriter(new OutputStreamWriter(
+                Objects.requireNonNull(output, "output"), StandardCharsets.UTF_8));
         this.objectMapper = new ObjectMapper();
     }
 
-    /** 执行串行请求循环，直到 EOF 或 close 操作。 */
+    /** 发送 ready 通知并执行 JSON-RPC 请求循环，直到 EOF。 */
     public void run() throws IOException {
-        boolean running = true;
-        while (running) {
-            byte[] frame;
-            try {
-                frame = readFrame();
-            } catch (EOFException ignored) {
-                return;
-            }
+        ObjectNode ready = JsonNodeFactory.instance.objectNode();
+        ready.put("jsonrpc", "2.0");
+        ready.put("method", "ready");
+        ObjectNode readyParams = ready.putObject("params");
+        readyParams.put("protocolVersion", PROTOCOL_VERSION);
+        readyParams.put("agentVersion", "0.0.0-design");
+        readyParams.putArray("capabilities")
+                .add("multi-session")
+                .add("structured-errors")
+                .add("tagged-values");
+        writeLine(ready);
 
+        String line;
+        while (Objects.nonNull(line = input.readLine())) {
             AgentRequest request = null;
             AgentResponse response;
             try {
-                request = objectMapper.readValue(frame, AgentRequest.class);
+                if (line.getBytes(StandardCharsets.UTF_8).length > MAX_FRAME_BYTES) {
+                    throw new IOException("JSON-RPC request exceeds maximum frame size");
+                }
+                request = objectMapper.readValue(line, AgentRequest.class);
                 validateRequest(request);
-                JsonNode payload = dispatch(request.operation(), request.payload());
-                response = AgentResponse.success(request.requestId(), payload);
-                running = !"close".equals(request.operation());
+                JsonNode result = dispatch(request.method(), request.params());
+                response = AgentResponse.success(request.id(), result);
             } catch (Exception exception) {
-                long requestId = Objects.isNull(request) ? 0 : request.requestId();
+                long requestId = Objects.isNull(request) ? 0 : request.id();
                 response = AgentResponse.failure(requestId, exception);
                 log.debug("JDBC operation failed: requestId={}", requestId, exception);
             }
-            writeFrame(objectMapper.writeValueAsBytes(response));
+            writeLine(objectMapper.valueToTree(response));
         }
     }
 
     private void validateRequest(AgentRequest request) {
         Objects.requireNonNull(request, "request");
-        Objects.requireNonNull(request.operation(), "operation");
-        if (request.protocolVersion() != PROTOCOL_VERSION) {
-            throw new IllegalArgumentException("unsupported protocolVersion " + request.protocolVersion());
+        Objects.requireNonNull(request.method(), "method");
+        if (!"2.0".equals(request.jsonrpc())) {
+            throw new IllegalArgumentException("unsupported jsonrpc version " + request.jsonrpc());
         }
     }
 
-    private JsonNode dispatch(String operation, JsonNode payload) throws SQLException, IOException {
-        return switch (operation) {
-            case "connect" -> connect(payload);
-            case "exec" -> exec(payload);
-            case "fetch" -> fetch(payload);
-            case "execute" -> execute(payload);
+    private JsonNode dispatch(String method, JsonNode params) throws SQLException, IOException {
+        if ("handshake".equals(method)) {
+            if (params.path("protocolVersion").asInt() != PROTOCOL_VERSION) {
+                throw new IllegalArgumentException("unsupported protocolVersion "
+                        + params.path("protocolVersion").asInt());
+            }
+            ObjectNode result = JsonNodeFactory.instance.objectNode();
+            result.put("protocolVersion", PROTOCOL_VERSION);
+            result.put("agentVersion", "0.0.0-design");
+            return result;
+        }
+        if ("session.open".equals(method)) {
+            return openSession(params);
+        }
+        if ("session.close".equals(method)) {
+            return closeSession(params);
+        }
+        String operation = method.startsWith("session.") ? method.substring("session.".length()) : method;
+        return withSession(params, () -> switch (operation) {
+            case "exec" -> exec(params);
+            case "fetch" -> fetch(params);
+            case "execute" -> execute(params);
             case "begin" -> begin();
             case "commit" -> commit();
             case "rollback" -> rollback();
             case "ping" -> ping();
-            case "set_auto_commit" -> setAutoCommit(payload);
-            case "set_read_only" -> setReadOnly(payload);
-            case "set_transaction_isolation" -> setTransactionIsolation(payload);
-            case "close" -> closeConnection();
-            default -> throw new IllegalArgumentException("unsupported operation " + operation);
-        };
+            case "set_auto_commit" -> setAutoCommit(params);
+            case "set_read_only" -> setReadOnly(params);
+            case "set_transaction_isolation" -> setTransactionIsolation(params);
+            default -> throw new UnsupportedOperationException("unsupported method " + method);
+        });
+    }
+
+    private JsonNode openSession(JsonNode payload) throws SQLException {
+        JsonNode result = connect(payload);
+        String sessionId = UUID.randomUUID().toString();
+        sessions.put(sessionId, new AgentSession(connection, validationQuery));
+        connection = null;
+        validationQuery = null;
+        ((ObjectNode) result).put("sessionId", sessionId);
+        return result;
+    }
+
+    private JsonNode closeSession(JsonNode payload) throws SQLException {
+        String sessionId = requiredText(payload, "sessionId");
+        AgentSession session = sessions.remove(sessionId);
+        if (Objects.isNull(session)) {
+            return JsonNodeFactory.instance.objectNode();
+        }
+        try {
+            session.connection().close();
+        } finally {
+            connection = null;
+            validationQuery = null;
+        }
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode withSession(JsonNode payload, SessionOperation operation) throws SQLException, IOException {
+        String sessionId = requiredText(payload, "sessionId");
+        AgentSession session = sessions.get(sessionId);
+        if (Objects.isNull(session) || session.connection().isClosed()) {
+            throw new SQLException("JDBC Agent session is not open: " + sessionId);
+        }
+        connection = session.connection();
+        validationQuery = session.validationQuery();
+        try {
+            return operation.execute();
+        } finally {
+            connection = null;
+            validationQuery = null;
+        }
+    }
+
+    @FunctionalInterface
+    private interface SessionOperation {
+        JsonNode execute() throws SQLException, IOException;
     }
 
     private JsonNode connect(JsonNode payload) throws SQLException {
@@ -380,40 +453,37 @@ public final class AgentServer implements Closeable {
         return result;
     }
 
-    private byte[] readFrame() throws IOException {
-        int length = input.readInt();
-        if (length <= 0 || length > MAX_FRAME_BYTES) {
-            throw new IOException("invalid DAP1 frame length " + length);
+    private void writeLine(JsonNode value) throws IOException {
+        String line = objectMapper.writeValueAsString(value);
+        if (line.getBytes(StandardCharsets.UTF_8).length > MAX_FRAME_BYTES) {
+            throw new IOException("JSON-RPC response exceeds maximum frame size");
         }
-        byte[] frame = input.readNBytes(length);
-        if (frame.length != length) {
-            throw new EOFException("incomplete DAP1 frame");
-        }
-        return frame;
-    }
-
-    private void writeFrame(byte[] frame) throws IOException {
-        if (frame.length > MAX_FRAME_BYTES) {
-            throw new IOException("DAP1 response exceeds maximum frame size");
-        }
-        output.writeInt(frame.length);
-        output.write(frame);
+        output.write(line);
+        output.newLine();
         output.flush();
     }
 
-    /** 关闭物理连接和协议流。 */
+    /** 关闭全部 session 和协议流。 */
     @Override
     public void close() throws IOException {
+        IOException failure = null;
         try {
-            if (Objects.nonNull(connection)) {
-                connection.close();
-                connection = null;
+            for (AgentSession session : sessions.values()) {
+                try {
+                    session.connection().close();
+                } catch (SQLException exception) {
+                    if (Objects.isNull(failure)) {
+                        failure = new IOException("failed to close JDBC session", exception);
+                    }
+                }
             }
-        } catch (SQLException exception) {
-            throw new IOException("failed to close JDBC connection", exception);
+            sessions.clear();
         } finally {
             input.close();
             output.close();
+        }
+        if (Objects.nonNull(failure)) {
+            throw failure;
         }
     }
 }

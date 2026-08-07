@@ -1,6 +1,7 @@
 use super::{
     database_profile_record::DatabaseProfileRecord, DatabaseProfileId, DriverCapabilities,
-    DriverRegistryError, DriverRuntimeMode, DriverSupportStatus, ProtocolFamily, WallMode,
+    DriverRegistryError, DriverRuntimeMode, DriverSupportStatus, DriverVerificationEvidence,
+    ProtocolFamily, WallMode,
 };
 use druid::sql::DbType;
 
@@ -13,26 +14,36 @@ pub struct DatabaseProfile {
     protocol_family: ProtocolFamily,
     runtime_mode: DriverRuntimeMode,
     provider_id: String,
+    artifact_id: String,
+    artifact_version: Option<String>,
+    driver_class: Option<String>,
     default_port: Option<u16>,
     support_status: DriverSupportStatus,
     wall_mode: WallMode,
     delivery_phase: u8,
     validation_query: Option<String>,
+    reset_sql: Option<String>,
+    exception_sorter: String,
+    evidence: Option<DriverVerificationEvidence>,
     capabilities: DriverCapabilities,
 }
 
 impl DatabaseProfile {
     pub(crate) fn from_record(record: DatabaseProfileRecord) -> Result<Self, DriverRegistryError> {
-        let id = DatabaseProfileId::new(record.id)?;
+        let id = DatabaseProfileId::new(record.profile_id)?;
         let db_type = DbType::of(&record.db_type).ok_or_else(|| {
             DriverRegistryError::InvalidManifest(format!(
                 "profile '{id}' references unknown Druid DbType '{}'",
                 record.db_type
             ))
         })?;
-        if record.display_name.trim().is_empty() || record.provider_id.trim().is_empty() {
+        if record.display_name.trim().is_empty()
+            || record.provider_id.trim().is_empty()
+            || record.artifact_id.trim().is_empty()
+            || record.exception_sorter.trim().is_empty()
+        {
             return Err(DriverRegistryError::InvalidManifest(format!(
-                "profile '{id}' must define displayName and providerId"
+                "profile '{id}' must define displayName, providerId, artifactId and exceptionSorter"
             )));
         }
         if !(1..=3).contains(&record.delivery_phase) {
@@ -48,11 +59,17 @@ impl DatabaseProfile {
             protocol_family: record.protocol_family,
             runtime_mode: record.runtime_mode,
             provider_id: record.provider_id,
+            artifact_id: record.artifact_id,
+            artifact_version: record.artifact_version,
+            driver_class: record.driver_class,
             default_port: record.default_port,
             support_status: record.support_status,
             wall_mode: record.wall_mode,
             delivery_phase: record.delivery_phase,
             validation_query: record.validation_query,
+            reset_sql: record.reset_sql,
+            exception_sorter: record.exception_sorter,
+            evidence: record.evidence,
             capabilities: record.capabilities,
         })
     }
@@ -82,6 +99,18 @@ impl DatabaseProfile {
         &self.provider_id
     }
     #[must_use]
+    pub fn artifact_id(&self) -> &str {
+        &self.artifact_id
+    }
+    #[must_use]
+    pub fn artifact_version(&self) -> Option<&str> {
+        self.artifact_version.as_deref()
+    }
+    #[must_use]
+    pub fn driver_class(&self) -> Option<&str> {
+        self.driver_class.as_deref()
+    }
+    #[must_use]
     pub const fn default_port(&self) -> Option<u16> {
         self.default_port
     }
@@ -100,6 +129,18 @@ impl DatabaseProfile {
     #[must_use]
     pub fn validation_query(&self) -> Option<&str> {
         self.validation_query.as_deref()
+    }
+    #[must_use]
+    pub fn reset_sql(&self) -> Option<&str> {
+        self.reset_sql.as_deref()
+    }
+    #[must_use]
+    pub fn exception_sorter(&self) -> &str {
+        &self.exception_sorter
+    }
+    #[must_use]
+    pub fn evidence(&self) -> Option<&DriverVerificationEvidence> {
+        self.evidence.as_ref()
     }
     #[must_use]
     pub const fn capabilities(&self) -> DriverCapabilities {

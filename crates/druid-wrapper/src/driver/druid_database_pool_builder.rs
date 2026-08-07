@@ -1,4 +1,5 @@
 use super::{DatabaseConnectionConfig, DriverRegistryError, DruidDriverRegistry};
+#[cfg(feature = "jdbc-agent")]
 use crate::jdbc_agent::JdbcAgentOptions;
 use druid::pool::{DruidPool, DruidPoolBuilder};
 use std::collections::HashMap;
@@ -9,6 +10,7 @@ pub struct DruidDatabasePoolBuilder {
     url: String,
     name: Option<String>,
     properties: HashMap<String, String>,
+    #[cfg(feature = "jdbc-agent")]
     jdbc_agent_options: Option<JdbcAgentOptions>,
     configure: Option<Box<dyn FnOnce(DruidPoolBuilder) -> DruidPoolBuilder + Send>>,
 }
@@ -22,6 +24,7 @@ impl DruidDatabasePoolBuilder {
             url: url.into(),
             name: None,
             properties: HashMap::new(),
+            #[cfg(feature = "jdbc-agent")]
             jdbc_agent_options: None,
             configure: None,
         }
@@ -50,6 +53,7 @@ impl DruidDatabasePoolBuilder {
     }
 
     /// 显式启用 Druid JDBC Agent 运行时。
+    #[cfg(feature = "jdbc-agent")]
     #[must_use]
     pub fn jdbc_agent(mut self, options: JdbcAgentOptions) -> Self {
         self.jdbc_agent_options = Some(options);
@@ -75,7 +79,11 @@ impl DruidDatabasePoolBuilder {
 
     /// 解析驱动并构建 canonical Druid native pool。
     pub async fn build(self) -> Result<DruidPool, DriverRegistryError> {
+        #[cfg(feature = "jdbc-agent")]
         let mut registry = DruidDriverRegistry::builtin()?;
+        #[cfg(not(feature = "jdbc-agent"))]
+        let registry = DruidDriverRegistry::builtin()?;
+        #[cfg(feature = "jdbc-agent")]
         if let Some(options) = self.jdbc_agent_options {
             registry = registry.with_jdbc_agent(options);
         }

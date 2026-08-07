@@ -66,8 +66,8 @@ fn test_pool_config_default_values() {
     assert_eq!(cfg.max_open, 8);
     assert_eq!(cfg.min_idle, 0);
     assert_eq!(cfg.initial_size, 0);
-    assert_eq!(cfg.acquire_timeout, Duration::from_secs(30));
-    assert_eq!(cfg.max_lifetime, Duration::from_secs(25200));
+    assert_eq!(cfg.acquire_timeout, Duration::MAX);
+    assert_eq!(cfg.max_lifetime, Duration::MAX);
     assert_eq!(cfg.eviction_interval, Duration::from_secs(60));
     assert_eq!(cfg.min_evictable_idle, Duration::from_secs(1800));
     assert!(!cfg.test_on_borrow);
@@ -478,7 +478,7 @@ fn test_value_display_all_variants() {
     assert_eq!(format!("{}", Value::Bool(true)), "true");
     assert_eq!(format!("{}", Value::Bool(false)), "false");
     assert_eq!(format!("{}", Value::Int(42)), "42");
-    assert_eq!(format!("{}", Value::Float(3.14)), "3.14");
+    assert_eq!(format!("{}", Value::Float(3.125)), "3.125");
     assert_eq!(format!("{}", Value::String("hello".into())), "'hello'");
     assert_eq!(format!("{}", Value::Bytes(vec![1, 2, 3])), "<3 bytes>");
 }
@@ -491,8 +491,8 @@ fn test_value_from_conversions() {
     assert_eq!(v, Value::Int(42));
     let v: Value = 42i32.into();
     assert_eq!(v, Value::Int(42));
-    let v: Value = 3.14f64.into();
-    assert_eq!(v, Value::Float(3.14));
+    let v: Value = 3.125f64.into();
+    assert_eq!(v, Value::Float(3.125));
     let v: Value = String::from("test").into();
     assert_eq!(v, Value::String("test".into()));
     let v: Value = "hello".into();
@@ -817,12 +817,13 @@ fn test_statement_type_variants() {
 
 #[test]
 fn test_conn_state_clone_and_debug() {
-    let mut s = ConnState::default();
-    s.auto_commit = false;
-    s.read_only = true;
-    s.transaction_isolation = 8;
-    s.catalog = Some("mydb".into());
-    s.schema = Some("public".into());
+    let s = ConnState {
+        auto_commit: false,
+        read_only: true,
+        transaction_isolation: 8,
+        catalog: Some("mydb".into()),
+        schema: Some("public".into()),
+    };
 
     let s2 = s.clone();
     assert_eq!(s.auto_commit, s2.auto_commit);

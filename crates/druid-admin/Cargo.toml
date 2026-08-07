@@ -7,12 +7,24 @@ license      = "Apache-2.0"
 description  = "druid-rust admin: axum-based HTTP endpoints that expose datasource, SQL, wall and /metrics"
 publish      = false
 
+[features]
+default = []
+driver-catalog = ["druid-wrapper/driver-catalog"]
+jdbc-agent = ["driver-catalog", "druid-wrapper/jdbc-agent"]
+managed-driver-install = ["jdbc-agent", "druid-wrapper/managed-driver-install"]
+all-databases = ["managed-driver-install", "druid-wrapper/all-databases"]
+
+[[bin]]
+name = "druid-driver"
+path = "src/bin/druid-driver.rs"
+required-features = ["managed-driver-install"]
+
 [lints]
 workspace = true
 
 [dependencies]
-druid         = { path = "../druid" }
-druid-wrapper = { path = "../druid-wrapper" }
+druid         = { version = "0.0.0-design", path = "../druid" }
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false }
 tokio         = { workspace = true }
 axum          = { workspace = true }
 axum-valid    = { workspace = true }

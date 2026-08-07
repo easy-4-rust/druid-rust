@@ -1,3 +1,5 @@
+#![cfg(feature = "managed-driver-install")]
+
 use druid_admin::driver::{DriverInstaller, DriverRuntimeDiagnostics};
 
 #[tokio::test]

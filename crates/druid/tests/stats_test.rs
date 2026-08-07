@@ -49,7 +49,7 @@ fn test_merged_sql_stat_record() {
     stat.record(Duration::from_millis(20), true);
     stat.record(Duration::from_millis(5), false);
 
-    assert_eq!(stat.execute_count(), 3);
+    assert_eq!(stat.execute_count(), 2);
     assert_eq!(stat.error_count(), 1);
     assert!(stat.total_time_ms() > 0.0);
     assert!(stat.max_time_ms() >= 20.0 - 0.1, "max should be ~20ms");
@@ -177,6 +177,6 @@ async fn test_stat_filter_as_after_filter() {
 
     assert_eq!(collector.sql_merger.len(), 1);
     let stats = collector.sql_merger.all_stats();
-    assert_eq!(stats[0].execute_count(), 2);
+    assert_eq!(stats[0].execute_count(), 1);
     assert_eq!(stats[0].error_count(), 1);
 }

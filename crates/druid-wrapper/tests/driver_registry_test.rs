@@ -3,13 +3,14 @@ use druid_wrapper::driver::{
     DatabaseConnectionConfig, DatabaseProfileId, DriverManifest, DriverRegistryError,
     DriverSupportStatus, DruidDatabasePoolBuilder, DruidDriverRegistry,
 };
+#[cfg(feature = "jdbc-agent")]
 use druid_wrapper::jdbc_agent::JdbcAgentOptions;
 
 #[test]
 fn builtin_catalog_has_exact_phased_sql_scope() {
     let manifest = DriverManifest::builtin().expect("内置数据库目录必须可解析");
 
-    assert_eq!(manifest.schema_version(), 1);
+    assert_eq!(manifest.schema_version(), 2);
     assert_eq!(manifest.profiles().len(), 80);
     assert_eq!(
         manifest
@@ -49,6 +50,9 @@ fn builtin_catalog_has_exact_phased_sql_scope() {
         .profiles()
         .iter()
         .all(|profile| { !excluded_non_sql_products.contains(&profile.id().as_str()) }));
+    assert!(manifest.profiles().iter().all(|profile| {
+        !profile.artifact_id().is_empty() && !profile.exception_sorter().is_empty()
+    }));
 }
 
 #[test]
@@ -98,15 +102,17 @@ fn registry_resolves_protocol_compatible_sqlx_profiles() {
 #[test]
 fn manifest_rejects_unknown_druid_dialect() {
     let invalid = r#"{
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "catalogVersion": "test",
         "profiles": [{
-            "id": "invalid",
+            "profileId": "invalid",
             "displayName": "Invalid",
             "dbType": "not-a-druid-dialect",
             "protocolFamily": "jdbc",
             "runtimeMode": "jdbc_agent",
             "providerId": "jdbc-agent",
+            "artifactId": "invalid-jdbc",
+            "exceptionSorter": "auto",
             "supportStatus": "declared",
             "wallMode": "generic",
             "deliveryPhase": 3
@@ -116,6 +122,67 @@ fn manifest_rejects_unknown_druid_dialect() {
     assert!(matches!(
         DriverManifest::from_json(invalid),
         Err(DriverRegistryError::InvalidManifest(_))
+    ));
+}
+
+#[test]
+fn manifest_rejects_verified_profiles_without_cross_platform_evidence() {
+    let invalid = r#"{
+        "schemaVersion": 2,
+        "catalogVersion": "test",
+        "profiles": [{
+            "profileId": "verified-without-evidence",
+            "displayName": "Verified Without Evidence",
+            "dbType": "h2",
+            "protocolFamily": "embedded",
+            "runtimeMode": "jdbc_agent",
+            "providerId": "jdbc-agent",
+            "artifactId": "h2-jdbc",
+            "exceptionSorter": "auto",
+            "supportStatus": "verified",
+            "wallMode": "dedicated",
+            "deliveryPhase": 1,
+            "validationQuery": "SELECT 1",
+            "capabilities": {
+                "query": true,
+                "update": true,
+                "preparedStatements": true,
+                "transactions": true
+            }
+        }]
+    }"#;
+
+    assert!(matches!(
+        DriverManifest::from_json(invalid),
+        Err(DriverRegistryError::InvalidManifest(message))
+            if message.contains("lacks Linux/macOS/Windows evidence")
+    ));
+}
+
+#[test]
+fn manifest_rejects_incompatible_provider_runtime_and_protocol() {
+    let invalid = r#"{
+        "schemaVersion": 2,
+        "catalogVersion": "test",
+        "profiles": [{
+            "profileId": "bad-provider",
+            "displayName": "Bad Provider",
+            "dbType": "mysql",
+            "protocolFamily": "mysql",
+            "runtimeMode": "jdbc_agent",
+            "providerId": "sqlx",
+            "artifactId": "bad-provider",
+            "exceptionSorter": "auto",
+            "supportStatus": "declared",
+            "wallMode": "dedicated",
+            "deliveryPhase": 1
+        }]
+    }"#;
+
+    assert!(matches!(
+        DriverManifest::from_json(invalid),
+        Err(DriverRegistryError::InvalidManifest(message))
+            if message.contains("incompatible runtimeMode")
     ));
 }
 
@@ -147,6 +214,7 @@ fn profile_id_is_stable_and_rejects_path_syntax() {
 }
 
 #[test]
+#[cfg(feature = "jdbc-agent")]
 fn jdbc_agent_runtime_requires_explicit_installation() {
     let config =
         DatabaseConnectionConfig::new("h2", "jdbc:h2:mem:catalog").expect("H2 产品配置必须合法");

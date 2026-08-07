@@ -738,8 +738,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     let error = statement
         .execute_query_result_set(&mut connection, "SELECT 4")
         .await
-        .err()
-        .expect("listener 异常必须中止 ResultSet 构造");
+        .expect_err("listener 异常必须中止 ResultSet 构造");
     assert!(StatFilterContext::global().remove_context_listener(&failing));
     assert_eq!(error, DruidError::Other("failing failed".to_string()));
     assert_eq!(collector.result_set_stat().opening_count(), 1);

@@ -10,7 +10,7 @@ public final class JdbcAgentMain {
     }
 
     /**
-     * 在标准输入输出上运行 DAP1 帧循环；日志只写标准错误。
+     * 在标准输入输出上运行 JSON-RPC 2.0 NDJSON 循环；日志只写标准错误。
      *
      * @param args 保留参数
      */

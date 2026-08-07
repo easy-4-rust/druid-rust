@@ -21,8 +21,8 @@ fn test_wall_config_all_46_defaults() {
     assert!(c.insert_allow);
     assert!(c.update_allow);
     assert!(c.delete_allow);
-    assert!(!c.drop_table_allow); // DruidJava: false
-    assert!(!c.truncate_allow); // DruidJava: false
+    assert!(c.drop_table_allow);
+    assert!(c.truncate_allow);
     assert!(c.alter_table_allow);
     assert!(c.create_table_allow);
     assert!(c.commit_allow);
@@ -34,24 +34,24 @@ fn test_wall_config_all_46_defaults() {
     assert!(c.start_transaction_allow);
     // WHERE enforcement (6 fields)
     assert!(c.set_allow);
-    assert!(c.update_must_have_where); // DruidJava: true
-    assert!(c.delete_must_have_where); // DruidJava: true
+    assert!(!c.update_must_have_where);
+    assert!(!c.delete_must_have_where);
     assert!(c.select_where_alway_true_check);
     assert!(c.select_having_alway_true_check);
     assert!(c.update_where_alway_true_check);
     // Condition checks (5 fields)
     assert!(c.delete_where_alway_true_check);
-    assert!(!c.condition_and_alway_true_allow);
+    assert!(c.condition_and_alway_true_allow);
     assert!(!c.condition_and_alway_false_allow);
     assert!(!c.condition_double_const_allow);
     assert!(c.condition_like_true_allow);
     // Syntax control (9 fields)
-    assert!(c.case_condition_const_allow);
+    assert!(!c.case_condition_const_allow);
     assert!(!c.multi_statement_allow); // DruidJava: false
     assert!(c.hint_allow);
-    assert!(c.none_base_statement_allow);
+    assert!(!c.none_base_statement_allow);
     assert!(!c.limit_zero_allow); // DruidJava: false
-    assert!(c.comment_allow);
+    assert!(!c.comment_allow);
     assert!(c.variant_check);
     assert!(!c.must_parameterized);
     assert!(c.metadata_allow);
@@ -75,7 +75,7 @@ fn test_wall_config_all_46_defaults() {
 /// WallBVTTest#test_delete_0: DELETE without WHERE → Denied.
 #[test]
 fn test_wall_delete_without_where() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(WallConfig::builder().delete_must_have_where(true).build());
     let result = wall.check("DELETE FROM users");
     assert!(result.is_err());
     assert!(result
@@ -94,7 +94,7 @@ fn test_wall_delete_with_where() {
 /// WallBVTTest#test_update_0: UPDATE without WHERE → Denied.
 #[test]
 fn test_wall_update_without_where() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(WallConfig::builder().update_must_have_where(true).build());
     let result = wall.check("UPDATE users SET name = 'x'");
     assert!(result.is_err());
     assert!(result
@@ -115,7 +115,7 @@ fn test_wall_update_with_where() {
 /// WallBVTTest#test_drop: DROP TABLE → Denied.
 #[test]
 fn test_wall_drop_table_denied() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(WallConfig::builder().drop_table_allow(false).build());
     let result = wall.check("DROP TABLE users");
     assert!(result.is_err());
     assert!(result
@@ -127,7 +127,7 @@ fn test_wall_drop_table_denied() {
 /// WallBVTTest#test_truncate: TRUNCATE → Denied.
 #[test]
 fn test_wall_truncate_denied() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(WallConfig::builder().truncate_allow(false).build());
     let result = wall.check("TRUNCATE users");
     assert!(result.is_err());
     assert!(result
@@ -212,7 +212,13 @@ fn test_wall_syntax_error() {
 /// Multiple violations in one statement.
 #[test]
 fn test_wall_multiple_violations() {
-    let wall = Wall::new(WallConfig::default());
+    let wall = Wall::new(
+        WallConfig::builder()
+            .multi_statement_allow(true)
+            .drop_table_allow(false)
+            .truncate_allow(false)
+            .build(),
+    );
     // DROP TABLE + TRUNCATE in same parse (multi)
     let result = wall.check("DROP TABLE users; TRUNCATE orders");
     assert!(result.is_err());

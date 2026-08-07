@@ -259,9 +259,9 @@ fn test_value_all_conversions_and_display() {
     assert_eq!(format!("{}", int_val), "42");
     let int_val2: Value = 10i32.into();
     assert_eq!(int_val2, Value::Int(10));
-    let float_val: Value = 3.14f64.into();
-    assert_eq!(float_val, Value::Float(3.14));
-    assert_eq!(format!("{}", float_val), "3.14");
+    let float_val: Value = 3.125f64.into();
+    assert_eq!(float_val, Value::Float(3.125));
+    assert_eq!(format!("{}", float_val), "3.125");
     let str_val: Value = String::from("hello").into();
     assert_eq!(str_val, Value::String("hello".into()));
     assert_eq!(format!("{}", str_val), "'hello'");

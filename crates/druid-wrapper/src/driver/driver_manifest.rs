@@ -1,4 +1,7 @@
-use super::{driver_manifest_record::DriverManifestRecord, DatabaseProfile, DriverRegistryError};
+use super::{
+    driver_manifest_record::DriverManifestRecord, DatabaseProfile, DriverRegistryError,
+    DriverRuntimeMode, ProtocolFamily,
+};
 use std::collections::HashSet;
 
 /// 经过 schema、类型和唯一性校验的数据库驱动清单。
@@ -10,7 +13,7 @@ pub struct DriverManifest {
 }
 
 impl DriverManifest {
-    pub(crate) const CURRENT_SCHEMA_VERSION: u32 = 1;
+    pub(crate) const CURRENT_SCHEMA_VERSION: u32 = 2;
 
     /// 加载内置的数据库产品目录。
     pub fn builtin() -> Result<Self, DriverRegistryError> {
@@ -46,12 +49,60 @@ impl DriverManifest {
                     profile.id()
                 )));
             }
+            Self::validate_profile_contract(profile)?;
         }
         Ok(Self {
             schema_version: record.schema_version,
             catalog_version: record.catalog_version,
             profiles,
         })
+    }
+
+    fn validate_profile_contract(profile: &DatabaseProfile) -> Result<(), DriverRegistryError> {
+        let compatible = match profile.runtime_mode() {
+            DriverRuntimeMode::Sqlx => {
+                profile.provider_id() == "sqlx"
+                    && matches!(
+                        profile.protocol_family(),
+                        ProtocolFamily::MySql | ProtocolFamily::PostgreSql | ProtocolFamily::SQLite
+                    )
+            }
+            DriverRuntimeMode::JdbcAgent => {
+                profile.provider_id() == "jdbc-agent"
+                    && profile.protocol_family() != ProtocolFamily::HttpSql
+            }
+            DriverRuntimeMode::HttpSql => profile.protocol_family() == ProtocolFamily::HttpSql,
+            DriverRuntimeMode::Native => profile.provider_id() != "jdbc-agent",
+        };
+        if !compatible {
+            return Err(DriverRegistryError::InvalidManifest(format!(
+                "profile '{}' has incompatible runtimeMode, providerId and protocolFamily",
+                profile.id()
+            )));
+        }
+        if profile.support_status().counts_as_supported() {
+            let capabilities = profile.capabilities();
+            if !capabilities.query
+                || !capabilities.update
+                || !capabilities.prepared_statements
+                || !capabilities.transactions
+            {
+                return Err(DriverRegistryError::InvalidManifest(format!(
+                    "verified profile '{}' does not satisfy the minimum capability contract",
+                    profile.id()
+                )));
+            }
+            if profile
+                .evidence()
+                .is_none_or(|evidence| !evidence.validates_support_contract())
+            {
+                return Err(DriverRegistryError::InvalidManifest(format!(
+                    "verified profile '{}' lacks Linux/macOS/Windows evidence",
+                    profile.id()
+                )));
+            }
+        }
+        Ok(())
     }
 
     #[must_use]

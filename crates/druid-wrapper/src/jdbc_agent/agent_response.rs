@@ -1,38 +1,33 @@
-use super::AgentError;
+use super::AgentRpcError;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
-/// Druid JDBC Agent Protocol v1 响应帧。
+/// JDBC Agent JSON-RPC 2.0 响应。
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct AgentResponse {
-    protocol_version: u32,
-    request_id: u64,
-    success: bool,
+    jsonrpc: String,
+    id: u64,
     #[serde(default)]
-    payload: Option<JsonValue>,
+    result: Option<JsonValue>,
     #[serde(default)]
-    error: Option<AgentError>,
+    error: Option<AgentRpcError>,
 }
 
 impl AgentResponse {
-    pub(crate) const fn protocol_version(&self) -> u32 {
-        self.protocol_version
+    pub(crate) fn validate_version(&self) -> bool {
+        self.jsonrpc == "2.0"
     }
 
     pub(crate) const fn request_id(&self) -> u64 {
-        self.request_id
+        self.id
     }
 
-    pub(crate) const fn success(&self) -> bool {
-        self.success
+    pub(crate) fn take_result(&mut self) -> Option<JsonValue> {
+        self.result.take()
     }
 
-    pub(crate) fn take_payload(&mut self) -> Option<JsonValue> {
-        self.payload.take()
-    }
-
-    pub(crate) fn take_error(&mut self) -> Option<AgentError> {
+    pub(crate) fn take_error(&mut self) -> Option<AgentRpcError> {
         self.error.take()
     }
 }

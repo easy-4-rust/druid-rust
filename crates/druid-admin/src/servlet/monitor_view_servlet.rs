@@ -71,7 +71,6 @@ impl MonitorViewServlet {
     }
 
     /// 构建 Java 兼容端点和 Rust REST 别名。
-    #[must_use]
     pub fn router(self) -> Router {
         let auth_state = self.clone();
         let context_path = self.context_path.to_string();

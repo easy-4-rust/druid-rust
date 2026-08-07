@@ -72,8 +72,8 @@ fn test_wall_config_default_all_fields() {
     assert!(cfg.insert_allow);
     assert!(cfg.update_allow);
     assert!(cfg.delete_allow);
-    assert!(!cfg.drop_table_allow);
-    assert!(!cfg.truncate_allow);
+    assert!(cfg.drop_table_allow);
+    assert!(cfg.truncate_allow);
     assert!(cfg.alter_table_allow);
     assert!(cfg.create_table_allow);
     assert!(cfg.commit_allow);
@@ -83,22 +83,22 @@ fn test_wall_config_default_all_fields() {
     assert!(cfg.describe_allow);
     assert!(cfg.start_transaction_allow);
     assert!(cfg.set_allow);
-    assert!(cfg.update_must_have_where);
-    assert!(cfg.delete_must_have_where);
+    assert!(!cfg.update_must_have_where);
+    assert!(!cfg.delete_must_have_where);
     assert!(cfg.select_where_alway_true_check);
     assert!(cfg.select_having_alway_true_check);
     assert!(cfg.update_where_alway_true_check);
     assert!(cfg.delete_where_alway_true_check);
-    assert!(!cfg.condition_and_alway_true_allow);
+    assert!(cfg.condition_and_alway_true_allow);
     assert!(!cfg.condition_and_alway_false_allow);
     assert!(!cfg.condition_double_const_allow);
     assert!(cfg.condition_like_true_allow);
-    assert!(cfg.case_condition_const_allow);
+    assert!(!cfg.case_condition_const_allow);
     assert!(!cfg.multi_statement_allow);
     assert!(cfg.hint_allow);
-    assert!(cfg.none_base_statement_allow);
+    assert!(!cfg.none_base_statement_allow);
     assert!(!cfg.limit_zero_allow);
-    assert!(cfg.comment_allow);
+    assert!(!cfg.comment_allow);
     assert!(cfg.variant_check);
     assert!(!cfg.must_parameterized);
     assert!(cfg.metadata_allow);
@@ -205,9 +205,9 @@ fn test_wall_insert_denied() {
     let result = wall.check("INSERT INTO users VALUES (1)");
     assert!(result.is_err());
     let violations = result.unwrap_err();
-    assert!(violations
-        .iter()
-        .any(|v| matches!(v, WallViolation::SyntaxError(_))));
+    assert!(violations.iter().any(
+        |v| matches!(v, WallViolation::OperationNotAllowed(operation) if operation == "INSERT")
+    ));
 }
 
 #[test]
@@ -234,7 +234,8 @@ fn test_wall_update_with_where() {
 
 #[test]
 fn test_wall_update_without_where() {
-    let wall = Wall::new(WallConfig::default());
+    let cfg = WallConfig::builder().update_must_have_where(true).build();
+    let wall = Wall::new(cfg);
     let result = wall.check("UPDATE users SET name = 'x'");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -280,7 +281,8 @@ fn test_wall_delete_with_where() {
 
 #[test]
 fn test_wall_delete_without_where() {
-    let wall = Wall::new(WallConfig::default());
+    let cfg = WallConfig::builder().delete_must_have_where(true).build();
+    let wall = Wall::new(cfg);
     let result = wall.check("DELETE FROM users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -327,7 +329,8 @@ fn test_wall_drop_table_allowed() {
 
 #[test]
 fn test_wall_drop_table_denied() {
-    let wall = Wall::new(WallConfig::default());
+    let cfg = WallConfig::builder().drop_table_allow(false).build();
+    let wall = Wall::new(cfg);
     let result = wall.check("DROP TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -338,7 +341,8 @@ fn test_wall_drop_table_denied() {
 
 #[test]
 fn test_wall_drop_table_multiple() {
-    let wall = Wall::new(WallConfig::default());
+    let cfg = WallConfig::builder().drop_table_allow(false).build();
+    let wall = Wall::new(cfg);
     let result = wall.check("DROP TABLE users, orders");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -368,7 +372,8 @@ fn test_wall_truncate_allowed() {
 
 #[test]
 fn test_wall_truncate_denied() {
-    let wall = Wall::new(WallConfig::default());
+    let cfg = WallConfig::builder().truncate_allow(false).build();
+    let wall = Wall::new(cfg);
     let result = wall.check("TRUNCATE TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();

@@ -18,7 +18,8 @@ fn test_select_with_where_passes() {
 // FR-011: DROP TABLE 拦截
 #[test]
 fn test_drop_table_blocked() {
-    let wall = Wall::new(WallConfig::default());
+    let config = WallConfig::builder().drop_table_allow(false).build();
+    let wall = Wall::new(config);
     let result = wall.check("DROP TABLE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -37,7 +38,8 @@ fn test_drop_table_allowed_when_configured() {
 // FR-012: UPDATE 无 WHERE 拦截
 #[test]
 fn test_update_without_where_blocked() {
-    let wall = Wall::new(WallConfig::default());
+    let config = WallConfig::builder().update_must_have_where(true).build();
+    let wall = Wall::new(config);
     let result = wall.check("UPDATE users SET name = 'a'");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -57,7 +59,8 @@ fn test_update_with_where_passes() {
 // FR-013: DELETE 无 WHERE 拦截
 #[test]
 fn test_delete_without_where_blocked() {
-    let wall = Wall::new(WallConfig::default());
+    let config = WallConfig::builder().delete_must_have_where(true).build();
+    let wall = Wall::new(config);
     let result = wall.check("DELETE FROM users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -75,7 +78,8 @@ fn test_delete_with_where_passes() {
 // FR-014: TRUNCATE 拦截
 #[test]
 fn test_truncate_blocked() {
-    let wall = Wall::new(WallConfig::default());
+    let config = WallConfig::builder().truncate_allow(false).build();
+    let wall = Wall::new(config);
     let result = wall.check("TRUNCATE users");
     assert!(result.is_err());
     let violations = result.unwrap_err();
@@ -95,10 +99,10 @@ fn test_truncate_allowed_when_configured() {
 #[test]
 fn test_wall_config_builder_defaults() {
     let config = WallConfig::default();
-    assert!(!config.drop_table_allow); // 默认拒绝 DROP
-    assert!(!config.truncate_allow); // 默认拒绝 TRUNCATE
-    assert!(config.update_must_have_where); // UPDATE 必须有 WHERE
-    assert!(config.delete_must_have_where); // DELETE 必须有 WHERE
+    assert!(config.drop_table_allow); // Java 默认允许 DROP
+    assert!(config.truncate_allow); // Java 默认允许 TRUNCATE
+    assert!(!config.update_must_have_where); // Java 默认不强制 UPDATE WHERE
+    assert!(!config.delete_must_have_where); // Java 默认不强制 DELETE WHERE
     assert!(config.select_all_column_allow); // SELECT * 默认允许
     assert!(config.insert_allow); // INSERT 默认允许
 }
@@ -148,8 +152,10 @@ fn test_syntax_error_reported() {
 #[test]
 fn test_multi_statement_parsing() {
     let wall = Wall::new(WallConfig::default());
-    // sqlparser 默认逐条解析
-    assert!(wall.check("SELECT 1; SELECT 2").is_ok());
+    let violations = wall.check("SELECT 1; SELECT 2").unwrap_err();
+    assert!(violations
+        .iter()
+        .any(|violation| matches!(violation, WallViolation::MultiStatementNotAllowed)));
 }
 
 // 额外：INSERT 默认允许

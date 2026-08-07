@@ -2,6 +2,7 @@ use super::{
     DatabaseConnectionConfig, DatabaseProfile, DatabaseProfileId, DriverManifest,
     DriverRegistryError, DriverRuntimeMode, ProtocolFamily, ResolvedDatabaseDriver,
 };
+#[cfg(feature = "jdbc-agent")]
 use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use crate::sqlx::SqlxConnectionFactory;
 use druid::core::PhysicalConnectionFactory;
@@ -13,6 +14,7 @@ use std::sync::Arc;
 pub struct DruidDriverRegistry {
     manifest: DriverManifest,
     profile_indexes: HashMap<DatabaseProfileId, usize>,
+    #[cfg(feature = "jdbc-agent")]
     jdbc_agent_options: Option<JdbcAgentOptions>,
 }
 
@@ -33,11 +35,13 @@ impl DruidDriverRegistry {
         Ok(Self {
             manifest,
             profile_indexes,
+            #[cfg(feature = "jdbc-agent")]
             jdbc_agent_options: None,
         })
     }
 
     /// 显式安装 JDBC Agent 运行时；未调用时 JDBC 档案保持不可解析。
+    #[cfg(feature = "jdbc-agent")]
     #[must_use]
     pub fn with_jdbc_agent(mut self, options: JdbcAgentOptions) -> Self {
         self.jdbc_agent_options = Some(options);
@@ -95,32 +99,42 @@ impl DruidDriverRegistry {
                 ))
             }
             DriverRuntimeMode::JdbcAgent => {
-                if !config.url().starts_with("jdbc:") {
-                    return Err(DriverRegistryError::InvalidUrl {
+                #[cfg(not(feature = "jdbc-agent"))]
+                {
+                    return Err(DriverRegistryError::UnsupportedRuntime {
                         profile: profile.id().to_string(),
-                        url: config.url().to_owned(),
+                        runtime: "JdbcAgent feature disabled".to_owned(),
                     });
                 }
-                let options = self.jdbc_agent_options.clone().ok_or_else(|| {
-                    DriverRegistryError::UnsupportedRuntime {
-                        profile: profile.id().to_string(),
-                        runtime: "JdbcAgent".to_owned(),
+                #[cfg(feature = "jdbc-agent")]
+                {
+                    if !config.url().starts_with("jdbc:") {
+                        return Err(DriverRegistryError::InvalidUrl {
+                            profile: profile.id().to_string(),
+                            url: config.url().to_owned(),
+                        });
                     }
-                })?;
-                let mut factory = JdbcAgentConnectionFactory::new(
-                    config.url(),
-                    profile.validation_query().map(str::to_owned),
-                    options,
-                );
-                for (name, value) in config.properties() {
-                    factory = factory.property(name, value);
+                    let options = self.jdbc_agent_options.clone().ok_or_else(|| {
+                        DriverRegistryError::UnsupportedRuntime {
+                            profile: profile.id().to_string(),
+                            runtime: "JdbcAgent".to_owned(),
+                        }
+                    })?;
+                    let mut factory = JdbcAgentConnectionFactory::new(
+                        config.url(),
+                        profile.validation_query().map(str::to_owned),
+                        options,
+                    );
+                    for (name, value) in config.properties() {
+                        factory = factory.property(name, value);
+                    }
+                    let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                    Ok(ResolvedDatabaseDriver::new(
+                        profile,
+                        config.url().to_owned(),
+                        factory,
+                    ))
                 }
-                let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
-                Ok(ResolvedDatabaseDriver::new(
-                    profile,
-                    config.url().to_owned(),
-                    factory,
-                ))
             }
             runtime => Err(DriverRegistryError::UnsupportedRuntime {
                 profile: profile.id().to_string(),

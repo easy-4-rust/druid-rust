@@ -545,8 +545,8 @@ fn test_value_conversions() {
     let v: Value = true.into();
     assert_eq!(v, Value::Bool(true));
 
-    let v: Value = 3.14f64.into();
-    assert_eq!(v, Value::Float(3.14));
+    let v: Value = 3.125f64.into();
+    assert_eq!(v, Value::Float(3.125));
 
     let v: Value = Value::Null;
     assert_eq!(format!("{v}"), "NULL");

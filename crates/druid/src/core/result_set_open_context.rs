@@ -64,6 +64,7 @@ impl<'a> ResultSetOpenContext<'a> {
         self.filter_context.set_tenant_columns(tenant_columns);
     }
 
+    #[allow(clippy::type_complexity)]
     pub(crate) fn into_column_mappings(
         self,
     ) -> (

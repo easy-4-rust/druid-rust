@@ -1540,286 +1540,289 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         .as_any()
         .downcast_ref::<TestCallableStatement>()
         .unwrap();
-    let registrations = physical
-        .registrations
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(registrations.len(), 6);
-    assert_eq!(
-        registrations
-            .get(&CallableParameter::Index(2))
-            .unwrap()
-            .scale(),
-        Some(2)
-    );
-    assert_eq!(
-        registrations
-            .get(&CallableParameter::Index(3))
-            .unwrap()
-            .type_name(),
-        Some("schema.kind")
-    );
-    drop(registrations);
-    let named_parameters = physical
-        .named_parameters
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(named_parameters.len(), 49);
-    assert_eq!(
-        named_parameters.get("nullable"),
-        Some(&CallableInputParameter::Null {
-            sql_type: 4,
-            type_name: None,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("typed_null"),
-        Some(&CallableInputParameter::Null {
-            sql_type: 2002,
-            type_name: Some("schema.kind".to_string()),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_byte"),
-        Some(&CallableInputParameter::Byte(8))
-    );
-    assert_eq!(
-        named_parameters.get("in_short"),
-        Some(&CallableInputParameter::Short(16))
-    );
-    assert_eq!(
-        named_parameters.get("in_float"),
-        Some(&CallableInputParameter::Float(1.25))
-    );
-    assert_eq!(
-        named_parameters.get("in_url"),
-        Some(&CallableInputParameter::Url(None))
-    );
-    assert_eq!(
-        named_parameters.get("in_row_id"),
-        Some(&CallableInputParameter::RowId(None))
-    );
-    assert_eq!(
-        named_parameters.get("in_sql_xml"),
-        Some(&CallableInputParameter::SqlXml(None))
-    );
-    assert!(matches!(
-        named_parameters.get("in_ascii_stream"),
-        Some(CallableInputParameter::AsciiStream {
-            stream: Some(_),
-            length: JdbcStreamLength::Unspecified,
-        })
-    ));
-    assert_eq!(
-        named_parameters.get("in_ascii_stream_int"),
-        Some(&CallableInputParameter::AsciiStream {
-            stream: None,
-            length: JdbcStreamLength::Int(-7),
-        })
-    );
-    assert!(matches!(
-        named_parameters.get("in_ascii_stream_long"),
-        Some(CallableInputParameter::AsciiStream {
-            stream: Some(_),
-            length: JdbcStreamLength::Long(-8),
-        })
-    ));
-    assert!(matches!(
-        named_parameters.get("in_binary_stream"),
-        Some(CallableInputParameter::BinaryStream {
-            stream: Some(_),
-            length: JdbcStreamLength::Unspecified,
-        })
-    ));
-    assert_eq!(
-        named_parameters.get("in_binary_stream_int"),
-        Some(&CallableInputParameter::BinaryStream {
-            stream: None,
-            length: JdbcStreamLength::Int(-9),
-        })
-    );
-    assert!(matches!(
-        named_parameters.get("in_binary_stream_long"),
-        Some(CallableInputParameter::BinaryStream {
-            stream: Some(_),
-            length: JdbcStreamLength::Long(-10),
-        })
-    ));
-    assert_eq!(
-        named_parameters.get("in_string"),
-        Some(&CallableInputParameter::String(Some("value".to_string())))
-    );
-    assert_eq!(
-        named_parameters.get("in_string_null"),
-        Some(&CallableInputParameter::String(None))
-    );
-    assert_eq!(
-        named_parameters.get("in_nstring"),
-        Some(&CallableInputParameter::NString(Some("字符".to_string())))
-    );
-    assert_eq!(
-        named_parameters.get("in_nstring_null"),
-        Some(&CallableInputParameter::NString(None))
-    );
-    assert_eq!(
-        named_parameters.get("in_bytes"),
-        Some(&CallableInputParameter::Bytes(Some(vec![8, 9])))
-    );
-    assert_eq!(
-        named_parameters.get("in_bytes_null"),
-        Some(&CallableInputParameter::Bytes(None))
-    );
-    assert_eq!(
-        named_parameters.get("in_typed_object"),
-        Some(&CallableInputParameter::Object {
-            value: Value::Int(11),
-            target_sql_type: Some(4),
-            scale: None,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_scaled_object"),
-        Some(&CallableInputParameter::Object {
-            value: Value::Float(3.5),
-            target_sql_type: Some(3),
-            scale: Some(2),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_decimal"),
-        Some(&CallableInputParameter::BigDecimal(Some(
-            BigDecimal::from_str("123.4500").unwrap()
-        )))
-    );
-    assert_eq!(
-        named_parameters.get("in_blob"),
-        Some(&CallableInputParameter::Blob(Some(input_blob)))
-    );
-    assert_eq!(
-        named_parameters.get("in_blob_null"),
-        Some(&CallableInputParameter::Blob(None))
-    );
-    assert_eq!(
-        named_parameters.get("in_blob_stream"),
-        Some(&CallableInputParameter::BlobStream {
-            stream: Some(input_stream.clone()),
-            length: JdbcStreamLength::Unspecified,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_blob_stream_length"),
-        Some(&CallableInputParameter::BlobStream {
-            stream: None,
-            length: JdbcStreamLength::Long(-1),
-        })
-    );
-    let stored_stream = match named_parameters.get("in_blob_stream").unwrap() {
-        CallableInputParameter::BlobStream {
-            stream: Some(stream),
-            ..
-        } => stream.clone(),
-        other => panic!("expected BlobStream, got {other:?}"),
+    {
+        let registrations = physical
+            .registrations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(registrations.len(), 6);
+        assert_eq!(
+            registrations
+                .get(&CallableParameter::Index(2))
+                .unwrap()
+                .scale(),
+            Some(2)
+        );
+        assert_eq!(
+            registrations
+                .get(&CallableParameter::Index(3))
+                .unwrap()
+                .type_name(),
+            Some("schema.kind")
+        );
+    }
+    let stored_stream = {
+        let named_parameters = physical
+            .named_parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(named_parameters.len(), 49);
+        assert_eq!(
+            named_parameters.get("nullable"),
+            Some(&CallableInputParameter::Null {
+                sql_type: 4,
+                type_name: None,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("typed_null"),
+            Some(&CallableInputParameter::Null {
+                sql_type: 2002,
+                type_name: Some("schema.kind".to_string()),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_byte"),
+            Some(&CallableInputParameter::Byte(8))
+        );
+        assert_eq!(
+            named_parameters.get("in_short"),
+            Some(&CallableInputParameter::Short(16))
+        );
+        assert_eq!(
+            named_parameters.get("in_float"),
+            Some(&CallableInputParameter::Float(1.25))
+        );
+        assert_eq!(
+            named_parameters.get("in_url"),
+            Some(&CallableInputParameter::Url(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_row_id"),
+            Some(&CallableInputParameter::RowId(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_sql_xml"),
+            Some(&CallableInputParameter::SqlXml(None))
+        );
+        assert!(matches!(
+            named_parameters.get("in_ascii_stream"),
+            Some(CallableInputParameter::AsciiStream {
+                stream: Some(_),
+                length: JdbcStreamLength::Unspecified,
+            })
+        ));
+        assert_eq!(
+            named_parameters.get("in_ascii_stream_int"),
+            Some(&CallableInputParameter::AsciiStream {
+                stream: None,
+                length: JdbcStreamLength::Int(-7),
+            })
+        );
+        assert!(matches!(
+            named_parameters.get("in_ascii_stream_long"),
+            Some(CallableInputParameter::AsciiStream {
+                stream: Some(_),
+                length: JdbcStreamLength::Long(-8),
+            })
+        ));
+        assert!(matches!(
+            named_parameters.get("in_binary_stream"),
+            Some(CallableInputParameter::BinaryStream {
+                stream: Some(_),
+                length: JdbcStreamLength::Unspecified,
+            })
+        ));
+        assert_eq!(
+            named_parameters.get("in_binary_stream_int"),
+            Some(&CallableInputParameter::BinaryStream {
+                stream: None,
+                length: JdbcStreamLength::Int(-9),
+            })
+        );
+        assert!(matches!(
+            named_parameters.get("in_binary_stream_long"),
+            Some(CallableInputParameter::BinaryStream {
+                stream: Some(_),
+                length: JdbcStreamLength::Long(-10),
+            })
+        ));
+        assert_eq!(
+            named_parameters.get("in_string"),
+            Some(&CallableInputParameter::String(Some("value".to_string())))
+        );
+        assert_eq!(
+            named_parameters.get("in_string_null"),
+            Some(&CallableInputParameter::String(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_nstring"),
+            Some(&CallableInputParameter::NString(Some("字符".to_string())))
+        );
+        assert_eq!(
+            named_parameters.get("in_nstring_null"),
+            Some(&CallableInputParameter::NString(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_bytes"),
+            Some(&CallableInputParameter::Bytes(Some(vec![8, 9])))
+        );
+        assert_eq!(
+            named_parameters.get("in_bytes_null"),
+            Some(&CallableInputParameter::Bytes(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_typed_object"),
+            Some(&CallableInputParameter::Object {
+                value: Value::Int(11),
+                target_sql_type: Some(4),
+                scale: None,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_scaled_object"),
+            Some(&CallableInputParameter::Object {
+                value: Value::Float(3.5),
+                target_sql_type: Some(3),
+                scale: Some(2),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_decimal"),
+            Some(&CallableInputParameter::BigDecimal(Some(
+                BigDecimal::from_str("123.4500").unwrap()
+            )))
+        );
+        assert_eq!(
+            named_parameters.get("in_blob"),
+            Some(&CallableInputParameter::Blob(Some(input_blob)))
+        );
+        assert_eq!(
+            named_parameters.get("in_blob_null"),
+            Some(&CallableInputParameter::Blob(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_blob_stream"),
+            Some(&CallableInputParameter::BlobStream {
+                stream: Some(input_stream.clone()),
+                length: JdbcStreamLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_blob_stream_length"),
+            Some(&CallableInputParameter::BlobStream {
+                stream: None,
+                length: JdbcStreamLength::Long(-1),
+            })
+        );
+        let stored_stream = match named_parameters.get("in_blob_stream").unwrap() {
+            CallableInputParameter::BlobStream {
+                stream: Some(stream),
+                ..
+            } => stream.clone(),
+            other => panic!("expected BlobStream, got {other:?}"),
+        };
+        assert_eq!(
+            named_parameters.get("in_clob"),
+            Some(&CallableInputParameter::Clob(Some(input_clob)))
+        );
+        assert_eq!(
+            named_parameters.get("in_clob_reader"),
+            Some(&CallableInputParameter::ClobReader {
+                reader: Some(clob_reader.clone()),
+                length: JdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_clob_reader_length"),
+            Some(&CallableInputParameter::ClobReader {
+                reader: None,
+                length: JdbcCharacterLength::Long(-2),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_clob"),
+            Some(&CallableInputParameter::NClob(Some(input_n_clob)))
+        );
+        assert_eq!(
+            named_parameters.get("in_n_clob_reader"),
+            Some(&CallableInputParameter::NClobReader {
+                reader: Some(n_clob_reader.clone()),
+                length: JdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_clob_reader_length"),
+            Some(&CallableInputParameter::NClobReader {
+                reader: None,
+                length: JdbcCharacterLength::Long(-3),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_character_stream"),
+            Some(&CallableInputParameter::CharacterStream {
+                reader: Some(character_reader.clone()),
+                length: JdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_character_stream_int"),
+            Some(&CallableInputParameter::CharacterStream {
+                reader: None,
+                length: JdbcCharacterLength::Int(-4),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_character_stream_long"),
+            Some(&CallableInputParameter::CharacterStream {
+                reader: Some(character_reader_long.clone()),
+                length: JdbcCharacterLength::Long(-5),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_character_stream"),
+            Some(&CallableInputParameter::NCharacterStream {
+                reader: Some(n_character_reader.clone()),
+                length: JdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_character_stream_long"),
+            Some(&CallableInputParameter::NCharacterStream {
+                reader: None,
+                length: JdbcCharacterLength::Long(-6),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_date"),
+            Some(&CallableInputParameter::Date {
+                value: Some(date),
+                calendar: CallableCalendarArgument::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_date_cal"),
+            Some(&CallableInputParameter::Date {
+                value: None,
+                calendar: CallableCalendarArgument::Specified(Some(shanghai.clone())),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_time_cal"),
+            Some(&CallableInputParameter::Time {
+                value: Some(time),
+                calendar: CallableCalendarArgument::Specified(None),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_timestamp_cal"),
+            Some(&CallableInputParameter::Timestamp {
+                value: Some(timestamp),
+                calendar: CallableCalendarArgument::Specified(Some(utc)),
+            })
+        );
+        stored_stream
     };
-    assert_eq!(
-        named_parameters.get("in_clob"),
-        Some(&CallableInputParameter::Clob(Some(input_clob)))
-    );
-    assert_eq!(
-        named_parameters.get("in_clob_reader"),
-        Some(&CallableInputParameter::ClobReader {
-            reader: Some(clob_reader.clone()),
-            length: JdbcCharacterLength::Unspecified,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_clob_reader_length"),
-        Some(&CallableInputParameter::ClobReader {
-            reader: None,
-            length: JdbcCharacterLength::Long(-2),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_n_clob"),
-        Some(&CallableInputParameter::NClob(Some(input_n_clob)))
-    );
-    assert_eq!(
-        named_parameters.get("in_n_clob_reader"),
-        Some(&CallableInputParameter::NClobReader {
-            reader: Some(n_clob_reader.clone()),
-            length: JdbcCharacterLength::Unspecified,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_n_clob_reader_length"),
-        Some(&CallableInputParameter::NClobReader {
-            reader: None,
-            length: JdbcCharacterLength::Long(-3),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_character_stream"),
-        Some(&CallableInputParameter::CharacterStream {
-            reader: Some(character_reader.clone()),
-            length: JdbcCharacterLength::Unspecified,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_character_stream_int"),
-        Some(&CallableInputParameter::CharacterStream {
-            reader: None,
-            length: JdbcCharacterLength::Int(-4),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_character_stream_long"),
-        Some(&CallableInputParameter::CharacterStream {
-            reader: Some(character_reader_long.clone()),
-            length: JdbcCharacterLength::Long(-5),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_n_character_stream"),
-        Some(&CallableInputParameter::NCharacterStream {
-            reader: Some(n_character_reader.clone()),
-            length: JdbcCharacterLength::Unspecified,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_n_character_stream_long"),
-        Some(&CallableInputParameter::NCharacterStream {
-            reader: None,
-            length: JdbcCharacterLength::Long(-6),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_date"),
-        Some(&CallableInputParameter::Date {
-            value: Some(date),
-            calendar: CallableCalendarArgument::Unspecified,
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_date_cal"),
-        Some(&CallableInputParameter::Date {
-            value: None,
-            calendar: CallableCalendarArgument::Specified(Some(shanghai.clone())),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_time_cal"),
-        Some(&CallableInputParameter::Time {
-            value: Some(time),
-            calendar: CallableCalendarArgument::Specified(None),
-        })
-    );
-    assert_eq!(
-        named_parameters.get("in_timestamp_cal"),
-        Some(&CallableInputParameter::Timestamp {
-            value: Some(timestamp),
-            calendar: CallableCalendarArgument::Specified(Some(utc)),
-        })
-    );
-    drop(named_parameters);
     assert_eq!(
         stored_stream.read_to_end().unwrap(),
         b"stream-content",
@@ -1859,60 +1862,63 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         n_character_reader.read_to_string().unwrap(),
         "国家字符-reader"
     );
-    let calendar_reads = physical
-        .calendar_reads
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(calendar_reads.len(), 12);
-    assert_eq!(
-        calendar_reads[0],
-        (
-            CallableParameter::Index(6),
-            CallableCalendarArgument::Unspecified
-        )
-    );
-    assert_eq!(
-        calendar_reads[1],
-        (
-            CallableParameter::Index(6),
-            CallableCalendarArgument::Specified(None)
-        )
-    );
-    assert_eq!(
-        calendar_reads[3],
-        (
-            CallableParameter::Name("date".to_string()),
-            CallableCalendarArgument::Specified(Some(shanghai))
-        )
-    );
-    drop(calendar_reads);
-    let type_map_reads = physical
-        .type_map_reads
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(type_map_reads.len(), 2);
-    assert_eq!(type_map_reads[0].0, CallableParameter::Index(1));
-    assert_eq!(type_map_reads[0].1.as_ref(), Some(&type_map));
-    assert_eq!(
-        type_map_reads[1],
-        (CallableParameter::Name("name".to_string()), None)
-    );
-    drop(type_map_reads);
-    let typed_reads = physical
-        .typed_reads
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(
-        typed_reads.as_slice(),
-        &[
-            (CallableParameter::Index(1), JdbcTargetType::Integer),
+    {
+        let calendar_reads = physical
+            .calendar_reads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(calendar_reads.len(), 12);
+        assert_eq!(
+            calendar_reads[0],
             (
-                CallableParameter::Name("name".to_string()),
-                JdbcTargetType::String,
-            ),
-        ]
-    );
-    drop(typed_reads);
+                CallableParameter::Index(6),
+                CallableCalendarArgument::Unspecified
+            )
+        );
+        assert_eq!(
+            calendar_reads[1],
+            (
+                CallableParameter::Index(6),
+                CallableCalendarArgument::Specified(None)
+            )
+        );
+        assert_eq!(
+            calendar_reads[3],
+            (
+                CallableParameter::Name("date".to_string()),
+                CallableCalendarArgument::Specified(Some(shanghai))
+            )
+        );
+    }
+    {
+        let type_map_reads = physical
+            .type_map_reads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(type_map_reads.len(), 2);
+        assert_eq!(type_map_reads[0].0, CallableParameter::Index(1));
+        assert_eq!(type_map_reads[0].1.as_ref(), Some(&type_map));
+        assert_eq!(
+            type_map_reads[1],
+            (CallableParameter::Name("name".to_string()), None)
+        );
+    }
+    {
+        let typed_reads = physical
+            .typed_reads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            typed_reads.as_slice(),
+            &[
+                (CallableParameter::Index(1), JdbcTargetType::Integer),
+                (
+                    CallableParameter::Name("name".to_string()),
+                    JdbcTargetType::String,
+                ),
+            ]
+        );
+    }
     callable.close().unwrap();
     assert!(callable.is_wrapper_for_type::<dyn PhysicalCallableStatement>());
     assert!(callable
@@ -1963,15 +1969,16 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert_eq!(result_set.key().result_set_holdability(), 0);
     result_set.close().unwrap();
 
-    let keys = prepared_keys
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    assert_eq!(keys.len(), 3);
-    assert_eq!(keys[0].catalog(), None);
-    assert_eq!(keys[0].method_type(), PreparedStatementMethodType::Precall1);
-    assert_eq!(keys[1].method_type(), PreparedStatementMethodType::Precall2);
-    assert_eq!(keys[2].method_type(), PreparedStatementMethodType::Precall3);
-    drop(keys);
+    {
+        let keys = prepared_keys
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(keys.len(), 3);
+        assert_eq!(keys[0].catalog(), None);
+        assert_eq!(keys[0].method_type(), PreparedStatementMethodType::Precall1);
+        assert_eq!(keys[1].method_type(), PreparedStatementMethodType::Precall2);
+        assert_eq!(keys[2].method_type(), PreparedStatementMethodType::Precall3);
+    }
 
     let state = pool.state();
     assert_eq!(state.prepared_statement_count, 3);
