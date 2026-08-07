@@ -3,12 +3,12 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, DruidPooledConnection, FilterChain, JdbcArray, JdbcBlob, JdbcCalendar,
-    JdbcCalendarArgument, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject,
-    JdbcOpaqueObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
-    JdbcTypeMap, JdbcUrl, PhysicalConnectionFactory, PhysicalJdbcOpaqueObject, PhysicalResultSet,
-    ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData,
-    ResultSetStatement, ResultSetUpdate, Value,
+    DruidError, DruidPooledConnection, FilterChain, PhysicalConnectionFactory,
+    PhysicalRdbcOpaqueObject, PhysicalResultSet, RdbcArray, RdbcBlob, RdbcCalendar,
+    RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject,
+    RdbcOpaqueObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType,
+    RdbcTypeMap, RdbcUrl, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
+    ResultSetMetaData, ResultSetStatement, ResultSetUpdate, Value,
 };
 use druid::stats::{StatFilter, StatsCollector};
 use druid::toasty::ToastyConnectionFactory;
@@ -38,17 +38,17 @@ macro_rules! physical_scalar_getter_pair {
     };
 }
 
-fn calendar_identity(calendar: &JdbcCalendarArgument) -> String {
+fn calendar_identity(calendar: &RdbcCalendarArgument) -> String {
     match calendar {
-        JdbcCalendarArgument::Unspecified => "unspecified".to_string(),
-        JdbcCalendarArgument::Specified(None) => "specified:null".to_string(),
-        JdbcCalendarArgument::Specified(Some(calendar)) => {
+        RdbcCalendarArgument::Unspecified => "unspecified".to_string(),
+        RdbcCalendarArgument::Specified(None) => "specified:null".to_string(),
+        RdbcCalendarArgument::Specified(Some(calendar)) => {
             format!("specified:{}", calendar.time_zone_id())
         }
     }
 }
 
-fn type_map_identity(type_map: Option<&JdbcTypeMap>) -> String {
+fn type_map_identity(type_map: Option<&RdbcTypeMap>) -> String {
     match type_map {
         None => "null".to_string(),
         Some(type_map) if type_map.is_empty() => "empty".to_string(),
@@ -87,7 +87,7 @@ macro_rules! physical_temporal_getter_pair {
         fn $index(
             &self,
             column_index: usize,
-            calendar: &JdbcCalendarArgument,
+            calendar: &RdbcCalendarArgument,
         ) -> Result<Option<$ty>, DruidError> {
             self.calls
                 .lock()
@@ -103,7 +103,7 @@ macro_rules! physical_temporal_getter_pair {
         fn $label(
             &self,
             column_label: &str,
-            calendar: &JdbcCalendarArgument,
+            calendar: &RdbcCalendarArgument,
         ) -> Result<Option<$ty>, DruidError> {
             self.calls
                 .lock()
@@ -291,8 +291,8 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
     fn object_with_type_map(
         &self,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         let identity = type_map_identity(type_map);
         self.calls
             .lock()
@@ -300,7 +300,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
             .push(format!(
                 "physical:object_with_type_map:{column_index}:{identity}"
             ));
-        Ok(JdbcObject::String(format!(
+        Ok(RdbcObject::String(format!(
             "index-map:{column_index}:{identity}"
         )))
     }
@@ -308,8 +308,8 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
     fn object_by_label_with_type_map(
         &self,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         let identity = type_map_identity(type_map);
         self.calls
             .lock()
@@ -317,7 +317,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
             .push(format!(
                 "physical:object_by_label_with_type_map:{column_label}:{identity}"
             ));
-        Ok(JdbcObject::String(format!(
+        Ok(RdbcObject::String(format!(
             "label-map:{column_label}:{identity}"
         )))
     }
@@ -325,13 +325,13 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
     fn object_as(
         &self,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(format!("physical:object_as:{column_index}:{target_type:?}"));
-        Ok(JdbcObject::String(format!(
+        Ok(RdbcObject::String(format!(
             "index-typed:{column_index}:{target_type:?}"
         )))
     }
@@ -339,15 +339,15 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
     fn object_by_label_as(
         &self,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(format!(
                 "physical:object_by_label_as:{column_label}:{target_type:?}"
             ));
-        Ok(JdbcObject::String(format!(
+        Ok(RdbcObject::String(format!(
             "label-typed:{column_label}:{target_type:?}"
         )))
     }
@@ -434,43 +434,43 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
             .and_hms_opt(6, 7, 8)
             .unwrap()
     );
-    physical_resource_getter_pair!(reference, reference_by_label, JdbcRef);
-    physical_resource_getter_pair!(blob, blob_by_label, JdbcBlob);
-    physical_resource_getter_pair!(clob, clob_by_label, JdbcClob);
-    physical_resource_getter_pair!(array, array_by_label, JdbcArray);
-    physical_resource_getter_pair!(url, url_by_label, JdbcUrl);
-    physical_resource_getter_pair!(row_id, row_id_by_label, JdbcRowId);
-    physical_resource_getter_pair!(n_clob, n_clob_by_label, JdbcNClob);
-    physical_resource_getter_pair!(sql_xml, sql_xml_by_label, JdbcSqlXml);
-    physical_resource_getter_pair!(ascii_stream, ascii_stream_by_label, JdbcInputStream);
-    physical_resource_getter_pair!(unicode_stream, unicode_stream_by_label, JdbcInputStream);
-    physical_resource_getter_pair!(binary_stream, binary_stream_by_label, JdbcInputStream);
-    physical_resource_getter_pair!(character_stream, character_stream_by_label, JdbcReader);
-    physical_resource_getter_pair!(n_character_stream, n_character_stream_by_label, JdbcReader);
-    physical_resource_update_pair!(update_reference, update_reference_by_label, JdbcRef);
-    physical_resource_update_pair!(update_blob, update_blob_by_label, JdbcBlob);
-    physical_resource_update_pair!(update_clob, update_clob_by_label, JdbcClob);
-    physical_resource_update_pair!(update_array, update_array_by_label, JdbcArray);
-    physical_resource_update_pair!(update_row_id, update_row_id_by_label, JdbcRowId);
-    physical_resource_update_pair!(update_n_clob, update_n_clob_by_label, JdbcNClob);
-    physical_resource_update_pair!(update_sql_xml, update_sql_xml_by_label, JdbcSqlXml);
+    physical_resource_getter_pair!(reference, reference_by_label, RdbcRef);
+    physical_resource_getter_pair!(blob, blob_by_label, RdbcBlob);
+    physical_resource_getter_pair!(clob, clob_by_label, RdbcClob);
+    physical_resource_getter_pair!(array, array_by_label, RdbcArray);
+    physical_resource_getter_pair!(url, url_by_label, RdbcUrl);
+    physical_resource_getter_pair!(row_id, row_id_by_label, RdbcRowId);
+    physical_resource_getter_pair!(n_clob, n_clob_by_label, RdbcNClob);
+    physical_resource_getter_pair!(sql_xml, sql_xml_by_label, RdbcSqlXml);
+    physical_resource_getter_pair!(ascii_stream, ascii_stream_by_label, RdbcInputStream);
+    physical_resource_getter_pair!(unicode_stream, unicode_stream_by_label, RdbcInputStream);
+    physical_resource_getter_pair!(binary_stream, binary_stream_by_label, RdbcInputStream);
+    physical_resource_getter_pair!(character_stream, character_stream_by_label, RdbcReader);
+    physical_resource_getter_pair!(n_character_stream, n_character_stream_by_label, RdbcReader);
+    physical_resource_update_pair!(update_reference, update_reference_by_label, RdbcRef);
+    physical_resource_update_pair!(update_blob, update_blob_by_label, RdbcBlob);
+    physical_resource_update_pair!(update_clob, update_clob_by_label, RdbcClob);
+    physical_resource_update_pair!(update_array, update_array_by_label, RdbcArray);
+    physical_resource_update_pair!(update_row_id, update_row_id_by_label, RdbcRowId);
+    physical_resource_update_pair!(update_n_clob, update_n_clob_by_label, RdbcNClob);
+    physical_resource_update_pair!(update_sql_xml, update_sql_xml_by_label, RdbcSqlXml);
     physical_lob_stream_update_pair!(
         update_blob_stream,
         update_blob_stream_by_label,
-        JdbcInputStream,
-        JdbcStreamLength
+        RdbcInputStream,
+        RdbcStreamLength
     );
     physical_lob_stream_update_pair!(
         update_clob_reader,
         update_clob_reader_by_label,
-        JdbcReader,
-        JdbcCharacterLength
+        RdbcReader,
+        RdbcCharacterLength
     );
     physical_lob_stream_update_pair!(
         update_n_clob_reader,
         update_n_clob_reader_by_label,
-        JdbcReader,
-        JdbcCharacterLength
+        RdbcReader,
+        RdbcCharacterLength
     );
     physical_no_arg_method!(was_null, bool, true);
     physical_no_arg_method!(previous, bool, false);
@@ -714,8 +714,8 @@ struct ObjectShortCircuitFilter {
 
 struct ResourceShortCircuitFilter {
     calls: Arc<Mutex<Vec<String>>>,
-    stream: JdbcInputStream,
-    reader: JdbcReader,
+    stream: RdbcInputStream,
+    reader: RdbcReader,
 }
 
 struct NavigationShortCircuitFilter {
@@ -737,7 +737,7 @@ struct NStringUpdateShortCircuitFilter {
 
 struct ObjectUpdateShortCircuitFilter {
     calls: Arc<Mutex<Vec<String>>>,
-    expected_custom: JdbcOpaqueObject,
+    expected_custom: RdbcOpaqueObject,
 }
 
 struct ResourceUpdateShortCircuitFilter {
@@ -767,7 +767,7 @@ macro_rules! short_circuit_blob_stream_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_index: usize,
-            value: Option<JdbcInputStream>,
+            value: Option<RdbcInputStream>,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
             if let Some(stream) = value {
@@ -784,7 +784,7 @@ macro_rules! short_circuit_blob_stream_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_label: &str,
-            value: Option<JdbcInputStream>,
+            value: Option<RdbcInputStream>,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
             self.record(format!(
@@ -797,7 +797,7 @@ macro_rules! short_circuit_blob_stream_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_index: usize,
-            value: Option<JdbcInputStream>,
+            value: Option<RdbcInputStream>,
             length: i64,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
@@ -811,7 +811,7 @@ macro_rules! short_circuit_blob_stream_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_label: &str,
-            value: Option<JdbcInputStream>,
+            value: Option<RdbcInputStream>,
             length: i64,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
@@ -834,7 +834,7 @@ macro_rules! short_circuit_reader_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_index: usize,
-            value: Option<JdbcReader>,
+            value: Option<RdbcReader>,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
             if let Some(reader) = value {
@@ -849,7 +849,7 @@ macro_rules! short_circuit_reader_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_label: &str,
-            value: Option<JdbcReader>,
+            value: Option<RdbcReader>,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
             self.record(format!("{}:{column_label}:{presence}", stringify!($label)));
@@ -860,7 +860,7 @@ macro_rules! short_circuit_reader_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_index: usize,
-            value: Option<JdbcReader>,
+            value: Option<RdbcReader>,
             length: i64,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
@@ -875,7 +875,7 @@ macro_rules! short_circuit_reader_update_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_label: &str,
-            value: Option<JdbcReader>,
+            value: Option<RdbcReader>,
             length: i64,
         ) -> Result<(), DruidError> {
             let presence = if value.is_some() { "some" } else { "none" };
@@ -923,7 +923,7 @@ trait ConsumeOneForFilter {
     fn consume_one_for_filter(&self) -> Result<(), DruidError>;
 }
 
-impl ConsumeOneForFilter for JdbcInputStream {
+impl ConsumeOneForFilter for RdbcInputStream {
     fn consume_one_for_filter(&self) -> Result<(), DruidError> {
         let mut byte = [0_u8; 1];
         assert_eq!(self.read(&mut byte)?, 1);
@@ -931,7 +931,7 @@ impl ConsumeOneForFilter for JdbcInputStream {
     }
 }
 
-impl ConsumeOneForFilter for JdbcReader {
+impl ConsumeOneForFilter for RdbcReader {
     fn consume_one_for_filter(&self) -> Result<(), DruidError> {
         let mut code_unit = [0_u16; 1];
         assert_eq!(self.read_utf16(&mut code_unit)?, 1);
@@ -1115,7 +1115,7 @@ impl ResultSetFilter for StreamUpdateShortCircuitFilter {
         result_set_update_ascii_stream_by_label_with_int_length,
         result_set_update_ascii_stream_with_length,
         result_set_update_ascii_stream_by_label_with_length,
-        JdbcInputStream
+        RdbcInputStream
     );
     short_circuit_stream_update_family!(
         result_set_update_binary_stream,
@@ -1124,7 +1124,7 @@ impl ResultSetFilter for StreamUpdateShortCircuitFilter {
         result_set_update_binary_stream_by_label_with_int_length,
         result_set_update_binary_stream_with_length,
         result_set_update_binary_stream_by_label_with_length,
-        JdbcInputStream
+        RdbcInputStream
     );
     short_circuit_stream_update_family!(
         result_set_update_character_stream,
@@ -1133,14 +1133,14 @@ impl ResultSetFilter for StreamUpdateShortCircuitFilter {
         result_set_update_character_stream_by_label_with_int_length,
         result_set_update_character_stream_with_length,
         result_set_update_character_stream_by_label_with_length,
-        JdbcReader
+        RdbcReader
     );
     short_circuit_long_stream_update_family!(
         result_set_update_n_character_stream,
         result_set_update_n_character_stream_by_label,
         result_set_update_n_character_stream_with_length,
         result_set_update_n_character_stream_by_label_with_length,
-        JdbcReader
+        RdbcReader
     );
 }
 
@@ -1225,37 +1225,37 @@ impl ResultSetFilter for ResourceUpdateShortCircuitFilter {
     short_circuit_resource_update_pair!(
         result_set_update_reference,
         result_set_update_reference_by_label,
-        JdbcRef
+        RdbcRef
     );
     short_circuit_resource_update_pair!(
         result_set_update_blob,
         result_set_update_blob_by_label,
-        JdbcBlob
+        RdbcBlob
     );
     short_circuit_resource_update_pair!(
         result_set_update_clob,
         result_set_update_clob_by_label,
-        JdbcClob
+        RdbcClob
     );
     short_circuit_resource_update_pair!(
         result_set_update_array,
         result_set_update_array_by_label,
-        JdbcArray
+        RdbcArray
     );
     short_circuit_resource_update_pair!(
         result_set_update_row_id,
         result_set_update_row_id_by_label,
-        JdbcRowId
+        RdbcRowId
     );
     short_circuit_resource_update_pair!(
         result_set_update_n_clob,
         result_set_update_n_clob_by_label,
-        JdbcNClob
+        RdbcNClob
     );
     short_circuit_resource_update_pair!(
         result_set_update_sql_xml,
         result_set_update_sql_xml_by_label,
-        JdbcSqlXml
+        RdbcSqlXml
     );
 }
 
@@ -1273,10 +1273,10 @@ impl ResultSetFilter for ObjectUpdateShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
-        assert_eq!(value, JdbcObject::Custom(self.expected_custom.clone()));
-        let JdbcObject::Custom(custom) = &value else {
+        assert_eq!(value, RdbcObject::Custom(self.expected_custom.clone()));
+        let RdbcObject::Custom(custom) = &value else {
             panic!("updateObject 必须保留 vendor custom 对象分支");
         };
         let vendor = custom
@@ -1295,7 +1295,7 @@ impl ResultSetFilter for ObjectUpdateShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         self.record(format!(
             "result_set_update_object_by_label:{column_label}:{value:?}"
@@ -1313,7 +1313,7 @@ impl ResultSetFilter for ObjectUpdateShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         self.record(format!(
@@ -1326,7 +1326,7 @@ impl ResultSetFilter for ObjectUpdateShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         self.record(format!(
@@ -1341,7 +1341,7 @@ struct FilterVendorObjectProbe {
     id: u64,
 }
 
-impl PhysicalJdbcOpaqueObject for FilterVendorObjectProbe {
+impl PhysicalRdbcOpaqueObject for FilterVendorObjectProbe {
     fn class_name(&self) -> &str {
         "example.FilterVendorObject"
     }
@@ -1746,39 +1746,39 @@ macro_rules! short_circuit_resource_filter_pair {
 }
 
 impl ResultSetFilter for ResourceShortCircuitFilter {
-    short_circuit_resource_filter_pair!(result_set_get_ref, result_set_get_ref_by_label, JdbcRef);
+    short_circuit_resource_filter_pair!(result_set_get_ref, result_set_get_ref_by_label, RdbcRef);
     short_circuit_resource_filter_pair!(
         result_set_get_blob,
         result_set_get_blob_by_label,
-        JdbcBlob
+        RdbcBlob
     );
     short_circuit_resource_filter_pair!(
         result_set_get_clob,
         result_set_get_clob_by_label,
-        JdbcClob
+        RdbcClob
     );
     short_circuit_resource_filter_pair!(
         result_set_get_array,
         result_set_get_array_by_label,
-        JdbcArray
+        RdbcArray
     );
-    short_circuit_resource_filter_pair!(result_set_get_url, result_set_get_url_by_label, JdbcUrl);
+    short_circuit_resource_filter_pair!(result_set_get_url, result_set_get_url_by_label, RdbcUrl);
     short_circuit_resource_filter_pair!(
         result_set_get_row_id,
         result_set_get_row_id_by_label,
-        JdbcRowId
+        RdbcRowId
     );
     short_circuit_resource_filter_pair!(
         result_set_get_n_clob,
         result_set_get_n_clob_by_label,
-        JdbcNClob
+        RdbcNClob
     );
 
     fn result_set_get_sql_xml(
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.record_index("result_set_get_sql_xml", column_index);
         Ok(None)
     }
@@ -1787,7 +1787,7 @@ impl ResultSetFilter for ResourceShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.record_label("result_set_get_sql_xml_by_label", column_label);
         if column_label == "fail" {
             Err(DruidError::DriverError(
@@ -1802,7 +1802,7 @@ impl ResultSetFilter for ResourceShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.record_index("result_set_get_ascii_stream", column_index);
         Ok(Some(self.stream.clone()))
     }
@@ -1811,7 +1811,7 @@ impl ResultSetFilter for ResourceShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.record_label("result_set_get_ascii_stream_by_label", column_label);
         Ok(Some(self.stream.clone()))
     }
@@ -1819,19 +1819,19 @@ impl ResultSetFilter for ResourceShortCircuitFilter {
     short_circuit_resource_filter_pair!(
         result_set_get_unicode_stream,
         result_set_get_unicode_stream_by_label,
-        JdbcInputStream
+        RdbcInputStream
     );
     short_circuit_resource_filter_pair!(
         result_set_get_binary_stream,
         result_set_get_binary_stream_by_label,
-        JdbcInputStream
+        RdbcInputStream
     );
 
     fn result_set_get_character_stream(
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         self.record_index("result_set_get_character_stream", column_index);
         Ok(Some(self.reader.clone()))
     }
@@ -1840,7 +1840,7 @@ impl ResultSetFilter for ResourceShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         self.record_label("result_set_get_character_stream_by_label", column_label);
         Ok(Some(self.reader.clone()))
     }
@@ -1848,7 +1848,7 @@ impl ResultSetFilter for ResourceShortCircuitFilter {
     short_circuit_resource_filter_pair!(
         result_set_get_n_character_stream,
         result_set_get_n_character_stream_by_label,
-        JdbcReader
+        RdbcReader
     );
 }
 
@@ -1884,38 +1884,38 @@ impl ResultSetFilter for ObjectShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         let identity = type_map_identity(type_map);
         self.record(format!(
             "result_set_get_object_with_type_map:{column_index}:{identity}"
         ));
-        Ok(JdbcObject::String(format!("filtered-map:{identity}")))
+        Ok(RdbcObject::String(format!("filtered-map:{identity}")))
     }
 
     fn result_set_get_object_by_label_with_type_map(
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         let identity = type_map_identity(type_map);
         self.record(format!(
             "result_set_get_object_by_label_with_type_map:{column_label}:{identity}"
         ));
-        Ok(JdbcObject::String(format!("filtered-label-map:{identity}")))
+        Ok(RdbcObject::String(format!("filtered-label-map:{identity}")))
     }
 
     fn result_set_get_object_typed(
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.record(format!(
             "result_set_get_object_typed:{column_index}:{target_type:?}"
         ));
-        Ok(JdbcObject::String(format!(
+        Ok(RdbcObject::String(format!(
             "filtered-typed:{target_type:?}"
         )))
     }
@@ -1924,8 +1924,8 @@ impl ResultSetFilter for ObjectShortCircuitFilter {
         &self,
         _chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.record(format!(
             "result_set_get_object_typed_by_label:{column_label}:{target_type:?}"
         ));
@@ -1934,7 +1934,7 @@ impl ResultSetFilter for ObjectShortCircuitFilter {
                 "filtered object failure".to_string(),
             ))
         } else {
-            Ok(JdbcObject::String(format!(
+            Ok(RdbcObject::String(format!(
                 "filtered-label-typed:{target_type:?}"
             )))
         }
@@ -1977,7 +1977,7 @@ macro_rules! short_circuit_temporal_filter_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_index: usize,
-            calendar: &JdbcCalendarArgument,
+            calendar: &RdbcCalendarArgument,
         ) -> Result<Option<$ty>, DruidError> {
             self.record(format!(
                 "{}:{column_index}:{}",
@@ -1991,7 +1991,7 @@ macro_rules! short_circuit_temporal_filter_family {
             &self,
             _chain: &mut ResultSetFilterChain<'_>,
             column_label: &str,
-            calendar: &JdbcCalendarArgument,
+            calendar: &RdbcCalendarArgument,
         ) -> Result<Option<$ty>, DruidError> {
             self.record(format!(
                 "{}:{column_label}:{}",
@@ -2361,9 +2361,9 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
             .unwrap(),
         Some(BigDecimal::from_str("56.780").unwrap())
     );
-    let null_calendar = JdbcCalendarArgument::specified(None);
+    let null_calendar = RdbcCalendarArgument::specified(None);
     let shanghai_calendar =
-        JdbcCalendarArgument::specified(Some(JdbcCalendar::new("Asia/Shanghai").unwrap()));
+        RdbcCalendarArgument::specified(Some(RdbcCalendar::new("Asia/Shanghai").unwrap()));
     assert_eq!(
         chain.result_set_get_date(&physical, &context, 12).unwrap(),
         Some(NaiveDate::from_ymd_opt(2025, 1, 2).unwrap())
@@ -2467,10 +2467,10 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
                 .unwrap()
         )
     );
-    let mut type_map = JdbcTypeMap::new();
+    let mut type_map = RdbcTypeMap::new();
     type_map.insert(
         "example.address",
-        JdbcTargetType::Custom("example.Address".to_string()),
+        RdbcTargetType::Custom("example.Address".to_string()),
     );
     assert_eq!(
         chain
@@ -2488,7 +2488,7 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
         chain
             .result_set_get_object_with_type_map(&physical, &context, 19, None)
             .unwrap(),
-        JdbcObject::String("index-map:19:null".to_string())
+        RdbcObject::String("index-map:19:null".to_string())
     );
     assert_eq!(
         chain
@@ -2499,7 +2499,7 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
                 Some(&type_map),
             )
             .unwrap(),
-        JdbcObject::String(
+        RdbcObject::String(
             "label-map:mapped:example.address=Custom(\"example.Address\")".to_string()
         )
     );
@@ -2509,10 +2509,10 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
                 &physical,
                 &context,
                 20,
-                &JdbcTargetType::Custom("example.Typed".to_string()),
+                &RdbcTargetType::Custom("example.Typed".to_string()),
             )
             .unwrap(),
-        JdbcObject::String("index-typed:20:Custom(\"example.Typed\")".to_string())
+        RdbcObject::String("index-typed:20:Custom(\"example.Typed\")".to_string())
     );
     assert_eq!(
         chain
@@ -2520,10 +2520,10 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
                 &physical,
                 &context,
                 "typed",
-                &JdbcTargetType::String,
+                &RdbcTargetType::String,
             )
             .unwrap(),
-        JdbcObject::String("label-typed:typed:String".to_string())
+        RdbcObject::String("label-typed:typed:String".to_string())
     );
     assert_eq!(
         chain.result_set_warnings(&physical, &context),
@@ -2997,7 +2997,7 @@ fn result_set_object_update_filter_defaults_preserve_all_four_overloads() {
             &physical,
             &context,
             15,
-            JdbcObject::String("index".to_string()),
+            RdbcObject::String("index".to_string()),
         )
         .unwrap();
     chain
@@ -3008,7 +3008,7 @@ fn result_set_object_update_filter_defaults_preserve_all_four_overloads() {
             &physical,
             &context,
             16,
-            JdbcObject::Integer(7),
+            RdbcObject::Integer(7),
             -3,
         )
         .unwrap();
@@ -3017,7 +3017,7 @@ fn result_set_object_update_filter_defaults_preserve_all_four_overloads() {
             &physical,
             &context,
             "scaled_object",
-            JdbcObject::Bytes(vec![9]),
+            RdbcObject::Bytes(vec![9]),
             99,
         )
         .unwrap();
@@ -3248,7 +3248,7 @@ async fn pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overlo
             .date_by_label_with_calendar(
                 &mut connection,
                 "date_calendar",
-                Some(JdbcCalendar::new("UTC").unwrap()),
+                Some(RdbcCalendar::new("UTC").unwrap()),
             )
             .unwrap(),
         Some(NaiveDate::from_ymd_opt(2031, 1, 3).unwrap())
@@ -3273,7 +3273,7 @@ async fn pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overlo
             .time_by_label_with_calendar(
                 &mut connection,
                 "time_calendar",
-                Some(JdbcCalendar::new("UTC").unwrap()),
+                Some(RdbcCalendar::new("UTC").unwrap()),
             )
             .unwrap(),
         Some(NaiveTime::from_hms_opt(3, 4, 5).unwrap())
@@ -3312,7 +3312,7 @@ async fn pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overlo
             .timestamp_by_label_with_calendar(
                 &mut connection,
                 "timestamp_calendar",
-                Some(JdbcCalendar::new("UTC").unwrap()),
+                Some(RdbcCalendar::new("UTC").unwrap()),
             )
             .unwrap(),
         Some(calendar_timestamp)
@@ -3344,7 +3344,7 @@ async fn pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overlo
         result_set.timestamp_by_label_with_calendar(
             &mut connection,
             "fail",
-            Some(JdbcCalendar::new("UTC").unwrap()),
+            Some(RdbcCalendar::new("UTC").unwrap()),
         ),
         Err(DruidError::DriverError(
             "filtered temporal failure".to_string()
@@ -3382,13 +3382,13 @@ async fn pooled_result_set_routes_all_object_overloads_and_preserves_argument_id
         .await
         .unwrap();
 
-    let empty_map = JdbcTypeMap::new();
-    let mut populated_map = JdbcTypeMap::new();
+    let empty_map = RdbcTypeMap::new();
+    let mut populated_map = RdbcTypeMap::new();
     populated_map.insert(
         "example.address",
-        JdbcTargetType::Custom("example.Address".to_string()),
+        RdbcTargetType::Custom("example.Address".to_string()),
     );
-    let custom_target = JdbcTargetType::Custom("example.Target".to_string());
+    let custom_target = RdbcTargetType::Custom("example.Target".to_string());
 
     assert_eq!(
         result_set.object(&mut connection, 1).unwrap(),
@@ -3404,19 +3404,19 @@ async fn pooled_result_set_routes_all_object_overloads_and_preserves_argument_id
         result_set
             .object_with_type_map(&mut connection, 2, None)
             .unwrap(),
-        JdbcObject::String("filtered-map:null".to_string())
+        RdbcObject::String("filtered-map:null".to_string())
     );
     assert_eq!(
         result_set
             .object_with_type_map(&mut connection, 3, Some(&empty_map))
             .unwrap(),
-        JdbcObject::String("filtered-map:empty".to_string())
+        RdbcObject::String("filtered-map:empty".to_string())
     );
     assert_eq!(
         result_set
             .object_by_label_with_type_map(&mut connection, "mapped", Some(&populated_map),)
             .unwrap(),
-        JdbcObject::String(
+        RdbcObject::String(
             "filtered-label-map:example.address=Custom(\"example.Address\")".to_string()
         )
     );
@@ -3424,13 +3424,13 @@ async fn pooled_result_set_routes_all_object_overloads_and_preserves_argument_id
         result_set
             .object_typed(&mut connection, 4, &custom_target)
             .unwrap(),
-        JdbcObject::String("filtered-typed:Custom(\"example.Target\")".to_string())
+        RdbcObject::String("filtered-typed:Custom(\"example.Target\")".to_string())
     );
     assert_eq!(
         result_set
-            .object_typed_by_label(&mut connection, "typed", &JdbcTargetType::String)
+            .object_typed_by_label(&mut connection, "typed", &RdbcTargetType::String)
             .unwrap(),
-        JdbcObject::String("filtered-label-typed:String".to_string())
+        RdbcObject::String("filtered-label-typed:String".to_string())
     );
 
     assert_eq!(
@@ -3450,7 +3450,7 @@ async fn pooled_result_set_routes_all_object_overloads_and_preserves_argument_id
         result_set.object_typed_by_label(
             &mut connection,
             "fail",
-            &JdbcTargetType::Custom("example.Fail".to_string()),
+            &RdbcTargetType::Custom("example.Fail".to_string()),
         ),
         Err(DruidError::DriverError(
             "filtered object failure".to_string()
@@ -3463,8 +3463,8 @@ async fn pooled_result_set_routes_all_object_overloads_and_preserves_argument_id
 #[tokio::test]
 async fn pooled_result_set_routes_resource_getters_and_real_sqlite_streams() {
     let call_log = Arc::new(Mutex::new(Vec::new()));
-    let shared_stream = JdbcInputStream::from_bytes([1, 2, 3]);
-    let shared_reader = JdbcReader::from_string("迁移");
+    let shared_stream = RdbcInputStream::from_bytes([1, 2, 3]);
+    let shared_reader = RdbcReader::from_string("迁移");
     let mut filter_chain = FilterChain::new();
     filter_chain.add_result_set(Arc::new(ResourceShortCircuitFilter {
         calls: Arc::clone(&call_log),
@@ -3559,7 +3559,7 @@ async fn pooled_result_set_routes_resource_getters_and_real_sqlite_streams() {
 
     // VALUE_ADD / V5_HOST：真实 Toasty SQLite 行集经过默认 Filter，
     // 验证流资源的实际读取。Toasty 当前行集未暴露 SQL alias，故主机证据使用
-    // JDBC 1-based 索引；标签重载身份由上方精确物理探针独立证明。
+    // RDBC 1-based 索引；标签重载身份由上方精确物理探针独立证明。
     let mut pass_chain = FilterChain::new();
     pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
     let physical = factory.create().await.unwrap();
@@ -3983,7 +3983,7 @@ async fn pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability
 async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability_errors() {
     let call_log = Arc::new(Mutex::new(Vec::new()));
     let mut filter_chain = FilterChain::new();
-    let vendor_object = JdbcOpaqueObject::new(Arc::new(FilterVendorObjectProbe { id: 99 }));
+    let vendor_object = RdbcOpaqueObject::new(Arc::new(FilterVendorObjectProbe { id: 99 }));
     filter_chain.add_result_set(Arc::new(ObjectUpdateShortCircuitFilter {
         calls: Arc::clone(&call_log),
         expected_custom: vendor_object.clone(),
@@ -4008,19 +4008,19 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
     // SOURCE_PARITY / V2_MIRRORED：plain 与 scaleOrLength 的 index/label
     // 四重载均可独立短路，SQL NULL 与负 scaleOrLength 不被改写。
     result_set
-        .update_object(&mut connection, 15, JdbcObject::Custom(vendor_object))
+        .update_object(&mut connection, 15, RdbcObject::Custom(vendor_object))
         .unwrap();
     result_set
         .update_object_by_label(&mut connection, "object_value", Value::Null.into())
         .unwrap();
     result_set
-        .update_object_with_scale_or_length(&mut connection, 16, JdbcObject::Integer(7), -3)
+        .update_object_with_scale_or_length(&mut connection, 16, RdbcObject::Integer(7), -3)
         .unwrap();
     result_set
         .update_object_by_label_with_scale_or_length(
             &mut connection,
             "scaled_object",
-            JdbcObject::Bytes(vec![9]),
+            RdbcObject::Bytes(vec![9]),
             99,
         )
         .unwrap();
@@ -4064,7 +4064,7 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
         .unwrap();
 
     assert_eq!(
-        result_set.update_object(&mut connection, 15, JdbcObject::String("index".to_string())),
+        result_set.update_object(&mut connection, 15, RdbcObject::String("index".to_string())),
         Err(DruidError::UnsupportedOperation {
             operation: "result_set_update_value",
         })
@@ -4079,7 +4079,7 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
         result_set.update_object_with_scale_or_length(
             &mut connection,
             16,
-            JdbcObject::Integer(7),
+            RdbcObject::Integer(7),
             -3,
         ),
         Err(DruidError::UnsupportedOperation {
@@ -4090,7 +4090,7 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
         result_set.update_object_by_label_with_scale_or_length(
             &mut connection,
             "scaled_object",
-            JdbcObject::Bytes(vec![9]),
+            RdbcObject::Bytes(vec![9]),
             99,
         ),
         Err(DruidError::UnsupportedOperation {
@@ -4109,7 +4109,7 @@ fn result_set_resource_update_filter_defaults_preserve_all_fourteen_overloads() 
     let context = ResultSetFilterContext::new();
     let mut filter_chain = FilterChain::new();
     filter_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
-    let row_id = JdbcRowId::new([1, 2, 3]);
+    let row_id = RdbcRowId::new([1, 2, 3]);
 
     // SOURCE_PARITY / V2_MIRRORED：七个资源类型的 index/label 重载分别进入
     // Filter，Java null 与 RowId 值身份在默认末端保持不变。
@@ -4167,8 +4167,8 @@ fn result_set_resource_update_filter_defaults_preserve_all_fourteen_overloads() 
             "physical:update_clob_by_label:clob:None",
             "physical:update_array:4:None",
             "physical:update_array_by_label:array:None",
-            "physical:update_row_id:5:Some(JdbcRowId { bytes: [1, 2, 3] })",
-            "physical:update_row_id_by_label:row_id:Some(JdbcRowId { bytes: [1, 2, 3] })",
+            "physical:update_row_id:5:Some(RdbcRowId { bytes: [1, 2, 3] })",
+            "physical:update_row_id_by_label:row_id:Some(RdbcRowId { bytes: [1, 2, 3] })",
             "physical:update_n_clob:6:None",
             "physical:update_n_clob_by_label:n_clob:None",
             "physical:update_sql_xml:7:None",
@@ -4201,7 +4201,7 @@ async fn pooled_result_set_routes_resource_updates_and_preserves_sqlite_capabili
         .execute_query_result_set(&mut connection, "SELECT 1 AS value")
         .await
         .unwrap();
-    let row_id = JdbcRowId::new([4, 5, 6]);
+    let row_id = RdbcRowId::new([4, 5, 6]);
 
     result_set
         .update_reference(&mut connection, 1, None)
@@ -4246,8 +4246,8 @@ async fn pooled_result_set_routes_resource_updates_and_preserves_sqlite_capabili
             "result_set_update_clob_by_label:clob:None",
             "result_set_update_array:4:None",
             "result_set_update_array_by_label:array:None",
-            "result_set_update_row_id:5:Some(JdbcRowId { bytes: [4, 5, 6] })",
-            "result_set_update_row_id_by_label:row_id:Some(JdbcRowId { bytes: [4, 5, 6] })",
+            "result_set_update_row_id:5:Some(RdbcRowId { bytes: [4, 5, 6] })",
+            "result_set_update_row_id_by_label:row_id:Some(RdbcRowId { bytes: [4, 5, 6] })",
             "result_set_update_n_clob:6:None",
             "result_set_update_n_clob_by_label:n_clob:None",
             "result_set_update_sql_xml:7:None",
@@ -4364,9 +4364,9 @@ fn result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads() 
     let context = ResultSetFilterContext::new();
     let mut filter_chain = FilterChain::new();
     filter_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
-    let blob = JdbcInputStream::from_bytes([1, 2, 3]);
-    let clob = JdbcReader::from_string("甲乙");
-    let n_clob = JdbcReader::from_string("丙丁");
+    let blob = RdbcInputStream::from_bytes([1, 2, 3]);
+    let clob = RdbcReader::from_string("甲乙");
+    let n_clob = RdbcReader::from_string("丙丁");
 
     // SOURCE_PARITY / V2_MIRRORED：Java Filter/FilterChainImpl 的 Blob、
     // Clob、NClob × index/label × unspecified/long 12 个重载逐一穿透。
@@ -4480,9 +4480,9 @@ async fn pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capabi
         .execute_query_result_set(&mut connection, "SELECT X'010203' AS value")
         .await
         .unwrap();
-    let blob = JdbcInputStream::from_bytes([1, 2, 3]);
-    let clob = JdbcReader::from_string("甲乙");
-    let n_clob = JdbcReader::from_string("丙丁");
+    let blob = RdbcInputStream::from_bytes([1, 2, 3]);
+    let clob = RdbcReader::from_string("甲乙");
+    let n_clob = RdbcReader::from_string("丙丁");
 
     result_set
         .update_blob_stream(&mut connection, 1, Some(&blob))
@@ -4567,9 +4567,9 @@ async fn pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capabi
         .execute_query_result_set(&mut connection, "SELECT X'010203' AS value")
         .await
         .unwrap();
-    let blob = JdbcInputStream::from_bytes([4, 5, 6]);
-    let clob = JdbcReader::from_string("戊己");
-    let n_clob = JdbcReader::from_string("庚辛");
+    let blob = RdbcInputStream::from_bytes([4, 5, 6]);
+    let clob = RdbcReader::from_string("戊己");
+    let n_clob = RdbcReader::from_string("庚辛");
 
     macro_rules! assert_lob_stream_unsupported {
         ($expression:expr, $operation:literal) => {
@@ -4655,10 +4655,10 @@ fn result_set_stream_update_filter_defaults_preserve_all_twenty_two_overloads() 
     let context = ResultSetFilterContext::new();
     let mut filter_chain = FilterChain::new();
     filter_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
-    let ascii = JdbcInputStream::from_bytes([1, 2, 3]);
-    let binary = JdbcInputStream::from_bytes([4, 5, 6]);
-    let character = JdbcReader::from_string("甲乙");
-    let n_character = JdbcReader::from_string("丙丁");
+    let ascii = RdbcInputStream::from_bytes([1, 2, 3]);
+    let binary = RdbcInputStream::from_bytes([4, 5, 6]);
+    let character = RdbcReader::from_string("甲乙");
+    let n_character = RdbcReader::from_string("丙丁");
 
     // SOURCE_PARITY / V2_MIRRORED：Java Filter/FilterChainImpl 的 ASCII、
     // Binary、Character × index/label × unspecified/int/long，以及
@@ -4874,10 +4874,10 @@ async fn pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability
         .execute_query_result_set(&mut connection, "SELECT X'010203' AS value")
         .await
         .unwrap();
-    let ascii = JdbcInputStream::from_bytes([1, 2, 3]);
-    let binary = JdbcInputStream::from_bytes([4, 5, 6]);
-    let character = JdbcReader::from_string("甲乙");
-    let n_character = JdbcReader::from_string("丙丁");
+    let ascii = RdbcInputStream::from_bytes([1, 2, 3]);
+    let binary = RdbcInputStream::from_bytes([4, 5, 6]);
+    let character = RdbcReader::from_string("甲乙");
+    let n_character = RdbcReader::from_string("丙丁");
 
     result_set
         .update_ascii_stream(&mut connection, 1, Some(&ascii))
@@ -5583,9 +5583,9 @@ async fn real_sqlite_result_sets_flow_through_stat_filter_and_statement_cascade(
     assert_eq!(first.object(&mut connection, 1).unwrap(), Value::Int(1));
     assert_eq!(
         first
-            .object_typed(&mut connection, 1, &JdbcTargetType::Long)
+            .object_typed(&mut connection, 1, &RdbcTargetType::Long)
             .unwrap(),
-        JdbcObject::Long(1)
+        RdbcObject::Long(1)
     );
     assert_eq!(
         first.big_decimal(&mut connection, 2).unwrap(),
@@ -5601,7 +5601,7 @@ async fn real_sqlite_result_sets_flow_through_stat_filter_and_statement_cascade(
     );
     assert_eq!(
         first
-            .timestamp_with_calendar(&mut connection, 5, Some(JdbcCalendar::new("UTC").unwrap()),)
+            .timestamp_with_calendar(&mut connection, 5, Some(RdbcCalendar::new("UTC").unwrap()),)
             .unwrap(),
         Some(
             NaiveDate::from_ymd_opt(2025, 1, 2)

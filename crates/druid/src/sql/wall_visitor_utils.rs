@@ -5,7 +5,7 @@
 //! `checkInsertForMultiTenant` 与 `generateTenantValue`。
 
 use super::{TenantStatementType, WallConfig, WallProvider};
-use crate::core::{DruidError, Value as JdbcValue};
+use crate::core::{DruidError, Value as RdbcValue};
 use sqlparser::ast::{
     Assignment, AssignmentTarget, Expr, Ident, ObjectName, Query, Select, SelectItem, SetExpr,
     Statement, TableFactor, TableWithJoins, Value as SqlValue,
@@ -189,12 +189,12 @@ fn tenant_value(
         .or_else(WallProvider::tenant_value)
         .ok_or_else(|| DruidError::Other("tenant value not support type null".to_owned()))?;
     match value {
-        JdbcValue::Int(value) => Ok(Expr::Value(SqlValue::Number(value.to_string(), false))),
-        JdbcValue::Float(value) if value.is_finite() => {
+        RdbcValue::Int(value) => Ok(Expr::Value(SqlValue::Number(value.to_string(), false))),
+        RdbcValue::Float(value) if value.is_finite() => {
             Ok(Expr::Value(SqlValue::Number(value.to_string(), false)))
         }
-        JdbcValue::Decimal(value) => Ok(Expr::Value(SqlValue::Number(value.to_string(), false))),
-        JdbcValue::String(value) => Ok(Expr::Value(SqlValue::SingleQuotedString(value))),
+        RdbcValue::Decimal(value) => Ok(Expr::Value(SqlValue::Number(value.to_string(), false))),
+        RdbcValue::String(value) => Ok(Expr::Value(SqlValue::SingleQuotedString(value))),
         value => Err(DruidError::Other(format!(
             "tenant value not support type {value:?}"
         ))),

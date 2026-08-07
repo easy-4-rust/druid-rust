@@ -1,7 +1,7 @@
 //! Druid Proxy attributes 的 Rust 值域与共享存储。
 //!
 //! 对应 Java：
-//! `com.alibaba.druid.proxy.jdbc.WrapperProxy#getAttributes/putAttribute`。
+//! `com.alibaba.druid.proxy.rdbc.WrapperProxy#getAttributes/putAttribute`。
 
 use parking_lot::RwLock;
 use std::any::Any;

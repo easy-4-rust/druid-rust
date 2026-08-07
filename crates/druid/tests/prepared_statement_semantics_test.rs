@@ -10,12 +10,12 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     AfterFilter, BatchExecContext, BeforeFilter, DruidError, DruidPooledConnection,
     DruidPooledPreparedStatement, DruidPooledPreparedStatementHandle, ExecContext, ExecOperation,
-    ExecResult, FilterChain, JdbcCalendar, JdbcCalendarArgument, JdbcCharacterLength,
-    JdbcInputStream, JdbcObject, JdbcReader, JdbcRowId, JdbcStreamLength, JdbcUrl,
-    PhysicalConnection, PhysicalConnectionFactory, PhysicalPreparedStatement,
-    PreparedInputParameter, PreparedStatementKey, PreparedTypeNameArgument, ResultSetStatement,
-    Row, SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
-    WrapperExt,
+    ExecResult, FilterChain, PhysicalConnection, PhysicalConnectionFactory,
+    PhysicalPreparedStatement, PreparedInputParameter, PreparedStatementKey,
+    PreparedTypeNameArgument, RdbcCalendar, RdbcCalendarArgument, RdbcCharacterLength,
+    RdbcInputStream, RdbcObject, RdbcReader, RdbcRowId, RdbcStreamLength, RdbcUrl,
+    ResultSetStatement, Row, SqlTextPreparedStatement, StatementExecuteResult,
+    StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
 use druid::pool::DruidPool;
 use druid::toasty::{ToastyConnectionFactory, ToastyPreparedStatement};
@@ -703,15 +703,15 @@ async fn prepared_setter_overloads_preserve_exact_descriptor_identity() {
     let date = NaiveDate::from_ymd_opt(2026, 7, 29).unwrap();
     let time = NaiveTime::from_hms_nano_opt(11, 12, 13, 456_789_000).unwrap();
     let timestamp = NaiveDateTime::new(date, time);
-    let calendar = JdbcCalendar::new("Asia/Shanghai").unwrap();
-    let ascii = JdbcInputStream::from_bytes(b"ascii".to_vec());
-    let binary = JdbcInputStream::from_bytes(vec![0, 1, 2]);
-    let unicode = JdbcInputStream::from_bytes(b"unicode".to_vec());
-    let blob_stream = JdbcInputStream::from_bytes(vec![3, 4, 5]);
-    let character = JdbcReader::from_string("character");
-    let national = JdbcReader::from_string("国家字符");
-    let clob_reader = JdbcReader::from_string("clob");
-    let n_clob_reader = JdbcReader::from_string("nclob");
+    let calendar = RdbcCalendar::new("Asia/Shanghai").unwrap();
+    let ascii = RdbcInputStream::from_bytes(b"ascii".to_vec());
+    let binary = RdbcInputStream::from_bytes(vec![0, 1, 2]);
+    let unicode = RdbcInputStream::from_bytes(b"unicode".to_vec());
+    let blob_stream = RdbcInputStream::from_bytes(vec![3, 4, 5]);
+    let character = RdbcReader::from_string("character");
+    let national = RdbcReader::from_string("国家字符");
+    let clob_reader = RdbcReader::from_string("clob");
+    let n_clob_reader = RdbcReader::from_string("nclob");
 
     statement.set_null(&mut connection, 1, 4).unwrap();
     statement
@@ -758,17 +758,17 @@ async fn prepared_setter_overloads_preserve_exact_descriptor_identity() {
         .set_object(
             &mut connection,
             20,
-            Some(JdbcObject::String("object".to_string())),
+            Some(RdbcObject::String("object".to_string())),
         )
         .unwrap();
     statement
-        .set_object_with_sql_type(&mut connection, 21, Some(JdbcObject::Integer(21)), 4)
+        .set_object_with_sql_type(&mut connection, 21, Some(RdbcObject::Integer(21)), 4)
         .unwrap();
     statement
         .set_object_with_sql_type_and_scale(
             &mut connection,
             22,
-            Some(JdbcObject::BigDecimal(
+            Some(RdbcObject::BigDecimal(
                 BigDecimal::from_str("22.50").unwrap(),
             )),
             3,
@@ -857,7 +857,7 @@ async fn prepared_setter_overloads_preserve_exact_descriptor_identity() {
         statement.parameter(15),
         Some(PreparedInputParameter::Date {
             value: Some(date),
-            calendar: JdbcCalendarArgument::Specified(Some(calendar)),
+            calendar: RdbcCalendarArgument::Specified(Some(calendar)),
         })
     );
     assert!(matches!(
@@ -871,21 +871,21 @@ async fn prepared_setter_overloads_preserve_exact_descriptor_identity() {
     assert!(matches!(
         statement.parameter(24),
         Some(PreparedInputParameter::AsciiStream {
-            length: JdbcStreamLength::Int(-1),
+            length: RdbcStreamLength::Int(-1),
             ..
         })
     ));
     assert!(matches!(
         statement.parameter(31),
         Some(PreparedInputParameter::CharacterStream {
-            length: JdbcCharacterLength::Int(-3),
+            length: RdbcCharacterLength::Int(-3),
             ..
         })
     ));
     assert!(matches!(
         statement.parameter(44),
         Some(PreparedInputParameter::NClobReader {
-            length: JdbcCharacterLength::Long(44),
+            length: RdbcCharacterLength::Long(44),
             ..
         })
     ));
@@ -916,7 +916,7 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
     let time = NaiveTime::from_hms_nano_opt(1, 2, 3, 4).unwrap();
     let timestamp = NaiveDateTime::new(date, time);
     let decimal = BigDecimal::from_str("123.4500").unwrap();
-    let url = JdbcUrl::new("https://example.com/path");
+    let url = RdbcUrl::new("https://example.com/path");
     let scalar_cases = vec![
         (PreparedInputParameter::null(4), Value::Null),
         (
@@ -953,108 +953,108 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
         (
             PreparedInputParameter::Date {
                 value: Some(date),
-                calendar: JdbcCalendarArgument::Unspecified,
+                calendar: RdbcCalendarArgument::Unspecified,
             },
             Value::Date(date),
         ),
         (
             PreparedInputParameter::Date {
                 value: None,
-                calendar: JdbcCalendarArgument::Unspecified,
+                calendar: RdbcCalendarArgument::Unspecified,
             },
             Value::Null,
         ),
         (
             PreparedInputParameter::Time {
                 value: Some(time),
-                calendar: JdbcCalendarArgument::Unspecified,
+                calendar: RdbcCalendarArgument::Unspecified,
             },
             Value::Time(time),
         ),
         (
             PreparedInputParameter::Time {
                 value: None,
-                calendar: JdbcCalendarArgument::Unspecified,
+                calendar: RdbcCalendarArgument::Unspecified,
             },
             Value::Null,
         ),
         (
             PreparedInputParameter::Timestamp {
                 value: Some(timestamp),
-                calendar: JdbcCalendarArgument::Unspecified,
+                calendar: RdbcCalendarArgument::Unspecified,
             },
             Value::Timestamp(timestamp),
         ),
         (
             PreparedInputParameter::Timestamp {
                 value: None,
-                calendar: JdbcCalendarArgument::Unspecified,
+                calendar: RdbcCalendarArgument::Unspecified,
             },
             Value::Null,
         ),
         (PreparedInputParameter::object(None), Value::Null),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Scalar(Value::Int(1)))),
+            PreparedInputParameter::object(Some(RdbcObject::Scalar(Value::Int(1)))),
             Value::Int(1),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::String("s".to_string()))),
+            PreparedInputParameter::object(Some(RdbcObject::String("s".to_string()))),
             Value::String("s".to_string()),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::NString("n".to_string()))),
+            PreparedInputParameter::object(Some(RdbcObject::NString("n".to_string()))),
             Value::String("n".to_string()),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Boolean(true))),
+            PreparedInputParameter::object(Some(RdbcObject::Boolean(true))),
             Value::Bool(true),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Byte(-1))),
+            PreparedInputParameter::object(Some(RdbcObject::Byte(-1))),
             Value::Int(-1),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Short(2))),
+            PreparedInputParameter::object(Some(RdbcObject::Short(2))),
             Value::Int(2),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Integer(3))),
+            PreparedInputParameter::object(Some(RdbcObject::Integer(3))),
             Value::Int(3),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Long(4))),
+            PreparedInputParameter::object(Some(RdbcObject::Long(4))),
             Value::Int(4),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Float(5.5))),
+            PreparedInputParameter::object(Some(RdbcObject::Float(5.5))),
             Value::Float(5.5),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Double(6.5))),
+            PreparedInputParameter::object(Some(RdbcObject::Double(6.5))),
             Value::Float(6.5),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Bytes(vec![7]))),
+            PreparedInputParameter::object(Some(RdbcObject::Bytes(vec![7]))),
             Value::Bytes(vec![7]),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::BigDecimal(decimal.clone()))),
+            PreparedInputParameter::object(Some(RdbcObject::BigDecimal(decimal.clone()))),
             Value::Decimal(decimal),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Date(date))),
+            PreparedInputParameter::object(Some(RdbcObject::Date(date))),
             Value::Date(date),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Time(time))),
+            PreparedInputParameter::object(Some(RdbcObject::Time(time))),
             Value::Time(time),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Timestamp(timestamp))),
+            PreparedInputParameter::object(Some(RdbcObject::Timestamp(timestamp))),
             Value::Timestamp(timestamp),
         ),
         (
-            PreparedInputParameter::object(Some(JdbcObject::Url(url.clone()))),
+            PreparedInputParameter::object(Some(RdbcObject::Url(url.clone()))),
             Value::String("https://example.com/path".to_string()),
         ),
         (
@@ -1074,10 +1074,10 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
         assert_eq!(parameter.scalar_value().unwrap(), expected);
     }
 
-    let typed = PreparedInputParameter::object_with_sql_type(Some(JdbcObject::Integer(8)), 4);
+    let typed = PreparedInputParameter::object_with_sql_type(Some(RdbcObject::Integer(8)), 4);
     assert_eq!(typed.scalar_value().unwrap(), Value::Int(8));
     let scaled = PreparedInputParameter::object_with_sql_type_and_scale(
-        Some(JdbcObject::BigDecimal(BigDecimal::from(9))),
+        Some(RdbcObject::BigDecimal(BigDecimal::from(9))),
         3,
         2,
     );
@@ -1086,8 +1086,8 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
         Value::Decimal(BigDecimal::from(9))
     );
 
-    let reader = JdbcReader::from_string("native-only");
-    let object_error = PreparedInputParameter::object(Some(JdbcObject::CharacterStream(reader)))
+    let reader = RdbcReader::from_string("native-only");
+    let object_error = PreparedInputParameter::object(Some(RdbcObject::CharacterStream(reader)))
         .scalar_value()
         .unwrap_err();
     assert_eq!(
@@ -1098,7 +1098,7 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
     );
     let stream_error = PreparedInputParameter::AsciiStream {
         stream: None,
-        length: JdbcStreamLength::Unspecified,
+        length: RdbcStreamLength::Unspecified,
     }
     .scalar_value()
     .unwrap_err();
@@ -1131,7 +1131,7 @@ impl CleanupFailingStatement {
     fn fatal_error() -> DruidError {
         DruidError::SqlException(Box::new(
             druid::core::SqlException::driver(1040, "too many connections").with_class_name(
-                "com.mysql.cj.jdbc.exceptions.MySQLNonTransientConnectionException",
+                "com.mysql.cj.rdbc.exceptions.MySQLNonTransientConnectionException",
             ),
         ))
     }
@@ -1803,7 +1803,7 @@ async fn prepared_batch_snapshots_parameters_and_executes_against_real_sqlite() 
     assert_eq!(
         statement.execute_batch(&mut connection).await.unwrap(),
         Vec::<i32>::new(),
-        "SQLite JDBC oracle 在 executeBatch 后消费参数批次"
+        "SQLite RDBC oracle 在 executeBatch 后消费参数批次"
     );
 
     let rows = connection
@@ -2372,7 +2372,7 @@ async fn prepared_bound_setters_execute_and_batch_against_real_sqlite() {
         DruidError::InvalidArgument(_)
     ));
 
-    let stream = JdbcInputStream::from_bytes(b"not-eagerly-read".to_vec());
+    let stream = RdbcInputStream::from_bytes(b"not-eagerly-read".to_vec());
     let mut native_only = connection
         .prepare_statement("INSERT INTO prepared_bound_item(bytes_value) VALUES (?1)")
         .await
@@ -2474,7 +2474,7 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         .await
         .unwrap();
 
-    let short_stream = JdbcInputStream::from_bytes(vec![1, 2]);
+    let short_stream = RdbcInputStream::from_bytes(vec![1, 2]);
     let mut invalid = connection.prepare_statement("SELECT ?1").await.unwrap();
     assert!(matches!(
         invalid.set_binary_stream_with_int_length(
@@ -2490,20 +2490,20 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         invalid.set_binary_stream_with_int_length(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![1])),
+            Some(RdbcInputStream::from_bytes(vec![1])),
             -1,
         ),
         Err(DruidError::InvalidArgument(_))
     ));
     invalid.close_with_connection(&mut connection).unwrap();
 
-    let ascii = JdbcInputStream::from_bytes(b"abcdef".to_vec());
-    let binary = JdbcInputStream::from_bytes(vec![0, 1, 2, 3]);
-    let character = JdbcReader::from_string("hello");
-    let national = JdbcReader::from_string("国家字符");
-    let blob_stream = JdbcInputStream::from_bytes(vec![9, 8, 7]);
-    let clob_reader = JdbcReader::from_string("clob-tail");
-    let nclob_reader = JdbcReader::from_string("国字大对象");
+    let ascii = RdbcInputStream::from_bytes(b"abcdef".to_vec());
+    let binary = RdbcInputStream::from_bytes(vec![0, 1, 2, 3]);
+    let character = RdbcReader::from_string("hello");
+    let national = RdbcReader::from_string("国家字符");
+    let blob_stream = RdbcInputStream::from_bytes(vec![9, 8, 7]);
+    let clob_reader = RdbcReader::from_string("clob-tail");
+    let nclob_reader = RdbcReader::from_string("国字大对象");
     let mut statement = connection
         .prepare_statement(
             "INSERT INTO prepared_resource_item(
@@ -2539,11 +2539,11 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         .set_url(
             &mut connection,
             8,
-            Some(JdbcUrl::new("https://example.com/路径")),
+            Some(RdbcUrl::new("https://example.com/路径")),
         )
         .unwrap();
     statement
-        .set_row_id(&mut connection, 9, Some(JdbcRowId::new(vec![4, 5, 6])))
+        .set_row_id(&mut connection, 9, Some(RdbcRowId::new(vec![4, 5, 6])))
         .unwrap();
     statement.set_blob(&mut connection, 10, None).unwrap();
 
@@ -2598,14 +2598,14 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         .set_binary_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![1, 3, 5])),
+            Some(RdbcInputStream::from_bytes(vec![1, 3, 5])),
         )
         .unwrap();
     query
         .set_character_stream(
             &mut connection,
             2,
-            Some(JdbcReader::from_string("query-reader")),
+            Some(RdbcReader::from_string("query-reader")),
         )
         .unwrap();
     let mut query_rows = query.execute_query_bound(&mut connection).await.unwrap();
@@ -2626,7 +2626,7 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         .set_blob_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![2, 4, 6])),
+            Some(RdbcInputStream::from_bytes(vec![2, 4, 6])),
         )
         .unwrap();
     assert!(generic.execute_bound(&mut connection).await.unwrap());
@@ -2639,8 +2639,8 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
     generic_rows.close_with_connection(&mut connection).unwrap();
     generic.close_with_connection(&mut connection).unwrap();
 
-    let first_batch_stream = JdbcInputStream::from_bytes(vec![10, 11, 12]);
-    let second_batch_reader = JdbcReader::from_string("第二批");
+    let first_batch_stream = RdbcInputStream::from_bytes(vec![10, 11, 12]);
+    let second_batch_reader = RdbcReader::from_string("第二批");
     let mut batch = connection
         .prepare_statement(
             "INSERT INTO prepared_resource_item(binary_value, character_value) VALUES (?1, ?2)",
@@ -2651,14 +2651,14 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         .set_binary_stream_with_int_length(&mut connection, 1, Some(first_batch_stream.clone()), 2)
         .unwrap();
     batch
-        .set_character_stream(&mut connection, 2, Some(JdbcReader::from_string("first")))
+        .set_character_stream(&mut connection, 2, Some(RdbcReader::from_string("first")))
         .unwrap();
     batch.add_bound_batch(&mut connection).unwrap();
     batch
         .set_binary_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![20, 21])),
+            Some(RdbcInputStream::from_bytes(vec![20, 21])),
         )
         .unwrap();
     batch
@@ -2708,7 +2708,7 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         assert!(matches!(
             recorded[0][0],
             PreparedInputParameter::AsciiStream {
-                length: JdbcStreamLength::Int(3),
+                length: RdbcStreamLength::Int(3),
                 ..
             }
         ));
@@ -2724,14 +2724,14 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
         assert!(matches!(
             recorded_batches[0][0][0],
             PreparedInputParameter::BinaryStream {
-                length: JdbcStreamLength::Int(2),
+                length: RdbcStreamLength::Int(2),
                 ..
             }
         ));
         assert!(matches!(
             recorded_batches[0][1][1],
             PreparedInputParameter::CharacterStream {
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
                 ..
             }
         ));

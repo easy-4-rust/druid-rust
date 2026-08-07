@@ -1,5 +1,8 @@
-use druid_admin::driver::{DriverInstallRequest, DriverInstaller, DriverRuntimeDiagnostics};
-use druid_wrapper::driver::DruidDriverRegistry;
+use druid_admin::driver::{
+    DriverBundleFile, DriverBundleInstallRequest, DriverEvidenceAggregator, DriverInstallRequest,
+    DriverInstaller, DriverRuntimeDiagnostics,
+};
+use druid_wrapper::driver::{DriverRuntimeMode, DruidDriverRegistry};
 use serde_json::json;
 use std::error::Error;
 use std::path::PathBuf;
@@ -58,6 +61,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 request = request.expected_sha256(checksum);
             }
             let installed = DriverInstaller::new(root).install_file(&request).await?;
+            println!("{}", serde_json::to_string_pretty(&installed)?);
+        }
+        "install-bundle" => {
+            let root = required(&mut arguments, "root")?;
+            let profile_id = required(&mut arguments, "profile-id")?;
+            let files = arguments
+                .map(|argument| {
+                    let (path, checksum) = argument
+                        .rsplit_once('=')
+                        .filter(|(_, checksum)| checksum.len() == 64)
+                        .map_or((argument.as_str(), None), |(path, checksum)| {
+                            (path, Some(checksum))
+                        });
+                    let file = DriverBundleFile::new(path);
+                    match checksum {
+                        Some(checksum) => file.expected_sha256(checksum),
+                        None => file,
+                    }
+                })
+                .collect::<Vec<_>>();
+            let request = DriverBundleInstallRequest::new(profile_id, files);
+            let installed = DriverInstaller::new(root)
+                .install_bundle_files(&request)
+                .await?;
             println!("{}", serde_json::to_string_pretty(&installed)?);
         }
         "install-url" | "update" => {
@@ -121,6 +148,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let report = diagnostics.check(&profile_id).await?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
+        "aggregate-evidence" => {
+            let profile_id = required(&mut arguments, "profile-id")?;
+            let runtime_mode = parse_runtime_mode(&required(&mut arguments, "runtime-mode")?)?;
+            let directory = required(&mut arguments, "evidence-directory")?;
+            let output = required(&mut arguments, "output-json")?;
+            let evidence =
+                DriverEvidenceAggregator::aggregate(directory, &profile_id, runtime_mode)?;
+            std::fs::write(&output, serde_json::to_vec_pretty(&evidence)?)?;
+            println!("{}", serde_json::to_string_pretty(&evidence)?);
+        }
         "help" | "--help" | "-h" => print_help(),
         other => return Err(format!("unknown command '{other}'").into()),
     }
@@ -141,6 +178,20 @@ fn catalog() -> Result<(), Box<dyn Error>> {
                 "supportStatus": format!("{:?}", profile.support_status()),
                 "countsAsSupported": profile.support_status().counts_as_supported(),
                 "deliveryPhase": profile.delivery_phase(),
+                "driverClass": profile.driver_class(),
+                "artifactId": profile.artifact_id(),
+                "artifactVersion": profile.artifact_version(),
+                "capabilities": {
+                    "query": profile.capabilities().query,
+                    "update": profile.capabilities().update,
+                    "preparedStatements": profile.capabilities().prepared_statements,
+                    "batch": profile.capabilities().batch,
+                    "transactions": profile.capabilities().transactions,
+                    "savepoints": profile.capabilities().savepoints,
+                    "cancellation": profile.capabilities().cancellation,
+                    "pagedResults": profile.capabilities().paged_results,
+                    "metadata": profile.capabilities().metadata,
+                },
             })
         })
         .collect::<Vec<_>>();
@@ -165,6 +216,16 @@ fn required(
         .ok_or_else(|| format!("missing required argument <{name}>").into())
 }
 
+fn parse_runtime_mode(value: &str) -> Result<DriverRuntimeMode, Box<dyn Error>> {
+    match value {
+        "sqlx" => Ok(DriverRuntimeMode::Sqlx),
+        "native" => Ok(DriverRuntimeMode::Native),
+        "jdbc_agent" | "jdbc-agent" => Ok(DriverRuntimeMode::JdbcAgent),
+        "http_sql" | "http-sql" => Ok(DriverRuntimeMode::HttpSql),
+        _ => Err(format!("unknown runtime mode '{value}'").into()),
+    }
+}
+
 fn print_help() {
     let default_root =
         DriverInstaller::default_root().unwrap_or_else(|_| PathBuf::from(".druid-rust/drivers"));
@@ -176,11 +237,13 @@ fn print_help() {
          install-jre <root> <java-home> <java-executable-sha256>\n\
          verify-jre <root>\n\
          install <root> <profile-id> <driver-jar> [sha256]\n\
+         install-bundle <root> <profile-id> <jar>[=<sha256>]...\n\
          update <root> <profile-id> <url> <file-name> <sha256>\n\
          verify <root> <profile-id> [sha256]\n\
          activate <root> <profile-id> <sha256>\n\
          remove <root> <profile-id> <sha256>\n\
          doctor <root> <profile-id> [java-program]\n\
+         aggregate-evidence <profile-id> <runtime-mode> <evidence-directory> <output-json>\n\
          default root: {}",
         default_root.display()
     );

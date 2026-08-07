@@ -1,13 +1,17 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid::core::{DruidError, PhysicalConnection, Value};
+use druid::core::{
+    DruidError, PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, Value,
+};
 use druid_wrapper::driver::{
-    DriverRuntimeMode, DruidDatabasePoolBuilder, DruidDriverRegistry, ProtocolFamily,
+    DatabaseConnectionConfig, DriverRuntimeMode, DruidDatabasePoolBuilder, DruidDriverRegistry,
+    ProtocolFamily,
 };
 #[cfg(feature = "duckdb-native")]
 use druid_wrapper::duckdb::DuckDbConnectionAdapter;
+#[cfg(feature = "jdbc-agent")]
+use druid_wrapper::jdbc_agent::{JdbcAgentConnection, JdbcAgentOptions};
 use std::path::Path;
-#[cfg(feature = "duckdb-native")]
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -30,19 +34,11 @@ async fn database_profile_live_contract_when_configured() {
         .profiles()
         .find(|profile| profile.id().as_str() == profile_id)
         .unwrap_or_else(|| panic!("unknown database profile {profile_id}"));
-    assert!(
-        matches!(
-            profile.runtime_mode(),
-            DriverRuntimeMode::Sqlx | DriverRuntimeMode::Native
-        ),
-        "本契约运行器当前认证 SQLx 与 Native 产品档案"
-    );
-
     let table = contract_table_name();
     let create_sql = create_table_sql(profile.protocol_family(), &table);
     let insert_sql = insert_sql(profile.protocol_family(), &table);
     let select_sql = select_sql(profile.protocol_family(), &table);
-    let pool = DruidDatabasePoolBuilder::new(&profile_id, &url)
+    let pool = configured_pool_builder(&profile_id, &url, profile.runtime_mode())
         .name(format!("contract-{profile_id}"))
         .pool(|builder| {
             builder
@@ -59,6 +55,21 @@ async fn database_profile_live_contract_when_configured() {
 
     let mut connection = pool.get().await.expect("必须能建立未池化物理连接");
     connection.ping().await.expect("validation/ping 必须成功");
+    let physical_capabilities = connection.capabilities();
+    let declared_capabilities = profile.capabilities();
+    assert!(
+        !declared_capabilities.transactions || physical_capabilities.transactions,
+        "产品目录不得声明物理适配器未提供的事务能力"
+    );
+    assert!(
+        !declared_capabilities.savepoints || physical_capabilities.savepoints,
+        "产品目录不得声明物理适配器未提供的保存点能力"
+    );
+    assert!(
+        !declared_capabilities.auto_commit || physical_capabilities.auto_commit,
+        "产品目录不得声明物理适配器未提供的 auto-commit 能力"
+    );
+    let supports_transactions = physical_capabilities.transactions;
     connection
         .exec(&format!("DROP TABLE IF EXISTS {table}"), Vec::new())
         .await
@@ -107,39 +118,86 @@ async fn database_profile_live_contract_when_configured() {
         .expect("UPDATE 必须成功");
     assert_eq!(updated.rows_affected, 1);
 
-    connection
-        .set_auto_commit(false)
-        .await
-        .expect("必须进入事务");
-    connection
-        .exec(&insert_sql, contract_values(2, "rollback"))
-        .await
-        .expect("事务内 INSERT 必须成功");
-    connection.rollback().await.expect("rollback 必须成功");
-    assert!(connection.auto_commit());
-    assert!(connection
-        .fetch(&select_sql, vec![Value::Int(2)])
-        .await
-        .expect("rollback 后查询必须成功")
-        .is_empty());
-
-    connection
-        .set_auto_commit(false)
-        .await
-        .expect("必须再次进入事务");
-    connection
-        .exec(&insert_sql, contract_values(3, "commit"))
-        .await
-        .expect("事务内 INSERT 必须成功");
-    connection.commit().await.expect("commit 必须成功");
-    assert_eq!(
+    if supports_transactions {
         connection
-            .fetch(&select_sql, vec![Value::Int(3)])
+            .set_auto_commit(false)
             .await
-            .expect("commit 后查询必须成功")
-            .len(),
-        1
-    );
+            .expect("必须进入事务");
+        connection
+            .exec(&insert_sql, contract_values(2, "rollback"))
+            .await
+            .expect("事务内 INSERT 必须成功");
+        connection.rollback().await.expect("rollback 必须成功");
+        connection
+            .set_auto_commit(true)
+            .await
+            .expect("rollback 后必须恢复 auto-commit");
+        assert!(connection
+            .fetch(&select_sql, vec![Value::Int(2)])
+            .await
+            .expect("rollback 后查询必须成功")
+            .is_empty());
+
+        connection
+            .set_auto_commit(false)
+            .await
+            .expect("必须再次进入事务");
+        connection
+            .exec(&insert_sql, contract_values(3, "commit"))
+            .await
+            .expect("事务内 INSERT 必须成功");
+        connection.commit().await.expect("commit 必须成功");
+        connection
+            .set_auto_commit(true)
+            .await
+            .expect("commit 后必须恢复 auto-commit");
+        assert_eq!(
+            connection
+                .fetch(&select_sql, vec![Value::Int(3)])
+                .await
+                .expect("commit 后查询必须成功")
+                .len(),
+            1
+        );
+
+        if physical_capabilities.savepoints {
+            connection
+                .set_auto_commit(false)
+                .await
+                .expect("保存点合同必须进入事务");
+            let savepoint = connection
+                .set_savepoint_named("druid_contract_savepoint")
+                .await
+                .expect("声明保存点能力的驱动必须创建命名保存点");
+            connection
+                .exec(&insert_sql, contract_values(7, "savepoint"))
+                .await
+                .expect("保存点之后的写入必须成功");
+            connection
+                .rollback_to(&savepoint)
+                .await
+                .expect("声明保存点能力的驱动必须回滚到保存点");
+            connection
+                .release_savepoint(&savepoint)
+                .await
+                .expect("声明保存点能力的驱动必须释放保存点");
+            connection.commit().await.expect("保存点事务必须可提交");
+            connection
+                .set_auto_commit(true)
+                .await
+                .expect("保存点事务后必须恢复 auto-commit");
+            assert!(connection
+                .fetch(&select_sql, vec![Value::Int(7)])
+                .await
+                .expect("保存点回滚后查询必须成功")
+                .is_empty());
+        }
+    } else {
+        assert!(
+            connection.set_auto_commit(false).await.is_err(),
+            "不支持事务的产品必须明确拒绝 setAutoCommit(false)"
+        );
+    }
 
     let mut batch = connection
         .prepare_statement(&insert_sql)
@@ -159,22 +217,26 @@ async fn database_profile_live_contract_when_configured() {
     batch.close().expect("batch statement 必须可关闭");
 
     // 归还一个未提交连接，Druid 必须 rollback 并恢复默认 auto-commit。
-    connection
-        .set_auto_commit(false)
-        .await
-        .expect("状态复位前必须进入事务");
-    connection
-        .exec(&insert_sql, contract_values(6, "recycle"))
-        .await
-        .expect("待回收事务写入必须成功");
+    if supports_transactions {
+        connection
+            .set_auto_commit(false)
+            .await
+            .expect("状态复位前必须进入事务");
+        connection
+            .exec(&insert_sql, contract_values(6, "recycle"))
+            .await
+            .expect("待回收事务写入必须成功");
+    }
     connection.close().await.expect("连接归还必须成功");
     let mut connection = pool.get().await.expect("必须能重新借出连接");
-    assert!(connection.auto_commit(), "归还后必须恢复 auto-commit");
-    assert!(connection
-        .fetch(&select_sql, vec![Value::Int(6)])
-        .await
-        .expect("状态复位后查询必须成功")
-        .is_empty());
+    if supports_transactions {
+        assert!(connection.auto_commit(), "归还后必须恢复 auto-commit");
+        assert!(connection
+            .fetch(&select_sql, vec![Value::Int(6)])
+            .await
+            .expect("状态复位后查询必须成功")
+            .is_empty());
+    }
 
     let deleted = connection
         .exec(
@@ -188,17 +250,13 @@ async fn database_profile_live_contract_when_configured() {
         .expect("DELETE 必须成功");
     assert_eq!(deleted.rows_affected, 1);
     let database_version = database_version(&mut connection, profile.protocol_family()).await;
-    let requires_embedded_restart = profile.id().as_str() == "duckdb";
-    if requires_embedded_restart {
-        eprintln!("contract-stage: duckdb-error-classification");
-        verify_duckdb_error_classification(&mut connection).await;
+    eprintln!("contract-stage: error-classification");
+    verify_error_classification(&mut connection, &table).await;
+    let is_duckdb = profile.id().as_str() == "duckdb";
+    let requires_embedded_restart = matches!(profile.id().as_str(), "duckdb" | "sqlite");
+    if is_duckdb {
         eprintln!("contract-stage: duckdb-timeout-cancel");
         verify_duckdb_timeout_and_cancel(&mut connection).await;
-    } else {
-        connection
-            .exec(&format!("DROP TABLE {table}"), Vec::new())
-            .await
-            .expect("清理契约表必须成功");
     }
     connection.close().await.expect("最终连接归还必须成功");
 
@@ -217,19 +275,162 @@ async fn database_profile_live_contract_when_configured() {
 
     eprintln!("contract-stage: rejected-connection");
     verify_rejected_connection_if_configured(&profile_id).await;
+    let timeout_cancel = if is_duckdb {
+        true
+    } else {
+        eprintln!("contract-stage: timeout-cancel");
+        verify_timeout_and_cancel_if_configured(profile, &url).await
+    };
+    let jdbc_faults = verify_jdbc_agent_failures_if_required(profile, &url).await;
     eprintln!("contract-stage: pool-close");
     pool.close().await;
     assert!(pool.state().closed);
-    if requires_embedded_restart {
-        eprintln!("contract-stage: duckdb-database-restart");
-        verify_duckdb_database_restart(&profile_id, &url, &table, &select_sql).await;
-    }
+    eprintln!("contract-stage: database-restart");
+    let database_restart = verify_database_restart_if_configured(
+        profile,
+        &url,
+        &table,
+        &select_sql,
+        requires_embedded_restart,
+    )
+    .await;
     eprintln!("contract-stage: evidence-write");
-    write_contract_evidence_if_configured(profile, &database_version);
+    write_contract_evidence_if_configured(
+        profile,
+        &database_version,
+        timeout_cancel,
+        database_restart,
+        jdbc_faults,
+    );
+}
+
+fn configured_pool_builder(
+    profile_id: &str,
+    url: &str,
+    runtime_mode: DriverRuntimeMode,
+) -> DruidDatabasePoolBuilder {
+    let mut builder = DruidDatabasePoolBuilder::new(profile_id, url);
+    for (environment, property) in [
+        ("DRUID_DATABASE_USER", "user"),
+        ("DRUID_DATABASE_PASSWORD", "password"),
+        ("DRUID_DATABASE_TOKEN", "token"),
+        ("DRUID_DATABASE_API_TOKEN", "api_token"),
+    ] {
+        if let Some(value) = std::env::var(environment)
+            .ok()
+            .filter(|value| !value.is_empty())
+        {
+            builder = builder.property(property, value);
+        }
+    }
+    if let Some(properties) = std::env::var("DRUID_DATABASE_PROPERTIES_JSON")
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
+        let properties: std::collections::HashMap<String, String> =
+            serde_json::from_str(&properties)
+                .expect("DRUID_DATABASE_PROPERTIES_JSON 必须是字符串键值对象");
+        for (name, value) in properties {
+            builder = builder.property(name, value);
+        }
+    }
+    if runtime_mode == DriverRuntimeMode::JdbcAgent {
+        builder = configure_jdbc_agent(builder);
+    }
+    builder
+}
+
+#[cfg(feature = "jdbc-agent")]
+fn configure_jdbc_agent(builder: DruidDatabasePoolBuilder) -> DruidDatabasePoolBuilder {
+    builder.jdbc_agent(configured_jdbc_agent_options())
+}
+
+#[cfg(feature = "jdbc-agent")]
+fn configured_jdbc_agent_options() -> JdbcAgentOptions {
+    let java = std::env::var_os("DRUID_JDBC_JAVA")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| std::ffi::OsString::from("java"));
+    let agent = std::env::var_os("DRUID_JDBC_AGENT_JAR")
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| panic!("JDBC 产品合同必须设置 DRUID_JDBC_AGENT_JAR"));
+    let drivers = std::env::var_os("DRUID_JDBC_DRIVER_JARS")
+        .filter(|value| !value.is_empty())
+        .or_else(|| std::env::var_os("DRUID_JDBC_DRIVER_JAR"))
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| panic!("JDBC 产品合同必须设置 DRUID_JDBC_DRIVER_JARS"));
+    let class_path = std::iter::once(std::path::PathBuf::from(agent))
+        .chain(std::env::split_paths(&drivers))
+        .collect::<Vec<_>>();
+    JdbcAgentOptions::java(java, class_path).expect("JDBC Agent classpath 必须可在当前平台编码")
+}
+
+#[cfg(not(feature = "jdbc-agent"))]
+fn configure_jdbc_agent(_builder: DruidDatabasePoolBuilder) -> DruidDatabasePoolBuilder {
+    panic!("JDBC 产品合同必须启用 jdbc-agent feature")
+}
+
+fn configured_connection_config(profile_id: &str, url: &str) -> DatabaseConnectionConfig {
+    let mut config =
+        DatabaseConnectionConfig::new(profile_id, url).expect("合同 profile ID 必须合法");
+    for (environment, property) in [
+        ("DRUID_DATABASE_USER", "user"),
+        ("DRUID_DATABASE_PASSWORD", "password"),
+        ("DRUID_DATABASE_TOKEN", "token"),
+        ("DRUID_DATABASE_API_TOKEN", "api_token"),
+    ] {
+        if let Some(value) = std::env::var(environment)
+            .ok()
+            .filter(|value| !value.is_empty())
+        {
+            config = config.property(property, value);
+        }
+    }
+    if let Some(properties) = std::env::var("DRUID_DATABASE_PROPERTIES_JSON")
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
+        let properties: std::collections::HashMap<String, String> =
+            serde_json::from_str(&properties)
+                .expect("DRUID_DATABASE_PROPERTIES_JSON 必须是字符串键值对象");
+        for (name, value) in properties {
+            config = config.property(name, value);
+        }
+    }
+    config
+}
+
+fn configured_properties() -> std::collections::HashMap<String, String> {
+    let mut properties = std::collections::HashMap::new();
+    for (environment, property) in [
+        ("DRUID_DATABASE_USER", "user"),
+        ("DRUID_DATABASE_PASSWORD", "password"),
+        ("DRUID_DATABASE_TOKEN", "token"),
+        ("DRUID_DATABASE_API_TOKEN", "api_token"),
+    ] {
+        if let Some(value) = std::env::var(environment)
+            .ok()
+            .filter(|value| !value.is_empty())
+        {
+            properties.insert(property.to_owned(), value);
+        }
+    }
+    if let Some(extra) = std::env::var("DRUID_DATABASE_PROPERTIES_JSON")
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
+        properties.extend(
+            serde_json::from_str::<std::collections::HashMap<String, String>>(&extra)
+                .expect("DRUID_DATABASE_PROPERTIES_JSON 必须是字符串键值对象"),
+        );
+    }
+    properties
 }
 
 fn create_table_sql(family: ProtocolFamily, table: &str) -> String {
-    if let Ok(template) = std::env::var("DRUID_CONTRACT_CREATE_TABLE_SQL") {
+    if let Some(template) = std::env::var("DRUID_CONTRACT_CREATE_TABLE_SQL")
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
         return template.replace("{table}", table);
     }
     let binary = match family {
@@ -298,13 +499,27 @@ fn contract_values(id: i64, name: &str) -> Vec<Value> {
 fn assert_scalar_row(family: ProtocolFamily, actual: &[Value], expected: &[Value]) {
     assert_eq!(actual.len(), expected.len());
     for (index, (actual, expected)) in actual.iter().zip(expected).enumerate() {
-        if family == ProtocolFamily::SQLite
-            && index == 4
-            && matches!((actual, expected), (Value::Float(12.5), Value::Decimal(_)))
-        {
-            // SQLite NUMERIC affinity has no decimal storage class. The adapter reports the
-            // real runtime storage class instead of inventing a Decimal identity.
-            continue;
+        if matches!(family, ProtocolFamily::SQLite | ProtocolFamily::HttpSql) {
+            let sqlite_equivalent = match (actual, expected) {
+                (Value::Int(1), Value::Bool(true)) => true,
+                (Value::Float(actual), Value::Decimal(expected)) => {
+                    (*actual - 12.5).abs() < f64::EPSILON && expected.to_string() == "12.5"
+                }
+                (Value::String(actual), Value::Decimal(expected)) => {
+                    actual == &expected.to_string()
+                }
+                (Value::String(actual), Value::Date(expected)) => actual == &expected.to_string(),
+                (Value::String(actual), Value::Time(expected)) => actual == &expected.to_string(),
+                (Value::String(actual), Value::Timestamp(expected)) => {
+                    actual == &expected.to_string()
+                }
+                _ => false,
+            };
+            if sqlite_equivalent {
+                // SQLite 只有动态 storage class；适配器保留真实运行时值，合同只接受
+                // 可逆的 SQLite 表示，不伪造 Decimal/日期时间的强类型身份。
+                continue;
+            }
         }
         assert_eq!(actual, expected, "scalar type mismatch at column {index}");
     }
@@ -314,12 +529,15 @@ async fn database_version(
     connection: &mut druid::core::DruidPooledConnection,
     family: ProtocolFamily,
 ) -> String {
-    let sql = match family {
-        ProtocolFamily::SQLite => "SELECT sqlite_version()",
+    let configured_sql = std::env::var("DRUID_CONTRACT_DATABASE_VERSION_SQL")
+        .ok()
+        .filter(|value| !value.is_empty());
+    let sql = configured_sql.as_deref().unwrap_or(match family {
+        ProtocolFamily::SQLite | ProtocolFamily::HttpSql => "SELECT sqlite_version()",
         ProtocolFamily::MySql => "SELECT version()",
         ProtocolFamily::PostgreSql => "SHOW server_version",
         _ => "SELECT version()",
-    };
+    });
     let rows = connection
         .fetch(sql, Vec::new())
         .await
@@ -341,7 +559,13 @@ async fn verify_rejected_connection_if_configured(profile_id: &str) {
         verify_duckdb_rejected_physical_connection(&bad_url).await;
         return;
     }
-    let pool = DruidDatabasePoolBuilder::new(profile_id, bad_url)
+    let registry = DruidDriverRegistry::builtin().expect("内置数据库档案必须可解析");
+    let runtime_mode = registry
+        .profiles()
+        .find(|profile| profile.id().as_str() == profile_id)
+        .expect("坏连接合同必须引用已知档案")
+        .runtime_mode();
+    let pool = configured_pool_builder(profile_id, &bad_url, runtime_mode)
         .pool(|builder| {
             builder
                 .max_open(1)
@@ -383,6 +607,9 @@ async fn verify_duckdb_rejected_physical_connection(_bad_url: &str) {
 fn write_contract_evidence_if_configured(
     profile: &druid_wrapper::driver::DatabaseProfile,
     database_version: &str,
+    timeout_cancel: bool,
+    database_restart: bool,
+    jdbc_faults: bool,
 ) {
     let Ok(path) = std::env::var("DRUID_CONTRACT_EVIDENCE_PATH") else {
         return;
@@ -394,6 +621,12 @@ fn write_contract_evidence_if_configured(
     let target = std::env::var("DRUID_CONTRACT_TARGET").unwrap_or_else(|_| current_target());
     let rust_version =
         std::env::var("DRUID_CONTRACT_RUST_VERSION").unwrap_or_else(|_| "default".to_owned());
+    assert!(timeout_cancel, "认证证据必须真实执行 timeout-cancel");
+    assert!(database_restart, "认证证据必须真实执行 database-restart");
+    assert!(
+        profile.runtime_mode() != DriverRuntimeMode::JdbcAgent || jdbc_faults,
+        "JDBC 认证证据必须执行 agent-crash 与 protocol-failure"
+    );
     let mut contract_checks = vec![
         "connection-lifecycle",
         "validation",
@@ -403,25 +636,39 @@ fn write_contract_evidence_if_configured(
         "transactions",
         "state-reset",
         "capabilities",
+        "error-classification",
+        "timeout-cancel",
+        "database-restart",
         "concurrency-leak-shutdown",
         "no-pool-in-pool",
     ];
-    if profile.id().as_str() == "duckdb" {
-        contract_checks.extend(["error-classification", "timeout-cancel", "database-restart"]);
+    if profile.runtime_mode() == DriverRuntimeMode::JdbcAgent {
+        contract_checks.extend(["agent-crash", "protocol-failure"]);
     }
+    let java_versions = if profile.runtime_mode() == DriverRuntimeMode::JdbcAgent {
+        vec![std::env::var("DRUID_CONTRACT_JAVA_VERSION")
+            .unwrap_or_else(|_| "17".to_owned())
+            .parse::<u16>()
+            .expect("DRUID_CONTRACT_JAVA_VERSION 必须是 Java 主版本")]
+    } else {
+        Vec::new()
+    };
+    let artifact_sha256 = std::env::var("DRUID_CONTRACT_ARTIFACT_SHA256")
+        .ok()
+        .filter(|value| !value.is_empty());
     let record = serde_json::json!({
         "profileId": profile.id().as_str(),
         "target": target,
         "databaseVersion": database_version,
         "rustVersion": rust_version,
-        "javaVersions": [],
+        "javaVersions": java_versions,
         "runtimeMode": runtime_mode_label(profile.runtime_mode()),
         "installationPaths": installation_paths(profile.runtime_mode()),
         "contractChecks": contract_checks,
         "sourceRevision": source_revision,
         "evidenceRef": evidence_ref,
         "passedAt": Utc::now().to_rfc3339(),
-        "artifactSha256": null
+        "artifactSha256": artifact_sha256
     });
     let path = Path::new(&path);
     if let Some(parent) = path.parent() {
@@ -443,27 +690,188 @@ fn installation_paths(runtime_mode: DriverRuntimeMode) -> Vec<&'static str> {
     match runtime_mode {
         DriverRuntimeMode::Native => vec!["native", "bundled-native"],
         DriverRuntimeMode::Sqlx => vec!["native"],
-        DriverRuntimeMode::JdbcAgent => vec!["jdbc-agent"],
+        DriverRuntimeMode::JdbcAgent => {
+            vec!["jdbc-agent", "offline-preinstalled", "explicit-install"]
+        }
         DriverRuntimeMode::HttpSql => vec!["http-sql"],
     }
 }
 
-async fn verify_duckdb_error_classification(connection: &mut druid::core::DruidPooledConnection) {
+async fn verify_error_classification(
+    connection: &mut druid::core::DruidPooledConnection,
+    table: &str,
+) {
     let error = connection
-        .fetch("SELECT * FROM druid_missing_contract_table", Vec::new())
+        .fetch(&format!("SELECT * FROM {table}_missing"), Vec::new())
         .await
-        .expect_err("DuckDB 不存在的表必须返回错误");
+        .expect_err("不存在的表必须返回结构化驱动错误");
     match error {
         DruidError::SqlException(exception) => {
-            assert_ne!(exception.error_code(), 0);
-            assert_eq!(exception.sql_state(), Some("HY000"));
-            assert!(exception.class_name().starts_with("duckdb::Error"));
+            assert!(
+                exception.error_code() != 0 || exception.sql_state().is_some(),
+                "驱动必须至少保留 vendor code 或 SQLState"
+            );
+            assert!(!exception.class_name().is_empty());
             assert!(exception
                 .message()
                 .is_some_and(|message| !message.is_empty()));
         }
-        other => panic!("DuckDB 错误必须保留 SQLState/vendor/class，实际为 {other:?}"),
+        other => panic!("错误必须保留 SQLState/vendor/class，实际为 {other:?}"),
     }
+}
+
+async fn verify_timeout_and_cancel_if_configured(
+    profile: &druid_wrapper::driver::DatabaseProfile,
+    url: &str,
+) -> bool {
+    let long_query = match std::env::var("DRUID_CONTRACT_LONG_QUERY")
+        .ok()
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => value,
+        None if std::env::var_os("DRUID_CONTRACT_EVIDENCE_PATH").is_some() => {
+            panic!("生成认证证据必须设置 DRUID_CONTRACT_LONG_QUERY")
+        }
+        None => return false,
+    };
+    let registry = configured_registry(profile.runtime_mode());
+    let config = configured_connection_config(profile.id().as_str(), url);
+    let resolved = registry.resolve(&config).expect("合同档案必须可解析");
+    let key = PreparedStatementKey::new(
+        Some(long_query.clone()),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("长查询 PreparedStatement key 必须合法");
+
+    let mut timeout_connection = resolved
+        .factory()
+        .create()
+        .await
+        .expect("timeout 合同必须建立物理连接");
+    let timeout_statement = timeout_connection
+        .prepare_physical_statement(&key)
+        .await
+        .expect("timeout 合同必须 prepare");
+    timeout_statement
+        .set_query_timeout(1)
+        .expect("物理 PreparedStatement 必须接受 query timeout");
+    let timeout_error = tokio::time::timeout(
+        Duration::from_secs(15),
+        timeout_connection.fetch_prepared(timeout_statement.as_ref(), Vec::new()),
+    )
+    .await
+    .expect("驱动 query timeout 必须在合同截止时间内完成")
+    .expect_err("长查询必须被 query timeout 中断");
+    assert!(
+        matches!(timeout_error, DruidError::SqlException(ref exception)
+            if matches!(exception.sql_state(), Some("HYT00" | "HY008" | "57014"))),
+        "timeout 必须保留标准 SQLState，实际为 {timeout_error:?}"
+    );
+
+    let mut cancel_connection = resolved
+        .factory()
+        .create()
+        .await
+        .expect("cancel 合同必须建立独立物理连接");
+    let cancel_statement = cancel_connection
+        .prepare_physical_statement(&key)
+        .await
+        .expect("cancel 合同必须 prepare");
+    let executing = Arc::clone(&cancel_statement);
+    let cancelling = Arc::clone(&cancel_statement);
+    let task = tokio::spawn(async move {
+        cancel_connection
+            .fetch_prepared(executing.as_ref(), Vec::new())
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    cancelling.cancel().expect("显式 cancel 请求必须可发送");
+    let cancel_error = tokio::time::timeout(Duration::from_secs(15), task)
+        .await
+        .expect("显式 cancel 必须在合同截止时间内完成")
+        .expect("cancel 合同任务不得 panic")
+        .expect_err("长查询必须被显式 cancel 中断");
+    assert!(
+        matches!(cancel_error, DruidError::SqlException(ref exception)
+            if matches!(exception.sql_state(), Some("HY008" | "57014" | "HYT00")))
+            || matches!(cancel_error, DruidError::ConnectionDiscarded),
+        "cancel 必须产生可分类异常或明确丢弃，实际为 {cancel_error:?}"
+    );
+    true
+}
+
+fn configured_registry(runtime_mode: DriverRuntimeMode) -> DruidDriverRegistry {
+    #[cfg(feature = "jdbc-agent")]
+    {
+        let registry = DruidDriverRegistry::builtin().expect("内置数据库档案必须可解析");
+        if runtime_mode == DriverRuntimeMode::JdbcAgent {
+            return registry.with_jdbc_agent(configured_jdbc_agent_options());
+        }
+        registry
+    }
+    #[cfg(not(feature = "jdbc-agent"))]
+    {
+        assert_ne!(
+            runtime_mode,
+            DriverRuntimeMode::JdbcAgent,
+            "JDBC 产品合同必须启用 jdbc-agent feature"
+        );
+        DruidDriverRegistry::builtin().expect("内置数据库档案必须可解析")
+    }
+}
+
+#[cfg(feature = "jdbc-agent")]
+async fn verify_jdbc_agent_failures_if_required(
+    profile: &druid_wrapper::driver::DatabaseProfile,
+    url: &str,
+) -> bool {
+    if profile.runtime_mode() != DriverRuntimeMode::JdbcAgent {
+        return true;
+    }
+    let connect = || {
+        JdbcAgentConnection::connect(
+            url,
+            profile.validation_query(),
+            configured_properties(),
+            configured_jdbc_agent_options().contract_fault_injection(true),
+        )
+    };
+
+    let mut crash = connect()
+        .await
+        .expect("agent-crash 合同必须建立隔离 JDBC session");
+    tokio::time::timeout(Duration::from_secs(10), crash.diagnostic_crash_agent())
+        .await
+        .expect("Agent 崩溃必须在截止时间内传播")
+        .expect_err("diagnostic_crash 必须终止 Agent");
+    assert!(crash.is_discarded(), "Agent 崩溃后物理连接必须丢弃");
+
+    let mut protocol = connect()
+        .await
+        .expect("protocol-failure 合同必须启动新的健康 Agent");
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        protocol.diagnostic_protocol_failure(),
+    )
+    .await
+    .expect("协议坏帧必须在截止时间内传播")
+    .expect_err("diagnostic_protocol_failure 必须失败关闭");
+    assert!(protocol.is_discarded(), "Agent 协议失败后物理连接必须丢弃");
+    true
+}
+
+#[cfg(not(feature = "jdbc-agent"))]
+async fn verify_jdbc_agent_failures_if_required(
+    profile: &druid_wrapper::driver::DatabaseProfile,
+    _url: &str,
+) -> bool {
+    assert_ne!(
+        profile.runtime_mode(),
+        DriverRuntimeMode::JdbcAgent,
+        "JDBC 产品合同必须启用 jdbc-agent feature"
+    );
+    true
 }
 
 #[cfg(feature = "duckdb-native")]
@@ -537,22 +945,22 @@ async fn verify_duckdb_timeout_and_cancel(_connection: &mut druid::core::DruidPo
     panic!("DuckDB 完整契约必须启用 duckdb-native feature");
 }
 
-async fn verify_duckdb_database_restart(
+async fn verify_embedded_database_restart(
     profile_id: &str,
     url: &str,
     table: &str,
     select_sql: &str,
 ) {
     assert!(
-        url != "duckdb::memory:" && url != "duckdb:///:memory:",
-        "DuckDB database-restart 契约必须使用文件数据库"
+        url != "duckdb::memory:" && url != "duckdb:///:memory:" && !url.contains(":memory:"),
+        "embedded database-restart 契约必须使用文件数据库"
     );
     let pool = DruidDatabasePoolBuilder::new(profile_id, url)
         .name(format!("contract-{profile_id}-restart"))
         .pool(|builder| builder.max_open(1).max_idle(1).test_on_borrow(true))
         .build()
         .await
-        .expect("DuckDB 文件数据库必须能重新启动");
+        .expect("嵌入式文件数据库必须能重新启动");
     let mut connection = pool.get().await.expect("重启后必须能建立物理连接");
     assert_eq!(
         connection
@@ -569,6 +977,64 @@ async fn verify_duckdb_database_restart(
     connection.close().await.expect("重启后的连接必须归还");
     pool.close().await;
     assert!(pool.state().closed);
+}
+
+async fn verify_database_restart_if_configured(
+    profile: &druid_wrapper::driver::DatabaseProfile,
+    url: &str,
+    table: &str,
+    select_sql: &str,
+    embedded_restart: bool,
+) -> bool {
+    if embedded_restart {
+        verify_embedded_database_restart(profile.id().as_str(), url, table, select_sql).await;
+        return true;
+    }
+
+    let restart_program =
+        std::env::var_os("DRUID_CONTRACT_RESTART_PROGRAM").filter(|value| !value.is_empty());
+    if let Some(program) = restart_program.as_ref() {
+        let arguments = std::env::var("DRUID_CONTRACT_RESTART_ARGS_JSON")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .map(|value| {
+                serde_json::from_str::<Vec<String>>(&value)
+                    .expect("DRUID_CONTRACT_RESTART_ARGS_JSON 必须是字符串数组")
+            })
+            .unwrap_or_default();
+        let status = tokio::process::Command::new(program)
+            .args(arguments)
+            .status()
+            .await
+            .expect("数据库重启 hook 必须可执行");
+        assert!(status.success(), "数据库重启 hook 必须成功");
+    } else if std::env::var_os("DRUID_CONTRACT_EVIDENCE_PATH").is_some() {
+        panic!("生成认证证据必须设置 DRUID_CONTRACT_RESTART_PROGRAM");
+    }
+
+    let pool = configured_pool_builder(profile.id().as_str(), url, profile.runtime_mode())
+        .name(format!("contract-{}-restart", profile.id()))
+        .pool(|builder| builder.max_open(1).max_idle(1).test_on_borrow(true))
+        .build()
+        .await
+        .expect("数据库重启后必须能重新构建 DruidPool");
+    let mut connection = pool.get().await.expect("数据库重启后必须能重新建连");
+    connection.ping().await.expect("数据库重启后 ping 必须成功");
+    assert_eq!(
+        connection
+            .fetch(select_sql, vec![Value::Int(4)])
+            .await
+            .expect("数据库重启后必须读取已提交 batch 数据")
+            .len(),
+        1
+    );
+    connection
+        .exec(&format!("DROP TABLE {table}"), Vec::new())
+        .await
+        .expect("数据库重启后必须清理契约表");
+    connection.close().await.expect("重启后的连接必须归还");
+    pool.close().await;
+    restart_program.is_some()
 }
 
 fn current_target() -> String {

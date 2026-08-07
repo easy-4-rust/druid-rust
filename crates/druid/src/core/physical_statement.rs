@@ -8,7 +8,7 @@ use super::{DruidError, ExecResult, Row, SqlWarning};
 use std::any::Any;
 use std::sync::Mutex;
 
-/// JDBC `Statement` 的结果集创建参数。
+/// RDBC `Statement` 的结果集创建参数。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicalStatementOptions {
     /// 对应 `ResultSet#getType()`。
@@ -35,9 +35,9 @@ pub enum StatementGeneratedKeys {
     ColumnNames(Vec<String>),
 }
 
-/// `Statement#execute(...)` 返回的一个 JDBC 结果。
+/// `Statement#execute(...)` 返回的一个 RDBC 结果。
 ///
-/// JDBC 用布尔值区分首结果是否为 ResultSet，并通过 `getMoreResults()` 继续
+/// RDBC 用布尔值区分首结果是否为 ResultSet，并通过 `getMoreResults()` 继续
 /// 遍历。Rust SPI 显式保存有序结果，避免通过 SQL 文本猜测查询或更新类型。
 #[derive(Debug, Clone, PartialEq)]
 pub enum StatementExecuteResult {
@@ -48,12 +48,12 @@ pub enum StatementExecuteResult {
 }
 
 impl StatementExecuteResult {
-    /// 返回当前结果是否为 JDBC ResultSet。
+    /// 返回当前结果是否为 RDBC ResultSet。
     pub fn is_result_set(&self) -> bool {
         matches!(self, Self::ResultSet(_))
     }
 
-    /// 返回 JDBC `getUpdateCount()`；ResultSet 返回 `-1`。
+    /// 返回 RDBC `getUpdateCount()`；ResultSet 返回 `-1`。
     pub fn update_count(&self) -> i64 {
         match self {
             Self::ResultSet(_) => -1,
@@ -101,7 +101,7 @@ pub trait PhysicalStatement: Any + Send + Sync {
     /// 设置最大结果行数。
     fn set_max_rows(&self, max: i32) -> Result<(), DruidError>;
 
-    /// 设置 JDBC escape 处理开关。
+    /// 设置 RDBC escape 处理开关。
     fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError>;
 
     /// 返回查询超时秒数。
@@ -171,10 +171,10 @@ pub trait PhysicalStatement: Any + Send + Sync {
         Ok(())
     }
 
-    /// 推进 JDBC 多结果。
+    /// 推进 RDBC 多结果。
     ///
     /// 对应 Java：`Statement#getMoreResults()` 与 `getMoreResults(int)`。默认
-    /// 文本 Statement 没有额外驱动状态，但仍精确校验 JDBC current 常量。
+    /// 文本 Statement 没有额外驱动状态，但仍精确校验 RDBC current 常量。
     fn get_more_results(&self, current: Option<i32>) -> Result<(), DruidError> {
         if current.is_some_and(|value| !matches!(value, 1..=3)) {
             Err(DruidError::InvalidArgument(
@@ -219,7 +219,7 @@ struct SqlTextStatementState {
 /// Adapter 通用的普通 SQL 语句资源。
 ///
 /// SQLx、RBDC 与 Toasty 均在连接对象上执行动态 SQL，因此这个实现只保存
-/// JDBC Statement 的资源状态，执行仍回到原始 `PhysicalConnection`。
+/// RDBC Statement 的资源状态，执行仍回到原始 `PhysicalConnection`。
 #[derive(Debug)]
 pub struct SqlTextStatement {
     options: PhysicalStatementOptions,

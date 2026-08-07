@@ -3,8 +3,8 @@
 //! 对应 Java：`com.alibaba.druid.filter.Filter` 的 `resultSet_*` 方法族。
 
 use super::{
-    DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcClob, JdbcInputStream, JdbcNClob,
-    JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl,
+    DruidError, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcClob, RdbcInputStream, RdbcNClob,
+    RdbcObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcTargetType, RdbcTypeMap, RdbcUrl,
     ResultSetFilterChain, ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext,
     ResultSetStatement, SqlWarning, Value,
 };
@@ -61,7 +61,7 @@ macro_rules! temporal_getter_filter_methods {
                 &self,
                 chain: &mut ResultSetFilterChain<'_>,
                 column_index: usize,
-                calendar: &JdbcCalendarArgument,
+                calendar: &RdbcCalendarArgument,
             ) -> Result<Option<$ty>, DruidError> {
                 chain.$chain_index_calendar(column_index, calendar)
             }
@@ -71,7 +71,7 @@ macro_rules! temporal_getter_filter_methods {
                 &self,
                 chain: &mut ResultSetFilterChain<'_>,
                 column_label: &str,
-                calendar: &JdbcCalendarArgument,
+                calendar: &RdbcCalendarArgument,
             ) -> Result<Option<$ty>, DruidError> {
                 chain.$chain_label_calendar(column_label, calendar)
             }
@@ -342,7 +342,7 @@ macro_rules! long_stream_update_filter_methods {
 
 /// 可包围 `ResultSet` 物理操作的同步 `Filter`。
 ///
-/// Java JDBC `ResultSet` 操作是同步调用，`Filter` 可以在委托前后执行逻辑，也可以
+/// Java RDBC `ResultSet` 操作是同步调用，`Filter` 可以在委托前后执行逻辑，也可以
 /// 短路或改写返回值。因此该协议保留 around-chain，而不是退化为只读事件通知。
 pub trait ResultSetFilter: Send + Sync {
     /// 查询成功并创建 `ResultSet` 代理后执行。
@@ -422,8 +422,8 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         chain.result_set_get_object_with_type_map(column_index, type_map)
     }
 
@@ -432,8 +432,8 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         chain.result_set_get_object_by_label_with_type_map(column_label, type_map)
     }
 
@@ -442,8 +442,8 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         chain.result_set_get_object_typed(column_index, target_type)
     }
 
@@ -452,8 +452,8 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         chain.result_set_get_object_typed_by_label(column_label, target_type)
     }
 
@@ -621,79 +621,79 @@ pub trait ResultSetFilter: Send + Sync {
         (
             result_set_get_ref,
             result_set_get_ref_by_label,
-            JdbcRef,
+            RdbcRef,
             "getRef"
         ),
         (
             result_set_get_blob,
             result_set_get_blob_by_label,
-            JdbcBlob,
+            RdbcBlob,
             "getBlob"
         ),
         (
             result_set_get_clob,
             result_set_get_clob_by_label,
-            JdbcClob,
+            RdbcClob,
             "getClob"
         ),
         (
             result_set_get_array,
             result_set_get_array_by_label,
-            JdbcArray,
+            RdbcArray,
             "getArray"
         ),
         (
             result_set_get_url,
             result_set_get_url_by_label,
-            JdbcUrl,
+            RdbcUrl,
             "getURL"
         ),
         (
             result_set_get_row_id,
             result_set_get_row_id_by_label,
-            JdbcRowId,
+            RdbcRowId,
             "getRowId"
         ),
         (
             result_set_get_n_clob,
             result_set_get_n_clob_by_label,
-            JdbcNClob,
+            RdbcNClob,
             "getNClob"
         ),
         (
             result_set_get_sql_xml,
             result_set_get_sql_xml_by_label,
-            JdbcSqlXml,
+            RdbcSqlXml,
             "getSQLXML"
         ),
         (
             result_set_get_ascii_stream,
             result_set_get_ascii_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getAsciiStream"
         ),
         (
             result_set_get_unicode_stream,
             result_set_get_unicode_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getUnicodeStream"
         ),
         (
             result_set_get_binary_stream,
             result_set_get_binary_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getBinaryStream"
         ),
         (
             result_set_get_character_stream,
             result_set_get_character_stream_by_label,
-            JdbcReader,
+            RdbcReader,
             "getCharacterStream"
         ),
         (
             result_set_get_n_character_stream,
             result_set_get_n_character_stream_by_label,
-            JdbcReader,
+            RdbcReader,
             "getNCharacterStream"
         ),
     );
@@ -738,7 +738,7 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         chain.result_set_update_object(column_index, value)
     }
@@ -748,7 +748,7 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         chain.result_set_update_object_by_label(column_label, value)
     }
@@ -758,7 +758,7 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         chain.result_set_update_object_with_scale_or_length(column_index, value, scale_or_length)
@@ -769,7 +769,7 @@ pub trait ResultSetFilter: Send + Sync {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         chain.result_set_update_object_by_label_with_scale_or_length(
@@ -783,43 +783,43 @@ pub trait ResultSetFilter: Send + Sync {
         (
             result_set_update_reference,
             result_set_update_reference_by_label,
-            JdbcRef,
+            RdbcRef,
             "updateRef"
         ),
         (
             result_set_update_blob,
             result_set_update_blob_by_label,
-            JdbcBlob,
+            RdbcBlob,
             "updateBlob"
         ),
         (
             result_set_update_clob,
             result_set_update_clob_by_label,
-            JdbcClob,
+            RdbcClob,
             "updateClob"
         ),
         (
             result_set_update_array,
             result_set_update_array_by_label,
-            JdbcArray,
+            RdbcArray,
             "updateArray"
         ),
         (
             result_set_update_row_id,
             result_set_update_row_id_by_label,
-            JdbcRowId,
+            RdbcRowId,
             "updateRowId"
         ),
         (
             result_set_update_n_clob,
             result_set_update_n_clob_by_label,
-            JdbcNClob,
+            RdbcNClob,
             "updateNClob"
         ),
         (
             result_set_update_sql_xml,
             result_set_update_sql_xml_by_label,
-            JdbcSqlXml,
+            RdbcSqlXml,
             "updateSQLXML"
         ),
     );
@@ -830,7 +830,7 @@ pub trait ResultSetFilter: Send + Sync {
             result_set_update_blob_stream_by_label,
             result_set_update_blob_stream_with_length,
             result_set_update_blob_stream_by_label_with_length,
-            JdbcInputStream,
+            RdbcInputStream,
             "updateBlob"
         ),
         (
@@ -838,7 +838,7 @@ pub trait ResultSetFilter: Send + Sync {
             result_set_update_clob_reader_by_label,
             result_set_update_clob_reader_with_length,
             result_set_update_clob_reader_by_label_with_length,
-            JdbcReader,
+            RdbcReader,
             "updateClob"
         ),
         (
@@ -846,7 +846,7 @@ pub trait ResultSetFilter: Send + Sync {
             result_set_update_n_clob_reader_by_label,
             result_set_update_n_clob_reader_with_length,
             result_set_update_n_clob_reader_by_label_with_length,
-            JdbcReader,
+            RdbcReader,
             "updateNClob"
         ),
     );
@@ -859,7 +859,7 @@ pub trait ResultSetFilter: Send + Sync {
             result_set_update_ascii_stream_by_label_with_int_length,
             result_set_update_ascii_stream_with_length,
             result_set_update_ascii_stream_by_label_with_length,
-            JdbcInputStream,
+            RdbcInputStream,
             "updateAsciiStream"
         ),
         (
@@ -869,7 +869,7 @@ pub trait ResultSetFilter: Send + Sync {
             result_set_update_binary_stream_by_label_with_int_length,
             result_set_update_binary_stream_with_length,
             result_set_update_binary_stream_by_label_with_length,
-            JdbcInputStream,
+            RdbcInputStream,
             "updateBinaryStream"
         ),
         (
@@ -879,7 +879,7 @@ pub trait ResultSetFilter: Send + Sync {
             result_set_update_character_stream_by_label_with_int_length,
             result_set_update_character_stream_with_length,
             result_set_update_character_stream_by_label_with_length,
-            JdbcReader,
+            RdbcReader,
             "updateCharacterStream"
         ),
     );
@@ -889,7 +889,7 @@ pub trait ResultSetFilter: Send + Sync {
         result_set_update_n_character_stream_by_label,
         result_set_update_n_character_stream_with_length,
         result_set_update_n_character_stream_by_label_with_length,
-        JdbcReader,
+        RdbcReader,
         "updateNCharacterStream"
     ));
 

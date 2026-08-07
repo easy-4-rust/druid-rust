@@ -1,4 +1,4 @@
-use super::JdbcSqlStatValue;
+use super::RdbcSqlStatValue;
 use serde::Serialize;
 
 /// 数据源区间统计的不可变管理快照。
@@ -71,7 +71,7 @@ pub struct DruidDataSourceStatValue {
     pub clob_open_count: u64,
     pub blob_open_count: u64,
     pub sql_skip_count: u64,
-    pub sql_list: Vec<JdbcSqlStatValue>,
+    pub sql_list: Vec<RdbcSqlStatValue>,
 }
 
 impl DruidDataSourceStatValue {

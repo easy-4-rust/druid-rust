@@ -1,6 +1,6 @@
-//! 对应 Java：`com.alibaba.druid.proxy.jdbc.DatabaseMetaDataProxyImpl`。
+//! 对应 Java：`com.alibaba.druid.proxy.rdbc.DatabaseMetaDataProxyImpl`。
 //! 来源文件：
-//! `core/src/main/java/com/alibaba/druid/proxy/jdbc/DatabaseMetaDataProxyImpl.java`。
+//! `core/src/main/java/com/alibaba/druid/proxy/rdbc/DatabaseMetaDataProxyImpl.java`。
 
 use super::{DruidError, PhysicalDatabaseMetaData};
 use std::ops::{Deref, DerefMut};

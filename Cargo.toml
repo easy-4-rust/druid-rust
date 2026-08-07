@@ -50,6 +50,7 @@ sqlparser    = "0.52"
 # connection pool ecosystem (optional adapters)
 sqlx         = { version = "0.8", default-features = false, features = ["runtime-tokio", "any", "sqlite", "postgres", "mysql", "chrono", "bigdecimal"] }
 duckdb       = { version = "~1.10505.0", default-features = false, features = ["bundled", "chrono"] }
+libsql       = { version = "0.9.30", default-features = false, features = ["remote"] }
 deadpool     = { version = "0.12", features = ["managed", "rt_tokio_1"] }
 bb8          = "0.8"
 

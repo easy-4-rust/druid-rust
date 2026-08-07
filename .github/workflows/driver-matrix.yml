@@ -151,9 +151,10 @@ jobs:
           DRUID_DATABASE_PROFILE: sqlite
           DRUID_DATABASE_URL: sqlite://druid_contract.db?mode=rwc
           DRUID_DATABASE_BAD_URL: sqlite://druid_contract_missing.db?mode=rw
+          DRUID_CONTRACT_LONG_QUERY: "WITH RECURSIVE cnt(x) AS (VALUES(0) UNION ALL SELECT x + 1 FROM cnt WHERE x < 1000000000) SELECT sum(x) FROM cnt"
           DRUID_CONTRACT_TARGET: ${{ matrix.platform.target }}
           DRUID_CONTRACT_RUST_VERSION: ${{ matrix.rust.label }}
-          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/sqlite.json
+          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/sqlite-${{ matrix.platform.target }}-${{ matrix.rust.label }}.json
           DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p target/contract-evidence
@@ -162,7 +163,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sqlite-${{ matrix.platform.target }}-rust-${{ matrix.rust.label }}
-          path: target/contract-evidence/sqlite.json
+          path: target/contract-evidence/sqlite-*.json
           if-no-files-found: error
           retention-days: 90
 
@@ -202,7 +203,7 @@ jobs:
           DRUID_DATABASE_BAD_URL: duckdb:missing-parent/druid_contract.duckdb
           DRUID_CONTRACT_TARGET: ${{ matrix.platform.target }}
           DRUID_CONTRACT_RUST_VERSION: ${{ matrix.rust.label }}
-          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/duckdb.json
+          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/duckdb-${{ matrix.platform.target }}-${{ matrix.rust.label }}.json
           DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p target/contract-evidence
@@ -211,7 +212,51 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: duckdb-${{ matrix.platform.target }}-rust-${{ matrix.rust.label }}
-          path: target/contract-evidence/duckdb.json
+          path: target/contract-evidence/duckdb-*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  aggregate-sqlite-evidence:
+    needs: sqlite-product-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sqlite-*
+          path: target/contract-evidence/sqlite-runs
+          merge-multiple: true
+      - name: Validate and aggregate SQLite evidence
+        run: cargo run -p druid-admin --features managed-driver-install --bin druid-driver -- aggregate-evidence sqlite sqlx target/contract-evidence/sqlite-runs target/contract-evidence/sqlite-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sqlite-contract-evidence
+          path: target/contract-evidence/sqlite-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+
+  aggregate-duckdb-evidence:
+    needs: duckdb-product-contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: duckdb-*
+          path: target/contract-evidence/duckdb-runs
+          merge-multiple: true
+      - name: Validate and aggregate DuckDB evidence
+        run: cargo run -p druid-admin --features managed-driver-install --bin druid-driver -- aggregate-evidence duckdb native target/contract-evidence/duckdb-runs target/contract-evidence/duckdb-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: duckdb-contract-evidence
+          path: target/contract-evidence/duckdb-evidence.json
           if-no-files-found: error
           retention-days: 90
 

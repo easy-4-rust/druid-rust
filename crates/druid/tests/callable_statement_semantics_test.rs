@@ -11,14 +11,15 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidError, DruidPooledCallableStatement,
-    DruidPooledCallableStatementHandle, ExecResult, JavaString, JdbcArray, JdbcBlob,
-    JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcOutputStream,
-    JdbcReader, JdbcRef, JdbcResultSet, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
-    JdbcTypeMap, JdbcUrl, JdbcWriter, JdbcXmlRepresentationType, JdbcXmlResult, JdbcXmlSource,
-    PhysicalArray, PhysicalBlob, PhysicalCallableStatement, PhysicalClob, PhysicalConnection,
-    PhysicalNClob, PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
-    PreparedStatementMethodType, ResultSetStatement, Row, SqlTextPreparedStatement,
-    StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper, WrapperExt,
+    DruidPooledCallableStatementHandle, ExecResult, JavaString, PhysicalArray, PhysicalBlob,
+    PhysicalCallableStatement, PhysicalClob, PhysicalConnection, PhysicalNClob,
+    PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
+    PreparedStatementMethodType, RdbcArray, RdbcBlob, RdbcCharacterLength, RdbcClob,
+    RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef, RdbcResultSet,
+    RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, RdbcWriter,
+    RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, ResultSetStatement, Row,
+    SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
+    WrapperExt,
 };
 use druid::pool::DruidPool;
 use std::any::{Any, TypeId};
@@ -73,9 +74,9 @@ impl PhysicalBlob for TestPhysicalBlob {
             .ok_or_else(|| DruidError::DriverError("invalid Blob range".to_string()))
     }
 
-    fn get_binary_stream(&self) -> Result<JdbcInputStream, DruidError> {
+    fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         self.ensure_open()?;
-        Ok(JdbcInputStream::from_bytes(self.bytes.clone()))
+        Ok(RdbcInputStream::from_bytes(self.bytes.clone()))
     }
 
     fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
@@ -93,7 +94,7 @@ impl PhysicalBlob for TestPhysicalBlob {
             .map(|position| i64::try_from(start + position + 1).expect("test position fits i64")))
     }
 
-    fn position_blob(&self, pattern: &JdbcBlob, start: i64) -> Result<Option<i64>, DruidError> {
+    fn position_blob(&self, pattern: &RdbcBlob, start: i64) -> Result<Option<i64>, DruidError> {
         let length = i32::try_from(pattern.length()?)
             .map_err(|_| DruidError::DriverError("test pattern is too large".to_string()))?;
         self.position_bytes(&pattern.get_bytes(1, length)?, start)
@@ -117,7 +118,7 @@ impl PhysicalBlob for TestPhysicalBlob {
         })
     }
 
-    fn set_binary_stream(&self, _position: i64) -> Result<JdbcOutputStream, DruidError> {
+    fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_blob_set_binary_stream",
         })
@@ -142,17 +143,17 @@ impl PhysicalBlob for TestPhysicalBlob {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<JdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, DruidError> {
         let length = i32::try_from(length)
             .map_err(|_| DruidError::DriverError("invalid Blob range length".to_string()))?;
-        Ok(JdbcInputStream::from_bytes(
+        Ok(RdbcInputStream::from_bytes(
             self.get_bytes(position, length)?,
         ))
     }
 }
 
-fn test_blob(bytes: impl Into<Vec<u8>>) -> JdbcBlob {
-    JdbcBlob::new(Arc::new(TestPhysicalBlob {
+fn test_blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
+    RdbcBlob::new(Arc::new(TestPhysicalBlob {
         bytes: bytes.into(),
         freed: AtomicBool::new(false),
     }))
@@ -205,12 +206,12 @@ impl PhysicalClob for TestPhysicalClob {
         Ok(JavaString::from_utf16(self.code_units[start..end].to_vec()))
     }
 
-    fn get_character_stream(&self) -> Result<JdbcReader, DruidError> {
+    fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
         self.ensure_open()?;
-        Ok(JdbcReader::from_utf16(self.code_units.clone()))
+        Ok(RdbcReader::from_utf16(self.code_units.clone()))
     }
 
-    fn get_ascii_stream(&self) -> Result<JdbcInputStream, DruidError> {
+    fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
         self.ensure_open()?;
         let bytes = self
             .code_units
@@ -221,7 +222,7 @@ impl PhysicalClob for TestPhysicalClob {
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(JdbcInputStream::from_bytes(bytes))
+        Ok(RdbcInputStream::from_bytes(bytes))
     }
 
     fn position_string(&self, pattern: &JavaString, start: i64) -> Result<Option<i64>, DruidError> {
@@ -238,7 +239,7 @@ impl PhysicalClob for TestPhysicalClob {
             .map(|position| i64::try_from(position + 1).expect("test Clob position fits i64")))
     }
 
-    fn position_clob(&self, pattern: &JdbcClob, start: i64) -> Result<Option<i64>, DruidError> {
+    fn position_clob(&self, pattern: &RdbcClob, start: i64) -> Result<Option<i64>, DruidError> {
         let length = i32::try_from(pattern.length()?)
             .map_err(|_| DruidError::DriverError("test Clob pattern is too large".to_string()))?;
         self.position_string(&pattern.get_sub_string(1, length)?, start)
@@ -262,13 +263,13 @@ impl PhysicalClob for TestPhysicalClob {
         })
     }
 
-    fn set_ascii_stream(&self, _position: i64) -> Result<JdbcOutputStream, DruidError> {
+    fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_set_ascii_stream",
         })
     }
 
-    fn set_character_stream(&self, _position: i64) -> Result<JdbcWriter, DruidError> {
+    fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_set_character_stream",
         })
@@ -293,10 +294,10 @@ impl PhysicalClob for TestPhysicalClob {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         let length = i32::try_from(length)
             .map_err(|_| DruidError::DriverError("invalid Clob range length".to_string()))?;
-        Ok(JdbcReader::from_utf16(
+        Ok(RdbcReader::from_utf16(
             self.get_sub_string(position, length)?.as_utf16().to_vec(),
         ))
     }
@@ -304,15 +305,15 @@ impl PhysicalClob for TestPhysicalClob {
 
 impl PhysicalNClob for TestPhysicalClob {}
 
-fn test_clob(value: &str) -> JdbcClob {
-    JdbcClob::new(Arc::new(TestPhysicalClob {
+fn test_clob(value: &str) -> RdbcClob {
+    RdbcClob::new(Arc::new(TestPhysicalClob {
         code_units: value.encode_utf16().collect(),
         freed: AtomicBool::new(false),
     }))
 }
 
-fn test_n_clob(value: &str) -> JdbcNClob {
-    JdbcNClob::new(Arc::new(TestPhysicalClob {
+fn test_n_clob(value: &str) -> RdbcNClob {
+    RdbcNClob::new(Arc::new(TestPhysicalClob {
         code_units: value.encode_utf16().collect(),
         freed: AtomicBool::new(false),
     }))
@@ -326,15 +327,15 @@ impl PhysicalRef for TestPhysicalRef {
         Ok("schema.kind".to_string())
     }
 
-    fn object(&self) -> Result<JdbcObject, DruidError> {
-        Ok(JdbcObject::from(Value::String("ref-value".to_string())))
+    fn object(&self) -> Result<RdbcObject, DruidError> {
+        Ok(RdbcObject::from(Value::String("ref-value".to_string())))
     }
 
-    fn object_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<JdbcObject, DruidError> {
+    fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, DruidError> {
         self.object()
     }
 
-    fn set_object(&self, _value: JdbcObject) -> Result<(), DruidError> {
+    fn set_object(&self, _value: RdbcObject) -> Result<(), DruidError> {
         Ok(())
     }
 }
@@ -351,15 +352,15 @@ impl PhysicalArray for TestPhysicalArray {
         Ok(4)
     }
 
-    fn values(&self) -> Result<Vec<JdbcObject>, DruidError> {
-        Ok(vec![JdbcObject::from(Value::Int(1))])
+    fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
+        Ok(vec![RdbcObject::from(Value::Int(1))])
     }
 
-    fn values_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<Vec<JdbcObject>, DruidError> {
+    fn values_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<Vec<RdbcObject>, DruidError> {
         self.values()
     }
 
-    fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<JdbcObject>, DruidError> {
+    fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<RdbcObject>, DruidError> {
         self.values()
     }
 
@@ -367,12 +368,12 @@ impl PhysicalArray for TestPhysicalArray {
         &self,
         index: i64,
         count: i32,
-        _type_map: &JdbcTypeMap,
-    ) -> Result<Vec<JdbcObject>, DruidError> {
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Vec<RdbcObject>, DruidError> {
         self.values_range(index, count)
     }
 
-    fn result_set(&self) -> Result<JdbcResultSet, DruidError> {
+    fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_array_result_set",
         })
@@ -380,12 +381,12 @@ impl PhysicalArray for TestPhysicalArray {
 
     fn result_set_with_type_map(
         &self,
-        _type_map: &JdbcTypeMap,
-    ) -> Result<JdbcResultSet, DruidError> {
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcResultSet, DruidError> {
         self.result_set()
     }
 
-    fn result_set_range(&self, _index: i64, _count: i32) -> Result<JdbcResultSet, DruidError> {
+    fn result_set_range(&self, _index: i64, _count: i32) -> Result<RdbcResultSet, DruidError> {
         self.result_set()
     }
 
@@ -393,8 +394,8 @@ impl PhysicalArray for TestPhysicalArray {
         &self,
         index: i64,
         count: i32,
-        _type_map: &JdbcTypeMap,
-    ) -> Result<JdbcResultSet, DruidError> {
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcResultSet, DruidError> {
         self.result_set_range(index, count)
     }
 
@@ -419,19 +420,19 @@ impl PhysicalSqlXml for TestPhysicalSqlXml {
         false
     }
 
-    fn binary_stream(&self) -> Result<JdbcInputStream, DruidError> {
-        Ok(JdbcInputStream::from_bytes(b"<x/>".to_vec()))
+    fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+        Ok(RdbcInputStream::from_bytes(b"<x/>".to_vec()))
     }
 
-    fn set_binary_stream(&self) -> Result<JdbcOutputStream, DruidError> {
-        Ok(JdbcOutputStream::new(Vec::<u8>::new()))
+    fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
+        Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    fn character_stream(&self) -> Result<JdbcReader, DruidError> {
-        Ok(JdbcReader::from_string("<x/>"))
+    fn character_stream(&self) -> Result<RdbcReader, DruidError> {
+        Ok(RdbcReader::from_string("<x/>"))
     }
 
-    fn set_character_stream(&self) -> Result<JdbcWriter, DruidError> {
+    fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_sql_xml_writer",
         })
@@ -447,8 +448,8 @@ impl PhysicalSqlXml for TestPhysicalSqlXml {
 
     fn source(
         &self,
-        _representation: &JdbcXmlRepresentationType,
-    ) -> Result<JdbcXmlSource, DruidError> {
+        _representation: &RdbcXmlRepresentationType,
+    ) -> Result<RdbcXmlSource, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_sql_xml_source",
         })
@@ -456,8 +457,8 @@ impl PhysicalSqlXml for TestPhysicalSqlXml {
 
     fn result(
         &self,
-        _representation: &JdbcXmlRepresentationType,
-    ) -> Result<JdbcXmlResult, DruidError> {
+        _representation: &RdbcXmlRepresentationType,
+    ) -> Result<RdbcXmlResult, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_sql_xml_result",
         })
@@ -470,10 +471,10 @@ struct TestCallableStatement {
     closed: AtomicBool,
     registrations: Mutex<HashMap<CallableParameter, CallableOutParameter>>,
     named_parameters: Mutex<HashMap<String, CallableInputParameter>>,
-    outputs: HashMap<CallableParameter, JdbcObject>,
+    outputs: HashMap<CallableParameter, RdbcObject>,
     calendar_reads: Mutex<Vec<(CallableParameter, CallableCalendarArgument)>>,
-    type_map_reads: Mutex<Vec<(CallableParameter, Option<JdbcTypeMap>)>>,
-    typed_reads: Mutex<Vec<(CallableParameter, JdbcTargetType)>>,
+    type_map_reads: Mutex<Vec<(CallableParameter, Option<RdbcTypeMap>)>>,
+    typed_reads: Mutex<Vec<(CallableParameter, RdbcTargetType)>>,
     last_was_null: AtomicBool,
 }
 
@@ -485,151 +486,151 @@ impl TestCallableStatement {
         let blob = test_blob(b"callable-blob".to_vec());
         let clob = test_clob("callable-clob");
         let n_clob = test_n_clob("国家字符");
-        let url = JdbcUrl::new("https://example.test/callable");
-        let reference = JdbcRef::new(Arc::new(TestPhysicalRef));
-        let array = JdbcArray::new(Arc::new(TestPhysicalArray));
-        let row_id = JdbcRowId::new(vec![1, 2, 3]);
-        let sql_xml = JdbcSqlXml::new(Arc::new(TestPhysicalSqlXml));
+        let url = RdbcUrl::new("https://example.test/callable");
+        let reference = RdbcRef::new(Arc::new(TestPhysicalRef));
+        let array = RdbcArray::new(Arc::new(TestPhysicalArray));
+        let row_id = RdbcRowId::new(vec![1, 2, 3]);
+        let sql_xml = RdbcSqlXml::new(Arc::new(TestPhysicalSqlXml));
         Self {
             sql: sql.into(),
             closed: AtomicBool::new(false),
             registrations: Mutex::new(HashMap::new()),
             named_parameters: Mutex::new(HashMap::new()),
             outputs: HashMap::from([
-                (CallableParameter::Index(1), JdbcObject::from(Value::Int(7))),
-                (CallableParameter::Index(2), JdbcObject::from(Value::Null)),
+                (CallableParameter::Index(1), RdbcObject::from(Value::Int(7))),
+                (CallableParameter::Index(2), RdbcObject::from(Value::Null)),
                 (
                     CallableParameter::Index(4),
-                    JdbcObject::from(Value::Int(300)),
+                    RdbcObject::from(Value::Int(300)),
                 ),
                 (
                     CallableParameter::Index(5),
-                    JdbcObject::BigDecimal(
+                    RdbcObject::BigDecimal(
                         BigDecimal::from_str("123.4500").expect("valid decimal"),
                     ),
                 ),
-                (CallableParameter::Index(6), JdbcObject::Date(date)),
-                (CallableParameter::Index(7), JdbcObject::Time(time)),
+                (CallableParameter::Index(6), RdbcObject::Date(date)),
+                (CallableParameter::Index(7), RdbcObject::Time(time)),
                 (
                     CallableParameter::Index(8),
-                    JdbcObject::Timestamp(timestamp),
+                    RdbcObject::Timestamp(timestamp),
                 ),
-                (CallableParameter::Index(9), JdbcObject::Blob(blob.clone())),
-                (CallableParameter::Index(10), JdbcObject::Clob(clob.clone())),
+                (CallableParameter::Index(9), RdbcObject::Blob(blob.clone())),
+                (CallableParameter::Index(10), RdbcObject::Clob(clob.clone())),
                 (
                     CallableParameter::Index(11),
-                    JdbcObject::NClob(n_clob.clone()),
+                    RdbcObject::NClob(n_clob.clone()),
                 ),
                 (
                     CallableParameter::Index(12),
-                    JdbcObject::CharacterStream(JdbcReader::from_string("reader-index")),
+                    RdbcObject::CharacterStream(RdbcReader::from_string("reader-index")),
                 ),
                 (
                     CallableParameter::Index(13),
-                    JdbcObject::NCharacterStream(JdbcReader::from_string("国字-index")),
+                    RdbcObject::NCharacterStream(RdbcReader::from_string("国字-index")),
                 ),
                 (
                     CallableParameter::Index(14),
-                    JdbcObject::NString("国字-string-index".to_string()),
+                    RdbcObject::NString("国字-string-index".to_string()),
                 ),
-                (CallableParameter::Index(15), JdbcObject::Url(url.clone())),
+                (CallableParameter::Index(15), RdbcObject::Url(url.clone())),
                 (
                     CallableParameter::Index(16),
-                    JdbcObject::Ref(reference.clone()),
+                    RdbcObject::Ref(reference.clone()),
                 ),
                 (
                     CallableParameter::Index(17),
-                    JdbcObject::Array(array.clone()),
+                    RdbcObject::Array(array.clone()),
                 ),
                 (
                     CallableParameter::Index(18),
-                    JdbcObject::RowId(row_id.clone()),
+                    RdbcObject::RowId(row_id.clone()),
                 ),
                 (
                     CallableParameter::Index(19),
-                    JdbcObject::SqlXml(sql_xml.clone()),
+                    RdbcObject::SqlXml(sql_xml.clone()),
                 ),
                 (
                     CallableParameter::Name("name".to_string()),
-                    JdbcObject::from(Value::String("druid".to_string())),
+                    RdbcObject::from(Value::String("druid".to_string())),
                 ),
                 (
                     CallableParameter::Name("flag".to_string()),
-                    JdbcObject::from(Value::Bool(true)),
+                    RdbcObject::from(Value::Bool(true)),
                 ),
                 (
                     CallableParameter::Name("count".to_string()),
-                    JdbcObject::from(Value::Int(9)),
+                    RdbcObject::from(Value::Int(9)),
                 ),
                 (
                     CallableParameter::Name("ratio".to_string()),
-                    JdbcObject::from(Value::Float(1.5)),
+                    RdbcObject::from(Value::Float(1.5)),
                 ),
                 (
                     CallableParameter::Name("bytes".to_string()),
-                    JdbcObject::from(Value::Bytes(vec![1, 2, 3])),
+                    RdbcObject::from(Value::Bytes(vec![1, 2, 3])),
                 ),
                 (
                     CallableParameter::Name("decimal".to_string()),
-                    JdbcObject::BigDecimal(
+                    RdbcObject::BigDecimal(
                         BigDecimal::from_str("123.4500").expect("valid decimal"),
                     ),
                 ),
                 (
                     CallableParameter::Name("date".to_string()),
-                    JdbcObject::Date(date),
+                    RdbcObject::Date(date),
                 ),
                 (
                     CallableParameter::Name("time".to_string()),
-                    JdbcObject::Time(time),
+                    RdbcObject::Time(time),
                 ),
                 (
                     CallableParameter::Name("timestamp".to_string()),
-                    JdbcObject::Timestamp(timestamp),
+                    RdbcObject::Timestamp(timestamp),
                 ),
                 (
                     CallableParameter::Name("blob".to_string()),
-                    JdbcObject::Blob(blob),
+                    RdbcObject::Blob(blob),
                 ),
                 (
                     CallableParameter::Name("clob".to_string()),
-                    JdbcObject::Clob(clob),
+                    RdbcObject::Clob(clob),
                 ),
                 (
                     CallableParameter::Name("n_clob".to_string()),
-                    JdbcObject::NClob(n_clob),
+                    RdbcObject::NClob(n_clob),
                 ),
                 (
                     CallableParameter::Name("character_stream".to_string()),
-                    JdbcObject::CharacterStream(JdbcReader::from_string("reader-name")),
+                    RdbcObject::CharacterStream(RdbcReader::from_string("reader-name")),
                 ),
                 (
                     CallableParameter::Name("n_character_stream".to_string()),
-                    JdbcObject::NCharacterStream(JdbcReader::from_string("国字-name")),
+                    RdbcObject::NCharacterStream(RdbcReader::from_string("国字-name")),
                 ),
                 (
                     CallableParameter::Name("n_string".to_string()),
-                    JdbcObject::NString("国字-string-name".to_string()),
+                    RdbcObject::NString("国字-string-name".to_string()),
                 ),
                 (
                     CallableParameter::Name("url".to_string()),
-                    JdbcObject::Url(url),
+                    RdbcObject::Url(url),
                 ),
                 (
                     CallableParameter::Name("ref".to_string()),
-                    JdbcObject::Ref(reference),
+                    RdbcObject::Ref(reference),
                 ),
                 (
                     CallableParameter::Name("array".to_string()),
-                    JdbcObject::Array(array),
+                    RdbcObject::Array(array),
                 ),
                 (
                     CallableParameter::Name("row_id".to_string()),
-                    JdbcObject::RowId(row_id),
+                    RdbcObject::RowId(row_id),
                 ),
                 (
                     CallableParameter::Name("sql_xml".to_string()),
-                    JdbcObject::SqlXml(sql_xml),
+                    RdbcObject::SqlXml(sql_xml),
                 ),
             ]),
             calendar_reads: Mutex::new(Vec::new()),
@@ -696,7 +697,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         Ok(())
     }
 
-    fn out_parameter(&self, parameter: &CallableParameter) -> Result<JdbcObject, DruidError> {
+    fn out_parameter(&self, parameter: &CallableParameter) -> Result<RdbcObject, DruidError> {
         let value = self.outputs.get(parameter).cloned().ok_or_else(|| {
             DruidError::DriverError(format!("OUT parameter {parameter:?} is unavailable"))
         })?;
@@ -707,8 +708,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
     fn out_parameter_with_type_map(
         &self,
         parameter: &CallableParameter,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.type_map_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -719,8 +720,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
     fn out_parameter_as(
         &self,
         parameter: &CallableParameter,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.typed_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -742,8 +743,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((parameter.clone(), calendar.clone()));
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Date(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Date(value) => Ok(Some(value)),
             other => Err(DruidError::DriverError(format!(
                 "expected Date, got {other}"
             ))),
@@ -760,8 +761,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((parameter.clone(), calendar.clone()));
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Time(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Time(value) => Ok(Some(value)),
             other => Err(DruidError::DriverError(format!(
                 "expected Time, got {other}"
             ))),
@@ -778,8 +779,8 @@ impl PhysicalCallableStatement for TestCallableStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((parameter.clone(), calendar.clone()));
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Timestamp(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Timestamp(value) => Ok(Some(value)),
             other => Err(DruidError::DriverError(format!(
                 "expected Timestamp, got {other}"
             ))),
@@ -1053,18 +1054,18 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     let shanghai = CallableCalendar::new("Asia/Shanghai").unwrap();
     let utc = CallableCalendar::new("UTC").unwrap();
     let input_blob = test_blob(b"input-blob".to_vec());
-    let input_stream = JdbcInputStream::from_bytes(b"stream-content".to_vec());
+    let input_stream = RdbcInputStream::from_bytes(b"stream-content".to_vec());
     let input_clob = test_clob("input-clob");
     let input_n_clob = test_n_clob("输入国家字符");
-    let clob_reader = JdbcReader::from_string("clob-reader");
-    let n_clob_reader = JdbcReader::from_string("nclob-reader");
-    let character_reader = JdbcReader::from_string("character-reader");
-    let character_reader_long = JdbcReader::from_string("character-reader-long");
-    let n_character_reader = JdbcReader::from_string("国家字符-reader");
-    let ascii_stream = JdbcInputStream::from_bytes(b"ascii-stream".to_vec());
-    let ascii_stream_long = JdbcInputStream::from_bytes(b"ascii-stream-long".to_vec());
-    let binary_stream = JdbcInputStream::from_bytes(vec![0, 1, 2]);
-    let binary_stream_long = JdbcInputStream::from_bytes(vec![3, 4, 5]);
+    let clob_reader = RdbcReader::from_string("clob-reader");
+    let n_clob_reader = RdbcReader::from_string("nclob-reader");
+    let character_reader = RdbcReader::from_string("character-reader");
+    let character_reader_long = RdbcReader::from_string("character-reader-long");
+    let n_character_reader = RdbcReader::from_string("国家字符-reader");
+    let ascii_stream = RdbcInputStream::from_bytes(b"ascii-stream".to_vec());
+    let ascii_stream_long = RdbcInputStream::from_bytes(b"ascii-stream-long".to_vec());
+    let binary_stream = RdbcInputStream::from_bytes(vec![0, 1, 2]);
+    let binary_stream_long = RdbcInputStream::from_bytes(vec![3, 4, 5]);
     assert_eq!(
         callable.key().method_type(),
         PreparedStatementMethodType::Precall1
@@ -1216,7 +1217,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert_eq!(callable.get_long(1).unwrap(), 7);
     assert_eq!(
         callable.get_object(2).unwrap(),
-        JdbcObject::from(Value::Null)
+        RdbcObject::from(Value::Null)
     );
     assert!(callable.was_null().unwrap());
     assert_eq!(
@@ -1349,7 +1350,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .object()
             .unwrap(),
-        JdbcObject::from(Value::String("ref-value".to_string()))
+        RdbcObject::from(Value::String("ref-value".to_string()))
     );
     assert_eq!(
         callable
@@ -1367,7 +1368,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             .unwrap()
             .values()
             .unwrap(),
-        vec![JdbcObject::from(Value::Int(1))]
+        vec![RdbcObject::from(Value::Int(1))]
     );
     assert_eq!(
         callable.get_row_id(18).unwrap().unwrap().bytes(),
@@ -1409,29 +1410,29 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     assert!(callable.get_row_id(2).unwrap().is_none());
     assert!(callable.get_sql_xml(2).unwrap().is_none());
 
-    let mut type_map = JdbcTypeMap::new();
-    type_map.insert("schema.kind", JdbcTargetType::String);
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert("schema.kind", RdbcTargetType::String);
     assert_eq!(
         callable
             .get_object_with_type_map(1, Some(&type_map))
             .unwrap(),
-        JdbcObject::from(Value::Int(7))
+        RdbcObject::from(Value::Int(7))
     );
     assert_eq!(
         callable
             .get_named_object_with_type_map("name", None)
             .unwrap(),
-        JdbcObject::from(Value::String("druid".to_string()))
+        RdbcObject::from(Value::String("druid".to_string()))
     );
     assert_eq!(
-        callable.get_object_as(1, &JdbcTargetType::Integer).unwrap(),
-        JdbcObject::from(Value::Int(7))
+        callable.get_object_as(1, &RdbcTargetType::Integer).unwrap(),
+        RdbcObject::from(Value::Int(7))
     );
     assert_eq!(
         callable
-            .get_named_object_as("name", &JdbcTargetType::String)
+            .get_named_object_as("name", &RdbcTargetType::String)
             .unwrap(),
-        JdbcObject::from(Value::String("druid".to_string()))
+        RdbcObject::from(Value::String("druid".to_string()))
     );
     assert!(!callable.is_wrapper_for(None));
     assert!(callable.unwrap(None).is_none());
@@ -1609,42 +1610,42 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             named_parameters.get("in_ascii_stream"),
             Some(CallableInputParameter::AsciiStream {
                 stream: Some(_),
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             })
         ));
         assert_eq!(
             named_parameters.get("in_ascii_stream_int"),
             Some(&CallableInputParameter::AsciiStream {
                 stream: None,
-                length: JdbcStreamLength::Int(-7),
+                length: RdbcStreamLength::Int(-7),
             })
         );
         assert!(matches!(
             named_parameters.get("in_ascii_stream_long"),
             Some(CallableInputParameter::AsciiStream {
                 stream: Some(_),
-                length: JdbcStreamLength::Long(-8),
+                length: RdbcStreamLength::Long(-8),
             })
         ));
         assert!(matches!(
             named_parameters.get("in_binary_stream"),
             Some(CallableInputParameter::BinaryStream {
                 stream: Some(_),
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             })
         ));
         assert_eq!(
             named_parameters.get("in_binary_stream_int"),
             Some(&CallableInputParameter::BinaryStream {
                 stream: None,
-                length: JdbcStreamLength::Int(-9),
+                length: RdbcStreamLength::Int(-9),
             })
         );
         assert!(matches!(
             named_parameters.get("in_binary_stream_long"),
             Some(CallableInputParameter::BinaryStream {
                 stream: Some(_),
-                length: JdbcStreamLength::Long(-10),
+                length: RdbcStreamLength::Long(-10),
             })
         ));
         assert_eq!(
@@ -1705,14 +1706,14 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             named_parameters.get("in_blob_stream"),
             Some(&CallableInputParameter::BlobStream {
                 stream: Some(input_stream.clone()),
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             })
         );
         assert_eq!(
             named_parameters.get("in_blob_stream_length"),
             Some(&CallableInputParameter::BlobStream {
                 stream: None,
-                length: JdbcStreamLength::Long(-1),
+                length: RdbcStreamLength::Long(-1),
             })
         );
         let stored_stream = match named_parameters.get("in_blob_stream").unwrap() {
@@ -1730,14 +1731,14 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             named_parameters.get("in_clob_reader"),
             Some(&CallableInputParameter::ClobReader {
                 reader: Some(clob_reader.clone()),
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             })
         );
         assert_eq!(
             named_parameters.get("in_clob_reader_length"),
             Some(&CallableInputParameter::ClobReader {
                 reader: None,
-                length: JdbcCharacterLength::Long(-2),
+                length: RdbcCharacterLength::Long(-2),
             })
         );
         assert_eq!(
@@ -1748,49 +1749,49 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
             named_parameters.get("in_n_clob_reader"),
             Some(&CallableInputParameter::NClobReader {
                 reader: Some(n_clob_reader.clone()),
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             })
         );
         assert_eq!(
             named_parameters.get("in_n_clob_reader_length"),
             Some(&CallableInputParameter::NClobReader {
                 reader: None,
-                length: JdbcCharacterLength::Long(-3),
+                length: RdbcCharacterLength::Long(-3),
             })
         );
         assert_eq!(
             named_parameters.get("in_character_stream"),
             Some(&CallableInputParameter::CharacterStream {
                 reader: Some(character_reader.clone()),
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             })
         );
         assert_eq!(
             named_parameters.get("in_character_stream_int"),
             Some(&CallableInputParameter::CharacterStream {
                 reader: None,
-                length: JdbcCharacterLength::Int(-4),
+                length: RdbcCharacterLength::Int(-4),
             })
         );
         assert_eq!(
             named_parameters.get("in_character_stream_long"),
             Some(&CallableInputParameter::CharacterStream {
                 reader: Some(character_reader_long.clone()),
-                length: JdbcCharacterLength::Long(-5),
+                length: RdbcCharacterLength::Long(-5),
             })
         );
         assert_eq!(
             named_parameters.get("in_n_character_stream"),
             Some(&CallableInputParameter::NCharacterStream {
                 reader: Some(n_character_reader.clone()),
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             })
         );
         assert_eq!(
             named_parameters.get("in_n_character_stream_long"),
             Some(&CallableInputParameter::NCharacterStream {
                 reader: None,
-                length: JdbcCharacterLength::Long(-6),
+                length: RdbcCharacterLength::Long(-6),
             })
         );
         assert_eq!(
@@ -1911,10 +1912,10 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         assert_eq!(
             typed_reads.as_slice(),
             &[
-                (CallableParameter::Index(1), JdbcTargetType::Integer),
+                (CallableParameter::Index(1), RdbcTargetType::Integer),
                 (
                     CallableParameter::Name("name".to_string()),
-                    JdbcTargetType::String,
+                    RdbcTargetType::String,
                 ),
             ]
         );
@@ -2011,7 +2012,7 @@ async fn callable_errors_invalidate_cache_and_non_callable_handles_are_rejected(
     assert!(invalid_index.get_sql_xml(0).is_err());
     assert!(invalid_index.get_object_with_type_map(0, None).is_err());
     assert!(invalid_index
-        .get_object_as(0, &JdbcTargetType::String)
+        .get_object_as(0, &RdbcTargetType::String)
         .is_err());
     invalid_index.close().unwrap();
 
@@ -2077,7 +2078,7 @@ async fn callable_errors_invalidate_cache_and_non_callable_handles_are_rejected(
         .get_named_object_with_type_map("missing", None)
         .is_err());
     assert!(unavailable
-        .get_named_object_as("missing", &JdbcTargetType::String)
+        .get_named_object_as("missing", &RdbcTargetType::String)
         .is_err());
     unavailable.close().unwrap();
 

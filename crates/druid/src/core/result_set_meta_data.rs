@@ -1,4 +1,4 @@
-//! JDBC `ResultSetMetaData` 公共句柄。
+//! RDBC `ResultSetMetaData` 公共句柄。
 //!
 //! 对应 Java：`java.sql.ResultSetMetaData`。eager Adapter 使用列 descriptor，
 //! 真实 driver 使用 `PhysicalResultSetMetaData` 逐方法委托并保留 Wrapper 身份。
@@ -98,7 +98,7 @@ impl ResultSetMetaData {
 
     /// 返回 Java `columnNoNulls/columnNullable/columnNullableUnknown` 数值。
     pub fn nullable_code(&self, column_index: usize) -> Result<i32, DruidError> {
-        Ok(self.nullability(column_index)?.jdbc_code())
+        Ok(self.nullability(column_index)?.rdbc_code())
     }
 
     /// 返回列是否自动递增。
@@ -210,8 +210,8 @@ impl ResultSetMetaData {
     }
 
     /// 返回 `java.sql.Types` 数值。
-    pub fn jdbc_type(&self, column_index: usize) -> Result<i32, DruidError> {
-        Ok(self.column_type(column_index)?.jdbc_type())
+    pub fn rdbc_type(&self, column_index: usize) -> Result<i32, DruidError> {
+        Ok(self.column_type(column_index)?.rdbc_type())
     }
 
     /// 返回数据库类型名。
@@ -265,6 +265,55 @@ impl ResultSetMetaData {
         } else {
             Ok(class_name)
         }
+    }
+
+    /// 对应 Java `getColumnCount`。
+    pub fn get_column_count(&self) -> Result<usize, DruidError> {
+        self.column_count()
+    }
+    /// 对应 Java `getColumnLabel`。
+    pub fn get_column_label(&self, column_index: usize) -> Result<String, DruidError> {
+        self.column_label(column_index)
+    }
+    /// 对应 Java `getColumnName`。
+    pub fn get_column_name(&self, column_index: usize) -> Result<String, DruidError> {
+        self.column_name(column_index)
+    }
+    /// 对应 Java `getColumnType`。
+    pub fn get_column_type(&self, column_index: usize) -> Result<i32, DruidError> {
+        self.rdbc_type(column_index)
+    }
+    /// 对应 Java `getColumnTypeName`。
+    pub fn get_column_type_name(&self, column_index: usize) -> Result<String, DruidError> {
+        self.column_type_name(column_index)
+    }
+    /// 对应 Java `getColumnClassName`。
+    pub fn get_column_class_name(&self, column_index: usize) -> Result<String, DruidError> {
+        self.column_class_name(column_index)
+    }
+    /// 对应 Java `getSchemaName`。
+    pub fn get_schema_name(&self, column_index: usize) -> Result<String, DruidError> {
+        self.schema_name(column_index)
+    }
+    /// 对应 Java `getTableName`。
+    pub fn get_table_name(&self, column_index: usize) -> Result<String, DruidError> {
+        self.table_name(column_index)
+    }
+    /// 对应 Java `getCatalogName`。
+    pub fn get_catalog_name(&self, column_index: usize) -> Result<String, DruidError> {
+        self.catalog_name(column_index)
+    }
+    /// 对应 Java `getPrecision`。
+    pub fn get_precision(&self, column_index: usize) -> Result<usize, DruidError> {
+        self.precision(column_index)
+    }
+    /// 对应 Java `getScale`。
+    pub fn get_scale(&self, column_index: usize) -> Result<usize, DruidError> {
+        self.scale(column_index)
+    }
+    /// 对应 Java `getColumnDisplaySize`。
+    pub fn get_column_display_size(&self, column_index: usize) -> Result<usize, DruidError> {
+        self.column_display_size(column_index)
     }
 
     fn column(&self, column_index: usize) -> Result<&ResultSetColumnMeta, DruidError> {

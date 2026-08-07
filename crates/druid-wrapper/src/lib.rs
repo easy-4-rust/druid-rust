@@ -22,13 +22,22 @@ pub mod driver;
 /// DuckDB 原生未池化物理连接 Adapter。
 #[cfg(feature = "duckdb-native")]
 pub mod duckdb;
+/// RQLite、Cloudflare D1 等产品的未池化 HTTP SQL 物理连接 Adapter。
+#[cfg(feature = "http-sql")]
+pub mod http_sql;
 /// Druid 自有 JDBC Agent 协议、进程运行时与物理连接 Adapter。
 #[cfg(feature = "jdbc-agent")]
 pub mod jdbc_agent;
+/// Turso/libSQL 远程原生未池化物理连接 Adapter。
+#[cfg(feature = "libsql-native")]
+pub mod libsql;
 /// Proxool 兼容对象。
 pub mod proxool;
 /// RBDC 直连驱动 Adapter。
 pub mod rbdc;
+/// 基于 DruidPool 的 RDBC 标准 DataSource 与动态数据源实现。
+#[cfg(feature = "driver-catalog")]
+pub mod rdbc;
 /// SQLx 直连驱动 Adapter，以及 bb8、deadpool 池适配器。
 pub mod sqlx;
 

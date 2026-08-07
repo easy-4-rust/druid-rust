@@ -2,14 +2,14 @@
 //!
 //! 统计 `Filter`，实现 `AfterFilter` 接口。
 
-use super::{JdbcStatManager, StatFilterContext, StatsCollector};
+use super::{RdbcStatManager, StatFilterContext, StatsCollector};
 use crate::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
-    DruidPooledConnection, ExecContext, ExecOperation, ExecResult, JdbcObject,
+    DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
     PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
-    PhysicalConnectionConnectResult, PreparedInputParameter, ResultSetFilter, ResultSetFilterChain,
-    ResultSetFilterContext, StatementEventContext, Value,
+    PhysicalConnectionConnectResult, PreparedInputParameter, RdbcObject, ResultSetFilter,
+    ResultSetFilterChain, ResultSetFilterContext, StatementEventContext, Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -142,7 +142,7 @@ impl StatFilter {
     }
 
     /// 返回本 `Filter` 所属数据源的 `ResultSet` 统计对象。
-    pub fn result_set_stat(&self) -> &super::JdbcResultSetStat {
+    pub fn result_set_stat(&self) -> &super::RdbcResultSetStat {
         self.collector.result_set_stat()
     }
 
@@ -207,7 +207,7 @@ impl StatFilter {
     }
 
     fn effective_sql(sql: &str) -> String {
-        JdbcStatManager::global()
+        RdbcStatManager::global()
             .stat_context()
             .and_then(|context| {
                 context
@@ -219,7 +219,7 @@ impl StatFilter {
     }
 
     fn context_identity() -> (Option<String>, Option<String>) {
-        JdbcStatManager::global()
+        RdbcStatManager::global()
             .stat_context()
             .map_or((None, None), |context| {
                 (
@@ -282,7 +282,7 @@ impl BeforeFilter for StatFilter {
         let elapsed = started_at.elapsed();
         connection_stat.after_connected(elapsed);
 
-        let entry = Arc::new(super::JdbcConnectionStatEntry::new(
+        let entry = Arc::new(super::RdbcConnectionStatEntry::new(
             self.collector.name.clone(),
             result.connection_id(),
         ));
@@ -354,11 +354,11 @@ impl BeforeFilter for StatFilter {
         &self,
         _context: &StatementEventContext<'_>,
     ) -> Result<(), DruidError> {
-        if let Some(mut context) = JdbcStatManager::global().stat_context() {
+        if let Some(mut context) = RdbcStatManager::global().stat_context() {
             context.set_name(None);
             context.set_file(None);
             context.set_sql(None);
-            JdbcStatManager::global().set_stat_context(Some(context));
+            RdbcStatManager::global().set_stat_context(Some(context));
         }
         Ok(())
     }
@@ -673,7 +673,7 @@ fn slow_prepared_parameter(parameter: &PreparedInputParameter) -> serde_json::Va
             .map_or(serde_json::Value::Null, |_| json_marker("<java.io.Reader>")),
         PreparedInputParameter::Object { value, .. } => value
             .as_ref()
-            .map_or(serde_json::Value::Null, slow_jdbc_object),
+            .map_or(serde_json::Value::Null, slow_rdbc_object),
         PreparedInputParameter::Ref(value) => resource_marker(value, "<java.sql.Ref>"),
         PreparedInputParameter::Blob(value) => resource_marker(value, "<Blob>"),
         PreparedInputParameter::Clob(value) => resource_marker(value, "<Clob>"),
@@ -700,34 +700,34 @@ fn slow_value(value: &Value) -> serde_json::Value {
     }
 }
 
-fn slow_jdbc_object(value: &JdbcObject) -> serde_json::Value {
+fn slow_rdbc_object(value: &RdbcObject) -> serde_json::Value {
     match value {
-        JdbcObject::Scalar(value) => slow_value(value),
-        JdbcObject::String(value) | JdbcObject::NString(value) => json_java_string(value),
-        JdbcObject::Boolean(value) => serde_json::Value::Bool(*value),
-        JdbcObject::Byte(value) => json_integer(i64::from(*value)),
-        JdbcObject::Short(value) => json_integer(i64::from(*value)),
-        JdbcObject::Integer(value) => json_integer(i64::from(*value)),
-        JdbcObject::Long(value) => json_integer(*value),
-        JdbcObject::Float(value) => json_float(f64::from(*value)),
-        JdbcObject::Double(value) => json_float(*value),
-        JdbcObject::BigDecimal(value) => json_decimal(value),
-        JdbcObject::Date(value) => json_marker(&value.format("%Y-%m-%d").to_string()),
-        JdbcObject::Time(value) => json_marker(&value.format("%H:%M:%S").to_string()),
-        JdbcObject::Timestamp(value) => json_marker(&value.format("%Y-%m-%d %H:%M:%S").to_string()),
-        JdbcObject::Bytes(_) => json_marker("<[B>"),
-        JdbcObject::Url(_) => json_marker("<java.net.URL>"),
-        JdbcObject::Ref(_) => json_marker("<java.sql.Ref>"),
-        JdbcObject::Array(_) => json_marker("<java.sql.Array>"),
-        JdbcObject::RowId(_) => json_marker("<java.sql.RowId>"),
-        JdbcObject::SqlXml(_) => json_marker("<java.sql.SQLXML>"),
-        JdbcObject::Blob(_) => json_marker("<Blob>"),
-        JdbcObject::Clob(_) => json_marker("<Clob>"),
-        JdbcObject::NClob(_) => json_marker("<NClob>"),
-        JdbcObject::CharacterStream(_) | JdbcObject::NCharacterStream(_) => {
+        RdbcObject::Scalar(value) => slow_value(value),
+        RdbcObject::String(value) | RdbcObject::NString(value) => json_java_string(value),
+        RdbcObject::Boolean(value) => serde_json::Value::Bool(*value),
+        RdbcObject::Byte(value) => json_integer(i64::from(*value)),
+        RdbcObject::Short(value) => json_integer(i64::from(*value)),
+        RdbcObject::Integer(value) => json_integer(i64::from(*value)),
+        RdbcObject::Long(value) => json_integer(*value),
+        RdbcObject::Float(value) => json_float(f64::from(*value)),
+        RdbcObject::Double(value) => json_float(*value),
+        RdbcObject::BigDecimal(value) => json_decimal(value),
+        RdbcObject::Date(value) => json_marker(&value.format("%Y-%m-%d").to_string()),
+        RdbcObject::Time(value) => json_marker(&value.format("%H:%M:%S").to_string()),
+        RdbcObject::Timestamp(value) => json_marker(&value.format("%Y-%m-%d %H:%M:%S").to_string()),
+        RdbcObject::Bytes(_) => json_marker("<[B>"),
+        RdbcObject::Url(_) => json_marker("<java.net.URL>"),
+        RdbcObject::Ref(_) => json_marker("<java.sql.Ref>"),
+        RdbcObject::Array(_) => json_marker("<java.sql.Array>"),
+        RdbcObject::RowId(_) => json_marker("<java.sql.RowId>"),
+        RdbcObject::SqlXml(_) => json_marker("<java.sql.SQLXML>"),
+        RdbcObject::Blob(_) => json_marker("<Blob>"),
+        RdbcObject::Clob(_) => json_marker("<Clob>"),
+        RdbcObject::NClob(_) => json_marker("<NClob>"),
+        RdbcObject::CharacterStream(_) | RdbcObject::NCharacterStream(_) => {
             json_marker("<java.io.Reader>")
         }
-        JdbcObject::Custom(value) => json_marker(&format!("<{}>", value.class_name())),
+        RdbcObject::Custom(value) => json_marker(&format!("<{}>", value.class_name())),
     }
 }
 

@@ -1,4 +1,4 @@
-//! 对应 Java 类：com.alibaba.druid.stat.JdbcSqlStat + SqlMerger
+//! 对应 Java 类：com.alibaba.druid.stat.RdbcSqlStat + SqlMerger
 //!
 //! SQL 合并统计：把参数化后的 SQL 模板作为 key，聚合执行统计。
 
@@ -9,10 +9,10 @@ use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::JdbcSqlStat;
+use super::RdbcSqlStat;
 
-/// 旧内部名称，保留源码兼容；canonical 对象为 [`JdbcSqlStat`]。
-pub type MergedSqlStat = JdbcSqlStat;
+/// 旧内部名称，保留源码兼容；canonical 对象为 [`RdbcSqlStat`]。
+pub type MergedSqlStat = RdbcSqlStat;
 
 /// SQL 指纹（xxh3 哈希）。
 pub fn fingerprint(sql_template: &str) -> u64 {
@@ -222,7 +222,7 @@ fn consume_number(bytes: &[u8], mut index: usize) -> usize {
 ///
 /// 对应 Druid Java 的 `DruidStatService` 中的 SQL 合并逻辑。
 pub struct SqlMerger {
-    cache: RwLock<IndexMap<u64, Arc<JdbcSqlStat>>>,
+    cache: RwLock<IndexMap<u64, Arc<RdbcSqlStat>>>,
     active_sql_stats: RwLock<HashMap<String, u64>>,
     max_sql_size: AtomicI32,
     skip_sql_count: AtomicU64,
@@ -262,14 +262,14 @@ impl SqlMerger {
         elapsed: Duration,
         ok: bool,
         merge_sql: bool,
-    ) -> Arc<JdbcSqlStat> {
+    ) -> Arc<RdbcSqlStat> {
         let stat = self.prepare(sql, merge_sql);
         stat.record(elapsed, ok);
         stat
     }
 
     /// 在执行前创建或取得 SQL 统计对象，但不增加完成计数。
-    pub fn prepare(&self, sql: &str, merge_sql: bool) -> Arc<JdbcSqlStat> {
+    pub fn prepare(&self, sql: &str, merge_sql: bool) -> Arc<RdbcSqlStat> {
         let param = sql_key(sql, merge_sql);
         let fingerprint = param.fingerprint;
         let stat = {
@@ -277,7 +277,7 @@ impl SqlMerger {
             if let Some(stat) = cache.get(&param.fingerprint) {
                 Arc::clone(stat)
             } else {
-                let stat = Arc::new(JdbcSqlStat::new(param.template, param.fingerprint));
+                let stat = Arc::new(RdbcSqlStat::new(param.template, param.fingerprint));
                 cache.insert(param.fingerprint, Arc::clone(&stat));
                 let max_sql_size = self.max_sql_size.load(Ordering::Acquire);
                 if i64::try_from(cache.len()).unwrap_or(i64::MAX) > i64::from(max_sql_size) {
@@ -291,7 +291,7 @@ impl SqlMerger {
                 stat
             }
         };
-        // Java StatementProxy 直接持有本次 JdbcSqlStat。Rust 的物理 Statement
+        // Java StatementProxy 直接持有本次 RdbcSqlStat。Rust 的物理 Statement
         // 与 Filter 上下文解耦，因此保留原始 SQL 到本次统计对象的关联，供
         // ResultSet/CallableStatement 在后续打开 LOB 时更新同一个对象。
         self.active_sql_stats
@@ -301,12 +301,12 @@ impl SqlMerger {
     }
 
     /// 获取所有 SQL 统计。
-    pub fn all_stats(&self) -> Vec<Arc<JdbcSqlStat>> {
+    pub fn all_stats(&self) -> Vec<Arc<RdbcSqlStat>> {
         self.cache.read().values().cloned().collect()
     }
 
     /// 获取指定指纹的统计。
-    pub fn get_stat(&self, fingerprint: u64) -> Option<Arc<JdbcSqlStat>> {
+    pub fn get_stat(&self, fingerprint: u64) -> Option<Arc<RdbcSqlStat>> {
         self.cache.read().get(&fingerprint).cloned()
     }
 
@@ -314,7 +314,7 @@ impl SqlMerger {
     ///
     /// 对应 Java `StatementProxy#getSqlStat()` 的关联语义。若统计对象已因容量
     /// 限制淘汰，则返回 `None`，不会为一次 LOB 读取重新创建 SQL 条目。
-    pub fn active_stat_for_sql(&self, sql: &str) -> Option<Arc<JdbcSqlStat>> {
+    pub fn active_stat_for_sql(&self, sql: &str) -> Option<Arc<RdbcSqlStat>> {
         let fingerprint = self.active_sql_stats.read().get(sql).copied()?;
         self.get_stat(fingerprint)
     }
@@ -359,7 +359,7 @@ impl SqlMerger {
         self.skip_sql_count.swap(0, Ordering::AcqRel)
     }
 
-    /// 按 Java `JdbcDataSourceStat#reset()` 重置 SQL 聚合项。
+    /// 按 Java `RdbcDataSourceStat#reset()` 重置 SQL 聚合项。
     ///
     /// 从未成功执行且当前未运行的条目被移除；其余条目保留 SQL 身份并清零区间
     /// 统计。不能直接清空 cache，否则管理端 reset 后会丢失活跃 SQL 对象。

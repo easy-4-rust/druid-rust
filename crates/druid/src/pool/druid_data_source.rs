@@ -85,6 +85,12 @@ impl DruidDataSource {
         self.pool.state()
     }
 
+    /// 返回物理建连超时秒数。对应 Java: `CommonDataSource#getLoginTimeout`。
+    #[must_use]
+    pub fn login_timeout(&self) -> i32 {
+        self.pool.login_timeout()
+    }
+
     /// 返回数据源当前是否处于 Java `onFatalError` 状态。
     #[must_use]
     pub fn is_on_fatal_error(&self) -> bool {
@@ -290,7 +296,7 @@ impl DataSourceProxy for DruidDataSource {
         self.pool.url()
     }
 
-    fn raw_jdbc_url(&self) -> Option<&str> {
+    fn raw_rdbc_url(&self) -> Option<&str> {
         self.pool.raw_url()
     }
 
@@ -411,7 +417,7 @@ impl DataSourceMonitorable for DruidDataSource {
         self.pool.reset_stats();
     }
 
-    fn reset_jdbc_stat(&self) {
+    fn reset_rdbc_stat(&self) {
         self.pool.stats_collector().reset();
     }
 

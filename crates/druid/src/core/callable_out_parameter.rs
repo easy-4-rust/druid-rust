@@ -2,7 +2,7 @@
 //!
 //! 对应 Java：`CallableStatement#registerOutParameter(...)` 的参数集合。
 
-/// OUT 参数的 JDBC SQL 类型及可选 scale/typeName。
+/// OUT 参数的 RDBC SQL 类型及可选 scale/typeName。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CallableOutParameter {
     sql_type: i32,
@@ -38,7 +38,7 @@ impl CallableOutParameter {
         }
     }
 
-    /// 返回 JDBC SQL 类型常量。
+    /// 返回 RDBC SQL 类型常量。
     pub fn sql_type(&self) -> i32 {
         self.sql_type
     }

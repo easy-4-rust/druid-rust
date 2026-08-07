@@ -1,7 +1,7 @@
 //! `ResultSet Filter` 调用上下文。
 //!
 //! 对应 Java 平台对象：
-//! `com.alibaba.druid.proxy.jdbc.ResultSetProxyImpl` 中由 Filter 使用的状态。
+//! `com.alibaba.druid.proxy.rdbc.ResultSetProxyImpl` 中由 Filter 使用的状态。
 
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicI32, AtomicU64, Ordering};

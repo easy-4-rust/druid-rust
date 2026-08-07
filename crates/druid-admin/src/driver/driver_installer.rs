@@ -1,9 +1,12 @@
-use super::{DriverInstallRequest, DriverInstallerError, InstalledDriver, JavaRuntimeInstallation};
+use super::{
+    DriverBundleInstallRequest, DriverInstallRequest, DriverInstallerError, InstalledDriver,
+    JavaRuntimeInstallation,
+};
 use druid_wrapper::driver::{DatabaseProfileId, DriverRuntimeMode, DruidDriverRegistry};
 use druid_wrapper::jdbc_agent::JdbcAgentOptions;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsStr;
 use std::fmt::Write;
 use std::fs::File;
@@ -113,6 +116,107 @@ impl DriverInstaller {
             source,
         )
         .await
+    }
+
+    /// 从本地显式安装一个包含主驱动及传递依赖的 JDBC 多 JAR bundle。
+    ///
+    /// 每个 JAR 独立校验摘要，bundle 版本由排序后的文件名与摘要共同计算；
+    /// 核心建池路径不会解析 Maven 或访问网络。
+    pub async fn install_bundle_files(
+        &self,
+        request: &DriverBundleInstallRequest,
+    ) -> Result<InstalledDriver, DriverInstallerError> {
+        Self::require_jdbc_profile(request.profile_id())?;
+        if request.files().is_empty() {
+            return Err(DriverInstallerError::InvalidArtifact(
+                "JDBC bundle must contain at least one JAR".to_owned(),
+            ));
+        }
+        let mut files = BTreeMap::<String, (Vec<u8>, String, String)>::new();
+        let mut total_bytes = 0_u64;
+        for file in request.files() {
+            let metadata = tokio::fs::symlink_metadata(file.path()).await?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(DriverInstallerError::InvalidArtifact(
+                    file.path().display().to_string(),
+                ));
+            }
+            Self::validate_size(metadata.len())?;
+            total_bytes = total_bytes.saturating_add(metadata.len());
+            Self::validate_size(total_bytes)?;
+            let file_name = Self::jar_file_name(file.path())?;
+            if files.contains_key(&file_name) {
+                return Err(DriverInstallerError::InvalidArtifact(format!(
+                    "duplicate JDBC bundle file name: {file_name}"
+                )));
+            }
+            let bytes = tokio::fs::read(file.path()).await?;
+            if !bytes.starts_with(b"PK") {
+                return Err(DriverInstallerError::InvalidArtifact(format!(
+                    "{file_name} is not a ZIP/JAR archive"
+                )));
+            }
+            let actual = Self::sha256(&bytes);
+            if let Some(expected) = file.checksum() {
+                let expected = Self::normalize_checksum(expected)?;
+                if expected != actual {
+                    return Err(DriverInstallerError::ChecksumMismatch { expected, actual });
+                }
+            }
+            let source = tokio::fs::canonicalize(file.path())
+                .await?
+                .display()
+                .to_string();
+            files.insert(file_name, (bytes, actual, source));
+        }
+
+        let mut identity = Sha256::new();
+        let mut jar_sha256 = BTreeMap::new();
+        for (file_name, (_, sha256, _)) in &files {
+            identity.update(file_name.as_bytes());
+            identity.update([0]);
+            identity.update(sha256.as_bytes());
+            identity.update([0]);
+            jar_sha256.insert(file_name.clone(), sha256.clone());
+        }
+        let bundle_sha256 = Self::hex_digest(identity.finalize());
+        let _lock = self.acquire_profile_lock(request.profile_id()).await?;
+        let profile_root = self.profile_root(request.profile_id());
+        Self::reject_symlink_if_present(&profile_root).await?;
+        let objects_directory = profile_root.join("objects");
+        Self::reject_symlink_if_present(&objects_directory).await?;
+        let object_directory = objects_directory.join(&bundle_sha256);
+        Self::reject_symlink_if_present(&object_directory).await?;
+        tokio::fs::create_dir_all(&object_directory).await?;
+        for (file_name, (bytes, _, _)) in &files {
+            let target = object_directory.join(file_name);
+            if tokio::fs::metadata(&target).await.is_err() {
+                let temporary = object_directory.join(format!(".tmp-{}", uuid::Uuid::new_v4()));
+                tokio::fs::write(&temporary, bytes).await?;
+                tokio::fs::rename(temporary, target).await?;
+            }
+        }
+        let primary_name = files.keys().next().cloned().expect("bundle is non-empty");
+        let primary_path = tokio::fs::canonicalize(object_directory.join(&primary_name)).await?;
+        let sources = files
+            .values()
+            .map(|(_, _, source)| source)
+            .collect::<Vec<_>>();
+        let installation = InstalledDriver::new_bundle(
+            request.profile_id().to_owned(),
+            primary_name,
+            bundle_sha256,
+            primary_path,
+            serde_json::to_string(&sources)?,
+            "NOASSERTION".to_owned(),
+            Self::driver_class(request.profile_id())?,
+            jar_sha256,
+            chrono::Utc::now().timestamp_millis(),
+        );
+        let installation = self
+            .verify_record(request.profile_id(), installation)
+            .await?;
+        self.write_activation(&installation).await
     }
 
     /// 通过调用方显式给出的 URL 和必填 SHA-256 下载 JDBC JAR。
@@ -344,17 +448,19 @@ impl DriverInstaller {
             return Err(DriverInstallerError::UnsupportedJavaVersion(java_version));
         }
         let jvm_options_hash = Self::sha256(java_program.to_string_lossy().as_bytes());
-        Ok(JdbcAgentOptions::java(
-            java_program,
-            vec![agent.path().to_owned(), driver.path().to_owned()],
-        )?
-        .runtime_identity(
-            format!("jdbc-agent:{}", agent.sha256()),
-            format!("agent={};driver={}", agent.sha256(), driver.sha256()),
-            jvm_options_hash,
-        )
-        .artifact_lease(agent_lease)
-        .artifact_lease(driver_lease))
+        let class_path = agent
+            .class_path()
+            .into_iter()
+            .chain(driver.class_path())
+            .collect::<Vec<_>>();
+        Ok(JdbcAgentOptions::java(java_program, class_path)?
+            .runtime_identity(
+                format!("jdbc-agent:{}", agent.sha256()),
+                format!("agent={};driver={}", agent.sha256(), driver.sha256()),
+                jvm_options_hash,
+            )
+            .artifact_lease(agent_lease)
+            .artifact_lease(driver_lease))
     }
 
     /// 登记并激活调用方已解压的 Java 17+ runtime；不会下载或执行 shell。
@@ -550,24 +656,62 @@ impl DriverInstaller {
         record: InstalledDriver,
     ) -> Result<InstalledDriver, DriverInstallerError> {
         let profile_root = tokio::fs::canonicalize(self.profile_root(profile_id)).await?;
-        let metadata = tokio::fs::symlink_metadata(record.path()).await?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
-            return Err(DriverInstallerError::InvalidArtifact(
-                record.path().display().to_string(),
-            ));
+        let expected = if record.jar_sha256().is_empty() {
+            BTreeMap::from([(
+                record
+                    .path()
+                    .file_name()
+                    .and_then(OsStr::to_str)
+                    .ok_or_else(|| {
+                        DriverInstallerError::InvalidArtifact(record.path().display().to_string())
+                    })?
+                    .to_owned(),
+                record.sha256().to_owned(),
+            )])
+        } else {
+            record.jar_sha256().clone()
+        };
+        let directory = record.path().parent().ok_or_else(|| {
+            DriverInstallerError::InvalidArtifact(record.path().display().to_string())
+        })?;
+        let mut identity = Sha256::new();
+        for (file_name, expected_sha256) in &expected {
+            Self::validate_jar_name(file_name)?;
+            let path = directory.join(file_name);
+            let metadata = tokio::fs::symlink_metadata(&path).await?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() {
+                return Err(DriverInstallerError::InvalidArtifact(
+                    path.display().to_string(),
+                ));
+            }
+            let artifact_path = tokio::fs::canonicalize(&path).await?;
+            if !artifact_path.starts_with(&profile_root) {
+                return Err(DriverInstallerError::InvalidArtifact(format!(
+                    "installed artifact escapes managed profile root: {}",
+                    path.display()
+                )));
+            }
+            let actual = Self::sha256(&tokio::fs::read(&artifact_path).await?);
+            if &actual != expected_sha256 {
+                return Err(DriverInstallerError::ChecksumMismatch {
+                    expected: expected_sha256.clone(),
+                    actual,
+                });
+            }
+            identity.update(file_name.as_bytes());
+            identity.update([0]);
+            identity.update(actual.as_bytes());
+            identity.update([0]);
         }
-        let artifact_path = tokio::fs::canonicalize(record.path()).await?;
-        if !artifact_path.starts_with(&profile_root) {
-            return Err(DriverInstallerError::InvalidArtifact(format!(
-                "installed artifact escapes managed profile root: {}",
-                record.path().display()
-            )));
-        }
-        let actual = Self::sha256(&tokio::fs::read(&artifact_path).await?);
-        if actual != record.sha256() {
+        let actual_version = if record.is_bundle() {
+            Self::hex_digest(identity.finalize())
+        } else {
+            expected.values().next().cloned().unwrap_or_default()
+        };
+        if actual_version != record.sha256() {
             return Err(DriverInstallerError::ChecksumMismatch {
                 expected: record.sha256().to_owned(),
-                actual,
+                actual: actual_version,
             });
         }
         Ok(record)
@@ -636,7 +780,10 @@ impl DriverInstaller {
 
         let profile_root = self.profile_root(profile_id);
         Self::reject_symlink_if_present(&profile_root).await?;
-        let object_directory = profile_root.join("objects").join(&sha256);
+        let objects_directory = profile_root.join("objects");
+        Self::reject_symlink_if_present(&objects_directory).await?;
+        let object_directory = objects_directory.join(&sha256);
+        Self::reject_symlink_if_present(&object_directory).await?;
         let artifact_path = object_directory.join(file_name);
         tokio::fs::create_dir_all(&object_directory).await?;
         if tokio::fs::metadata(&artifact_path).await.is_err() {
@@ -659,6 +806,7 @@ impl DriverInstaller {
             Self::driver_class(profile_id)?,
             chrono::Utc::now().timestamp_millis(),
         );
+        let installation = self.verify_record(profile_id, installation).await?;
         self.write_activation(&installation).await
     }
 
@@ -927,8 +1075,12 @@ impl DriverInstaller {
     }
 
     fn sha256(bytes: &[u8]) -> String {
+        Self::hex_digest(Sha256::digest(bytes))
+    }
+
+    fn hex_digest(bytes: impl AsRef<[u8]>) -> String {
         let mut checksum = String::with_capacity(64);
-        for byte in Sha256::digest(bytes) {
+        for byte in bytes.as_ref() {
             write!(&mut checksum, "{byte:02x}").expect("writing into String cannot fail");
         }
         checksum

@@ -10,17 +10,17 @@ use super::value::Value;
 use super::{
     ClobFilterChain, ConnectionDatabaseMetaDataFilterChain, ConnectionLobFilterChain,
     ConnectionWarningFilterChain, DataSourceGetConnectionFilterChain,
-    DataSourceReleaseConnectionFilterChain, DruidPooledConnection, JavaString, JdbcBlob, JdbcClob,
-    JdbcInputStream, JdbcNClob, JdbcOutputStream, JdbcReader, JdbcWriter,
+    DataSourceReleaseConnectionFilterChain, DruidPooledConnection, JavaString,
     PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
-    PhysicalConnectionConnectResult, PhysicalDatabaseMetaData, PreparedInputParameter, SqlWarning,
+    PhysicalConnectionConnectResult, PhysicalDatabaseMetaData, PreparedInputParameter, RdbcBlob,
+    RdbcClob, RdbcInputStream, RdbcNClob, RdbcOutputStream, RdbcReader, RdbcWriter, SqlWarning,
     StatementWarningFilterChain,
 };
 use std::time::{Duration, Instant};
 
 /// 配置加载与旧 Druid 密文兼容。
 pub mod config;
-/// JDBC 字符编码转换 Filter。
+/// RDBC 字符编码转换 Filter。
 pub mod encoding;
 /// MySQL Connector/J 8 日期时间兼容 Filter。
 pub mod mysql8datetime;
@@ -51,11 +51,11 @@ pub struct ExecContext<'a> {
     pub fingerprint: Option<u64>,
     /// 当前物理连接是否处于显式事务。
     pub in_transaction: bool,
-    /// 本次 SQL 的 JDBC 执行入口语义。
+    /// 本次 SQL 的 RDBC 执行入口语义。
     pub operation: ExecOperation,
 }
 
-/// JDBC 批处理 Filter 上下文。
+/// RDBC 批处理 Filter 上下文。
 ///
 /// 对应 Java `StatementProxy#getBatchSql()` 与 `getBatchSqlList()`。`sql` 使用
 /// Java 的 `"\n;\n"` 连接规则，`statements` 保留每条 SQL 和批次大小。
@@ -88,7 +88,7 @@ pub struct BatchExecContext<'a> {
     pub in_transaction: bool,
 }
 
-/// JDBC 批处理入口种类。
+/// RDBC 批处理入口种类。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BatchExecKind {
     /// `Statement#executeBatch()`。
@@ -281,11 +281,11 @@ pub trait BeforeFilter: Send + Sync {
     /// 包围 `Connection#createBlob()`。
     ///
     /// 默认继续位置化链，末端才调用同一物理连接。Java Druid 不包装 Blob，
-    /// 因而返回值保持驱动 `JdbcBlob` 身份。
+    /// 因而返回值保持驱动 `RdbcBlob` 身份。
     async fn connection_create_blob(
         &self,
         chain: &mut ConnectionLobFilterChain<'_>,
-    ) -> Result<JdbcBlob, DruidError> {
+    ) -> Result<RdbcBlob, DruidError> {
         chain.connection_create_blob().await
     }
 
@@ -293,7 +293,7 @@ pub trait BeforeFilter: Send + Sync {
     async fn connection_create_clob(
         &self,
         chain: &mut ConnectionLobFilterChain<'_>,
-    ) -> Result<JdbcClob, DruidError> {
+    ) -> Result<RdbcClob, DruidError> {
         chain.connection_create_clob().await
     }
 
@@ -301,7 +301,7 @@ pub trait BeforeFilter: Send + Sync {
     async fn connection_create_n_clob(
         &self,
         chain: &mut ConnectionLobFilterChain<'_>,
-    ) -> Result<JdbcNClob, DruidError> {
+    ) -> Result<RdbcNClob, DruidError> {
         chain.connection_create_n_clob().await
     }
 
@@ -530,7 +530,7 @@ pub trait BeforeFilter: Send + Sync {
     fn clob_get_character_stream(
         &self,
         chain: &mut ClobFilterChain<'_>,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         chain.clob_get_character_stream()
     }
 
@@ -538,7 +538,7 @@ pub trait BeforeFilter: Send + Sync {
     fn clob_get_ascii_stream(
         &self,
         chain: &mut ClobFilterChain<'_>,
-    ) -> Result<JdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, DruidError> {
         chain.clob_get_ascii_stream()
     }
 
@@ -556,7 +556,7 @@ pub trait BeforeFilter: Send + Sync {
     fn clob_position_clob(
         &self,
         chain: &mut ClobFilterChain<'_>,
-        pattern: &JdbcClob,
+        pattern: &RdbcClob,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         chain.clob_position_clob(pattern, start)
@@ -589,7 +589,7 @@ pub trait BeforeFilter: Send + Sync {
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
-    ) -> Result<JdbcOutputStream, DruidError> {
+    ) -> Result<RdbcOutputStream, DruidError> {
         chain.clob_set_ascii_stream(position)
     }
 
@@ -598,7 +598,7 @@ pub trait BeforeFilter: Send + Sync {
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
-    ) -> Result<JdbcWriter, DruidError> {
+    ) -> Result<RdbcWriter, DruidError> {
         chain.clob_set_character_stream(position)
     }
 
@@ -622,7 +622,7 @@ pub trait BeforeFilter: Send + Sync {
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         length: i64,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         chain.clob_get_character_stream_range(position, length)
     }
 

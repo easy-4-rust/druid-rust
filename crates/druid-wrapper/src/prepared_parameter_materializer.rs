@@ -1,10 +1,10 @@
 //! 扩展 Adapter 共用的 Prepared 参数物化策略。
 
 use druid::core::{
-    DruidError, JdbcCharacterLength, JdbcObject, JdbcStreamLength, PreparedInputParameter, Value,
+    DruidError, PreparedInputParameter, RdbcCharacterLength, RdbcObject, RdbcStreamLength, Value,
 };
 
-/// 将标准 JDBC 参数资源转换成扩展驱动可绑定的通用值。
+/// 将标准 RDBC 参数资源转换成扩展驱动可绑定的通用值。
 ///
 /// 该对象只允许由具体 `PhysicalPreparedStatement::set_parameter` 调用，因此读取
 /// 时点仍处于物理 Adapter 边界。Ref、Array 和 vendor custom 类型保持明确
@@ -12,13 +12,13 @@ use druid::core::{
 pub(crate) struct PreparedParameterMaterializer;
 
 impl PreparedParameterMaterializer {
-    fn stream_length(length: JdbcStreamLength) -> Result<Option<usize>, DruidError> {
+    fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, DruidError> {
         match length {
-            JdbcStreamLength::Unspecified => Ok(None),
-            JdbcStreamLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcStreamLength::Unspecified => Ok(None),
+            RdbcStreamLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument("stream length must not be negative".to_string())
             }),
-            JdbcStreamLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcStreamLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument(
                     "stream length must be non-negative and fit usize".to_string(),
                 )
@@ -26,13 +26,13 @@ impl PreparedParameterMaterializer {
         }
     }
 
-    fn character_length(length: JdbcCharacterLength) -> Result<Option<usize>, DruidError> {
+    fn character_length(length: RdbcCharacterLength) -> Result<Option<usize>, DruidError> {
         match length {
-            JdbcCharacterLength::Unspecified => Ok(None),
-            JdbcCharacterLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcCharacterLength::Unspecified => Ok(None),
+            RdbcCharacterLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument("reader length must not be negative".to_string())
             }),
-            JdbcCharacterLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcCharacterLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument(
                     "reader length must be non-negative and fit usize".to_string(),
                 )
@@ -41,8 +41,8 @@ impl PreparedParameterMaterializer {
     }
 
     fn read_stream(
-        stream: &druid::core::JdbcInputStream,
-        length: JdbcStreamLength,
+        stream: &druid::core::RdbcInputStream,
+        length: RdbcStreamLength,
     ) -> Result<Vec<u8>, DruidError> {
         let Some(length) = Self::stream_length(length)? else {
             return stream.read_to_end();
@@ -62,8 +62,8 @@ impl PreparedParameterMaterializer {
     }
 
     fn read_reader(
-        reader: &druid::core::JdbcReader,
-        length: JdbcCharacterLength,
+        reader: &druid::core::RdbcReader,
+        length: RdbcCharacterLength,
     ) -> Result<String, DruidError> {
         let Some(length) = Self::character_length(length)? else {
             return reader.read_to_string();
@@ -84,22 +84,22 @@ impl PreparedParameterMaterializer {
         })
     }
 
-    fn jdbc_object(value: &JdbcObject) -> Result<Value, DruidError> {
+    fn rdbc_object(value: &RdbcObject) -> Result<Value, DruidError> {
         match value {
-            JdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
-            JdbcObject::SqlXml(value) => value.string()?.to_rust_string().map(Value::String),
-            JdbcObject::Blob(value) => {
+            RdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
+            RdbcObject::SqlXml(value) => value.string()?.to_rust_string().map(Value::String),
+            RdbcObject::Blob(value) => {
                 let length = i32::try_from(value.length()?).map_err(|_| {
                     DruidError::InvalidArgument(
-                        "Blob length exceeds JDBC getBytes int range".to_string(),
+                        "Blob length exceeds RDBC getBytes int range".to_string(),
                     )
                 })?;
                 value.get_bytes(1, length).map(Value::Bytes)
             }
-            JdbcObject::Clob(value) => {
+            RdbcObject::Clob(value) => {
                 let length = i32::try_from(value.length()?).map_err(|_| {
                     DruidError::InvalidArgument(
-                        "Clob length exceeds JDBC getSubString int range".to_string(),
+                        "Clob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
                 value
@@ -107,10 +107,10 @@ impl PreparedParameterMaterializer {
                     .to_rust_string()
                     .map(Value::String)
             }
-            JdbcObject::NClob(value) => {
+            RdbcObject::NClob(value) => {
                 let length = i32::try_from(value.length()?).map_err(|_| {
                     DruidError::InvalidArgument(
-                        "NClob length exceeds JDBC getSubString int range".to_string(),
+                        "NClob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
                 value
@@ -118,8 +118,8 @@ impl PreparedParameterMaterializer {
                     .to_rust_string()
                     .map(Value::String)
             }
-            JdbcObject::CharacterStream(value) | JdbcObject::NCharacterStream(value) => {
-                Self::read_reader(value, JdbcCharacterLength::Unspecified).map(Value::String)
+            RdbcObject::CharacterStream(value) | RdbcObject::NCharacterStream(value) => {
+                Self::read_reader(value, RdbcCharacterLength::Unspecified).map(Value::String)
             }
             _ => PreparedInputParameter::object(Some(value.clone())).scalar_value(),
         }
@@ -145,7 +145,7 @@ impl PreparedParameterMaterializer {
             PreparedInputParameter::UnicodeStream { stream, length } => stream
                 .as_ref()
                 .map(|stream| {
-                    let bytes = Self::read_stream(stream, JdbcStreamLength::Int(*length))?;
+                    let bytes = Self::read_stream(stream, RdbcStreamLength::Int(*length))?;
                     String::from_utf8(bytes)
                         .map(Value::String)
                         .map_err(|error| {
@@ -171,13 +171,13 @@ impl PreparedParameterMaterializer {
                 .transpose()
                 .map(|value| value.unwrap_or(Value::Null)),
             PreparedInputParameter::Blob(Some(value)) => {
-                Self::jdbc_object(&JdbcObject::Blob(value.clone()))
+                Self::rdbc_object(&RdbcObject::Blob(value.clone()))
             }
             PreparedInputParameter::Clob(Some(value)) => {
-                Self::jdbc_object(&JdbcObject::Clob(value.clone()))
+                Self::rdbc_object(&RdbcObject::Clob(value.clone()))
             }
             PreparedInputParameter::NClob(Some(value)) => {
-                Self::jdbc_object(&JdbcObject::NClob(value.clone()))
+                Self::rdbc_object(&RdbcObject::NClob(value.clone()))
             }
             PreparedInputParameter::RowId(Some(value)) => Ok(Value::Bytes(value.bytes().to_vec())),
             PreparedInputParameter::SqlXml(Some(value)) => {
@@ -185,7 +185,7 @@ impl PreparedParameterMaterializer {
             }
             PreparedInputParameter::Object {
                 value: Some(value), ..
-            } => Self::jdbc_object(value),
+            } => Self::rdbc_object(value),
             _ => parameter.scalar_value(),
         }
     }
@@ -195,17 +195,17 @@ impl PreparedParameterMaterializer {
 mod tests {
     use super::PreparedParameterMaterializer;
     use druid::core::{
-        JdbcCharacterLength, JdbcInputStream, JdbcObject, JdbcReader, JdbcRowId, JdbcStreamLength,
-        PreparedInputParameter, Value,
+        PreparedInputParameter, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,
+        RdbcRowId, RdbcStreamLength, Value,
     };
 
     #[test]
     fn materializes_stream_reader_object_and_null_families_at_setter_time() {
-        let ascii = JdbcInputStream::from_bytes(b"ascii-tail".to_vec());
+        let ascii = RdbcInputStream::from_bytes(b"ascii-tail".to_vec());
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::AsciiStream {
                 stream: Some(ascii.clone()),
-                length: JdbcStreamLength::Int(5),
+                length: RdbcStreamLength::Int(5),
             })
             .unwrap(),
             Value::String("ascii".to_string())
@@ -214,7 +214,7 @@ mod tests {
 
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::UnicodeStream {
-                stream: Some(JdbcInputStream::from_bytes("国字".as_bytes().to_vec())),
+                stream: Some(RdbcInputStream::from_bytes("国字".as_bytes().to_vec())),
                 length: i32::try_from("国字".len()).unwrap(),
             })
             .unwrap(),
@@ -222,23 +222,23 @@ mod tests {
         );
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::BinaryStream {
-                stream: Some(JdbcInputStream::from_bytes([1, 2, 3])),
-                length: JdbcStreamLength::Long(3),
+                stream: Some(RdbcInputStream::from_bytes([1, 2, 3])),
+                length: RdbcStreamLength::Long(3),
             })
             .unwrap(),
             Value::Bytes(vec![1, 2, 3])
         );
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::CharacterStream {
-                reader: Some(JdbcReader::from_string("A😀B")),
-                length: JdbcCharacterLength::Int(3),
+                reader: Some(RdbcReader::from_string("A😀B")),
+                length: RdbcCharacterLength::Int(3),
             })
             .unwrap(),
             Value::String("A😀".to_string())
         );
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::Object {
-                value: Some(JdbcObject::NCharacterStream(JdbcReader::from_string(
+                value: Some(RdbcObject::NCharacterStream(RdbcReader::from_string(
                     "对象"
                 ))),
                 target_sql_type: None,
@@ -249,7 +249,7 @@ mod tests {
         );
         assert_eq!(
             PreparedParameterMaterializer::materialize(&PreparedInputParameter::RowId(Some(
-                JdbcRowId::new([7, 8])
+                RdbcRowId::new([7, 8])
             )))
             .unwrap(),
             Value::Bytes(vec![7, 8])
@@ -258,15 +258,15 @@ mod tests {
         for parameter in [
             PreparedInputParameter::AsciiStream {
                 stream: None,
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             },
             PreparedInputParameter::BlobStream {
                 stream: None,
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             },
             PreparedInputParameter::NClobReader {
                 reader: None,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
             PreparedInputParameter::RowId(None),
         ] {
@@ -281,19 +281,19 @@ mod tests {
     fn rejects_invalid_lengths_short_resources_and_invalid_encodings() {
         let cases = [
             PreparedInputParameter::BinaryStream {
-                stream: Some(JdbcInputStream::from_bytes([1])),
-                length: JdbcStreamLength::Int(-1),
+                stream: Some(RdbcInputStream::from_bytes([1])),
+                length: RdbcStreamLength::Int(-1),
             },
             PreparedInputParameter::BinaryStream {
-                stream: Some(JdbcInputStream::from_bytes([1])),
-                length: JdbcStreamLength::Long(-1),
+                stream: Some(RdbcInputStream::from_bytes([1])),
+                length: RdbcStreamLength::Long(-1),
             },
             PreparedInputParameter::BinaryStream {
-                stream: Some(JdbcInputStream::from_bytes([1])),
-                length: JdbcStreamLength::Int(2),
+                stream: Some(RdbcInputStream::from_bytes([1])),
+                length: RdbcStreamLength::Int(2),
             },
             PreparedInputParameter::UnicodeStream {
-                stream: Some(JdbcInputStream::from_bytes([0xff])),
+                stream: Some(RdbcInputStream::from_bytes([0xff])),
                 length: 1,
             },
         ];
@@ -303,20 +303,20 @@ mod tests {
 
         for parameter in [
             PreparedInputParameter::CharacterStream {
-                reader: Some(JdbcReader::from_string("x")),
-                length: JdbcCharacterLength::Int(-1),
+                reader: Some(RdbcReader::from_string("x")),
+                length: RdbcCharacterLength::Int(-1),
             },
             PreparedInputParameter::CharacterStream {
-                reader: Some(JdbcReader::from_string("x")),
-                length: JdbcCharacterLength::Long(-1),
+                reader: Some(RdbcReader::from_string("x")),
+                length: RdbcCharacterLength::Long(-1),
             },
             PreparedInputParameter::CharacterStream {
-                reader: Some(JdbcReader::from_string("x")),
-                length: JdbcCharacterLength::Int(2),
+                reader: Some(RdbcReader::from_string("x")),
+                length: RdbcCharacterLength::Int(2),
             },
             PreparedInputParameter::CharacterStream {
-                reader: Some(JdbcReader::from_utf16(vec![0xd800])),
-                length: JdbcCharacterLength::Int(1),
+                reader: Some(RdbcReader::from_utf16(vec![0xd800])),
+                length: RdbcCharacterLength::Int(1),
             },
         ] {
             assert!(PreparedParameterMaterializer::materialize(&parameter).is_err());

@@ -777,10 +777,17 @@ impl DruidPool {
         }
     }
 
+    /// 返回物理建连超时秒数。对应 Java: `CommonDataSource#getLoginTimeout`。
+    #[must_use]
+    pub fn login_timeout(&self) -> i32 {
+        self.inner.config.login_timeout
+    }
+
     pub fn state(&self) -> PoolState {
         PoolState {
             name: self.name.clone(),
             driver_name: self.driver_name.clone(),
+            url: self.inner.config.url.clone().unwrap_or_default(),
             max_open: self.inner.config.max_open,
             active_count: self
                 .inner
@@ -1113,7 +1120,7 @@ impl DruidPool {
     /// 使超过阈值且当前未执行 SQL 的借出连接租约失效。
     ///
     /// 对应 Java：`DruidDataSource#removeAbandoned()`。Java 可由扫描线程直接
-    /// `close()` 活跃 JDBC 连接；Rust 不能安全地跨线程取得其独占可变引用，
+    /// `close()` 活跃 RDBC 连接；Rust 不能安全地跨线程取得其独占可变引用，
     /// 因而先原子失效租约，物理连接在所有者下一次操作或 Drop 时丢弃。
     /// 返回本轮新失效的连接数。
     pub fn remove_abandoned(&self) -> usize {

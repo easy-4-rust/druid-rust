@@ -10,7 +10,7 @@ use crate::core::{
 use std::any::Any;
 use std::sync::Mutex;
 
-/// 在 JDBC setter 边界物化参数的 Toasty 预编译语句句柄。
+/// 在 RDBC setter 边界物化参数的 Toasty 预编译语句句柄。
 ///
 /// Toasty 的 raw SQL API 没有独立 PreparedStatement 参数槽，因此本对象在
 /// `setXxx` 时执行驱动转换并保存值，使负长度、提前 EOF 等错误与 Java Druid

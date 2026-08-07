@@ -1,4 +1,4 @@
-//! JDBC 客户端/服务端字符编码转换对象。
+//! RDBC 客户端/服务端字符编码转换对象。
 
 pub mod charset_convert;
 pub mod charset_parameter;

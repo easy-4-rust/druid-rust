@@ -2,11 +2,11 @@
 
 use super::ToastyPreparedStatement;
 use crate::core::{
-    DruidError, ExecResult, JdbcCharacterLength, JdbcInputStream, JdbcObject, JdbcReader,
-    JdbcStreamLength, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
-    Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, StatementExecuteResult,
-    StatementGeneratedKeys, Value,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
+    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
+    PreparedStatementKey, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,
+    RdbcStreamLength, Row, RowSetResultSet, Savepoint, SqlException, SqlWarning,
+    StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use std::sync::Arc;
@@ -31,7 +31,7 @@ fn parse_naive_datetime(value: &str) -> Result<Value, DruidError> {
 
 /// 将一个未池化 Toasty driver connection 适配为 Druid 物理连接。
 ///
-/// 对应 Java 平台对象：JDBC driver 的 `java.sql.Connection` 实现。对象不持有
+/// 对应 Java 平台对象：RDBC driver 的 `java.sql.Connection` 实现。对象不持有
 /// `toasty::Db` 或 Toasty Pool；DruidPool 独占池化、回收和统计职责。
 pub struct ToastyConnectionAdapter {
     connection: Option<Box<dyn ToastyConnection>>,
@@ -117,7 +117,7 @@ impl ToastyConnectionAdapter {
 
     fn typed_parameter(value: Value) -> Result<TypedValue, DruidError> {
         Ok(match value {
-            // Druid Value 目前不携带 JDBC targetSqlType；与现有 SQLx/RBDC
+            // Druid Value 目前不携带 RDBC targetSqlType；与现有 SQLx/RBDC
             // Adapter 一致，未定型 null 使用通用文本 storage type。
             Value::Null => TypedValue {
                 value: ToastyValue::Null,
@@ -192,13 +192,13 @@ impl ToastyConnectionAdapter {
         .into())
     }
 
-    fn stream_length(length: JdbcStreamLength) -> Result<Option<usize>, DruidError> {
+    fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, DruidError> {
         match length {
-            JdbcStreamLength::Unspecified => Ok(None),
-            JdbcStreamLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcStreamLength::Unspecified => Ok(None),
+            RdbcStreamLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument("stream length must not be negative".to_string())
             }),
-            JdbcStreamLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcStreamLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument(
                     "stream length must be non-negative and fit usize".to_string(),
                 )
@@ -206,13 +206,13 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    fn character_length(length: JdbcCharacterLength) -> Result<Option<usize>, DruidError> {
+    fn character_length(length: RdbcCharacterLength) -> Result<Option<usize>, DruidError> {
         match length {
-            JdbcCharacterLength::Unspecified => Ok(None),
-            JdbcCharacterLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcCharacterLength::Unspecified => Ok(None),
+            RdbcCharacterLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument("reader length must not be negative".to_string())
             }),
-            JdbcCharacterLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
+            RdbcCharacterLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
                 DruidError::InvalidArgument(
                     "reader length must be non-negative and fit usize".to_string(),
                 )
@@ -221,8 +221,8 @@ impl ToastyConnectionAdapter {
     }
 
     fn read_stream(
-        stream: &JdbcInputStream,
-        length: JdbcStreamLength,
+        stream: &RdbcInputStream,
+        length: RdbcStreamLength,
     ) -> Result<Vec<u8>, DruidError> {
         let Some(length) = Self::stream_length(length)? else {
             return stream.read_to_end();
@@ -241,7 +241,7 @@ impl ToastyConnectionAdapter {
         Ok(bytes)
     }
 
-    fn read_reader(reader: &JdbcReader, length: JdbcCharacterLength) -> Result<String, DruidError> {
+    fn read_reader(reader: &RdbcReader, length: RdbcCharacterLength) -> Result<String, DruidError> {
         let Some(length) = Self::character_length(length)? else {
             return reader.read_to_string();
         };
@@ -261,24 +261,24 @@ impl ToastyConnectionAdapter {
         })
     }
 
-    fn jdbc_object_parameter(value: &JdbcObject) -> Result<Value, DruidError> {
+    fn rdbc_object_parameter(value: &RdbcObject) -> Result<Value, DruidError> {
         match value {
-            JdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
-            JdbcObject::SqlXml(value) => value.string()?.to_rust_string().map(Value::String),
-            JdbcObject::Blob(value) => {
+            RdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
+            RdbcObject::SqlXml(value) => value.string()?.to_rust_string().map(Value::String),
+            RdbcObject::Blob(value) => {
                 let length = value.length()?;
                 let length = i32::try_from(length).map_err(|_| {
                     DruidError::InvalidArgument(
-                        "Blob length exceeds JDBC getBytes int range".to_string(),
+                        "Blob length exceeds RDBC getBytes int range".to_string(),
                     )
                 })?;
                 value.get_bytes(1, length).map(Value::Bytes)
             }
-            JdbcObject::Clob(value) => {
+            RdbcObject::Clob(value) => {
                 let length = value.length()?;
                 let length = i32::try_from(length).map_err(|_| {
                     DruidError::InvalidArgument(
-                        "Clob length exceeds JDBC getSubString int range".to_string(),
+                        "Clob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
                 value
@@ -286,11 +286,11 @@ impl ToastyConnectionAdapter {
                     .to_rust_string()
                     .map(Value::String)
             }
-            JdbcObject::NClob(value) => {
+            RdbcObject::NClob(value) => {
                 let length = value.length()?;
                 let length = i32::try_from(length).map_err(|_| {
                     DruidError::InvalidArgument(
-                        "NClob length exceeds JDBC getSubString int range".to_string(),
+                        "NClob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
                 value
@@ -298,8 +298,8 @@ impl ToastyConnectionAdapter {
                     .to_rust_string()
                     .map(Value::String)
             }
-            JdbcObject::CharacterStream(value) | JdbcObject::NCharacterStream(value) => {
-                Self::read_reader(value, JdbcCharacterLength::Unspecified).map(Value::String)
+            RdbcObject::CharacterStream(value) | RdbcObject::NCharacterStream(value) => {
+                Self::read_reader(value, RdbcCharacterLength::Unspecified).map(Value::String)
             }
             _ => PreparedInputParameter::object(Some(value.clone())).scalar_value(),
         }
@@ -326,7 +326,7 @@ impl ToastyConnectionAdapter {
             PreparedInputParameter::UnicodeStream { stream, length } => stream
                 .as_ref()
                 .map(|stream| {
-                    let length = JdbcStreamLength::Int(*length);
+                    let length = RdbcStreamLength::Int(*length);
                     let bytes = Self::read_stream(stream, length)?;
                     String::from_utf8(bytes)
                         .map(Value::String)
@@ -353,13 +353,13 @@ impl ToastyConnectionAdapter {
                 .transpose()
                 .map(|value| value.unwrap_or(Value::Null)),
             PreparedInputParameter::Blob(Some(value)) => {
-                Self::jdbc_object_parameter(&JdbcObject::Blob(value.clone()))
+                Self::rdbc_object_parameter(&RdbcObject::Blob(value.clone()))
             }
             PreparedInputParameter::Clob(Some(value)) => {
-                Self::jdbc_object_parameter(&JdbcObject::Clob(value.clone()))
+                Self::rdbc_object_parameter(&RdbcObject::Clob(value.clone()))
             }
             PreparedInputParameter::NClob(Some(value)) => {
-                Self::jdbc_object_parameter(&JdbcObject::NClob(value.clone()))
+                Self::rdbc_object_parameter(&RdbcObject::NClob(value.clone()))
             }
             PreparedInputParameter::RowId(Some(value)) => Ok(Value::Bytes(value.bytes().to_vec())),
             PreparedInputParameter::SqlXml(Some(value)) => {
@@ -367,7 +367,7 @@ impl ToastyConnectionAdapter {
             }
             PreparedInputParameter::Object {
                 value: Some(value), ..
-            } => Self::jdbc_object_parameter(value),
+            } => Self::rdbc_object_parameter(value),
             _ => parameter.scalar_value(),
         }
     }
@@ -540,7 +540,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
             generated_keys,
             StatementGeneratedKeys::ColumnIndexes(_) | StatementGeneratedKeys::ColumnNames(_)
         ) {
-            // xerial SQLite 对这两个 JDBC 重载抛 SQLFeatureNotSupportedException；
+            // xerial SQLite 对这两个 RDBC 重载抛 SQLFeatureNotSupportedException；
             // Toasty 0.9 也没有向驱动传递列选择的契约，不能静默忽略参数。
             return Err(DruidError::UnsupportedOperation {
                 operation: "statement_execute_generated_key_columns",
@@ -883,7 +883,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         }
         if self.is_sqlite() && level != 8 {
             return Err(DruidError::InvalidArgument(
-                "Toasty SQLite only supports JDBC TRANSACTION_SERIALIZABLE (8)".to_string(),
+                "Toasty SQLite only supports RDBC TRANSACTION_SERIALIZABLE (8)".to_string(),
             ));
         }
         self.isolation = Some(match level {
@@ -893,7 +893,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
             8 => IsolationLevel::Serializable,
             _ => {
                 return Err(DruidError::InvalidArgument(format!(
-                    "unsupported JDBC transaction isolation level: {level}"
+                    "unsupported RDBC transaction isolation level: {level}"
                 )));
             }
         });

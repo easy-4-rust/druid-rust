@@ -59,10 +59,17 @@ impl DatabaseConnectionConfig {
 
 impl std::fmt::Debug for DatabaseConnectionConfig {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display_url = if self.url.starts_with("rdbc://") {
+            self.url
+                .split_once('?')
+                .map_or(self.url.as_str(), |(url, _)| url)
+        } else {
+            self.url.as_str()
+        };
         formatter
             .debug_struct("DatabaseConnectionConfig")
             .field("profile_id", &self.profile_id)
-            .field("url", &self.url)
+            .field("url", &display_url)
             .field("property_names", &self.properties.keys())
             .finish()
     }

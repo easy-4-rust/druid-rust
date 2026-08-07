@@ -1,9 +1,9 @@
 //! SQLx Adapter 真实 SQLite 驱动合同测试。
 
 use druid::core::{
-    BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, JdbcCharacterLength,
-    JdbcInputStream, JdbcReader, JdbcRowId, JdbcStreamLength, JdbcUrl, PhysicalConnection,
-    PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, Row, Value,
+    BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, PhysicalConnection,
+    PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, RdbcCharacterLength,
+    RdbcInputStream, RdbcReader, RdbcRowId, RdbcStreamLength, RdbcUrl, Row, Value,
 };
 use druid::pool::DruidPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
@@ -396,7 +396,7 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         .unwrap();
 
     let mut invalid = connection.prepare_statement("SELECT ?").await.unwrap();
-    let short = JdbcInputStream::from_bytes(vec![1, 2]);
+    let short = RdbcInputStream::from_bytes(vec![1, 2]);
     assert!(matches!(
         invalid.set_binary_stream_with_int_length(&mut connection, 1, Some(short.clone()), 3,),
         Err(DruidError::DriverError(_))
@@ -406,15 +406,15 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         invalid.set_character_stream_with_int_length(
             &mut connection,
             1,
-            Some(JdbcReader::from_string("x")),
+            Some(RdbcReader::from_string("x")),
             -1,
         ),
         Err(DruidError::InvalidArgument(_))
     ));
     invalid.close_with_connection(&mut connection).unwrap();
 
-    let binary = JdbcInputStream::from_bytes(vec![1, 2, 3, 4]);
-    let reader = JdbcReader::from_string("reader-tail");
+    let binary = RdbcInputStream::from_bytes(vec![1, 2, 3, 4]);
+    let reader = RdbcReader::from_string("reader-tail");
     let mut insert = connection
         .prepare_statement(
             "INSERT INTO prepared_resource(
@@ -433,11 +433,11 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         .set_url(
             &mut connection,
             3,
-            Some(JdbcUrl::new("https://example.com/sqlx")),
+            Some(RdbcUrl::new("https://example.com/sqlx")),
         )
         .unwrap();
     insert
-        .set_row_id(&mut connection, 4, Some(JdbcRowId::new(vec![7, 8])))
+        .set_row_id(&mut connection, 4, Some(RdbcRowId::new(vec![7, 8])))
         .unwrap();
     assert_eq!(binary.read_to_end().unwrap(), vec![4]);
     assert_eq!(reader.read_to_string().unwrap(), "-tail");
@@ -458,11 +458,11 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         .set_binary_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![9, 10])),
+            Some(RdbcInputStream::from_bytes(vec![9, 10])),
         )
         .unwrap();
     query
-        .set_n_character_stream(&mut connection, 2, Some(JdbcReader::from_string("查询")))
+        .set_n_character_stream(&mut connection, 2, Some(RdbcReader::from_string("查询")))
         .unwrap();
     let mut result_set = query.execute_query_bound(&mut connection).await.unwrap();
     let meta_data = result_set.meta_data(&mut connection).unwrap();
@@ -494,7 +494,7 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
 
     let mut generic = connection.prepare_statement("SELECT ?").await.unwrap();
     generic
-        .set_clob_reader(&mut connection, 1, Some(JdbcReader::from_string("generic")))
+        .set_clob_reader(&mut connection, 1, Some(RdbcReader::from_string("generic")))
         .unwrap();
     assert!(generic.execute_bound(&mut connection).await.unwrap());
     let mut generic_rows = generic.result_set(&mut connection).unwrap().unwrap();
@@ -506,7 +506,7 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
     generic_rows.close_with_connection(&mut connection).unwrap();
     generic.close_with_connection(&mut connection).unwrap();
 
-    let first_batch_stream = JdbcInputStream::from_bytes(vec![20, 21, 22]);
+    let first_batch_stream = RdbcInputStream::from_bytes(vec![20, 21, 22]);
     let mut batch = connection
         .prepare_statement(
             "INSERT INTO prepared_resource(binary_value, character_value) VALUES (?, ?)",
@@ -517,18 +517,18 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         .set_blob_stream_with_long_length(&mut connection, 1, Some(first_batch_stream.clone()), 2)
         .unwrap();
     batch
-        .set_clob_reader(&mut connection, 2, Some(JdbcReader::from_string("first")))
+        .set_clob_reader(&mut connection, 2, Some(RdbcReader::from_string("first")))
         .unwrap();
     batch.add_bound_batch(&mut connection).unwrap();
     batch
         .set_binary_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![30, 31])),
+            Some(RdbcInputStream::from_bytes(vec![30, 31])),
         )
         .unwrap();
     batch
-        .set_n_clob_reader(&mut connection, 2, Some(JdbcReader::from_string("第二")))
+        .set_n_clob_reader(&mut connection, 2, Some(RdbcReader::from_string("第二")))
         .unwrap();
     batch.add_bound_batch(&mut connection).unwrap();
     assert_eq!(
@@ -579,14 +579,14 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         assert!(matches!(
             executions[0][0],
             PreparedInputParameter::BinaryStream {
-                length: JdbcStreamLength::Long(3),
+                length: RdbcStreamLength::Long(3),
                 ..
             }
         ));
         assert!(matches!(
             executions[1][1],
             PreparedInputParameter::NCharacterStream {
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
                 ..
             }
         ));
@@ -601,7 +601,7 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
         assert!(matches!(
             batches[0][0][0],
             PreparedInputParameter::BlobStream {
-                length: JdbcStreamLength::Long(2),
+                length: RdbcStreamLength::Long(2),
                 ..
             }
         ));

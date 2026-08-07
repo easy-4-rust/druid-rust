@@ -1,4 +1,4 @@
-use super::{DataSourceMonitorable, DruidDataSourceStatManager, JdbcStatManager};
+use super::{DataSourceMonitorable, DruidDataSourceStatManager, RdbcStatManager};
 use indexmap::IndexMap;
 use serde_json::{json, Value};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -43,7 +43,7 @@ impl DruidStatManagerFacade {
         if !self.is_reset_enable() {
             return;
         }
-        // Java 顺序：Spring/Web（Rust 平台不适用）→ JdbcStatManager →
+        // Java 顺序：Spring/Web（Rust 平台不适用）→ RdbcStatManager →
         // DruidDataSourceStatManager → facade resetCount。
         self.reset_sql_stat();
         self.reset_data_source_stat();
@@ -55,9 +55,9 @@ impl DruidStatManagerFacade {
         DruidDataSourceStatManager::global().reset();
     }
 
-    /// 重置 JDBC 代理层及每个数据源的 JDBC 统计。
+    /// 重置 RDBC 代理层及每个数据源的 RDBC 统计。
     pub fn reset_sql_stat(&self) {
-        JdbcStatManager::global().reset();
+        RdbcStatManager::global().reset();
     }
 
     /// 发布并重置全部数据源区间统计。

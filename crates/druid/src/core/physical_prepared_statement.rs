@@ -59,7 +59,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
         })
     }
 
-    /// 设置 JDBC escape 处理开关。
+    /// 设置 RDBC escape 处理开关。
     fn set_escape_processing(&self, _enabled: bool) -> Result<(), DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "prepared_statement_set_escape_processing",
@@ -136,7 +136,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
         })
     }
 
-    /// 接收一个按 JDBC 下标设置的参数。
+    /// 接收一个按 RDBC 下标设置的参数。
     ///
     /// 对应 Java：`PreparedStatement#setXxx(int, ...)`。默认实现只验证 Java
     /// 1-based 下标；需要在 setter 时验证类型、参数数量或保存驱动资源的 Adapter
@@ -170,7 +170,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
         Ok(())
     }
 
-    /// 校验并接收包含完整 JDBC setter 描述符的批处理参数快照。
+    /// 校验并接收包含完整 RDBC setter 描述符的批处理参数快照。
     ///
     /// 默认实现仅接收快照；需要在 `addBatch` 阶段物化资源或进行驱动校验的
     /// Adapter 应覆盖本方法。
@@ -200,7 +200,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
         Ok(())
     }
 
-    /// 推进到下一个 JDBC 结果。
+    /// 推进到下一个 RDBC 结果。
     ///
     /// 对应 Java：PreparedStatement 继承的 `getMoreResults()` 与
     /// `getMoreResults(int)`。非法 current 必须在关闭旧 ResultSet 前失败。

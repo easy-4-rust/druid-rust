@@ -5,7 +5,7 @@
 
 use crate::core::DruidError;
 
-/// 接收 JDBC 执行、连接、ResultSet 与 LOB 统计事件。
+/// 接收 RDBC 执行、连接、ResultSet 与 LOB 统计事件。
 ///
 /// Java 方法可抛出 unchecked exception；Rust 使用 `Result` 保留“首个错误中止
 /// 后续 listener 和当前调用”的可观测行为。

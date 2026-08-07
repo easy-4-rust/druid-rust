@@ -46,7 +46,7 @@ impl ExceptionSorter for MySqlExceptionSorter {
         }
 
         if let Some(message) = exception.message() {
-            const STREAMING_PREFIX: &str = "Streaming result set com.mysql.jdbc.RowDataDynamic";
+            const STREAMING_PREFIX: &str = "Streaming result set com.mysql.rdbc.RowDataDynamic";
             const STREAMING_SUFFIX: &str = "is still active. No statements may be issued when any streaming result sets are open and in use on a given connection. Ensure that you have called .close() on any active streaming result sets before attempting more queries.";
             if message.starts_with(STREAMING_PREFIX) && message.ends_with(STREAMING_SUFFIX) {
                 return true;

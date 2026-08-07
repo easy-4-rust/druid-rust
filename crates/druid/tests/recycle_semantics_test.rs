@@ -92,7 +92,7 @@ impl PhysicalConnection for TrackingConnection {
     }
 
     async fn rollback(&mut self) -> Result<(), DruidError> {
-        // JDBC rollback 不改变 autoCommit，随后 holder.reset 再恢复默认值。
+        // RDBC rollback 不改变 autoCommit，随后 holder.reset 再恢复默认值。
         self.operation("rollback")
     }
 

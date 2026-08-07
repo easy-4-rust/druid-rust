@@ -150,7 +150,8 @@ impl AgentRuntime {
                         "concurrent-requests",
                         "cursor-paging",
                         "cancel"
-                    ]
+                    ],
+                    "contractFaultInjection": options.contract_fault_injection_enabled()
                 }),
             )
             .await?;

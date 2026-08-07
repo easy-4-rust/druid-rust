@@ -11,7 +11,7 @@ use std::time::Duration;
 /// Druid Filter 的默认适配对象。
 ///
 /// Java `FilterAdapter` 为抽象基类：生命周期与属性配置默认不做处理，Wrapper
-/// 只识别运行时自身类型，所有 JDBC hook 默认继续调用 `FilterChain`。Rust
+/// 只识别运行时自身类型，所有 RDBC hook 默认继续调用 `FilterChain`。Rust
 /// 不使用继承，因此以一个可组合、可直接注册的对象承载相同默认行为：
 ///
 /// - SQL before/after 默认放行；

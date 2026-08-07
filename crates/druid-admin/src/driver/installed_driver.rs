@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 /// 内容寻址保存的已安装 JDBC 驱动或 Agent 工件。
@@ -18,6 +19,10 @@ pub struct InstalledDriver {
     driver_class: Option<String>,
     #[serde(default)]
     jar_files: Vec<String>,
+    #[serde(default)]
+    jar_sha256: BTreeMap<String, String>,
+    #[serde(default)]
+    bundle: bool,
     #[serde(default = "InstalledDriver::default_java_version")]
     minimum_java_version: u16,
     installed_at_epoch_millis: i64,
@@ -35,16 +40,48 @@ impl InstalledDriver {
         driver_class: Option<String>,
         installed_at_epoch_millis: i64,
     ) -> Self {
+        let jar_sha256 = BTreeMap::from([(file_name.clone(), sha256.clone())]);
         Self {
             profile_id,
             artifact_version: sha256.clone(),
             jar_files: vec![file_name.clone()],
+            jar_sha256,
+            bundle: false,
             file_name,
             sha256,
             path,
             source,
             license,
             driver_class,
+            minimum_java_version: 17,
+            installed_at_epoch_millis,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_bundle(
+        profile_id: String,
+        file_name: String,
+        sha256: String,
+        path: PathBuf,
+        source: String,
+        license: String,
+        driver_class: Option<String>,
+        jar_sha256: BTreeMap<String, String>,
+        installed_at_epoch_millis: i64,
+    ) -> Self {
+        Self {
+            profile_id,
+            file_name,
+            artifact_version: sha256.clone(),
+            sha256,
+            path,
+            source,
+            license,
+            driver_class,
+            jar_files: jar_sha256.keys().cloned().collect(),
+            jar_sha256,
+            bundle: true,
             minimum_java_version: 17,
             installed_at_epoch_millis,
         }
@@ -90,6 +127,31 @@ impl InstalledDriver {
     #[must_use]
     pub fn jar_files(&self) -> &[String] {
         &self.jar_files
+    }
+
+    /// 返回 bundle 内每个 JAR 的独立内容摘要。
+    #[must_use]
+    pub fn jar_sha256(&self) -> &BTreeMap<String, String> {
+        &self.jar_sha256
+    }
+
+    /// 返回该激活记录是否为多制品 bundle 身份。
+    #[must_use]
+    pub const fn is_bundle(&self) -> bool {
+        self.bundle
+    }
+
+    /// 返回该激活版本应加入 Java classpath 的全部 JAR。
+    #[must_use]
+    pub fn class_path(&self) -> Vec<PathBuf> {
+        if self.jar_files.is_empty() {
+            return vec![self.path.clone()];
+        }
+        let directory = self.path.parent().unwrap_or_else(|| Path::new(""));
+        self.jar_files
+            .iter()
+            .map(|file_name| directory.join(file_name))
+            .collect()
     }
 
     /// 返回运行该制品要求的最低 Java 主版本。

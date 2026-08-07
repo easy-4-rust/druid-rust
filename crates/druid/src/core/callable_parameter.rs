@@ -8,7 +8,7 @@ use super::DruidError;
 /// 存储过程参数的索引或名称。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CallableParameter {
-    /// JDBC 从 1 开始的参数索引。
+    /// RDBC 从 1 开始的参数索引。
     Index(usize),
     /// 驱动识别的参数名称。
     Name(String),

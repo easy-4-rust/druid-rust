@@ -44,8 +44,8 @@ pub trait DataSourceMonitorable: Send + Sync {
     /// 重置可重置的累计统计。
     fn reset_stat(&self);
 
-    /// 重置本数据源独立的 `JdbcDataSourceStat`。
-    fn reset_jdbc_stat(&self) {}
+    /// 重置本数据源独立的 `RdbcDataSourceStat`。
+    fn reset_rdbc_stat(&self) {}
 
     /// 发布并重置一份区间统计；单个 sink 错误不得中断其他数据源。
     fn log_stats(&self) -> Result<(), crate::core::DruidError> {

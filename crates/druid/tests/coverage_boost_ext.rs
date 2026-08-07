@@ -100,7 +100,7 @@ fn test_pool_config_default_values() {
 fn test_pool_config_builder_all_methods() {
     let cfg = PoolConfig::builder()
         .name("test-pool")
-        .url("jdbc:postgresql://localhost/test")
+        .url("rdbc:postgresql://localhost/test")
         .driver_name("postgres")
         .username("admin")
         .password("secret")
@@ -127,7 +127,7 @@ fn test_pool_config_builder_all_methods() {
         .build();
 
     assert_eq!(cfg.name, "test-pool");
-    assert_eq!(cfg.url, "jdbc:postgresql://localhost/test");
+    assert_eq!(cfg.url, "rdbc:postgresql://localhost/test");
     assert_eq!(cfg.driver_name, "postgres");
     assert_eq!(cfg.username, "admin");
     assert_eq!(cfg.password, "secret");

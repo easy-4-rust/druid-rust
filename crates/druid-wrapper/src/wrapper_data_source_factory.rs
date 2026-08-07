@@ -4,7 +4,7 @@ use crate::sqlx::SqlxConnectionFactory;
 use crate::{ManagedWrapperPool, ProxoolConfigKey};
 use druid::core::{DruidError, PhysicalConnectionFactory};
 use druid::pool::DruidPoolBuilder;
-use druid::sql::JdbcUtils;
+use druid::sql::RdbcUtils;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -84,7 +84,7 @@ impl WrapperDataSourceFactory {
             .factory(factory)
             .max_open(max_open)
             .acquire_timeout(acquire_timeout);
-        if let Some(db_type) = JdbcUtils::infer_db_type(Some(url), Some(&configured_driver_name)) {
+        if let Some(db_type) = RdbcUtils::infer_db_type(Some(url), Some(&configured_driver_name)) {
             builder = builder.db_type_name(db_type.as_str());
         }
         if let Some(value) = first_usize(
@@ -211,7 +211,7 @@ impl WrapperDataSourceFactory {
             .unwrap_or(30_000),
         );
 
-        let native_url = JdbcUtils::to_rust_url(url).ok_or_else(|| {
+        let native_url = RdbcUtils::to_rust_url(url).ok_or_else(|| {
             DruidError::InvalidArgument(format!(
                 "SQLx provider does not support JDBC URL `{url}`; inject a matching PhysicalConnectionFactory"
             ))
@@ -225,7 +225,7 @@ impl WrapperDataSourceFactory {
                     .factory(Arc::new(SqlxConnectionFactory::new(&sqlx_url)))
                     .max_open(max_open)
                     .acquire_timeout(acquire_timeout);
-                if let Some(db_type) = JdbcUtils::infer_db_type(Some(&sqlx_url), Some("sqlx")) {
+                if let Some(db_type) = RdbcUtils::infer_db_type(Some(&sqlx_url), Some("sqlx")) {
                     builder = builder.db_type_name(db_type.as_str());
                 }
                 if let Some(value) = first_usize(

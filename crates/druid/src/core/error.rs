@@ -50,12 +50,12 @@ pub enum DruidError {
     },
     ConnectionDiscarded,
     DriverError(String),
-    /// 保留 JDBC/驱动异常分类字段的 SQL 执行错误。
+    /// 保留 RDBC/驱动异常分类字段的 SQL 执行错误。
     ///
     /// 对应 Java `SQLException`；池化连接会把该对象交给
     /// `ExceptionSorter`，但仍把原始错误返回调用者。
     SqlException(Box<SqlException>),
-    /// JDBC 批处理异常及已经完成项的更新计数。
+    /// RDBC 批处理异常及已经完成项的更新计数。
     ///
     /// 对应 Java `java.sql.BatchUpdateException#getUpdateCounts()`。计数允许
     /// `Statement::SUCCESS_NO_INFO(-2)` 与 `Statement::EXECUTE_FAILED(-3)`；
@@ -284,7 +284,7 @@ impl DruidError {
         }
     }
 
-    /// 返回当前错误或批处理 cause 中保留的 JDBC `SQLException`。
+    /// 返回当前错误或批处理 cause 中保留的 RDBC `SQLException`。
     ///
     /// 批处理异常仍必须进入与普通 SQL 异常相同的 vendor fatal sorter。
     pub fn sql_exception(&self) -> Option<&SqlException> {
@@ -295,7 +295,7 @@ impl DruidError {
         }
     }
 
-    /// 返回批处理失败前已经得到的 JDBC 更新计数。
+    /// 返回批处理失败前已经得到的 RDBC 更新计数。
     pub fn batch_update_counts(&self) -> Option<&[i32]> {
         match self {
             Self::BatchUpdateException { update_counts, .. } => Some(update_counts),

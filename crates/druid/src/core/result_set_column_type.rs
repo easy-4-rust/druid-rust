@@ -1,4 +1,4 @@
-//! JDBC 结果集列类型。
+//! RDBC 结果集列类型。
 //!
 //! 对应 Java 平台常量：`java.sql.Types`。该类型只表达当前 Druid Adapter
 //! 能无损区分的类型族，不猜测驱动未提供的整数宽度或 vendor type。
@@ -30,7 +30,7 @@ pub enum ResultSetColumnType {
 
 impl ResultSetColumnType {
     /// 返回 `java.sql.Types` 数值。
-    pub const fn jdbc_type(self) -> i32 {
+    pub const fn rdbc_type(self) -> i32 {
         match self {
             Self::Unknown => 1_111,
             Self::Boolean => 16,

@@ -3,14 +3,14 @@
 //! 连接池内部状态：空闲队列、活跃计数、等待通知。
 
 use crate::core::fatal_error_handler::FatalErrorHandler;
-use crate::core::Value as JdbcValue;
+use crate::core::Value as RdbcValue;
 use crate::core::{
     ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, FilterChain,
     JavaString, PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
     PhysicalConnectionInfo, PreparedStatementCacheStats, StatementGeneratedKeys,
     ValidConnectionCheckerAdapter,
 };
-use crate::sql::{DbType, JdbcUtils};
+use crate::sql::{DbType, RdbcUtils};
 use crate::stats::StatsCollector;
 use serde_json::{Number as JsonNumber, Value as JsonValue};
 use std::collections::{HashMap, VecDeque};
@@ -993,7 +993,7 @@ impl PoolInner {
             .db_type_name
             .as_deref()
             .and_then(DbType::of)
-            .is_some_and(JdbcUtils::is_mysql_db_type);
+            .is_some_and(RdbcUtils::is_mysql_db_type);
         if is_mysql_family {
             if let Some(values) = variables.as_mut() {
                 let rows = connection.fetch("show variables", Vec::new()).await?;
@@ -1019,40 +1019,40 @@ impl PoolInner {
             let Some(name) = row.get(0).and_then(Self::variable_name) else {
                 continue;
             };
-            let value = row.get(1).map_or(JsonValue::Null, Self::jdbc_value_to_json);
+            let value = row.get(1).map_or(JsonValue::Null, Self::rdbc_value_to_json);
             target.insert(name, value);
         }
     }
 
-    fn variable_name(value: &JdbcValue) -> Option<String> {
+    fn variable_name(value: &RdbcValue) -> Option<String> {
         match value {
-            JdbcValue::Null => None,
-            JdbcValue::String(value) => Some(value.clone()),
-            JdbcValue::Bytes(value) => String::from_utf8(value.clone()).ok(),
-            JdbcValue::Bool(value) => Some(value.to_string()),
-            JdbcValue::Int(value) => Some(value.to_string()),
-            JdbcValue::Float(value) => Some(value.to_string()),
-            JdbcValue::Decimal(value) => Some(value.to_string()),
-            JdbcValue::Date(value) => Some(value.to_string()),
-            JdbcValue::Time(value) => Some(value.to_string()),
-            JdbcValue::Timestamp(value) => Some(value.to_string()),
+            RdbcValue::Null => None,
+            RdbcValue::String(value) => Some(value.clone()),
+            RdbcValue::Bytes(value) => String::from_utf8(value.clone()).ok(),
+            RdbcValue::Bool(value) => Some(value.to_string()),
+            RdbcValue::Int(value) => Some(value.to_string()),
+            RdbcValue::Float(value) => Some(value.to_string()),
+            RdbcValue::Decimal(value) => Some(value.to_string()),
+            RdbcValue::Date(value) => Some(value.to_string()),
+            RdbcValue::Time(value) => Some(value.to_string()),
+            RdbcValue::Timestamp(value) => Some(value.to_string()),
         }
     }
 
-    fn jdbc_value_to_json(value: &JdbcValue) -> JsonValue {
+    fn rdbc_value_to_json(value: &RdbcValue) -> JsonValue {
         match value {
-            JdbcValue::Null => JsonValue::Null,
-            JdbcValue::Bool(value) => JsonValue::Bool(*value),
-            JdbcValue::Int(value) => JsonValue::Number((*value).into()),
-            JdbcValue::Float(value) => JsonNumber::from_f64(*value)
+            RdbcValue::Null => JsonValue::Null,
+            RdbcValue::Bool(value) => JsonValue::Bool(*value),
+            RdbcValue::Int(value) => JsonValue::Number((*value).into()),
+            RdbcValue::Float(value) => JsonNumber::from_f64(*value)
                 .map(JsonValue::Number)
                 .unwrap_or_else(|| JsonValue::String(value.to_string())),
-            JdbcValue::Decimal(value) => JsonValue::String(value.to_string()),
-            JdbcValue::Date(value) => JsonValue::String(value.to_string()),
-            JdbcValue::Time(value) => JsonValue::String(value.to_string()),
-            JdbcValue::Timestamp(value) => JsonValue::String(value.to_string()),
-            JdbcValue::String(value) => JsonValue::String(value.clone()),
-            JdbcValue::Bytes(value) => JsonValue::Array(
+            RdbcValue::Decimal(value) => JsonValue::String(value.to_string()),
+            RdbcValue::Date(value) => JsonValue::String(value.to_string()),
+            RdbcValue::Time(value) => JsonValue::String(value.to_string()),
+            RdbcValue::Timestamp(value) => JsonValue::String(value.to_string()),
+            RdbcValue::String(value) => JsonValue::String(value.clone()),
+            RdbcValue::Bytes(value) => JsonValue::Array(
                 value
                     .iter()
                     .map(|byte| JsonValue::Number((*byte).into()))

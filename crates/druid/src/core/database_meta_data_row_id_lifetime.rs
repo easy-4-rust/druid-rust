@@ -1,4 +1,4 @@
-//! JDBC `RowIdLifetime` 的 Rust 协议值。
+//! RDBC `RowIdLifetime` 的 Rust 协议值。
 //!
 //! 对应 Java 平台对象：`java.sql.RowIdLifetime`。
 

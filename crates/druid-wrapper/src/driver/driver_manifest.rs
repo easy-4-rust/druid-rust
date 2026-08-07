@@ -85,7 +85,8 @@ impl DriverManifest {
             if !capabilities.query
                 || !capabilities.update
                 || !capabilities.prepared_statements
-                || !capabilities.transactions
+                || (!capabilities.transactions
+                    && profile.runtime_mode() != DriverRuntimeMode::HttpSql)
             {
                 return Err(DriverRegistryError::InvalidManifest(format!(
                     "verified profile '{}' does not satisfy the minimum capability contract",
@@ -101,6 +102,14 @@ impl DriverManifest {
                     profile.id()
                 )));
             }
+        }
+        if profile.runtime_mode() == DriverRuntimeMode::JdbcAgent
+            && profile.driver_class().is_none()
+        {
+            return Err(DriverRegistryError::InvalidManifest(format!(
+                "JDBC Agent profile '{}' has no driverClass mapping",
+                profile.id()
+            )));
         }
         Ok(())
     }

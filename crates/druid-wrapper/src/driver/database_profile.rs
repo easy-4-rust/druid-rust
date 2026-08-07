@@ -52,6 +52,11 @@ impl DatabaseProfile {
                 record.delivery_phase
             )));
         }
+        let capabilities = DriverCapabilities::runtime_baseline(record.runtime_mode, id.as_str())
+            .merged_with(record.capabilities);
+        let driver_class = record
+            .driver_class
+            .or_else(|| jdbc_driver_class(id.as_str()).map(str::to_owned));
         Ok(Self {
             id,
             display_name: record.display_name,
@@ -61,7 +66,7 @@ impl DatabaseProfile {
             provider_id: record.provider_id,
             artifact_id: record.artifact_id,
             artifact_version: record.artifact_version,
-            driver_class: record.driver_class,
+            driver_class,
             default_port: record.default_port,
             support_status: record.support_status,
             wall_mode: record.wall_mode,
@@ -70,7 +75,7 @@ impl DatabaseProfile {
             reset_sql: record.reset_sql,
             exception_sorter: record.exception_sorter,
             evidence: record.evidence,
-            capabilities: record.capabilities,
+            capabilities,
         })
     }
 
@@ -146,4 +151,53 @@ impl DatabaseProfile {
     pub const fn capabilities(&self) -> DriverCapabilities {
         self.capabilities
     }
+}
+
+/// JDBC Agent 产品的默认 DriverManager 类名；用户导入的 bundle 仍可通过
+/// `META-INF/services/java.sql.Driver` 自注册。本表用于诊断、审计与旧驱动兼容。
+fn jdbc_driver_class(profile_id: &str) -> Option<&'static str> {
+    Some(match profile_id {
+        "h2" => "org.h2.Driver",
+        "hsqldb" => "org.hsqldb.jdbc.JDBCDriver",
+        "access" => "net.ucanaccess.jdbc.UcanaccessDriver",
+        "derby" => "org.apache.derby.jdbc.EmbeddedDriver",
+        "firebird" => "org.firebirdsql.jdbc.FBDriver",
+        "oracle" => "oracle.jdbc.OracleDriver",
+        "oceanbase-oracle" => "com.oceanbase.jdbc.Driver",
+        "dameng" => "dm.jdbc.driver.DmDriver",
+        "yashandb" => "com.yashandb.jdbc.Driver",
+        "gbase8a" => "com.gbase.jdbc.Driver",
+        "gbase8s" => "com.gbasedbt.jdbc.Driver",
+        "xugudb" => "com.xugu.cloudjdbc.Driver",
+        "oscar" => "com.oscar.Driver",
+        "sundb" => "sunje.goldilocks.jdbc.GoldilocksDriver",
+        "iris" => "com.intersystems.jdbc.IRISDriver",
+        "sap-hana" => "com.sap.db.jdbc.Driver",
+        "db2" => "com.ibm.db2.jcc.DB2Driver",
+        "informix" => "com.informix.jdbc.IfxDriver",
+        "db2-for-i" => "com.ibm.as400.access.AS400JDBCDriver",
+        "sap-maxdb" => "com.sap.dbtech.jdbc.DriverSapDB",
+        "sqlserver" | "azure-sql" | "azure-synapse" => {
+            "com.microsoft.sqlserver.jdbc.SQLServerDriver"
+        }
+        "sybase-ase" => "com.sybase.jdbc4.jdbc.SybDriver",
+        "clickhouse" => "com.clickhouse.jdbc.ClickHouseDriver",
+        "databend" => "com.databend.jdbc.DatabendDriver",
+        "databricks-sql" => "com.databricks.client.jdbc.Driver",
+        "snowflake" => "net.snowflake.client.jdbc.SnowflakeDriver",
+        "teradata" => "com.teradata.jdbc.TeraDriver",
+        "vertica" => "com.vertica.jdbc.Driver",
+        "exasol" => "com.exasol.jdbc.EXADriver",
+        "trino" => "io.trino.jdbc.TrinoDriver",
+        "prestosql" => "com.facebook.presto.jdbc.PrestoDriver",
+        "hive" | "spark-sql" => "org.apache.hive.jdbc.HiveDriver",
+        "bigquery" => "com.simba.googlebigquery.jdbc.Driver",
+        "kylin" => "org.apache.kylin.jdbc.Driver",
+        "phoenix" => "org.apache.phoenix.jdbc.PhoenixDriver",
+        "impala" => "com.cloudera.impala.jdbc.Driver",
+        "athena" => "com.simba.athena.jdbc.Driver",
+        "maxcompute" => "com.aliyun.odps.jdbc.OdpsDriver",
+        "tdengine" => "com.taosdata.jdbc.TSDBDriver",
+        _ => return None,
+    })
 }

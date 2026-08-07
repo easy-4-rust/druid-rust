@@ -11,7 +11,7 @@ use std::time::Duration;
 /// MySQL Connector/J 8.0.23+ DATETIME 兼容 Filter。
 ///
 /// Java 驱动把 `getObject` 的 DATETIME 从 `Timestamp` 改为
-/// `LocalDateTime`。Rust JDBC 值模型从一开始就把无时区 SQL
+/// `LocalDateTime`。Rust RDBC 值模型从一开始就把无时区 SQL
 /// TIMESTAMP/DATETIME 表示为 `Value::Timestamp`，因此值替换是恒等操作；
 /// metadata 的 Java 类名仍需显式恢复。
 #[derive(Debug, Default, Clone, Copy)]

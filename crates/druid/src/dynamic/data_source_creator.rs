@@ -3,7 +3,7 @@
 use super::high_available_data_source::HighAvailableDataSourceInner;
 use crate::core::{DruidError, Pool};
 use crate::pool::DruidPoolBuilder;
-use crate::sql::JdbcUtils;
+use crate::sql::RdbcUtils;
 use crate::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 
@@ -25,7 +25,7 @@ impl DataSourceCreator {
         let raw_url = url.ok_or_else(|| {
             DruidError::InvalidArgument(format!("{node_name}.url must not be empty"))
         })?;
-        let rust_url = JdbcUtils::to_rust_url(raw_url).ok_or(DruidError::UnsupportedOperation {
+        let rust_url = RdbcUtils::to_rust_url(raw_url).ok_or(DruidError::UnsupportedOperation {
             operation: "ha_node_driver_adapter_required",
         })?;
         let driver_url = Self::apply_credentials(rust_url.as_ref(), username, password)?;

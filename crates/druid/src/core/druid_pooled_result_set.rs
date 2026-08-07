@@ -8,11 +8,12 @@
 use super::druid_pooled_statement::DruidPooledStatementInner;
 use super::{
     ClobProxyImpl, DruidError, DruidPooledCallableStatementHandle, DruidPooledConnection,
-    DruidPooledPreparedStatementHandle, DruidPooledStatement, FilterChain, JdbcArray, JdbcBlob,
-    JdbcCalendar, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob,
-    JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
-    JdbcTypeMap, JdbcUrl, NClobProxyImpl, PhysicalResultSet, ResultSetFilterContext,
-    ResultSetMetaData, ResultSetStatement, ResultSetUpdate, SqlWarning, Unwrapped, Value, Wrapper,
+    DruidPooledPreparedStatementHandle, DruidPooledStatement, FilterChain, NClobProxyImpl,
+    PhysicalResultSet, RdbcArray, RdbcBlob, RdbcCalendar, RdbcCalendarArgument,
+    RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader, RdbcRef,
+    RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl,
+    ResultSetFilterContext, ResultSetMetaData, ResultSetStatement, ResultSetUpdate, SqlWarning,
+    Unwrapped, Value, Wrapper,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -137,7 +138,7 @@ macro_rules! input_stream_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_index: usize,
-            stream: Option<&JdbcInputStream>,
+            stream: Option<&RdbcInputStream>,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -152,7 +153,7 @@ macro_rules! input_stream_update_family {
                     column_index,
                     &ResultSetUpdate::$variant {
                         stream: stream.cloned(),
-                        length: JdbcStreamLength::Unspecified,
+                        length: RdbcStreamLength::Unspecified,
                     },
                 )
             };
@@ -164,7 +165,7 @@ macro_rules! input_stream_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_label: &str,
-            stream: Option<&JdbcInputStream>,
+            stream: Option<&RdbcInputStream>,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -179,7 +180,7 @@ macro_rules! input_stream_update_family {
                     column_label,
                     &ResultSetUpdate::$variant {
                         stream: stream.cloned(),
-                        length: JdbcStreamLength::Unspecified,
+                        length: RdbcStreamLength::Unspecified,
                     },
                 )
             };
@@ -191,7 +192,7 @@ macro_rules! input_stream_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_index: usize,
-            stream: Option<&JdbcInputStream>,
+            stream: Option<&RdbcInputStream>,
             length: i32,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -208,7 +209,7 @@ macro_rules! input_stream_update_family {
                     column_index,
                     &ResultSetUpdate::$variant {
                         stream: stream.cloned(),
-                        length: JdbcStreamLength::Int(length),
+                        length: RdbcStreamLength::Int(length),
                     },
                 )
             };
@@ -220,7 +221,7 @@ macro_rules! input_stream_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_label: &str,
-            stream: Option<&JdbcInputStream>,
+            stream: Option<&RdbcInputStream>,
             length: i32,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -237,7 +238,7 @@ macro_rules! input_stream_update_family {
                     column_label,
                     &ResultSetUpdate::$variant {
                         stream: stream.cloned(),
-                        length: JdbcStreamLength::Int(length),
+                        length: RdbcStreamLength::Int(length),
                     },
                 )
             };
@@ -249,7 +250,7 @@ macro_rules! input_stream_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_index: usize,
-            stream: Option<&JdbcInputStream>,
+            stream: Option<&RdbcInputStream>,
             length: i64,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -266,7 +267,7 @@ macro_rules! input_stream_update_family {
                     column_index,
                     &ResultSetUpdate::$variant {
                         stream: stream.cloned(),
-                        length: JdbcStreamLength::Long(length),
+                        length: RdbcStreamLength::Long(length),
                     },
                 )
             };
@@ -278,7 +279,7 @@ macro_rules! input_stream_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_label: &str,
-            stream: Option<&JdbcInputStream>,
+            stream: Option<&RdbcInputStream>,
             length: i64,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -295,7 +296,7 @@ macro_rules! input_stream_update_family {
                     column_label,
                     &ResultSetUpdate::$variant {
                         stream: stream.cloned(),
-                        length: JdbcStreamLength::Long(length),
+                        length: RdbcStreamLength::Long(length),
                     },
                 )
             };
@@ -319,7 +320,7 @@ macro_rules! reader_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_index: usize,
-            reader: Option<&JdbcReader>,
+            reader: Option<&RdbcReader>,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -334,7 +335,7 @@ macro_rules! reader_update_family {
                     column_index,
                     &ResultSetUpdate::$variant {
                         reader: reader.cloned(),
-                        length: JdbcCharacterLength::Unspecified,
+                        length: RdbcCharacterLength::Unspecified,
                     },
                 )
             };
@@ -346,7 +347,7 @@ macro_rules! reader_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_label: &str,
-            reader: Option<&JdbcReader>,
+            reader: Option<&RdbcReader>,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -361,7 +362,7 @@ macro_rules! reader_update_family {
                     column_label,
                     &ResultSetUpdate::$variant {
                         reader: reader.cloned(),
-                        length: JdbcCharacterLength::Unspecified,
+                        length: RdbcCharacterLength::Unspecified,
                     },
                 )
             };
@@ -373,7 +374,7 @@ macro_rules! reader_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_index: usize,
-            reader: Option<&JdbcReader>,
+            reader: Option<&RdbcReader>,
             length: i32,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -390,7 +391,7 @@ macro_rules! reader_update_family {
                     column_index,
                     &ResultSetUpdate::$variant {
                         reader: reader.cloned(),
-                        length: JdbcCharacterLength::Int(length),
+                        length: RdbcCharacterLength::Int(length),
                     },
                 )
             };
@@ -402,7 +403,7 @@ macro_rules! reader_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_label: &str,
-            reader: Option<&JdbcReader>,
+            reader: Option<&RdbcReader>,
             length: i32,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -419,7 +420,7 @@ macro_rules! reader_update_family {
                     column_label,
                     &ResultSetUpdate::$variant {
                         reader: reader.cloned(),
-                        length: JdbcCharacterLength::Int(length),
+                        length: RdbcCharacterLength::Int(length),
                     },
                 )
             };
@@ -431,7 +432,7 @@ macro_rules! reader_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_index: usize,
-            reader: Option<&JdbcReader>,
+            reader: Option<&RdbcReader>,
             length: i64,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -448,7 +449,7 @@ macro_rules! reader_update_family {
                     column_index,
                     &ResultSetUpdate::$variant {
                         reader: reader.cloned(),
-                        length: JdbcCharacterLength::Long(length),
+                        length: RdbcCharacterLength::Long(length),
                     },
                 )
             };
@@ -460,7 +461,7 @@ macro_rules! reader_update_family {
             &mut self,
             connection: &mut DruidPooledConnection,
             column_label: &str,
-            reader: Option<&JdbcReader>,
+            reader: Option<&RdbcReader>,
             length: i64,
         ) -> Result<(), DruidError> {
             self.ensure_open_for(connection)?;
@@ -477,7 +478,7 @@ macro_rules! reader_update_family {
                     column_label,
                     &ResultSetUpdate::$variant {
                         reader: reader.cloned(),
-                        length: JdbcCharacterLength::Long(length),
+                        length: RdbcCharacterLength::Long(length),
                     },
                 )
             };
@@ -556,6 +557,16 @@ pub struct DruidPooledResultSet {
 }
 
 impl DruidPooledResultSet {
+    pub const FETCH_FORWARD: i32 = 1000;
+    pub const FETCH_REVERSE: i32 = 1001;
+    pub const FETCH_UNKNOWN: i32 = 1002;
+    pub const TYPE_FORWARD_ONLY: i32 = 1003;
+    pub const TYPE_SCROLL_INSENSITIVE: i32 = 1004;
+    pub const TYPE_SCROLL_SENSITIVE: i32 = 1005;
+    pub const CONCUR_READ_ONLY: i32 = 1007;
+    pub const CONCUR_UPDATABLE: i32 = 1008;
+    pub const HOLD_CURSORS_OVER_COMMIT: i32 = 1;
+    pub const CLOSE_CURSORS_AT_COMMIT: i32 = 2;
     pub(crate) fn new(
         statement: Arc<DruidPooledStatementInner>,
         physical: Arc<dyn PhysicalResultSet>,
@@ -910,7 +921,7 @@ impl DruidPooledResultSet {
 
     /// 经 Java `ResultSet#isClosed()` FilterChain 查询物理关闭状态。
     ///
-    /// `is_closed()` 保留为 Rust 内部无失败生命周期观察器；对外 JDBC 语义入口
+    /// `is_closed()` 保留为 Rust 内部无失败生命周期观察器；对外 RDBC 语义入口
     /// 使用本方法，使 Filter 可以短路、改写或返回驱动错误。
     pub fn is_closed_with_connection(
         &mut self,
@@ -978,8 +989,8 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.object_with_type_map(column_index, type_map),
@@ -1006,8 +1017,8 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || {
@@ -1033,13 +1044,13 @@ impl DruidPooledResultSet {
     /// 按下标和目标类型读取对象。
     ///
     /// 对应 Java：`DruidPooledResultSet#getObject(int, Class<T>)`。Rust 用
-    /// `JdbcTargetType` 代替 JVM `Class<T>`，目标类型原样下沉到物理 SPI。
+    /// `RdbcTargetType` 代替 JVM `Class<T>`，目标类型原样下沉到物理 SPI。
     pub fn object_typed(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.object_as(column_index, target_type),
@@ -1066,8 +1077,8 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.object_by_label_as(column_label, target_type),
@@ -1135,7 +1146,7 @@ impl DruidPooledResultSet {
         result
     }
 
-    /// 按下标读取布尔值；SQL NULL 与 JDBC 一致返回 false。
+    /// 按下标读取布尔值；SQL NULL 与 RDBC 一致返回 false。
     pub fn boolean(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1175,7 +1186,7 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按下标读取 i64；SQL NULL 与 JDBC 一致返回 0。
+    /// 按下标读取 i64；SQL NULL 与 RDBC 一致返回 0。
     pub fn long(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1504,7 +1515,7 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 使用已废弃 JDBC scale 重载按下标读取 Decimal。
+    /// 使用已废弃 RDBC scale 重载按下标读取 Decimal。
     ///
     /// 对应 Java：`DruidPooledResultSet#getBigDecimal(int, int)`。
     pub fn big_decimal_with_scale(
@@ -1528,7 +1539,7 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 使用已废弃 JDBC scale 重载按标签读取 Decimal。
+    /// 使用已废弃 RDBC scale 重载按标签读取 Decimal。
     ///
     /// 对应 Java：`DruidPooledResultSet#getBigDecimal(String, int)`。
     pub fn big_decimal_by_label_with_scale(
@@ -1566,7 +1577,7 @@ impl DruidPooledResultSet {
         self.date_argument(
             connection,
             column_index,
-            JdbcCalendarArgument::unspecified(),
+            RdbcCalendarArgument::unspecified(),
         )
     }
 
@@ -1579,7 +1590,7 @@ impl DruidPooledResultSet {
         self.date_by_label_argument(
             connection,
             column_label,
-            JdbcCalendarArgument::unspecified(),
+            RdbcCalendarArgument::unspecified(),
         )
     }
 
@@ -1590,12 +1601,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<Option<NaiveDate>, DruidError> {
         self.date_argument(
             connection,
             column_index,
-            JdbcCalendarArgument::specified(calendar),
+            RdbcCalendarArgument::specified(calendar),
         )
     }
 
@@ -1604,12 +1615,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<Option<NaiveDate>, DruidError> {
         self.date_by_label_argument(
             connection,
             column_label,
-            JdbcCalendarArgument::specified(calendar),
+            RdbcCalendarArgument::specified(calendar),
         )
     }
 
@@ -1622,7 +1633,7 @@ impl DruidPooledResultSet {
         self.time_argument(
             connection,
             column_index,
-            JdbcCalendarArgument::unspecified(),
+            RdbcCalendarArgument::unspecified(),
         )
     }
 
@@ -1635,7 +1646,7 @@ impl DruidPooledResultSet {
         self.time_by_label_argument(
             connection,
             column_label,
-            JdbcCalendarArgument::unspecified(),
+            RdbcCalendarArgument::unspecified(),
         )
     }
 
@@ -1644,12 +1655,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<Option<NaiveTime>, DruidError> {
         self.time_argument(
             connection,
             column_index,
-            JdbcCalendarArgument::specified(calendar),
+            RdbcCalendarArgument::specified(calendar),
         )
     }
 
@@ -1658,12 +1669,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<Option<NaiveTime>, DruidError> {
         self.time_by_label_argument(
             connection,
             column_label,
-            JdbcCalendarArgument::specified(calendar),
+            RdbcCalendarArgument::specified(calendar),
         )
     }
 
@@ -1676,7 +1687,7 @@ impl DruidPooledResultSet {
         self.timestamp_argument(
             connection,
             column_index,
-            JdbcCalendarArgument::unspecified(),
+            RdbcCalendarArgument::unspecified(),
         )
     }
 
@@ -1689,7 +1700,7 @@ impl DruidPooledResultSet {
         self.timestamp_by_label_argument(
             connection,
             column_label,
-            JdbcCalendarArgument::unspecified(),
+            RdbcCalendarArgument::unspecified(),
         )
     }
 
@@ -1698,12 +1709,12 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         self.timestamp_argument(
             connection,
             column_index,
-            JdbcCalendarArgument::specified(calendar),
+            RdbcCalendarArgument::specified(calendar),
         )
     }
 
@@ -1712,23 +1723,23 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         self.timestamp_by_label_argument(
             connection,
             column_label,
-            JdbcCalendarArgument::specified(calendar),
+            RdbcCalendarArgument::specified(calendar),
         )
     }
 
-    /// 按下标读取 JDBC `Ref`。
+    /// 按下标读取 RDBC `Ref`。
     ///
     /// 对应 Java：`DruidPooledResultSet#getRef(int)`。
     pub fn reference(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcRef>, DruidError> {
+    ) -> Result<Option<RdbcRef>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.reference(column_index),
@@ -1739,12 +1750,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 JDBC `Ref`。
+    /// 按标签读取 RDBC `Ref`。
     pub fn reference_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcRef>, DruidError> {
+    ) -> Result<Option<RdbcRef>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.reference_by_label(column_label),
@@ -1759,12 +1770,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按下标读取 JDBC `Blob`。
+    /// 按下标读取 RDBC `Blob`。
     pub fn blob(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcBlob>, DruidError> {
+    ) -> Result<Option<RdbcBlob>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.blob(column_index),
@@ -1783,12 +1794,12 @@ impl DruidPooledResultSet {
         result
     }
 
-    /// 按标签读取 JDBC `Blob`。
+    /// 按标签读取 RDBC `Blob`。
     pub fn blob_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcBlob>, DruidError> {
+    ) -> Result<Option<RdbcBlob>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.blob_by_label(column_label),
@@ -1807,12 +1818,12 @@ impl DruidPooledResultSet {
         result
     }
 
-    /// 按下标读取 JDBC `Clob`。
+    /// 按下标读取 RDBC `Clob`。
     pub fn clob(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcClob>, DruidError> {
+    ) -> Result<Option<RdbcClob>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.clob(column_index),
@@ -1831,12 +1842,12 @@ impl DruidPooledResultSet {
         result
     }
 
-    /// 按标签读取 JDBC `Clob`。
+    /// 按标签读取 RDBC `Clob`。
     pub fn clob_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcClob>, DruidError> {
+    ) -> Result<Option<RdbcClob>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.clob_by_label(column_label),
@@ -1888,12 +1899,12 @@ impl DruidPooledResultSet {
             .map(|clob| clob.map(|clob| ClobProxyImpl::new(connection_id, clob, filter_chain)))
     }
 
-    /// 按下标读取 JDBC `Array`。
+    /// 按下标读取 RDBC `Array`。
     pub fn array(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.array(column_index),
@@ -1908,12 +1919,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 JDBC `Array`。
+    /// 按标签读取 RDBC `Array`。
     pub fn array_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.array_by_label(column_label),
@@ -1928,12 +1939,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按下标读取 JDBC `URL`。
+    /// 按下标读取 RDBC `URL`。
     pub fn url(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcUrl>, DruidError> {
+    ) -> Result<Option<RdbcUrl>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.url(column_index),
@@ -1944,12 +1955,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 JDBC `URL`。
+    /// 按标签读取 RDBC `URL`。
     pub fn url_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcUrl>, DruidError> {
+    ) -> Result<Option<RdbcUrl>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.url_by_label(column_label),
@@ -1964,12 +1975,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按下标读取 JDBC `RowId`。
+    /// 按下标读取 RDBC `RowId`。
     pub fn row_id(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_id(column_index),
@@ -1984,12 +1995,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 JDBC `RowId`。
+    /// 按标签读取 RDBC `RowId`。
     pub fn row_id_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_id_by_label(column_label),
@@ -2004,12 +2015,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按下标读取 JDBC `NClob`。
+    /// 按下标读取 RDBC `NClob`。
     pub fn n_clob(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_clob(column_index),
@@ -2024,12 +2035,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 JDBC `NClob`。
+    /// 按标签读取 RDBC `NClob`。
     pub fn n_clob_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_clob_by_label(column_label),
@@ -2077,12 +2088,12 @@ impl DruidPooledResultSet {
             })
     }
 
-    /// 按下标读取 JDBC `SQLXML`。
+    /// 按下标读取 RDBC `SQLXML`。
     pub fn sql_xml(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.sql_xml(column_index),
@@ -2097,12 +2108,12 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 JDBC `SQLXML`。
+    /// 按标签读取 RDBC `SQLXML`。
     pub fn sql_xml_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.sql_xml_by_label(column_label),
@@ -2286,7 +2297,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -2308,7 +2319,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -2330,7 +2341,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
@@ -2359,7 +2370,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
@@ -2447,7 +2458,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -2462,7 +2473,7 @@ impl DruidPooledResultSet {
                 column_index,
                 &ResultSetUpdate::NCharacterStream {
                     reader: reader.cloned(),
-                    length: JdbcCharacterLength::Unspecified,
+                    length: RdbcCharacterLength::Unspecified,
                 },
             )
         };
@@ -2474,7 +2485,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
@@ -2489,7 +2500,7 @@ impl DruidPooledResultSet {
                 column_label,
                 &ResultSetUpdate::NCharacterStream {
                     reader: reader.cloned(),
-                    length: JdbcCharacterLength::Unspecified,
+                    length: RdbcCharacterLength::Unspecified,
                 },
             )
         };
@@ -2501,7 +2512,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
@@ -2518,7 +2529,7 @@ impl DruidPooledResultSet {
                 column_index,
                 &ResultSetUpdate::NCharacterStream {
                     reader: reader.cloned(),
-                    length: JdbcCharacterLength::Long(length),
+                    length: RdbcCharacterLength::Long(length),
                 },
             )
         };
@@ -2530,7 +2541,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
@@ -2547,7 +2558,7 @@ impl DruidPooledResultSet {
                 column_label,
                 &ResultSetUpdate::NCharacterStream {
                     reader: reader.cloned(),
-                    length: JdbcCharacterLength::Long(length),
+                    length: RdbcCharacterLength::Long(length),
                 },
             )
         };
@@ -2559,7 +2570,7 @@ impl DruidPooledResultSet {
         update_reference_by_label,
         result_set_update_reference,
         result_set_update_reference_by_label,
-        JdbcRef,
+        RdbcRef,
         "updateRef"
     );
     resource_update_pair!(
@@ -2567,7 +2578,7 @@ impl DruidPooledResultSet {
         update_blob_by_label,
         result_set_update_blob,
         result_set_update_blob_by_label,
-        JdbcBlob,
+        RdbcBlob,
         "updateBlob"
     );
     resource_update_pair!(
@@ -2575,7 +2586,7 @@ impl DruidPooledResultSet {
         update_clob_by_label,
         result_set_update_clob,
         result_set_update_clob_by_label,
-        JdbcClob,
+        RdbcClob,
         "updateClob"
     );
     resource_update_pair!(
@@ -2583,7 +2594,7 @@ impl DruidPooledResultSet {
         update_array_by_label,
         result_set_update_array,
         result_set_update_array_by_label,
-        JdbcArray,
+        RdbcArray,
         "updateArray"
     );
     resource_update_pair!(
@@ -2591,7 +2602,7 @@ impl DruidPooledResultSet {
         update_row_id_by_label,
         result_set_update_row_id,
         result_set_update_row_id_by_label,
-        JdbcRowId,
+        RdbcRowId,
         "updateRowId"
     );
     resource_update_pair!(
@@ -2599,7 +2610,7 @@ impl DruidPooledResultSet {
         update_n_clob_by_label,
         result_set_update_n_clob,
         result_set_update_n_clob_by_label,
-        JdbcNClob,
+        RdbcNClob,
         "updateNClob"
     );
     resource_update_pair!(
@@ -2607,7 +2618,7 @@ impl DruidPooledResultSet {
         update_sql_xml_by_label,
         result_set_update_sql_xml,
         result_set_update_sql_xml_by_label,
-        JdbcSqlXml,
+        RdbcSqlXml,
         "updateSQLXML"
     );
 
@@ -2616,13 +2627,13 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        stream: Option<&JdbcInputStream>,
+        stream: Option<&RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.update_blob_stream_argument(
             connection,
             column_index,
             stream,
-            JdbcStreamLength::Unspecified,
+            RdbcStreamLength::Unspecified,
         )
     }
 
@@ -2631,13 +2642,13 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        stream: Option<&JdbcInputStream>,
+        stream: Option<&RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.update_blob_stream_by_label_argument(
             connection,
             column_label,
             stream,
-            JdbcStreamLength::Unspecified,
+            RdbcStreamLength::Unspecified,
         )
     }
 
@@ -2646,14 +2657,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        stream: Option<&JdbcInputStream>,
+        stream: Option<&RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.update_blob_stream_argument(
             connection,
             column_index,
             stream,
-            JdbcStreamLength::Long(length),
+            RdbcStreamLength::Long(length),
         )
     }
 
@@ -2662,14 +2673,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        stream: Option<&JdbcInputStream>,
+        stream: Option<&RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.update_blob_stream_by_label_argument(
             connection,
             column_label,
             stream,
-            JdbcStreamLength::Long(length),
+            RdbcStreamLength::Long(length),
         )
     }
 
@@ -2678,13 +2689,13 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
     ) -> Result<(), DruidError> {
         self.update_clob_reader_argument(
             connection,
             column_index,
             reader,
-            JdbcCharacterLength::Unspecified,
+            RdbcCharacterLength::Unspecified,
         )
     }
 
@@ -2693,13 +2704,13 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
     ) -> Result<(), DruidError> {
         self.update_clob_reader_by_label_argument(
             connection,
             column_label,
             reader,
-            JdbcCharacterLength::Unspecified,
+            RdbcCharacterLength::Unspecified,
         )
     }
 
@@ -2708,14 +2719,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.update_clob_reader_argument(
             connection,
             column_index,
             reader,
-            JdbcCharacterLength::Long(length),
+            RdbcCharacterLength::Long(length),
         )
     }
 
@@ -2724,14 +2735,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.update_clob_reader_by_label_argument(
             connection,
             column_label,
             reader,
-            JdbcCharacterLength::Long(length),
+            RdbcCharacterLength::Long(length),
         )
     }
 
@@ -2740,13 +2751,13 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
     ) -> Result<(), DruidError> {
         self.update_n_clob_reader_argument(
             connection,
             column_index,
             reader,
-            JdbcCharacterLength::Unspecified,
+            RdbcCharacterLength::Unspecified,
         )
     }
 
@@ -2755,13 +2766,13 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
     ) -> Result<(), DruidError> {
         self.update_n_clob_reader_by_label_argument(
             connection,
             column_label,
             reader,
-            JdbcCharacterLength::Unspecified,
+            RdbcCharacterLength::Unspecified,
         )
     }
 
@@ -2770,14 +2781,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.update_n_clob_reader_argument(
             connection,
             column_index,
             reader,
-            JdbcCharacterLength::Long(length),
+            RdbcCharacterLength::Long(length),
         )
     }
 
@@ -2786,14 +2797,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
+        reader: Option<&RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.update_n_clob_reader_by_label_argument(
             connection,
             column_label,
             reader,
-            JdbcCharacterLength::Long(length),
+            RdbcCharacterLength::Long(length),
         )
     }
 
@@ -2845,7 +2856,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.ascii_stream(column_index),
@@ -2869,7 +2880,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.ascii_stream_by_label(column_label),
@@ -2893,7 +2904,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.unicode_stream(column_index),
@@ -2913,7 +2924,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.unicode_stream_by_label(column_label),
@@ -2933,7 +2944,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.binary_stream(column_index),
@@ -2957,7 +2968,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.binary_stream_by_label(column_label),
@@ -2981,7 +2992,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.character_stream(column_index),
@@ -3005,7 +3016,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.character_stream_by_label(column_label),
@@ -3029,7 +3040,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_character_stream(column_index),
@@ -3049,7 +3060,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_character_stream_by_label(column_label),
@@ -3173,7 +3184,7 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 返回当前 JDBC 行号。
+    /// 返回当前 RDBC 行号。
     pub fn row(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
@@ -3546,18 +3557,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<Option<NaiveDate>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.date(column_index, &calendar),
             |chain| match &calendar {
-                JdbcCalendarArgument::Unspecified => chain.result_set_get_date(
+                RdbcCalendarArgument::Unspecified => chain.result_set_get_date(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                 ),
-                JdbcCalendarArgument::Specified(_) => chain.result_set_get_date_with_calendar(
+                RdbcCalendarArgument::Specified(_) => chain.result_set_get_date_with_calendar(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
@@ -3572,18 +3583,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<Option<NaiveDate>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.date_by_label(column_label, &calendar),
             |chain| match &calendar {
-                JdbcCalendarArgument::Unspecified => chain.result_set_get_date_by_label(
+                RdbcCalendarArgument::Unspecified => chain.result_set_get_date_by_label(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_label,
                 ),
-                JdbcCalendarArgument::Specified(_) => chain
+                RdbcCalendarArgument::Specified(_) => chain
                     .result_set_get_date_by_label_with_calendar(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3599,18 +3610,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<Option<NaiveTime>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.time(column_index, &calendar),
             |chain| match &calendar {
-                JdbcCalendarArgument::Unspecified => chain.result_set_get_time(
+                RdbcCalendarArgument::Unspecified => chain.result_set_get_time(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                 ),
-                JdbcCalendarArgument::Specified(_) => chain.result_set_get_time_with_calendar(
+                RdbcCalendarArgument::Specified(_) => chain.result_set_get_time_with_calendar(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
@@ -3625,18 +3636,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<Option<NaiveTime>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.time_by_label(column_label, &calendar),
             |chain| match &calendar {
-                JdbcCalendarArgument::Unspecified => chain.result_set_get_time_by_label(
+                RdbcCalendarArgument::Unspecified => chain.result_set_get_time_by_label(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_label,
                 ),
-                JdbcCalendarArgument::Specified(_) => chain
+                RdbcCalendarArgument::Specified(_) => chain
                     .result_set_get_time_by_label_with_calendar(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3652,18 +3663,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.timestamp(column_index, &calendar),
             |chain| match &calendar {
-                JdbcCalendarArgument::Unspecified => chain.result_set_get_timestamp(
+                RdbcCalendarArgument::Unspecified => chain.result_set_get_timestamp(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                 ),
-                JdbcCalendarArgument::Specified(_) => chain.result_set_get_timestamp_with_calendar(
+                RdbcCalendarArgument::Specified(_) => chain.result_set_get_timestamp_with_calendar(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
@@ -3678,18 +3689,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.timestamp_by_label(column_label, &calendar),
             |chain| match &calendar {
-                JdbcCalendarArgument::Unspecified => chain.result_set_get_timestamp_by_label(
+                RdbcCalendarArgument::Unspecified => chain.result_set_get_timestamp_by_label(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_label,
                 ),
-                JdbcCalendarArgument::Specified(_) => chain
+                RdbcCalendarArgument::Specified(_) => chain
                     .result_set_get_timestamp_by_label_with_calendar(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3705,26 +3716,26 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        stream: Option<&JdbcInputStream>,
-        length: JdbcStreamLength,
+        stream: Option<&RdbcInputStream>,
+        length: RdbcStreamLength,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                JdbcStreamLength::Unspecified => chain.result_set_update_blob_stream(
+                RdbcStreamLength::Unspecified => chain.result_set_update_blob_stream(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                     stream.cloned(),
                 ),
-                JdbcStreamLength::Long(length) => chain.result_set_update_blob_stream_with_length(
+                RdbcStreamLength::Long(length) => chain.result_set_update_blob_stream_with_length(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                     stream.cloned(),
                     length,
                 ),
-                JdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
+                RdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
             }
         } else {
             self.physical
@@ -3737,19 +3748,19 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        stream: Option<&JdbcInputStream>,
-        length: JdbcStreamLength,
+        stream: Option<&RdbcInputStream>,
+        length: RdbcStreamLength,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                JdbcStreamLength::Unspecified => chain.result_set_update_blob_stream_by_label(
+                RdbcStreamLength::Unspecified => chain.result_set_update_blob_stream_by_label(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_label,
                     stream.cloned(),
                 ),
-                JdbcStreamLength::Long(length) => chain
+                RdbcStreamLength::Long(length) => chain
                     .result_set_update_blob_stream_by_label_with_length(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3757,7 +3768,7 @@ impl DruidPooledResultSet {
                         stream.cloned(),
                         length,
                     ),
-                JdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
+                RdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
             }
         } else {
             self.physical
@@ -3770,19 +3781,19 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                JdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader(
+                RdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                     reader.cloned(),
                 ),
-                JdbcCharacterLength::Long(length) => chain
+                RdbcCharacterLength::Long(length) => chain
                     .result_set_update_clob_reader_with_length(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3790,7 +3801,7 @@ impl DruidPooledResultSet {
                         reader.cloned(),
                         length,
                     ),
-                JdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
+                RdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
             }
         } else {
             self.physical
@@ -3803,19 +3814,19 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                JdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader_by_label(
+                RdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader_by_label(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_label,
                     reader.cloned(),
                 ),
-                JdbcCharacterLength::Long(length) => chain
+                RdbcCharacterLength::Long(length) => chain
                     .result_set_update_clob_reader_by_label_with_length(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3823,7 +3834,7 @@ impl DruidPooledResultSet {
                         reader.cloned(),
                         length,
                     ),
-                JdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
+                RdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
             }
         } else {
             self.physical
@@ -3836,19 +3847,19 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                JdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader(
+                RdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_index,
                     reader.cloned(),
                 ),
-                JdbcCharacterLength::Long(length) => chain
+                RdbcCharacterLength::Long(length) => chain
                     .result_set_update_n_clob_reader_with_length(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3856,7 +3867,7 @@ impl DruidPooledResultSet {
                         reader.cloned(),
                         length,
                     ),
-                JdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
+                RdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
             }
         } else {
             self.physical
@@ -3869,19 +3880,19 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                JdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader_by_label(
+                RdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader_by_label(
                     self.physical.as_ref(),
                     &self.filter_context,
                     column_label,
                     reader.cloned(),
                 ),
-                JdbcCharacterLength::Long(length) => chain
+                RdbcCharacterLength::Long(length) => chain
                     .result_set_update_n_clob_reader_by_label_with_length(
                         self.physical.as_ref(),
                         &self.filter_context,
@@ -3889,7 +3900,7 @@ impl DruidPooledResultSet {
                         reader.cloned(),
                         length,
                     ),
-                JdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
+                RdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
             }
         } else {
             self.physical
@@ -3936,10 +3947,10 @@ impl DruidPooledResultSet {
         self.statement.record_blob_open();
     }
 
-    fn record_object_lob_open(&self, value: &JdbcObject) {
+    fn record_object_lob_open(&self, value: &RdbcObject) {
         match value {
-            JdbcObject::Blob(_) => self.record_blob_open(),
-            JdbcObject::Clob(_) | JdbcObject::NClob(_) => self.record_clob_open(),
+            RdbcObject::Blob(_) => self.record_blob_open(),
+            RdbcObject::Clob(_) | RdbcObject::NClob(_) => self.record_clob_open(),
             _ => {}
         }
     }

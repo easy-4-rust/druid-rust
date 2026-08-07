@@ -1,4 +1,4 @@
-//! JDBC `SQLWarning` 的平台值对象。
+//! RDBC `SQLWarning` 的平台值对象。
 //!
 //! 对应 Java：`java.sql.SQLWarning`。警告不是普通字符串：必须保留
 //! SQLState、vendor code 和 warning 链。

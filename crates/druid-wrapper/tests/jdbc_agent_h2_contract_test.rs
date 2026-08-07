@@ -107,6 +107,58 @@ async fn jdbc_agent_h2_contract_when_configured() {
         assert_eq!(connection.schema(), Some("PUBLIC"));
     }
 
+    {
+        let mut metadata = connection
+            .database_meta_data()
+            .expect("JDBC Agent 必须暴露握手捕获的真实数据库元数据");
+        assert_eq!(
+            metadata
+                .get_database_product_name()
+                .await
+                .expect("必须读取数据库产品名")
+                .as_deref(),
+            Some("H2")
+        );
+        assert!(metadata
+            .get_driver_name()
+            .await
+            .expect("必须读取 JDBC driver 名称")
+            .is_some_and(|name| !name.is_empty()));
+    }
+
+    if connection.capabilities().savepoints {
+        connection.begin().await.expect("保存点合同必须开始事务");
+        let savepoint = connection
+            .set_savepoint_named("druid_h2_contract")
+            .await
+            .expect("H2 必须创建远程命名保存点");
+        connection
+            .exec("DELETE FROM sample WHERE id = 1", Vec::new())
+            .await
+            .expect("保存点后的更新必须成功");
+        connection
+            .rollback_to(&savepoint)
+            .await
+            .expect("必须按远程 savepointId 回滚");
+        connection
+            .release_savepoint(&savepoint)
+            .await
+            .expect("必须释放 Agent session 中的保存点");
+        connection.commit().await.expect("保存点事务必须提交");
+        connection
+            .set_auto_commit(true)
+            .await
+            .expect("保存点事务后必须恢复 autoCommit");
+        assert_eq!(
+            connection
+                .fetch("SELECT id FROM sample WHERE id = 1", Vec::new())
+                .await
+                .expect("回滚到保存点后必须可查询")
+                .len(),
+            1
+        );
+    }
+
     connection.begin().await.expect("必须开始事务");
     connection
         .exec("DELETE FROM sample", Vec::new())

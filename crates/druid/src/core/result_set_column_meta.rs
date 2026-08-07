@@ -1,4 +1,4 @@
-//! JDBC 结果集单列 metadata 描述。
+//! RDBC 结果集单列 metadata 描述。
 //!
 //! 对应 Java 平台对象 `java.sql.ResultSetMetaData` 的单列返回值集合。该 Rust
 //! 描述符保留 driver 已知字段；未知 origin/shape 使用空值或零，不从 SQL 文本猜测。
@@ -102,7 +102,7 @@ impl ResultSetColumnMeta {
         self
     }
 
-    /// 覆盖 JDBC 布尔属性，参数顺序与本对象字段顺序一致。
+    /// 覆盖 RDBC 布尔属性，参数顺序与本对象字段顺序一致。
     #[allow(clippy::too_many_arguments)]
     pub fn with_flags(
         mut self,

@@ -277,6 +277,33 @@ async fn profile_builder_keeps_canonical_druid_pool() {
 }
 
 #[tokio::test]
+async fn unified_rdbc_url_routes_through_catalog_into_real_sqlite_driver() {
+    let pool = DruidDatabasePoolBuilder::from_rdbc_url("rdbc://sqlite/:memory:")
+        .expect("统一 RDBC URL 必须可解析")
+        .name("unified-rdbc-sqlite")
+        .build()
+        .await
+        .expect("RDBC URL 必须转换为真实 SQLite URL 并构建 DruidPool");
+    let mut connection = pool.get().await.expect("RDBC SQLite 必须可借出连接");
+    let rows = connection
+        .fetch("SELECT 1", Vec::new())
+        .await
+        .expect("RDBC 转换后的真实连接必须可查询");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(pool.state().url, "rdbc://sqlite/:memory:");
+    drop(connection);
+    pool.close().await;
+}
+
+#[test]
+fn unified_rdbc_url_rejects_non_rdbc_scheme_and_user_info() {
+    assert!(DruidDatabasePoolBuilder::from_rdbc_url("mysql://localhost/app").is_err());
+    assert!(
+        DruidDatabasePoolBuilder::from_rdbc_url("rdbc://user:secret@mysql/localhost/app").is_err()
+    );
+}
+
+#[tokio::test]
 async fn profile_builder_installs_protocol_family_checker_and_sorter() {
     let mysql_pool = DruidDatabasePoolBuilder::new("tidb", "mysql://localhost/contract")
         .build()

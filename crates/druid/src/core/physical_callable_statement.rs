@@ -4,8 +4,8 @@
 
 use super::{
     CallableCalendarArgument, CallableInputParameter, CallableOutParameter, CallableParameter,
-    DruidError, JdbcArray, JdbcBlob, JdbcClob, JdbcNClob, JdbcObject, JdbcReader, JdbcRef,
-    JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl, PhysicalPreparedStatement, Value,
+    DruidError, PhysicalPreparedStatement, RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcObject,
+    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcTargetType, RdbcTypeMap, RdbcUrl, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -34,7 +34,7 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     ) -> Result<(), DruidError>;
 
     /// 读取 OUT 参数值。
-    fn out_parameter(&self, parameter: &CallableParameter) -> Result<JdbcObject, DruidError>;
+    fn out_parameter(&self, parameter: &CallableParameter) -> Result<RdbcObject, DruidError>;
 
     /// 使用 Java `Map<String, Class<?>>` 类型映射读取 OUT 参数。
     ///
@@ -43,8 +43,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn out_parameter_with_type_map(
         &self,
         _parameter: &CallableParameter,
-        _type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        _type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "callable_out_parameter_with_type_map",
         })
@@ -54,8 +54,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn out_parameter_as(
         &self,
         _parameter: &CallableParameter,
-        _target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        _target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "callable_out_parameter_as",
         })
@@ -72,8 +72,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         parameter: &CallableParameter,
     ) -> Result<Option<String>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Scalar(Value::String(value)) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Scalar(Value::String(value)) => Ok(Some(value)),
             other => Err(callable_type_error("String", &other)),
         }
     }
@@ -86,8 +86,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         parameter: &CallableParameter,
     ) -> Result<Option<String>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::NString(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::NString(value) => Ok(Some(value)),
             other => Err(callable_type_error("NString", &other)),
         }
     }
@@ -96,10 +96,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn url_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcUrl>, DruidError> {
+    ) -> Result<Option<RdbcUrl>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Url(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Url(value) => Ok(Some(value)),
             other => Err(callable_type_error("URL", &other)),
         }
     }
@@ -108,10 +108,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn ref_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcRef>, DruidError> {
+    ) -> Result<Option<RdbcRef>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Ref(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Ref(value) => Ok(Some(value)),
             other => Err(callable_type_error("Ref", &other)),
         }
     }
@@ -120,10 +120,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn array_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Array(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Array(value) => Ok(Some(value)),
             other => Err(callable_type_error("Array", &other)),
         }
     }
@@ -132,10 +132,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn row_id_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::RowId(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::RowId(value) => Ok(Some(value)),
             other => Err(callable_type_error("RowId", &other)),
         }
     }
@@ -144,10 +144,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn sql_xml_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::SqlXml(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::SqlXml(value) => Ok(Some(value)),
             other => Err(callable_type_error("SQLXML", &other)),
         }
     }
@@ -157,8 +157,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     /// 对应 Java：`CallableStatement#getBoolean(int/String)`。
     fn boolean_out_parameter(&self, parameter: &CallableParameter) -> Result<bool, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(false),
-            JdbcObject::Scalar(Value::Bool(value)) => Ok(value),
+            RdbcObject::Scalar(Value::Null) => Ok(false),
+            RdbcObject::Scalar(Value::Bool(value)) => Ok(value),
             other => Err(callable_type_error("boolean", &other)),
         }
     }
@@ -210,8 +210,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     /// 对应 Java：`CallableStatement#getDouble(int/String)`。
     fn double_out_parameter(&self, parameter: &CallableParameter) -> Result<f64, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(0.0),
-            JdbcObject::Scalar(Value::Float(value)) => Ok(value),
+            RdbcObject::Scalar(Value::Null) => Ok(0.0),
+            RdbcObject::Scalar(Value::Float(value)) => Ok(value),
             other => Err(callable_type_error("floating point", &other)),
         }
     }
@@ -224,8 +224,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         parameter: &CallableParameter,
     ) -> Result<Option<Vec<u8>>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Scalar(Value::Bytes(value)) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Scalar(Value::Bytes(value)) => Ok(Some(value)),
             other => Err(callable_type_error("bytes", &other)),
         }
     }
@@ -237,10 +237,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn blob_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcBlob>, DruidError> {
+    ) -> Result<Option<RdbcBlob>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Blob(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Blob(value) => Ok(Some(value)),
             other => Err(callable_type_error("Blob", &other)),
         }
     }
@@ -251,10 +251,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn clob_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcClob>, DruidError> {
+    ) -> Result<Option<RdbcClob>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Clob(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Clob(value) => Ok(Some(value)),
             other => Err(callable_type_error("Clob", &other)),
         }
     }
@@ -265,10 +265,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn n_clob_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::NClob(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::NClob(value) => Ok(Some(value)),
             other => Err(callable_type_error("NClob", &other)),
         }
     }
@@ -279,10 +279,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn character_stream_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::CharacterStream(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::CharacterStream(value) => Ok(Some(value)),
             other => Err(callable_type_error("CharacterStream", &other)),
         }
     }
@@ -293,10 +293,10 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     fn n_character_stream_out_parameter(
         &self,
         parameter: &CallableParameter,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::NCharacterStream(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::NCharacterStream(value) => Ok(Some(value)),
             other => Err(callable_type_error("NCharacterStream", &other)),
         }
     }
@@ -309,13 +309,13 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         parameter: &CallableParameter,
     ) -> Result<Option<BigDecimal>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::BigDecimal(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::BigDecimal(value) => Ok(Some(value)),
             other => Err(callable_type_error("BigDecimal", &other)),
         }
     }
 
-    /// 使用已废弃 JDBC scale 重载读取 Decimal OUT 参数。
+    /// 使用已废弃 RDBC scale 重载读取 Decimal OUT 参数。
     ///
     /// 对应 Java：`CallableStatement#getBigDecimal(int, int)`。真实驱动可覆盖该
     /// 方法以使用自身舍入规则；默认实现保持数值并调整 scale。
@@ -338,8 +338,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         _calendar: &CallableCalendarArgument,
     ) -> Result<Option<NaiveDate>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Date(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Date(value) => Ok(Some(value)),
             other => Err(callable_type_error("Date", &other)),
         }
     }
@@ -353,8 +353,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         _calendar: &CallableCalendarArgument,
     ) -> Result<Option<NaiveTime>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Time(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Time(value) => Ok(Some(value)),
             other => Err(callable_type_error("Time", &other)),
         }
     }
@@ -368,8 +368,8 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
         _calendar: &CallableCalendarArgument,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(None),
-            JdbcObject::Timestamp(value) => Ok(Some(value)),
+            RdbcObject::Scalar(Value::Null) => Ok(None),
+            RdbcObject::Timestamp(value) => Ok(Some(value)),
             other => Err(callable_type_error("Timestamp", &other)),
         }
     }
@@ -377,14 +377,14 @@ pub trait PhysicalCallableStatement: PhysicalPreparedStatement {
     /// 将通用 OUT 值读取为整数。
     fn integer_out_parameter(&self, parameter: &CallableParameter) -> Result<i64, DruidError> {
         match self.out_parameter(parameter)? {
-            JdbcObject::Scalar(Value::Null) => Ok(0),
-            JdbcObject::Scalar(Value::Int(value)) => Ok(value),
+            RdbcObject::Scalar(Value::Null) => Ok(0),
+            RdbcObject::Scalar(Value::Int(value)) => Ok(value),
             other => Err(callable_type_error("integer", &other)),
         }
     }
 }
 
-fn callable_type_error(expected: &str, actual: &JdbcObject) -> DruidError {
+fn callable_type_error(expected: &str, actual: &RdbcObject) -> DruidError {
     DruidError::DriverError(format!(
         "CallableStatement expected {expected} OUT parameter, got {actual}"
     ))

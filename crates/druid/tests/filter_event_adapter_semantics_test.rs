@@ -257,7 +257,7 @@ async fn default_anonymous_adapter_preserves_every_java_no_op_template() {
     ResultSetFilter::result_set_open_after(&adapter, &ResultSetFilterContext::new()).unwrap();
 
     // RUST_OBLIGATION / V1_RUST_LOCAL：
-    // Rust 物理 SPI 的 u64 更新计数若超出 JDBC int，必须成为可分类错误，而不是
+    // Rust 物理 SPI 的 u64 更新计数若超出 RDBC int，必须成为可分类错误，而不是
     // 截断；默认 error-after 仍放行，原范围错误保持主错误。
     context.operation = ExecOperation::Update;
     let overflow = Ok(ExecResult {
@@ -268,7 +268,7 @@ async fn default_anonymous_adapter_preserves_every_java_no_op_template() {
     assert!(matches!(
         AfterFilter::after(&adapter, &context, &overflow, Duration::ZERO).await,
         Err(DruidError::InvalidArgument(message))
-            if message == "update count exceeds JDBC int range: 18446744073709551615"
+            if message == "update count exceeds RDBC int range: 18446744073709551615"
     ));
 }
 
@@ -588,7 +588,7 @@ async fn real_toasty_sqlite_preserves_operation_specific_success_and_error_event
         .any(|event| event == &format!("sqlite:update_after:{prepared_sql}:1")));
 
     // SOURCE_PARITY / V0_STATIC + V1_RUST_LOCAL + V5_HOST：
-    // Java JdbcFilterEventAdapterTest 的 SQLException 分支要求错误原样传播。
+    // Java RdbcFilterEventAdapterTest 的 SQLException 分支要求错误原样传播。
     // 该 Java 测试没有校验事件次数，且本用例没有复制其全部 45 个异常分支，
     // 因此不冒充 V2_MIRRORED；这里只证明真实 SQLite 查询错误同时触发 error-after。
     assert!(recorded

@@ -3,13 +3,13 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, DruidPooledConnection, DruidPooledResultSet, JdbcArray, JdbcBlob, JdbcCalendar,
-    JdbcCalendarArgument, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject,
-    JdbcOpaqueObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType,
-    JdbcTypeMap, JdbcUrl, PhysicalConnection, PhysicalConnectionFactory, PhysicalJdbcOpaqueObject,
-    PhysicalResultSet, PhysicalResultSetMetaData, ResultSetColumnMeta, ResultSetColumnType,
-    ResultSetMetaData, ResultSetNullability, ResultSetUpdate, Row, RowSetResultSet, SqlWarning,
-    Value, Wrapper, WrapperExt,
+    DruidError, DruidPooledConnection, DruidPooledResultSet, PhysicalConnection,
+    PhysicalConnectionFactory, PhysicalRdbcOpaqueObject, PhysicalResultSet,
+    PhysicalResultSetMetaData, RdbcArray, RdbcBlob, RdbcCalendar, RdbcCalendarArgument,
+    RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOpaqueObject,
+    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap,
+    RdbcUrl, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData, ResultSetNullability,
+    ResultSetUpdate, Row, RowSetResultSet, SqlWarning, Value, Wrapper, WrapperExt,
 };
 use druid::toasty::ToastyConnectionFactory;
 use std::any::{Any, TypeId};
@@ -22,7 +22,7 @@ struct VendorObjectProbe {
     id: i32,
 }
 
-impl PhysicalJdbcOpaqueObject for VendorObjectProbe {
+impl PhysicalRdbcOpaqueObject for VendorObjectProbe {
     fn class_name(&self) -> &str {
         "com.example.VendorObject"
     }
@@ -59,7 +59,7 @@ fn custom_typed_object_checks_the_physical_column_exactly_once() {
         value_calls: AtomicUsize::new(0),
     };
     assert!(matches!(
-        probe.object_as(3, &JdbcTargetType::Custom("vendor.Type".to_string())),
+        probe.object_as(3, &RdbcTargetType::Custom("vendor.Type".to_string())),
         Err(DruidError::UnsupportedOperation {
             operation: "result_set_get_object_typed_custom"
         })
@@ -293,7 +293,7 @@ fn sparse_result_set_navigation_defaults_report_exact_capabilities() {
 #[test]
 fn sparse_result_set_typed_defaults_preserve_error_priority() {
     let result_set = SparsePhysicalResultSet;
-    let calendar = JdbcCalendarArgument::Unspecified;
+    let calendar = RdbcCalendarArgument::Unspecified;
     assert_unsupported_operation(result_set.big_decimal(1, None), "result_set_value");
     assert_unsupported_operation(
         result_set.big_decimal_by_label("amount", Some(2)),
@@ -323,11 +323,11 @@ fn sparse_result_set_typed_defaults_preserve_error_priority() {
         "result_set_get_object_by_label_with_type_map",
     );
     assert_unsupported_operation(
-        result_set.object_as(1, &JdbcTargetType::Custom("vendor.Type".to_string())),
+        result_set.object_as(1, &RdbcTargetType::Custom("vendor.Type".to_string())),
         "result_set_value",
     );
     assert_unsupported_operation(
-        result_set.object_by_label_as("object", &JdbcTargetType::Custom("vendor.Type".to_string())),
+        result_set.object_by_label_as("object", &RdbcTargetType::Custom("vendor.Type".to_string())),
         "result_set_find_column",
     );
 }
@@ -530,7 +530,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(41)
     }
 
-    fn blob(&self, column_index: usize) -> Result<Option<JdbcBlob>, DruidError> {
+    fn blob(&self, column_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -538,7 +538,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn clob(&self, column_index: usize) -> Result<Option<JdbcClob>, DruidError> {
+    fn clob(&self, column_index: usize) -> Result<Option<RdbcClob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -546,7 +546,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn n_clob(&self, column_index: usize) -> Result<Option<JdbcNClob>, DruidError> {
+    fn n_clob(&self, column_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -554,7 +554,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn array(&self, column_index: usize) -> Result<Option<JdbcArray>, DruidError> {
+    fn array(&self, column_index: usize) -> Result<Option<RdbcArray>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -562,7 +562,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn reference(&self, column_index: usize) -> Result<Option<JdbcRef>, DruidError> {
+    fn reference(&self, column_index: usize) -> Result<Option<RdbcRef>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -570,7 +570,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn row_id(&self, column_index: usize) -> Result<Option<JdbcRowId>, DruidError> {
+    fn row_id(&self, column_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -578,7 +578,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn sql_xml(&self, column_index: usize) -> Result<Option<JdbcSqlXml>, DruidError> {
+    fn sql_xml(&self, column_index: usize) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -586,7 +586,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn url(&self, column_index: usize) -> Result<Option<JdbcUrl>, DruidError> {
+    fn url(&self, column_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -738,12 +738,12 @@ impl PhysicalResultSetMetaData for PhysicalMetaDataProbe {
 enum StrongGetterCall {
     BigDecimalIndex(usize, Option<i32>),
     BigDecimalLabel(String, Option<i32>),
-    DateIndex(usize, JdbcCalendarArgument),
-    DateLabel(String, JdbcCalendarArgument),
-    TimeIndex(usize, JdbcCalendarArgument),
-    TimeLabel(String, JdbcCalendarArgument),
-    TimestampIndex(usize, JdbcCalendarArgument),
-    TimestampLabel(String, JdbcCalendarArgument),
+    DateIndex(usize, RdbcCalendarArgument),
+    DateLabel(String, RdbcCalendarArgument),
+    TimeIndex(usize, RdbcCalendarArgument),
+    TimeLabel(String, RdbcCalendarArgument),
+    TimestampIndex(usize, RdbcCalendarArgument),
+    TimestampLabel(String, RdbcCalendarArgument),
     RefIndex(usize),
     RefLabel(String),
     BlobIndex(usize),
@@ -774,18 +774,18 @@ enum StrongGetterCall {
     UpdateNClobLabel(String, bool),
     UpdateSqlXmlIndex(usize, bool),
     UpdateSqlXmlLabel(String, bool),
-    UpdateBlobStreamIndex(usize, bool, JdbcStreamLength),
-    UpdateBlobStreamLabel(String, bool, JdbcStreamLength),
-    UpdateClobReaderIndex(usize, bool, JdbcCharacterLength),
-    UpdateClobReaderLabel(String, bool, JdbcCharacterLength),
-    UpdateNClobReaderIndex(usize, bool, JdbcCharacterLength),
-    UpdateNClobReaderLabel(String, bool, JdbcCharacterLength),
+    UpdateBlobStreamIndex(usize, bool, RdbcStreamLength),
+    UpdateBlobStreamLabel(String, bool, RdbcStreamLength),
+    UpdateClobReaderIndex(usize, bool, RdbcCharacterLength),
+    UpdateClobReaderLabel(String, bool, RdbcCharacterLength),
+    UpdateNClobReaderIndex(usize, bool, RdbcCharacterLength),
+    UpdateNClobReaderLabel(String, bool, RdbcCharacterLength),
     UpdateValueIndex(usize, ResultSetUpdate),
     UpdateValueLabel(String, ResultSetUpdate),
-    ObjectMapIndex(usize, Option<JdbcTypeMap>),
-    ObjectMapLabel(String, Option<JdbcTypeMap>),
-    ObjectTypedIndex(usize, JdbcTargetType),
-    ObjectTypedLabel(String, JdbcTargetType),
+    ObjectMapIndex(usize, Option<RdbcTypeMap>),
+    ObjectMapLabel(String, Option<RdbcTypeMap>),
+    ObjectTypedIndex(usize, RdbcTargetType),
+    ObjectTypedLabel(String, RdbcTargetType),
 }
 
 #[derive(Debug)]
@@ -847,7 +847,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn date(
         &self,
         column_index: usize,
-        calendar: &JdbcCalendarArgument,
+        calendar: &RdbcCalendarArgument,
     ) -> Result<Option<NaiveDate>, DruidError> {
         self.calls
             .lock()
@@ -859,7 +859,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn date_by_label(
         &self,
         column_label: &str,
-        calendar: &JdbcCalendarArgument,
+        calendar: &RdbcCalendarArgument,
     ) -> Result<Option<NaiveDate>, DruidError> {
         self.calls.lock().unwrap().push(StrongGetterCall::DateLabel(
             column_label.to_string(),
@@ -871,7 +871,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn time(
         &self,
         column_index: usize,
-        calendar: &JdbcCalendarArgument,
+        calendar: &RdbcCalendarArgument,
     ) -> Result<Option<NaiveTime>, DruidError> {
         self.calls
             .lock()
@@ -883,7 +883,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn time_by_label(
         &self,
         column_label: &str,
-        calendar: &JdbcCalendarArgument,
+        calendar: &RdbcCalendarArgument,
     ) -> Result<Option<NaiveTime>, DruidError> {
         self.calls.lock().unwrap().push(StrongGetterCall::TimeLabel(
             column_label.to_string(),
@@ -895,7 +895,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn timestamp(
         &self,
         column_index: usize,
-        calendar: &JdbcCalendarArgument,
+        calendar: &RdbcCalendarArgument,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         self.calls
             .lock()
@@ -910,7 +910,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn timestamp_by_label(
         &self,
         column_label: &str,
-        calendar: &JdbcCalendarArgument,
+        calendar: &RdbcCalendarArgument,
     ) -> Result<Option<NaiveDateTime>, DruidError> {
         self.calls
             .lock()
@@ -922,7 +922,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(NaiveDate::from_ymd_opt(2026, 7, 29).and_then(|date| date.and_hms_opt(13, 14, 15)))
     }
 
-    fn reference(&self, column_index: usize) -> Result<Option<JdbcRef>, DruidError> {
+    fn reference(&self, column_index: usize) -> Result<Option<RdbcRef>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -930,7 +930,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn reference_by_label(&self, column_label: &str) -> Result<Option<JdbcRef>, DruidError> {
+    fn reference_by_label(&self, column_label: &str) -> Result<Option<RdbcRef>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -938,7 +938,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn blob(&self, column_index: usize) -> Result<Option<JdbcBlob>, DruidError> {
+    fn blob(&self, column_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -946,7 +946,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn blob_by_label(&self, column_label: &str) -> Result<Option<JdbcBlob>, DruidError> {
+    fn blob_by_label(&self, column_label: &str) -> Result<Option<RdbcBlob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -954,7 +954,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn clob(&self, column_index: usize) -> Result<Option<JdbcClob>, DruidError> {
+    fn clob(&self, column_index: usize) -> Result<Option<RdbcClob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -962,7 +962,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn clob_by_label(&self, column_label: &str) -> Result<Option<JdbcClob>, DruidError> {
+    fn clob_by_label(&self, column_label: &str) -> Result<Option<RdbcClob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -970,7 +970,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn array(&self, column_index: usize) -> Result<Option<JdbcArray>, DruidError> {
+    fn array(&self, column_index: usize) -> Result<Option<RdbcArray>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -978,7 +978,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn array_by_label(&self, column_label: &str) -> Result<Option<JdbcArray>, DruidError> {
+    fn array_by_label(&self, column_label: &str) -> Result<Option<RdbcArray>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -986,7 +986,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn url(&self, column_index: usize) -> Result<Option<JdbcUrl>, DruidError> {
+    fn url(&self, column_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -994,7 +994,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn url_by_label(&self, column_label: &str) -> Result<Option<JdbcUrl>, DruidError> {
+    fn url_by_label(&self, column_label: &str) -> Result<Option<RdbcUrl>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1002,7 +1002,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn row_id(&self, column_index: usize) -> Result<Option<JdbcRowId>, DruidError> {
+    fn row_id(&self, column_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1010,7 +1010,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn row_id_by_label(&self, column_label: &str) -> Result<Option<JdbcRowId>, DruidError> {
+    fn row_id_by_label(&self, column_label: &str) -> Result<Option<RdbcRowId>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1018,7 +1018,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn n_clob(&self, column_index: usize) -> Result<Option<JdbcNClob>, DruidError> {
+    fn n_clob(&self, column_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1026,7 +1026,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn n_clob_by_label(&self, column_label: &str) -> Result<Option<JdbcNClob>, DruidError> {
+    fn n_clob_by_label(&self, column_label: &str) -> Result<Option<RdbcNClob>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1034,7 +1034,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn sql_xml(&self, column_index: usize) -> Result<Option<JdbcSqlXml>, DruidError> {
+    fn sql_xml(&self, column_index: usize) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1042,7 +1042,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn sql_xml_by_label(&self, column_label: &str) -> Result<Option<JdbcSqlXml>, DruidError> {
+    fn sql_xml_by_label(&self, column_label: &str) -> Result<Option<RdbcSqlXml>, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1053,7 +1053,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_reference(
         &self,
         column_index: usize,
-        value: Option<&JdbcRef>,
+        value: Option<&RdbcRef>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1068,7 +1068,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_reference_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcRef>,
+        value: Option<&RdbcRef>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1080,7 +1080,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(())
     }
 
-    fn update_blob(&self, column_index: usize, value: Option<&JdbcBlob>) -> Result<(), DruidError> {
+    fn update_blob(&self, column_index: usize, value: Option<&RdbcBlob>) -> Result<(), DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1094,7 +1094,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_blob_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcBlob>,
+        value: Option<&RdbcBlob>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1106,7 +1106,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(())
     }
 
-    fn update_clob(&self, column_index: usize, value: Option<&JdbcClob>) -> Result<(), DruidError> {
+    fn update_clob(&self, column_index: usize, value: Option<&RdbcClob>) -> Result<(), DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1120,7 +1120,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_clob_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcClob>,
+        value: Option<&RdbcClob>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1135,7 +1135,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_array(
         &self,
         column_index: usize,
-        value: Option<&JdbcArray>,
+        value: Option<&RdbcArray>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1150,7 +1150,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_array_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcArray>,
+        value: Option<&RdbcArray>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1165,7 +1165,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_row_id(
         &self,
         column_index: usize,
-        value: Option<&JdbcRowId>,
+        value: Option<&RdbcRowId>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1180,7 +1180,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_row_id_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcRowId>,
+        value: Option<&RdbcRowId>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1195,7 +1195,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_n_clob(
         &self,
         column_index: usize,
-        value: Option<&JdbcNClob>,
+        value: Option<&RdbcNClob>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1210,7 +1210,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_n_clob_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcNClob>,
+        value: Option<&RdbcNClob>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1225,7 +1225,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_sql_xml(
         &self,
         column_index: usize,
-        value: Option<&JdbcSqlXml>,
+        value: Option<&RdbcSqlXml>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1240,7 +1240,7 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_sql_xml_by_label(
         &self,
         column_label: &str,
-        value: Option<&JdbcSqlXml>,
+        value: Option<&RdbcSqlXml>,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1255,8 +1255,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_blob_stream(
         &self,
         column_index: usize,
-        stream: Option<&JdbcInputStream>,
-        length: JdbcStreamLength,
+        stream: Option<&RdbcInputStream>,
+        length: RdbcStreamLength,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1272,8 +1272,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_blob_stream_by_label(
         &self,
         column_label: &str,
-        stream: Option<&JdbcInputStream>,
-        length: JdbcStreamLength,
+        stream: Option<&RdbcInputStream>,
+        length: RdbcStreamLength,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1289,8 +1289,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_clob_reader(
         &self,
         column_index: usize,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1306,8 +1306,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_clob_reader_by_label(
         &self,
         column_label: &str,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1323,8 +1323,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_n_clob_reader(
         &self,
         column_index: usize,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1340,8 +1340,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn update_n_clob_reader_by_label(
         &self,
         column_label: &str,
-        reader: Option<&JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<&RdbcReader>,
+        length: RdbcCharacterLength,
     ) -> Result<(), DruidError> {
         self.calls
             .lock()
@@ -1387,8 +1387,8 @@ impl PhysicalResultSet for StrongGetterProbe {
     fn object_with_type_map(
         &self,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1396,14 +1396,14 @@ impl PhysicalResultSet for StrongGetterProbe {
                 column_index,
                 type_map.cloned(),
             ));
-        Ok(JdbcObject::Scalar(Value::Int(71)))
+        Ok(RdbcObject::Scalar(Value::Int(71)))
     }
 
     fn object_by_label_with_type_map(
         &self,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1411,14 +1411,14 @@ impl PhysicalResultSet for StrongGetterProbe {
                 column_label.to_string(),
                 type_map.cloned(),
             ));
-        Ok(JdbcObject::Scalar(Value::Int(72)))
+        Ok(RdbcObject::Scalar(Value::Int(72)))
     }
 
     fn object_as(
         &self,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1426,14 +1426,14 @@ impl PhysicalResultSet for StrongGetterProbe {
                 column_index,
                 target_type.clone(),
             ));
-        Ok(JdbcObject::String("typed-index".to_string()))
+        Ok(RdbcObject::String("typed-index".to_string()))
     }
 
     fn object_by_label_as(
         &self,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         self.calls
             .lock()
             .unwrap()
@@ -1441,7 +1441,7 @@ impl PhysicalResultSet for StrongGetterProbe {
                 column_label.to_string(),
                 target_type.clone(),
             ));
-        Ok(JdbcObject::String("typed-label".to_string()))
+        Ok(RdbcObject::String("typed-label".to_string()))
     }
 }
 
@@ -1811,8 +1811,8 @@ async fn sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor
         .await
         .unwrap();
     assert!(result_set.next(&mut connection).unwrap());
-    let input = JdbcInputStream::from_bytes([1, 2, 3]);
-    let reader = JdbcReader::from_string("严格 SQLite");
+    let input = RdbcInputStream::from_bytes([1, 2, 3]);
+    let reader = RdbcReader::from_string("严格 SQLite");
 
     macro_rules! assert_update_unsupported {
         ($expression:expr, $operation:literal) => {
@@ -2000,8 +2000,8 @@ async fn sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor
         "result_set_update_value_by_label"
     );
 
-    let mut type_map = JdbcTypeMap::new();
-    type_map.insert("APP.USER_TYPE", JdbcTargetType::Custom("User".to_string()));
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert("APP.USER_TYPE", RdbcTargetType::Custom("User".to_string()));
     assert_update_unsupported!(
         result_set.object_with_type_map(&mut connection, 1, Some(&type_map)),
         "result_set_get_object_with_type_map"
@@ -2029,20 +2029,20 @@ async fn map_get_object_overloads_preserve_index_label_and_nullable_map_identity
     let probe = Arc::new(StrongGetterProbe::new());
     let physical: Arc<dyn PhysicalResultSet> = probe.clone();
     let mut result_set = statement.wrap_result_set(physical).unwrap();
-    let mut type_map = JdbcTypeMap::new();
-    type_map.insert("APP.MONEY", JdbcTargetType::BigDecimal);
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert("APP.MONEY", RdbcTargetType::BigDecimal);
 
     assert_eq!(
         result_set
             .object_with_type_map(&mut connection, 31, Some(&type_map))
             .unwrap(),
-        JdbcObject::Scalar(Value::Int(71))
+        RdbcObject::Scalar(Value::Int(71))
     );
     assert_eq!(
         result_set
             .object_by_label_with_type_map(&mut connection, "mapped", None)
             .unwrap(),
-        JdbcObject::Scalar(Value::Int(72))
+        RdbcObject::Scalar(Value::Int(72))
     );
     assert_eq!(
         probe.calls(),
@@ -2066,25 +2066,25 @@ async fn typed_get_object_overloads_preserve_raw_target_type_identity() {
             .object_typed(
                 &mut connection,
                 41,
-                &JdbcTargetType::Custom("com.example.Money".to_string()),
+                &RdbcTargetType::Custom("com.example.Money".to_string()),
             )
             .unwrap(),
-        JdbcObject::String("typed-index".to_string())
+        RdbcObject::String("typed-index".to_string())
     );
     assert_eq!(
         result_set
-            .object_typed_by_label(&mut connection, "payload", &JdbcTargetType::Bytes)
+            .object_typed_by_label(&mut connection, "payload", &RdbcTargetType::Bytes)
             .unwrap(),
-        JdbcObject::String("typed-label".to_string())
+        RdbcObject::String("typed-label".to_string())
     );
     assert_eq!(
         probe.calls(),
         vec![
             StrongGetterCall::ObjectTypedIndex(
                 41,
-                JdbcTargetType::Custom("com.example.Money".to_string())
+                RdbcTargetType::Custom("com.example.Money".to_string())
             ),
-            StrongGetterCall::ObjectTypedLabel("payload".to_string(), JdbcTargetType::Bytes),
+            StrongGetterCall::ObjectTypedLabel("payload".to_string(), RdbcTargetType::Bytes),
         ]
     );
 }
@@ -2092,19 +2092,19 @@ async fn typed_get_object_overloads_preserve_raw_target_type_identity() {
 #[test]
 fn default_typed_get_object_delegates_every_standard_resource_target() {
     let probe = TypedResourceProbe::new();
-    let null = JdbcObject::Scalar(Value::Null);
+    let null = RdbcObject::Scalar(Value::Null);
 
-    assert_eq!(probe.object_as(1, &JdbcTargetType::Blob).unwrap(), null);
-    assert_eq!(probe.object_as(2, &JdbcTargetType::Clob).unwrap(), null);
-    assert_eq!(probe.object_as(3, &JdbcTargetType::NClob).unwrap(), null);
-    assert_eq!(probe.object_as(4, &JdbcTargetType::Array).unwrap(), null);
-    assert_eq!(probe.object_as(5, &JdbcTargetType::Ref).unwrap(), null);
-    assert_eq!(probe.object_as(6, &JdbcTargetType::RowId).unwrap(), null);
-    assert_eq!(probe.object_as(7, &JdbcTargetType::SqlXml).unwrap(), null);
-    assert_eq!(probe.object_as(8, &JdbcTargetType::Url).unwrap(), null);
+    assert_eq!(probe.object_as(1, &RdbcTargetType::Blob).unwrap(), null);
+    assert_eq!(probe.object_as(2, &RdbcTargetType::Clob).unwrap(), null);
+    assert_eq!(probe.object_as(3, &RdbcTargetType::NClob).unwrap(), null);
+    assert_eq!(probe.object_as(4, &RdbcTargetType::Array).unwrap(), null);
+    assert_eq!(probe.object_as(5, &RdbcTargetType::Ref).unwrap(), null);
+    assert_eq!(probe.object_as(6, &RdbcTargetType::RowId).unwrap(), null);
+    assert_eq!(probe.object_as(7, &RdbcTargetType::SqlXml).unwrap(), null);
+    assert_eq!(probe.object_as(8, &RdbcTargetType::Url).unwrap(), null);
     assert_eq!(
         probe
-            .object_by_label_as("blob_label", &JdbcTargetType::Blob)
+            .object_by_label_as("blob_label", &RdbcTargetType::Blob)
             .unwrap(),
         null
     );
@@ -2126,11 +2126,11 @@ fn default_typed_get_object_delegates_every_standard_resource_target() {
 }
 
 #[test]
-fn jdbc_object_and_opaque_object_preserve_type_identity_and_display_contract() {
+fn rdbc_object_and_opaque_object_preserve_type_identity_and_display_contract() {
     let physical = Arc::new(VendorObjectProbe { id: 99 });
-    let opaque = JdbcOpaqueObject::new(physical.clone());
+    let opaque = RdbcOpaqueObject::new(physical.clone());
     let same = opaque.clone();
-    let other = JdbcOpaqueObject::new(Arc::new(VendorObjectProbe { id: 99 }));
+    let other = RdbcOpaqueObject::new(Arc::new(VendorObjectProbe { id: 99 }));
 
     assert_eq!(opaque.class_name(), "com.example.VendorObject");
     assert_eq!(
@@ -2144,22 +2144,22 @@ fn jdbc_object_and_opaque_object_preserve_type_identity_and_display_contract() {
     assert_ne!(opaque, other);
 
     let values = [
-        (JdbcObject::String("text".to_string()), "text"),
-        (JdbcObject::Boolean(true), "true"),
-        (JdbcObject::Byte(-1), "-1"),
-        (JdbcObject::Short(-2), "-2"),
-        (JdbcObject::Integer(-3), "-3"),
-        (JdbcObject::Long(-4), "-4"),
-        (JdbcObject::Float(1.25), "1.25"),
-        (JdbcObject::Double(2.5), "2.5"),
-        (JdbcObject::Bytes(vec![0, 1, 2]), "<3 bytes>"),
-        (JdbcObject::Custom(opaque), "<com.example.VendorObject>"),
+        (RdbcObject::String("text".to_string()), "text"),
+        (RdbcObject::Boolean(true), "true"),
+        (RdbcObject::Byte(-1), "-1"),
+        (RdbcObject::Short(-2), "-2"),
+        (RdbcObject::Integer(-3), "-3"),
+        (RdbcObject::Long(-4), "-4"),
+        (RdbcObject::Float(1.25), "1.25"),
+        (RdbcObject::Double(2.5), "2.5"),
+        (RdbcObject::Bytes(vec![0, 1, 2]), "<3 bytes>"),
+        (RdbcObject::Custom(opaque), "<com.example.VendorObject>"),
     ];
     for (value, expected) in values {
         assert_eq!(value.to_string(), expected);
         assert!(!value.is_null());
     }
-    assert!(JdbcObject::from(Value::Null).is_null());
+    assert!(RdbcObject::from(Value::Null).is_null());
 }
 
 #[tokio::test]
@@ -2216,71 +2216,71 @@ async fn sqlite_typed_get_object_converts_all_standard_scalar_targets() {
 
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 1, &JdbcTargetType::Boolean)
+            .object_typed(&mut connection, 1, &RdbcTargetType::Boolean)
             .unwrap(),
-        JdbcObject::Boolean(true)
+        RdbcObject::Boolean(true)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 2, &JdbcTargetType::Byte)
+            .object_typed(&mut connection, 2, &RdbcTargetType::Byte)
             .unwrap(),
-        JdbcObject::Byte(127)
+        RdbcObject::Byte(127)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 3, &JdbcTargetType::Short)
+            .object_typed(&mut connection, 3, &RdbcTargetType::Short)
             .unwrap(),
-        JdbcObject::Short(32_000)
+        RdbcObject::Short(32_000)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 4, &JdbcTargetType::Integer)
+            .object_typed(&mut connection, 4, &RdbcTargetType::Integer)
             .unwrap(),
-        JdbcObject::Integer(i32::MAX)
+        RdbcObject::Integer(i32::MAX)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 5, &JdbcTargetType::Long)
+            .object_typed(&mut connection, 5, &RdbcTargetType::Long)
             .unwrap(),
-        JdbcObject::Long(i64::MAX)
+        RdbcObject::Long(i64::MAX)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 6, &JdbcTargetType::Float)
+            .object_typed(&mut connection, 6, &RdbcTargetType::Float)
             .unwrap(),
-        JdbcObject::Float(1.25)
+        RdbcObject::Float(1.25)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 7, &JdbcTargetType::Double)
+            .object_typed(&mut connection, 7, &RdbcTargetType::Double)
             .unwrap(),
-        JdbcObject::Double(2.5)
+        RdbcObject::Double(2.5)
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 8, &JdbcTargetType::BigDecimal)
+            .object_typed(&mut connection, 8, &RdbcTargetType::BigDecimal)
             .unwrap(),
         // SQLite NUMERIC affinity stores this literal as IEEE-754 and therefore
-        // exposes the same rounded value a JDBC SQLite driver would return.
-        JdbcObject::BigDecimal(BigDecimal::from_str("1234567890.1234567").unwrap())
+        // exposes the same rounded value a RDBC SQLite driver would return.
+        RdbcObject::BigDecimal(BigDecimal::from_str("1234567890.1234567").unwrap())
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 9, &JdbcTargetType::Date)
+            .object_typed(&mut connection, 9, &RdbcTargetType::Date)
             .unwrap(),
-        JdbcObject::Date(NaiveDate::from_ymd_opt(2026, 7, 29).unwrap())
+        RdbcObject::Date(NaiveDate::from_ymd_opt(2026, 7, 29).unwrap())
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 10, &JdbcTargetType::Time)
+            .object_typed(&mut connection, 10, &RdbcTargetType::Time)
             .unwrap(),
-        JdbcObject::Time(NaiveTime::from_hms_nano_opt(13, 14, 15, 123_456_789).unwrap())
+        RdbcObject::Time(NaiveTime::from_hms_nano_opt(13, 14, 15, 123_456_789).unwrap())
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 11, &JdbcTargetType::Timestamp)
+            .object_typed(&mut connection, 11, &RdbcTargetType::Timestamp)
             .unwrap(),
-        JdbcObject::Timestamp(
+        RdbcObject::Timestamp(
             NaiveDate::from_ymd_opt(2026, 7, 29)
                 .unwrap()
                 .and_hms_nano_opt(13, 14, 15, 123_456_789)
@@ -2289,39 +2289,39 @@ async fn sqlite_typed_get_object_converts_all_standard_scalar_targets() {
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 4, &JdbcTargetType::String)
+            .object_typed(&mut connection, 4, &RdbcTargetType::String)
             .unwrap(),
-        JdbcObject::String(i32::MAX.to_string())
+        RdbcObject::String(i32::MAX.to_string())
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 12, &JdbcTargetType::Bytes)
+            .object_typed(&mut connection, 12, &RdbcTargetType::Bytes)
             .unwrap(),
-        JdbcObject::Bytes(b"druid".to_vec())
+        RdbcObject::Bytes(b"druid".to_vec())
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 13, &JdbcTargetType::Bytes)
+            .object_typed(&mut connection, 13, &RdbcTargetType::Bytes)
             .unwrap(),
-        JdbcObject::Bytes(vec![0, 255])
+        RdbcObject::Bytes(vec![0, 255])
     );
     assert_eq!(
         result_set
-            .object_typed(&mut connection, 14, &JdbcTargetType::String)
+            .object_typed(&mut connection, 14, &RdbcTargetType::String)
             .unwrap(),
-        JdbcObject::Scalar(Value::Null)
+        RdbcObject::Scalar(Value::Null)
     );
     assert!(result_set.was_null(&mut connection).unwrap());
 
     assert!(matches!(
-        result_set.object_typed(&mut connection, 15, &JdbcTargetType::Byte),
+        result_set.object_typed(&mut connection, 15, &RdbcTargetType::Byte),
         Err(DruidError::DriverError(_))
     ));
     assert!(matches!(
         result_set.object_typed(
             &mut connection,
             12,
-            &JdbcTargetType::Custom("vendor.Type".to_string()),
+            &RdbcTargetType::Custom("vendor.Type".to_string()),
         ),
         Err(DruidError::UnsupportedOperation {
             operation: "result_set_get_object_typed_custom"
@@ -2337,7 +2337,7 @@ async fn all_strong_getter_overloads_preserve_raw_spi_argument_identity() {
     let probe = Arc::new(StrongGetterProbe::new());
     let physical: Arc<dyn PhysicalResultSet> = probe.clone();
     let mut result_set = statement.wrap_result_set(physical).unwrap();
-    let shanghai = JdbcCalendar::new("Asia/Shanghai").unwrap();
+    let shanghai = RdbcCalendar::new("Asia/Shanghai").unwrap();
 
     result_set.big_decimal(&mut connection, 1).unwrap();
     result_set
@@ -2520,35 +2520,35 @@ async fn all_strong_getter_overloads_preserve_raw_spi_argument_identity() {
             StrongGetterCall::BigDecimalLabel("amount".to_string(), None),
             StrongGetterCall::BigDecimalIndex(2, Some(7)),
             StrongGetterCall::BigDecimalLabel("scaled_amount".to_string(), Some(8)),
-            StrongGetterCall::DateIndex(3, JdbcCalendarArgument::Unspecified),
+            StrongGetterCall::DateIndex(3, RdbcCalendarArgument::Unspecified),
             StrongGetterCall::DateLabel(
                 "event_date".to_string(),
-                JdbcCalendarArgument::Unspecified
+                RdbcCalendarArgument::Unspecified
             ),
-            StrongGetterCall::DateIndex(4, JdbcCalendarArgument::Specified(Some(shanghai.clone()))),
+            StrongGetterCall::DateIndex(4, RdbcCalendarArgument::Specified(Some(shanghai.clone()))),
             StrongGetterCall::DateLabel(
                 "nullable_date".to_string(),
-                JdbcCalendarArgument::Specified(None)
+                RdbcCalendarArgument::Specified(None)
             ),
-            StrongGetterCall::TimeIndex(5, JdbcCalendarArgument::Unspecified),
+            StrongGetterCall::TimeIndex(5, RdbcCalendarArgument::Unspecified),
             StrongGetterCall::TimeLabel(
                 "event_time".to_string(),
-                JdbcCalendarArgument::Unspecified
+                RdbcCalendarArgument::Unspecified
             ),
-            StrongGetterCall::TimeIndex(6, JdbcCalendarArgument::Specified(None)),
+            StrongGetterCall::TimeIndex(6, RdbcCalendarArgument::Specified(None)),
             StrongGetterCall::TimeLabel(
                 "zoned_time".to_string(),
-                JdbcCalendarArgument::Specified(Some(shanghai.clone()))
+                RdbcCalendarArgument::Specified(Some(shanghai.clone()))
             ),
-            StrongGetterCall::TimestampIndex(7, JdbcCalendarArgument::Unspecified),
+            StrongGetterCall::TimestampIndex(7, RdbcCalendarArgument::Unspecified),
             StrongGetterCall::TimestampLabel(
                 "event_at".to_string(),
-                JdbcCalendarArgument::Unspecified
+                RdbcCalendarArgument::Unspecified
             ),
-            StrongGetterCall::TimestampIndex(8, JdbcCalendarArgument::Specified(Some(shanghai))),
+            StrongGetterCall::TimestampIndex(8, RdbcCalendarArgument::Specified(Some(shanghai))),
             StrongGetterCall::TimestampLabel(
                 "nullable_at".to_string(),
-                JdbcCalendarArgument::Specified(None)
+                RdbcCalendarArgument::Specified(None)
             ),
             StrongGetterCall::RefIndex(9),
             StrongGetterCall::RefLabel("reference".to_string()),
@@ -2580,41 +2580,41 @@ async fn all_strong_getter_overloads_preserve_raw_spi_argument_identity() {
             StrongGetterCall::UpdateNClobLabel("n_clob_update".to_string(), false),
             StrongGetterCall::UpdateSqlXmlIndex(23, false),
             StrongGetterCall::UpdateSqlXmlLabel("sql_xml_update".to_string(), false),
-            StrongGetterCall::UpdateBlobStreamIndex(24, false, JdbcStreamLength::Unspecified),
+            StrongGetterCall::UpdateBlobStreamIndex(24, false, RdbcStreamLength::Unspecified),
             StrongGetterCall::UpdateBlobStreamLabel(
                 "blob_stream".to_string(),
                 false,
-                JdbcStreamLength::Unspecified
+                RdbcStreamLength::Unspecified
             ),
-            StrongGetterCall::UpdateBlobStreamIndex(25, false, JdbcStreamLength::Long(101)),
+            StrongGetterCall::UpdateBlobStreamIndex(25, false, RdbcStreamLength::Long(101)),
             StrongGetterCall::UpdateBlobStreamLabel(
                 "blob_stream_length".to_string(),
                 false,
-                JdbcStreamLength::Long(102)
+                RdbcStreamLength::Long(102)
             ),
-            StrongGetterCall::UpdateClobReaderIndex(26, false, JdbcCharacterLength::Unspecified),
+            StrongGetterCall::UpdateClobReaderIndex(26, false, RdbcCharacterLength::Unspecified),
             StrongGetterCall::UpdateClobReaderLabel(
                 "clob_reader".to_string(),
                 false,
-                JdbcCharacterLength::Unspecified
+                RdbcCharacterLength::Unspecified
             ),
-            StrongGetterCall::UpdateClobReaderIndex(27, false, JdbcCharacterLength::Long(103)),
+            StrongGetterCall::UpdateClobReaderIndex(27, false, RdbcCharacterLength::Long(103)),
             StrongGetterCall::UpdateClobReaderLabel(
                 "clob_reader_length".to_string(),
                 false,
-                JdbcCharacterLength::Long(104)
+                RdbcCharacterLength::Long(104)
             ),
-            StrongGetterCall::UpdateNClobReaderIndex(28, false, JdbcCharacterLength::Unspecified),
+            StrongGetterCall::UpdateNClobReaderIndex(28, false, RdbcCharacterLength::Unspecified),
             StrongGetterCall::UpdateNClobReaderLabel(
                 "n_clob_reader".to_string(),
                 false,
-                JdbcCharacterLength::Unspecified
+                RdbcCharacterLength::Unspecified
             ),
-            StrongGetterCall::UpdateNClobReaderIndex(29, false, JdbcCharacterLength::Long(105)),
+            StrongGetterCall::UpdateNClobReaderIndex(29, false, RdbcCharacterLength::Long(105)),
             StrongGetterCall::UpdateNClobReaderLabel(
                 "n_clob_reader_length".to_string(),
                 false,
-                JdbcCharacterLength::Long(106)
+                RdbcCharacterLength::Long(106)
             ),
         ]
     );
@@ -2630,9 +2630,9 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
     let date = NaiveDate::from_ymd_opt(2026, 7, 29).unwrap();
     let time = NaiveTime::from_hms_nano_opt(13, 14, 15, 123_456_789).unwrap();
     let timestamp = date.and_time(time);
-    let input = JdbcInputStream::from_bytes([1, 2, 3]);
-    let reader = JdbcReader::from_string("严格流身份");
-    let vendor_object = JdbcOpaqueObject::new(Arc::new(VendorObjectProbe { id: 99 }));
+    let input = RdbcInputStream::from_bytes([1, 2, 3]);
+    let reader = RdbcReader::from_string("严格流身份");
+    let vendor_object = RdbcOpaqueObject::new(Arc::new(VendorObjectProbe { id: 99 }));
     assert_eq!(
         vendor_object.downcast_ref::<VendorObjectProbe>(),
         Some(&VendorObjectProbe { id: 99 })
@@ -2805,11 +2805,11 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         result_set.update_object(
             &mut connection,
             15,
-            JdbcObject::Custom(vendor_object.clone())
+            RdbcObject::Custom(vendor_object.clone())
         ),
         StrongGetterCall::UpdateValueIndex(
             15,
-            ResultSetUpdate::Object(JdbcObject::Custom(vendor_object))
+            ResultSetUpdate::Object(RdbcObject::Custom(vendor_object))
         )
     );
     assert_last_update!(
@@ -2875,19 +2875,19 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         result_set.update_ascii_stream(&mut connection, 18, Some(&input)),
         |update| StrongGetterCall::UpdateValueIndex(18, update),
         AsciiStream,
-        JdbcStreamLength::Unspecified
+        RdbcStreamLength::Unspecified
     );
     assert_stream_call!(
         result_set.update_ascii_stream_by_label(&mut connection, "ascii", Some(&input)),
         |update| StrongGetterCall::UpdateValueLabel("ascii".to_string(), update),
         AsciiStream,
-        JdbcStreamLength::Unspecified
+        RdbcStreamLength::Unspecified
     );
     assert_stream_call!(
         result_set.update_ascii_stream_with_int_length(&mut connection, 19, Some(&input), -19),
         |update| StrongGetterCall::UpdateValueIndex(19, update),
         AsciiStream,
-        JdbcStreamLength::Int(-19)
+        RdbcStreamLength::Int(-19)
     );
     assert_stream_call!(
         result_set.update_ascii_stream_by_label_with_int_length(
@@ -2898,13 +2898,13 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("ascii_int".to_string(), update),
         AsciiStream,
-        JdbcStreamLength::Int(20)
+        RdbcStreamLength::Int(20)
     );
     assert_stream_call!(
         result_set.update_ascii_stream_with_length(&mut connection, 20, Some(&input), -21),
         |update| StrongGetterCall::UpdateValueIndex(20, update),
         AsciiStream,
-        JdbcStreamLength::Long(-21)
+        RdbcStreamLength::Long(-21)
     );
     assert_stream_call!(
         result_set.update_ascii_stream_by_label_with_length(
@@ -2915,25 +2915,25 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("ascii_long".to_string(), update),
         AsciiStream,
-        JdbcStreamLength::Long(22)
+        RdbcStreamLength::Long(22)
     );
     assert_stream_call!(
         result_set.update_binary_stream(&mut connection, 21, Some(&input)),
         |update| StrongGetterCall::UpdateValueIndex(21, update),
         BinaryStream,
-        JdbcStreamLength::Unspecified
+        RdbcStreamLength::Unspecified
     );
     assert_stream_call!(
         result_set.update_binary_stream_by_label(&mut connection, "binary", Some(&input)),
         |update| StrongGetterCall::UpdateValueLabel("binary".to_string(), update),
         BinaryStream,
-        JdbcStreamLength::Unspecified
+        RdbcStreamLength::Unspecified
     );
     assert_stream_call!(
         result_set.update_binary_stream_with_int_length(&mut connection, 22, Some(&input), -23),
         |update| StrongGetterCall::UpdateValueIndex(22, update),
         BinaryStream,
-        JdbcStreamLength::Int(-23)
+        RdbcStreamLength::Int(-23)
     );
     assert_stream_call!(
         result_set.update_binary_stream_by_label_with_int_length(
@@ -2944,13 +2944,13 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("binary_int".to_string(), update),
         BinaryStream,
-        JdbcStreamLength::Int(24)
+        RdbcStreamLength::Int(24)
     );
     assert_stream_call!(
         result_set.update_binary_stream_with_length(&mut connection, 23, Some(&input), -25),
         |update| StrongGetterCall::UpdateValueIndex(23, update),
         BinaryStream,
-        JdbcStreamLength::Long(-25)
+        RdbcStreamLength::Long(-25)
     );
     assert_stream_call!(
         result_set.update_binary_stream_by_label_with_length(
@@ -2961,7 +2961,7 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("binary_long".to_string(), update),
         BinaryStream,
-        JdbcStreamLength::Long(26)
+        RdbcStreamLength::Long(26)
     );
 
     macro_rules! assert_reader_call {
@@ -2979,20 +2979,20 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         result_set.update_character_stream(&mut connection, 24, Some(&reader)),
         |update| StrongGetterCall::UpdateValueIndex(24, update),
         CharacterStream,
-        JdbcCharacterLength::Unspecified
+        RdbcCharacterLength::Unspecified
     );
     assert_reader_call!(
         result_set.update_character_stream_by_label(&mut connection, "character", Some(&reader)),
         |update| StrongGetterCall::UpdateValueLabel("character".to_string(), update),
         CharacterStream,
-        JdbcCharacterLength::Unspecified
+        RdbcCharacterLength::Unspecified
     );
     assert_reader_call!(
         result_set
             .update_character_stream_with_int_length(&mut connection, 25, Some(&reader), -27,),
         |update| StrongGetterCall::UpdateValueIndex(25, update),
         CharacterStream,
-        JdbcCharacterLength::Int(-27)
+        RdbcCharacterLength::Int(-27)
     );
     assert_reader_call!(
         result_set.update_character_stream_by_label_with_int_length(
@@ -3003,13 +3003,13 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("character_int".to_string(), update),
         CharacterStream,
-        JdbcCharacterLength::Int(28)
+        RdbcCharacterLength::Int(28)
     );
     assert_reader_call!(
         result_set.update_character_stream_with_length(&mut connection, 26, Some(&reader), -29,),
         |update| StrongGetterCall::UpdateValueIndex(26, update),
         CharacterStream,
-        JdbcCharacterLength::Long(-29)
+        RdbcCharacterLength::Long(-29)
     );
     assert_reader_call!(
         result_set.update_character_stream_by_label_with_length(
@@ -3020,13 +3020,13 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("character_long".to_string(), update),
         CharacterStream,
-        JdbcCharacterLength::Long(30)
+        RdbcCharacterLength::Long(30)
     );
     assert_reader_call!(
         result_set.update_n_character_stream(&mut connection, 27, Some(&reader)),
         |update| StrongGetterCall::UpdateValueIndex(27, update),
         NCharacterStream,
-        JdbcCharacterLength::Unspecified
+        RdbcCharacterLength::Unspecified
     );
     assert_reader_call!(
         result_set.update_n_character_stream_by_label(
@@ -3036,13 +3036,13 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("n_character".to_string(), update),
         NCharacterStream,
-        JdbcCharacterLength::Unspecified
+        RdbcCharacterLength::Unspecified
     );
     assert_reader_call!(
         result_set.update_n_character_stream_with_length(&mut connection, 28, Some(&reader), -31,),
         |update| StrongGetterCall::UpdateValueIndex(28, update),
         NCharacterStream,
-        JdbcCharacterLength::Long(-31)
+        RdbcCharacterLength::Long(-31)
     );
     assert_reader_call!(
         result_set.update_n_character_stream_by_label_with_length(
@@ -3053,7 +3053,7 @@ async fn all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identi
         ),
         |update| StrongGetterCall::UpdateValueLabel("n_character_long".to_string(), update),
         NCharacterStream,
-        JdbcCharacterLength::Long(32)
+        RdbcCharacterLength::Long(32)
     );
 
     assert_eq!(probe.calls().len(), 56);
@@ -3116,13 +3116,13 @@ async fn result_set_errors_typed_getters_and_old_lease_are_observable() {
             if message == "result set cursor is not positioned on a row"
     ));
     assert!(matches!(
-        result_set.object_typed(&mut connection, 1, &JdbcTargetType::Custom("X".to_string())),
+        result_set.object_typed(&mut connection, 1, &RdbcTargetType::Custom("X".to_string())),
         Err(DruidError::Other(message))
             if message == "result set cursor is not positioned on a row"
     ));
     assert!(result_set.next(&mut connection).unwrap());
     assert!(matches!(
-        result_set.object_typed(&mut connection, 1, &JdbcTargetType::Custom("X".to_string())),
+        result_set.object_typed(&mut connection, 1, &RdbcTargetType::Custom("X".to_string())),
         Err(DruidError::UnsupportedOperation {
             operation: "result_set_get_object_typed_custom"
         })
@@ -3297,7 +3297,7 @@ async fn strong_typed_getters_preserve_all_decimal_temporal_and_calendar_overloa
         Some(decimal)
     );
 
-    let shanghai = JdbcCalendar::new("Asia/Shanghai").unwrap();
+    let shanghai = RdbcCalendar::new("Asia/Shanghai").unwrap();
     assert_eq!(result_set.date(&mut connection, 2).unwrap(), Some(date));
     assert_eq!(
         result_set
@@ -3590,13 +3590,13 @@ fn row_set_default_getters_cover_null_label_conversion_and_stream_contracts() {
     assert!(result_set.absolute(1).unwrap());
 
     let physical: Arc<dyn PhysicalResultSet> = Arc::new(result_set);
-    let first = druid::core::JdbcResultSet::new(physical.clone());
+    let first = druid::core::RdbcResultSet::new(physical.clone());
     let same = first.clone();
-    let other = druid::core::JdbcResultSet::new(Arc::new(SparsePhysicalResultSet));
+    let other = druid::core::RdbcResultSet::new(Arc::new(SparsePhysicalResultSet));
     assert_eq!(first, same);
     assert_ne!(first, other);
     assert!(std::ptr::eq(first.physical(), physical.as_ref()));
-    assert!(format!("{first:?}").contains("JdbcResultSet"));
+    assert!(format!("{first:?}").contains("RdbcResultSet"));
     first.close().unwrap();
     assert!(first.is_closed());
 }
@@ -3651,24 +3651,24 @@ fn assert_default_decimal_and_date_conversions(result_set: &RowSetResultSet) {
 
     assert_eq!(
         result_set
-            .date(1, &JdbcCalendarArgument::Unspecified)
+            .date(1, &RdbcCalendarArgument::Unspecified)
             .unwrap(),
         None
     );
     assert!(result_set
-        .date(10, &JdbcCalendarArgument::Unspecified)
+        .date(10, &RdbcCalendarArgument::Unspecified)
         .unwrap()
         .is_some());
     assert!(result_set
-        .date(11, &JdbcCalendarArgument::Unspecified)
+        .date(11, &RdbcCalendarArgument::Unspecified)
         .unwrap()
         .is_some());
     assert!(matches!(
-        result_set.date(6, &JdbcCalendarArgument::Unspecified),
+        result_set.date(6, &RdbcCalendarArgument::Unspecified),
         Err(DruidError::DriverError(_))
     ));
     assert!(matches!(
-        result_set.date(7, &JdbcCalendarArgument::Unspecified),
+        result_set.date(7, &RdbcCalendarArgument::Unspecified),
         Err(DruidError::DriverError(_))
     ));
 }
@@ -3676,45 +3676,45 @@ fn assert_default_decimal_and_date_conversions(result_set: &RowSetResultSet) {
 fn assert_default_time_and_timestamp_conversions(result_set: &RowSetResultSet) {
     assert_eq!(
         result_set
-            .time(1, &JdbcCalendarArgument::Unspecified)
+            .time(1, &RdbcCalendarArgument::Unspecified)
             .unwrap(),
         None
     );
     assert!(result_set
-        .time(10, &JdbcCalendarArgument::Unspecified)
+        .time(10, &RdbcCalendarArgument::Unspecified)
         .unwrap()
         .is_some());
     assert!(result_set
-        .time(14, &JdbcCalendarArgument::Unspecified)
+        .time(14, &RdbcCalendarArgument::Unspecified)
         .unwrap()
         .is_some());
     assert!(matches!(
-        result_set.time(6, &JdbcCalendarArgument::Unspecified),
+        result_set.time(6, &RdbcCalendarArgument::Unspecified),
         Err(DruidError::DriverError(_))
     ));
     assert!(matches!(
-        result_set.time(7, &JdbcCalendarArgument::Unspecified),
+        result_set.time(7, &RdbcCalendarArgument::Unspecified),
         Err(DruidError::DriverError(_))
     ));
 
     assert_eq!(
         result_set
-            .timestamp(1, &JdbcCalendarArgument::Unspecified)
+            .timestamp(1, &RdbcCalendarArgument::Unspecified)
             .unwrap(),
         None
     );
     for index in [8, 12, 13] {
         assert!(result_set
-            .timestamp(index, &JdbcCalendarArgument::Unspecified)
+            .timestamp(index, &RdbcCalendarArgument::Unspecified)
             .unwrap()
             .is_some());
     }
     assert!(matches!(
-        result_set.timestamp(6, &JdbcCalendarArgument::Unspecified),
+        result_set.timestamp(6, &RdbcCalendarArgument::Unspecified),
         Err(DruidError::DriverError(_))
     ));
     assert!(matches!(
-        result_set.timestamp(7, &JdbcCalendarArgument::Unspecified),
+        result_set.timestamp(7, &RdbcCalendarArgument::Unspecified),
         Err(DruidError::DriverError(_))
     ));
 }
@@ -3763,7 +3763,7 @@ fn sql_warning_and_result_set_metadata_preserve_structured_fields() {
 }
 
 #[test]
-fn result_set_metadata_preserves_complete_jdbc_column_contract() {
+fn result_set_metadata_preserves_complete_rdbc_column_contract() {
     let column = ResultSetColumnMeta::new("amount_alias", ResultSetColumnType::Decimal, true)
         .with_origin("amount", "app", "invoice", "main")
         .with_type_identity("MONEY", "com.example.Money")
@@ -3782,7 +3782,7 @@ fn result_set_metadata_preserves_complete_jdbc_column_contract() {
         meta_data.column_type(1).unwrap(),
         ResultSetColumnType::Decimal
     );
-    assert_eq!(meta_data.jdbc_type(1).unwrap(), 3);
+    assert_eq!(meta_data.rdbc_type(1).unwrap(), 3);
     assert_eq!(meta_data.column_type_name(1).unwrap(), "MONEY");
     assert_eq!(meta_data.column_class_name(1).unwrap(), "com.example.Money");
     assert_eq!(
@@ -3869,15 +3869,15 @@ fn result_set_metadata_preserves_complete_jdbc_column_contract() {
         ),
         (ResultSetColumnType::Binary, -3, "VARBINARY", "[B", false),
     ];
-    for (column_type, jdbc_type, type_name, class_name, signed) in all_types {
-        assert_eq!(column_type.jdbc_type(), jdbc_type);
+    for (column_type, rdbc_type, type_name, class_name, signed) in all_types {
+        assert_eq!(column_type.rdbc_type(), rdbc_type);
         assert_eq!(column_type.type_name(), type_name);
         assert_eq!(column_type.class_name(), class_name);
         assert_eq!(column_type.is_signed(), signed);
     }
-    assert_eq!(ResultSetNullability::NoNulls.jdbc_code(), 0);
-    assert_eq!(ResultSetNullability::Nullable.jdbc_code(), 1);
-    assert_eq!(ResultSetNullability::Unknown.jdbc_code(), 2);
+    assert_eq!(ResultSetNullability::NoNulls.rdbc_code(), 0);
+    assert_eq!(ResultSetNullability::Nullable.rdbc_code(), 1);
+    assert_eq!(ResultSetNullability::Unknown.rdbc_code(), 2);
 }
 
 #[test]
@@ -3910,7 +3910,7 @@ fn physical_result_set_metadata_preserves_getter_error_and_wrapper_identity() {
         meta_data.column_type(1).unwrap(),
         ResultSetColumnType::Decimal
     );
-    assert_eq!(meta_data.jdbc_type(1).unwrap(), 3);
+    assert_eq!(meta_data.rdbc_type(1).unwrap(), 3);
     assert_eq!(meta_data.column_type_name(1).unwrap(), "MONEY_1");
     assert!(!meta_data.is_read_only(1).unwrap());
     assert!(meta_data.is_writable(1).unwrap());

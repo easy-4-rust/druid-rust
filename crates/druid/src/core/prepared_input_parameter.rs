@@ -5,9 +5,9 @@
 //! `com.alibaba.druid.pool.DruidPooledPreparedStatement`。
 
 use super::{
-    DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob,
-    JdbcInputStream, JdbcNClob, JdbcObject, JdbcParameter, JdbcParameterType, JdbcParameterValue,
-    JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcUrl, Value,
+    DruidError, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcCharacterLength, RdbcClob,
+    RdbcInputStream, RdbcNClob, RdbcObject, RdbcParameter, RdbcParameterType, RdbcParameterValue,
+    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcUrl, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -24,7 +24,7 @@ pub enum PreparedTypeNameArgument {
     Specified(Option<String>),
 }
 
-/// PreparedStatement 参数及其精确 JDBC setter 语义。
+/// PreparedStatement 参数及其精确 RDBC setter 语义。
 ///
 /// 每个 variant 对应 Java 的一个 setter 家族。流和 LOB 保存资源句柄，不在
 /// 池化层提前读取；Calendar、长度和 SQL 类型元数据保持到物理 Adapter 边界。
@@ -33,7 +33,7 @@ pub enum PreparedInputParameter {
     /// Rust 显式 `add_batch(Vec<Value>)` 扩展参数。
     ///
     /// 该分支不伪装成 Java `setXxx`；仅用于把 Rust 原有批处理入口与完整
-    /// JDBC setter 描述符放进同一个有序批次。
+    /// RDBC setter 描述符放进同一个有序批次。
     RustValue(Value),
     /// `setNull(parameterIndex, sqlType[, typeName])`。
     Null {
@@ -69,103 +69,103 @@ pub enum PreparedInputParameter {
         /// Java 参数 `x`。
         value: Option<NaiveDate>,
         /// Calendar 重载身份。
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     },
     /// `setTime(parameterIndex, x[, cal])`。
     Time {
         /// Java 参数 `x`。
         value: Option<NaiveTime>,
         /// Calendar 重载身份。
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     },
     /// `setTimestamp(parameterIndex, x[, cal])`。
     Timestamp {
         /// Java 参数 `x`。
         value: Option<NaiveDateTime>,
         /// Calendar 重载身份。
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     },
     /// `setAsciiStream(parameterIndex, x[, int/long])`。
     AsciiStream {
         /// Java 参数 `x`。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 长度重载身份。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// 已废弃的 `setUnicodeStream(parameterIndex, x, int)`。
     UnicodeStream {
         /// Java 参数 `x`。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// Java 参数 `length`，原样保留负值。
         length: i32,
     },
     /// `setBinaryStream(parameterIndex, x[, int/long])`。
     BinaryStream {
         /// Java 参数 `x`。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 长度重载身份。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `setCharacterStream(parameterIndex, reader[, int/long])`。
     CharacterStream {
         /// Java 参数 `reader`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 长度重载身份。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setNCharacterStream(parameterIndex, value[, long])`。
     NCharacterStream {
         /// Java 参数 `value`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 长度重载身份。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setObject(parameterIndex, x[, targetSqlType[, scaleOrLength]])`。
     Object {
         /// Java 参数 `x`；`None` 对应 Java null。
-        value: Option<JdbcObject>,
+        value: Option<RdbcObject>,
         /// Java 参数 `targetSqlType`。
         target_sql_type: Option<i32>,
         /// Java 参数 `scaleOrLength`。
         scale_or_length: Option<i32>,
     },
     /// `setRef(parameterIndex, x)`。
-    Ref(Option<JdbcRef>),
+    Ref(Option<RdbcRef>),
     /// `setBlob(parameterIndex, x)`。
-    Blob(Option<JdbcBlob>),
+    Blob(Option<RdbcBlob>),
     /// `setBlob(parameterIndex, inputStream[, long])`。
     BlobStream {
         /// Java 参数 `inputStream`。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 长度重载身份。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `setClob(parameterIndex, x)`。
-    Clob(Option<JdbcClob>),
+    Clob(Option<RdbcClob>),
     /// `setClob(parameterIndex, reader[, long])`。
     ClobReader {
         /// Java 参数 `reader`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 长度重载身份。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setNClob(parameterIndex, value)`。
-    NClob(Option<JdbcNClob>),
+    NClob(Option<RdbcNClob>),
     /// `setNClob(parameterIndex, reader[, long])`。
     NClobReader {
         /// Java 参数 `reader`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 长度重载身份。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setArray(parameterIndex, x)`。
-    Array(Option<JdbcArray>),
+    Array(Option<RdbcArray>),
     /// `setURL(parameterIndex, x)`。
-    Url(Option<JdbcUrl>),
+    Url(Option<RdbcUrl>),
     /// `setRowId(parameterIndex, x)`。
-    RowId(Option<JdbcRowId>),
+    RowId(Option<RdbcRowId>),
     /// `setSQLXML(parameterIndex, xmlObject)`。
-    SqlXml(Option<JdbcSqlXml>),
+    SqlXml(Option<RdbcSqlXml>),
 }
 
 impl PreparedInputParameter {
@@ -186,7 +186,7 @@ impl PreparedInputParameter {
     }
 
     /// 创建 `setObject(int, Object)` 描述符。
-    pub fn object(value: Option<JdbcObject>) -> Self {
+    pub fn object(value: Option<RdbcObject>) -> Self {
         Self::Object {
             value,
             target_sql_type: None,
@@ -195,7 +195,7 @@ impl PreparedInputParameter {
     }
 
     /// 创建 `setObject(int, Object, int)` 描述符。
-    pub fn object_with_sql_type(value: Option<JdbcObject>, target_sql_type: i32) -> Self {
+    pub fn object_with_sql_type(value: Option<RdbcObject>, target_sql_type: i32) -> Self {
         Self::Object {
             value,
             target_sql_type: Some(target_sql_type),
@@ -205,7 +205,7 @@ impl PreparedInputParameter {
 
     /// 创建 `setObject(int, Object, int, int)` 描述符。
     pub fn object_with_sql_type_and_scale(
-        value: Option<JdbcObject>,
+        value: Option<RdbcObject>,
         target_sql_type: i32,
         scale_or_length: i32,
     ) -> Self {
@@ -242,7 +242,7 @@ impl PreparedInputParameter {
             Self::Object { value: None, .. } => Ok(Value::Null),
             Self::Object {
                 value: Some(value), ..
-            } => Self::jdbc_object_scalar(value),
+            } => Self::rdbc_object_scalar(value),
             Self::Url(Some(value)) => Ok(Value::String(value.external_form().to_string())),
             Self::Url(None)
             | Self::RowId(None)
@@ -272,120 +272,120 @@ impl PreparedInputParameter {
         }
     }
 
-    fn jdbc_object_scalar(value: &JdbcObject) -> Result<Value, DruidError> {
+    fn rdbc_object_scalar(value: &RdbcObject) -> Result<Value, DruidError> {
         match value {
-            JdbcObject::Scalar(value) => Ok(value.clone()),
-            JdbcObject::String(value) | JdbcObject::NString(value) => {
+            RdbcObject::Scalar(value) => Ok(value.clone()),
+            RdbcObject::String(value) | RdbcObject::NString(value) => {
                 Ok(Value::String(value.clone()))
             }
-            JdbcObject::Boolean(value) => Ok(Value::Bool(*value)),
-            JdbcObject::Byte(value) => Ok(Value::Int(i64::from(*value))),
-            JdbcObject::Short(value) => Ok(Value::Int(i64::from(*value))),
-            JdbcObject::Integer(value) => Ok(Value::Int(i64::from(*value))),
-            JdbcObject::Long(value) => Ok(Value::Int(*value)),
-            JdbcObject::Float(value) => Ok(Value::Float(f64::from(*value))),
-            JdbcObject::Double(value) => Ok(Value::Float(*value)),
-            JdbcObject::Bytes(value) => Ok(Value::Bytes(value.clone())),
-            JdbcObject::BigDecimal(value) => Ok(Value::Decimal(value.clone())),
-            JdbcObject::Date(value) => Ok(Value::Date(*value)),
-            JdbcObject::Time(value) => Ok(Value::Time(*value)),
-            JdbcObject::Timestamp(value) => Ok(Value::Timestamp(*value)),
-            JdbcObject::Url(value) => Ok(Value::String(value.external_form().to_string())),
-            JdbcObject::Ref(_)
-            | JdbcObject::Array(_)
-            | JdbcObject::RowId(_)
-            | JdbcObject::SqlXml(_)
-            | JdbcObject::Blob(_)
-            | JdbcObject::Clob(_)
-            | JdbcObject::NClob(_)
-            | JdbcObject::CharacterStream(_)
-            | JdbcObject::NCharacterStream(_)
-            | JdbcObject::Custom(_) => Err(DruidError::UnsupportedOperation {
+            RdbcObject::Boolean(value) => Ok(Value::Bool(*value)),
+            RdbcObject::Byte(value) => Ok(Value::Int(i64::from(*value))),
+            RdbcObject::Short(value) => Ok(Value::Int(i64::from(*value))),
+            RdbcObject::Integer(value) => Ok(Value::Int(i64::from(*value))),
+            RdbcObject::Long(value) => Ok(Value::Int(*value)),
+            RdbcObject::Float(value) => Ok(Value::Float(f64::from(*value))),
+            RdbcObject::Double(value) => Ok(Value::Float(*value)),
+            RdbcObject::Bytes(value) => Ok(Value::Bytes(value.clone())),
+            RdbcObject::BigDecimal(value) => Ok(Value::Decimal(value.clone())),
+            RdbcObject::Date(value) => Ok(Value::Date(*value)),
+            RdbcObject::Time(value) => Ok(Value::Time(*value)),
+            RdbcObject::Timestamp(value) => Ok(Value::Timestamp(*value)),
+            RdbcObject::Url(value) => Ok(Value::String(value.external_form().to_string())),
+            RdbcObject::Ref(_)
+            | RdbcObject::Array(_)
+            | RdbcObject::RowId(_)
+            | RdbcObject::SqlXml(_)
+            | RdbcObject::Blob(_)
+            | RdbcObject::Clob(_)
+            | RdbcObject::NClob(_)
+            | RdbcObject::CharacterStream(_)
+            | RdbcObject::NCharacterStream(_)
+            | RdbcObject::Custom(_) => Err(DruidError::UnsupportedOperation {
                 operation: "prepared_object_requires_native_adapter",
             }),
         }
     }
 }
 
-impl JdbcParameter for PreparedInputParameter {
-    fn value(&self) -> Option<JdbcParameterValue> {
-        let object = |value| Some(JdbcParameterValue::Object(value));
+impl RdbcParameter for PreparedInputParameter {
+    fn value(&self) -> Option<RdbcParameterValue> {
+        let object = |value| Some(RdbcParameterValue::Object(value));
         match self {
-            Self::RustValue(value) => object(JdbcObject::Scalar(value.clone())),
+            Self::RustValue(value) => object(RdbcObject::Scalar(value.clone())),
             Self::Null { .. } => None,
-            Self::Boolean(value) => object(JdbcObject::Boolean(*value)),
-            Self::Byte(value) => object(JdbcObject::Byte(*value)),
-            Self::Short(value) => object(JdbcObject::Short(*value)),
-            Self::Int(value) => object(JdbcObject::Integer(*value)),
-            Self::Long(value) => object(JdbcObject::Long(*value)),
-            Self::Float(value) => object(JdbcObject::Float(*value)),
-            Self::Double(value) => object(JdbcObject::Double(*value)),
+            Self::Boolean(value) => object(RdbcObject::Boolean(*value)),
+            Self::Byte(value) => object(RdbcObject::Byte(*value)),
+            Self::Short(value) => object(RdbcObject::Short(*value)),
+            Self::Int(value) => object(RdbcObject::Integer(*value)),
+            Self::Long(value) => object(RdbcObject::Long(*value)),
+            Self::Float(value) => object(RdbcObject::Float(*value)),
+            Self::Double(value) => object(RdbcObject::Double(*value)),
             Self::BigDecimal(value) => value
                 .clone()
-                .map(JdbcObject::BigDecimal)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::BigDecimal)
+                .map(RdbcParameterValue::Object),
             Self::String(value) => value
                 .clone()
-                .map(JdbcObject::String)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::String)
+                .map(RdbcParameterValue::Object),
             Self::NString(value) => value
                 .clone()
-                .map(JdbcObject::NString)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::NString)
+                .map(RdbcParameterValue::Object),
             Self::Bytes(value) => value
                 .clone()
-                .map(JdbcObject::Bytes)
-                .map(JdbcParameterValue::Object),
-            Self::Date { value, .. } => value.map(JdbcObject::Date).map(JdbcParameterValue::Object),
-            Self::Time { value, .. } => value.map(JdbcObject::Time).map(JdbcParameterValue::Object),
+                .map(RdbcObject::Bytes)
+                .map(RdbcParameterValue::Object),
+            Self::Date { value, .. } => value.map(RdbcObject::Date).map(RdbcParameterValue::Object),
+            Self::Time { value, .. } => value.map(RdbcObject::Time).map(RdbcParameterValue::Object),
             Self::Timestamp { value, .. } => value
-                .map(JdbcObject::Timestamp)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::Timestamp)
+                .map(RdbcParameterValue::Object),
             Self::AsciiStream { stream, .. }
             | Self::BinaryStream { stream, .. }
             | Self::BlobStream { stream, .. } => {
-                stream.clone().map(JdbcParameterValue::InputStream)
+                stream.clone().map(RdbcParameterValue::InputStream)
             }
             Self::UnicodeStream { stream, .. } => {
-                stream.clone().map(JdbcParameterValue::InputStream)
+                stream.clone().map(RdbcParameterValue::InputStream)
             }
             Self::CharacterStream { reader, .. }
             | Self::NCharacterStream { reader, .. }
             | Self::ClobReader { reader, .. }
-            | Self::NClobReader { reader, .. } => reader.clone().map(JdbcParameterValue::Reader),
-            Self::Object { value, .. } => value.clone().map(JdbcParameterValue::Object),
+            | Self::NClobReader { reader, .. } => reader.clone().map(RdbcParameterValue::Reader),
+            Self::Object { value, .. } => value.clone().map(RdbcParameterValue::Object),
             Self::Ref(value) => value
                 .clone()
-                .map(JdbcObject::Ref)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::Ref)
+                .map(RdbcParameterValue::Object),
             Self::Blob(value) => value
                 .clone()
-                .map(JdbcObject::Blob)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::Blob)
+                .map(RdbcParameterValue::Object),
             Self::Clob(value) => value
                 .clone()
-                .map(JdbcObject::Clob)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::Clob)
+                .map(RdbcParameterValue::Object),
             Self::NClob(value) => value
                 .clone()
-                .map(JdbcObject::NClob)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::NClob)
+                .map(RdbcParameterValue::Object),
             Self::Array(value) => value
                 .clone()
-                .map(JdbcObject::Array)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::Array)
+                .map(RdbcParameterValue::Object),
             Self::Url(value) => value
                 .clone()
-                .map(JdbcObject::Url)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::Url)
+                .map(RdbcParameterValue::Object),
             Self::RowId(value) => value
                 .clone()
-                .map(JdbcObject::RowId)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::RowId)
+                .map(RdbcParameterValue::Object),
             Self::SqlXml(value) => value
                 .clone()
-                .map(JdbcObject::SqlXml)
-                .map(JdbcParameterValue::Object),
+                .map(RdbcObject::SqlXml)
+                .map(RdbcParameterValue::Object),
         }
     }
 
@@ -397,14 +397,14 @@ impl JdbcParameter for PreparedInputParameter {
             | Self::BigDecimal(_)
             | Self::String(_) => 0,
             Self::Date { value, calendar } => {
-                if value.is_none() || matches!(calendar, JdbcCalendarArgument::Unspecified) {
+                if value.is_none() || matches!(calendar, RdbcCalendarArgument::Unspecified) {
                     0
                 } else {
                     -1
                 }
             }
             Self::Timestamp { value, calendar } => {
-                if value.is_none() || matches!(calendar, JdbcCalendarArgument::Unspecified) {
+                if value.is_none() || matches!(calendar, RdbcCalendarArgument::Unspecified) {
                     0
                 } else {
                     -1
@@ -451,19 +451,19 @@ impl JdbcParameter for PreparedInputParameter {
         }
     }
 
-    fn calendar(&self) -> Option<super::JdbcCalendar> {
+    fn calendar(&self) -> Option<super::RdbcCalendar> {
         match self {
             Self::Date {
                 value: Some(_),
-                calendar: JdbcCalendarArgument::Specified(calendar),
+                calendar: RdbcCalendarArgument::Specified(calendar),
             }
             | Self::Time {
                 value: Some(_),
-                calendar: JdbcCalendarArgument::Specified(calendar),
+                calendar: RdbcCalendarArgument::Specified(calendar),
             }
             | Self::Timestamp {
                 value: Some(_),
-                calendar: JdbcCalendarArgument::Specified(calendar),
+                calendar: RdbcCalendarArgument::Specified(calendar),
             } => calendar.clone(),
             _ => None,
         }
@@ -489,15 +489,15 @@ impl JdbcParameter for PreparedInputParameter {
             Self::BigDecimal(_) => 3,
             Self::String(_) => 12,
             Self::NString(_) => -9,
-            Self::Bytes(_) => JdbcParameterType::BYTES,
+            Self::Bytes(_) => RdbcParameterType::BYTES,
             Self::Date { .. } => 91,
             Self::Time { .. } => 92,
             Self::Timestamp { .. } => 93,
-            Self::AsciiStream { .. } => JdbcParameterType::ASCII_INPUT_STREAM,
-            Self::UnicodeStream { .. } => JdbcParameterType::UNICODE_STREAM,
-            Self::BinaryStream { .. } => JdbcParameterType::BINARY_INPUT_STREAM,
-            Self::CharacterStream { .. } => JdbcParameterType::CHARACTER_INPUT_STREAM,
-            Self::NCharacterStream { .. } => JdbcParameterType::NCHARACTER_INPUT_STREAM,
+            Self::AsciiStream { .. } => RdbcParameterType::ASCII_INPUT_STREAM,
+            Self::UnicodeStream { .. } => RdbcParameterType::UNICODE_STREAM,
+            Self::BinaryStream { .. } => RdbcParameterType::BINARY_INPUT_STREAM,
+            Self::CharacterStream { .. } => RdbcParameterType::CHARACTER_INPUT_STREAM,
+            Self::NCharacterStream { .. } => RdbcParameterType::NCHARACTER_INPUT_STREAM,
             Self::Object {
                 target_sql_type, ..
             } => target_sql_type.unwrap_or(1_111),
@@ -506,25 +506,25 @@ impl JdbcParameter for PreparedInputParameter {
             Self::Clob(_) | Self::ClobReader { .. } => 2_005,
             Self::NClob(_) | Self::NClobReader { .. } => 2_011,
             Self::Array(_) => 2_003,
-            Self::Url(_) => JdbcParameterType::URL,
+            Self::Url(_) => RdbcParameterType::URL,
             Self::RowId(_) => -8,
             Self::SqlXml(_) => 2_009,
         }
     }
 }
 
-fn stream_length(length: JdbcStreamLength) -> i64 {
+fn stream_length(length: RdbcStreamLength) -> i64 {
     match length {
-        JdbcStreamLength::Unspecified => -1,
-        JdbcStreamLength::Int(length) => i64::from(length),
-        JdbcStreamLength::Long(length) => length,
+        RdbcStreamLength::Unspecified => -1,
+        RdbcStreamLength::Int(length) => i64::from(length),
+        RdbcStreamLength::Long(length) => length,
     }
 }
 
-fn character_length(length: JdbcCharacterLength) -> i64 {
+fn character_length(length: RdbcCharacterLength) -> i64 {
     match length {
-        JdbcCharacterLength::Unspecified => -1,
-        JdbcCharacterLength::Int(length) => i64::from(length),
-        JdbcCharacterLength::Long(length) => length,
+        RdbcCharacterLength::Unspecified => -1,
+        RdbcCharacterLength::Int(length) => i64::from(length),
+        RdbcCharacterLength::Long(length) => length,
     }
 }

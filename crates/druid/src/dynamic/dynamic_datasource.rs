@@ -4,7 +4,7 @@
 
 use super::datasource_group::DataSourceGroup;
 use super::sql_hint::SqlHint;
-use crate::core::Pool;
+use crate::core::{DruidError, DruidPooledConnection, Pool};
 use arc_swap::ArcSwap;
 use std::sync::Arc;
 
@@ -35,6 +35,19 @@ impl DynamicDataSource {
                 .clone(),
             SqlHint::Auto => group.master.clone(), // 默认走主库
         }
+    }
+
+    /// 按 SQL 意图从当前数据源组取得池化连接。
+    pub async fn get_connection_for(
+        &self,
+        hint: SqlHint,
+    ) -> Result<DruidPooledConnection, DruidError> {
+        self.route(hint).get().await
+    }
+
+    /// 从当前默认写节点取得连接。对应 Java: `DataSource#getConnection()`。
+    pub async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
+        self.get_connection_for(SqlHint::Auto).await
     }
 
     /// 热切换数据源（lock-free）。

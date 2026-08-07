@@ -1,6 +1,9 @@
 #![cfg(feature = "managed-driver-install")]
 
-use druid_admin::driver::{DriverInstallRequest, DriverInstaller, DriverInstallerError};
+use druid_admin::driver::{
+    DriverBundleFile, DriverBundleInstallRequest, DriverInstallRequest, DriverInstaller,
+    DriverInstallerError,
+};
 use std::fs;
 
 #[tokio::test]
@@ -118,6 +121,46 @@ async fn installer_supports_version_rollback_verification_and_safe_removal() {
         .await
         .expect("非激活版本必须可删除");
     assert_eq!(installer.installations("h2").await.unwrap().len(), 1);
+    fs::remove_dir_all(root).expect("必须清理测试目录");
+}
+
+#[tokio::test]
+async fn installer_keeps_multi_jar_bundle_atomic_and_detects_dependency_tampering() {
+    let root =
+        std::env::temp_dir().join(format!("druid-driver-bundle-test-{}", uuid::Uuid::new_v4()));
+    fs::create_dir_all(&root).expect("必须创建测试目录");
+    let driver = root.join("h2-driver.jar");
+    let dependency = root.join("h2-dependency.jar");
+    fs::write(&driver, b"PK\x03\x04bundle-driver").expect("必须创建主驱动 JAR");
+    fs::write(&dependency, b"PK\x03\x04bundle-dependency").expect("必须创建依赖 JAR");
+    let installer = DriverInstaller::new(root.join("managed"));
+    let request = DriverBundleInstallRequest::new(
+        "h2",
+        vec![
+            DriverBundleFile::new(&driver),
+            DriverBundleFile::new(&dependency),
+        ],
+    );
+    let installed = installer
+        .install_bundle_files(&request)
+        .await
+        .expect("多 JAR bundle 必须原子安装");
+    assert!(installed.is_bundle());
+    assert_eq!(installed.class_path().len(), 2);
+    assert_eq!(installed.jar_sha256().len(), 2);
+    installer
+        .verify_installation("h2", installed.sha256())
+        .await
+        .expect("完整 bundle 必须可复验");
+
+    fs::write(&installed.class_path()[1], b"PK\x03\x04tampered-dependency")
+        .expect("必须能模拟依赖篡改");
+    assert!(matches!(
+        installer
+            .verify_installation("h2", installed.sha256())
+            .await,
+        Err(DriverInstallerError::ChecksumMismatch { .. })
+    ));
     fs::remove_dir_all(root).expect("必须清理测试目录");
 }
 

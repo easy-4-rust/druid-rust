@@ -788,7 +788,7 @@ impl DruidConnectionHolder {
 
     /// 设置是否采用 MySQL-family 的 schema 回收语义。
     ///
-    /// 对应 Java：`JdbcUtils.isMysqlDbType(...)` 分支。
+    /// 对应 Java：`RdbcUtils.isMysqlDbType(...)` 分支。
     pub fn set_restore_schema_on_recycle(&self, restore_schema_on_recycle: bool) {
         self.restore_schema_on_recycle
             .store(restore_schema_on_recycle, Ordering::Release);

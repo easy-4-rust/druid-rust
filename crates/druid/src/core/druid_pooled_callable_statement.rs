@@ -9,9 +9,9 @@ use super::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidError, DruidPooledConnection, DruidPooledPreparedStatement,
     DruidPooledPreparedStatementHandle, DruidPooledResultSet, DruidPooledStatement, ExecResult,
-    JdbcArray, JdbcBlob, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject,
-    JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcTargetType, JdbcTypeMap,
-    JdbcUrl, PhysicalCallableStatement, PhysicalPreparedStatement, PreparedStatementKey, Row,
+    PhysicalCallableStatement, PhysicalPreparedStatement, PreparedStatementKey, RdbcArray,
+    RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader,
+    RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row,
     Unwrapped, Value, Wrapper,
 };
 use bigdecimal::BigDecimal;
@@ -264,7 +264,7 @@ impl DruidPooledCallableStatement {
             })
     }
 
-    /// 推进到下一个 JDBC 结果。
+    /// 推进到下一个 RDBC 结果。
     pub fn more_results(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -272,7 +272,7 @@ impl DruidPooledCallableStatement {
         self.prepared_statement.more_results(connection)
     }
 
-    /// 使用 JDBC current 常量推进到下一个结果。
+    /// 使用 RDBC current 常量推进到下一个结果。
     pub fn more_results_with_current(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -536,7 +536,7 @@ impl DruidPooledCallableStatement {
     pub fn set_named_url(
         &mut self,
         parameter_name: &str,
-        value: Option<JdbcUrl>,
+        value: Option<RdbcUrl>,
     ) -> Result<(), DruidError> {
         self.set_named_input(parameter_name, CallableInputParameter::Url(value))
     }
@@ -545,7 +545,7 @@ impl DruidPooledCallableStatement {
     pub fn set_named_row_id(
         &mut self,
         parameter_name: &str,
-        value: Option<JdbcRowId>,
+        value: Option<RdbcRowId>,
     ) -> Result<(), DruidError> {
         self.set_named_input(parameter_name, CallableInputParameter::RowId(value))
     }
@@ -554,7 +554,7 @@ impl DruidPooledCallableStatement {
     pub fn set_named_sql_xml(
         &mut self,
         parameter_name: &str,
-        value: Option<JdbcSqlXml>,
+        value: Option<RdbcSqlXml>,
     ) -> Result<(), DruidError> {
         self.set_named_input(parameter_name, CallableInputParameter::SqlXml(value))
     }
@@ -563,13 +563,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_ascii_stream(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::AsciiStream {
                 stream,
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             },
         )
     }
@@ -578,14 +578,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_ascii_stream_with_int_length(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::AsciiStream {
                 stream,
-                length: JdbcStreamLength::Int(length),
+                length: RdbcStreamLength::Int(length),
             },
         )
     }
@@ -594,14 +594,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_ascii_stream_with_length(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::AsciiStream {
                 stream,
-                length: JdbcStreamLength::Long(length),
+                length: RdbcStreamLength::Long(length),
             },
         )
     }
@@ -610,13 +610,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_binary_stream(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BinaryStream {
                 stream,
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             },
         )
     }
@@ -625,14 +625,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_binary_stream_with_int_length(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BinaryStream {
                 stream,
-                length: JdbcStreamLength::Int(length),
+                length: RdbcStreamLength::Int(length),
             },
         )
     }
@@ -641,14 +641,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_binary_stream_with_length(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BinaryStream {
                 stream,
-                length: JdbcStreamLength::Long(length),
+                length: RdbcStreamLength::Long(length),
             },
         )
     }
@@ -660,7 +660,7 @@ impl DruidPooledCallableStatement {
     pub fn set_named_blob(
         &mut self,
         parameter_name: &str,
-        value: Option<JdbcBlob>,
+        value: Option<RdbcBlob>,
     ) -> Result<(), DruidError> {
         self.set_named_input(parameter_name, CallableInputParameter::Blob(value))
     }
@@ -671,13 +671,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_blob_stream(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BlobStream {
                 stream,
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             },
         )
     }
@@ -690,14 +690,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_blob_stream_with_length(
         &mut self,
         parameter_name: &str,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BlobStream {
                 stream,
-                length: JdbcStreamLength::Long(length),
+                length: RdbcStreamLength::Long(length),
             },
         )
     }
@@ -708,7 +708,7 @@ impl DruidPooledCallableStatement {
     pub fn set_named_clob(
         &mut self,
         parameter_name: &str,
-        value: Option<JdbcClob>,
+        value: Option<RdbcClob>,
     ) -> Result<(), DruidError> {
         self.set_named_input(parameter_name, CallableInputParameter::Clob(value))
     }
@@ -719,13 +719,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_clob_reader(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::ClobReader {
                 reader,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
         )
     }
@@ -736,14 +736,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_clob_reader_with_length(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::ClobReader {
                 reader,
-                length: JdbcCharacterLength::Long(length),
+                length: RdbcCharacterLength::Long(length),
             },
         )
     }
@@ -754,7 +754,7 @@ impl DruidPooledCallableStatement {
     pub fn set_named_n_clob(
         &mut self,
         parameter_name: &str,
-        value: Option<JdbcNClob>,
+        value: Option<RdbcNClob>,
     ) -> Result<(), DruidError> {
         self.set_named_input(parameter_name, CallableInputParameter::NClob(value))
     }
@@ -765,13 +765,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_n_clob_reader(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NClobReader {
                 reader,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
         )
     }
@@ -782,14 +782,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_n_clob_reader_with_length(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NClobReader {
                 reader,
-                length: JdbcCharacterLength::Long(length),
+                length: RdbcCharacterLength::Long(length),
             },
         )
     }
@@ -800,13 +800,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_character_stream(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::CharacterStream {
                 reader,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
         )
     }
@@ -817,14 +817,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_character_stream_with_int_length(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::CharacterStream {
                 reader,
-                length: JdbcCharacterLength::Int(length),
+                length: RdbcCharacterLength::Int(length),
             },
         )
     }
@@ -835,14 +835,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_character_stream_with_length(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::CharacterStream {
                 reader,
-                length: JdbcCharacterLength::Long(length),
+                length: RdbcCharacterLength::Long(length),
             },
         )
     }
@@ -853,13 +853,13 @@ impl DruidPooledCallableStatement {
     pub fn set_named_n_character_stream(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NCharacterStream {
                 reader,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
         )
     }
@@ -870,14 +870,14 @@ impl DruidPooledCallableStatement {
     pub fn set_named_n_character_stream_with_length(
         &mut self,
         parameter_name: &str,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NCharacterStream {
                 reader,
-                length: JdbcCharacterLength::Long(length),
+                length: RdbcCharacterLength::Long(length),
             },
         )
     }
@@ -1005,7 +1005,7 @@ impl DruidPooledCallableStatement {
     ///
     /// 对应 Java：`getObject(int)` 的已迁移标量部分。ResultSet/LOB/Ref/Array
     /// 必须由后续独立对象 SPI 表达，不能伪装成标量。
-    pub fn get_object(&mut self, parameter_index: usize) -> Result<JdbcObject, DruidError> {
+    pub fn get_object(&mut self, parameter_index: usize) -> Result<RdbcObject, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.get(parameter)
     }
@@ -1013,7 +1013,7 @@ impl DruidPooledCallableStatement {
     /// 读取命名 OUT 参数。
     ///
     /// 对应 Java：`getObject(String)` 的已迁移标量部分。
-    pub fn get_named_object(&mut self, parameter_name: &str) -> Result<JdbcObject, DruidError> {
+    pub fn get_named_object(&mut self, parameter_name: &str) -> Result<RdbcObject, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.get(parameter)
     }
@@ -1022,8 +1022,8 @@ impl DruidPooledCallableStatement {
     pub fn get_object_with_type_map(
         &mut self,
         parameter_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         let result = self.apply_callable(|statement| {
             statement.out_parameter_with_type_map(&parameter, type_map)
@@ -1036,8 +1036,8 @@ impl DruidPooledCallableStatement {
     pub fn get_named_object_with_type_map(
         &mut self,
         parameter_name: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         let result = self.apply_callable(|statement| {
             statement.out_parameter_with_type_map(&parameter, type_map)
@@ -1050,8 +1050,8 @@ impl DruidPooledCallableStatement {
     pub fn get_object_as(
         &mut self,
         parameter_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         // Java 4.1 typed `getObject` 直接委托给底层 stmt，不经过 checkException。
         let parameter = CallableParameter::by_index(parameter_index)?;
         self.physical_callable_statement()?
@@ -1062,8 +1062,8 @@ impl DruidPooledCallableStatement {
     pub fn get_named_object_as(
         &mut self,
         parameter_name: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         // 与 Java 原方法一致：保留底层异常，不写入连接异常计数。
         let parameter = CallableParameter::by_name(parameter_name)?;
         self.physical_callable_statement()?
@@ -1081,10 +1081,10 @@ impl DruidPooledCallableStatement {
         self.apply_callable(|statement| statement.big_decimal_out_parameter(&parameter))
     }
 
-    /// 读取索引 BigDecimal OUT 参数并应用已废弃 JDBC scale 重载。
+    /// 读取索引 BigDecimal OUT 参数并应用已废弃 RDBC scale 重载。
     ///
     /// 对应 Java：`getBigDecimal(int, int)`。
-    #[deprecated(note = "对应 JDBC 已废弃的 getBigDecimal(int, int)")]
+    #[deprecated(note = "对应 RDBC 已废弃的 getBigDecimal(int, int)")]
     pub fn get_big_decimal_with_scale(
         &mut self,
         parameter_index: usize,
@@ -1256,49 +1256,49 @@ impl DruidPooledCallableStatement {
         self.apply_callable(|statement| statement.string_out_parameter(&parameter))
     }
 
-    /// 读取索引布尔 OUT 参数；SQL NULL 与 JDBC 一致返回 `false`。
+    /// 读取索引布尔 OUT 参数；SQL NULL 与 RDBC 一致返回 `false`。
     pub fn get_boolean(&mut self, parameter_index: usize) -> Result<bool, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.boolean_out_parameter(&parameter))
     }
 
-    /// 读取命名布尔 OUT 参数；SQL NULL 与 JDBC 一致返回 `false`。
+    /// 读取命名布尔 OUT 参数；SQL NULL 与 RDBC 一致返回 `false`。
     pub fn get_named_boolean(&mut self, parameter_name: &str) -> Result<bool, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.boolean_out_parameter(&parameter))
     }
 
-    /// 读取索引 byte OUT 参数；SQL NULL 与 JDBC 一致返回 `0`。
+    /// 读取索引 byte OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
     pub fn get_byte(&mut self, parameter_index: usize) -> Result<i8, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.byte_out_parameter(&parameter))
     }
 
-    /// 读取命名 byte OUT 参数；SQL NULL 与 JDBC 一致返回 `0`。
+    /// 读取命名 byte OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
     pub fn get_named_byte(&mut self, parameter_name: &str) -> Result<i8, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.byte_out_parameter(&parameter))
     }
 
-    /// 读取索引 short OUT 参数；SQL NULL 与 JDBC 一致返回 `0`。
+    /// 读取索引 short OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
     pub fn get_short(&mut self, parameter_index: usize) -> Result<i16, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.short_out_parameter(&parameter))
     }
 
-    /// 读取命名 short OUT 参数；SQL NULL 与 JDBC 一致返回 `0`。
+    /// 读取命名 short OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
     pub fn get_named_short(&mut self, parameter_name: &str) -> Result<i16, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.short_out_parameter(&parameter))
     }
 
-    /// 读取索引整数 OUT 参数；SQL NULL 与 JDBC 一致返回 `0`。
+    /// 读取索引整数 OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
     pub fn get_int(&mut self, parameter_index: usize) -> Result<i32, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.int_out_parameter(&parameter))
     }
 
-    /// 读取命名整数 OUT 参数；SQL NULL 与 JDBC 一致返回 `0`。
+    /// 读取命名整数 OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
     pub fn get_named_int(&mut self, parameter_name: &str) -> Result<i32, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.int_out_parameter(&parameter))
@@ -1368,73 +1368,73 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取索引 URL。
-    pub fn get_url(&mut self, parameter_index: usize) -> Result<Option<JdbcUrl>, DruidError> {
+    pub fn get_url(&mut self, parameter_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.url_out_parameter(&parameter))
     }
 
     /// 读取命名 URL。
-    pub fn get_named_url(&mut self, parameter_name: &str) -> Result<Option<JdbcUrl>, DruidError> {
+    pub fn get_named_url(&mut self, parameter_name: &str) -> Result<Option<RdbcUrl>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.url_out_parameter(&parameter))
     }
 
-    /// 读取索引 JDBC `Ref`。
-    pub fn get_ref(&mut self, parameter_index: usize) -> Result<Option<JdbcRef>, DruidError> {
+    /// 读取索引 RDBC `Ref`。
+    pub fn get_ref(&mut self, parameter_index: usize) -> Result<Option<RdbcRef>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.ref_out_parameter(&parameter))
     }
 
-    /// 读取命名 JDBC `Ref`。
-    pub fn get_named_ref(&mut self, parameter_name: &str) -> Result<Option<JdbcRef>, DruidError> {
+    /// 读取命名 RDBC `Ref`。
+    pub fn get_named_ref(&mut self, parameter_name: &str) -> Result<Option<RdbcRef>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.ref_out_parameter(&parameter))
     }
 
-    /// 读取索引 JDBC `Array`。
-    pub fn get_array(&mut self, parameter_index: usize) -> Result<Option<JdbcArray>, DruidError> {
+    /// 读取索引 RDBC `Array`。
+    pub fn get_array(&mut self, parameter_index: usize) -> Result<Option<RdbcArray>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.array_out_parameter(&parameter))
     }
 
-    /// 读取命名 JDBC `Array`。
+    /// 读取命名 RDBC `Array`。
     pub fn get_named_array(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<JdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.array_out_parameter(&parameter))
     }
 
-    /// 读取索引 JDBC `RowId`。
-    pub fn get_row_id(&mut self, parameter_index: usize) -> Result<Option<JdbcRowId>, DruidError> {
+    /// 读取索引 RDBC `RowId`。
+    pub fn get_row_id(&mut self, parameter_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.row_id_out_parameter(&parameter))
     }
 
-    /// 读取命名 JDBC `RowId`。
+    /// 读取命名 RDBC `RowId`。
     pub fn get_named_row_id(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<JdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.row_id_out_parameter(&parameter))
     }
 
-    /// 读取索引 JDBC `SQLXML`。
+    /// 读取索引 RDBC `SQLXML`。
     pub fn get_sql_xml(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.sql_xml_out_parameter(&parameter))
     }
 
-    /// 读取命名 JDBC `SQLXML`。
+    /// 读取命名 RDBC `SQLXML`。
     pub fn get_named_sql_xml(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<JdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.sql_xml_out_parameter(&parameter))
     }
@@ -1442,7 +1442,7 @@ impl DruidPooledCallableStatement {
     /// 读取索引 Blob OUT 参数。
     ///
     /// 对应 Java：`getBlob(int parameterIndex)`。
-    pub fn get_blob(&mut self, parameter_index: usize) -> Result<Option<JdbcBlob>, DruidError> {
+    pub fn get_blob(&mut self, parameter_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1454,7 +1454,7 @@ impl DruidPooledCallableStatement {
     /// 读取命名 Blob OUT 参数。
     ///
     /// 对应 Java：`getBlob(String parameterName)`。
-    pub fn get_named_blob(&mut self, parameter_name: &str) -> Result<Option<JdbcBlob>, DruidError> {
+    pub fn get_named_blob(&mut self, parameter_name: &str) -> Result<Option<RdbcBlob>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1464,7 +1464,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取索引 Clob OUT 参数。
-    pub fn get_clob(&mut self, parameter_index: usize) -> Result<Option<JdbcClob>, DruidError> {
+    pub fn get_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcClob>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1474,7 +1474,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取命名 Clob OUT 参数。
-    pub fn get_named_clob(&mut self, parameter_name: &str) -> Result<Option<JdbcClob>, DruidError> {
+    pub fn get_named_clob(&mut self, parameter_name: &str) -> Result<Option<RdbcClob>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1484,7 +1484,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取索引 NClob OUT 参数。
-    pub fn get_n_clob(&mut self, parameter_index: usize) -> Result<Option<JdbcNClob>, DruidError> {
+    pub fn get_n_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
     }
@@ -1493,7 +1493,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_n_clob(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<JdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
     }
@@ -1502,7 +1502,7 @@ impl DruidPooledCallableStatement {
     pub fn get_character_stream(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.character_stream_out_parameter(&parameter))
     }
@@ -1511,7 +1511,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_character_stream(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.character_stream_out_parameter(&parameter))
     }
@@ -1520,7 +1520,7 @@ impl DruidPooledCallableStatement {
     pub fn get_n_character_stream(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.n_character_stream_out_parameter(&parameter))
     }
@@ -1529,7 +1529,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_n_character_stream(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<JdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, DruidError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.n_character_stream_out_parameter(&parameter))
     }
@@ -1569,7 +1569,7 @@ impl DruidPooledCallableStatement {
         self.apply_callable(|statement| statement.register_out_parameter(parameter, out_parameter))
     }
 
-    fn get(&mut self, parameter: CallableParameter) -> Result<JdbcObject, DruidError> {
+    fn get(&mut self, parameter: CallableParameter) -> Result<RdbcObject, DruidError> {
         let result = self.apply_callable(|statement| statement.out_parameter(&parameter));
         self.record_object_lob_result(&result);
         result
@@ -1612,13 +1612,13 @@ impl DruidPooledCallableStatement {
             .record_blob_open();
     }
 
-    fn record_object_lob_result(&self, result: &Result<JdbcObject, DruidError>) {
+    fn record_object_lob_result(&self, result: &Result<RdbcObject, DruidError>) {
         let Ok(value) = result.as_ref() else {
             return;
         };
         match value {
-            JdbcObject::Blob(_) => self.record_blob_open(),
-            JdbcObject::Clob(_) | JdbcObject::NClob(_) => self.record_clob_open(),
+            RdbcObject::Blob(_) => self.record_blob_open(),
+            RdbcObject::Clob(_) | RdbcObject::NClob(_) => self.record_clob_open(),
             _ => {}
         }
     }

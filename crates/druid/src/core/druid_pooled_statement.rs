@@ -59,6 +59,13 @@ pub struct DruidPooledStatement {
 }
 
 impl DruidPooledStatement {
+    pub const CLOSE_CURRENT_RESULT: i32 = 1;
+    pub const KEEP_CURRENT_RESULT: i32 = 2;
+    pub const CLOSE_ALL_RESULTS: i32 = 3;
+    pub const SUCCESS_NO_INFO: i32 = -2;
+    pub const EXECUTE_FAILED: i32 = -3;
+    pub const RETURN_GENERATED_KEYS: i32 = 1;
+    pub const NO_GENERATED_KEYS: i32 = 2;
     /// 判断两个句柄是否指向同一个逻辑 Statement。
     ///
     /// 用于保留 Java `ResultSet#getStatement()` 的对象身份语义；比较的是共享
@@ -405,7 +412,7 @@ impl DruidPooledStatement {
         self.classify(connection, result)
     }
 
-    /// 推进到下一个 JDBC 结果。
+    /// 推进到下一个 RDBC 结果。
     ///
     /// 对应 Java：`DruidPooledStatement#getMoreResults()`。
     pub fn more_results(
@@ -415,7 +422,7 @@ impl DruidPooledStatement {
         self.more_results_internal(connection, None)
     }
 
-    /// 使用 JDBC current-result 常量推进到下一个结果。
+    /// 使用 RDBC current-result 常量推进到下一个结果。
     ///
     /// 对应 Java：`getMoreResults(int)`；只接受 1/2/3，非法值在推进和关闭旧
     /// ResultSet 之前返回错误。
@@ -459,7 +466,7 @@ impl DruidPooledStatement {
         self.classify(connection, result)
     }
 
-    /// 执行当前批处理快照并返回 JDBC 更新计数数组。
+    /// 执行当前批处理快照并返回 RDBC 更新计数数组。
     ///
     /// 对应 Java：`DruidPooledStatement#executeBatch()`。整个批次只进入一次
     /// Filter before/after；任一 SQL 失败时返回携带部分更新计数的

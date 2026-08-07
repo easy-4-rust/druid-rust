@@ -7,11 +7,11 @@ use super::filter::{
     ExecContext, StatementEvent, StatementEventContext,
 };
 use super::{
-    ClobProxy, DruidPooledConnection, JavaString, JdbcArray, JdbcBlob, JdbcCalendarArgument,
-    JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcOutputStream, JdbcReader, JdbcRef,
-    JdbcRowId, JdbcSqlXml, JdbcTargetType, JdbcTypeMap, JdbcUrl, JdbcWriter, PhysicalConnection,
-    PhysicalConnectionFactory, PhysicalDatabaseMetaData, PhysicalPreparedStatement,
-    PhysicalResultSet, PhysicalStatement, PoolState, ResultSetFilter, ResultSetFilterChain,
+    ClobProxy, DruidPooledConnection, JavaString, PhysicalConnection, PhysicalConnectionFactory,
+    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement,
+    PoolState, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcClob, RdbcInputStream, RdbcNClob,
+    RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcTargetType,
+    RdbcTypeMap, RdbcUrl, RdbcWriter, ResultSetFilter, ResultSetFilterChain,
     ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext, ResultSetStatement,
     SqlWarning, Value,
 };
@@ -80,7 +80,7 @@ macro_rules! temporal_result_set_filter_chain_methods {
                 physical: &dyn PhysicalResultSet,
                 context: &ResultSetFilterContext,
                 column_index: usize,
-                calendar: &JdbcCalendarArgument,
+                calendar: &RdbcCalendarArgument,
             ) -> Result<Option<$ty>, DruidError> {
                 ResultSetFilterChain::new(&self.result_set, physical, context)
                     .$index_calendar(column_index, calendar)
@@ -92,7 +92,7 @@ macro_rules! temporal_result_set_filter_chain_methods {
                 physical: &dyn PhysicalResultSet,
                 context: &ResultSetFilterContext,
                 column_label: &str,
-                calendar: &JdbcCalendarArgument,
+                calendar: &RdbcCalendarArgument,
             ) -> Result<Option<$ty>, DruidError> {
                 ResultSetFilterChain::new(&self.result_set, physical, context)
                     .$label_calendar(column_label, calendar)
@@ -446,7 +446,7 @@ pub struct DataSourceReleaseConnectionFilterChain<'a> {
 /// 物理连接关闭时提供给 Filter 的不可变身份与寿命。
 ///
 /// 这是 Java `ConnectionProxy` 在关闭路径上被 Druid Filter 消费的最小语义
-/// 投影，不模拟 JDBC 对象，也不形成对外驱动标准。
+/// 投影，不模拟 RDBC 对象，也不形成对外驱动标准。
 #[derive(Debug, Clone, Copy)]
 pub struct PhysicalConnectionCloseContext {
     /// Druid 分配的物理连接 ID。
@@ -525,7 +525,7 @@ impl<'a> ClobFilterChain<'a> {
     }
 
     /// 继续无范围 `Clob#getCharacterStream` 链。
-    pub fn clob_get_character_stream(&mut self) -> Result<JdbcReader, DruidError> {
+    pub fn clob_get_character_stream(&mut self) -> Result<RdbcReader, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_get_character_stream(self)
         } else {
@@ -534,7 +534,7 @@ impl<'a> ClobFilterChain<'a> {
     }
 
     /// 继续 `Clob#getAsciiStream` 链。
-    pub fn clob_get_ascii_stream(&mut self) -> Result<JdbcInputStream, DruidError> {
+    pub fn clob_get_ascii_stream(&mut self) -> Result<RdbcInputStream, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_get_ascii_stream(self)
         } else {
@@ -558,7 +558,7 @@ impl<'a> ClobFilterChain<'a> {
     /// 继续 `Clob#position(Clob,long)` 链。
     pub fn clob_position_clob(
         &mut self,
-        pattern: &JdbcClob,
+        pattern: &RdbcClob,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         if let Some(filter) = self.next_filter() {
@@ -599,7 +599,7 @@ impl<'a> ClobFilterChain<'a> {
     }
 
     /// 继续 `Clob#setAsciiStream` 链。
-    pub fn clob_set_ascii_stream(&mut self, position: i64) -> Result<JdbcOutputStream, DruidError> {
+    pub fn clob_set_ascii_stream(&mut self, position: i64) -> Result<RdbcOutputStream, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_set_ascii_stream(self, position)
         } else {
@@ -608,7 +608,7 @@ impl<'a> ClobFilterChain<'a> {
     }
 
     /// 继续 `Clob#setCharacterStream` 链。
-    pub fn clob_set_character_stream(&mut self, position: i64) -> Result<JdbcWriter, DruidError> {
+    pub fn clob_set_character_stream(&mut self, position: i64) -> Result<RdbcWriter, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_set_character_stream(self, position)
         } else {
@@ -639,7 +639,7 @@ impl<'a> ClobFilterChain<'a> {
         &mut self,
         position: i64,
         length: i64,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_get_character_stream_range(self, position, length)
         } else {
@@ -874,7 +874,7 @@ impl<'a> ConnectionLobFilterChain<'a> {
     }
 
     /// 继续分派 `Connection#createBlob()`。
-    pub async fn connection_create_blob(&mut self) -> Result<JdbcBlob, DruidError> {
+    pub async fn connection_create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -885,7 +885,7 @@ impl<'a> ConnectionLobFilterChain<'a> {
     }
 
     /// 继续分派 `Connection#createClob()`。
-    pub async fn connection_create_clob(&mut self) -> Result<JdbcClob, DruidError> {
+    pub async fn connection_create_clob(&mut self) -> Result<RdbcClob, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -896,7 +896,7 @@ impl<'a> ConnectionLobFilterChain<'a> {
     }
 
     /// 继续分派 `Connection#createNClob()`。
-    pub async fn connection_create_n_clob(&mut self) -> Result<JdbcNClob, DruidError> {
+    pub async fn connection_create_n_clob(&mut self) -> Result<RdbcNClob, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -1136,7 +1136,7 @@ impl FilterChainImpl {
     pub fn clob_get_character_stream(
         &self,
         wrapper: &dyn ClobProxy,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_get_character_stream()
     }
 
@@ -1144,7 +1144,7 @@ impl FilterChainImpl {
     pub fn clob_get_ascii_stream(
         &self,
         wrapper: &dyn ClobProxy,
-    ) -> Result<JdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_get_ascii_stream()
     }
 
@@ -1162,7 +1162,7 @@ impl FilterChainImpl {
     pub fn clob_position_clob(
         &self,
         wrapper: &dyn ClobProxy,
-        pattern: &JdbcClob,
+        pattern: &RdbcClob,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_position_clob(pattern, start)
@@ -1196,7 +1196,7 @@ impl FilterChainImpl {
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
-    ) -> Result<JdbcOutputStream, DruidError> {
+    ) -> Result<RdbcOutputStream, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_set_ascii_stream(position)
     }
 
@@ -1205,7 +1205,7 @@ impl FilterChainImpl {
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
-    ) -> Result<JdbcWriter, DruidError> {
+    ) -> Result<RdbcWriter, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_set_character_stream(position)
     }
 
@@ -1225,7 +1225,7 @@ impl FilterChainImpl {
         wrapper: &dyn ClobProxy,
         position: i64,
         length: i64,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         ClobFilterChain::new(&self.before, wrapper)
             .clob_get_character_stream_range(position, length)
     }
@@ -1442,8 +1442,8 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
             .result_set_get_object_with_type_map(column_index, type_map)
     }
@@ -1454,8 +1454,8 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
             .result_set_get_object_by_label_with_type_map(column_label, type_map)
     }
@@ -1466,8 +1466,8 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
             .result_set_get_object_typed(column_index, target_type)
     }
@@ -1478,8 +1478,8 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
             .result_set_get_object_typed_by_label(column_label, target_type)
     }
@@ -1624,79 +1624,79 @@ impl FilterChainImpl {
         (
             result_set_get_ref,
             result_set_get_ref_by_label,
-            JdbcRef,
+            RdbcRef,
             "getRef"
         ),
         (
             result_set_get_blob,
             result_set_get_blob_by_label,
-            JdbcBlob,
+            RdbcBlob,
             "getBlob"
         ),
         (
             result_set_get_clob,
             result_set_get_clob_by_label,
-            JdbcClob,
+            RdbcClob,
             "getClob"
         ),
         (
             result_set_get_array,
             result_set_get_array_by_label,
-            JdbcArray,
+            RdbcArray,
             "getArray"
         ),
         (
             result_set_get_url,
             result_set_get_url_by_label,
-            JdbcUrl,
+            RdbcUrl,
             "getURL"
         ),
         (
             result_set_get_row_id,
             result_set_get_row_id_by_label,
-            JdbcRowId,
+            RdbcRowId,
             "getRowId"
         ),
         (
             result_set_get_n_clob,
             result_set_get_n_clob_by_label,
-            JdbcNClob,
+            RdbcNClob,
             "getNClob"
         ),
         (
             result_set_get_sql_xml,
             result_set_get_sql_xml_by_label,
-            JdbcSqlXml,
+            RdbcSqlXml,
             "getSQLXML"
         ),
         (
             result_set_get_ascii_stream,
             result_set_get_ascii_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getAsciiStream"
         ),
         (
             result_set_get_unicode_stream,
             result_set_get_unicode_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getUnicodeStream"
         ),
         (
             result_set_get_binary_stream,
             result_set_get_binary_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getBinaryStream"
         ),
         (
             result_set_get_character_stream,
             result_set_get_character_stream_by_label,
-            JdbcReader,
+            RdbcReader,
             "getCharacterStream"
         ),
         (
             result_set_get_n_character_stream,
             result_set_get_n_character_stream_by_label,
-            JdbcReader,
+            RdbcReader,
             "getNCharacterStream"
         ),
     );
@@ -1789,7 +1789,7 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
             .result_set_update_object(column_index, value)
@@ -1801,7 +1801,7 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
             .result_set_update_object_by_label(column_label, value)
@@ -1813,7 +1813,7 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
@@ -1826,7 +1826,7 @@ impl FilterChainImpl {
         physical: &dyn PhysicalResultSet,
         context: &ResultSetFilterContext,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context)
@@ -1841,43 +1841,43 @@ impl FilterChainImpl {
         (
             result_set_update_reference,
             result_set_update_reference_by_label,
-            JdbcRef,
+            RdbcRef,
             "updateRef"
         ),
         (
             result_set_update_blob,
             result_set_update_blob_by_label,
-            JdbcBlob,
+            RdbcBlob,
             "updateBlob"
         ),
         (
             result_set_update_clob,
             result_set_update_clob_by_label,
-            JdbcClob,
+            RdbcClob,
             "updateClob"
         ),
         (
             result_set_update_array,
             result_set_update_array_by_label,
-            JdbcArray,
+            RdbcArray,
             "updateArray"
         ),
         (
             result_set_update_row_id,
             result_set_update_row_id_by_label,
-            JdbcRowId,
+            RdbcRowId,
             "updateRowId"
         ),
         (
             result_set_update_n_clob,
             result_set_update_n_clob_by_label,
-            JdbcNClob,
+            RdbcNClob,
             "updateNClob"
         ),
         (
             result_set_update_sql_xml,
             result_set_update_sql_xml_by_label,
-            JdbcSqlXml,
+            RdbcSqlXml,
             "updateSQLXML"
         ),
     );
@@ -1888,7 +1888,7 @@ impl FilterChainImpl {
             result_set_update_blob_stream_by_label,
             result_set_update_blob_stream_with_length,
             result_set_update_blob_stream_by_label_with_length,
-            JdbcInputStream,
+            RdbcInputStream,
             "updateBlob"
         ),
         (
@@ -1896,7 +1896,7 @@ impl FilterChainImpl {
             result_set_update_clob_reader_by_label,
             result_set_update_clob_reader_with_length,
             result_set_update_clob_reader_by_label_with_length,
-            JdbcReader,
+            RdbcReader,
             "updateClob"
         ),
         (
@@ -1904,7 +1904,7 @@ impl FilterChainImpl {
             result_set_update_n_clob_reader_by_label,
             result_set_update_n_clob_reader_with_length,
             result_set_update_n_clob_reader_by_label_with_length,
-            JdbcReader,
+            RdbcReader,
             "updateNClob"
         ),
     );
@@ -1917,7 +1917,7 @@ impl FilterChainImpl {
             result_set_update_ascii_stream_by_label_with_int_length,
             result_set_update_ascii_stream_with_length,
             result_set_update_ascii_stream_by_label_with_length,
-            JdbcInputStream,
+            RdbcInputStream,
             "updateAsciiStream"
         ),
         (
@@ -1927,7 +1927,7 @@ impl FilterChainImpl {
             result_set_update_binary_stream_by_label_with_int_length,
             result_set_update_binary_stream_with_length,
             result_set_update_binary_stream_by_label_with_length,
-            JdbcInputStream,
+            RdbcInputStream,
             "updateBinaryStream"
         ),
         (
@@ -1937,7 +1937,7 @@ impl FilterChainImpl {
             result_set_update_character_stream_by_label_with_int_length,
             result_set_update_character_stream_with_length,
             result_set_update_character_stream_by_label_with_length,
-            JdbcReader,
+            RdbcReader,
             "updateCharacterStream"
         ),
     );
@@ -1947,7 +1947,7 @@ impl FilterChainImpl {
         result_set_update_n_character_stream_by_label,
         result_set_update_n_character_stream_with_length,
         result_set_update_n_character_stream_by_label_with_length,
-        JdbcReader,
+        RdbcReader,
         "updateNCharacterStream"
     ));
 
@@ -2128,7 +2128,7 @@ impl FilterChainImpl {
     pub async fn connection_create_blob(
         &self,
         physical: &mut dyn PhysicalConnection,
-    ) -> Result<JdbcBlob, DruidError> {
+    ) -> Result<RdbcBlob, DruidError> {
         ConnectionLobFilterChain::new(&self.before, physical)
             .connection_create_blob()
             .await
@@ -2138,7 +2138,7 @@ impl FilterChainImpl {
     pub async fn connection_create_clob(
         &self,
         physical: &mut dyn PhysicalConnection,
-    ) -> Result<JdbcClob, DruidError> {
+    ) -> Result<RdbcClob, DruidError> {
         ConnectionLobFilterChain::new(&self.before, physical)
             .connection_create_clob()
             .await
@@ -2148,7 +2148,7 @@ impl FilterChainImpl {
     pub async fn connection_create_n_clob(
         &self,
         physical: &mut dyn PhysicalConnection,
-    ) -> Result<JdbcNClob, DruidError> {
+    ) -> Result<RdbcNClob, DruidError> {
         ConnectionLobFilterChain::new(&self.before, physical)
             .connection_create_n_clob()
             .await

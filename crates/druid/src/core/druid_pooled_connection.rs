@@ -15,8 +15,6 @@ use super::exec_result::ExecResult;
 use super::fatal_error_handler::FatalErrorHandler;
 use super::filter::{ConnectionEvent, ExecContext};
 use super::filter_chain::FilterChain;
-use super::jdbc_blob::JdbcBlob;
-use super::jdbc_result_set::PhysicalResultSet;
 use super::n_clob_proxy_impl::NClobProxyImpl;
 use super::physical_connection::PhysicalConnection;
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
@@ -29,6 +27,8 @@ use super::prepared_input_parameter::PreparedInputParameter;
 use super::prepared_statement_holder::PreparedStatementHolder;
 use super::prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
 use super::proxy_attributes::{ProxyAttributeValue, ProxyAttributes};
+use super::rdbc_blob::RdbcBlob;
+use super::rdbc_result_set::PhysicalResultSet;
 use super::row::Row;
 use super::savepoint::Savepoint;
 use super::sql_warning::SqlWarning;
@@ -36,7 +36,7 @@ use super::statement_event_listener::StatementEventListener;
 use super::transaction_info::TransactionInfo;
 use super::value::Value;
 use super::wrapper::{Unwrapped, Wrapper};
-use crate::stats::{JdbcStatementStat, StatsCollector};
+use crate::stats::{RdbcStatementStat, StatsCollector};
 use serde_json::Value as JsonValue;
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -56,14 +56,14 @@ pub type PhysicalConnectionReturnCallback =
 /// 一次数据库执行的运行中标记，离开作用域时无条件复位。
 struct ExecutionRunningGuard {
     execution_running: Arc<AtomicBool>,
-    statement_stat: Option<Arc<JdbcStatementStat>>,
+    statement_stat: Option<Arc<RdbcStatementStat>>,
     started_at: Instant,
 }
 
 impl ExecutionRunningGuard {
     fn new(
         execution_running: Arc<AtomicBool>,
-        statement_stat: Option<Arc<JdbcStatementStat>>,
+        statement_stat: Option<Arc<RdbcStatementStat>>,
     ) -> Self {
         execution_running.store(true, Ordering::Release);
         if let Some(stat) = statement_stat.as_ref() {
@@ -215,6 +215,16 @@ impl Wrapper for DruidPooledConnection {
 }
 
 impl DruidPooledConnection {
+    /// RDBC 不支持事务隔离。
+    pub const TRANSACTION_NONE: i32 = 0;
+    /// RDBC READ_UNCOMMITTED。
+    pub const TRANSACTION_READ_UNCOMMITTED: i32 = 1;
+    /// RDBC READ_COMMITTED。
+    pub const TRANSACTION_READ_COMMITTED: i32 = 2;
+    /// RDBC REPEATABLE_READ。
+    pub const TRANSACTION_REPEATABLE_READ: i32 = 4;
+    /// RDBC SERIALIZABLE。
+    pub const TRANSACTION_SERIALIZABLE: i32 = 8;
     /// 创建不带过滤上下文的池化连接。
     ///
     /// 参数 `physical_connection` 为底层物理连接，`id` 为连接 ID，
@@ -744,6 +754,11 @@ impl DruidPooledConnection {
         Ok(DatabaseMetaDataProxyImpl::new(raw, connection_id))
     }
 
+    /// 返回数据库元数据。对应 Java: `Connection#getMetaData()`。
+    pub fn get_meta_data(&mut self) -> Result<DatabaseMetaDataProxyImpl<'_>, DruidError> {
+        self.database_meta_data()
+    }
+
     /// 返回当前连接 holder；连接归还后返回 `None`。
     ///
     /// 对应 Java：`DruidPooledConnection#getConnectionHolder()`。
@@ -858,7 +873,7 @@ impl DruidPooledConnection {
     ///
     /// 对应 Java：`DruidPooledConnection#createBlob()`。Java Druid 对 Blob
     /// 只做连接状态检查和 FilterChain 转发，不创建 `BlobProxy`。
-    pub async fn create_blob(&mut self) -> Result<JdbcBlob, DruidError> {
+    pub async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
         let filter_chain = self
             .filter_chain
             .clone()
@@ -1631,7 +1646,7 @@ impl DruidPooledConnection {
 
     /// 以 Java `statement_execute` 边界执行 generic Statement。
     ///
-    /// 驱动返回有序 JDBC 结果；Filter before/after 对整个 `execute` 调用各执行
+    /// 驱动返回有序 RDBC 结果；Filter before/after 对整个 `execute` 调用各执行
     /// 一次，查询首结果通过 `row_count` 暴露给 after hook，更新首结果保留
     /// `ExecResult` 的更新计数与生成键。
     pub(crate) async fn execute_with_filters(
@@ -1831,7 +1846,7 @@ impl DruidPooledConnection {
     /// 以单次 Java `statement_executeBatch` Filter 边界执行整个批次。
     ///
     /// `sql` 必须是 `StatementProxy#getBatchSql()` 的 `"\n;\n"` 合并结果；
-    /// 物理层返回完整 JDBC 更新计数数组，失败时保留部分计数。
+    /// 物理层返回完整 RDBC 更新计数数组，失败时保留部分计数。
     pub(crate) async fn exec_batch_with_filters(
         &mut self,
         sql: &str,
@@ -1932,7 +1947,7 @@ impl DruidPooledConnection {
         let result = physical
             .exec_prepared_parameter_batch(statement, snapshot.clone())
             .await;
-        // JDBC 驱动在 executeBatch 调用后消费参数批次；物理调用前的短路不清空。
+        // RDBC 驱动在 executeBatch 调用后消费参数批次；物理调用前的短路不清空。
         parameter_sets.clear();
         let result = self.classify_result_with_sql(result, Some(&sql));
         self.record_execution(&sql, &result);

@@ -9,12 +9,12 @@ use super::druid_pooled_statement::DruidPooledStatementInner;
 use super::prepared_statement_physical_statement::PreparedStatementPhysicalStatement;
 use super::{
     DruidError, DruidPooledConnection, DruidPooledResultSet, DruidPooledStatement, ExecResult,
-    FilterChain, JdbcArray, JdbcBlob, JdbcCalendar, JdbcCalendarArgument, JdbcCharacterLength,
-    JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml,
-    JdbcStreamLength, JdbcUrl, PhysicalResultSet, PhysicalStatement, PhysicalStatementOptions,
+    FilterChain, PhysicalResultSet, PhysicalStatement, PhysicalStatementOptions,
     PreparedInputParameter, PreparedStatementCacheStats, PreparedStatementHolder,
-    PreparedStatementKey, PreparedStatementPool, Row, SqlWarning, StatementExecuteType, Unwrapped,
-    Value, Wrapper,
+    PreparedStatementKey, PreparedStatementPool, RdbcArray, RdbcBlob, RdbcCalendar,
+    RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject,
+    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcUrl, Row, SqlWarning,
+    StatementExecuteType, Unwrapped, Value, Wrapper,
 };
 use crate::stats::StatsCollector;
 use bigdecimal::BigDecimal;
@@ -546,7 +546,7 @@ impl DruidPooledPreparedStatement {
         self.statement_base.set_max_rows(connection, max)
     }
 
-    /// 设置 JDBC escape 处理开关。
+    /// 设置 RDBC escape 处理开关。
     pub fn set_escape_processing(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -695,7 +695,7 @@ impl DruidPooledPreparedStatement {
     /// Map 包含从 0 到最高已绑定槽位的所有 key；中间未绑定槽位保留为
     /// `None`，不能从 Map 中删除后伪装成从未分配。
     #[must_use]
-    pub fn jdbc_parameters(&self) -> HashMap<usize, Option<PreparedInputParameter>> {
+    pub fn rdbc_parameters(&self) -> HashMap<usize, Option<PreparedInputParameter>> {
         self.shared
             .state
             .lock()
@@ -710,9 +710,9 @@ impl DruidPooledPreparedStatement {
     /// 返回 Java `PreparedStatementProxy#getParameter(int)` 的 0-based 参数。
     ///
     /// Java 对越过 parametersSize 的索引和未绑定槽位都返回 null，Rust 均以
-    /// `None` 表达；setter 的公共入口仍保持 JDBC 1-based 下标。
+    /// `None` 表达；setter 的公共入口仍保持 RDBC 1-based 下标。
     #[must_use]
-    pub fn jdbc_parameter(&self, proxy_index: usize) -> Option<PreparedInputParameter> {
+    pub fn rdbc_parameter(&self, proxy_index: usize) -> Option<PreparedInputParameter> {
         self.shared
             .state
             .lock()
@@ -767,14 +767,14 @@ impl DruidPooledPreparedStatement {
     prepared_value_setter!(set_string, Option<String>, String, "setString");
     prepared_value_setter!(set_n_string, Option<String>, NString, "setNString");
     prepared_value_setter!(set_bytes, Option<Vec<u8>>, Bytes, "setBytes");
-    prepared_value_setter!(set_ref, Option<JdbcRef>, Ref, "setRef");
-    prepared_value_setter!(set_blob, Option<JdbcBlob>, Blob, "setBlob");
-    prepared_value_setter!(set_clob, Option<JdbcClob>, Clob, "setClob");
-    prepared_value_setter!(set_n_clob, Option<JdbcNClob>, NClob, "setNClob");
-    prepared_value_setter!(set_array, Option<JdbcArray>, Array, "setArray");
-    prepared_value_setter!(set_url, Option<JdbcUrl>, Url, "setURL");
-    prepared_value_setter!(set_row_id, Option<JdbcRowId>, RowId, "setRowId");
-    prepared_value_setter!(set_sql_xml, Option<JdbcSqlXml>, SqlXml, "setSQLXML");
+    prepared_value_setter!(set_ref, Option<RdbcRef>, Ref, "setRef");
+    prepared_value_setter!(set_blob, Option<RdbcBlob>, Blob, "setBlob");
+    prepared_value_setter!(set_clob, Option<RdbcClob>, Clob, "setClob");
+    prepared_value_setter!(set_n_clob, Option<RdbcNClob>, NClob, "setNClob");
+    prepared_value_setter!(set_array, Option<RdbcArray>, Array, "setArray");
+    prepared_value_setter!(set_url, Option<RdbcUrl>, Url, "setURL");
+    prepared_value_setter!(set_row_id, Option<RdbcRowId>, RowId, "setRowId");
+    prepared_value_setter!(set_sql_xml, Option<RdbcSqlXml>, SqlXml, "setSQLXML");
 
     /// 执行 `setDate(int, Date)`。
     pub fn set_date(
@@ -787,7 +787,7 @@ impl DruidPooledPreparedStatement {
             connection,
             parameter_index,
             value,
-            JdbcCalendarArgument::Unspecified,
+            RdbcCalendarArgument::Unspecified,
         )
     }
 
@@ -797,13 +797,13 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveDate>,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<(), DruidError> {
         self.set_date_with_calendar_argument(
             connection,
             parameter_index,
             value,
-            JdbcCalendarArgument::Specified(calendar),
+            RdbcCalendarArgument::Specified(calendar),
         )
     }
 
@@ -818,7 +818,7 @@ impl DruidPooledPreparedStatement {
             connection,
             parameter_index,
             value,
-            JdbcCalendarArgument::Unspecified,
+            RdbcCalendarArgument::Unspecified,
         )
     }
 
@@ -828,13 +828,13 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveTime>,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<(), DruidError> {
         self.set_time_with_calendar_argument(
             connection,
             parameter_index,
             value,
-            JdbcCalendarArgument::Specified(calendar),
+            RdbcCalendarArgument::Specified(calendar),
         )
     }
 
@@ -849,7 +849,7 @@ impl DruidPooledPreparedStatement {
             connection,
             parameter_index,
             value,
-            JdbcCalendarArgument::Unspecified,
+            RdbcCalendarArgument::Unspecified,
         )
     }
 
@@ -859,13 +859,13 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveDateTime>,
-        calendar: Option<JdbcCalendar>,
+        calendar: Option<RdbcCalendar>,
     ) -> Result<(), DruidError> {
         self.set_timestamp_with_calendar_argument(
             connection,
             parameter_index,
             value,
-            JdbcCalendarArgument::Specified(calendar),
+            RdbcCalendarArgument::Specified(calendar),
         )
     }
 
@@ -874,7 +874,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        value: Option<JdbcObject>,
+        value: Option<RdbcObject>,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
@@ -888,7 +888,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        value: Option<JdbcObject>,
+        value: Option<RdbcObject>,
         target_sql_type: i32,
     ) -> Result<(), DruidError> {
         self.set_parameter(
@@ -903,7 +903,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        value: Option<JdbcObject>,
+        value: Option<RdbcObject>,
         target_sql_type: i32,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
@@ -923,13 +923,13 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
             stream,
-            JdbcStreamLength::Unspecified,
+            RdbcStreamLength::Unspecified,
             true,
         )
     }
@@ -939,14 +939,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
             stream,
-            JdbcStreamLength::Int(length),
+            RdbcStreamLength::Int(length),
             true,
         )
     }
@@ -956,14 +956,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
             stream,
-            JdbcStreamLength::Long(length),
+            RdbcStreamLength::Long(length),
             true,
         )
     }
@@ -973,7 +973,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_parameter(
@@ -988,13 +988,13 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
             stream,
-            JdbcStreamLength::Unspecified,
+            RdbcStreamLength::Unspecified,
             false,
         )
     }
@@ -1004,14 +1004,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
             stream,
-            JdbcStreamLength::Int(length),
+            RdbcStreamLength::Int(length),
             false,
         )
     }
@@ -1021,14 +1021,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
             stream,
-            JdbcStreamLength::Long(length),
+            RdbcStreamLength::Long(length),
             false,
         )
     }
@@ -1038,13 +1038,13 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_character_parameter(
             connection,
             parameter_index,
             reader,
-            JdbcCharacterLength::Unspecified,
+            RdbcCharacterLength::Unspecified,
             false,
         )
     }
@@ -1054,14 +1054,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i32,
     ) -> Result<(), DruidError> {
         self.set_character_parameter(
             connection,
             parameter_index,
             reader,
-            JdbcCharacterLength::Int(length),
+            RdbcCharacterLength::Int(length),
             false,
         )
     }
@@ -1071,14 +1071,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_character_parameter(
             connection,
             parameter_index,
             reader,
-            JdbcCharacterLength::Long(length),
+            RdbcCharacterLength::Long(length),
             false,
         )
     }
@@ -1088,13 +1088,13 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_character_parameter(
             connection,
             parameter_index,
             reader,
-            JdbcCharacterLength::Unspecified,
+            RdbcCharacterLength::Unspecified,
             true,
         )
     }
@@ -1104,14 +1104,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_character_parameter(
             connection,
             parameter_index,
             reader,
-            JdbcCharacterLength::Long(length),
+            RdbcCharacterLength::Long(length),
             true,
         )
     }
@@ -1121,14 +1121,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
             parameter_index,
             PreparedInputParameter::BlobStream {
                 stream,
-                length: JdbcStreamLength::Unspecified,
+                length: RdbcStreamLength::Unspecified,
             },
         )
     }
@@ -1138,7 +1138,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_parameter(
@@ -1146,7 +1146,7 @@ impl DruidPooledPreparedStatement {
             parameter_index,
             PreparedInputParameter::BlobStream {
                 stream,
-                length: JdbcStreamLength::Long(length),
+                length: RdbcStreamLength::Long(length),
             },
         )
     }
@@ -1156,14 +1156,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
             parameter_index,
             PreparedInputParameter::ClobReader {
                 reader,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
         )
     }
@@ -1173,7 +1173,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_parameter(
@@ -1181,7 +1181,7 @@ impl DruidPooledPreparedStatement {
             parameter_index,
             PreparedInputParameter::ClobReader {
                 reader,
-                length: JdbcCharacterLength::Long(length),
+                length: RdbcCharacterLength::Long(length),
             },
         )
     }
@@ -1191,14 +1191,14 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
             parameter_index,
             PreparedInputParameter::NClobReader {
                 reader,
-                length: JdbcCharacterLength::Unspecified,
+                length: RdbcCharacterLength::Unspecified,
             },
         )
     }
@@ -1208,7 +1208,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         length: i64,
     ) -> Result<(), DruidError> {
         self.set_parameter(
@@ -1216,7 +1216,7 @@ impl DruidPooledPreparedStatement {
             parameter_index,
             PreparedInputParameter::NClobReader {
                 reader,
-                length: JdbcCharacterLength::Long(length),
+                length: RdbcCharacterLength::Long(length),
             },
         )
     }
@@ -1643,7 +1643,7 @@ impl DruidPooledPreparedStatement {
             })
     }
 
-    /// 推进到下一个 JDBC 结果。
+    /// 推进到下一个 RDBC 结果。
     pub fn more_results(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1651,7 +1651,7 @@ impl DruidPooledPreparedStatement {
         self.more_results_internal(connection, None)
     }
 
-    /// 使用 JDBC current-result 常量推进结果。
+    /// 使用 RDBC current-result 常量推进结果。
     pub fn more_results_with_current(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1767,7 +1767,7 @@ impl DruidPooledPreparedStatement {
     ///
     /// 对应 Java：`DruidPooledPreparedStatement#executeBatch()`。参数按
     /// `add_batch` 时的快照顺序执行；整个批次只进入一次 Filter before/after。
-    /// 物理执行开始后，无论成功还是驱动失败，批次都按 JDBC 驱动行为被消费；
+    /// 物理执行开始后，无论成功还是驱动失败，批次都按 RDBC 驱动行为被消费；
     /// before Filter 短路则保留批次。
     pub async fn execute_batch(
         &mut self,
@@ -1941,7 +1941,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveDate>,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
@@ -1955,7 +1955,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveTime>,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
@@ -1969,7 +1969,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveDateTime>,
-        calendar: JdbcCalendarArgument,
+        calendar: RdbcCalendarArgument,
     ) -> Result<(), DruidError> {
         self.set_parameter(
             connection,
@@ -1982,8 +1982,8 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        stream: Option<JdbcInputStream>,
-        length: JdbcStreamLength,
+        stream: Option<RdbcInputStream>,
+        length: RdbcStreamLength,
         ascii: bool,
     ) -> Result<(), DruidError> {
         let parameter = if ascii {
@@ -1998,8 +1998,8 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
-        reader: Option<JdbcReader>,
-        length: JdbcCharacterLength,
+        reader: Option<RdbcReader>,
+        length: RdbcCharacterLength,
         national: bool,
     ) -> Result<(), DruidError> {
         let parameter = if national {

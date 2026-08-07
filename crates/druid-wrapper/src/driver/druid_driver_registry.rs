@@ -4,10 +4,15 @@ use super::{
 };
 #[cfg(feature = "duckdb-native")]
 use crate::duckdb::DuckDbConnectionFactory;
+#[cfg(feature = "http-sql")]
+use crate::http_sql::{HttpSqlConnectionFactory, HttpSqlProvider};
 #[cfg(feature = "jdbc-agent")]
 use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
+#[cfg(feature = "libsql-native")]
+use crate::libsql::LibSqlConnectionFactory;
 use crate::sqlx::SqlxConnectionFactory;
 use druid::core::PhysicalConnectionFactory;
+use druid::rdbc::RdbcUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -89,14 +94,40 @@ impl DruidDriverRegistry {
         config: &DatabaseConnectionConfig,
     ) -> Result<ResolvedDatabaseDriver, DriverRegistryError> {
         let profile = self.profile(config.profile_id())?.clone();
+        let (driver_url, display_url, properties) = if config.url().starts_with("rdbc://") {
+            let rdbc_url =
+                RdbcUrl::parse(config.url()).map_err(|_| DriverRegistryError::InvalidUrl {
+                    profile: profile.id().to_string(),
+                    url: "rdbc://<redacted>".to_owned(),
+                })?;
+            if rdbc_url.profile() != profile.id().as_str() {
+                return Err(DriverRegistryError::InvalidUrl {
+                    profile: profile.id().to_string(),
+                    url: rdbc_url.redacted(),
+                });
+            }
+            let mut properties = rdbc_url.properties().clone();
+            properties.extend(config.properties().clone());
+            (
+                Self::rdbc_driver_url(&profile, &rdbc_url)?,
+                rdbc_url.redacted(),
+                properties,
+            )
+        } else {
+            (
+                config.url().to_owned(),
+                config.url().to_owned(),
+                config.properties().clone(),
+            )
+        };
         match profile.runtime_mode() {
             DriverRuntimeMode::Sqlx => {
-                let driver_url = Self::normalize_sqlx_url(&profile, config.url())?;
+                let driver_url = Self::normalize_sqlx_url(&profile, &driver_url)?;
                 let factory: Arc<dyn PhysicalConnectionFactory> =
                     Arc::new(SqlxConnectionFactory::new(driver_url));
                 Ok(ResolvedDatabaseDriver::new(
                     profile,
-                    config.url().to_owned(),
+                    display_url.clone(),
                     factory,
                 ))
             }
@@ -110,10 +141,10 @@ impl DruidDriverRegistry {
                 }
                 #[cfg(feature = "jdbc-agent")]
                 {
-                    if !config.url().starts_with("jdbc:") {
+                    if !driver_url.starts_with("jdbc:") {
                         return Err(DriverRegistryError::InvalidUrl {
                             profile: profile.id().to_string(),
-                            url: config.url().to_owned(),
+                            url: display_url.clone(),
                         });
                     }
                     let options = self.jdbc_agent_options.clone().ok_or_else(|| {
@@ -123,50 +154,198 @@ impl DruidDriverRegistry {
                         }
                     })?;
                     let mut factory = JdbcAgentConnectionFactory::new(
-                        config.url(),
+                        &driver_url,
                         profile.validation_query().map(str::to_owned),
                         options,
                     );
-                    for (name, value) in config.properties() {
+                    for (name, value) in &properties {
                         factory = factory.property(name, value);
                     }
                     let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
                     Ok(ResolvedDatabaseDriver::new(
                         profile,
-                        config.url().to_owned(),
+                        display_url.clone(),
                         factory,
                     ))
                 }
             }
             DriverRuntimeMode::Native => {
-                #[cfg(not(feature = "duckdb-native"))]
+                if profile.id().as_str() == "duckdb" {
+                    #[cfg(feature = "duckdb-native")]
+                    {
+                        if !driver_url.starts_with("duckdb:") {
+                            return Err(DriverRegistryError::InvalidUrl {
+                                profile: profile.id().to_string(),
+                                url: display_url.clone(),
+                            });
+                        }
+                        let factory: Arc<dyn PhysicalConnectionFactory> =
+                            Arc::new(DuckDbConnectionFactory::new(&driver_url));
+                        return Ok(ResolvedDatabaseDriver::new(
+                            profile,
+                            display_url.clone(),
+                            factory,
+                        ));
+                    }
+                    #[cfg(not(feature = "duckdb-native"))]
+                    return Err(DriverRegistryError::UnsupportedRuntime {
+                        profile: profile.id().to_string(),
+                        runtime: "DuckDB native feature disabled".to_owned(),
+                    });
+                }
+                if profile.id().as_str() == "turso" {
+                    #[cfg(feature = "libsql-native")]
+                    {
+                        if !driver_url.starts_with("libsql://")
+                            && !driver_url.starts_with("https://")
+                        {
+                            return Err(DriverRegistryError::InvalidUrl {
+                                profile: profile.id().to_string(),
+                                url: display_url.clone(),
+                            });
+                        }
+                        let mut factory = LibSqlConnectionFactory::new(&driver_url);
+                        for (name, value) in &properties {
+                            factory = factory.property(name, value);
+                        }
+                        let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                        return Ok(ResolvedDatabaseDriver::new(
+                            profile,
+                            display_url.clone(),
+                            factory,
+                        ));
+                    }
+                    #[cfg(not(feature = "libsql-native"))]
+                    return Err(DriverRegistryError::UnsupportedRuntime {
+                        profile: profile.id().to_string(),
+                        runtime: "Turso/libSQL native feature disabled".to_owned(),
+                    });
+                }
+                Err(DriverRegistryError::UnsupportedRuntime {
+                    profile: profile.id().to_string(),
+                    runtime: format!("unknown native provider {}", profile.provider_id()),
+                })
+            }
+            DriverRuntimeMode::HttpSql => {
+                #[cfg(not(feature = "http-sql"))]
                 {
                     return Err(DriverRegistryError::UnsupportedRuntime {
                         profile: profile.id().to_string(),
-                        runtime: "Native feature disabled".to_owned(),
+                        runtime: "HttpSql feature disabled".to_owned(),
                     });
                 }
-                #[cfg(feature = "duckdb-native")]
+                #[cfg(feature = "http-sql")]
                 {
-                    if profile.id().as_str() != "duckdb" || !config.url().starts_with("duckdb:") {
+                    if !driver_url.starts_with("http://") && !driver_url.starts_with("https://") {
                         return Err(DriverRegistryError::InvalidUrl {
                             profile: profile.id().to_string(),
-                            url: config.url().to_owned(),
+                            url: display_url.clone(),
                         });
                     }
-                    let factory: Arc<dyn PhysicalConnectionFactory> =
-                        Arc::new(DuckDbConnectionFactory::new(config.url()));
-                    Ok(ResolvedDatabaseDriver::new(
-                        profile,
-                        config.url().to_owned(),
-                        factory,
-                    ))
+                    let provider = HttpSqlProvider::from_provider_id(profile.provider_id())
+                        .ok_or_else(|| DriverRegistryError::UnsupportedRuntime {
+                            profile: profile.id().to_string(),
+                            runtime: format!("unknown HTTP SQL provider {}", profile.provider_id()),
+                        })?;
+                    let mut factory = HttpSqlConnectionFactory::new(provider, &driver_url);
+                    for (name, value) in &properties {
+                        factory = factory.property(name, value);
+                    }
+                    let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                    Ok(ResolvedDatabaseDriver::new(profile, display_url, factory))
                 }
             }
-            runtime => Err(DriverRegistryError::UnsupportedRuntime {
-                profile: profile.id().to_string(),
-                runtime: format!("{runtime:?}"),
-            }),
+        }
+    }
+
+    fn rdbc_driver_url(
+        profile: &DatabaseProfile,
+        rdbc_url: &RdbcUrl,
+    ) -> Result<String, DriverRegistryError> {
+        let invalid = || DriverRegistryError::InvalidUrl {
+            profile: profile.id().to_string(),
+            url: rdbc_url.redacted(),
+        };
+        let network = |scheme: &str| rdbc_url.network_url(scheme).map_err(|_| invalid());
+        let authenticated_network = |scheme: &str| {
+            rdbc_url
+                .authenticated_network_url(scheme)
+                .map_err(|_| invalid())
+        };
+        match profile.runtime_mode() {
+            DriverRuntimeMode::Sqlx => match profile.protocol_family() {
+                ProtocolFamily::MySql => authenticated_network("mysql"),
+                ProtocolFamily::PostgreSql => authenticated_network("postgresql"),
+                ProtocolFamily::SQLite => {
+                    if rdbc_url.endpoint() == ":memory:" {
+                        Ok("sqlite::memory:".to_owned())
+                    } else {
+                        let path = [rdbc_url.endpoint(), rdbc_url.database()]
+                            .into_iter()
+                            .filter(|value| !value.is_empty())
+                            .collect::<Vec<_>>()
+                            .join("/");
+                        Ok(format!("sqlite://{path}"))
+                    }
+                }
+                _ => Err(invalid()),
+            },
+            DriverRuntimeMode::Native if profile.id().as_str() == "duckdb" => {
+                let path = [rdbc_url.endpoint(), rdbc_url.database()]
+                    .into_iter()
+                    .filter(|value| !value.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                (!path.is_empty())
+                    .then(|| format!("duckdb:{path}"))
+                    .ok_or_else(invalid)
+            }
+            DriverRuntimeMode::Native if profile.id().as_str() == "turso" => network("libsql"),
+            DriverRuntimeMode::HttpSql => {
+                let scheme = if rdbc_url.property("tls") == Some("false") {
+                    "http"
+                } else {
+                    "https"
+                };
+                network(scheme)
+            }
+            DriverRuntimeMode::JdbcAgent => {
+                let endpoint = rdbc_url.endpoint();
+                if endpoint.is_empty() {
+                    return Err(invalid());
+                }
+                let database = rdbc_url.database();
+                let suffix = if database.is_empty() {
+                    String::new()
+                } else {
+                    format!("/{database}")
+                };
+                let url = match profile.protocol_family() {
+                    ProtocolFamily::Oracle => format!("jdbc:oracle:thin:@//{endpoint}{suffix}"),
+                    ProtocolFamily::SqlServer => {
+                        if database.is_empty() {
+                            format!("jdbc:sqlserver://{endpoint}")
+                        } else {
+                            format!("jdbc:sqlserver://{endpoint};databaseName={database}")
+                        }
+                    }
+                    ProtocolFamily::SQLite => format!("jdbc:sqlite:{endpoint}{suffix}"),
+                    _ => match profile.id().as_str() {
+                        "h2" if rdbc_url.property("mode") == Some("memory") => {
+                            format!("jdbc:h2:mem:{endpoint}")
+                        }
+                        "h2" => format!("jdbc:h2:tcp://{endpoint}{suffix}"),
+                        "hsqldb" if rdbc_url.property("mode") == Some("memory") => {
+                            format!("jdbc:hsqldb:mem:{endpoint}")
+                        }
+                        "hsqldb" => format!("jdbc:hsqldb:hsql://{endpoint}{suffix}"),
+                        "derby" => format!("jdbc:derby://{endpoint}{suffix}"),
+                        id => format!("jdbc:{id}://{endpoint}{suffix}"),
+                    },
+                };
+                Ok(url)
+            }
+            DriverRuntimeMode::Native => Err(invalid()),
         }
     }
 

@@ -188,7 +188,7 @@ async fn sqlite_generic_execute_preserves_first_result_generated_keys_and_more_r
             .execute(&mut connection, "SELECT 7 AS value")
             .await
             .unwrap(),
-        "JDBC execute 对 ResultSet 首结果必须返回 true"
+        "RDBC execute 对 ResultSet 首结果必须返回 true"
     );
     assert_eq!(statement.update_count(&mut connection).unwrap(), -1);
     let mut result_set = statement

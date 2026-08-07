@@ -1,6 +1,6 @@
-//! 对应 Java：`com.alibaba.druid.proxy.jdbc.ResultSetMetaDataProxyImpl`。
+//! 对应 Java：`com.alibaba.druid.proxy.rdbc.ResultSetMetaDataProxyImpl`。
 //! 来源文件：
-//! `core/src/main/java/com/alibaba/druid/proxy/jdbc/ResultSetMetaDataProxyImpl.java`。
+//! `core/src/main/java/com/alibaba/druid/proxy/rdbc/ResultSetMetaDataProxyImpl.java`。
 
 use super::{
     ProxyAttributeValue, ProxyAttributes, ResultSetMetaData, ResultSetMetaDataProxy, Unwrapped,

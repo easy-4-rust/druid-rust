@@ -5,13 +5,13 @@
 //! `DruidPooledCallableStatement#setNull/setObject/setBoolean/...`。
 
 use super::{
-    CallableCalendarArgument, JdbcBlob, JdbcCharacterLength, JdbcClob, JdbcInputStream, JdbcNClob,
-    JdbcReader, JdbcRowId, JdbcSqlXml, JdbcStreamLength, JdbcUrl, Value,
+    CallableCalendarArgument, RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob,
+    RdbcReader, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcUrl, Value,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
-/// 命名 IN 参数及其精确 JDBC setter 语义。
+/// 命名 IN 参数及其精确 RDBC setter 语义。
 ///
 /// 不同 variant 对应不同的 Java `CallableStatement` setter，避免把
 /// `setByte`、`setNString` 或带 `targetSqlType/scale` 的 `setObject`
@@ -46,65 +46,65 @@ pub enum CallableInputParameter {
     /// `setBytes(parameterName, x)`；`None` 对应 Java null。
     Bytes(Option<Vec<u8>>),
     /// `setURL(parameterName, val)`；`None` 对应 Java null。
-    Url(Option<JdbcUrl>),
+    Url(Option<RdbcUrl>),
     /// `setRowId(parameterName, x)`；`None` 对应 Java null。
-    RowId(Option<JdbcRowId>),
+    RowId(Option<RdbcRowId>),
     /// `setSQLXML(parameterName, xmlObject)`；`None` 对应 Java null。
-    SqlXml(Option<JdbcSqlXml>),
+    SqlXml(Option<RdbcSqlXml>),
     /// `setAsciiStream(parameterName, stream[, int/long])`。
     AsciiStream {
         /// Java 参数 `x`；`None` 对应 Java null。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 精确保留无长度、int 或 long 重载。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `setBinaryStream(parameterName, stream[, int/long])`。
     BinaryStream {
         /// Java 参数 `x`；`None` 对应 Java null。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 精确保留无长度、int 或 long 重载。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `setBlob(parameterName, Blob)`；`None` 对应通过该 setter 传入 Java null。
-    Blob(Option<JdbcBlob>),
+    Blob(Option<RdbcBlob>),
     /// `setBlob(parameterName, InputStream[, long])`。
     BlobStream {
         /// Java 参数 `inputStream`；`None` 对应 Java null。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 区分无 length 重载和显式 long length。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `setClob(parameterName, Clob)`；`None` 对应 Java null。
-    Clob(Option<JdbcClob>),
+    Clob(Option<RdbcClob>),
     /// `setClob(parameterName, Reader[, long])`。
     ClobReader {
         /// Java 参数 `reader`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 无长度或 long 长度重载。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setNClob(parameterName, NClob)`；`None` 对应 Java null。
-    NClob(Option<JdbcNClob>),
+    NClob(Option<RdbcNClob>),
     /// `setNClob(parameterName, Reader[, long])`。
     NClobReader {
         /// Java 参数 `reader`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 无长度或 long 长度重载。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setCharacterStream(parameterName, Reader[, int/long])`。
     CharacterStream {
         /// Java 参数 `reader`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 精确保留 int、long 或无长度重载。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setNCharacterStream(parameterName, Reader[, long])`。
     NCharacterStream {
         /// Java 参数 `value`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 无长度或 long 长度重载。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `setBigDecimal(parameterName, x)`；`None` 对应 Java null。
     BigDecimal(Option<BigDecimal>),

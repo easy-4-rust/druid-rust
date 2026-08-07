@@ -3,9 +3,9 @@
 //! 对应 Java：`com.alibaba.druid.filter.FilterChainImpl` 的 `resultSet_*` 分派。
 
 use super::{
-    DruidError, JdbcArray, JdbcBlob, JdbcCalendarArgument, JdbcCharacterLength, JdbcClob,
-    JdbcInputStream, JdbcNClob, JdbcObject, JdbcReader, JdbcRef, JdbcRowId, JdbcSqlXml,
-    JdbcStreamLength, JdbcTargetType, JdbcTypeMap, JdbcUrl, PhysicalResultSet, ResultSetFilter,
+    DruidError, PhysicalResultSet, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcCharacterLength,
+    RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml,
+    RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, ResultSetFilter,
     ResultSetFilterContext, ResultSetMetaData, ResultSetStatement, ResultSetUpdate, SqlWarning,
     Value,
 };
@@ -52,7 +52,7 @@ macro_rules! temporal_getter_chain_methods {
                     filter.$filter_index(self, column_index)
                 } else {
                     self.physical
-                        .$physical_index(column_index, &JdbcCalendarArgument::unspecified())
+                        .$physical_index(column_index, &RdbcCalendarArgument::unspecified())
                 }
             }
 
@@ -65,7 +65,7 @@ macro_rules! temporal_getter_chain_methods {
                 } else {
                     self.physical.$physical_label(
                         column_label,
-                        &JdbcCalendarArgument::unspecified(),
+                        &RdbcCalendarArgument::unspecified(),
                     )
                 }
             }
@@ -74,7 +74,7 @@ macro_rules! temporal_getter_chain_methods {
             pub fn $index_calendar(
                 &mut self,
                 column_index: usize,
-                calendar: &JdbcCalendarArgument,
+                calendar: &RdbcCalendarArgument,
             ) -> Result<Option<$ty>, DruidError> {
                 if self.position < self.filters.len() {
                     let filter = Arc::clone(&self.filters[self.position]);
@@ -89,7 +89,7 @@ macro_rules! temporal_getter_chain_methods {
             pub fn $label_calendar(
                 &mut self,
                 column_label: &str,
-                calendar: &JdbcCalendarArgument,
+                calendar: &RdbcCalendarArgument,
             ) -> Result<Option<$ty>, DruidError> {
                 if self.position < self.filters.len() {
                     let filter = Arc::clone(&self.filters[self.position]);
@@ -694,8 +694,8 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_get_object_with_type_map(
         &mut self,
         column_index: usize,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -709,8 +709,8 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_get_object_by_label_with_type_map(
         &mut self,
         column_label: &str,
-        type_map: Option<&JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -725,8 +725,8 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_get_object_typed(
         &mut self,
         column_index: usize,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -740,8 +740,8 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_get_object_typed_by_label(
         &mut self,
         column_label: &str,
-        target_type: &JdbcTargetType,
-    ) -> Result<JdbcObject, DruidError> {
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
@@ -966,7 +966,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_ref_by_label,
             reference,
             reference_by_label,
-            JdbcRef,
+            RdbcRef,
             "getRef"
         ),
         (
@@ -976,7 +976,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_blob_by_label,
             blob,
             blob_by_label,
-            JdbcBlob,
+            RdbcBlob,
             "getBlob"
         ),
         (
@@ -986,7 +986,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_clob_by_label,
             clob,
             clob_by_label,
-            JdbcClob,
+            RdbcClob,
             "getClob"
         ),
         (
@@ -996,7 +996,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_array_by_label,
             array,
             array_by_label,
-            JdbcArray,
+            RdbcArray,
             "getArray"
         ),
         (
@@ -1006,7 +1006,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_url_by_label,
             url,
             url_by_label,
-            JdbcUrl,
+            RdbcUrl,
             "getURL"
         ),
         (
@@ -1016,7 +1016,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_row_id_by_label,
             row_id,
             row_id_by_label,
-            JdbcRowId,
+            RdbcRowId,
             "getRowId"
         ),
         (
@@ -1026,7 +1026,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_n_clob_by_label,
             n_clob,
             n_clob_by_label,
-            JdbcNClob,
+            RdbcNClob,
             "getNClob"
         ),
         (
@@ -1036,7 +1036,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_sql_xml_by_label,
             sql_xml,
             sql_xml_by_label,
-            JdbcSqlXml,
+            RdbcSqlXml,
             "getSQLXML"
         ),
         (
@@ -1046,7 +1046,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_ascii_stream_by_label,
             ascii_stream,
             ascii_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getAsciiStream"
         ),
         (
@@ -1056,7 +1056,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_unicode_stream_by_label,
             unicode_stream,
             unicode_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getUnicodeStream"
         ),
         (
@@ -1066,7 +1066,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_binary_stream_by_label,
             binary_stream,
             binary_stream_by_label,
-            JdbcInputStream,
+            RdbcInputStream,
             "getBinaryStream"
         ),
         (
@@ -1076,7 +1076,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_character_stream_by_label,
             character_stream,
             character_stream_by_label,
-            JdbcReader,
+            RdbcReader,
             "getCharacterStream"
         ),
         (
@@ -1086,7 +1086,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_get_n_character_stream_by_label,
             n_character_stream,
             n_character_stream_by_label,
-            JdbcReader,
+            RdbcReader,
             "getNCharacterStream"
         ),
     );
@@ -1222,7 +1222,7 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_update_object(
         &mut self,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
@@ -1238,7 +1238,7 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_update_object_by_label(
         &mut self,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
     ) -> Result<(), DruidError> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
@@ -1254,7 +1254,7 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_update_object_with_scale_or_length(
         &mut self,
         column_index: usize,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         if self.position < self.filters.len() {
@@ -1281,7 +1281,7 @@ impl<'a> ResultSetFilterChain<'a> {
     pub fn result_set_update_object_by_label_with_scale_or_length(
         &mut self,
         column_label: &str,
-        value: JdbcObject,
+        value: RdbcObject,
         scale_or_length: i32,
     ) -> Result<(), DruidError> {
         if self.position < self.filters.len() {
@@ -1310,7 +1310,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_reference_by_label,
             update_reference,
             update_reference_by_label,
-            JdbcRef,
+            RdbcRef,
             "updateRef"
         ),
         (
@@ -1318,7 +1318,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_blob_by_label,
             update_blob,
             update_blob_by_label,
-            JdbcBlob,
+            RdbcBlob,
             "updateBlob"
         ),
         (
@@ -1326,7 +1326,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_clob_by_label,
             update_clob,
             update_clob_by_label,
-            JdbcClob,
+            RdbcClob,
             "updateClob"
         ),
         (
@@ -1334,7 +1334,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_array_by_label,
             update_array,
             update_array_by_label,
-            JdbcArray,
+            RdbcArray,
             "updateArray"
         ),
         (
@@ -1342,7 +1342,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_row_id_by_label,
             update_row_id,
             update_row_id_by_label,
-            JdbcRowId,
+            RdbcRowId,
             "updateRowId"
         ),
         (
@@ -1350,7 +1350,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_n_clob_by_label,
             update_n_clob,
             update_n_clob_by_label,
-            JdbcNClob,
+            RdbcNClob,
             "updateNClob"
         ),
         (
@@ -1358,7 +1358,7 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_sql_xml_by_label,
             update_sql_xml,
             update_sql_xml_by_label,
-            JdbcSqlXml,
+            RdbcSqlXml,
             "updateSQLXML"
         ),
     );
@@ -1371,8 +1371,8 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_blob_stream_by_label_with_length,
             update_blob_stream,
             update_blob_stream_by_label,
-            JdbcInputStream,
-            JdbcStreamLength,
+            RdbcInputStream,
+            RdbcStreamLength,
             "updateBlob"
         ),
         (
@@ -1382,8 +1382,8 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_clob_reader_by_label_with_length,
             update_clob_reader,
             update_clob_reader_by_label,
-            JdbcReader,
-            JdbcCharacterLength,
+            RdbcReader,
+            RdbcCharacterLength,
             "updateClob"
         ),
         (
@@ -1393,8 +1393,8 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_n_clob_reader_by_label_with_length,
             update_n_clob_reader,
             update_n_clob_reader_by_label,
-            JdbcReader,
-            JdbcCharacterLength,
+            RdbcReader,
+            RdbcCharacterLength,
             "updateNClob"
         ),
     );
@@ -1408,8 +1408,8 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_ascii_stream_with_length,
             result_set_update_ascii_stream_by_label_with_length,
             stream,
-            JdbcInputStream,
-            JdbcStreamLength,
+            RdbcInputStream,
+            RdbcStreamLength,
             AsciiStream,
             "updateAsciiStream"
         ),
@@ -1421,8 +1421,8 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_binary_stream_with_length,
             result_set_update_binary_stream_by_label_with_length,
             stream,
-            JdbcInputStream,
-            JdbcStreamLength,
+            RdbcInputStream,
+            RdbcStreamLength,
             BinaryStream,
             "updateBinaryStream"
         ),
@@ -1434,8 +1434,8 @@ impl<'a> ResultSetFilterChain<'a> {
             result_set_update_character_stream_with_length,
             result_set_update_character_stream_by_label_with_length,
             reader,
-            JdbcReader,
-            JdbcCharacterLength,
+            RdbcReader,
+            RdbcCharacterLength,
             CharacterStream,
             "updateCharacterStream"
         ),
@@ -1447,8 +1447,8 @@ impl<'a> ResultSetFilterChain<'a> {
         result_set_update_n_character_stream_with_length,
         result_set_update_n_character_stream_by_label_with_length,
         reader,
-        JdbcReader,
-        JdbcCharacterLength,
+        RdbcReader,
+        RdbcCharacterLength,
         NCharacterStream,
         "updateNCharacterStream"
     ));

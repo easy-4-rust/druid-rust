@@ -2,10 +2,6 @@
 
 use super::error::DruidError;
 use super::exec_result::ExecResult;
-use super::jdbc_blob::JdbcBlob;
-use super::jdbc_clob::JdbcClob;
-use super::jdbc_n_clob::JdbcNClob;
-use super::jdbc_result_set::{PhysicalResultSet, RowSetResultSet};
 use super::physical_connection_capabilities::PhysicalConnectionCapabilities;
 use super::physical_database_meta_data::PhysicalDatabaseMetaData;
 use super::physical_prepared_statement::PhysicalPreparedStatement;
@@ -15,6 +11,10 @@ use super::physical_statement::{
 };
 use super::prepared_input_parameter::PreparedInputParameter;
 use super::prepared_statement_key::PreparedStatementKey;
+use super::rdbc_blob::RdbcBlob;
+use super::rdbc_clob::RdbcClob;
+use super::rdbc_n_clob::RdbcNClob;
+use super::rdbc_result_set::{PhysicalResultSet, RowSetResultSet};
 use super::row::Row;
 use super::savepoint::Savepoint;
 use super::sql_warning::SqlWarning;
@@ -45,10 +45,10 @@ pub trait PhysicalConnection: Any + Send {
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回执行结果。
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError>;
 
-    /// 执行 JDBC `Statement#execute(...)` 并返回有序结果。
+    /// 执行 RDBC `Statement#execute(...)` 并返回有序结果。
     ///
     /// 该入口不能根据 SQL 前缀猜测结果类型。支持 generic execute 的 Adapter
-    /// 必须让驱动执行并报告真实结果；多结果驱动按 JDBC 顺序返回全部结果。
+    /// 必须让驱动执行并报告真实结果；多结果驱动按 RDBC 顺序返回全部结果。
     async fn execute(
         &mut self,
         _sql: &str,
@@ -60,7 +60,7 @@ pub trait PhysicalConnection: Any + Send {
         })
     }
 
-    /// 执行一个 JDBC 更新批次并返回每项更新计数。
+    /// 执行一个 RDBC 更新批次并返回每项更新计数。
     ///
     /// 对应 Java：`Statement#executeBatch()`。默认实现按驱动连接顺序执行；
     /// Adapter 若有原生 batch 能力应覆盖本方法。失败时返回
@@ -105,7 +105,7 @@ pub trait PhysicalConnection: Any + Send {
         Ok(Arc::new(RowSetResultSet::new(rows)))
     }
 
-    /// 按完整 JDBC 重载键创建物理预编译语句。
+    /// 按完整 RDBC 重载键创建物理预编译语句。
     ///
     /// 对应 Java：`Connection#prepareStatement(...)` 和 `prepareCall(...)`。
     /// 不支持的 Adapter 必须返回明确错误。
@@ -146,7 +146,7 @@ pub trait PhysicalConnection: Any + Send {
         self.exec(statement.sql(), params).await
     }
 
-    /// 使用完整 JDBC setter 描述符执行已经 prepare 的更新语句。
+    /// 使用完整 RDBC setter 描述符执行已经 prepare 的更新语句。
     ///
     /// 默认实现只接受可无损投影为 `Value` 的标量参数。LOB、Stream、Reader
     /// 及其他资源必须由具体 Adapter 覆盖本入口，并在这里读取资源；池化层
@@ -180,7 +180,7 @@ pub trait PhysicalConnection: Any + Send {
         self.execute(statement.sql(), params, generated_keys).await
     }
 
-    /// 使用完整 JDBC setter 描述符执行 generic PreparedStatement。
+    /// 使用完整 RDBC setter 描述符执行 generic PreparedStatement。
     async fn execute_prepared_parameters(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -226,7 +226,7 @@ pub trait PhysicalConnection: Any + Send {
         Ok(update_counts)
     }
 
-    /// 使用完整 JDBC setter 描述符执行 PreparedStatement 参数批次。
+    /// 使用完整 RDBC setter 描述符执行 PreparedStatement 参数批次。
     async fn exec_prepared_parameter_batch(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -256,7 +256,7 @@ pub trait PhysicalConnection: Any + Send {
         self.fetch(statement.sql(), params).await
     }
 
-    /// 使用完整 JDBC setter 描述符执行已经 prepare 的查询。
+    /// 使用完整 RDBC setter 描述符执行已经 prepare 的查询。
     async fn fetch_prepared_parameters(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -279,7 +279,7 @@ pub trait PhysicalConnection: Any + Send {
         Ok(Arc::new(RowSetResultSet::new(rows)))
     }
 
-    /// 使用完整 JDBC setter 描述符执行查询并保留驱动级 `ResultSet` 语义。
+    /// 使用完整 RDBC setter 描述符执行查询并保留驱动级 `ResultSet` 语义。
     async fn fetch_prepared_parameters_result_set(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -341,7 +341,7 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#createBlob()`。默认实现明确报告驱动能力缺失；
     /// Adapter 不得用内存 `Vec<u8>` 冒充数据库 LOB。
-    async fn create_blob(&mut self) -> Result<JdbcBlob, DruidError> {
+    async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "connection_create_blob",
         })
@@ -351,7 +351,7 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#createClob()`。返回 raw 句柄，由 Druid 连接
     /// FilterChain 在池化边界包装为 `ClobProxyImpl`。
-    async fn create_clob(&mut self) -> Result<JdbcClob, DruidError> {
+    async fn create_clob(&mut self) -> Result<RdbcClob, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "connection_create_clob",
         })
@@ -361,7 +361,7 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#createNClob()`。NClob 必须保持独立类型身份，
     /// 不能降级成普通 Clob。
-    async fn create_n_clob(&mut self) -> Result<JdbcNClob, DruidError> {
+    async fn create_n_clob(&mut self) -> Result<RdbcNClob, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "connection_create_n_clob",
         })

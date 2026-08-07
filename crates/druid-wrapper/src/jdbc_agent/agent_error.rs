@@ -34,12 +34,17 @@ impl AgentError {
             ),
             None => format!("{} [requestId={}]", self.message, self.request_id),
         };
-        let mut exception = SqlException::new(self.vendor_code, self.sql_state, Some(context))
+        let sql_state = if self.fatal && self.sql_state.is_none() {
+            Some("08006".to_owned())
+        } else {
+            self.sql_state
+        };
+        let mut exception = SqlException::new(self.vendor_code, sql_state, Some(context))
             .with_class_name(self.exception_class);
-        if self.recoverable {
+        if self.recoverable || self.fatal {
             exception = exception.recoverable();
         }
-        let _classification = (self.transient_error, self.fatal);
+        let _transient_error = self.transient_error;
         DruidError::SqlException(Box::new(exception))
     }
 }

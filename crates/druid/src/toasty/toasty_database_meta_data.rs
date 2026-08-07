@@ -4,7 +4,7 @@ use crate::core::{DruidError, PhysicalDatabaseMetaData};
 
 /// Toasty driver capability 的数据库元数据视图。
 ///
-/// Toasty 0.9 没有 JDBC 风格的 metadata 对象。本 Adapter 只报告
+/// Toasty 0.9 没有 RDBC 风格的 metadata 对象。本 Adapter 只报告
 /// `Capability`、连接状态和 URL 可以证明的合同；其余方法保持明确 unsupported。
 pub struct ToastyDatabaseMetaData<'connection> {
     url: &'connection str,
@@ -96,7 +96,7 @@ impl PhysicalDatabaseMetaData for ToastyDatabaseMetaData<'_> {
     }
 
     async fn get_max_connections(&mut self) -> Result<i32, DruidError> {
-        // Toasty Connection 不携带工厂级 max_connections；JDBC 0 表示未知。
+        // Toasty Connection 不携带工厂级 max_connections；RDBC 0 表示未知。
         Ok(0)
     }
 

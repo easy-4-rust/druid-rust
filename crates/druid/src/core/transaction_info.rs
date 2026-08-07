@@ -2,7 +2,7 @@
 //!
 //! 对应 Java：
 //! `com.alibaba.druid.util.TransactionInfo` 与兼容子类
-//! `com.alibaba.druid.proxy.jdbc.TransactionInfo`。
+//! `com.alibaba.druid.proxy.rdbc.TransactionInfo`。
 
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicU64, Ordering};

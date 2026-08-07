@@ -12,7 +12,16 @@ use sqlx::postgres::PgStatement;
 use sqlx::sqlite::SqliteStatement;
 use sqlx::{Column, Statement};
 use std::any::Any;
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::sync::watch;
+
+/// SQLx 语句执行期间由 Druid 控制面产生的中断结果。
+pub(crate) enum SqlxStatementExecutionError {
+    Driver(DruidError),
+    TimedOut,
+    Cancelled,
+}
 
 enum SqlxPreparedStatementBackend {
     Any(AnyStatement<'static>),
@@ -31,6 +40,7 @@ pub struct SqlxPreparedStatement {
     closed: AtomicBool,
     statement: SqlTextStatement,
     parameter_state: PreparedParameterState,
+    cancel_generation: watch::Sender<u64>,
 }
 
 impl SqlxPreparedStatement {
@@ -41,6 +51,7 @@ impl SqlxPreparedStatement {
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
             parameter_state: PreparedParameterState::new(),
+            cancel_generation: watch::channel(0).0,
         }
     }
 
@@ -51,6 +62,7 @@ impl SqlxPreparedStatement {
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
             parameter_state: PreparedParameterState::new(),
+            cancel_generation: watch::channel(0).0,
         }
     }
 
@@ -61,6 +73,7 @@ impl SqlxPreparedStatement {
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
             parameter_state: PreparedParameterState::new(),
+            cancel_generation: watch::channel(0).0,
         }
     }
 
@@ -71,6 +84,7 @@ impl SqlxPreparedStatement {
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
             parameter_state: PreparedParameterState::new(),
+            cancel_generation: watch::channel(0).0,
         }
     }
 
@@ -187,6 +201,49 @@ impl SqlxPreparedStatement {
     ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
         self.parameter_state.take_batches(expected_count)
     }
+
+    /// 执行一个真实 SQLx future，并同时监听 Statement timeout 与显式 cancel。
+    ///
+    /// SQLx 不为所有后端暴露统一的 wire-level cancel handle。中断发生时调用方
+    /// 必须丢弃承载该 future 的物理连接，不能把协议状态未知的连接放回 Druid。
+    pub(crate) async fn execute_with_controls<T, F>(
+        &self,
+        execution: F,
+    ) -> Result<T, SqlxStatementExecutionError>
+    where
+        F: Future<Output = Result<T, DruidError>>,
+    {
+        let generation = *self.cancel_generation.borrow();
+        let mut cancellation = self.cancel_generation.subscribe();
+        let cancelled = async move {
+            if *cancellation.borrow() != generation {
+                return;
+            }
+            while cancellation.changed().await.is_ok() {
+                if *cancellation.borrow() != generation {
+                    return;
+                }
+            }
+        };
+        let timeout_seconds = self
+            .statement
+            .query_timeout()
+            .map_err(SqlxStatementExecutionError::Driver)?;
+        if timeout_seconds > 0 {
+            tokio::select! {
+                result = execution => result.map_err(SqlxStatementExecutionError::Driver),
+                () = cancelled => Err(SqlxStatementExecutionError::Cancelled),
+                () = tokio::time::sleep(std::time::Duration::from_secs(timeout_seconds as u64)) => {
+                    Err(SqlxStatementExecutionError::TimedOut)
+                }
+            }
+        } else {
+            tokio::select! {
+                result = execution => result.map_err(SqlxStatementExecutionError::Driver),
+                () = cancelled => Err(SqlxStatementExecutionError::Cancelled),
+            }
+        }
+    }
 }
 
 impl PhysicalPreparedStatement for SqlxPreparedStatement {
@@ -227,7 +284,10 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
     }
 
     fn cancel(&self) -> Result<(), DruidError> {
-        self.statement.cancel()
+        self.statement.cancel()?;
+        let next = (*self.cancel_generation.borrow()).wrapping_add(1);
+        self.cancel_generation.send_replace(next);
+        Ok(())
     }
 
     fn warnings(&self) -> Result<Option<druid::core::SqlWarning>, DruidError> {

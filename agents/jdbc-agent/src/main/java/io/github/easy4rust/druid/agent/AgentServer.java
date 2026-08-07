@@ -61,6 +61,7 @@ public final class AgentServer implements Closeable {
     private final ExecutorService requests = Executors.newCachedThreadPool();
     private final AtomicBoolean shuttingDown = new AtomicBoolean();
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final AtomicBoolean contractFaultInjection = new AtomicBoolean();
 
     /**
      * 创建使用指定字节流的服务端。
@@ -156,6 +157,8 @@ public final class AgentServer implements Closeable {
             case "close_session", "session.close" -> closeSession(params);
             case "cancel" -> cancel(params);
             case "shutdown" -> JsonNodeFactory.instance.objectNode();
+            case "diagnostic_crash" -> diagnosticCrash();
+            case "diagnostic_protocol_failure" -> diagnosticProtocolFailure();
             default -> withSession(params, session -> dispatchSession(
                     normalizeMethod(method), request.id(), session, params));
         };
@@ -191,6 +194,9 @@ public final class AgentServer implements Closeable {
             case "begin" -> begin(session);
             case "commit" -> commit(session);
             case "rollback" -> rollback(session);
+            case "set_savepoint" -> setSavepoint(session, params);
+            case "rollback_to_savepoint" -> rollbackToSavepoint(session, params);
+            case "release_savepoint" -> releaseSavepoint(session, params);
             case "set_auto_commit" -> setAutoCommit(session, params);
             case "get_auto_commit" -> value(session.connection().getAutoCommit());
             case "set_read_only" -> setReadOnly(session, params);
@@ -214,11 +220,35 @@ public final class AgentServer implements Closeable {
                     + params.path("protocolVersion").asInt());
         }
         ObjectNode result = JsonNodeFactory.instance.objectNode();
+        contractFaultInjection.set(params.path("contractFaultInjection").asBoolean(false));
         result.put("protocolVersion", PROTOCOL_VERSION);
         result.put("agentVersion", "0.0.0-design");
         result.put("defaultPageSize", DEFAULT_PAGE_SIZE);
         result.put("maxResponseBytes", DEFAULT_RESPONSE_BYTES);
         return result;
+    }
+
+    private JsonNode diagnosticCrash() {
+        requireContractFaultInjection();
+        Runtime.getRuntime().halt(91);
+        throw new IllegalStateException("JVM halt unexpectedly returned");
+    }
+
+    private JsonNode diagnosticProtocolFailure() throws IOException {
+        requireContractFaultInjection();
+        synchronized (this) {
+            output.write("{invalid-json-rpc-frame");
+            output.newLine();
+            output.flush();
+        }
+        requestShutdown();
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private void requireContractFaultInjection() {
+        if (!contractFaultInjection.get()) {
+            throw new SecurityException("contract fault injection is disabled");
+        }
     }
 
     private JsonNode openSession(JsonNode payload) throws SQLException {
@@ -253,6 +283,7 @@ public final class AgentServer implements Closeable {
             putNullable(result, "schema", safeSchema(connection));
             ObjectNode capabilities = result.putObject("capabilities");
             capabilities.put("transactions", metadata.supportsTransactions());
+            capabilities.put("savepoints", metadata.supportsSavepoints());
             capabilities.put("autoCommit", true);
             capabilities.put("readOnly", true);
             capabilities.put("transactionIsolation", true);
@@ -368,6 +399,7 @@ public final class AgentServer implements Closeable {
         String statementId = requiredText(payload, "statementId");
         PreparedStatement statement = session.preparedStatement(statementId);
         statement.clearParameters();
+        statement.setQueryTimeout(Math.max(0, payload.path("queryTimeoutSeconds").asInt(0)));
         bind(statement, payload.path("params"));
         String mode = payload.path("mode").asText("execute");
         session.activate(requestId, statement);
@@ -474,11 +506,33 @@ public final class AgentServer implements Closeable {
 
     private JsonNode commit(AgentSession session) throws SQLException {
         session.connection().commit();
+        session.clearSavepoints();
         return JsonNodeFactory.instance.objectNode();
     }
 
     private JsonNode rollback(AgentSession session) throws SQLException {
         session.connection().rollback();
+        session.clearSavepoints();
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode setSavepoint(AgentSession session, JsonNode payload) throws SQLException {
+        String name = nullableText(payload, "name");
+        java.sql.Savepoint savepoint = Objects.isNull(name)
+                ? session.connection().setSavepoint()
+                : session.connection().setSavepoint(name);
+        ObjectNode result = JsonNodeFactory.instance.objectNode();
+        result.put("savepointId", session.registerSavepoint(savepoint));
+        return result;
+    }
+
+    private JsonNode rollbackToSavepoint(AgentSession session, JsonNode payload) throws SQLException {
+        session.connection().rollback(session.savepoint(requiredText(payload, "savepointId")));
+        return JsonNodeFactory.instance.objectNode();
+    }
+
+    private JsonNode releaseSavepoint(AgentSession session, JsonNode payload) throws SQLException {
+        session.releaseSavepoint(requiredText(payload, "savepointId"));
         return JsonNodeFactory.instance.objectNode();
     }
 

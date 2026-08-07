@@ -3,13 +3,13 @@
 use super::CharsetConvert;
 use crate::core::{
     AfterFilter, BeforeFilter, ClobFilterChain, DruidError, ExecContext, ExecResult, JavaString,
-    JdbcObject, JdbcReader, ResultSetFilter, ResultSetFilterChain, Value,
+    RdbcObject, RdbcReader, ResultSetFilter, ResultSetFilterChain, Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::time::Duration;
 
-/// JDBC SQL、参数和结果字符编码转换 Filter。
+/// RDBC SQL、参数和结果字符编码转换 Filter。
 ///
 /// 本对象实现 Java 的字符串/Reader 值转换以及 ResultSet around-chain。
 /// SQL prepare/execute 入参的生产接线由连接/Statement FilterChain 继续承接，
@@ -47,7 +47,7 @@ impl EncodingConvertFilter {
         self.charset_convert.read().decode(value)
     }
 
-    /// 编码 JDBC 标量参数；非字符串值原样返回。
+    /// 编码 RDBC 标量参数；非字符串值原样返回。
     pub fn encode_value(&self, value: Value) -> Result<Value, DruidError> {
         match value {
             Value::String(value) => self.encode(&value).map(Value::String),
@@ -55,7 +55,7 @@ impl EncodingConvertFilter {
         }
     }
 
-    /// 解码 JDBC 标量结果；非字符串值原样返回。
+    /// 解码 RDBC 标量结果；非字符串值原样返回。
     pub fn decode_value(&self, value: Value) -> Result<Value, DruidError> {
         match value {
             Value::String(value) => self.decode(&value).map(Value::String),
@@ -63,22 +63,22 @@ impl EncodingConvertFilter {
         }
     }
 
-    fn decode_object(&self, object: JdbcObject) -> Result<JdbcObject, DruidError> {
+    fn decode_object(&self, object: RdbcObject) -> Result<RdbcObject, DruidError> {
         match object {
-            JdbcObject::Scalar(value) => self.decode_value(value).map(JdbcObject::Scalar),
-            JdbcObject::String(value) => self.decode(&value).map(JdbcObject::String),
-            JdbcObject::NString(value) => self.decode(&value).map(JdbcObject::NString),
-            JdbcObject::CharacterStream(reader) => {
+            RdbcObject::Scalar(value) => self.decode_value(value).map(RdbcObject::Scalar),
+            RdbcObject::String(value) => self.decode(&value).map(RdbcObject::String),
+            RdbcObject::NString(value) => self.decode(&value).map(RdbcObject::NString),
+            RdbcObject::CharacterStream(reader) => {
                 let value = reader.read_to_string()?;
                 self.decode(&value)
-                    .map(JdbcReader::from_string)
-                    .map(JdbcObject::CharacterStream)
+                    .map(RdbcReader::from_string)
+                    .map(RdbcObject::CharacterStream)
             }
-            JdbcObject::NCharacterStream(reader) => {
+            RdbcObject::NCharacterStream(reader) => {
                 let value = reader.read_to_string()?;
                 self.decode(&value)
-                    .map(JdbcReader::from_string)
-                    .map(JdbcObject::NCharacterStream)
+                    .map(RdbcReader::from_string)
+                    .map(RdbcObject::NCharacterStream)
             }
             object => Ok(object),
         }
@@ -158,9 +158,9 @@ impl BeforeFilter for EncodingConvertFilter {
     fn clob_get_character_stream(
         &self,
         chain: &mut ClobFilterChain<'_>,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         let text = chain.clob_get_character_stream()?.read_to_string()?;
-        self.decode(&text).map(JdbcReader::from_string)
+        self.decode(&text).map(RdbcReader::from_string)
     }
 
     fn clob_get_character_stream_range(
@@ -168,11 +168,11 @@ impl BeforeFilter for EncodingConvertFilter {
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         length: i64,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         let text = chain
             .clob_get_character_stream_range(position, length)?
             .read_to_string()?;
-        self.decode(&text).map(JdbcReader::from_string)
+        self.decode(&text).map(RdbcReader::from_string)
     }
 
     fn clob_set_string(
@@ -257,8 +257,8 @@ impl ResultSetFilter for EncodingConvertFilter {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_index: usize,
-        type_map: Option<&crate::core::JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&crate::core::RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.decode_object(chain.result_set_get_object_with_type_map(column_index, type_map)?)
     }
 
@@ -266,8 +266,8 @@ impl ResultSetFilter for EncodingConvertFilter {
         &self,
         chain: &mut ResultSetFilterChain<'_>,
         column_label: &str,
-        type_map: Option<&crate::core::JdbcTypeMap>,
-    ) -> Result<JdbcObject, DruidError> {
+        type_map: Option<&crate::core::RdbcTypeMap>,
+    ) -> Result<RdbcObject, DruidError> {
         self.decode_object(
             chain.result_set_get_object_by_label_with_type_map(column_label, type_map)?,
         )

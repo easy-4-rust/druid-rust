@@ -1,4 +1,4 @@
-//! JDBC `SQLException` 的 Rust 平台值对象。
+//! RDBC `SQLException` 的 Rust 平台值对象。
 
 /// SQL 异常 cause 的运行时类型。
 ///
@@ -10,6 +10,24 @@ pub enum SqlExceptionCause {
     SocketTimeout,
     /// 其他 cause 的 Java/驱动运行时类名。
     ClassName(String),
+}
+
+/// RDBC 标准异常分类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SqlExceptionKind {
+    Transient,
+    TransientConnection,
+    NonTransient,
+    NonTransientConnection,
+    Recoverable,
+    Data,
+    IntegrityConstraintViolation,
+    InvalidAuthorization,
+    Syntax,
+    TransactionRollback,
+    FeatureNotSupported,
+    Timeout,
+    General,
 }
 
 /// 不依赖具体驱动 crate 的 SQL 异常描述。
@@ -26,6 +44,7 @@ pub struct SqlException {
     assignable_types: Vec<String>,
     recoverable: bool,
     causes: Vec<SqlExceptionCause>,
+    next_exceptions: Vec<SqlException>,
 }
 
 impl SqlException {
@@ -41,6 +60,7 @@ impl SqlException {
             assignable_types: vec!["java.sql.SQLException".to_string()],
             recoverable: false,
             causes: Vec::new(),
+            next_exceptions: Vec::new(),
         }
     }
 
@@ -137,5 +157,46 @@ impl SqlException {
     /// 返回从直接 cause 开始的 cause 链。
     pub fn causes(&self) -> &[SqlExceptionCause] {
         &self.causes
+    }
+
+    /// 追加同一数据库操作产生的下一条 SQL 异常。
+    ///
+    /// 对应 Java: `SQLException#setNextException`；它与 Rust/Java cause 链相互独立。
+    pub fn set_next_exception(&mut self, exception: SqlException) {
+        self.next_exceptions.push(exception);
+    }
+
+    /// 返回异常链中的下一条 SQL 异常。对应 Java: `getNextException`。
+    pub fn next_exception(&self) -> Option<&SqlException> {
+        self.next_exceptions.first()
+    }
+
+    /// 返回按插入顺序保存的完整 SQL 异常链。
+    pub fn next_exceptions(&self) -> &[SqlException] {
+        &self.next_exceptions
+    }
+
+    /// 按具体类名、recoverable 标志和 SQLState class 识别 RDBC 标准异常层级。
+    #[must_use]
+    pub fn kind(&self) -> SqlExceptionKind {
+        match self.class_name.as_str() {
+            "java.sql.SQLTimeoutException" => SqlExceptionKind::Timeout,
+            "java.sql.SQLFeatureNotSupportedException" => SqlExceptionKind::FeatureNotSupported,
+            "java.sql.SQLRecoverableException" => SqlExceptionKind::Recoverable,
+            _ if self.recoverable => SqlExceptionKind::Recoverable,
+            _ => match self.sql_state.as_deref().and_then(|state| state.get(0..2)) {
+                Some("08") => SqlExceptionKind::NonTransientConnection,
+                Some("22") => SqlExceptionKind::Data,
+                Some("23") => SqlExceptionKind::IntegrityConstraintViolation,
+                Some("28") => SqlExceptionKind::InvalidAuthorization,
+                Some("40") => SqlExceptionKind::TransactionRollback,
+                Some("42") => SqlExceptionKind::Syntax,
+                Some("0A") => SqlExceptionKind::FeatureNotSupported,
+                Some("HY") if self.sql_state.as_deref() == Some("HYT00") => {
+                    SqlExceptionKind::Timeout
+                }
+                _ => SqlExceptionKind::General,
+            },
+        }
     }
 }

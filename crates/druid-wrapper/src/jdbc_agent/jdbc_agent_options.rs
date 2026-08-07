@@ -19,6 +19,7 @@ pub struct JdbcAgentOptions {
     artifact_version: String,
     jvm_options_hash: String,
     artifact_leases: Vec<Arc<File>>,
+    contract_fault_injection: bool,
 }
 
 impl JdbcAgentOptions {
@@ -38,6 +39,7 @@ impl JdbcAgentOptions {
             artifact_version: "unmanaged".to_owned(),
             jvm_options_hash,
             artifact_leases: Vec::new(),
+            contract_fault_injection: false,
         }
     }
 
@@ -135,6 +137,16 @@ impl JdbcAgentOptions {
         self
     }
 
+    /// 仅为隔离的真实合同进程启用 Agent 崩溃与坏帧注入。
+    ///
+    /// 普通应用不得启用；能力只通过本地 stdin/stdout 协议暴露，不影响数据库。
+    #[doc(hidden)]
+    #[must_use]
+    pub const fn contract_fault_injection(mut self, enabled: bool) -> Self {
+        self.contract_fault_injection = enabled;
+        self
+    }
+
     pub(crate) fn program(&self) -> &OsStr {
         &self.program
     }
@@ -155,14 +167,22 @@ impl JdbcAgentOptions {
         self.idle_timeout
     }
 
+    pub(crate) const fn contract_fault_injection_enabled(&self) -> bool {
+        self.contract_fault_injection
+    }
+
     pub(crate) fn artifact_leases(&self) -> Vec<Arc<File>> {
         self.artifact_leases.clone()
     }
 
     pub(crate) fn runtime_key(&self) -> String {
         format!(
-            "agent_key={}\0artifact_version={}\0jvm_options_hash={}\0frame={}",
-            self.agent_key, self.artifact_version, self.jvm_options_hash, self.max_frame_bytes
+            "agent_key={}\0artifact_version={}\0jvm_options_hash={}\0frame={}\0fault={}",
+            self.agent_key,
+            self.artifact_version,
+            self.jvm_options_hash,
+            self.max_frame_bytes,
+            self.contract_fault_injection
         )
     }
 

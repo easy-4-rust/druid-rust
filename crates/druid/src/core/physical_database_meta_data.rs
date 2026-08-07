@@ -1,7 +1,7 @@
 //! 物理数据库元数据 SPI。
 //!
 //! 对应 Java 平台接口：`java.sql.DatabaseMetaData`。Druid canonical
-//! `DatabaseMetaDataProxyImpl` 借用本 trait，不要求 Rust 驱动实现 JDBC
+//! `DatabaseMetaDataProxyImpl` 借用本 trait，不要求 Rust 驱动实现 RDBC
 //! 类型；每个 Adapter 只需逐项提供真实能力，未支持方法返回明确错误。
 
 use super::{DatabaseMetaDataRowIdLifetime, DruidError, PhysicalResultSet};
@@ -1300,17 +1300,17 @@ pub trait PhysicalDatabaseMetaData: Send {
         })
     }
 
-    /// 委托 Java `DatabaseMetaData#getJDBCMajorVersion` 的可观察结果。
-    async fn get_jdbc_major_version(&mut self) -> Result<i32, DruidError> {
+    /// 委托 Java `DatabaseMetaData#getRDBCMajorVersion` 的可观察结果。
+    async fn get_rdbc_major_version(&mut self) -> Result<i32, DruidError> {
         Err(DruidError::UnsupportedOperation {
-            operation: "database_metadata_get_jdbc_major_version",
+            operation: "database_metadata_get_rdbc_major_version",
         })
     }
 
-    /// 委托 Java `DatabaseMetaData#getJDBCMinorVersion` 的可观察结果。
-    async fn get_jdbc_minor_version(&mut self) -> Result<i32, DruidError> {
+    /// 委托 Java `DatabaseMetaData#getRDBCMinorVersion` 的可观察结果。
+    async fn get_rdbc_minor_version(&mut self) -> Result<i32, DruidError> {
         Err(DruidError::UnsupportedOperation {
-            operation: "database_metadata_get_jdbc_minor_version",
+            operation: "database_metadata_get_rdbc_minor_version",
         })
     }
 

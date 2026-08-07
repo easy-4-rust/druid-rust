@@ -1,3 +1,7 @@
+mod driver_bundle_file;
+mod driver_bundle_install_request;
+mod driver_evidence_aggregator;
+mod driver_evidence_error;
 mod driver_install_request;
 mod driver_installer;
 mod driver_installer_error;
@@ -6,6 +10,10 @@ mod driver_runtime_report;
 mod installed_driver;
 mod java_runtime_installation;
 
+pub use driver_bundle_file::DriverBundleFile;
+pub use driver_bundle_install_request::DriverBundleInstallRequest;
+pub use driver_evidence_aggregator::DriverEvidenceAggregator;
+pub use driver_evidence_error::DriverEvidenceError;
 pub use driver_install_request::DriverInstallRequest;
 pub use driver_installer::DriverInstaller;
 pub use driver_installer_error::DriverInstallerError;

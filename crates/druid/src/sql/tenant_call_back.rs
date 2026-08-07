@@ -1,7 +1,7 @@
 //! Wall 多租户回调协议。
 //!
 //! 对应 Java：`com.alibaba.druid.wall.WallConfig.TenantCallBack` 及其内部
-//! `StatementType`。Java 使用 `Object` 表达租户值；Rust 使用 JDBC 公共
+//! `StatementType`。Java 使用 `Object` 表达租户值；Rust 使用 RDBC 公共
 //! [`Value`] 保留数据库标量类型。
 
 use crate::core::Value;

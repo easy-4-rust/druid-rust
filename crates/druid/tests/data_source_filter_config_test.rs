@@ -282,7 +282,7 @@ async fn set_filters_reports_factory_error_immediately_and_keeps_prior_side_effe
     assert_eq!(
         builder.set_filters(Some("partial")).unwrap_err(),
         DruidError::Other(
-            "load managed jdbc driver event listener error. partial: \
+            "load managed rdbc driver event listener error. partial: \
              driver error: constructor failed"
                 .to_string()
         )

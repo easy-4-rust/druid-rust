@@ -115,7 +115,7 @@ fn test_merged_sql_stat_record_ok() {
 fn test_merged_sql_stat_record_error() {
     let stat = MergedSqlStat::new("SELECT 1".into(), 12345);
     stat.record(Duration::from_millis(5), false);
-    // Java JdbcSqlStat 的 ExecuteCount 是成功次数；失败只进入 ErrorCount。
+    // Java RdbcSqlStat 的 ExecuteCount 是成功次数；失败只进入 ErrorCount。
     assert_eq!(stat.execute_count(), 0);
     assert_eq!(stat.error_count(), 1);
 }

@@ -1,6 +1,6 @@
 //! Rust 异步资源回收义务：受监管物理连接关闭 worker。
 //!
-//! Java `DruidDataSource` 能在调用线程同步关闭 JDBC Connection；Rust 的
+//! Java `DruidDataSource` 能在调用线程同步关闭 RDBC Connection；Rust 的
 //! `PhysicalConnection::close` 是 async，`Drop` 不能直接 await。本对象把脏
 //! Drop 的关闭请求交给每个 `DruidPool` 唯一 worker，并由 pool 保存 JoinHandle。
 

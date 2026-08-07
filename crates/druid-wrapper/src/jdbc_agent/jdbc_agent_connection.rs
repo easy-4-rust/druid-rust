@@ -1,8 +1,11 @@
-use super::{AgentValue, JdbcAgentClient, JdbcAgentOptions, JdbcAgentPreparedStatement};
+use super::{
+    AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions,
+    JdbcAgentPreparedStatement,
+};
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalPreparedStatement, PreparedStatementKey, Row, StatementExecuteResult,
-    StatementGeneratedKeys, Value,
+    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
+    Row, RowSetResultSet, Savepoint, StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
@@ -20,6 +23,10 @@ pub struct JdbcAgentConnection {
     schema: Option<String>,
     closed: bool,
     discarded: bool,
+    savepoint_sequence: u64,
+    savepoint_ids: HashMap<u64, String>,
+    metadata: JdbcAgentDatabaseMetaData,
+    driver_name: String,
 }
 
 impl JdbcAgentConnection {
@@ -45,11 +52,34 @@ impl JdbcAgentConnection {
                 .and_then(JsonValue::as_bool)
                 .unwrap_or(false)
         };
+        let supports_transactions = capability("transactions");
+        let driver_name = session
+            .get("driverName")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("jdbc-agent")
+            .to_owned();
+        let metadata = JdbcAgentDatabaseMetaData::new(
+            url,
+            Some(driver_name.clone()),
+            session
+                .get("driverVersion")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+            session
+                .get("databaseProductName")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+            session
+                .get("databaseProductVersion")
+                .and_then(JsonValue::as_str)
+                .map(str::to_owned),
+            supports_transactions,
+        );
         Ok(Self {
             client,
             capabilities: PhysicalConnectionCapabilities {
-                transactions: capability("transactions"),
-                savepoints: false,
+                transactions: supports_transactions,
+                savepoints: capability("savepoints"),
                 auto_commit: capability("autoCommit"),
                 read_only: capability("readOnly"),
                 transaction_isolation: capability("transactionIsolation"),
@@ -81,7 +111,31 @@ impl JdbcAgentConnection {
                 .map(ToOwned::to_owned),
             closed: false,
             discarded: false,
+            savepoint_sequence: 0,
+            savepoint_ids: HashMap::new(),
+            metadata,
+            driver_name,
         })
+    }
+
+    /// 终止当前隔离 Agent，用于认证其崩溃传播与连接丢弃合同。
+    #[doc(hidden)]
+    pub async fn diagnostic_crash_agent(&mut self) -> Result<(), DruidError> {
+        self.ensure_open()?;
+        self.client
+            .request("diagnostic_crash", JsonValue::Null)
+            .await
+            .map(|_| ())
+    }
+
+    /// 令当前隔离 Agent 输出非法协议帧，用于认证 fail-closed 行为。
+    #[doc(hidden)]
+    pub async fn diagnostic_protocol_failure(&mut self) -> Result<(), DruidError> {
+        self.ensure_open()?;
+        self.client
+            .request("diagnostic_protocol_failure", JsonValue::Null)
+            .await
+            .map(|_| ())
     }
 
     fn ensure_open(&self) -> Result<(), DruidError> {
@@ -110,6 +164,22 @@ impl JdbcAgentConnection {
                     .map(AgentValue::into_druid)
                     .collect::<Result<Vec<_>, _>>()
                     .map(Row::new)
+            })
+            .collect()
+    }
+
+    fn column_labels(payload: &JsonValue) -> Result<Vec<String>, DruidError> {
+        payload
+            .get("columns")
+            .and_then(JsonValue::as_array)
+            .ok_or_else(|| Self::protocol_error("fetch response does not contain columns"))?
+            .iter()
+            .map(|column| {
+                column
+                    .get("label")
+                    .and_then(JsonValue::as_str)
+                    .map(str::to_owned)
+                    .ok_or_else(|| Self::protocol_error("result column does not contain label"))
             })
             .collect()
     }
@@ -222,7 +292,36 @@ impl JdbcAgentConnection {
     }
 
     fn protocol_error(message: impl Into<String>) -> DruidError {
-        DruidError::DriverError(format!("invalid JDBC Agent response: {}", message.into()))
+        DruidError::SqlException(Box::new(
+            druid::core::SqlException::new(
+                0,
+                Some("08006".to_owned()),
+                Some(format!("invalid JDBC Agent response: {}", message.into())),
+            )
+            .with_class_name("druid.jdbc_agent.ProtocolException")
+            .recoverable(),
+        ))
+    }
+
+    async fn create_savepoint(&mut self, name: Option<&str>) -> Result<Savepoint, DruidError> {
+        self.ensure_open()?;
+        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
+        let payload = self
+            .client
+            .request("set_savepoint", json!({"name": name}))
+            .await?;
+        let remote_id = payload
+            .get("savepointId")
+            .and_then(JsonValue::as_str)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| Self::protocol_error("set_savepoint response lacks savepointId"))?
+            .to_owned();
+        let savepoint = Savepoint {
+            id: self.savepoint_sequence,
+            name: name.map(str::to_owned),
+        };
+        self.savepoint_ids.insert(savepoint.id, remote_id);
+        Ok(savepoint)
     }
 
     async fn execute_request(
@@ -310,6 +409,24 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.collect_query_payload(payload).await
     }
 
+    async fn fetch_result_set(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        self.ensure_open()?;
+        let payload = self
+            .client
+            .request(
+                "execute_query",
+                json!({"sql": sql, "params": Self::parameters(params)?}),
+            )
+            .await?;
+        let labels = Self::column_labels(&payload)?;
+        let rows = self.collect_query_payload(payload).await?;
+        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
+    }
+
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
@@ -346,7 +463,9 @@ impl PhysicalConnection for JdbcAgentConnection {
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
         self.ensure_open()?;
-        let statement_id = Self::statement(statement)?.statement_id().to_owned();
+        let statement = Self::statement(statement)?;
+        let statement_id = statement.statement_id().to_owned();
+        let query_timeout_seconds = statement.query_timeout_seconds();
         let payload = self
             .client
             .request(
@@ -355,6 +474,7 @@ impl PhysicalConnection for JdbcAgentConnection {
                     "statementId": statement_id,
                     "params": Self::parameters(params)?,
                     "mode": "update",
+                    "queryTimeoutSeconds": query_timeout_seconds,
                 }),
             )
             .await?;
@@ -368,7 +488,9 @@ impl PhysicalConnection for JdbcAgentConnection {
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
         self.ensure_open()?;
-        let statement_id = Self::statement(statement)?.statement_id().to_owned();
+        let statement = Self::statement(statement)?;
+        let statement_id = statement.statement_id().to_owned();
+        let query_timeout_seconds = statement.query_timeout_seconds();
         let payload = self
             .client
             .request(
@@ -377,6 +499,7 @@ impl PhysicalConnection for JdbcAgentConnection {
                     "statementId": statement_id,
                     "params": Self::parameters(params)?,
                     "mode": "execute",
+                    "queryTimeoutSeconds": query_timeout_seconds,
                     "generatedKeys": Self::generated_keys(generated_keys),
                 }),
             )
@@ -403,7 +526,9 @@ impl PhysicalConnection for JdbcAgentConnection {
         params: Vec<Value>,
     ) -> Result<Vec<Row>, DruidError> {
         self.ensure_open()?;
-        let statement_id = Self::statement(statement)?.statement_id().to_owned();
+        let statement = Self::statement(statement)?;
+        let statement_id = statement.statement_id().to_owned();
+        let query_timeout_seconds = statement.query_timeout_seconds();
         let payload = self
             .client
             .request(
@@ -412,10 +537,35 @@ impl PhysicalConnection for JdbcAgentConnection {
                     "statementId": statement_id,
                     "params": Self::parameters(params)?,
                     "mode": "query",
+                    "queryTimeoutSeconds": query_timeout_seconds,
                 }),
             )
             .await?;
         self.collect_query_payload(payload).await
+    }
+
+    async fn fetch_prepared_result_set(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+        self.ensure_open()?;
+        let statement = Self::statement(statement)?;
+        let payload = self
+            .client
+            .request(
+                "execute_prepared",
+                json!({
+                    "statementId": statement.statement_id(),
+                    "params": Self::parameters(params)?,
+                    "mode": "query",
+                    "queryTimeoutSeconds": statement.query_timeout_seconds(),
+                }),
+            )
+            .await?;
+        let labels = Self::column_labels(&payload)?;
+        let rows = self.collect_query_payload(payload).await?;
+        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
@@ -428,12 +578,52 @@ impl PhysicalConnection for JdbcAgentConnection {
     async fn commit(&mut self) -> Result<(), DruidError> {
         self.ensure_open()?;
         self.client.request("commit", JsonValue::Null).await?;
+        self.savepoint_ids.clear();
         Ok(())
     }
 
     async fn rollback(&mut self) -> Result<(), DruidError> {
         self.ensure_open()?;
         self.client.request("rollback", JsonValue::Null).await?;
+        self.savepoint_ids.clear();
+        Ok(())
+    }
+
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+        self.ensure_open()?;
+        let savepoint_id = self.savepoint_ids.get(&savepoint.id).ok_or_else(|| {
+            DruidError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
+        })?;
+        self.client
+            .request(
+                "rollback_to_savepoint",
+                json!({"savepointId": savepoint_id}),
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+        self.create_savepoint(None).await
+    }
+
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+        if name.is_empty() {
+            return Err(DruidError::InvalidArgument(
+                "JDBC savepoint name must not be empty".to_owned(),
+            ));
+        }
+        self.create_savepoint(Some(name)).await
+    }
+
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+        self.ensure_open()?;
+        let savepoint_id = self.savepoint_ids.remove(&savepoint.id).ok_or_else(|| {
+            DruidError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
+        })?;
+        self.client
+            .request("release_savepoint", json!({"savepointId": savepoint_id}))
+            .await?;
         Ok(())
     }
 
@@ -460,6 +650,11 @@ impl PhysicalConnection for JdbcAgentConnection {
 
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
         self.capabilities
+    }
+
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        self.ensure_open()?;
+        Ok(Box::new(self.metadata.clone()))
     }
 
     fn auto_commit(&self) -> bool {
@@ -533,5 +728,9 @@ impl PhysicalConnection for JdbcAgentConnection {
 
     fn is_discarded(&self) -> bool {
         self.discarded || self.client.is_unusable()
+    }
+
+    fn driver_name(&self) -> &str {
+        &self.driver_name
     }
 }

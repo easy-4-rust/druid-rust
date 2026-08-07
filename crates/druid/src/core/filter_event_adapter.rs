@@ -68,7 +68,7 @@ pub trait FilterEventListener: Send + Sync {
 
     /// generic execute 成功后事件。
     ///
-    /// `first_result` 与 JDBC `Statement#execute` 返回值一致：首结果为结果集时
+    /// `first_result` 与 RDBC `Statement#execute` 返回值一致：首结果为结果集时
     /// 为 `true`，更新计数或无结果时为 `false`。
     /// 参数 `context` 保留执行上下文；返回错误会进入 error-after。
     async fn statement_execute_after(
@@ -116,7 +116,7 @@ pub trait FilterEventListener: Send + Sync {
     /// executeUpdate 成功后事件。
     ///
     /// 对应 Java：`FilterEventAdapter#statementExecuteUpdateAfter`。
-    /// 参数含执行上下文和 JDBC `int` 更新计数；返回错误会进入 error-after。
+    /// 参数含执行上下文和 RDBC `int` 更新计数；返回错误会进入 error-after。
     async fn statement_execute_update_after(
         &self,
         _context: &ExecContext<'_>,
@@ -139,7 +139,7 @@ pub trait FilterEventListener: Send + Sync {
     /// executeBatch 成功后事件。
     ///
     /// 对应 Java：`FilterEventAdapter#statementExecuteBatchAfter`。
-    /// 参数含批次上下文和 JDBC `int[]` 计数；返回错误会进入 error-after。
+    /// 参数含批次上下文和 RDBC `int[]` 计数；返回错误会进入 error-after。
     async fn statement_execute_batch_after(
         &self,
         _context: &BatchExecContext<'_>,
@@ -177,7 +177,7 @@ impl FilterEventListener for () {}
 ///
 /// Java 对象继承 `FilterAdapter` 并通过 protected 方法供子类覆写。Rust 对象
 /// 持有一个 [`FilterEventListener`]，在相同成功、失败与 ResultSet 打开边界
-/// 调用对应方法。所有未覆写的 JDBC hook 仍通过 [`ResultSetFilter`] 默认方法
+/// 调用对应方法。所有未覆写的 RDBC hook 仍通过 [`ResultSetFilter`] 默认方法
 /// 继续调用链。
 ///
 /// 当前 `ExecContext` 尚未携带 Java `StatementProxy` 平台对象，所以监听器保留
@@ -310,7 +310,7 @@ where
                         Ok(update_count) => update_count,
                         Err(_) => {
                             let error = DruidError::InvalidArgument(format!(
-                                "update count exceeds JDBC int range: {}",
+                                "update count exceeds RDBC int range: {}",
                                 execution.rows_affected
                             ));
                             self.listener

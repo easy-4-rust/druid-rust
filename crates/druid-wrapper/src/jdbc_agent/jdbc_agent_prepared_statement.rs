@@ -4,7 +4,7 @@ use druid::core::{
 };
 use serde_json::json;
 use std::any::Any;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 /// JDBC Agent 中已创建真实 JDBC PreparedStatement 的远程句柄。
 pub struct JdbcAgentPreparedStatement {
@@ -14,6 +14,7 @@ pub struct JdbcAgentPreparedStatement {
     request_handle: AgentRequestHandle,
     options: PhysicalStatementOptions,
     closed: AtomicBool,
+    query_timeout_seconds: AtomicI32,
 }
 
 impl JdbcAgentPreparedStatement {
@@ -35,12 +36,18 @@ impl JdbcAgentPreparedStatement {
                 result_set_holdability: key.result_set_holdability(),
             },
             closed: AtomicBool::new(false),
+            query_timeout_seconds: AtomicI32::new(0),
         }
     }
 
     /// 返回协议侧远程语句 ID。
     pub(crate) fn statement_id(&self) -> &str {
         &self.statement_id
+    }
+
+    /// 返回传给 JDBC `Statement#setQueryTimeout` 的秒数。
+    pub(crate) fn query_timeout_seconds(&self) -> i32 {
+        self.query_timeout_seconds.load(Ordering::Acquire)
     }
 }
 
@@ -98,6 +105,20 @@ impl PhysicalPreparedStatement for JdbcAgentPreparedStatement {
                 "statementId": self.statement_id,
             }),
         );
+        Ok(())
+    }
+
+    fn query_timeout(&self) -> Result<i32, DruidError> {
+        Ok(self.query_timeout_seconds())
+    }
+
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+        if seconds < 0 {
+            return Err(DruidError::InvalidArgument(
+                "JDBC query timeout must not be negative".to_owned(),
+            ));
+        }
+        self.query_timeout_seconds.store(seconds, Ordering::Release);
         Ok(())
     }
 }

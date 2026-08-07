@@ -7,7 +7,7 @@
 
 use super::{DruidError, StatementGeneratedKeys};
 
-/// 创建预编译语句所调用的 JDBC 重载。
+/// 创建预编译语句所调用的 RDBC 重载。
 ///
 /// 对应 Java：`PreparedStatementPool.MethodType`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,7 +32,7 @@ pub enum PreparedStatementMethodType {
     Precall3,
 }
 
-/// 完整区分 JDBC PreparedStatement/CallableStatement 重载的缓存键。
+/// 完整区分 RDBC PreparedStatement/CallableStatement 重载的缓存键。
 ///
 /// Java 的相等性同时比较 SQL、catalog、方法重载、结果集属性、自动生成键、
 /// 列序号和列名；Rust 保留同一字段集合，不能仅按 SQL 文本命中缓存。
@@ -58,7 +58,7 @@ impl PreparedStatementKey {
     /// # 参数
     /// - `sql`：Java 可空参数 `sql`；`None` 对应 Java `null`。
     /// - `catalog`：连接当前 catalog。
-    /// - `method_type`：调用的 JDBC 重载。
+    /// - `method_type`：调用的 RDBC 重载。
     ///
     /// # 错误
     /// `sql` 为 `None` 时返回与 Java `SQLException("sql is null")` 同类别的参数错误。
@@ -217,7 +217,7 @@ impl PreparedStatementKey {
         self.catalog.as_deref()
     }
 
-    /// 返回创建语句所使用的 JDBC 重载。
+    /// 返回创建语句所使用的 RDBC 重载。
     pub fn method_type(&self) -> PreparedStatementMethodType {
         self.method_type
     }
@@ -252,7 +252,7 @@ impl PreparedStatementKey {
         self.column_names.as_deref()
     }
 
-    /// 返回本缓存键对应的 JDBC generated-keys 执行参数。
+    /// 返回本缓存键对应的 RDBC generated-keys 执行参数。
     ///
     /// 对应 Java：`Connection#prepareStatement` 的 `int`、`int[]` 与
     /// `String[]` 重载。参数必须在后续 `PreparedStatement#execute()` 时继续

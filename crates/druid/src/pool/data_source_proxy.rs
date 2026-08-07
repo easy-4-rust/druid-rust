@@ -1,5 +1,5 @@
-//! 对应 Java：`com.alibaba.druid.proxy.jdbc.DataSourceProxy`。
-//! 来源文件：`core/src/main/java/com/alibaba/druid/proxy/jdbc/DataSourceProxy.java`。
+//! 对应 Java：`com.alibaba.druid.proxy.rdbc.DataSourceProxy`。
+//! 来源文件：`core/src/main/java/com/alibaba/druid/proxy/rdbc/DataSourceProxy.java`。
 
 use crate::core::PhysicalConnectionFactory;
 use crate::stats::StatsCollector;
@@ -30,7 +30,7 @@ pub trait DataSourceProxy {
     fn url(&self) -> Option<&str>;
 
     /// 返回底层驱动 URL。
-    fn raw_jdbc_url(&self) -> Option<&str>;
+    fn raw_rdbc_url(&self) -> Option<&str>;
 
     /// 返回已装配 Filter 类型名称。
     fn proxy_filter_names(&self) -> Vec<String>;

@@ -1,4 +1,4 @@
-//! JDBC 结果集列可空性。
+//! RDBC 结果集列可空性。
 //!
 //! 对应 Java：`java.sql.ResultSetMetaData` 的 `columnNoNulls`、
 //! `columnNullable` 与 `columnNullableUnknown`。
@@ -16,7 +16,7 @@ pub enum ResultSetNullability {
 
 impl ResultSetNullability {
     /// 返回 Java `ResultSetMetaData` 常量值。
-    pub const fn jdbc_code(self) -> i32 {
+    pub const fn rdbc_code(self) -> i32 {
         match self {
             Self::NoNulls => 0,
             Self::Nullable => 1,

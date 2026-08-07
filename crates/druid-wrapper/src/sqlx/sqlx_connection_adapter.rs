@@ -1,6 +1,6 @@
 //! SQLx 物理连接适配器。
 
-use super::sqlx_prepared_statement::SqlxPreparedStatement;
+use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecutionError};
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
@@ -48,6 +48,7 @@ pub struct SqlxConnectionAdapter {
     connection: Option<SqlxConnectionBackend>,
     url: String,
     savepoint_sequence: u64,
+    auto_commit: bool,
     discarded: bool,
 }
 
@@ -86,6 +87,7 @@ impl SqlxConnectionAdapter {
             connection: Some(connection),
             url: url.to_owned(),
             savepoint_sequence: 0,
+            auto_commit: true,
             discarded: false,
         })
     }
@@ -126,7 +128,75 @@ impl SqlxConnectionAdapter {
                     .with_class_name("sqlx::error::DatabaseError"),
                 ))
             }
+            sqlx::Error::Io(error) => DruidError::SqlException(Box::new(
+                druid::core::SqlException::new(
+                    0,
+                    Some("08006".to_owned()),
+                    Some(error.to_string()),
+                )
+                .with_class_name("std::io::Error")
+                .recoverable(),
+            )),
+            sqlx::Error::Tls(error) => DruidError::SqlException(Box::new(
+                druid::core::SqlException::new(
+                    0,
+                    Some("08006".to_owned()),
+                    Some(error.to_string()),
+                )
+                .with_class_name("sqlx::error::TlsError")
+                .recoverable(),
+            )),
+            sqlx::Error::Protocol(message) => DruidError::SqlException(Box::new(
+                druid::core::SqlException::new(0, Some("08006".to_owned()), Some(message))
+                    .with_class_name("sqlx::error::ProtocolError")
+                    .recoverable(),
+            )),
+            error @ (sqlx::Error::PoolTimedOut
+            | sqlx::Error::PoolClosed
+            | sqlx::Error::WorkerCrashed) => DruidError::SqlException(Box::new(
+                druid::core::SqlException::new(
+                    0,
+                    Some("08006".to_owned()),
+                    Some(error.to_string()),
+                )
+                .with_class_name("sqlx::Error")
+                .recoverable(),
+            )),
             error => DruidError::DriverError(error.to_string()),
+        }
+    }
+
+    fn finish_statement_execution<T>(
+        &mut self,
+        result: Result<T, SqlxStatementExecutionError>,
+    ) -> Result<T, DruidError> {
+        match result {
+            Ok(value) => Ok(value),
+            Err(SqlxStatementExecutionError::Driver(error)) => Err(error),
+            Err(SqlxStatementExecutionError::TimedOut) => {
+                self.discarded = true;
+                self.connection.take();
+                Err(DruidError::SqlException(Box::new(
+                    druid::core::SqlException::new(
+                        0,
+                        Some("HYT00".to_owned()),
+                        Some("SQLx prepared statement query timed out".to_owned()),
+                    )
+                    .with_class_name("java.sql.SQLTimeoutException"),
+                )))
+            }
+            Err(SqlxStatementExecutionError::Cancelled) => {
+                self.discarded = true;
+                self.connection.take();
+                Err(DruidError::SqlException(Box::new(
+                    druid::core::SqlException::new(
+                        0,
+                        Some("HY008".to_owned()),
+                        Some("SQLx prepared statement execution was cancelled".to_owned()),
+                    )
+                    .with_class_name("java.sql.SQLException"),
+                )))
+            }
         }
     }
 
@@ -824,75 +894,97 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
         }
-        match self.connection_mut()? {
+        let execution = match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
-                let statement = statement.any_statement().ok_or_else(|| {
+                let backend_statement = statement.any_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let result = Self::bind_any_prepared_values(statement, params)?
-                    .execute(connection)
+                let query = Self::bind_any_prepared_values(backend_statement, params)?;
+                statement
+                    .execute_with_controls(async move {
+                        let result = query
+                            .execute(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        Ok(ExecResult {
+                            rows_affected: result.rows_affected(),
+                            last_insert_id: result.last_insert_id(),
+                            row_count: None,
+                        })
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                Ok(ExecResult {
-                    rows_affected: result.rows_affected(),
-                    last_insert_id: result.last_insert_id(),
-                    row_count: None,
-                })
             }
             SqlxConnectionBackend::MySql(connection) => {
-                let statement = statement.mysql_statement().ok_or_else(|| {
+                let backend_statement = statement.mysql_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let result = Self::bind_mysql_prepared_values(statement, params)
-                    .execute(connection)
+                let query = Self::bind_mysql_prepared_values(backend_statement, params);
+                statement
+                    .execute_with_controls(async move {
+                        let result = query
+                            .execute(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        Ok(ExecResult {
+                            rows_affected: result.rows_affected(),
+                            last_insert_id: (result.last_insert_id() != 0).then(|| {
+                                i64::try_from(result.last_insert_id()).unwrap_or(i64::MAX)
+                            }),
+                            row_count: None,
+                        })
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                Ok(ExecResult {
-                    rows_affected: result.rows_affected(),
-                    last_insert_id: (result.last_insert_id() != 0)
-                        .then(|| i64::try_from(result.last_insert_id()).unwrap_or(i64::MAX)),
-                    row_count: None,
-                })
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
-                let statement = statement.postgresql_statement().ok_or_else(|| {
+                let backend_statement = statement.postgresql_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let result = Self::bind_postgresql_prepared_values(statement, params)
-                    .execute(connection)
+                let query = Self::bind_postgresql_prepared_values(backend_statement, params);
+                statement
+                    .execute_with_controls(async move {
+                        let result = query
+                            .execute(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        Ok(ExecResult {
+                            rows_affected: result.rows_affected(),
+                            last_insert_id: None,
+                            row_count: None,
+                        })
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                Ok(ExecResult {
-                    rows_affected: result.rows_affected(),
-                    last_insert_id: None,
-                    row_count: None,
-                })
             }
             SqlxConnectionBackend::Sqlite(connection) => {
-                let statement = statement.sqlite_statement().ok_or_else(|| {
+                let backend_statement = statement.sqlite_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let result = Self::bind_sqlite_prepared_values(statement, params)
-                    .execute(connection)
+                let query = Self::bind_sqlite_prepared_values(backend_statement, params);
+                statement
+                    .execute_with_controls(async move {
+                        let result = query
+                            .execute(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        let last_insert_id =
+                            (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
+                        Ok(ExecResult {
+                            rows_affected: result.rows_affected(),
+                            last_insert_id,
+                            row_count: None,
+                        })
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                let last_insert_id =
-                    (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
-                Ok(ExecResult {
-                    rows_affected: result.rows_affected(),
-                    last_insert_id,
-                    row_count: None,
-                })
             }
-        }
+        };
+        self.finish_statement_execution(execution)
     }
 
     async fn exec_prepared_parameters(
@@ -997,56 +1089,77 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
         }
-        match self.connection_mut()? {
+        let execution = match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
-                let statement = statement.any_statement().ok_or_else(|| {
+                let backend_statement = statement.any_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let rows = Self::bind_any_prepared_values(statement, params)?
-                    .fetch_all(connection)
+                let query = Self::bind_any_prepared_values(backend_statement, params)?;
+                statement
+                    .execute_with_controls(async move {
+                        let rows = query
+                            .fetch_all(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        rows.into_iter().map(Self::decode_any_row).collect()
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                rows.into_iter().map(Self::decode_any_row).collect()
             }
             SqlxConnectionBackend::MySql(connection) => {
-                let statement = statement.mysql_statement().ok_or_else(|| {
+                let backend_statement = statement.mysql_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let rows = Self::bind_mysql_prepared_values(statement, params)
-                    .fetch_all(connection)
+                let query = Self::bind_mysql_prepared_values(backend_statement, params);
+                statement
+                    .execute_with_controls(async move {
+                        let rows = query
+                            .fetch_all(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        rows.into_iter().map(Self::decode_mysql_row).collect()
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                rows.into_iter().map(Self::decode_mysql_row).collect()
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
-                let statement = statement.postgresql_statement().ok_or_else(|| {
+                let backend_statement = statement.postgresql_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let rows = Self::bind_postgresql_prepared_values(statement, params)
-                    .fetch_all(connection)
+                let query = Self::bind_postgresql_prepared_values(backend_statement, params);
+                statement
+                    .execute_with_controls(async move {
+                        let rows = query
+                            .fetch_all(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        rows.into_iter().map(Self::decode_postgresql_row).collect()
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                rows.into_iter().map(Self::decode_postgresql_row).collect()
             }
             SqlxConnectionBackend::Sqlite(connection) => {
-                let statement = statement.sqlite_statement().ok_or_else(|| {
+                let backend_statement = statement.sqlite_statement().ok_or_else(|| {
                     DruidError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
-                let rows = Self::bind_sqlite_prepared_values(statement, params)
-                    .fetch_all(connection)
+                let query = Self::bind_sqlite_prepared_values(backend_statement, params);
+                statement
+                    .execute_with_controls(async move {
+                        let rows = query
+                            .fetch_all(connection)
+                            .await
+                            .map_err(Self::driver_error)?;
+                        rows.into_iter().map(Self::decode_sqlite_row).collect()
+                    })
                     .await
-                    .map_err(Self::driver_error)?;
-                rows.into_iter().map(Self::decode_sqlite_row).collect()
             }
-        }
+        };
+        self.finish_statement_execution(execution)
     }
 
     async fn fetch_prepared_parameters(
@@ -1086,6 +1199,11 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
+        if !self.auto_commit {
+            return Err(DruidError::DriverError(
+                "SQLx transaction is already active".to_owned(),
+            ));
+        }
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 AnyTransactionManager::begin(connection, None)
@@ -1107,7 +1225,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     .await
                     .map_err(Self::driver_error)
             }
-        }
+        }?;
+        self.auto_commit = false;
+        Ok(())
     }
 
     async fn commit(&mut self) -> Result<(), DruidError> {
@@ -1128,7 +1248,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     .await
                     .map_err(Self::driver_error)
             }
-        }
+        }?;
+        self.auto_commit = true;
+        Ok(())
     }
 
     async fn rollback(&mut self) -> Result<(), DruidError> {
@@ -1151,7 +1273,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     .await
                     .map_err(Self::driver_error)
             }
-        }
+        }?;
+        self.auto_commit = true;
+        Ok(())
     }
 
     async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
@@ -1288,33 +1412,14 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     }
 
     fn auto_commit(&self) -> bool {
-        match &self.connection {
-            Some(SqlxConnectionBackend::Any(connection)) => {
-                AnyTransactionManager::get_transaction_depth(connection) == 0
-            }
-            Some(SqlxConnectionBackend::MySql(connection)) => {
-                MySqlTransactionManager::get_transaction_depth(connection) == 0
-            }
-            Some(SqlxConnectionBackend::PostgreSql(connection)) => {
-                PgTransactionManager::get_transaction_depth(connection) == 0
-            }
-            Some(SqlxConnectionBackend::Sqlite(connection)) => {
-                SqliteTransactionManager::get_transaction_depth(connection) == 0
-            }
-            None => true,
-        }
+        self.auto_commit
     }
 
     async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
         let current = self.auto_commit();
         match (current, auto_commit) {
             (true, false) => self.begin().await,
-            (false, true) => {
-                while !self.auto_commit() {
-                    self.commit().await?;
-                }
-                Ok(())
-            }
+            (false, true) => self.commit().await,
             _ => Ok(()),
         }
     }

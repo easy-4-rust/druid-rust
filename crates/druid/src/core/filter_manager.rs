@@ -210,7 +210,7 @@ impl FilterManager {
 
         let registered = factory().map_err(|error| {
             DruidError::Other(format!(
-                "load managed jdbc driver event listener error. {filter_name}: {error}"
+                "load managed rdbc driver event listener error. {filter_name}: {error}"
             ))
         })?;
         filter_chain.add_registered_filter(

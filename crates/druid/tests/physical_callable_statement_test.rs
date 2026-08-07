@@ -7,8 +7,8 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableParameter, DruidError, JdbcObject, PhysicalCallableStatement,
-    PhysicalPreparedStatement, Value,
+    CallableParameter, DruidError, PhysicalCallableStatement, PhysicalPreparedStatement,
+    RdbcObject, Value,
 };
 use std::any::Any;
 use std::str::FromStr;
@@ -16,17 +16,17 @@ use std::sync::Mutex;
 
 /// 可切换 OUT 值的最小物理 CallableStatement。
 struct DefaultCallableStatement {
-    output: Mutex<JdbcObject>,
+    output: Mutex<RdbcObject>,
 }
 
 impl DefaultCallableStatement {
-    fn new(output: JdbcObject) -> Self {
+    fn new(output: RdbcObject) -> Self {
         Self {
             output: Mutex::new(output),
         }
     }
 
-    fn set_output(&self, output: JdbcObject) {
+    fn set_output(&self, output: RdbcObject) {
         *self
             .output
             .lock()
@@ -73,7 +73,7 @@ impl PhysicalCallableStatement for DefaultCallableStatement {
         Ok(())
     }
 
-    fn out_parameter(&self, _parameter: &CallableParameter) -> Result<JdbcObject, DruidError> {
+    fn out_parameter(&self, _parameter: &CallableParameter) -> Result<RdbcObject, DruidError> {
         Ok(self
             .output
             .lock()
@@ -112,7 +112,7 @@ fn calendar_preserves_overload_and_time_zone_identity() {
 #[test]
 fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
     let parameter = CallableParameter::Index(1);
-    let statement = DefaultCallableStatement::new(JdbcObject::Scalar(Value::Null));
+    let statement = DefaultCallableStatement::new(RdbcObject::Scalar(Value::Null));
     assert_eq!(
         statement.warnings(),
         Err(DruidError::UnsupportedOperation {
@@ -150,9 +150,9 @@ fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
     );
 
     let decimal = BigDecimal::from_str("123.4500").unwrap();
-    statement.set_output(JdbcObject::BigDecimal(decimal.clone()));
+    statement.set_output(RdbcObject::BigDecimal(decimal.clone()));
     assert_eq!(
-        format!("{}", JdbcObject::BigDecimal(decimal.clone())),
+        format!("{}", RdbcObject::BigDecimal(decimal.clone())),
         "123.4500"
     );
     assert_eq!(
@@ -167,7 +167,7 @@ fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
     assert_eq!(scaled.as_bigint_and_exponent().1, 2);
 
     let date = NaiveDate::from_ymd_opt(2026, 7, 28).unwrap();
-    statement.set_output(JdbcObject::Date(date));
+    statement.set_output(RdbcObject::Date(date));
     assert_eq!(
         statement
             .date_out_parameter(
@@ -179,7 +179,7 @@ fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
     );
 
     let time = NaiveTime::from_hms_nano_opt(19, 30, 45, 123_456_789).unwrap();
-    statement.set_output(JdbcObject::Time(time));
+    statement.set_output(RdbcObject::Time(time));
     assert_eq!(
         statement
             .time_out_parameter(&parameter, &CallableCalendarArgument::Specified(None))
@@ -188,7 +188,7 @@ fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
     );
 
     let timestamp = NaiveDateTime::new(date, time);
-    statement.set_output(JdbcObject::Timestamp(timestamp));
+    statement.set_output(RdbcObject::Timestamp(timestamp));
     assert_eq!(
         statement
             .timestamp_out_parameter(&parameter, &CallableCalendarArgument::Unspecified)
@@ -196,15 +196,15 @@ fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
         Some(timestamp)
     );
 
-    assert_eq!(format!("{}", JdbcObject::Date(date)), "2026-07-28");
-    assert!(format!("{}", JdbcObject::Time(time)).contains("19:30:45"));
-    assert!(format!("{}", JdbcObject::Timestamp(timestamp)).contains("2026-07-28"));
+    assert_eq!(format!("{}", RdbcObject::Date(date)), "2026-07-28");
+    assert!(format!("{}", RdbcObject::Time(time)).contains("19:30:45"));
+    assert!(format!("{}", RdbcObject::Timestamp(timestamp)).contains("2026-07-28"));
     assert_eq!(
-        format!("{}", JdbcObject::Scalar(Value::String("druid".to_string()))),
+        format!("{}", RdbcObject::Scalar(Value::String("druid".to_string()))),
         "'druid'"
     );
 
-    statement.set_output(JdbcObject::Scalar(Value::Bool(true)));
+    statement.set_output(RdbcObject::Scalar(Value::Bool(true)));
     assert!(statement.big_decimal_out_parameter(&parameter).is_err());
     assert!(statement
         .date_out_parameter(&parameter, &CallableCalendarArgument::Unspecified)

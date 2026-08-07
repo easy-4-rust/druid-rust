@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Savepoint;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Map;
@@ -22,6 +23,7 @@ public final class AgentSession implements Closeable {
     private final Map<String, PreparedStatement> preparedStatements = new ConcurrentHashMap<>();
     private final Map<String, AgentCursor> cursors = new ConcurrentHashMap<>();
     private final Map<Long, Statement> activeStatements = new ConcurrentHashMap<>();
+    private final Map<String, Savepoint> savepoints = new ConcurrentHashMap<>();
 
     /** 创建拥有独占物理 JDBC 连接的会话。 */
     public AgentSession(Connection connection, String validationQuery) {
@@ -137,6 +139,35 @@ public final class AgentSession implements Closeable {
         return true;
     }
 
+    /** 注册 JDBC 保存点并返回跨协议稳定标识。 */
+    public String registerSavepoint(Savepoint savepoint) {
+        String savepointId = UUID.randomUUID().toString();
+        savepoints.put(savepointId, Objects.requireNonNull(savepoint, "savepoint"));
+        return savepointId;
+    }
+
+    /** 获取当前事务中仍有效的保存点。 */
+    public Savepoint savepoint(String savepointId) throws SQLException {
+        Savepoint savepoint = savepoints.get(savepointId);
+        if (Objects.isNull(savepoint)) {
+            throw new SQLException("JDBC Agent savepoint is not open: " + savepointId);
+        }
+        return savepoint;
+    }
+
+    /** 释放并移除保存点。 */
+    public void releaseSavepoint(String savepointId) throws SQLException {
+        Savepoint savepoint = savepoints.remove(savepointId);
+        if (Objects.nonNull(savepoint)) {
+            connection.releaseSavepoint(savepoint);
+        }
+    }
+
+    /** 提交或完整回滚后清除已失效保存点。 */
+    public void clearSavepoints() {
+        savepoints.clear();
+    }
+
     /** 关闭全部游标、语句和物理连接。 */
     @Override
     public void close() throws IOException {
@@ -160,6 +191,7 @@ public final class AgentSession implements Closeable {
             }
             preparedStatements.clear();
             activeStatements.clear();
+            savepoints.clear();
             try {
                 connection.close();
             } catch (SQLException exception) {

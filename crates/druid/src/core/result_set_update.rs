@@ -5,7 +5,7 @@
 //! Java 依靠方法重载区分值类型和长度参数；Rust 用本枚举在物理 SPI 边界保留
 //! 相同的重载身份，禁止提前物化流或把不同 setter 压缩成无类型值。
 
-use super::{JdbcCharacterLength, JdbcInputStream, JdbcObject, JdbcReader, JdbcStreamLength};
+use super::{RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader, RdbcStreamLength};
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
@@ -44,11 +44,11 @@ pub enum ResultSetUpdate {
     /// `ResultSet#updateTimestamp`；`None` 对应 Java `null`。
     Timestamp(Option<NaiveDateTime>),
     /// `ResultSet#updateObject(Object)`。
-    Object(JdbcObject),
+    Object(RdbcObject),
     /// `ResultSet#updateObject(Object, int)`。
     ObjectWithScaleOrLength {
         /// Java 参数 `x`。
-        value: JdbcObject,
+        value: RdbcObject,
         /// Java 参数 `scaleOrLength`。
         scale_or_length: i32,
     },
@@ -57,29 +57,29 @@ pub enum ResultSetUpdate {
     /// `ResultSet#updateAsciiStream`，保留流对象和长度重载。
     AsciiStream {
         /// Java 参数 `x`。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 未指定、`int` 或 `long` 长度。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `ResultSet#updateBinaryStream`，保留流对象和长度重载。
     BinaryStream {
         /// Java 参数 `x`。
-        stream: Option<JdbcInputStream>,
+        stream: Option<RdbcInputStream>,
         /// 未指定、`int` 或 `long` 长度。
-        length: JdbcStreamLength,
+        length: RdbcStreamLength,
     },
     /// `ResultSet#updateCharacterStream`，保留 Reader 和长度重载。
     CharacterStream {
         /// Java 参数 `x`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 未指定、`int` 或 `long` 长度。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
     /// `ResultSet#updateNCharacterStream`，保留 Reader 和长度重载。
     NCharacterStream {
         /// Java 参数 `x`。
-        reader: Option<JdbcReader>,
+        reader: Option<RdbcReader>,
         /// 未指定或 `long` 长度。
-        length: JdbcCharacterLength,
+        length: RdbcCharacterLength,
     },
 }

@@ -2,7 +2,7 @@
 
 /// 物理连接可选能力集合。
 ///
-/// 对应 Java: JDBC 驱动通过 `DatabaseMetaData` 和
+/// 对应 Java: RDBC 驱动通过 `DatabaseMetaData` 和
 /// `SQLFeatureNotSupportedException` 暴露的能力差异。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PhysicalConnectionCapabilities {

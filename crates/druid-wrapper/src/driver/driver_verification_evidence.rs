@@ -45,6 +45,12 @@ impl DriverVerificationEvidence {
             })
     }
 
+    /// 判断该证据集合是否完整覆盖指定运行时的五目标双工具链合同。
+    #[must_use]
+    pub fn is_valid_for(&self, runtime_mode: DriverRuntimeMode) -> bool {
+        self.validates_support_contract(runtime_mode)
+    }
+
     /// 返回验证合同版本。
     #[must_use]
     pub fn contract_version(&self) -> &str {

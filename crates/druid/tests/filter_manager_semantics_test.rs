@@ -199,7 +199,7 @@ fn explicit_factories_preserve_alias_expansion_case_insensitive_dedup_and_failur
             .load_filter(&mut chain, "example.filter.ErrorFilter")
             .unwrap_err(),
         DruidError::Other(
-            "load managed jdbc driver event listener error. \
+            "load managed rdbc driver event listener error. \
              example.filter.ErrorFilter: driver error: constructor failed"
                 .to_string()
         )

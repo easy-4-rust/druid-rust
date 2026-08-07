@@ -88,8 +88,8 @@ impl DbType {
     ///
     /// 对应 Java：`DbType#of(String)`。除 `aliyun_ads` 和 `maxcompute`
     /// 两个兼容别名忽略大小写外，枚举名称严格区分大小写，也不会修剪空白。
-    /// Java 专属的 log4jdbc 包装驱动不形成 Rust 数据库类型，因此
-    /// `log4jdbc` 返回 `None`；旧 JDBC URL 仍由 `JdbcUtils` 归一化到真实
+    /// Java 专属的 log4rdbc 包装驱动不形成 Rust 数据库类型，因此
+    /// `log4rdbc` 返回 `None`；旧 RDBC URL 仍由 `RdbcUtils` 归一化到真实
     /// vendor。
     #[must_use]
     pub fn of(name: &str) -> Option<Self> {

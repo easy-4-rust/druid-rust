@@ -15,7 +15,7 @@ pub struct PoolConfig {
     // ── 数据源标识 ──────────────────────────────────────────────
     /// 数据源名称（对应 name）
     pub name: String,
-    /// JDBC 风格 URL（对应 jdbcUrl）
+    /// RDBC 风格 URL（对应 rdbcUrl）
     pub url: String,
     /// 驱动名称（对应 driverClassName）
     pub driver_name: String,
@@ -23,7 +23,7 @@ pub struct PoolConfig {
     pub username: String,
     /// 密码（对应 password）
     pub password: String,
-    /// JDBC 连接属性（对应 connectProperties）
+    /// RDBC 连接属性（对应 connectProperties）
     pub connect_properties: std::collections::HashMap<String, String>,
 
     // ── 连接池大小 ──────────────────────────────────────────────

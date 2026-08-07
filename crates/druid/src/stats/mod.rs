@@ -7,17 +7,17 @@ pub mod druid_data_source_stat_manager;
 pub mod druid_data_source_stat_value;
 pub mod druid_stat_manager_facade;
 pub mod druid_stat_service;
-pub mod jdbc_connection_stat;
-pub mod jdbc_data_source_stat;
-pub mod jdbc_result_set_stat;
-pub mod jdbc_sql_stat;
-pub mod jdbc_sql_stat_value;
-pub mod jdbc_stat_context;
-pub mod jdbc_stat_manager;
-pub mod jdbc_statement_stat;
-pub mod jdbc_trace_manager;
 pub mod merge;
 pub mod merge_stat_filter;
+pub mod rdbc_connection_stat;
+pub mod rdbc_data_source_stat;
+pub mod rdbc_result_set_stat;
+pub mod rdbc_sql_stat;
+pub mod rdbc_sql_stat_value;
+pub mod rdbc_stat_context;
+pub mod rdbc_stat_manager;
+pub mod rdbc_statement_stat;
+pub mod rdbc_trace_manager;
 pub mod stat_filter;
 pub mod stat_filter_context;
 pub mod stat_filter_context_listener;
@@ -29,22 +29,22 @@ pub use druid_data_source_stat_manager::DruidDataSourceStatManager;
 pub use druid_data_source_stat_value::DruidDataSourceStatValue;
 pub use druid_stat_manager_facade::DruidStatManagerFacade;
 pub use druid_stat_service::DruidStatService;
-pub use jdbc_connection_stat::{
-    JdbcConnectionStat, JdbcConnectionStatEntry, JdbcConnectionStatEntryValue,
+pub use rdbc_connection_stat::{
+    RdbcConnectionStat, RdbcConnectionStatEntry, RdbcConnectionStatEntryValue,
 };
-pub use jdbc_data_source_stat::JdbcDataSourceStat;
-/// 旧内部名称，保留源码兼容；canonical 对象为 [`JdbcDataSourceStat`]。
-pub type StatsCollector = JdbcDataSourceStat;
-pub use jdbc_result_set_stat::JdbcResultSetStat;
-pub use jdbc_sql_stat::JdbcSqlStat;
-pub use jdbc_sql_stat_value::JdbcSqlStatValue;
-pub use jdbc_stat_context::JdbcStatContext;
-pub use jdbc_stat_manager::JdbcStatManager;
-pub use jdbc_statement_stat::JdbcStatementStat;
-#[allow(deprecated)]
-pub use jdbc_trace_manager::JdbcTraceManager;
+pub use rdbc_data_source_stat::RdbcDataSourceStat;
+/// 旧内部名称，保留源码兼容；canonical 对象为 [`RdbcDataSourceStat`]。
+pub type StatsCollector = RdbcDataSourceStat;
 pub use merge::{fingerprint, parameterize, MergedSqlStat, SqlMerger};
 pub use merge_stat_filter::MergeStatFilter;
+pub use rdbc_result_set_stat::RdbcResultSetStat;
+pub use rdbc_sql_stat::RdbcSqlStat;
+pub use rdbc_sql_stat_value::RdbcSqlStatValue;
+pub use rdbc_stat_context::RdbcStatContext;
+pub use rdbc_stat_manager::RdbcStatManager;
+pub use rdbc_statement_stat::RdbcStatementStat;
+#[allow(deprecated)]
+pub use rdbc_trace_manager::RdbcTraceManager;
 pub use stat_filter::StatFilter;
 pub use stat_filter_context::StatFilterContext;
 pub use stat_filter_context_listener::StatFilterContextListener;

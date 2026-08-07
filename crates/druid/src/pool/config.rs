@@ -634,7 +634,7 @@ impl DruidPoolBuilder {
 
     /// 设置数据源局部登录超时秒数。
     ///
-    /// Java 使用进程级 `DriverManager`；Rust 不创建全局 JDBC 状态，而把同一
+    /// Java 使用进程级 `DriverManager`；Rust 不创建全局 RDBC 状态，而把同一
     /// 可观察配置收敛到数据源及其 PhysicalConnectionFactory 边界。
     pub fn login_timeout(mut self, login_timeout: i32) -> Self {
         self.login_timeout = login_timeout;

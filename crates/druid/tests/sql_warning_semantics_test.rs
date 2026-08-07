@@ -330,7 +330,7 @@ async fn sqlite_connection(filter_chain: Option<Arc<FilterChain>>) -> DruidPoole
 }
 
 #[tokio::test]
-async fn real_sqlite_warning_contract_covers_all_four_jdbc_objects() {
+async fn real_sqlite_warning_contract_covers_all_four_rdbc_objects() {
     let mut connection = sqlite_connection(None).await;
     assert_eq!(connection.warnings().await.unwrap(), None);
     connection.clear_warnings().await.unwrap();

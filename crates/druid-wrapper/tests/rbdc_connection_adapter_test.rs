@@ -4,11 +4,11 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     ConnectionFactory, DruidError, DruidPooledConnection, DruidPooledPreparedStatement, JavaString,
-    JdbcArray, JdbcBlob, JdbcClob, JdbcInputStream, JdbcNClob, JdbcObject, JdbcOutputStream,
-    JdbcReader, JdbcRef, JdbcResultSet, JdbcRowId, JdbcSqlXml, JdbcTypeMap, JdbcUrl, JdbcWriter,
-    JdbcXmlRepresentationType, JdbcXmlResult, JdbcXmlSource, PhysicalArray, PhysicalBlob,
-    PhysicalClob, PhysicalConnection, PhysicalNClob, PhysicalRef, PhysicalSqlXml,
-    PreparedStatementKey, PreparedStatementMethodType, Value,
+    PhysicalArray, PhysicalBlob, PhysicalClob, PhysicalConnection, PhysicalNClob, PhysicalRef,
+    PhysicalSqlXml, PreparedStatementKey, PreparedStatementMethodType, RdbcArray, RdbcBlob,
+    RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef,
+    RdbcResultSet, RdbcRowId, RdbcSqlXml, RdbcTypeMap, RdbcUrl, RdbcWriter,
+    RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
 use druid_wrapper::rbdc::RbdcConnectionFactory;
 use futures::future::BoxFuture;
@@ -184,7 +184,7 @@ impl PhysicalBlob for FixtureBlob {
         Ok(self.bytes.clone())
     }
 
-    fn get_binary_stream(&self) -> Result<JdbcInputStream, DruidError> {
+    fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         unsupported_resource()
     }
 
@@ -192,7 +192,7 @@ impl PhysicalBlob for FixtureBlob {
         unsupported_resource()
     }
 
-    fn position_blob(&self, _pattern: &JdbcBlob, _start: i64) -> Result<Option<i64>, DruidError> {
+    fn position_blob(&self, _pattern: &RdbcBlob, _start: i64) -> Result<Option<i64>, DruidError> {
         unsupported_resource()
     }
 
@@ -210,7 +210,7 @@ impl PhysicalBlob for FixtureBlob {
         unsupported_resource()
     }
 
-    fn set_binary_stream(&self, _position: i64) -> Result<JdbcOutputStream, DruidError> {
+    fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
         unsupported_resource()
     }
 
@@ -230,7 +230,7 @@ impl PhysicalBlob for FixtureBlob {
         &self,
         _position: i64,
         _length: i64,
-    ) -> Result<JdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, DruidError> {
         unsupported_resource()
     }
 }
@@ -254,11 +254,11 @@ impl PhysicalClob for FixtureClob {
         Ok(self.value.clone())
     }
 
-    fn get_character_stream(&self) -> Result<JdbcReader, DruidError> {
+    fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
         unsupported_resource()
     }
 
-    fn get_ascii_stream(&self) -> Result<JdbcInputStream, DruidError> {
+    fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
         unsupported_resource()
     }
 
@@ -270,7 +270,7 @@ impl PhysicalClob for FixtureClob {
         unsupported_resource()
     }
 
-    fn position_clob(&self, _pattern: &JdbcClob, _start: i64) -> Result<Option<i64>, DruidError> {
+    fn position_clob(&self, _pattern: &RdbcClob, _start: i64) -> Result<Option<i64>, DruidError> {
         unsupported_resource()
     }
 
@@ -288,11 +288,11 @@ impl PhysicalClob for FixtureClob {
         unsupported_resource()
     }
 
-    fn set_ascii_stream(&self, _position: i64) -> Result<JdbcOutputStream, DruidError> {
+    fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
         unsupported_resource()
     }
 
-    fn set_character_stream(&self, _position: i64) -> Result<JdbcWriter, DruidError> {
+    fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
         unsupported_resource()
     }
 
@@ -312,7 +312,7 @@ impl PhysicalClob for FixtureClob {
         &self,
         _position: i64,
         _length: i64,
-    ) -> Result<JdbcReader, DruidError> {
+    ) -> Result<RdbcReader, DruidError> {
         unsupported_resource()
     }
 }
@@ -334,19 +334,19 @@ impl PhysicalSqlXml for FixtureSqlXml {
         false
     }
 
-    fn binary_stream(&self) -> Result<JdbcInputStream, DruidError> {
+    fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
         unsupported_resource()
     }
 
-    fn set_binary_stream(&self) -> Result<JdbcOutputStream, DruidError> {
+    fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
         unsupported_resource()
     }
 
-    fn character_stream(&self) -> Result<JdbcReader, DruidError> {
+    fn character_stream(&self) -> Result<RdbcReader, DruidError> {
         unsupported_resource()
     }
 
-    fn set_character_stream(&self) -> Result<JdbcWriter, DruidError> {
+    fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
         unsupported_resource()
     }
 
@@ -365,15 +365,15 @@ impl PhysicalSqlXml for FixtureSqlXml {
 
     fn source(
         &self,
-        _representation: &JdbcXmlRepresentationType,
-    ) -> Result<JdbcXmlSource, DruidError> {
+        _representation: &RdbcXmlRepresentationType,
+    ) -> Result<RdbcXmlSource, DruidError> {
         unsupported_resource()
     }
 
     fn result(
         &self,
-        _representation: &JdbcXmlRepresentationType,
-    ) -> Result<JdbcXmlResult, DruidError> {
+        _representation: &RdbcXmlRepresentationType,
+    ) -> Result<RdbcXmlResult, DruidError> {
         unsupported_resource()
     }
 }
@@ -386,15 +386,15 @@ impl PhysicalRef for FixtureRef {
         unsupported_resource()
     }
 
-    fn object(&self) -> Result<JdbcObject, DruidError> {
+    fn object(&self) -> Result<RdbcObject, DruidError> {
         unsupported_resource()
     }
 
-    fn object_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<JdbcObject, DruidError> {
+    fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, DruidError> {
         unsupported_resource()
     }
 
-    fn set_object(&self, _value: JdbcObject) -> Result<(), DruidError> {
+    fn set_object(&self, _value: RdbcObject) -> Result<(), DruidError> {
         unsupported_resource()
     }
 }
@@ -411,15 +411,15 @@ impl PhysicalArray for FixtureArray {
         unsupported_resource()
     }
 
-    fn values(&self) -> Result<Vec<JdbcObject>, DruidError> {
+    fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
         unsupported_resource()
     }
 
-    fn values_with_type_map(&self, _type_map: &JdbcTypeMap) -> Result<Vec<JdbcObject>, DruidError> {
+    fn values_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<Vec<RdbcObject>, DruidError> {
         unsupported_resource()
     }
 
-    fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<JdbcObject>, DruidError> {
+    fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<RdbcObject>, DruidError> {
         unsupported_resource()
     }
 
@@ -427,23 +427,23 @@ impl PhysicalArray for FixtureArray {
         &self,
         _index: i64,
         _count: i32,
-        _type_map: &JdbcTypeMap,
-    ) -> Result<Vec<JdbcObject>, DruidError> {
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Vec<RdbcObject>, DruidError> {
         unsupported_resource()
     }
 
-    fn result_set(&self) -> Result<JdbcResultSet, DruidError> {
+    fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
         unsupported_resource()
     }
 
     fn result_set_with_type_map(
         &self,
-        _type_map: &JdbcTypeMap,
-    ) -> Result<JdbcResultSet, DruidError> {
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcResultSet, DruidError> {
         unsupported_resource()
     }
 
-    fn result_set_range(&self, _index: i64, _count: i32) -> Result<JdbcResultSet, DruidError> {
+    fn result_set_range(&self, _index: i64, _count: i32) -> Result<RdbcResultSet, DruidError> {
         unsupported_resource()
     }
 
@@ -451,8 +451,8 @@ impl PhysicalArray for FixtureArray {
         &self,
         _index: i64,
         _count: i32,
-        _type_map: &JdbcTypeMap,
-    ) -> Result<JdbcResultSet, DruidError> {
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcResultSet, DruidError> {
         unsupported_resource()
     }
 
@@ -785,7 +785,7 @@ async fn rbdc_prepared_resources_preserve_setter_timing_and_batch_snapshots() {
     let mut connection = DruidPooledConnection::new(physical, 700, Box::new(|_, _| {}));
 
     let mut invalid = connection.prepare_statement("INVALID ?").await.unwrap();
-    let short = JdbcInputStream::from_bytes(vec![1, 2]);
+    let short = RdbcInputStream::from_bytes(vec![1, 2]);
     assert!(matches!(
         invalid.set_binary_stream_with_int_length(&mut connection, 1, Some(short.clone()), 3,),
         Err(DruidError::DriverError(_))
@@ -793,8 +793,8 @@ async fn rbdc_prepared_resources_preserve_setter_timing_and_batch_snapshots() {
     assert!(short.read_to_end().unwrap().is_empty());
     invalid.close_with_connection(&mut connection).unwrap();
 
-    let binary = JdbcInputStream::from_bytes(vec![1, 2, 3]);
-    let reader = JdbcReader::from_string("rbdc-reader");
+    let binary = RdbcInputStream::from_bytes(vec![1, 2, 3]);
+    let reader = RdbcReader::from_string("rbdc-reader");
     let mut statement = connection
         .prepare_statement("INSERT_RESOURCE ?, ?, ?, ?")
         .await
@@ -809,11 +809,11 @@ async fn rbdc_prepared_resources_preserve_setter_timing_and_batch_snapshots() {
         .set_url(
             &mut connection,
             3,
-            Some(JdbcUrl::new("https://example.com/rbdc")),
+            Some(RdbcUrl::new("https://example.com/rbdc")),
         )
         .unwrap();
     statement
-        .set_row_id(&mut connection, 4, Some(JdbcRowId::new(vec![8, 9])))
+        .set_row_id(&mut connection, 4, Some(RdbcRowId::new(vec![8, 9])))
         .unwrap();
     assert_eq!(binary.read_to_end().unwrap(), vec![3]);
     assert_eq!(reader.read_to_string().unwrap(), "-reader");
@@ -834,22 +834,22 @@ async fn rbdc_prepared_resources_preserve_setter_timing_and_batch_snapshots() {
         .set_blob_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![10, 11])),
+            Some(RdbcInputStream::from_bytes(vec![10, 11])),
         )
         .unwrap();
     batch
-        .set_clob_reader(&mut connection, 2, Some(JdbcReader::from_string("first")))
+        .set_clob_reader(&mut connection, 2, Some(RdbcReader::from_string("first")))
         .unwrap();
     batch.add_bound_batch(&mut connection).unwrap();
     batch
         .set_binary_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![20, 21])),
+            Some(RdbcInputStream::from_bytes(vec![20, 21])),
         )
         .unwrap();
     batch
-        .set_n_clob_reader(&mut connection, 2, Some(JdbcReader::from_string("第二")))
+        .set_n_clob_reader(&mut connection, 2, Some(RdbcReader::from_string("第二")))
         .unwrap();
     batch.add_bound_batch(&mut connection).unwrap();
     assert_eq!(
@@ -865,7 +865,7 @@ async fn rbdc_prepared_resources_preserve_setter_timing_and_batch_snapshots() {
         .set_binary_stream(
             &mut connection,
             1,
-            Some(JdbcInputStream::from_bytes(vec![30, 31])),
+            Some(RdbcInputStream::from_bytes(vec![30, 31])),
         )
         .unwrap();
     let mut rows = query.execute_query_bound(&mut connection).await.unwrap();
@@ -917,7 +917,7 @@ fn assert_invalid_resource_setters(
         invalid.set_blob(
             connection,
             1,
-            Some(JdbcBlob::new(Arc::new(FixtureBlob {
+            Some(RdbcBlob::new(Arc::new(FixtureBlob {
                 reported_length: oversized,
                 bytes: Vec::new(),
             }))),
@@ -928,7 +928,7 @@ fn assert_invalid_resource_setters(
         invalid.set_clob(
             connection,
             2,
-            Some(JdbcClob::new(Arc::new(FixtureClob {
+            Some(RdbcClob::new(Arc::new(FixtureClob {
                 reported_length: oversized,
                 value: JavaString::from(""),
             }))),
@@ -939,7 +939,7 @@ fn assert_invalid_resource_setters(
         invalid.set_n_clob(
             connection,
             3,
-            Some(JdbcNClob::new(Arc::new(FixtureClob {
+            Some(RdbcNClob::new(Arc::new(FixtureClob {
                 reported_length: oversized,
                 value: JavaString::from(""),
             }))),
@@ -950,7 +950,7 @@ fn assert_invalid_resource_setters(
         invalid.set_sql_xml(
             connection,
             4,
-            Some(JdbcSqlXml::new(Arc::new(FixtureSqlXml {
+            Some(RdbcSqlXml::new(Arc::new(FixtureSqlXml {
                 value: JavaString::from("<x/>"),
                 fail_string: true,
             }))),
@@ -961,7 +961,7 @@ fn assert_invalid_resource_setters(
         invalid.set_sql_xml(
             connection,
             5,
-            Some(JdbcSqlXml::new(Arc::new(FixtureSqlXml {
+            Some(RdbcSqlXml::new(Arc::new(FixtureSqlXml {
                 value: JavaString::from_utf16([0xd800]),
                 fail_string: false,
             }))),
@@ -969,15 +969,15 @@ fn assert_invalid_resource_setters(
         Err(DruidError::DriverError(_))
     ));
     assert!(matches!(
-        invalid.set_ascii_stream(connection, 1, Some(JdbcInputStream::from_bytes([0xff])),),
+        invalid.set_ascii_stream(connection, 1, Some(RdbcInputStream::from_bytes([0xff])),),
         Err(DruidError::DriverError(_))
     ));
     assert!(matches!(
-        invalid.set_ref(connection, 1, Some(JdbcRef::new(Arc::new(FixtureRef))),),
+        invalid.set_ref(connection, 1, Some(RdbcRef::new(Arc::new(FixtureRef))),),
         Err(DruidError::UnsupportedOperation { .. })
     ));
     assert!(matches!(
-        invalid.set_array(connection, 1, Some(JdbcArray::new(Arc::new(FixtureArray))),),
+        invalid.set_array(connection, 1, Some(RdbcArray::new(Arc::new(FixtureArray))),),
         Err(DruidError::UnsupportedOperation { .. })
     ));
 }
@@ -986,19 +986,19 @@ fn bind_valid_resource_objects(
     connection: &mut DruidPooledConnection,
     statement: &mut DruidPooledPreparedStatement,
 ) {
-    let blob = JdbcBlob::new(Arc::new(FixtureBlob {
+    let blob = RdbcBlob::new(Arc::new(FixtureBlob {
         reported_length: 2,
         bytes: vec![40, 41],
     }));
-    let clob = JdbcClob::new(Arc::new(FixtureClob {
+    let clob = RdbcClob::new(Arc::new(FixtureClob {
         reported_length: 4,
         value: JavaString::from("clob"),
     }));
-    let n_clob = JdbcNClob::new(Arc::new(FixtureClob {
+    let n_clob = RdbcNClob::new(Arc::new(FixtureClob {
         reported_length: 1,
         value: JavaString::from("国"),
     }));
-    let sql_xml = JdbcSqlXml::new(Arc::new(FixtureSqlXml {
+    let sql_xml = RdbcSqlXml::new(Arc::new(FixtureSqlXml {
         value: JavaString::from("<x/>"),
         fail_string: false,
     }));
@@ -1019,26 +1019,26 @@ fn bind_valid_resource_objects(
         .set_object(
             connection,
             5,
-            Some(JdbcObject::RowId(JdbcRowId::new([1, 2]))),
+            Some(RdbcObject::RowId(RdbcRowId::new([1, 2]))),
         )
         .unwrap();
     statement
-        .set_object(connection, 6, Some(JdbcObject::SqlXml(sql_xml)))
+        .set_object(connection, 6, Some(RdbcObject::SqlXml(sql_xml)))
         .unwrap();
     statement
-        .set_object(connection, 7, Some(JdbcObject::Blob(blob)))
+        .set_object(connection, 7, Some(RdbcObject::Blob(blob)))
         .unwrap();
     statement
-        .set_object(connection, 8, Some(JdbcObject::Clob(clob)))
+        .set_object(connection, 8, Some(RdbcObject::Clob(clob)))
         .unwrap();
     statement
-        .set_object(connection, 9, Some(JdbcObject::NClob(n_clob)))
+        .set_object(connection, 9, Some(RdbcObject::NClob(n_clob)))
         .unwrap();
     statement
         .set_object(
             connection,
             10,
-            Some(JdbcObject::CharacterStream(JdbcReader::from_string(
+            Some(RdbcObject::CharacterStream(RdbcReader::from_string(
                 "reader",
             ))),
         )
@@ -1047,7 +1047,7 @@ fn bind_valid_resource_objects(
         .set_object(
             connection,
             11,
-            Some(JdbcObject::NCharacterStream(JdbcReader::from_string(
+            Some(RdbcObject::NCharacterStream(RdbcReader::from_string(
                 "国字",
             ))),
         )
@@ -1056,7 +1056,7 @@ fn bind_valid_resource_objects(
         .set_object(
             connection,
             12,
-            Some(JdbcObject::String("scalar".to_string())),
+            Some(RdbcObject::String("scalar".to_string())),
         )
         .unwrap();
 }

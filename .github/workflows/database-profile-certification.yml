@@ -1,0 +1,106 @@
+name: database-profile-certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Exact profileId from the 80-product manifest
+        required: true
+        type: string
+      runtime_mode:
+        description: sqlx, native, http_sql, or jdbc_agent
+        required: true
+        type: choice
+        options: [sqlx, native, http_sql, jdbc_agent]
+
+concurrency:
+  group: database-certification-${{ inputs.profile }}
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    name: ${{ inputs.profile }} (${{ matrix.platform.target }}, Rust ${{ matrix.rust.label }})
+    environment: database-${{ inputs.profile }}
+    runs-on: ${{ matrix.platform.os }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        rust:
+          - label: "1.95"
+            toolchain: "1.95"
+          - label: default
+            toolchain: "1.97.1"
+        platform:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos-15
+            target: aarch64-apple-darwin
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust.toolchain }}
+      - name: Run the complete product contract
+        shell: bash
+        env:
+          DRUID_REQUIRE_DATABASE_PROFILE_CONTRACT: "1"
+          DRUID_DATABASE_PROFILE: ${{ inputs.profile }}
+          DRUID_DATABASE_URL: ${{ secrets.DRUID_DATABASE_URL }}
+          DRUID_DATABASE_BAD_URL: ${{ secrets.DRUID_DATABASE_BAD_URL }}
+          DRUID_DATABASE_USER: ${{ secrets.DRUID_DATABASE_USER }}
+          DRUID_DATABASE_PASSWORD: ${{ secrets.DRUID_DATABASE_PASSWORD }}
+          DRUID_DATABASE_TOKEN: ${{ secrets.DRUID_DATABASE_TOKEN }}
+          DRUID_DATABASE_API_TOKEN: ${{ secrets.DRUID_DATABASE_API_TOKEN }}
+          DRUID_DATABASE_PROPERTIES_JSON: ${{ secrets.DRUID_DATABASE_PROPERTIES_JSON }}
+          DRUID_JDBC_JAVA: ${{ vars.DRUID_JDBC_JAVA }}
+          DRUID_JDBC_AGENT_JAR: ${{ vars.DRUID_JDBC_AGENT_JAR }}
+          DRUID_JDBC_DRIVER_JARS: ${{ vars.DRUID_JDBC_DRIVER_JARS }}
+          DRUID_CONTRACT_CREATE_TABLE_SQL: ${{ vars.DRUID_CONTRACT_CREATE_TABLE_SQL }}
+          DRUID_CONTRACT_DATABASE_VERSION_SQL: ${{ vars.DRUID_CONTRACT_DATABASE_VERSION_SQL }}
+          DRUID_CONTRACT_LONG_QUERY: ${{ vars.DRUID_CONTRACT_LONG_QUERY }}
+          DRUID_CONTRACT_RESTART_PROGRAM: ${{ vars.DRUID_CONTRACT_RESTART_PROGRAM }}
+          DRUID_CONTRACT_RESTART_ARGS_JSON: ${{ vars.DRUID_CONTRACT_RESTART_ARGS_JSON }}
+          DRUID_CONTRACT_JAVA_VERSION: ${{ vars.DRUID_CONTRACT_JAVA_VERSION }}
+          DRUID_CONTRACT_ARTIFACT_SHA256: ${{ vars.DRUID_CONTRACT_ARTIFACT_SHA256 }}
+          DRUID_CONTRACT_TARGET: ${{ matrix.platform.target }}
+          DRUID_CONTRACT_RUST_VERSION: ${{ matrix.rust.label }}
+          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/${{ inputs.profile }}-${{ matrix.platform.target }}-${{ matrix.rust.label }}.json
+          DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p target/contract-evidence
+          cargo test -p druid-wrapper --all-features --test database_profile_live_contract_test -- --nocapture
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.profile }}-${{ matrix.platform.target }}-rust-${{ matrix.rust.label }}
+          path: target/contract-evidence/${{ inputs.profile }}-*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  aggregate:
+    needs: contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.97.1
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ${{ inputs.profile }}-*
+          path: target/contract-evidence/runs
+          merge-multiple: true
+      - name: Validate the ten-run evidence set
+        run: cargo run -p druid-admin --features managed-driver-install --bin druid-driver -- aggregate-evidence "${{ inputs.profile }}" "${{ inputs.runtime_mode }}" target/contract-evidence/runs target/contract-evidence/${{ inputs.profile }}-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.profile }}-contract-evidence
+          path: target/contract-evidence/${{ inputs.profile }}-evidence.json
+          if-no-files-found: error
+          retention-days: 90

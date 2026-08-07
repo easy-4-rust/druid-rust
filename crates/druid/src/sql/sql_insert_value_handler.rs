@@ -1,6 +1,6 @@
 //! INSERT values 流式处理协议。
 
-use crate::core::{DruidError, JavaString, JdbcObject};
+use crate::core::{DruidError, JavaString, RdbcObject};
 use bigdecimal::BigDecimal;
 use num_bigint::BigInt;
 
@@ -33,8 +33,8 @@ pub enum SqlInsertFunctionValue {
     DateMillis(i64),
     /// Java null。
     Null,
-    /// 其他 JDBC/vendor Object。
-    Object(JdbcObject),
+    /// 其他 RDBC/vendor Object。
+    Object(RdbcObject),
 }
 
 /// 流式处理 INSERT VALUES 的调用方协议。

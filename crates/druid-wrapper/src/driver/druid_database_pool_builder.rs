@@ -6,7 +6,8 @@ use druid::core::{
     MySqlValidConnectionChecker, OracleExceptionSorter, OracleValidConnectionChecker,
     PgExceptionSorter, PgValidConnectionChecker, ValidConnectionChecker,
 };
-use druid::pool::{DruidPool, DruidPoolBuilder};
+use druid::pool::{DruidDataSource, DruidPool, DruidPoolBuilder};
+use druid::rdbc::RdbcUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -22,6 +23,20 @@ pub struct DruidDatabasePoolBuilder {
 }
 
 impl DruidDatabasePoolBuilder {
+    /// 从统一 `rdbc://profile/endpoint/database` URL 创建建池器。
+    pub fn from_rdbc_url(url: impl Into<String>) -> Result<Self, DriverRegistryError> {
+        let url = url.into();
+        let parsed = RdbcUrl::parse(&url).map_err(|_| DriverRegistryError::InvalidUrl {
+            profile: "unknown".to_owned(),
+            url: if url.starts_with("rdbc://") {
+                "rdbc://<redacted>".to_owned()
+            } else {
+                url.clone()
+            },
+        })?;
+        Ok(Self::new(parsed.profile(), url))
+    }
+
     /// 创建产品档案驱动的 Druid 建池器。
     #[must_use]
     pub fn new(profile_id: impl Into<String>, url: impl Into<String>) -> Self {
@@ -123,6 +138,13 @@ impl DruidDatabasePoolBuilder {
             builder = configure(builder);
         }
         builder.build().await.map_err(Into::into)
+    }
+
+    /// 构建以同一个 native pool 为底座的 RDBC `DataSource`。
+    ///
+    /// 对应 Java: `javax.sql.DataSource` 与 Druid `DruidDataSource`；不会再包一层池。
+    pub async fn build_data_source(self) -> Result<DruidDataSource, DriverRegistryError> {
+        self.build().await.map(DruidDataSource::from_pool)
     }
 
     fn family_exception_sorter(family: super::ProtocolFamily) -> Option<Arc<dyn ExceptionSorter>> {

@@ -10,7 +10,7 @@ use druid::core::{
 use std::collections::BTreeSet;
 
 #[test]
-fn sql_exception_preserves_nullable_jdbc_fields_and_runtime_identity() {
+fn sql_exception_preserves_nullable_rdbc_fields_and_runtime_identity() {
     let exception = SqlException::new(7, None, None)
         .with_sql_state("08006")
         .with_class_name("vendor.DriverException")
@@ -101,12 +101,12 @@ fn mysql_sorter_matches_every_java_fatal_branch_and_cause_depth_limit() {
 
     assert!(sorter.is_exception_fatal(
         &SqlException::driver(0, "driver")
-            .with_class_name("com.mysql.cj.jdbc.exceptions.CommunicationsException")
+            .with_class_name("com.mysql.cj.rdbc.exceptions.CommunicationsException")
     ));
     assert!(sorter.is_exception_fatal(&SqlException::driver(
         0,
         concat!(
-            "Streaming result set com.mysql.jdbc.RowDataDynamic ",
+            "Streaming result set com.mysql.rdbc.RowDataDynamic ",
             "is still active. No statements may be issued when any streaming result sets are ",
             "open and in use on a given connection. Ensure that you have called .close() on any ",
             "active streaming result sets before attempting more queries."

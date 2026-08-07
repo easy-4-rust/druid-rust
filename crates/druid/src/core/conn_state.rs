@@ -10,7 +10,7 @@ pub struct ConnState {
     pub auto_commit: bool,
     /// 是否只读。
     pub read_only: bool,
-    /// 事务隔离级别，沿用 JDBC 数值语义。
+    /// 事务隔离级别，沿用 RDBC 数值语义。
     pub transaction_isolation: u8,
     /// 当前 catalog。
     pub catalog: Option<String>,

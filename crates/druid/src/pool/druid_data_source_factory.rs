@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::core::{ConfigFilter, DruidError, PhysicalConnectionFactory};
-use crate::sql::{JdbcUtils, WallConfig};
+use crate::sql::{RdbcUtils, WallConfig};
 use crate::toasty::ToastyConnectionFactory;
 
 use super::{DruidDataSource, DruidPoolBuilder};
@@ -55,9 +55,9 @@ impl DruidDataSourceFactory {
             ));
         }
         let configured_url = required(properties, Self::PROP_URL)?;
-        let url = JdbcUtils::to_rust_url(configured_url).ok_or_else(|| {
+        let url = RdbcUtils::to_rust_url(configured_url).ok_or_else(|| {
             DruidError::InvalidArgument(format!(
-                "Toasty does not support JDBC URL `{configured_url}`; select a druid-wrapper PhysicalConnectionFactory adapter"
+                "Toasty does not support RDBC URL `{configured_url}`; select a druid-wrapper PhysicalConnectionFactory adapter"
             ))
         })?;
         let factory = ToastyConnectionFactory::new(url.as_ref()).await?;
@@ -108,11 +108,11 @@ impl DruidDataSourceFactory {
             builder = builder.url(url).raw_url(url);
         }
 
-        // Java DruidDataSource#init 会在未显式设置时从 jdbcUrl 推断 dbType。
-        // Rust 同时接受 JDBC URL 与 sqlx/toasty URL，确保 Wall、校验器和
+        // Java DruidDataSource#init 会在未显式设置时从 rdbcUrl 推断 dbType。
+        // Rust 同时接受 RDBC URL 与 sqlx/toasty URL，确保 Wall、校验器和
         // ExceptionSorter 使用同一个数据库身份。
         let db_type = properties.get(Self::PROP_DB_TYPE).cloned().or_else(|| {
-            JdbcUtils::infer_db_type(
+            RdbcUtils::infer_db_type(
                 properties.get(Self::PROP_URL).map(String::as_str),
                 Some(&driver_name),
             )

@@ -1,4 +1,4 @@
-//! 物理 JDBC `ResultSetMetaData` SPI。
+//! 物理 RDBC `ResultSetMetaData` SPI。
 //!
 //! 对应 Java：`java.sql.ResultSetMetaData`。所有 getter 保持独立调用，以保留
 //! driver 的错误时机、副作用和动态 metadata；同时继承 `Wrapper` 保留底层

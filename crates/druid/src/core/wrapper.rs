@@ -1,4 +1,4 @@
-//! JDBC Wrapper 的 Rust 平台协议。
+//! RDBC Wrapper 的 Rust 平台协议。
 
 use super::{
     PhysicalCallableStatement, PhysicalConnection, PhysicalPreparedStatement, PhysicalResultSet,
