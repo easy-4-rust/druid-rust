@@ -16,6 +16,10 @@ pub mod c3p0;
 pub mod dbcp;
 /// Apache DBCP 2 兼容对象。
 pub mod dbcp2;
+/// 以 Druid 物理连接 SPI 为核心的多数据库驱动目录与解析入口。
+pub mod driver;
+/// Druid 自有 JDBC Agent 协议、进程运行时与物理连接 Adapter。
+pub mod jdbc_agent;
 /// Proxool 兼容对象。
 pub mod proxool;
 /// RBDC 直连驱动 Adapter。

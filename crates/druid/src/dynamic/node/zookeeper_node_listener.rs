@@ -243,7 +243,9 @@ impl ZookeeperNodeListener {
                 let Some(node_name) = Self::direct_child_name(&path, &event.path) else {
                     return;
                 };
-                if let Some(data) = self.cache.write().remove(&node_name) {
+                // 先完成缓存更新并释放写锁，再通知异步监听器。
+                let data = { self.cache.write().remove(&node_name) };
+                if let Some(data) = data {
                     self.update_single_node(&node_name, &data, NodeEventTypeEnum::Delete)
                         .await;
                 }

@@ -1,0 +1,81 @@
+use super::{DriverInstaller, DriverInstallerError, DriverRuntimeReport};
+use druid_wrapper::driver::{DatabaseProfileId, DruidDriverRegistry};
+use std::ffi::OsString;
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::process::Command;
+
+/// 检查 catalog、Agent、驱动 JAR 和 Java 进程四个独立证据层。
+#[derive(Debug, Clone)]
+pub struct DriverRuntimeDiagnostics {
+    installer: DriverInstaller,
+    java_program: OsString,
+}
+
+impl DriverRuntimeDiagnostics {
+    /// 创建使用 `java` 命令的诊断器。
+    #[must_use]
+    pub fn new(installer: DriverInstaller) -> Self {
+        Self {
+            installer,
+            java_program: OsString::from("java"),
+        }
+    }
+
+    /// 替换 Java 可执行文件路径。
+    #[must_use]
+    pub fn java_program(mut self, java_program: impl Into<OsString>) -> Self {
+        self.java_program = java_program.into();
+        self
+    }
+
+    /// 诊断本机启动条件，不尝试连接真实数据库。
+    pub async fn check(
+        &self,
+        profile_id: &str,
+    ) -> Result<DriverRuntimeReport, DriverInstallerError> {
+        let registry = DruidDriverRegistry::builtin()?;
+        let profile_id_value = DatabaseProfileId::new(profile_id)?;
+        let profile = registry.profile(&profile_id_value)?;
+        let catalog_status = format!("{:?}", profile.support_status());
+        let agent = self.installer.active_installation("jdbc-agent").await;
+        let driver = self.installer.active_installation(profile_id).await;
+        let java_available = Self::java_available(&self.java_program).await;
+        let mut messages = Vec::new();
+        if agent.is_err() {
+            messages.push("JDBC Agent uber-jar is not installed".to_owned());
+        }
+        if driver.is_err() {
+            messages.push(format!("JDBC driver for '{profile_id}' is not installed"));
+        }
+        if !java_available {
+            messages.push("Java runtime is not executable".to_owned());
+        }
+        if agent.is_ok() && driver.is_ok() && java_available {
+            messages.push(
+                "local runtime is ready; live database connectivity remains unverified".to_owned(),
+            );
+        }
+        Ok(DriverRuntimeReport::new(
+            profile_id.to_owned(),
+            catalog_status,
+            agent.is_ok(),
+            driver.is_ok(),
+            java_available,
+            messages,
+        ))
+    }
+
+    async fn java_available(java_program: &OsString) -> bool {
+        let mut command = Command::new(java_program);
+        command
+            .arg("-version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        tokio::time::timeout(Duration::from_secs(5), command.status())
+            .await
+            .is_ok_and(|status| status.is_ok_and(|status| status.success()))
+    }
+}

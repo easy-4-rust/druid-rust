@@ -27,7 +27,7 @@
 >
 > 迁移不是 Java 源码逐行翻译，但也不是只借鉴架构模式后自行删减功能。
 
-> **最后核验**：2026-07-28。
+> **最后核验**：2026-08-07。
 
 ## 1. 项目定位与状态
 
@@ -73,13 +73,13 @@ Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结�
 | 声明 | 当前值 | 证据 |
 | :--- | :--- | :--- |
 | workspace 可构建 | 是 | `cargo check --workspace` |
-| 全 workspace 测试 | 433/433 通过 | `cargo test --workspace` |
+| 全 workspace 测试 | 新增驱动契约通过；全量仍有既存 core 断言失败 | `cargo test --workspace` |
 | 真实 SQLite | 21 个跨内置/core/扩展用例通过 | Toasty、SQLx、bb8、deadpool、wrapper 测试 |
 | Toasty feature 图 | 全部可组合编译 | `cargo check -p druid --all-features` |
 | 连接 API | 已实现，尚不稳定 | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
 | 迁移完成度 | 部分 | `docs/druid*` 三模块对象与语义账本 |
 | crates.io / docs.rs | 未发布 | `publish = false` |
-| CI | 未配置 | 无 `.github/workflows/` |
+| CI | 已配置驱动矩阵，等待远端执行 | `.github/workflows/driver-matrix.yml` |
 | 覆盖率 | 有历史快照，未达到完成门禁 | 迁移路线图 §15 |
 | 基准 | 未测量 | 无稳定 benchmark 报告 |
 
@@ -97,6 +97,9 @@ Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结�
 | 多数据源热切换 | 🚧 部分 | `druid` | HA 健康和恢复未完成 | route/switch 测试 |
 | Toasty 默认集成 | 🧪 预览 | `druid` | SQLite 已测，其他数据库实测待补 | 真实 SQLite + all-features |
 | SQLx/RBDC 数据库操作适配 | 🚧 部分 | `druid-wrapper` | 真实数据库矩阵未完成 | adapter contract |
+| 80 个 SQL 数据库产品目录 | 🧪 预览 | `druid-wrapper` | 15/25/40 三阶段；目录不等于已验证支持 | manifest/registry contract |
+| JDBC Agent 长尾驱动 | 🧪 预览 | `druid-wrapper` + release asset | H2 跨语言契约已接通；厂商实库矩阵待补 | Rust/Java/H2 contract |
+| 驱动显式安装与诊断 | 🧪 预览 | `druid-admin` | JAR 内容寻址、SHA-256、doctor；无隐式下载 | installer contract |
 | bb8/deadpool 外部池适配 | 🧪 预览 | `druid-wrapper` | 禁止嵌套 DruidPool | 真实 SQLite bridge |
 | `/druid/*` Admin 兼容面 | 🗓️ 计划 | `druid-admin` | 只有占位 state/endpoint 字符串 | 迁移账本 |
 | Java 全对象语义 | 🚧 部分 | workspace | P0–P10 未全部关闭 | 对象/语义总账 |
@@ -244,6 +247,47 @@ README 不再保存无法编译的伪 API。当前可执行用法以三个 crate
 
 API 未稳定前，README 不承诺构造器签名；测试是当前源码版本的可执行示例。
 
+### 6.4 80 数据库目录与 JDBC Agent
+
+`druid-wrapper` 内置版本化 SQL-only 产品目录，共 80 项，交付阶段固定为
+15/25/40。Redis、MongoDB、Kafka、RabbitMQ、etcd、ZooKeeper 等非 SQL
+产品不会为了凑数进入目录。`declared`、`experimental`、`verified`、
+`certified` 是不同证据等级；公开支持数量只统计后两级，当前不能把 80 项目录
+写成“已支持 80 种数据库”。
+
+```mermaid
+flowchart LR
+    Config["DatabaseConnectionConfig<br/>产品 ID + URL + properties"] --> Registry["DruidDriverRegistry<br/>80 项版本化 manifest"]
+    Registry -->|SQLx| Native["SqlxConnectionFactory<br/>raw connection"]
+    Registry -->|JDBC Agent| AgentFactory["JdbcAgentConnectionFactory"]
+    Admin["druid-driver<br/>显式安装 + SHA-256 + doctor"] --> Jar["Agent JAR + vendor driver JAR"]
+    Jar --> AgentFactory
+    AgentFactory --> Process["DAP1 有界帧子进程<br/>一条物理 JDBC Connection"]
+    Native --> Pool["DruidPool<br/>唯一池化权威"]
+    Process --> Pool
+    Pool --> Public["DruidPooledConnection"]
+```
+
+关键边界：
+
+- `database-drivers.manifest.json` 记录产品、Druid 方言、协议族、运行时、Wall
+  等级、能力和阶段；重复 ID、未知字段、未知 `DbType` 会在启动前失败；
+- Agent 由 Druid 启动且不经过 shell，DAP1 使用 4 字节长度前缀、协议版本、
+  请求 ID、帧上限、超时和结构化 `SQLException`；
+- Agent 内只有一条 raw JDBC Connection，不创建第二个连接池；
+- 核心建池路径不访问网络。下载只能通过显式 HTTPS 管理命令触发，远程安装必须提供
+  SHA-256；商业驱动使用调用方已获授权的本地 JAR；
+- `driver-matrix.yml` 已编排 Linux、macOS、Windows 的 H2 Agent 契约，但首次
+  远端结果仍待执行；真实厂商数据库还需逐项补
+  DDL/DML/query/transaction/prepared/failure 证据。
+
+```bash
+cargo run -p druid-admin --bin druid-driver -- catalog
+cargo run -p druid-admin --bin druid-driver -- install-agent <root> <agent.jar> [sha256]
+cargo run -p druid-admin --bin druid-driver -- install-file <root> h2 <h2.jar> [sha256]
+cargo run -p druid-admin --bin druid-driver -- doctor <root> h2
+```
+
 ## 7. Cargo Features
 
 Toasty feature 已由 `druid` 统一暴露：
@@ -357,7 +401,7 @@ DruidPool::get/get_timeout
 | 命令/门禁 | 当前结果 |
 | :--- | :--- |
 | `cargo fmt --all -- --check` | 通过 |
-| `cargo test --workspace` | 433/433 通过 |
+| `cargo test --workspace` | 新增驱动契约通过；既有 callable/cache、连接池默认值和 Filter 生命周期断言仍使全量门禁保持打开 |
 | `cargo check -p druid --all-features` | 通过 |
 | `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | 未通过；存在归并前已有的 pedantic 告警债务 |
 | `cargo llvm-cov` | 有历史快照；未达到完成门禁 |

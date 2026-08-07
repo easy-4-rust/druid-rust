@@ -74,6 +74,7 @@ __pycache__/
 .fastRequest
 *.http
 *.json
+!crates/druid-wrapper/assets/database-drivers.manifest.json
 .flattened-pom.xml
 /agentdb.rvf
 /agentdb.rvf.lock

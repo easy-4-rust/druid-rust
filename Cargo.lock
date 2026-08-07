@@ -1930,7 +1930,9 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-valid",
+ "chrono",
  "druid",
+ "druid-wrapper",
  "k8s-openapi",
  "kube",
  "parking_lot",
@@ -1939,6 +1941,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 1.0.69",
  "tokio",
  "tokio-metrics",
@@ -1954,6 +1957,7 @@ name = "druid-wrapper"
 version = "0.0.0-design"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "bb8",
  "bigdecimal",
  "chrono",
@@ -1964,6 +1968,7 @@ dependencies = [
  "rbdc",
  "rbs",
  "serde",
+ "serde_json",
  "sqlx",
  "thiserror 1.0.69",
  "tokio",

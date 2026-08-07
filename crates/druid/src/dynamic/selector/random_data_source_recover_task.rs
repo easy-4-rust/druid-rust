@@ -28,7 +28,9 @@ impl RandomDataSourceRecoverTask {
             if *self.shutdown.borrow() {
                 return;
             }
-            for data_source in self.state.blacklist.read().clone() {
+            // 在进入异步探测前释放 parking_lot 读锁，避免 guard 跨越 await。
+            let blacklist = { self.state.blacklist.read().clone() };
+            for data_source in blacklist {
                 let result = async {
                     let mut connection = data_source.get().await?;
                     let validation_sleep =

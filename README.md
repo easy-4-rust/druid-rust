@@ -30,7 +30,7 @@
 > This is not a line-by-line Java translation, but it is also not an
 > architecture-inspired subset that silently drops functionality.
 
-> **Last verified:** 2026-07-28.
+> **Last verified:** 2026-08-07.
 
 ## 1. Project Positioning and Status
 
@@ -82,13 +82,13 @@ the obligation to migrate Druid result semantics.
 | Claim | Current value | Evidence |
 | :--- | :--- | :--- |
 | Workspace builds | Yes | `cargo check --workspace` |
-| Workspace tests | 433/433 pass | `cargo test --workspace` |
+| Workspace tests | New driver contracts pass; the full suite still has pre-existing core assertion failures | `cargo test --workspace` |
 | Real SQLite | 21 cross-layer cases pass | Toasty, SQLx, bb8, deadpool, wrapper tests |
 | Toasty feature graph | All features compose and compile | `cargo check -p druid --all-features` |
 | Connection API | Implemented, unstable | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
 | Migration completion | Partial | module ledgers under `docs/druid*` |
 | crates.io / docs.rs | Unpublished | `publish = false` |
-| CI | Not configured | no `.github/workflows/` |
+| CI | Driver matrix configured; remote run pending | `.github/workflows/driver-matrix.yml` |
 | Coverage | Historical snapshots exist; exit gate is open | migration roadmap §15 |
 | Benchmarks | Not measured | no stable benchmark report |
 
@@ -106,6 +106,9 @@ the obligation to migrate Druid result semantics.
 | Dynamic data-source switching | 🚧 Partial | `druid` | HA health and recovery pending | route/switch tests |
 | Default Toasty integration | 🧪 Preview | `druid` | SQLite tested; other real DBs pending | real SQLite + all-features |
 | SQLx/RBDC database operations | 🚧 Partial | `druid-wrapper` | real-database matrix pending | adapter contracts |
+| 80 SQL database product catalog | 🧪 Preview | `druid-wrapper` | fixed 15/25/40 phases; catalog entries are not verified support | manifest/registry contracts |
+| JDBC Agent long tail | 🧪 Preview | `druid-wrapper` + release asset | cross-language H2 contract works; vendor matrix pending | Rust/Java/H2 contract |
+| Explicit driver install and diagnostics | 🧪 Preview | `druid-admin` | content-addressed JARs, SHA-256, doctor; no implicit download | installer contract |
 | bb8/deadpool external pools | 🧪 Preview | `druid-wrapper` | must not nest DruidPool | real SQLite bridges |
 | Java-compatible `/druid/*` Admin | 🗓️ Planned | `druid-admin` | only placeholder state/endpoint strings | migration ledger |
 | Complete Java semantics | 🚧 Partial | workspace | P0–P10 are not closed | object/semantic ledgers |
@@ -259,6 +262,43 @@ current revision lives in tests under the three product crates:
 Until the API stabilizes, the README does not promise constructor signatures. Tests
 are the executable examples for the current source revision.
 
+### 6.4 80-database catalog and JDBC Agent
+
+`druid-wrapper` ships a versioned, SQL-only catalog of exactly 80 database products
+in fixed 15/25/40 delivery phases. Non-SQL products such as Redis, MongoDB, Kafka,
+RabbitMQ, etcd, and ZooKeeper are deliberately excluded. `declared`, `experimental`,
+`verified`, and `certified` are distinct evidence states; only the last two count as
+public support. An 80-entry catalog is therefore not an “80 databases supported”
+claim.
+
+```mermaid
+flowchart LR
+    Config["DatabaseConnectionConfig<br/>product ID + URL + properties"] --> Registry["DruidDriverRegistry<br/>versioned 80-entry manifest"]
+    Registry -->|SQLx| Native["SqlxConnectionFactory<br/>raw connection"]
+    Registry -->|JDBC Agent| AgentFactory["JdbcAgentConnectionFactory"]
+    Admin["druid-driver<br/>explicit install + SHA-256 + doctor"] --> Jar["Agent JAR + vendor driver JAR"]
+    Jar --> AgentFactory
+    AgentFactory --> Process["bounded DAP1 subprocess<br/>one raw JDBC Connection"]
+    Native --> Pool["DruidPool<br/>single pooling authority"]
+    Process --> Pool
+    Pool --> Public["DruidPooledConnection"]
+```
+
+The core pool never downloads a driver. Downloads are explicit HTTPS administrative
+operations and require a SHA-256 checksum; commercial drivers are supplied locally
+by an authorized user. The Agent is spawned without a shell, uses bounded
+length-prefixed DAP1 frames with request correlation and timeouts, and owns one raw
+JDBC connection rather than another pool. `driver-matrix.yml` defines the H2 contract
+for Linux, macOS, and Windows, but its first remote result is still pending; each vendor
+also needs its own live evidence gate.
+
+```bash
+cargo run -p druid-admin --bin druid-driver -- catalog
+cargo run -p druid-admin --bin druid-driver -- install-agent <root> <agent.jar> [sha256]
+cargo run -p druid-admin --bin druid-driver -- install-file <root> h2 <h2.jar> [sha256]
+cargo run -p druid-admin --bin druid-driver -- doctor <root> h2
+```
+
 ## 7. Cargo Features
 
 The Toasty feature contract is exposed directly by `druid`:
@@ -378,7 +418,7 @@ second completion ledger. The README is the project entry point, not another roa
 | Command / gate | Current result |
 | :--- | :--- |
 | `cargo fmt --all -- --check` | passes |
-| `cargo test --workspace` | 433/433 pass |
+| `cargo test --workspace` | new driver contracts pass; existing callable/cache, pool-default, and filter-lifecycle assertions keep the full gate open |
 | `cargo check -p druid --all-features` | passes |
 | `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | fails; pre-existing pedantic lint debt remains |
 | `cargo llvm-cov` | historical snapshots exist; completion gate is open |
