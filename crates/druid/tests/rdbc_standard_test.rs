@@ -2,11 +2,35 @@ use std::sync::Arc;
 
 use druid::core::{Driver, DruidError, PhysicalConnection, SqlException, Value};
 use druid::rdbc::{
-    Date, DriverManager, RdbcType, RdbcUrl, SqlExceptionKind, SqlInput, SqlOutput, SqlType, Time,
-    Timestamp, Types,
+    Date, DriverManager, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString, RdbcType,
+    RdbcUrl, RdbcWriter, SqlExceptionKind, SqlInput, SqlOutput, SqlType, Time, Timestamp, Types,
 };
 
 struct ProbeDriver;
+
+#[test]
+fn rdbc_facade_exports_only_rdbc_named_string_and_stream_resources() {
+    let value = RdbcString::from_utf16([0x0041, 0xD800]);
+    assert_eq!(value.as_utf16(), &[0x0041, 0xD800]);
+
+    let input = RdbcInputStream::new(std::io::Cursor::new(vec![1_u8, 2, 3]));
+    assert_eq!(
+        input.read_to_end().expect("RDBC input must be readable"),
+        [1, 2, 3]
+    );
+
+    let reader = RdbcReader::from_utf16(vec![0x0041, 0xD800]);
+    assert_eq!(
+        reader
+            .read_to_end_utf16()
+            .expect("RDBC reader must preserve UTF-16"),
+        [0x0041, 0xD800]
+    );
+
+    // Compile-time checks for the remaining public RDBC resource handles.
+    let _: Option<RdbcOutputStream> = None;
+    let _: Option<RdbcWriter> = None;
+}
 
 #[async_trait::async_trait]
 impl Driver for ProbeDriver {

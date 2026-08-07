@@ -1,8 +1,8 @@
 //! java.sql.Clob/NClob 与 java.io.Reader/Writer 的资源语义契约。
 
 use druid::core::{
-    DruidError, JavaString, PhysicalCharacterReader, PhysicalCharacterWriter, PhysicalClob,
-    PhysicalNClob, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader,
+    DruidError, PhysicalCharacterReader, PhysicalCharacterWriter, PhysicalClob, PhysicalNClob,
+    RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString,
     RdbcWriter,
 };
 use std::any::Any;
@@ -21,7 +21,7 @@ struct InMemoryPhysicalClob {
 }
 
 impl InMemoryPhysicalClob {
-    fn new(value: JavaString) -> Self {
+    fn new(value: RdbcString) -> Self {
         Self {
             state: Arc::new(Mutex::new(ClobState {
                 code_units: value.as_utf16().to_vec(),
@@ -144,7 +144,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
             .map_err(|_| DruidError::DriverError("Clob length exceeds i64".to_string()))
     }
 
-    fn get_sub_string(&self, position: i64, length: i32) -> Result<JavaString, DruidError> {
+    fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
         let state = self.state();
         let start = Self::checked_start(&state, position)?;
         let length = Self::checked_length(i64::from(length))?;
@@ -152,7 +152,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
             .checked_add(length)
             .map(|value| value.min(state.code_units.len()))
             .ok_or_else(|| DruidError::DriverError("Clob range overflow".to_string()))?;
-        Ok(JavaString::from_utf16(
+        Ok(RdbcString::from_utf16(
             state.code_units[start..end].to_vec(),
         ))
     }
@@ -182,7 +182,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         Ok(RdbcInputStream::from_bytes(bytes))
     }
 
-    fn position_string(&self, pattern: &JavaString, start: i64) -> Result<Option<i64>, DruidError> {
+    fn position_string(&self, pattern: &RdbcString, start: i64) -> Result<Option<i64>, DruidError> {
         let state = self.state();
         let start = Self::checked_start(&state, start)?;
         let pattern = pattern.as_utf16();
@@ -208,7 +208,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
         self.position_string(&pattern.get_sub_string(1, length)?, start)
     }
 
-    fn set_string(&self, position: i64, value: &JavaString) -> Result<i32, DruidError> {
+    fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
         let length = i32::try_from(value.len())
             .map_err(|_| DruidError::DriverError("Clob write is too large".to_string()))?;
         self.set_string_range(position, value, 0, length)
@@ -217,7 +217,7 @@ impl PhysicalClob for InMemoryPhysicalClob {
     fn set_string_range(
         &self,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {
@@ -300,11 +300,11 @@ impl PhysicalClob for InMemoryPhysicalClob {
 
 impl PhysicalNClob for InMemoryPhysicalClob {}
 
-fn clob(value: impl Into<JavaString>) -> RdbcClob {
+fn clob(value: impl Into<RdbcString>) -> RdbcClob {
     RdbcClob::new(Arc::new(InMemoryPhysicalClob::new(value.into())))
 }
 
-fn n_clob(value: impl Into<JavaString>) -> RdbcNClob {
+fn n_clob(value: impl Into<RdbcString>) -> RdbcNClob {
     RdbcNClob::new(Arc::new(InMemoryPhysicalClob::new(value.into())))
 }
 
@@ -355,16 +355,16 @@ impl PhysicalCharacterWriter for FailingWriter {
 }
 
 #[test]
-fn java_string_and_reader_preserve_utf16_identity_cursor_and_close() {
-    let supplementary = JavaString::from("A😀B");
+fn rdbc_string_and_reader_preserve_utf16_identity_cursor_and_close() {
+    let supplementary = RdbcString::from("A😀B");
     assert_eq!(supplementary.len(), 4);
     assert!(!supplementary.is_empty());
     assert_eq!(supplementary.to_rust_string().unwrap(), "A😀B");
     assert!(format!("{supplementary:?}").contains("utf16_length"));
-    let owned = JavaString::from(String::from("owned"));
+    let owned = RdbcString::from(String::from("owned"));
     assert_eq!(owned.to_rust_string().unwrap(), "owned");
 
-    let invalid = JavaString::from_utf16(vec![0xD800]);
+    let invalid = RdbcString::from_utf16(vec![0xD800]);
     assert!(invalid.to_rust_string().is_err());
 
     let reader = RdbcReader::from_utf16(supplementary.as_utf16().to_vec());
@@ -424,15 +424,15 @@ fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
         b"abcdef"
     );
     assert_eq!(
-        value.position_string(&JavaString::from("cd"), 1).unwrap(),
+        value.position_string(&RdbcString::from("cd"), 1).unwrap(),
         Some(3)
     );
     assert_eq!(value.position_clob(&clob("de"), 1).unwrap(), Some(4));
 
-    assert_eq!(value.set_string(2, &JavaString::from("XY")).unwrap(), 2);
+    assert_eq!(value.set_string(2, &RdbcString::from("XY")).unwrap(), 2);
     assert_eq!(
         value
-            .set_string_range(4, &JavaString::from("12ZZ"), 2, 2)
+            .set_string_range(4, &RdbcString::from("12ZZ"), 2, 2)
             .unwrap(),
         2
     );
@@ -454,7 +454,7 @@ fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
     assert_eq!(character_writer.write_str("中").unwrap(), 1);
     assert_eq!(
         character_writer_clone
-            .write_utf16(JavaString::from("文").as_utf16())
+            .write_utf16(RdbcString::from("文").as_utf16())
             .unwrap(),
         1
     );
@@ -478,7 +478,7 @@ fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
     assert_eq!(value.length().unwrap(), 5);
     assert!(value.get_sub_string(0, 1).is_err());
     assert!(value
-        .set_string_range(1, &JavaString::from("x"), -1, 1)
+        .set_string_range(1, &RdbcString::from("x"), -1, 1)
         .is_err());
     assert!(value.truncate(6).is_err());
 

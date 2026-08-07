@@ -155,7 +155,7 @@ impl StatFilter {
             }
         }
         if let Some(value) = properties.get("druid.stat.slowSqlMillis") {
-            let value = trim_java_string(value);
+            let value = trim_rdbc_string(value);
             if !value.is_empty() {
                 match value.parse::<i64>() {
                     Ok(value) => self.set_slow_sql_millis(value),
@@ -176,7 +176,7 @@ impl StatFilter {
             self.set_slow_sql_log_level(value);
         }
         if let Some(value) = properties.get("druid.stat.sql.MaxSize") {
-            let value = trim_java_string(value);
+            let value = trim_rdbc_string(value);
             if !value.is_empty() {
                 match value.parse::<i32>() {
                     Ok(value) => self.collector.set_max_sql_size(value),
@@ -612,7 +612,7 @@ impl ResultSetFilter for StatFilter {
     }
 }
 
-fn trim_java_string(value: &str) -> &str {
+fn trim_rdbc_string(value: &str) -> &str {
     value.trim_matches(|character| character <= '\u{20}')
 }
 
@@ -643,7 +643,7 @@ fn slow_prepared_parameter(parameter: &PreparedInputParameter) -> serde_json::Va
         }
         PreparedInputParameter::String(value) | PreparedInputParameter::NString(value) => value
             .as_deref()
-            .map_or(serde_json::Value::Null, json_java_string),
+            .map_or(serde_json::Value::Null, json_rdbc_string),
         PreparedInputParameter::Bytes(value) => value
             .as_ref()
             .map_or(serde_json::Value::Null, |_| json_marker("<[B>")),
@@ -695,7 +695,7 @@ fn slow_value(value: &Value) -> serde_json::Value {
         Value::Date(value) => json_marker(&value.format("%Y-%m-%d").to_string()),
         Value::Time(value) => json_marker(&value.format("%H:%M:%S").to_string()),
         Value::Timestamp(value) => json_marker(&value.format("%Y-%m-%d %H:%M:%S").to_string()),
-        Value::String(value) => json_java_string(value),
+        Value::String(value) => json_rdbc_string(value),
         Value::Bytes(_) => json_marker("<[B>"),
     }
 }
@@ -703,7 +703,7 @@ fn slow_value(value: &Value) -> serde_json::Value {
 fn slow_rdbc_object(value: &RdbcObject) -> serde_json::Value {
     match value {
         RdbcObject::Scalar(value) => slow_value(value),
-        RdbcObject::String(value) | RdbcObject::NString(value) => json_java_string(value),
+        RdbcObject::String(value) | RdbcObject::NString(value) => json_rdbc_string(value),
         RdbcObject::Boolean(value) => serde_json::Value::Bool(*value),
         RdbcObject::Byte(value) => json_integer(i64::from(*value)),
         RdbcObject::Short(value) => json_integer(i64::from(*value)),
@@ -731,7 +731,7 @@ fn slow_rdbc_object(value: &RdbcObject) -> serde_json::Value {
     }
 }
 
-fn json_java_string(value: &str) -> serde_json::Value {
+fn json_rdbc_string(value: &str) -> serde_json::Value {
     let utf16 = value.encode_utf16().collect::<Vec<_>>();
     if utf16.len() <= 100 {
         return json_marker(value);

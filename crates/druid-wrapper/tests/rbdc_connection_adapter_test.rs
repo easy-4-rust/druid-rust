@@ -3,11 +3,11 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    ConnectionFactory, DruidError, DruidPooledConnection, DruidPooledPreparedStatement, JavaString,
+    ConnectionFactory, DruidError, DruidPooledConnection, DruidPooledPreparedStatement,
     PhysicalArray, PhysicalBlob, PhysicalClob, PhysicalConnection, PhysicalNClob, PhysicalRef,
     PhysicalSqlXml, PreparedStatementKey, PreparedStatementMethodType, RdbcArray, RdbcBlob,
     RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef,
-    RdbcResultSet, RdbcRowId, RdbcSqlXml, RdbcTypeMap, RdbcUrl, RdbcWriter,
+    RdbcResultSet, RdbcRowId, RdbcSqlXml, RdbcString, RdbcTypeMap, RdbcUrl, RdbcWriter,
     RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
 use druid_wrapper::rbdc::RbdcConnectionFactory;
@@ -238,7 +238,7 @@ impl PhysicalBlob for FixtureBlob {
 #[derive(Debug)]
 struct FixtureClob {
     reported_length: i64,
-    value: JavaString,
+    value: RdbcString,
 }
 
 impl PhysicalClob for FixtureClob {
@@ -250,7 +250,7 @@ impl PhysicalClob for FixtureClob {
         Ok(self.reported_length)
     }
 
-    fn get_sub_string(&self, _position: i64, _length: i32) -> Result<JavaString, DruidError> {
+    fn get_sub_string(&self, _position: i64, _length: i32) -> Result<RdbcString, DruidError> {
         Ok(self.value.clone())
     }
 
@@ -264,7 +264,7 @@ impl PhysicalClob for FixtureClob {
 
     fn position_string(
         &self,
-        _pattern: &JavaString,
+        _pattern: &RdbcString,
         _start: i64,
     ) -> Result<Option<i64>, DruidError> {
         unsupported_resource()
@@ -274,14 +274,14 @@ impl PhysicalClob for FixtureClob {
         unsupported_resource()
     }
 
-    fn set_string(&self, _position: i64, _value: &JavaString) -> Result<i32, DruidError> {
+    fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
         unsupported_resource()
     }
 
     fn set_string_range(
         &self,
         _position: i64,
-        _value: &JavaString,
+        _value: &RdbcString,
         _offset: i32,
         _length: i32,
     ) -> Result<i32, DruidError> {
@@ -321,7 +321,7 @@ impl PhysicalNClob for FixtureClob {}
 
 #[derive(Debug)]
 struct FixtureSqlXml {
-    value: JavaString,
+    value: RdbcString,
     fail_string: bool,
 }
 
@@ -350,7 +350,7 @@ impl PhysicalSqlXml for FixtureSqlXml {
         unsupported_resource()
     }
 
-    fn string(&self) -> Result<JavaString, DruidError> {
+    fn string(&self) -> Result<RdbcString, DruidError> {
         if self.fail_string {
             return Err(DruidError::DriverError(
                 "injected SQLXML string failure".to_string(),
@@ -359,7 +359,7 @@ impl PhysicalSqlXml for FixtureSqlXml {
         Ok(self.value.clone())
     }
 
-    fn set_string(&self, _value: &JavaString) -> Result<(), DruidError> {
+    fn set_string(&self, _value: &RdbcString) -> Result<(), DruidError> {
         unsupported_resource()
     }
 
@@ -930,7 +930,7 @@ fn assert_invalid_resource_setters(
             2,
             Some(RdbcClob::new(Arc::new(FixtureClob {
                 reported_length: oversized,
-                value: JavaString::from(""),
+                value: RdbcString::from(""),
             }))),
         ),
         Err(DruidError::InvalidArgument(_))
@@ -941,7 +941,7 @@ fn assert_invalid_resource_setters(
             3,
             Some(RdbcNClob::new(Arc::new(FixtureClob {
                 reported_length: oversized,
-                value: JavaString::from(""),
+                value: RdbcString::from(""),
             }))),
         ),
         Err(DruidError::InvalidArgument(_))
@@ -951,7 +951,7 @@ fn assert_invalid_resource_setters(
             connection,
             4,
             Some(RdbcSqlXml::new(Arc::new(FixtureSqlXml {
-                value: JavaString::from("<x/>"),
+                value: RdbcString::from("<x/>"),
                 fail_string: true,
             }))),
         ),
@@ -962,7 +962,7 @@ fn assert_invalid_resource_setters(
             connection,
             5,
             Some(RdbcSqlXml::new(Arc::new(FixtureSqlXml {
-                value: JavaString::from_utf16([0xd800]),
+                value: RdbcString::from_utf16([0xd800]),
                 fail_string: false,
             }))),
         ),
@@ -992,14 +992,14 @@ fn bind_valid_resource_objects(
     }));
     let clob = RdbcClob::new(Arc::new(FixtureClob {
         reported_length: 4,
-        value: JavaString::from("clob"),
+        value: RdbcString::from("clob"),
     }));
     let n_clob = RdbcNClob::new(Arc::new(FixtureClob {
         reported_length: 1,
-        value: JavaString::from("国"),
+        value: RdbcString::from("国"),
     }));
     let sql_xml = RdbcSqlXml::new(Arc::new(FixtureSqlXml {
-        value: JavaString::from("<x/>"),
+        value: RdbcString::from("<x/>"),
         fail_string: false,
     }));
 

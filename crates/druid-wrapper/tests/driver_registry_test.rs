@@ -126,6 +126,41 @@ fn manifest_rejects_unknown_druid_dialect() {
 }
 
 #[test]
+fn manifest_keeps_omitted_capabilities_disabled() {
+    let manifest = DriverManifest::from_json(
+        r#"{
+            "schemaVersion": 3,
+            "catalogVersion": "test",
+            "profiles": [{
+                "profileId": "h2",
+                "displayName": "H2",
+                "dbType": "h2",
+                "protocolFamily": "jdbc",
+                "runtimeMode": "jdbc_agent",
+                "providerId": "jdbc-agent",
+                "artifactId": "h2-jdbc",
+                "driverClass": "org.h2.Driver",
+                "exceptionSorter": "auto",
+                "supportStatus": "declared",
+                "wallMode": "generic",
+                "deliveryPhase": 2,
+                "capabilities": { "query": true }
+            }]
+        }"#,
+    )
+    .expect("a declared profile may omit unsupported capabilities");
+
+    let capabilities = manifest.profiles()[0].capabilities();
+    assert!(capabilities.query);
+    assert!(!capabilities.update);
+    assert!(!capabilities.prepared_statements);
+    assert!(!capabilities.transactions);
+    assert!(!capabilities.cancellation);
+    assert!(!capabilities.paged_results);
+    assert!(!capabilities.blob);
+}
+
+#[test]
 fn manifest_rejects_verified_profiles_without_cross_platform_evidence() {
     let invalid = r#"{
         "schemaVersion": 3,

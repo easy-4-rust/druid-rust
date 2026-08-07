@@ -1,8 +1,8 @@
 //! 对应 Java：`com.alibaba.druid.proxy.rdbc.ClobProxyImpl`。
 
 use super::{
-    ClobProxy, DruidError, FilterChain, JavaString, RdbcClob, RdbcInputStream, RdbcOutputStream,
-    RdbcReader, RdbcWriter,
+    ClobProxy, DruidError, FilterChain, RdbcClob, RdbcInputStream, RdbcOutputStream, RdbcReader,
+    RdbcString, RdbcWriter,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -51,7 +51,7 @@ impl ClobProxyImpl {
     }
 
     /// 对应 Java：`Clob#getSubString(long,int)`。
-    pub fn get_sub_string(&self, position: i64, length: i32) -> Result<JavaString, DruidError> {
+    pub fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
         self.filter_chain
             .clob_get_sub_string(self, position, length)
     }
@@ -64,7 +64,7 @@ impl ClobProxyImpl {
     /// 对应 Java：`Clob#position(String,long)`。
     pub fn position_string(
         &self,
-        pattern: &JavaString,
+        pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         self.filter_chain.clob_position_string(self, pattern, start)
@@ -86,7 +86,7 @@ impl ClobProxyImpl {
     }
 
     /// 对应 Java：`Clob#setString(long,String)`。
-    pub fn set_string(&self, position: i64, value: &JavaString) -> Result<i32, DruidError> {
+    pub fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
         self.filter_chain.clob_set_string(self, position, value)
     }
 
@@ -94,7 +94,7 @@ impl ClobProxyImpl {
     pub fn set_string_range(
         &self,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {

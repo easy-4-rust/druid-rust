@@ -85,7 +85,7 @@ impl ConfigFilter {
             .map(|filters| filters.strip_prefix('!').unwrap_or(filters))
             .is_some_and(|filters| {
                 filters.split(',').any(|filter| {
-                    let filter = trim_java_string(filter);
+                    let filter = trim_rdbc_string(filter);
                     filter == "config" || filter == CONFIG_FILTER_CLASS
                 })
             })
@@ -432,6 +432,6 @@ async fn read_classpath(
     )))
 }
 
-fn trim_java_string(value: &str) -> &str {
+fn trim_rdbc_string(value: &str) -> &str {
     value.trim_matches(|character| character <= '\u{20}')
 }

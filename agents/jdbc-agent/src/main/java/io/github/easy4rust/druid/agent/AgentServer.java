@@ -33,6 +33,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Base64;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
@@ -53,6 +54,15 @@ public final class AgentServer implements Closeable {
     private static final int MAX_PAGE_SIZE = 10_000;
     private static final int DEFAULT_RESPONSE_BYTES = 8 * 1024 * 1024;
     private static final int MIN_RESPONSE_BYTES = 1024;
+    private static final List<String> AGENT_CAPABILITIES = List.of(
+            "multi-session",
+            "structured-errors",
+            "tagged-values",
+            "concurrent-requests",
+            "cursor-paging",
+            "cancel",
+            "remote-prepare",
+            "native-prepared-batch");
 
     private final BufferedReader input;
     private final BufferedWriter output;
@@ -85,14 +95,8 @@ public final class AgentServer implements Closeable {
         ObjectNode readyParams = ready.putObject("params");
         readyParams.put("protocolVersion", PROTOCOL_VERSION);
         readyParams.put("agentVersion", "0.0.0-design");
-        readyParams.putArray("capabilities")
-                .add("multi-session")
-                .add("structured-errors")
-                .add("tagged-values")
-                .add("concurrent-requests")
-                .add("cursor-paging")
-                .add("cancel")
-                .add("remote-prepare");
+        ArrayNode readyCapabilities = readyParams.putArray("capabilities");
+        AGENT_CAPABILITIES.forEach(readyCapabilities::add);
         writeLine(ready);
 
         try {
@@ -188,6 +192,7 @@ public final class AgentServer implements Closeable {
             case "execute" -> execute(requestId, session, params);
             case "prepare" -> prepare(session, params);
             case "execute_prepared" -> executePrepared(requestId, session, params);
+            case "execute_prepared_batch" -> executePreparedBatch(requestId, session, params);
             case "close_statement" -> closeStatement(session, params);
             case "fetch_page" -> fetchPage(requestId, session, params);
             case "close_cursor" -> closeCursor(session, params);
@@ -219,10 +224,24 @@ public final class AgentServer implements Closeable {
             throw new IllegalArgumentException("unsupported protocolVersion "
                     + params.path("protocolVersion").asInt());
         }
+        JsonNode requestedCapabilities = params.path("capabilities");
+        if (!requestedCapabilities.isArray()) {
+            throw new IllegalArgumentException("handshake capabilities must be an array");
+        }
+        for (JsonNode capability : requestedCapabilities) {
+            String name = capability.asText();
+            if (!AGENT_CAPABILITIES.contains(name)) {
+                throw new UnsupportedOperationException(
+                        "unsupported JDBC Agent capability " + name);
+            }
+        }
         ObjectNode result = JsonNodeFactory.instance.objectNode();
         contractFaultInjection.set(params.path("contractFaultInjection").asBoolean(false));
         result.put("protocolVersion", PROTOCOL_VERSION);
         result.put("agentVersion", "0.0.0-design");
+        result.put("driverArtifactVersion", params.path("driverArtifactVersion").asText("unmanaged"));
+        ArrayNode capabilities = result.putArray("capabilities");
+        AGENT_CAPABILITIES.forEach(capabilities::add);
         result.put("defaultPageSize", DEFAULT_PAGE_SIZE);
         result.put("maxResponseBytes", DEFAULT_RESPONSE_BYTES);
         return result;
@@ -331,7 +350,7 @@ public final class AgentServer implements Closeable {
             bind(statement, payload.path("params"));
             session.activate(requestId, statement);
             try {
-                return updateResult(statement, Math.max(0, statement.executeUpdate()));
+                return updateResult(statement, Math.max(0, statement.executeUpdate()), true);
             } finally {
                 session.deactivate(requestId);
             }
@@ -375,7 +394,10 @@ public final class AgentServer implements Closeable {
                 return firstPage(session, new AgentCursor(
                         statement, statement.getResultSet(), true, null, objectMapper), payload);
             }
-            ObjectNode result = updateResult(statement, Math.max(0, statement.getUpdateCount()));
+            ObjectNode result = updateResult(
+                    statement,
+                    Math.max(0, statement.getUpdateCount()),
+                    generatedKeysRequested(payload));
             statement.close();
             return result;
         } catch (SQLException | IOException | RuntimeException exception) {
@@ -407,7 +429,10 @@ public final class AgentServer implements Closeable {
             return switch (mode) {
                 case "query" -> firstPage(session, new AgentCursor(
                         statement, statement.executeQuery(), false, statementId, objectMapper), payload);
-                case "update" -> updateResult(statement, Math.max(0, statement.executeUpdate()));
+                case "update" -> updateResult(
+                        statement,
+                        Math.max(0, statement.executeUpdate()),
+                        generatedKeysRequested(payload));
                 case "execute" -> executePreparedAny(session, statementId, statement, payload);
                 default -> throw new IllegalArgumentException("unsupported execute_prepared mode " + mode);
             };
@@ -425,7 +450,46 @@ public final class AgentServer implements Closeable {
             return firstPage(session, new AgentCursor(
                     statement, statement.getResultSet(), false, statementId, objectMapper), payload);
         }
-        return updateResult(statement, Math.max(0, statement.getUpdateCount()));
+        return updateResult(
+                statement,
+                Math.max(0, statement.getUpdateCount()),
+                generatedKeysRequested(payload));
+    }
+
+    private JsonNode executePreparedBatch(
+            long requestId,
+            AgentSession session,
+            JsonNode payload) throws SQLException, IOException {
+        String statementId = requiredText(payload, "statementId");
+        PreparedStatement statement = session.preparedStatement(statementId);
+        JsonNode parameterSets = payload.path("parameterSets");
+        if (!parameterSets.isArray()) {
+            throw new IllegalArgumentException("parameterSets must be an array");
+        }
+        statement.clearBatch();
+        for (JsonNode parameters : parameterSets) {
+            statement.clearParameters();
+            bind(statement, parameters);
+            statement.addBatch();
+        }
+        statement.setQueryTimeout(Math.max(0, payload.path("queryTimeoutSeconds").asInt(0)));
+        session.activate(requestId, statement);
+        try {
+            int[] updateCounts = statement.executeBatch();
+            ObjectNode result = JsonNodeFactory.instance.objectNode();
+            ArrayNode counts = result.putArray("updateCounts");
+            for (int updateCount : updateCounts) {
+                counts.add(updateCount);
+            }
+            return result;
+        } finally {
+            session.deactivate(requestId);
+            try {
+                statement.clearBatch();
+            } catch (SQLException exception) {
+                log.debug("Unable to clear JDBC batch after execution", exception);
+            }
+        }
     }
 
     private JsonNode closeStatement(AgentSession session, JsonNode payload) throws SQLException {
@@ -497,6 +561,10 @@ public final class AgentServer implements Closeable {
             case "none" -> connection.prepareStatement(sql);
             default -> throw new IllegalArgumentException("unsupported generatedKeys mode " + mode);
         };
+    }
+
+    private boolean generatedKeysRequested(JsonNode payload) {
+        return !"none".equals(payload.path("generatedKeys").path("mode").asText("none"));
     }
 
     private JsonNode begin(AgentSession session) throws SQLException {
@@ -615,10 +683,16 @@ public final class AgentServer implements Closeable {
         return result;
     }
 
-    private ObjectNode updateResult(PreparedStatement statement, long rowsAffected) throws SQLException {
+    private ObjectNode updateResult(
+            PreparedStatement statement,
+            long rowsAffected,
+            boolean generatedKeysRequested) throws SQLException {
         ObjectNode result = JsonNodeFactory.instance.objectNode();
         result.put("kind", "update");
         result.put("rowsAffected", rowsAffected);
+        if (!generatedKeysRequested) {
+            return result;
+        }
         try (ResultSet generatedKeys = statement.getGeneratedKeys()) {
             if (Objects.nonNull(generatedKeys) && generatedKeys.next()) {
                 long value = generatedKeys.getLong(1);
@@ -628,6 +702,12 @@ public final class AgentServer implements Closeable {
             }
         } catch (SQLFeatureNotSupportedException ignored) {
             log.debug("JDBC driver does not expose generated keys");
+        } catch (SQLException exception) {
+            // The update has already succeeded. Some JDBC drivers (including
+            // HSQLDB for statements that produce no key) report an invalid
+            // cursor instead of returning an empty generated-key ResultSet.
+            // Preserve rowsAffected and represent the optional key as absent.
+            log.debug("JDBC driver could not read generated keys", exception);
         }
         return result;
     }

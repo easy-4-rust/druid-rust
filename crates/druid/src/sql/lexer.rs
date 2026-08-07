@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use num_bigint::BigInt;
 
-use crate::core::JavaString;
+use crate::core::RdbcString;
 
 use super::{
     CharTypes, DbType, DialectFeature, DialectFeatureValue, Keywords, LayoutCharacters,
@@ -25,7 +25,7 @@ pub trait CommentHandler: Send + Sync {
     /// 处理刚扫描到的注释。
     ///
     /// `last_token` 对应 Java nullable `lastToken`，`comment` 保持原始 UTF-16。
-    fn handle(&self, last_token: Option<Token>, comment: &JavaString) -> bool;
+    fn handle(&self, last_token: Option<Token>, comment: &RdbcString) -> bool;
 }
 
 /// Lexer 可回溯状态。
@@ -42,7 +42,7 @@ pub struct LexerSavePoint {
     hash: i64,
     hash_l_case: i64,
     token: Option<Token>,
-    string_val: Option<JavaString>,
+    string_val: Option<RdbcString>,
     line: usize,
 }
 
@@ -102,7 +102,7 @@ enum KeywordSet {
 /// UTF-16 code unit 上维护 `pos/mark/bufPos/ch/token/hash` 状态，并保留
 /// SQLite、DM 关键字表、注释安全开关和 SavePoint 回溯语义。
 pub struct Lexer {
-    text: JavaString,
+    text: RdbcString,
     features: i32,
     pos: usize,
     mark: usize,
@@ -112,11 +112,11 @@ pub struct Lexer {
     buf_pos: usize,
     token: Option<Token>,
     keyword_set: KeywordSet,
-    string_val: Option<JavaString>,
+    string_val: Option<RdbcString>,
     hash_l_case: i64,
     hash: i64,
     comment_count: usize,
-    comments: Option<Vec<JavaString>>,
+    comments: Option<Vec<RdbcString>>,
     skip_comment: bool,
     save_point: Option<LexerSavePoint>,
     allow_comment: bool,
@@ -154,14 +154,14 @@ impl Lexer {
     /// 从 Rust UTF-8 SQL 创建默认 Lexer。
     #[must_use]
     pub fn new(input: impl AsRef<str>) -> Self {
-        Self::from_java_string(JavaString::from_rust_str(input.as_ref()), None, true)
+        Self::from_rdbc_string(RdbcString::from_rust_str(input.as_ref()), None, true)
     }
 
     /// 从 SQL 与数据库类型创建 Lexer。
     #[must_use]
     pub fn with_db_type(input: impl AsRef<str>, db_type: DbType) -> Self {
-        Self::from_java_string(
-            JavaString::from_rust_str(input.as_ref()),
+        Self::from_rdbc_string(
+            RdbcString::from_rust_str(input.as_ref()),
             Some(db_type),
             true,
         )
@@ -169,7 +169,7 @@ impl Lexer {
 
     /// 从无损 Java UTF-16 SQL 创建 Lexer。
     #[must_use]
-    pub fn from_java_string(text: JavaString, db_type: Option<DbType>, skip_comment: bool) -> Self {
+    pub fn from_rdbc_string(text: RdbcString, db_type: Option<DbType>, skip_comment: bool) -> Self {
         let keyword_set = match db_type {
             Some(DbType::SQLite) => KeywordSet::SQLite,
             Some(DbType::Dm) => KeywordSet::Dm,
@@ -221,7 +221,7 @@ impl Lexer {
 
     /// 返回原始 Java String。
     #[must_use]
-    pub const fn source(&self) -> &JavaString {
+    pub const fn source(&self) -> &RdbcString {
         &self.text
     }
 
@@ -248,7 +248,7 @@ impl Lexer {
 
     /// 返回当前 Token 对应的 UTF-16 值。
     #[must_use]
-    pub const fn string_val(&self) -> Option<&JavaString> {
+    pub const fn string_val(&self) -> Option<&RdbcString> {
         self.string_val.as_ref()
     }
 
@@ -333,7 +333,7 @@ impl Lexer {
 
     /// 返回已保留的注释。
     #[must_use]
-    pub fn comments(&self) -> Option<&[JavaString]> {
+    pub fn comments(&self) -> Option<&[RdbcString]> {
         self.comments.as_deref()
     }
 
@@ -647,7 +647,7 @@ impl Lexer {
         let value = self.slice(self.mark, self.buf_pos);
         self.token = self
             .keywords()
-            .get_keyword_java_string(&value)
+            .get_keyword_rdbc_string(&value)
             .or(Some(Token::Identifier));
         if self.token == Some(Token::Identifier) {
             self.string_val = Some(value);
@@ -686,7 +686,7 @@ impl Lexer {
         self.string_val = Some(if value.is_empty() && self.buf_pos > 2 {
             self.slice(value_start, self.buf_pos - 2)
         } else {
-            JavaString::from_utf16(value)
+            RdbcString::from_utf16(value)
         });
         self.token = Some(token);
         Ok(())
@@ -737,7 +737,7 @@ impl Lexer {
             self.scan_char();
         }
         self.buf_pos = self.pos - self.mark;
-        self.string_val = Some(JavaString::from_utf16(value));
+        self.string_val = Some(RdbcString::from_utf16(value));
         self.token = Some(token);
         Ok(())
     }
@@ -1032,8 +1032,8 @@ impl Lexer {
         self.pos >= self.text.len()
     }
 
-    fn slice(&self, offset: usize, count: usize) -> JavaString {
-        JavaString::from_utf16(self.text.as_utf16()[offset..offset + count].to_vec())
+    fn slice(&self, offset: usize, count: usize) -> RdbcString {
+        RdbcString::from_utf16(self.text.as_utf16()[offset..offset + count].to_vec())
     }
 
     fn token_slice(&self) -> &[u16] {

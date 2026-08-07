@@ -1,6 +1,6 @@
 //! Druid lexer 字符串符号表。
 
-use crate::core::JavaString;
+use crate::core::RdbcString;
 use std::sync::{Arc, LazyLock, Mutex};
 
 /// 进程级默认符号表。
@@ -15,7 +15,7 @@ struct SymbolTableEntry {
     hash: i64,
     #[allow(dead_code)]
     len: i32,
-    value: Arc<JavaString>,
+    value: Arc<RdbcString>,
 }
 
 /// Lexer 使用的单槽 bucket 符号表。
@@ -46,11 +46,11 @@ impl SymbolTable {
     /// offset/len 单位为 Java char；非法边界和 Java 一样在调用点失败。
     pub fn add_symbol(
         &mut self,
-        buffer: &JavaString,
+        buffer: &RdbcString,
         offset: i32,
         len: i32,
         hash: i64,
-    ) -> Arc<JavaString> {
+    ) -> Arc<RdbcString> {
         let bucket = self.bucket(hash);
         if let Some(entry) = &self.entries[bucket] {
             if hash == entry.hash {
@@ -78,7 +78,7 @@ impl SymbolTable {
         offset: i32,
         len: i32,
         hash: i64,
-    ) -> Arc<JavaString> {
+    ) -> Arc<RdbcString> {
         let bucket = self.bucket(hash);
         if let Some(entry) = &self.entries[bucket] {
             if hash == entry.hash {
@@ -100,7 +100,7 @@ impl SymbolTable {
     ///
     /// 未命中 bucket 时缓存并返回输入的同一 Arc；发生不同 hash 的 bucket 冲突
     /// 时仍返回输入 Arc，但不覆盖旧 entry。
-    pub fn add_symbol_value(&mut self, symbol: Arc<JavaString>, hash: i64) -> Arc<JavaString> {
+    pub fn add_symbol_value(&mut self, symbol: Arc<RdbcString>, hash: i64) -> Arc<RdbcString> {
         let bucket = self.bucket(hash);
         if let Some(entry) = &self.entries[bucket] {
             if hash == entry.hash {
@@ -119,7 +119,7 @@ impl SymbolTable {
 
     /// 按 hash 查找缓存 symbol。
     #[must_use]
-    pub fn find_symbol(&self, hash: i64) -> Option<Arc<JavaString>> {
+    pub fn find_symbol(&self, hash: i64) -> Option<Arc<RdbcString>> {
         self.entries[self.bucket(hash)]
             .as_ref()
             .filter(|entry| entry.hash == hash)
@@ -130,19 +130,19 @@ impl SymbolTable {
         ((hash as i32) & self.index_mask) as usize
     }
 
-    fn substring(buffer: &JavaString, offset: i32, len: i32) -> JavaString {
+    fn substring(buffer: &RdbcString, offset: i32, len: i32) -> RdbcString {
         let offset = usize::try_from(offset).expect("negative Java String offset");
         let len = usize::try_from(len).expect("negative Java String length");
         let end = offset.checked_add(len).expect("Java String range overflow");
-        JavaString::from_utf16(buffer.as_utf16()[offset..end].to_vec())
+        RdbcString::from_utf16(buffer.as_utf16()[offset..end].to_vec())
     }
 
-    fn substring_bytes(buffer: &[u8], offset: i32, len: i32) -> JavaString {
+    fn substring_bytes(buffer: &[u8], offset: i32, len: i32) -> RdbcString {
         let offset = usize::try_from(offset).expect("negative Java byte array offset");
         let len = usize::try_from(len).expect("negative Java byte array length");
         let end = offset
             .checked_add(len)
             .expect("Java byte array range overflow");
-        JavaString::from_rust_str(String::from_utf8_lossy(&buffer[offset..end]).as_ref())
+        RdbcString::from_rust_str(String::from_utf8_lossy(&buffer[offset..end]).as_ref())
     }
 }

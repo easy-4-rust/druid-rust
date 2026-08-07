@@ -52,8 +52,10 @@ impl DatabaseProfile {
                 record.delivery_phase
             )));
         }
-        let capabilities = DriverCapabilities::runtime_baseline(record.runtime_mode, id.as_str())
-            .merged_with(record.capabilities);
+        // Missing capability fields deserialize to `false`. Product profiles must never inherit
+        // optimistic adapter capabilities: only explicit catalog declarations backed by contract
+        // evidence may describe product support.
+        let capabilities = record.capabilities;
         let driver_class = record
             .driver_class
             .or_else(|| jdbc_driver_class(id.as_str()).map(str::to_owned));

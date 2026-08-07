@@ -1,8 +1,9 @@
-//! RDBC 字符 Reader 平台对象。
+//! RDBC character-reader platform object.
 //!
-//! 对应 Java 平台对象：`java.io.Reader`。Java Reader 以 UTF-16 code unit
-//! 工作，不能直接缩成 Rust UTF-8 `String` 或字节 `Read`；本对象因此把
-//! `u16` 序列作为无损驱动边界。
+//! Corresponds to the Java platform type `java.io.Reader`. A Java reader works
+//! in UTF-16 code units and therefore cannot be represented losslessly as a
+//! Rust UTF-8 `String` or byte-oriented `Read`. This type uses `u16` sequences
+//! as the lossless driver boundary.
 
 use super::DruidError;
 use std::fmt;
@@ -11,14 +12,15 @@ use std::sync::{Arc, Mutex};
 
 static NEXT_READER_ID: AtomicU64 = AtomicU64::new(1);
 
-/// 物理字符 Reader SPI。
+/// Service-provider interface for a physical character reader.
 ///
-/// 对应 Java：`java.io.Reader#read(char[])` 与 `Reader#close()`。
+/// Corresponds to `java.io.Reader#read(char[])` and `Reader#close()`.
 pub trait PhysicalCharacterReader: fmt::Debug + Send {
-    /// 读取 UTF-16 code unit 并推进游标；返回 0 表示流结束。
+    /// Reads UTF-16 code units and advances the cursor; zero denotes end of
+    /// stream.
     fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, DruidError>;
 
-    /// 关闭底层 Reader。
+    /// Closes the underlying reader.
     fn close(&mut self) -> Result<(), DruidError>;
 }
 
@@ -51,19 +53,20 @@ struct RdbcReaderInner {
     state: Mutex<RdbcReaderState>,
 }
 
-/// 可共享的 Java Reader 句柄。
+/// A shareable RDBC character-reader handle.
 ///
-/// Clone 保留 Java 引用语义：所有克隆共享 UTF-16 游标和关闭状态。
+/// Cloning preserves Java reference semantics: all clones share the UTF-16
+/// cursor and closed state.
 #[derive(Clone)]
 pub struct RdbcReader {
     inner: Arc<RdbcReaderInner>,
 }
 
 impl RdbcReader {
-    /// 包装物理字符 Reader。
+    /// Wraps a physical character reader.
     ///
-    /// # 参数
-    /// - `reader`：驱动或调用方提供的字符流。
+    /// # Parameters
+    /// - `reader`: the character stream supplied by a driver or caller.
     pub fn new(reader: impl PhysicalCharacterReader + 'static) -> Self {
         Self {
             inner: Arc::new(RdbcReaderInner {
@@ -75,15 +78,16 @@ impl RdbcReader {
         }
     }
 
-    /// 从 Rust 字符串创建 UTF-16 Reader。
+    /// Creates a UTF-16 reader from a Rust string.
     pub fn from_string(value: impl AsRef<str>) -> Self {
         Self::from_utf16(value.as_ref().encode_utf16().collect())
     }
 
-    /// 从原始 UTF-16 code unit 创建 Reader。
+    /// Creates a reader from raw UTF-16 code units.
     ///
-    /// 该入口允许 Adapter 保留 Java Reader 中未配对 surrogate，直到调用方
-    /// 明确要求转换为 Rust String。
+    /// This entry point lets an adapter preserve unpaired surrogates received
+    /// from a Java reader until the caller explicitly requests conversion to a
+    /// Rust string.
     pub fn from_utf16(code_units: Vec<u16>) -> Self {
         Self::new(Utf16SliceReader {
             code_units,
@@ -91,7 +95,7 @@ impl RdbcReader {
         })
     }
 
-    /// 读取 UTF-16 code unit 并推进共享游标。
+    /// Reads UTF-16 code units and advances the shared cursor.
     pub fn read_utf16(&self, buffer: &mut [u16]) -> Result<usize, DruidError> {
         let mut state = self
             .inner
@@ -105,7 +109,7 @@ impl RdbcReader {
             .read_utf16(buffer)
     }
 
-    /// 从当前游标读取剩余全部 UTF-16 code unit。
+    /// Reads all remaining UTF-16 code units from the current cursor.
     pub fn read_to_end_utf16(&self) -> Result<Vec<u16>, DruidError> {
         let mut result = Vec::new();
         let mut buffer = [0_u16; 1024];
@@ -118,17 +122,18 @@ impl RdbcReader {
         }
     }
 
-    /// 从当前游标读取并严格转换为 Rust UTF-8 String。
+    /// Reads from the current cursor and strictly converts the result to a Rust
+    /// UTF-8 string.
     ///
-    /// Java 允许未配对 surrogate；遇到此类内容时返回错误，不进行替换字符式
-    /// 有损转换。
+    /// Java permits unpaired surrogates. Such input produces an error instead
+    /// of a lossy replacement-character conversion.
     pub fn read_to_string(&self) -> Result<String, DruidError> {
         String::from_utf16(&self.read_to_end_utf16()?).map_err(|error| {
             DruidError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
         })
     }
 
-    /// 关闭 Reader；重复关闭保持幂等。
+    /// Closes the reader. Repeated calls are idempotent.
     pub fn close(&self) -> Result<(), DruidError> {
         let mut state = self
             .inner
@@ -141,7 +146,7 @@ impl RdbcReader {
         reader.close()
     }
 
-    /// 返回 Reader 是否已经关闭。
+    /// Returns whether the reader has been closed.
     pub fn is_closed(&self) -> bool {
         self.inner
             .state
@@ -170,13 +175,13 @@ impl PartialEq for RdbcReader {
 
 impl Eq for RdbcReader {}
 
-/// Reader setter 的 Java 长度重载身份。
+/// Identifies the Java length overload selected for a reader setter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RdbcCharacterLength {
-    /// 未调用长度重载。
+    /// No length-bearing overload was selected.
     Unspecified,
-    /// Java `int length` 重载。
+    /// The overload taking a Java `int length`.
     Int(i32),
-    /// Java `long length` 重载。
+    /// The overload taking a Java `long length`.
     Long(i64),
 }

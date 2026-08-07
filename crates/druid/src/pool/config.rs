@@ -954,7 +954,7 @@ impl DruidPoolBuilder {
         self.filter_chain_configured = true;
         for item in filters.split(',') {
             self.filter_manager
-                .load_filter(&mut self.filter_chain, trim_java_string(item))?;
+                .load_filter(&mut self.filter_chain, trim_rdbc_string(item))?;
         }
         Ok(())
     }
@@ -1128,7 +1128,7 @@ fn default_filter_manager(
     manager
 }
 
-fn trim_java_string(value: &str) -> &str {
+fn trim_rdbc_string(value: &str) -> &str {
     value.trim_matches(|character| character <= '\u{20}')
 }
 

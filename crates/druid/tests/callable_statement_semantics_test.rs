@@ -11,13 +11,13 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidError, DruidPooledCallableStatement,
-    DruidPooledCallableStatementHandle, ExecResult, JavaString, PhysicalArray, PhysicalBlob,
+    DruidPooledCallableStatementHandle, ExecResult, PhysicalArray, PhysicalBlob,
     PhysicalCallableStatement, PhysicalClob, PhysicalConnection, PhysicalNClob,
     PhysicalPreparedStatement, PhysicalRef, PhysicalSqlXml, PreparedStatementKey,
     PreparedStatementMethodType, RdbcArray, RdbcBlob, RdbcCharacterLength, RdbcClob,
     RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef, RdbcResultSet,
-    RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, RdbcWriter,
-    RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, ResultSetStatement, Row,
+    RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcString, RdbcTargetType, RdbcTypeMap, RdbcUrl,
+    RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, ResultSetStatement, Row,
     SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
     WrapperExt,
 };
@@ -195,7 +195,7 @@ impl PhysicalClob for TestPhysicalClob {
         Ok(i64::try_from(self.code_units.len()).expect("test Clob length fits i64"))
     }
 
-    fn get_sub_string(&self, position: i64, length: i32) -> Result<JavaString, DruidError> {
+    fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
         let start = self.start(position)?;
         let length = usize::try_from(length)
             .map_err(|_| DruidError::DriverError("invalid Clob length".to_string()))?;
@@ -203,7 +203,7 @@ impl PhysicalClob for TestPhysicalClob {
             .checked_add(length)
             .map(|end| end.min(self.code_units.len()))
             .ok_or_else(|| DruidError::DriverError("Clob range overflow".to_string()))?;
-        Ok(JavaString::from_utf16(self.code_units[start..end].to_vec()))
+        Ok(RdbcString::from_utf16(self.code_units[start..end].to_vec()))
     }
 
     fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
@@ -225,7 +225,7 @@ impl PhysicalClob for TestPhysicalClob {
         Ok(RdbcInputStream::from_bytes(bytes))
     }
 
-    fn position_string(&self, pattern: &JavaString, start: i64) -> Result<Option<i64>, DruidError> {
+    fn position_string(&self, pattern: &RdbcString, start: i64) -> Result<Option<i64>, DruidError> {
         let start = self.start(start)?;
         let position = if pattern.is_empty() {
             Some(start)
@@ -245,7 +245,7 @@ impl PhysicalClob for TestPhysicalClob {
         self.position_string(&pattern.get_sub_string(1, length)?, start)
     }
 
-    fn set_string(&self, _position: i64, _value: &JavaString) -> Result<i32, DruidError> {
+    fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "test_read_only_clob_set_string",
         })
@@ -254,7 +254,7 @@ impl PhysicalClob for TestPhysicalClob {
     fn set_string_range(
         &self,
         _position: i64,
-        _value: &JavaString,
+        _value: &RdbcString,
         _offset: i32,
         _length: i32,
     ) -> Result<i32, DruidError> {
@@ -438,11 +438,11 @@ impl PhysicalSqlXml for TestPhysicalSqlXml {
         })
     }
 
-    fn string(&self) -> Result<JavaString, DruidError> {
-        Ok(JavaString::from("<x/>"))
+    fn string(&self) -> Result<RdbcString, DruidError> {
+        Ok(RdbcString::from("<x/>"))
     }
 
-    fn set_string(&self, _value: &JavaString) -> Result<(), DruidError> {
+    fn set_string(&self, _value: &RdbcString) -> Result<(), DruidError> {
         Ok(())
     }
 

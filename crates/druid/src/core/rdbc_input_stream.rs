@@ -1,8 +1,9 @@
-//! RDBC 输入流平台对象。
+//! RDBC input-stream platform object.
 //!
-//! 对应 Java 平台对象：`java.io.InputStream`。该对象用于保持
-//! `CallableStatement#setBlob(String, InputStream[, long])` 的流身份、
-//! 当前读取位置和关闭状态，禁止在池化层提前物化为字节数组。
+//! Corresponds to the Java platform type `java.io.InputStream`. It preserves
+//! the stream identity, current read position, and closed state used by
+//! `CallableStatement#setBlob(String, InputStream[, long])` without eagerly
+//! materializing the stream into a byte array at the pooling layer.
 
 use super::DruidError;
 use std::fmt;
@@ -21,20 +22,20 @@ struct RdbcInputStreamInner {
     state: Mutex<RdbcInputStreamState>,
 }
 
-/// 可共享的 RDBC 输入流句柄。
+/// A shareable RDBC input-stream handle.
 ///
-/// Clone 只克隆句柄，所有克隆共享同一个读取游标和关闭状态，对应 Java
-/// `InputStream` 对象引用语义。
+/// Cloning copies only the handle. All clones share the same read cursor and
+/// closed state, matching Java `InputStream` object-reference semantics.
 #[derive(Clone)]
 pub struct RdbcInputStream {
     inner: Arc<RdbcInputStreamInner>,
 }
 
 impl RdbcInputStream {
-    /// 包装一个真实输入流。
+    /// Wraps a physical input stream without reading from it eagerly.
     ///
-    /// # 参数
-    /// - `reader`：由驱动或调用方提供的流；池化层不会提前读取。
+    /// # Parameters
+    /// - `reader`: the stream supplied by a driver or caller.
     pub fn new(reader: impl Read + Send + 'static) -> Self {
         Self {
             inner: Arc::new(RdbcInputStreamInner {
@@ -46,18 +47,20 @@ impl RdbcInputStream {
         }
     }
 
-    /// 从字节创建有状态输入流，主要用于 Adapter 和契约测试。
+    /// Creates a stateful input stream from bytes, primarily for adapters and
+    /// contract tests.
     pub fn from_bytes(bytes: impl Into<Vec<u8>>) -> Self {
         Self::new(Cursor::new(bytes.into()))
     }
 
-    /// 读取数据并推进共享游标。
+    /// Reads bytes and advances the shared cursor.
     ///
-    /// # 参数
-    /// - `buffer`：接收本次读取内容的缓冲区。
+    /// # Parameters
+    /// - `buffer`: the destination buffer for this read operation.
     ///
-    /// # 返回
-    /// 实际读取字节数；流已关闭或底层读取失败时返回错误。
+    /// # Returns
+    /// The number of bytes read, or an error if the stream is closed or the
+    /// underlying read operation fails.
     pub fn read(&self, buffer: &mut [u8]) -> Result<usize, DruidError> {
         let mut state = self
             .inner
@@ -73,7 +76,7 @@ impl RdbcInputStream {
             .map_err(|error| DruidError::DriverError(format!("InputStream read failed: {error}")))
     }
 
-    /// 从当前共享游标读取到流末尾。
+    /// Reads from the current shared cursor to the end of the stream.
     pub fn read_to_end(&self) -> Result<Vec<u8>, DruidError> {
         let mut bytes = Vec::new();
         let mut state = self
@@ -91,7 +94,7 @@ impl RdbcInputStream {
         Ok(bytes)
     }
 
-    /// 关闭输入流；重复关闭保持幂等。
+    /// Closes the input stream. Repeated calls are idempotent.
     pub fn close(&self) -> Result<(), DruidError> {
         self.inner
             .state
@@ -102,7 +105,7 @@ impl RdbcInputStream {
         Ok(())
     }
 
-    /// 返回输入流是否已经关闭。
+    /// Returns whether the input stream has been closed.
     pub fn is_closed(&self) -> bool {
         self.inner
             .state
@@ -131,13 +134,13 @@ impl PartialEq for RdbcInputStream {
 
 impl Eq for RdbcInputStream {}
 
-/// 二进制流 setter 的 Java 重载身份。
+/// Identifies the Java overload selected for a binary-stream setter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RdbcStreamLength {
-    /// 调用方使用未提供长度的重载。
+    /// The caller selected an overload that does not provide a length.
     Unspecified,
-    /// `setAsciiStream/setBinaryStream(..., int)`，原样保留 Java int。
+    /// `setAsciiStream/setBinaryStream(..., int)`, preserving the Java `int`.
     Int(i32),
-    /// Blob/ASCII/Binary stream 的 long 重载，原样保留 Java long。
+    /// A Blob, ASCII, or binary stream overload that takes a Java `long`.
     Long(i64),
 }

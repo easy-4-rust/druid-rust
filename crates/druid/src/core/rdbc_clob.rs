@@ -3,7 +3,7 @@
 //! Corresponds to Java: `java.sql.Clob`. A Clob is a driver-owned character resource and cannot
 //! be reduced to a Rust `String` by the pooling layer.
 
-use super::{DruidError, JavaString, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcWriter};
+use super::{DruidError, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter};
 use std::any::Any;
 use std::fmt;
 use std::sync::Arc;
@@ -20,7 +20,7 @@ pub trait PhysicalClob: fmt::Debug + Send + Sync {
     fn length(&self) -> Result<i64, DruidError>;
 
     /// Returns a substring. Corresponds to Java: `Clob#getSubString(long, int)`.
-    fn get_sub_string(&self, position: i64, length: i32) -> Result<JavaString, DruidError>;
+    fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError>;
 
     /// Opens the character stream. Corresponds to Java: `Clob#getCharacterStream()`.
     fn get_character_stream(&self) -> Result<RdbcReader, DruidError>;
@@ -29,19 +29,19 @@ pub trait PhysicalClob: fmt::Debug + Send + Sync {
     fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError>;
 
     /// Finds a string. Corresponds to Java: `Clob#position(String, long)`.
-    fn position_string(&self, pattern: &JavaString, start: i64) -> Result<Option<i64>, DruidError>;
+    fn position_string(&self, pattern: &RdbcString, start: i64) -> Result<Option<i64>, DruidError>;
 
     /// Finds another Clob. Corresponds to Java: `Clob#position(Clob, long)`.
     fn position_clob(&self, pattern: &RdbcClob, start: i64) -> Result<Option<i64>, DruidError>;
 
     /// Writes a string. Corresponds to Java: `Clob#setString(long, String)`.
-    fn set_string(&self, position: i64, value: &JavaString) -> Result<i32, DruidError>;
+    fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError>;
 
     /// Writes a string range. Corresponds to Java: `Clob#setString(long, String, int, int)`.
     fn set_string_range(
         &self,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError>;
@@ -95,7 +95,7 @@ impl RdbcClob {
     }
 
     /// Returns a substring. Corresponds to Java: `Clob#getSubString(long, int)`.
-    pub fn get_sub_string(&self, position: i64, length: i32) -> Result<JavaString, DruidError> {
+    pub fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
         self.physical.get_sub_string(position, length)
     }
 
@@ -112,7 +112,7 @@ impl RdbcClob {
     /// Finds a string. Corresponds to Java: `Clob#position(String, long)`.
     pub fn position_string(
         &self,
-        pattern: &JavaString,
+        pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         self.physical.position_string(pattern, start)
@@ -124,7 +124,7 @@ impl RdbcClob {
     }
 
     /// Writes a string. Corresponds to Java: `Clob#setString(long, String)`.
-    pub fn set_string(&self, position: i64, value: &JavaString) -> Result<i32, DruidError> {
+    pub fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
         self.physical.set_string(position, value)
     }
 
@@ -132,7 +132,7 @@ impl RdbcClob {
     pub fn set_string_range(
         &self,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {

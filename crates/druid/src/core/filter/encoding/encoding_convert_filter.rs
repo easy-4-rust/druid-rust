@@ -2,8 +2,8 @@
 
 use super::CharsetConvert;
 use crate::core::{
-    AfterFilter, BeforeFilter, ClobFilterChain, DruidError, ExecContext, ExecResult, JavaString,
-    RdbcObject, RdbcReader, ResultSetFilter, ResultSetFilterChain, Value,
+    AfterFilter, BeforeFilter, ClobFilterChain, DruidError, ExecContext, ExecResult, RdbcObject,
+    RdbcReader, RdbcString, ResultSetFilter, ResultSetFilterChain, Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -84,14 +84,14 @@ impl EncodingConvertFilter {
         }
     }
 
-    fn encode_java_string(&self, value: &JavaString) -> Result<JavaString, DruidError> {
+    fn encode_rdbc_string(&self, value: &RdbcString) -> Result<RdbcString, DruidError> {
         let value = String::from_utf16_lossy(value.as_utf16());
-        self.encode(&value).map(JavaString::from)
+        self.encode(&value).map(RdbcString::from)
     }
 
-    fn decode_java_string(&self, value: JavaString) -> Result<JavaString, DruidError> {
+    fn decode_rdbc_string(&self, value: RdbcString) -> Result<RdbcString, DruidError> {
         let value = String::from_utf16_lossy(value.as_utf16());
-        self.decode(&value).map(JavaString::from)
+        self.decode(&value).map(RdbcString::from)
     }
 }
 
@@ -139,10 +139,10 @@ impl BeforeFilter for EncodingConvertFilter {
     fn clob_position_string(
         &self,
         chain: &mut ClobFilterChain<'_>,
-        pattern: &JavaString,
+        pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
-        let pattern = self.encode_java_string(pattern)?;
+        let pattern = self.encode_rdbc_string(pattern)?;
         chain.clob_position_string(&pattern, start)
     }
 
@@ -151,8 +151,8 @@ impl BeforeFilter for EncodingConvertFilter {
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         length: i32,
-    ) -> Result<JavaString, DruidError> {
-        self.decode_java_string(chain.clob_get_sub_string(position, length)?)
+    ) -> Result<RdbcString, DruidError> {
+        self.decode_rdbc_string(chain.clob_get_sub_string(position, length)?)
     }
 
     fn clob_get_character_stream(
@@ -179,9 +179,9 @@ impl BeforeFilter for EncodingConvertFilter {
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
     ) -> Result<i32, DruidError> {
-        let value = self.encode_java_string(value)?;
+        let value = self.encode_rdbc_string(value)?;
         chain.clob_set_string(position, &value)
     }
 
@@ -189,11 +189,11 @@ impl BeforeFilter for EncodingConvertFilter {
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {
-        let value = self.encode_java_string(value)?;
+        let value = self.encode_rdbc_string(value)?;
         chain.clob_set_string_range(position, &value, offset, length)
     }
 }

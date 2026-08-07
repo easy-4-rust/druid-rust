@@ -1,7 +1,8 @@
-//! RDBC 字符 Writer 平台对象。
+//! RDBC character-writer platform object.
 //!
-//! 对应 Java 平台对象：`java.io.Writer`。字符写入以 UTF-16 code unit 为
-//! 无损边界，避免 Rust String 无法表达未配对 surrogate 时静默替换数据。
+//! Corresponds to the Java platform type `java.io.Writer`. Character writes
+//! use UTF-16 code units as the lossless boundary, avoiding silent replacement
+//! when a Rust string cannot represent unpaired surrogates.
 
 use super::DruidError;
 use std::fmt;
@@ -10,15 +11,15 @@ use std::sync::{Arc, Mutex};
 
 static NEXT_WRITER_ID: AtomicU64 = AtomicU64::new(1);
 
-/// 物理字符 Writer SPI。
+/// Service-provider interface for a physical character writer.
 pub trait PhysicalCharacterWriter: fmt::Debug + Send {
-    /// 写入 UTF-16 code unit。
+    /// Writes UTF-16 code units.
     fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, DruidError>;
 
-    /// 刷新底层 Writer。
+    /// Flushes the underlying writer.
     fn flush(&mut self) -> Result<(), DruidError>;
 
-    /// 关闭底层 Writer。
+    /// Closes the underlying writer.
     fn close(&mut self) -> Result<(), DruidError>;
 }
 
@@ -31,16 +32,16 @@ struct RdbcWriterInner {
     state: Mutex<RdbcWriterState>,
 }
 
-/// 可共享的 Java Writer 句柄。
+/// A shareable RDBC character-writer handle.
 ///
-/// Clone 共享写入位置和关闭状态。
+/// All clones share the write position and closed state.
 #[derive(Clone)]
 pub struct RdbcWriter {
     inner: Arc<RdbcWriterInner>,
 }
 
 impl RdbcWriter {
-    /// 包装物理字符 Writer。
+    /// Wraps a physical character writer.
     pub fn new(writer: impl PhysicalCharacterWriter + 'static) -> Self {
         Self {
             inner: Arc::new(RdbcWriterInner {
@@ -52,7 +53,7 @@ impl RdbcWriter {
         }
     }
 
-    /// 写入 UTF-16 code unit。
+    /// Writes UTF-16 code units.
     pub fn write_utf16(&self, code_units: &[u16]) -> Result<usize, DruidError> {
         let mut state = self
             .inner
@@ -66,12 +67,12 @@ impl RdbcWriter {
             .write_utf16(code_units)
     }
 
-    /// 将 Rust String 编码为 UTF-16 后写入。
+    /// Encodes a Rust string as UTF-16 and writes the resulting code units.
     pub fn write_str(&self, value: &str) -> Result<usize, DruidError> {
         self.write_utf16(&value.encode_utf16().collect::<Vec<_>>())
     }
 
-    /// 刷新底层 Writer。
+    /// Flushes the underlying writer.
     pub fn flush(&self) -> Result<(), DruidError> {
         let mut state = self
             .inner
@@ -85,7 +86,7 @@ impl RdbcWriter {
             .flush()
     }
 
-    /// 关闭 Writer；重复关闭保持幂等。
+    /// Closes the writer. Repeated calls are idempotent.
     pub fn close(&self) -> Result<(), DruidError> {
         let mut state = self
             .inner
@@ -98,7 +99,7 @@ impl RdbcWriter {
         writer.close()
     }
 
-    /// 返回 Writer 是否已经关闭。
+    /// Returns whether the writer has been closed.
     pub fn is_closed(&self) -> bool {
         self.inner
             .state

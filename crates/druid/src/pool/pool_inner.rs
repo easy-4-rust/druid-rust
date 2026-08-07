@@ -6,8 +6,8 @@ use crate::core::fatal_error_handler::FatalErrorHandler;
 use crate::core::Value as RdbcValue;
 use crate::core::{
     ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, FilterChain,
-    JavaString, PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
-    PhysicalConnectionInfo, PreparedStatementCacheStats, StatementGeneratedKeys,
+    PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
+    PhysicalConnectionInfo, PreparedStatementCacheStats, RdbcString, StatementGeneratedKeys,
     ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, RdbcUtils};
@@ -34,7 +34,7 @@ struct FatalErrorState {
     fatal_error_count_last_shrink: i32,
     last_fatal_error_at: Option<Instant>,
     last_fatal_error_time_millis: u64,
-    last_fatal_error_sql: Option<JavaString>,
+    last_fatal_error_sql: Option<RdbcString>,
     last_fatal_error: Option<DruidError>,
 }
 
@@ -1497,7 +1497,7 @@ impl FatalErrorHandler for PoolInner {
             if code_units.len() > 1024 {
                 code_units.truncate(1024);
             }
-            JavaString::from_utf16(code_units)
+            RdbcString::from_utf16(code_units)
         });
         state.on_fatal_error
     }

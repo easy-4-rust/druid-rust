@@ -1,6 +1,7 @@
 use super::AgentRequestHandle;
 use druid::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedStatementKey,
+    StatementGeneratedKeys,
 };
 use serde_json::json;
 use std::any::Any;
@@ -13,6 +14,7 @@ pub struct JdbcAgentPreparedStatement {
     session_id: String,
     request_handle: AgentRequestHandle,
     options: PhysicalStatementOptions,
+    generated_keys: StatementGeneratedKeys,
     closed: AtomicBool,
     query_timeout_seconds: AtomicI32,
 }
@@ -35,6 +37,7 @@ impl JdbcAgentPreparedStatement {
                 result_set_concurrency: key.result_set_concurrency(),
                 result_set_holdability: key.result_set_holdability(),
             },
+            generated_keys: key.statement_generated_keys(),
             closed: AtomicBool::new(false),
             query_timeout_seconds: AtomicI32::new(0),
         }
@@ -48,6 +51,12 @@ impl JdbcAgentPreparedStatement {
     /// 返回传给 JDBC `Statement#setQueryTimeout` 的秒数。
     pub(crate) fn query_timeout_seconds(&self) -> i32 {
         self.query_timeout_seconds.load(Ordering::Acquire)
+    }
+
+    /// Returns the generated-key overload selected when the remote statement
+    /// was prepared.
+    pub(crate) fn generated_keys(&self) -> StatementGeneratedKeys {
+        self.generated_keys.clone()
     }
 }
 

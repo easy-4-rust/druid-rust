@@ -466,6 +466,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         let statement = Self::statement(statement)?;
         let statement_id = statement.statement_id().to_owned();
         let query_timeout_seconds = statement.query_timeout_seconds();
+        let generated_keys = statement.generated_keys();
         let payload = self
             .client
             .request(
@@ -475,10 +476,53 @@ impl PhysicalConnection for JdbcAgentConnection {
                     "params": Self::parameters(params)?,
                     "mode": "update",
                     "queryTimeoutSeconds": query_timeout_seconds,
+                    "generatedKeys": Self::generated_keys(generated_keys),
                 }),
             )
             .await?;
         Self::exec_result(&payload)
+    }
+
+    async fn exec_prepared_batch(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        parameter_sets: Vec<Vec<Value>>,
+    ) -> Result<Vec<i32>, DruidError> {
+        self.ensure_open()?;
+        let statement = Self::statement(statement)?;
+        let parameter_sets = parameter_sets
+            .into_iter()
+            .map(Self::parameters)
+            .collect::<Result<Vec<_>, _>>()?;
+        let payload = self
+            .client
+            .request(
+                "execute_prepared_batch",
+                json!({
+                    "statementId": statement.statement_id(),
+                    "parameterSets": parameter_sets,
+                    "queryTimeoutSeconds": statement.query_timeout_seconds(),
+                }),
+            )
+            .await?;
+        payload
+            .get("updateCounts")
+            .and_then(JsonValue::as_array)
+            .ok_or_else(|| {
+                Self::protocol_error("execute_prepared_batch response lacks updateCounts")
+            })?
+            .iter()
+            .map(|value| {
+                value
+                    .as_i64()
+                    .and_then(|value| i32::try_from(value).ok())
+                    .ok_or_else(|| {
+                        Self::protocol_error(
+                            "execute_prepared_batch update count is not a signed 32-bit integer",
+                        )
+                    })
+            })
+            .collect()
     }
 
     async fn execute_prepared(

@@ -1,7 +1,8 @@
-//! RDBC 输出流平台对象。
+//! RDBC output-stream platform object.
 //!
-//! 对应 Java 平台对象：`java.io.OutputStream`，用于承载
-//! `java.sql.Blob#setBinaryStream(long)` 返回的驱动写入流。
+//! Corresponds to the Java platform type `java.io.OutputStream` and carries
+//! the driver-provided stream returned by
+//! `java.sql.Blob#setBinaryStream(long)`.
 
 use super::DruidError;
 use std::fmt;
@@ -20,19 +21,20 @@ struct RdbcOutputStreamInner {
     state: Mutex<RdbcOutputStreamState>,
 }
 
-/// 可共享的 RDBC 输出流句柄。
+/// A shareable RDBC output-stream handle.
 ///
-/// Clone 只克隆句柄，所有克隆共享底层写入位置和关闭状态。
+/// Cloning copies only the handle. All clones share the underlying write
+/// position and closed state.
 #[derive(Clone)]
 pub struct RdbcOutputStream {
     inner: Arc<RdbcOutputStreamInner>,
 }
 
 impl RdbcOutputStream {
-    /// 包装驱动提供的真实输出流。
+    /// Wraps a physical output stream supplied by a driver.
     ///
-    /// # 参数
-    /// - `writer`：写入目标，通常由 Blob Adapter 创建。
+    /// # Parameters
+    /// - `writer`: the destination, normally created by a Blob adapter.
     pub fn new(writer: impl Write + Send + 'static) -> Self {
         Self {
             inner: Arc::new(RdbcOutputStreamInner {
@@ -44,13 +46,14 @@ impl RdbcOutputStream {
         }
     }
 
-    /// 写入字节并推进共享位置。
+    /// Writes bytes and advances the shared position.
     ///
-    /// # 参数
-    /// - `bytes`：待写入内容。
+    /// # Parameters
+    /// - `bytes`: the bytes to write.
     ///
-    /// # 返回
-    /// 实际写入字节数；流已关闭或底层写入失败时返回错误。
+    /// # Returns
+    /// The number of bytes written, or an error if the stream is closed or the
+    /// underlying write operation fails.
     pub fn write(&self, bytes: &[u8]) -> Result<usize, DruidError> {
         let mut state = self
             .inner
@@ -66,7 +69,7 @@ impl RdbcOutputStream {
             .map_err(|error| DruidError::DriverError(format!("OutputStream write failed: {error}")))
     }
 
-    /// 刷新底层输出流。
+    /// Flushes the underlying output stream.
     pub fn flush(&self) -> Result<(), DruidError> {
         let mut state = self
             .inner
@@ -82,7 +85,7 @@ impl RdbcOutputStream {
             .map_err(|error| DruidError::DriverError(format!("OutputStream flush failed: {error}")))
     }
 
-    /// 刷新并关闭输出流；重复关闭保持幂等。
+    /// Flushes and closes the output stream. Repeated calls are idempotent.
     pub fn close(&self) -> Result<(), DruidError> {
         let mut state = self
             .inner
@@ -97,7 +100,7 @@ impl RdbcOutputStream {
             .map_err(|error| DruidError::DriverError(format!("OutputStream close failed: {error}")))
     }
 
-    /// 返回输出流是否已经关闭。
+    /// Returns whether the output stream has been closed.
     pub fn is_closed(&self) -> bool {
         self.inner
             .state

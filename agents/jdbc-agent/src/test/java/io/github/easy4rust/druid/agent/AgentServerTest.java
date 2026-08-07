@@ -14,17 +14,40 @@ import java.io.OutputStreamWriter;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.net.SocketTimeoutException;
+import java.sql.SQLIntegrityConstraintViolationException;
+import java.sql.SQLTransientConnectionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** JDBC Agent JSON-RPC、多 session 与真实 H2 JDBC 驱动的最小契约测试。 */
 class AgentServerTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Test
+    void preservesSQLExceptionHierarchyCauseAndNextException() {
+        SQLTransientConnectionException exception =
+                new SQLTransientConnectionException("connection timed out", "08006", 77);
+        exception.initCause(new SocketTimeoutException("socket timed out"));
+        exception.setNextException(new SQLIntegrityConstraintViolationException(
+                "duplicate key", "23505", 88));
+
+        AgentError error = AgentError.from(42, "session-1", exception);
+
+        assertEquals("java.sql.SQLTransientConnectionException", error.exceptionClass());
+        assertTrue(error.fatal());
+        assertTrue(error.transientError());
+        assertTrue(error.assignableTypes().contains("java.sql.SQLException"));
+        assertEquals("java.net.SocketTimeoutException", error.causes().get(0));
+        assertEquals(1, error.nextExceptions().size());
+        assertEquals("23505", error.nextExceptions().get(0).sqlState());
+    }
 
     @Test
     void executesJsonRpcLifecycleAcrossTwoSessions() throws Exception {
@@ -46,7 +69,10 @@ class AgentServerTest {
             assertEquals(1, ready.at("/params/protocolVersion").asInt());
 
             write(requests, request(1, "handshake", handshakePayload()));
-            assertEquals(1, read(responses).path("result").path("protocolVersion").asInt());
+            JsonNode handshake = read(responses).path("result");
+            assertEquals(1, handshake.path("protocolVersion").asInt());
+            assertEquals("test-h2", handshake.path("driverArtifactVersion").asText());
+            assertEquals(true, contains(handshake.path("capabilities"), "native-prepared-batch"));
 
             write(requests, request(2, "open_session", connectPayload()));
             String firstSession = read(responses).at("/result/sessionId").asText();
@@ -171,7 +197,26 @@ class AgentServerTest {
         ObjectNode payload = JsonNodeFactory.instance.objectNode();
         payload.put("protocolVersion", 1);
         payload.put("client", "agent-test");
+        payload.put("driverArtifactVersion", "test-h2");
+        ArrayNode capabilities = payload.putArray("capabilities");
+        capabilities.add("multi-session");
+        capabilities.add("structured-errors");
+        capabilities.add("tagged-values");
+        capabilities.add("concurrent-requests");
+        capabilities.add("cursor-paging");
+        capabilities.add("cancel");
+        capabilities.add("remote-prepare");
+        capabilities.add("native-prepared-batch");
         return payload;
+    }
+
+    private boolean contains(JsonNode values, String expected) {
+        for (JsonNode value : values) {
+            if (expected.equals(value.asText())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private ObjectNode connectPayload() {

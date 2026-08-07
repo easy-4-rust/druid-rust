@@ -1,6 +1,6 @@
 //! Druid SQL lexer 关键字表。
 
-use crate::core::JavaString;
+use crate::core::RdbcString;
 use std::collections::HashMap;
 use std::sync::LazyLock;
 
@@ -94,8 +94,8 @@ impl Keywords {
 
     /// 按无损 Java UTF-16 字符串查询关键字。
     #[must_use]
-    pub fn get_keyword_java_string(&self, key: &JavaString) -> Option<Token> {
-        self.get_keyword_by_hash(Self::fnv1a_64_lower_java_string(key))
+    pub fn get_keyword_rdbc_string(&self, key: &RdbcString) -> Option<Token> {
+        self.get_keyword_by_hash(Self::fnv1a_64_lower_rdbc_string(key))
     }
 
     /// 返回构造时保存的原始关键字 map。
@@ -112,7 +112,7 @@ impl Keywords {
 
     /// 对无损 Java String 计算相同 hash。
     #[must_use]
-    pub fn fnv1a_64_lower_java_string(key: &JavaString) -> i64 {
+    pub fn fnv1a_64_lower_rdbc_string(key: &RdbcString) -> i64 {
         Self::fnv1a_64_lower_units(key.as_utf16().iter().copied())
     }
 

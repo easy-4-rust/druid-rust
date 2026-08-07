@@ -137,27 +137,73 @@ impl AgentRuntime {
             counted_process: false,
             _artifact_leases: options.artifact_leases(),
         };
-        runtime
+        let required_capabilities = [
+            "multi-session",
+            "structured-errors",
+            "tagged-values",
+            "concurrent-requests",
+            "cursor-paging",
+            "cancel",
+            "remote-prepare",
+            "native-prepared-batch",
+        ];
+        let handshake = runtime
             .request(
                 "handshake",
                 json!({
                     "protocolVersion": 1,
                     "client": "druid-rust",
-                    "capabilities": [
-                        "multi-session",
-                        "structured-errors",
-                        "tagged-values",
-                        "concurrent-requests",
-                        "cursor-paging",
-                        "cancel"
-                    ],
+                    "driverArtifactVersion": options.artifact_version(),
+                    "capabilities": required_capabilities,
                     "contractFaultInjection": options.contract_fault_injection_enabled()
                 }),
             )
             .await?;
+        Self::validate_handshake(
+            &handshake,
+            options.artifact_version(),
+            &required_capabilities,
+        )?;
         JdbcAgentRuntimeMetrics::process_started();
         runtime.counted_process = true;
         Ok(runtime)
+    }
+
+    fn validate_handshake(
+        handshake: &JsonValue,
+        artifact_version: &str,
+        required_capabilities: &[&str],
+    ) -> Result<(), DruidError> {
+        let protocol_version = handshake.get("protocolVersion").and_then(JsonValue::as_u64);
+        let agent_version = handshake
+            .get("agentVersion")
+            .and_then(JsonValue::as_str)
+            .filter(|value| !value.is_empty());
+        let negotiated_artifact = handshake
+            .get("driverArtifactVersion")
+            .and_then(JsonValue::as_str);
+        let capabilities = handshake.get("capabilities").and_then(JsonValue::as_array);
+        if protocol_version != Some(1)
+            || agent_version.is_none()
+            || negotiated_artifact != Some(artifact_version)
+            || capabilities.is_none()
+        {
+            return Err(Self::protocol_message(format!(
+                "invalid handshake response: {handshake}"
+            )));
+        }
+        let capabilities = capabilities.expect("capabilities were checked above");
+        for required in required_capabilities {
+            if !capabilities
+                .iter()
+                .any(|value| value.as_str() == Some(required))
+            {
+                return Err(Self::protocol_message(format!(
+                    "handshake lacks required capability '{required}'"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// 创建并发送请求，返回可独立等待的关联句柄。
@@ -372,6 +418,10 @@ impl AgentRuntime {
 
     fn protocol_error(error: serde_json::Error) -> DruidError {
         DruidError::DriverError(format!("JDBC Agent protocol error: {error}"))
+    }
+
+    fn protocol_message(message: impl std::fmt::Display) -> DruidError {
+        DruidError::DriverError(format!("JDBC Agent protocol error: {message}"))
     }
 }
 

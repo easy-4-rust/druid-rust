@@ -1,6 +1,6 @@
 //! Druid lexer 的 UTF-16 字符分类。
 
-use crate::core::JavaString;
+use crate::core::RdbcString;
 
 use super::LayoutCharacters;
 
@@ -82,9 +82,9 @@ impl CharTypes {
     ///
     /// 只有 0..255 内且可作为标识符后续字符的 code unit 有缓存项。
     #[must_use]
-    pub fn value_of(code_unit: u16) -> Option<JavaString> {
+    pub fn value_of(code_unit: u16) -> Option<RdbcString> {
         if code_unit < 256 && Self::is_identifier_char(code_unit) {
-            Some(JavaString::from_utf16(vec![code_unit]))
+            Some(RdbcString::from_utf16(vec![code_unit]))
         } else {
             None
         }
@@ -110,7 +110,7 @@ impl CharTypes {
     ///
     /// 截取单位是 UTF-16 code unit，因此不会修复或替换未配对 surrogate。
     #[must_use]
-    pub fn trim(value: &JavaString) -> JavaString {
+    pub fn trim(value: &RdbcString) -> RdbcString {
         let code_units = value.as_utf16();
         let mut start = 0;
         let mut end = code_units.len();
@@ -123,7 +123,7 @@ impl CharTypes {
         if start == 0 && end == code_units.len() {
             value.clone()
         } else {
-            JavaString::from_utf16(code_units[start..end].to_vec())
+            RdbcString::from_utf16(code_units[start..end].to_vec())
         }
     }
 }

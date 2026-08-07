@@ -141,3 +141,11 @@ pub use time::Time;
 pub use timestamp::Timestamp;
 pub use types::Types;
 pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
+
+// RDBC resource adapters preserve Java SQL stream and UTF-16 value semantics while exposing
+// Rust-native ownership and naming. They remain single physical resources; cloning a handle
+// shares its cursor and closed state.
+pub use crate::core::{
+    RdbcCharacterLength, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcStreamLength,
+    RdbcString, RdbcWriter,
+};

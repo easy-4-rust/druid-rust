@@ -3,7 +3,7 @@
 //! Corresponds to Java: `java.sql.SQLXML`.
 
 use super::{
-    DruidError, JavaString, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcWriter,
+    DruidError, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
     RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource,
 };
 use std::fmt;
@@ -30,10 +30,10 @@ pub trait PhysicalSqlXml: fmt::Debug + Send + Sync {
     fn set_character_stream(&self) -> Result<RdbcWriter, DruidError>;
 
     /// Returns the XML string.
-    fn string(&self) -> Result<JavaString, DruidError>;
+    fn string(&self) -> Result<RdbcString, DruidError>;
 
     /// Sets the XML string.
-    fn set_string(&self, value: &JavaString) -> Result<(), DruidError>;
+    fn set_string(&self, value: &RdbcString) -> Result<(), DruidError>;
 
     /// Returns an XML source in the requested representation.
     fn source(
@@ -101,17 +101,17 @@ impl RdbcSqlXml {
     }
 
     /// Returns the XML string.
-    pub fn string(&self) -> Result<JavaString, DruidError> {
+    pub fn string(&self) -> Result<RdbcString, DruidError> {
         self.physical.string()
     }
 
     /// Snake_case getter corresponding to Java `SQLXML#getString()`.
-    pub fn get_string(&self) -> Result<JavaString, DruidError> {
+    pub fn get_string(&self) -> Result<RdbcString, DruidError> {
         self.string()
     }
 
     /// Sets the XML string.
-    pub fn set_string(&self, value: &JavaString) -> Result<(), DruidError> {
+    pub fn set_string(&self, value: &RdbcString) -> Result<(), DruidError> {
         self.physical.set_string(value)
     }
 

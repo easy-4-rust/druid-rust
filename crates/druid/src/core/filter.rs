@@ -10,11 +10,11 @@ use super::value::Value;
 use super::{
     ClobFilterChain, ConnectionDatabaseMetaDataFilterChain, ConnectionLobFilterChain,
     ConnectionWarningFilterChain, DataSourceGetConnectionFilterChain,
-    DataSourceReleaseConnectionFilterChain, DruidPooledConnection, JavaString,
+    DataSourceReleaseConnectionFilterChain, DruidPooledConnection,
     PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
     PhysicalConnectionConnectResult, PhysicalDatabaseMetaData, PreparedInputParameter, RdbcBlob,
-    RdbcClob, RdbcInputStream, RdbcNClob, RdbcOutputStream, RdbcReader, RdbcWriter, SqlWarning,
-    StatementWarningFilterChain,
+    RdbcClob, RdbcInputStream, RdbcNClob, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
+    SqlWarning, StatementWarningFilterChain,
 };
 use std::time::{Duration, Instant};
 
@@ -522,7 +522,7 @@ pub trait BeforeFilter: Send + Sync {
         chain: &mut ClobFilterChain<'_>,
         position: i64,
         length: i32,
-    ) -> Result<JavaString, DruidError> {
+    ) -> Result<RdbcString, DruidError> {
         chain.clob_get_sub_string(position, length)
     }
 
@@ -546,7 +546,7 @@ pub trait BeforeFilter: Send + Sync {
     fn clob_position_string(
         &self,
         chain: &mut ClobFilterChain<'_>,
-        pattern: &JavaString,
+        pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         chain.clob_position_string(pattern, start)
@@ -567,7 +567,7 @@ pub trait BeforeFilter: Send + Sync {
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
     ) -> Result<i32, DruidError> {
         chain.clob_set_string(position, value)
     }
@@ -577,7 +577,7 @@ pub trait BeforeFilter: Send + Sync {
         &self,
         chain: &mut ClobFilterChain<'_>,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {

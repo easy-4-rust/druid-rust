@@ -7,11 +7,11 @@ use super::filter::{
     ExecContext, StatementEvent, StatementEventContext,
 };
 use super::{
-    ClobProxy, DruidPooledConnection, JavaString, PhysicalConnection, PhysicalConnectionFactory,
+    ClobProxy, DruidPooledConnection, PhysicalConnection, PhysicalConnectionFactory,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement,
     PoolState, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcClob, RdbcInputStream, RdbcNClob,
-    RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcTargetType,
-    RdbcTypeMap, RdbcUrl, RdbcWriter, ResultSetFilter, ResultSetFilterChain,
+    RdbcObject, RdbcOutputStream, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcString,
+    RdbcTargetType, RdbcTypeMap, RdbcUrl, RdbcWriter, ResultSetFilter, ResultSetFilterChain,
     ResultSetFilterContext, ResultSetMetaData, ResultSetOpenContext, ResultSetStatement,
     SqlWarning, Value,
 };
@@ -516,7 +516,7 @@ impl<'a> ClobFilterChain<'a> {
         &mut self,
         position: i64,
         length: i32,
-    ) -> Result<JavaString, DruidError> {
+    ) -> Result<RdbcString, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_get_sub_string(self, position, length)
         } else {
@@ -545,7 +545,7 @@ impl<'a> ClobFilterChain<'a> {
     /// 继续 `Clob#position(String,long)` 链。
     pub fn clob_position_string(
         &mut self,
-        pattern: &JavaString,
+        pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         if let Some(filter) = self.next_filter() {
@@ -572,7 +572,7 @@ impl<'a> ClobFilterChain<'a> {
     pub fn clob_set_string(
         &mut self,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
     ) -> Result<i32, DruidError> {
         if let Some(filter) = self.next_filter() {
             filter.clob_set_string(self, position, value)
@@ -585,7 +585,7 @@ impl<'a> ClobFilterChain<'a> {
     pub fn clob_set_string_range(
         &mut self,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {
@@ -1128,7 +1128,7 @@ impl FilterChainImpl {
         wrapper: &dyn ClobProxy,
         position: i64,
         length: i32,
-    ) -> Result<JavaString, DruidError> {
+    ) -> Result<RdbcString, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_get_sub_string(position, length)
     }
 
@@ -1152,7 +1152,7 @@ impl FilterChainImpl {
     pub fn clob_position_string(
         &self,
         wrapper: &dyn ClobProxy,
-        pattern: &JavaString,
+        pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_position_string(pattern, start)
@@ -1173,7 +1173,7 @@ impl FilterChainImpl {
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
     ) -> Result<i32, DruidError> {
         ClobFilterChain::new(&self.before, wrapper).clob_set_string(position, value)
     }
@@ -1183,7 +1183,7 @@ impl FilterChainImpl {
         &self,
         wrapper: &dyn ClobProxy,
         position: i64,
-        value: &JavaString,
+        value: &RdbcString,
         offset: i32,
         length: i32,
     ) -> Result<i32, DruidError> {

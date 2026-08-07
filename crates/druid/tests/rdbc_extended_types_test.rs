@@ -1,10 +1,10 @@
 //! URL/Ref/Array/RowId/SQLXML 平台对象完整资源契约。
 
 use druid::core::{
-    DruidError, JavaString, PhysicalArray, PhysicalCharacterWriter, PhysicalRef, PhysicalResultSet,
+    DruidError, PhysicalArray, PhysicalCharacterWriter, PhysicalRef, PhysicalResultSet,
     PhysicalSqlXml, PhysicalXmlResult, PhysicalXmlSource, RdbcArray, RdbcInputStream, RdbcObject,
-    RdbcOutputStream, RdbcRef, RdbcResultSet, RdbcRowId, RdbcSqlXml, RdbcTargetType, RdbcTypeMap,
-    RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
+    RdbcOutputStream, RdbcRef, RdbcResultSet, RdbcRowId, RdbcSqlXml, RdbcString, RdbcTargetType,
+    RdbcTypeMap, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -202,7 +202,7 @@ impl PhysicalXmlResult for TestXmlResult {}
 
 #[derive(Debug)]
 struct TestSqlXml {
-    value: Mutex<JavaString>,
+    value: Mutex<RdbcString>,
     freed: AtomicBool,
 }
 
@@ -254,7 +254,7 @@ impl PhysicalSqlXml for TestSqlXml {
         Ok(RdbcWriter::new(TestCharacterWriter))
     }
 
-    fn string(&self) -> Result<JavaString, DruidError> {
+    fn string(&self) -> Result<RdbcString, DruidError> {
         self.ensure_open()?;
         Ok(self
             .value
@@ -263,7 +263,7 @@ impl PhysicalSqlXml for TestSqlXml {
             .clone())
     }
 
-    fn set_string(&self, value: &JavaString) -> Result<(), DruidError> {
+    fn set_string(&self, value: &RdbcString) -> Result<(), DruidError> {
         self.ensure_open()?;
         *self
             .value
@@ -368,7 +368,7 @@ fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle() {
     assert_eq!(url, druid::core::RdbcUrl::from(url.external_form()));
 
     let xml = RdbcSqlXml::new(Arc::new(TestSqlXml {
-        value: Mutex::new(JavaString::from("<root>值</root>")),
+        value: Mutex::new(RdbcString::from("<root>值</root>")),
         freed: AtomicBool::new(false),
     }));
     assert_eq!(xml, xml.clone());
@@ -389,7 +389,7 @@ fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle() {
         .unwrap()
         .write_str("<character/>")
         .unwrap();
-    xml.set_string(&JavaString::from_utf16(vec![0xD800]))
+    xml.set_string(&RdbcString::from_utf16(vec![0xD800]))
         .unwrap();
     assert_eq!(xml.string().unwrap().as_utf16(), &[0xD800]);
     let source = xml.source(&RdbcXmlRepresentationType::Dom).unwrap();

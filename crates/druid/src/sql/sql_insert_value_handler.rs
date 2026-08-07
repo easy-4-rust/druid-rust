@@ -1,6 +1,6 @@
 //! INSERT values 流式处理协议。
 
-use crate::core::{DruidError, JavaString, RdbcObject};
+use crate::core::{DruidError, RdbcObject, RdbcString};
 use bigdecimal::BigDecimal;
 use num_bigint::BigInt;
 
@@ -22,7 +22,7 @@ pub enum SqlInsertNumber {
 #[derive(Debug, Clone, PartialEq)]
 pub enum SqlInsertFunctionValue {
     /// Java String，保持 UTF-16 code unit。
-    String(JavaString),
+    String(RdbcString),
     /// Java Number。
     Number(SqlInsertNumber),
     /// Java BigDecimal。
@@ -41,7 +41,7 @@ pub enum SqlInsertFunctionValue {
 ///
 /// 对应 Java：`com.alibaba.druid.sql.parser.SQLInsertValueHandler`。关联 `Row`
 /// 映射 Java Object 行身份；所有方法保持原 index、重载类型及 SQLException
-/// 传播。字符串使用 UTF-16 `JavaString`，不得因 Rust UTF-8 丢失 surrogate。
+/// 传播。字符串使用 UTF-16 `RdbcString`，不得因 Rust UTF-8 丢失 surrogate。
 pub trait SqlInsertValueHandler {
     /// 调用方拥有的单行对象。
     type Row;
@@ -62,7 +62,7 @@ pub trait SqlInsertValueHandler {
         &mut self,
         row: &mut Self::Row,
         index: i32,
-        value: JavaString,
+        value: RdbcString,
     ) -> Result<(), DruidError>;
 
     /// 处理 `DATE '...'` 字符串重载。
@@ -70,7 +70,7 @@ pub trait SqlInsertValueHandler {
         &mut self,
         row: &mut Self::Row,
         index: i32,
-        value: JavaString,
+        value: RdbcString,
     ) -> Result<(), DruidError>;
 
     /// 处理 `java.util.Date` 重载；值为 Unix epoch 毫秒。
@@ -86,7 +86,7 @@ pub trait SqlInsertValueHandler {
         &mut self,
         row: &mut Self::Row,
         index: i32,
-        value: JavaString,
+        value: RdbcString,
     ) -> Result<(), DruidError>;
 
     /// 处理 timestamp 的 `java.util.Date` 重载；值为 Unix epoch 毫秒。
@@ -102,7 +102,7 @@ pub trait SqlInsertValueHandler {
         &mut self,
         row: &mut Self::Row,
         index: i32,
-        value: JavaString,
+        value: RdbcString,
     ) -> Result<(), DruidError>;
 
     /// 处理 BigDecimal。
@@ -132,7 +132,7 @@ pub trait SqlInsertValueHandler {
         &mut self,
         row: &mut Self::Row,
         index: i32,
-        function_name: JavaString,
+        function_name: RdbcString,
         function_name_hash_code_64: i64,
         values: Vec<SqlInsertFunctionValue>,
     ) -> Result<(), DruidError>;

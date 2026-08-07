@@ -70,7 +70,7 @@ impl DriverEvidenceAggregator {
                 "no evidence run JSON files were found".to_owned(),
             ));
         }
-        runs.sort_by(|left, right| run_key(left).cmp(&run_key(right)));
+        runs.sort_by_key(run_key);
         let evidence = json!({
             "contractVersion": "druid-database-contract-v1",
             "testedAt": chrono::Utc::now().to_rfc3339(),

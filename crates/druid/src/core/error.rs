@@ -5,7 +5,7 @@
 use std::fmt;
 use std::time::Duration;
 
-use super::{JavaString, SqlException};
+use super::{RdbcString, SqlException};
 
 /// druid-rust 统一错误类型。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,7 +86,7 @@ pub enum DruidError {
         active_count: usize,
         max_active: i32,
         last_error_time_millis: u64,
-        last_sql: Option<JavaString>,
+        last_sql: Option<RdbcString>,
         cause: Option<Box<DruidError>>,
     },
     /// 高可用数据源当前没有可用节点。
