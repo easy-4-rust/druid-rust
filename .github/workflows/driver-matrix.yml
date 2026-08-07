@@ -153,7 +153,7 @@ jobs:
           DRUID_DATABASE_BAD_URL: sqlite://druid_contract_missing.db?mode=rw
           DRUID_CONTRACT_TARGET: ${{ matrix.platform.target }}
           DRUID_CONTRACT_RUST_VERSION: ${{ matrix.rust.label }}
-          DRUID_CONTRACT_EVIDENCE_PATH: target/contract-evidence/sqlite.json
+          DRUID_CONTRACT_EVIDENCE_PATH: ${{ github.workspace }}/target/contract-evidence/sqlite.json
           DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p target/contract-evidence

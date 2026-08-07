@@ -370,7 +370,11 @@ fn write_basic_evidence_if_configured(
         "passedAt": Utc::now().to_rfc3339(),
         "artifactSha256": null
     });
-    std::fs::write(Path::new(&path), record.to_string()).expect("必须能写入 CI 契约证据工件");
+    let path = Path::new(&path);
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).expect("必须能创建 CI 契约证据目录");
+    }
+    std::fs::write(path, record.to_string()).expect("必须能写入 CI 契约证据工件");
 }
 
 fn current_target() -> String {
