@@ -1,10 +1,14 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid::core::{PhysicalConnection, Value};
+use druid::core::{DruidError, PhysicalConnection, Value};
 use druid_wrapper::driver::{
     DriverRuntimeMode, DruidDatabasePoolBuilder, DruidDriverRegistry, ProtocolFamily,
 };
+#[cfg(feature = "duckdb-native")]
+use druid_wrapper::duckdb::DuckDbConnectionAdapter;
 use std::path::Path;
+#[cfg(feature = "duckdb-native")]
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// 对环境显式提供的真实数据库运行统一产品契约。
@@ -184,10 +188,18 @@ async fn database_profile_live_contract_when_configured() {
         .expect("DELETE 必须成功");
     assert_eq!(deleted.rows_affected, 1);
     let database_version = database_version(&mut connection, profile.protocol_family()).await;
-    connection
-        .exec(&format!("DROP TABLE {table}"), Vec::new())
-        .await
-        .expect("清理契约表必须成功");
+    let requires_embedded_restart = profile.id().as_str() == "duckdb";
+    if requires_embedded_restart {
+        eprintln!("contract-stage: duckdb-error-classification");
+        verify_duckdb_error_classification(&mut connection).await;
+        eprintln!("contract-stage: duckdb-timeout-cancel");
+        verify_duckdb_timeout_and_cancel(&mut connection).await;
+    } else {
+        connection
+            .exec(&format!("DROP TABLE {table}"), Vec::new())
+            .await
+            .expect("清理契约表必须成功");
+    }
     connection.close().await.expect("最终连接归还必须成功");
 
     let mut leases = Vec::new();
@@ -203,10 +215,17 @@ async fn database_profile_live_contract_when_configured() {
     assert!(state.cached_prepared_statement_hit_count > 0);
     assert!(state.cached_prepared_statement_miss_count > 0);
 
+    eprintln!("contract-stage: rejected-connection");
     verify_rejected_connection_if_configured(&profile_id).await;
-    write_basic_evidence_if_configured(profile, &database_version);
+    eprintln!("contract-stage: pool-close");
     pool.close().await;
     assert!(pool.state().closed);
+    if requires_embedded_restart {
+        eprintln!("contract-stage: duckdb-database-restart");
+        verify_duckdb_database_restart(&profile_id, &url, &table, &select_sql).await;
+    }
+    eprintln!("contract-stage: evidence-write");
+    write_contract_evidence_if_configured(profile, &database_version);
 }
 
 fn create_table_sql(family: ProtocolFamily, table: &str) -> String {
@@ -318,6 +337,10 @@ async fn verify_rejected_connection_if_configured(profile_id: &str) {
         Err(error) if required => panic!("DRUID_DATABASE_BAD_URL is required: {error}"),
         Err(_) => return,
     };
+    if profile_id == "duckdb" {
+        verify_duckdb_rejected_physical_connection(&bad_url).await;
+        return;
+    }
     let pool = DruidDatabasePoolBuilder::new(profile_id, bad_url)
         .pool(|builder| {
             builder
@@ -336,7 +359,28 @@ async fn verify_rejected_connection_if_configured(profile_id: &str) {
     pool.close().await;
 }
 
-fn write_basic_evidence_if_configured(
+#[cfg(feature = "duckdb-native")]
+async fn verify_duckdb_rejected_physical_connection(bad_url: &str) {
+    assert!(
+        bad_url.starts_with("duckdb:"),
+        "DuckDB 坏连接测试输入必须保留 duckdb scheme"
+    );
+    let malformed_url = format!("{bad_url}?druid-invalid-option=1");
+    assert!(
+        matches!(
+            DuckDbConnectionAdapter::connect(&malformed_url).await,
+            Err(DruidError::InvalidArgument(_))
+        ),
+        "DuckDB 不支持凭据认证，必须在物理连接前拒绝非法 URL"
+    );
+}
+
+#[cfg(not(feature = "duckdb-native"))]
+async fn verify_duckdb_rejected_physical_connection(_bad_url: &str) {
+    panic!("DuckDB 完整契约必须启用 duckdb-native feature");
+}
+
+fn write_contract_evidence_if_configured(
     profile: &druid_wrapper::driver::DatabaseProfile,
     database_version: &str,
 ) {
@@ -350,6 +394,21 @@ fn write_basic_evidence_if_configured(
     let target = std::env::var("DRUID_CONTRACT_TARGET").unwrap_or_else(|_| current_target());
     let rust_version =
         std::env::var("DRUID_CONTRACT_RUST_VERSION").unwrap_or_else(|_| "default".to_owned());
+    let mut contract_checks = vec![
+        "connection-lifecycle",
+        "validation",
+        "crud-ddl",
+        "scalar-types",
+        "prepared-and-batch",
+        "transactions",
+        "state-reset",
+        "capabilities",
+        "concurrency-leak-shutdown",
+        "no-pool-in-pool",
+    ];
+    if profile.id().as_str() == "duckdb" {
+        contract_checks.extend(["error-classification", "timeout-cancel", "database-restart"]);
+    }
     let record = serde_json::json!({
         "profileId": profile.id().as_str(),
         "target": target,
@@ -358,18 +417,7 @@ fn write_basic_evidence_if_configured(
         "javaVersions": [],
         "runtimeMode": runtime_mode_label(profile.runtime_mode()),
         "installationPaths": installation_paths(profile.runtime_mode()),
-        "contractChecks": [
-            "connection-lifecycle",
-            "validation",
-            "crud-ddl",
-            "scalar-types",
-            "prepared-and-batch",
-            "transactions",
-            "state-reset",
-            "capabilities",
-            "concurrency-leak-shutdown",
-            "no-pool-in-pool"
-        ],
+        "contractChecks": contract_checks,
         "sourceRevision": source_revision,
         "evidenceRef": evidence_ref,
         "passedAt": Utc::now().to_rfc3339(),
@@ -393,11 +441,134 @@ fn runtime_mode_label(runtime_mode: DriverRuntimeMode) -> &'static str {
 
 fn installation_paths(runtime_mode: DriverRuntimeMode) -> Vec<&'static str> {
     match runtime_mode {
-        DriverRuntimeMode::Native => vec!["bundled-native"],
+        DriverRuntimeMode::Native => vec!["native", "bundled-native"],
         DriverRuntimeMode::Sqlx => vec!["native"],
         DriverRuntimeMode::JdbcAgent => vec!["jdbc-agent"],
         DriverRuntimeMode::HttpSql => vec!["http-sql"],
     }
+}
+
+async fn verify_duckdb_error_classification(connection: &mut druid::core::DruidPooledConnection) {
+    let error = connection
+        .fetch("SELECT * FROM druid_missing_contract_table", Vec::new())
+        .await
+        .expect_err("DuckDB 不存在的表必须返回错误");
+    match error {
+        DruidError::SqlException(exception) => {
+            assert_ne!(exception.error_code(), 0);
+            assert_eq!(exception.sql_state(), Some("HY000"));
+            assert!(exception.class_name().starts_with("duckdb::Error"));
+            assert!(exception
+                .message()
+                .is_some_and(|message| !message.is_empty()));
+        }
+        other => panic!("DuckDB 错误必须保留 SQLState/vendor/class，实际为 {other:?}"),
+    }
+}
+
+#[cfg(feature = "duckdb-native")]
+async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPooledConnection) {
+    let sql = "SELECT SUM(a.i * b.i) FROM range(1000000) AS a(i), range(1000000) AS b(i)";
+    let mut statement = connection
+        .prepare_statement(sql)
+        .await
+        .expect("DuckDB 长查询必须可 prepare");
+    statement
+        .set_query_timeout(connection, 1)
+        .expect("池化 PreparedStatement 必须把 timeout 委托给原生语句");
+    let timeout = tokio::time::timeout(
+        Duration::from_secs(10),
+        statement.fetch(connection, Vec::new()),
+    )
+    .await
+    .expect("DuckDB query timeout 必须在测试截止时间内完成")
+    .expect_err("DuckDB 长查询必须触发 query timeout");
+    assert!(matches!(
+        timeout,
+        DruidError::SqlException(ref exception)
+            if exception.sql_state() == Some("HYT00")
+                && exception.class_name() == "java.sql.SQLTimeoutException"
+    ));
+    statement.close().expect("超时后的池化语句必须可关闭");
+    connection
+        .ping()
+        .await
+        .expect("query timeout 后连接必须可复用");
+
+    let mut physical = DuckDbConnectionAdapter::connect("duckdb::memory:")
+        .await
+        .expect("取消契约的未池化 DuckDB 连接必须打开");
+    let key = druid::core::PreparedStatementKey::new(
+        Some(sql.to_owned()),
+        None,
+        druid::core::PreparedStatementMethodType::M1,
+    )
+    .expect("取消契约 prepare key 必须合法");
+    let prepared = physical
+        .prepare_physical_statement(&key)
+        .await
+        .expect("取消契约必须可 prepare");
+    let executing = Arc::clone(&prepared);
+    let cancel = Arc::clone(&prepared);
+    let task = tokio::spawn(async move {
+        physical
+            .fetch_prepared(executing.as_ref(), Vec::new())
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    cancel
+        .cancel()
+        .expect("显式 cancel 必须调用 DuckDB 原生 interrupt");
+    let cancelled = tokio::time::timeout(Duration::from_secs(10), task)
+        .await
+        .expect("显式 cancel 必须在测试截止时间内完成")
+        .expect("显式 cancel 任务不得 panic")
+        .expect_err("DuckDB 长查询必须被显式 cancel");
+    assert!(matches!(
+        cancelled,
+        DruidError::SqlException(ref exception)
+            if exception.sql_state() == Some("HY008")
+                && exception.class_name() == "duckdb::Error::OperationInterrupted"
+    ));
+}
+
+#[cfg(not(feature = "duckdb-native"))]
+async fn verify_duckdb_timeout_and_cancel(_connection: &mut druid::core::DruidPooledConnection) {
+    panic!("DuckDB 完整契约必须启用 duckdb-native feature");
+}
+
+async fn verify_duckdb_database_restart(
+    profile_id: &str,
+    url: &str,
+    table: &str,
+    select_sql: &str,
+) {
+    assert!(
+        url != "duckdb::memory:" && url != "duckdb:///:memory:",
+        "DuckDB database-restart 契约必须使用文件数据库"
+    );
+    let pool = DruidDatabasePoolBuilder::new(profile_id, url)
+        .name(format!("contract-{profile_id}-restart"))
+        .pool(|builder| builder.max_open(1).max_idle(1).test_on_borrow(true))
+        .build()
+        .await
+        .expect("DuckDB 文件数据库必须能重新启动");
+    let mut connection = pool.get().await.expect("重启后必须能建立物理连接");
+    assert_eq!(
+        connection
+            .fetch(select_sql, vec![Value::Int(3)])
+            .await
+            .expect("数据库重启后必须能读取已提交数据")
+            .len(),
+        1
+    );
+    connection
+        .exec(&format!("DROP TABLE {table}"), Vec::new())
+        .await
+        .expect("数据库重启后必须能清理契约表");
+    connection.close().await.expect("重启后的连接必须归还");
+    pool.close().await;
+    assert!(pool.state().closed);
 }
 
 fn current_target() -> String {

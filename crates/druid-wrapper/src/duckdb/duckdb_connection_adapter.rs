@@ -17,6 +17,7 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -77,7 +78,18 @@ impl DuckDbConnectionAdapter {
                     .to_string(),
             ));
         }
-        Ok(Some(PathBuf::from(value)))
+        let path = PathBuf::from(value);
+        if path.is_absolute() {
+            Ok(Some(path))
+        } else {
+            std::env::current_dir()
+                .map(|current_dir| Some(current_dir.join(path)))
+                .map_err(|error| {
+                    DruidError::DriverError(format!(
+                        "DuckDB cannot resolve relative database path `{value}`: {error}"
+                    ))
+                })
+        }
     }
 
     fn connection_ref(&self) -> Result<Arc<Mutex<Connection>>, DruidError> {
@@ -101,6 +113,39 @@ impl DuckDbConnectionAdapter {
             .map_err(Self::worker_error)?
     }
 
+    async fn run_prepared_blocking<T, F>(
+        &self,
+        statement: &DuckDbPreparedStatement,
+        operation: F,
+    ) -> Result<T, DruidError>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, DruidError> + Send + 'static,
+    {
+        let timeout_seconds = statement.query_timeout()?;
+        let connection = self.connection_ref()?;
+        let mut worker = tokio::task::spawn_blocking(move || operation(&connection.lock()));
+        if timeout_seconds == 0 {
+            return worker.await.map_err(Self::worker_error)?;
+        }
+
+        tokio::select! {
+            result = &mut worker => result.map_err(Self::worker_error)?,
+            () = tokio::time::sleep(Duration::from_secs(timeout_seconds as u64)) => {
+                self.interrupt_handle.interrupt();
+                let _ = worker.await.map_err(Self::worker_error)?;
+                Err(DruidError::SqlException(Box::new(
+                    SqlException::new(
+                        0,
+                        Some("HYT00".to_owned()),
+                        Some(format!("DuckDB query timed out after {timeout_seconds} second(s)")),
+                    )
+                    .with_class_name("java.sql.SQLTimeoutException"),
+                )))
+            }
+        }
+    }
+
     fn worker_error(error: tokio::task::JoinError) -> DruidError {
         DruidError::DriverError(format!("DuckDB blocking worker failed: {error}"))
     }
@@ -109,17 +154,25 @@ impl DuckDbConnectionAdapter {
         match error {
             duckdb::Error::DuckDBFailure(error, message) => {
                 let error_code = i32::try_from(error.extended_code).unwrap_or_default();
+                let message = message.unwrap_or_else(|| error.to_string());
+                let interrupted = message.to_ascii_lowercase().contains("interrupt");
                 DruidError::SqlException(Box::new(
                     SqlException::new(
                         error_code,
-                        None,
-                        message.or_else(|| Some(error.to_string())),
+                        Some(if interrupted { "HY008" } else { "HY000" }.to_owned()),
+                        Some(message),
                     )
-                    .with_class_name("duckdb::Error::DuckDBFailure"),
+                    .with_class_name(if interrupted {
+                        "duckdb::Error::OperationInterrupted"
+                    } else {
+                        "duckdb::Error::DuckDBFailure"
+                    }),
                 ))
             }
             error => DruidError::SqlException(Box::new(
-                SqlException::driver(0, error.to_string()).with_class_name("duckdb::Error"),
+                SqlException::driver(0, error.to_string())
+                    .with_sql_state("HY000")
+                    .with_class_name("duckdb::Error"),
             )),
         }
     }
@@ -408,8 +461,21 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<ExecResult, DruidError> {
-        let sql = self.prepared_statement(statement)?.sql().to_owned();
-        self.exec(&sql, params).await
+        let statement = self.prepared_statement(statement)?;
+        let sql = statement.sql().to_owned();
+        self.run_prepared_blocking(statement, move |connection| {
+            let mut statement = connection
+                .prepare_cached(&sql)
+                .map_err(Self::driver_error)?;
+            Self::bind_parameters(&mut statement, &params)?;
+            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
+            Ok(ExecResult {
+                rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
+                last_insert_id: None,
+                row_count: None,
+            })
+        })
+        .await
     }
 
     async fn execute_prepared(
@@ -418,8 +484,31 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
     ) -> Result<Vec<StatementExecuteResult>, DruidError> {
-        let sql = self.prepared_statement(statement)?.sql().to_owned();
-        self.execute(&sql, params, generated_keys).await
+        if !matches!(generated_keys, StatementGeneratedKeys::None) {
+            return Err(DruidError::UnsupportedOperation {
+                operation: "duckdb_generated_keys",
+            });
+        }
+        let statement = self.prepared_statement(statement)?;
+        let sql = statement.sql().to_owned();
+        self.run_prepared_blocking(statement, move |connection| {
+            let mut statement = connection
+                .prepare_cached(&sql)
+                .map_err(Self::driver_error)?;
+            Self::bind_parameters(&mut statement, &params)?;
+            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
+            if statement.column_count() > 0 {
+                Self::collect_executed_rows(&statement)
+                    .map(|(rows, _)| vec![StatementExecuteResult::ResultSet(rows)])
+            } else {
+                Ok(vec![StatementExecuteResult::Update(ExecResult {
+                    rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
+                    last_insert_id: None,
+                    row_count: None,
+                })])
+            }
+        })
+        .await
     }
 
     async fn fetch_prepared(
@@ -427,8 +516,12 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
     ) -> Result<Vec<Row>, DruidError> {
-        let sql = self.prepared_statement(statement)?.sql().to_owned();
-        self.fetch(&sql, params).await
+        let statement = self.prepared_statement(statement)?;
+        let sql = statement.sql().to_owned();
+        self.run_prepared_blocking(statement, move |connection| {
+            Self::query(connection, &sql, &params).map(|value| value.0)
+        })
+        .await
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {

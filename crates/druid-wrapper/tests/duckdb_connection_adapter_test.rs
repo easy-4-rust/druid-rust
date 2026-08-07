@@ -5,11 +5,14 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, Value,
+    DruidError, PhysicalConnection, PhysicalPreparedStatement, PreparedStatementKey,
+    PreparedStatementMethodType, Value,
 };
 use druid_wrapper::driver::{DatabaseConnectionConfig, DruidDriverRegistry};
 use druid_wrapper::duckdb::DuckDbConnectionAdapter;
 use std::str::FromStr;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[tokio::test]
 async fn duckdb_registry_resolves_only_explicit_native_urls() {
@@ -202,4 +205,156 @@ async fn duckdb_prepared_statement_is_bound_to_its_physical_connection() {
     assert!(
         matches!(result, Err(DruidError::DriverError(message)) if message.contains("another physical connection"))
     );
+}
+
+#[tokio::test]
+async fn duckdb_errors_preserve_sql_classification_fields() {
+    let mut connection = DuckDbConnectionAdapter::connect("duckdb::memory:")
+        .await
+        .expect("DuckDB 内存连接必须打开");
+    let error = connection
+        .fetch("SELECT * FROM druid_missing_contract_table", Vec::new())
+        .await
+        .expect_err("不存在的表必须返回驱动错误");
+
+    match error {
+        DruidError::SqlException(exception) => {
+            assert_ne!(exception.error_code(), 0);
+            assert_eq!(exception.sql_state(), Some("HY000"));
+            assert!(exception.class_name().starts_with("duckdb::Error"));
+            assert!(exception
+                .message()
+                .is_some_and(|message| !message.is_empty()));
+        }
+        other => panic!("DuckDB 错误必须保留为 SqlException，实际为 {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn duckdb_prepared_statement_timeout_interrupts_the_native_query() {
+    let mut connection = DuckDbConnectionAdapter::connect("duckdb::memory:")
+        .await
+        .expect("DuckDB 内存连接必须打开");
+    let statement = prepare_long_running_statement(&mut connection).await;
+    statement
+        .set_query_timeout(1)
+        .expect("DuckDB PreparedStatement 必须接受正查询超时");
+
+    let error = tokio::time::timeout(
+        Duration::from_secs(10),
+        connection.fetch_prepared(statement.as_ref(), Vec::new()),
+    )
+    .await
+    .expect("原生超时必须在上层测试截止时间内完成")
+    .expect_err("长查询必须被查询超时中断");
+    match error {
+        DruidError::SqlException(exception) => {
+            assert_eq!(exception.sql_state(), Some("HYT00"));
+            assert_eq!(exception.class_name(), "java.sql.SQLTimeoutException");
+        }
+        other => panic!("查询超时必须保留结构化 SqlException，实际为 {other:?}"),
+    }
+    connection.ping().await.expect("查询超时后连接仍应可复用");
+}
+
+#[tokio::test]
+async fn duckdb_prepared_statement_cancel_interrupts_the_native_query() {
+    let mut connection = DuckDbConnectionAdapter::connect("duckdb::memory:")
+        .await
+        .expect("DuckDB 内存连接必须打开");
+    let statement = prepare_long_running_statement(&mut connection).await;
+    let executing_statement = Arc::clone(&statement);
+    let cancel_statement = Arc::clone(&statement);
+    let execution = tokio::spawn(async move {
+        let result = connection
+            .fetch_prepared(executing_statement.as_ref(), Vec::new())
+            .await;
+        (connection, result)
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    cancel_statement
+        .cancel()
+        .expect("DuckDB PreparedStatement cancel 必须调用原生 interrupt");
+
+    let (mut connection, result) = tokio::time::timeout(Duration::from_secs(10), execution)
+        .await
+        .expect("取消必须在上层测试截止时间内完成")
+        .expect("取消任务不得 panic");
+    match result.expect_err("长查询必须被显式 cancel 中断") {
+        DruidError::SqlException(exception) => {
+            assert_eq!(exception.sql_state(), Some("HY008"));
+            assert_eq!(
+                exception.class_name(),
+                "duckdb::Error::OperationInterrupted"
+            );
+        }
+        other => panic!("取消必须保留结构化 SqlException，实际为 {other:?}"),
+    }
+    connection.ping().await.expect("显式取消后连接仍应可复用");
+}
+
+#[tokio::test]
+async fn duckdb_file_database_survives_physical_database_restart() {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let file_name = format!(
+        "druid_duckdb_restart_{}_{}.duckdb",
+        std::process::id(),
+        nanos
+    );
+    let path = std::env::current_dir()
+        .expect("测试工作目录必须可读取")
+        .join("target")
+        .join(&file_name);
+    let url = format!("duckdb:target/{file_name}");
+
+    let mut first = DuckDbConnectionAdapter::connect(&url)
+        .await
+        .expect("DuckDB 文件数据库必须打开");
+    first
+        .exec(
+            "CREATE TABLE restart_item(id BIGINT PRIMARY KEY)",
+            Vec::new(),
+        )
+        .await
+        .expect("重启契约表必须创建");
+    first
+        .exec("INSERT INTO restart_item VALUES (7)", Vec::new())
+        .await
+        .expect("重启前数据必须持久化");
+    first.close().await.expect("第一个物理数据库必须关闭");
+
+    let mut reopened = DuckDbConnectionAdapter::connect(&url)
+        .await
+        .expect("DuckDB 文件数据库必须重启");
+    let rows = reopened
+        .fetch("SELECT id FROM restart_item", Vec::new())
+        .await
+        .expect("重启后必须能读取持久化数据");
+    assert_eq!(rows[0].values, vec![Value::Int(7)]);
+    reopened
+        .exec("DROP TABLE restart_item", Vec::new())
+        .await
+        .expect("重启契约表必须清理");
+    reopened.close().await.expect("重启数据库必须关闭");
+    std::fs::remove_file(path).expect("DuckDB 测试数据库文件必须可清理");
+}
+
+async fn prepare_long_running_statement(
+    connection: &mut DuckDbConnectionAdapter,
+) -> Arc<dyn PhysicalPreparedStatement> {
+    let key = PreparedStatementKey::new(
+        Some(
+            "SELECT SUM(a.i * b.i) FROM range(1000000) AS a(i), range(1000000) AS b(i)".to_owned(),
+        ),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("长查询 prepare key 必须合法");
+    connection
+        .prepare_physical_statement(&key)
+        .await
+        .expect("长查询必须可 prepare")
 }

@@ -175,3 +175,46 @@ fn is_evidence_reference(value: &str) -> bool {
 fn is_rfc3339_like(value: &str) -> bool {
     value.len() >= 20 && value.contains('T') && (value.ends_with('Z') || value.contains('+'))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn native_verification_requires_the_canonical_native_installation_path() {
+        let checks = serde_json::json!([
+            "connection-lifecycle",
+            "validation",
+            "crud-ddl",
+            "scalar-types",
+            "prepared-and-batch",
+            "transactions",
+            "state-reset",
+            "capabilities",
+            "error-classification",
+            "timeout-cancel",
+            "database-restart",
+            "concurrency-leak-shutdown",
+            "no-pool-in-pool"
+        ]);
+        let record = |installation_paths: serde_json::Value| {
+            serde_json::from_value::<DriverVerificationRun>(serde_json::json!({
+                "target": "x86_64-unknown-linux-gnu",
+                "databaseVersion": "1.4.0",
+                "rustVersion": "default",
+                "runtimeMode": "native",
+                "installationPaths": installation_paths,
+                "contractChecks": checks.clone(),
+                "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "evidenceRef": "https://github.com/easy-4-rust/druid-rust/actions/runs/1",
+                "passedAt": "2026-08-07T00:00:00Z"
+            }))
+            .expect("测试证据必须可反序列化")
+        };
+
+        assert!(!record(serde_json::json!(["bundled-native"]))
+            .validates(DriverRuntimeMode::Native, None));
+        assert!(record(serde_json::json!(["native", "bundled-native"]))
+            .validates(DriverRuntimeMode::Native, None));
+    }
+}
