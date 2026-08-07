@@ -5,6 +5,9 @@ use druid_wrapper::driver::{
 };
 #[cfg(feature = "jdbc-agent")]
 use druid_wrapper::jdbc_agent::JdbcAgentOptions;
+use druid_wrapper::sqlx::SqlxConnectionFactory;
+use sqlx::{mysql::MySqlConnectOptions, ConnectOptions};
+use std::str::FromStr;
 
 #[test]
 fn builtin_catalog_has_exact_phased_sql_scope() {
@@ -97,6 +100,100 @@ fn registry_resolves_protocol_compatible_sqlx_profiles() {
         Some("mysql://localhost/demo")
     );
     assert_eq!(resolved.url(), "jdbc:mysql://localhost/demo");
+}
+
+#[test]
+fn java_style_mysql_rdbc_url_maps_to_sqlx_with_all_properties_and_separate_credentials() {
+    let registry = DruidDriverRegistry::builtin().expect("内置注册中心必须可创建");
+    let rdbc_url = "rdbc:mysql://cloud-mysql:13306/qumall_mall?characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=GMT%2B8&allowMultiQueries=true&allowPublicKeyRetrieval=true";
+    let config = DatabaseConnectionConfig::new("mysql", rdbc_url)
+        .expect("MySQL 配置必须合法")
+        .user_name("xxxx")
+        .password("xxxx");
+    let config_debug = format!("{config:?}");
+    assert!(!config_debug.contains("xxxx"));
+    assert!(!config_debug.contains("allowPublicKeyRetrieval"));
+    let resolved = registry
+        .resolve(&config)
+        .expect("Java 风格 RDBC URL 必须映射为 SQLx MySQL URL");
+
+    let factory = resolved.factory();
+    let driver_url = factory
+        .connection_url()
+        .expect("SQLx factory 必须暴露真实连接 URL");
+    let factory_debug = format!("{:?}", SqlxConnectionFactory::new(driver_url));
+    assert!(!factory_debug.contains("xxxx"));
+    assert!(!factory_debug.contains("allowPublicKeyRetrieval"));
+    let parsed = url::Url::parse(driver_url).expect("真实 MySQL URL 必须合法");
+    let properties = parsed
+        .query_pairs()
+        .into_owned()
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(parsed.scheme(), "mysql");
+    assert_eq!(parsed.host_str(), Some("cloud-mysql"));
+    assert_eq!(parsed.port(), Some(13_306));
+    assert_eq!(parsed.path(), "/qumall_mall");
+    assert_eq!(parsed.username(), "xxxx");
+    assert_eq!(parsed.password(), Some("xxxx"));
+    assert_eq!(
+        properties.get("characterEncoding").map(String::as_str),
+        Some("utf8")
+    );
+    assert_eq!(
+        properties.get("zeroDateTimeBehavior").map(String::as_str),
+        Some("convertToNull")
+    );
+    assert_eq!(properties.get("useSSL").map(String::as_str), Some("false"));
+    assert_eq!(
+        properties
+            .get("useJDBCCompliantTimezoneShift")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        properties.get("useLegacyDatetimeCode").map(String::as_str),
+        Some("false")
+    );
+    assert_eq!(
+        properties.get("serverTimezone").map(String::as_str),
+        Some("GMT+8")
+    );
+    assert_eq!(
+        properties.get("allowMultiQueries").map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(
+        properties
+            .get("allowPublicKeyRetrieval")
+            .map(String::as_str),
+        Some("true")
+    );
+    assert_eq!(properties.get("charset").map(String::as_str), Some("utf8"));
+    assert_eq!(
+        properties.get("ssl-mode").map(String::as_str),
+        Some("DISABLED")
+    );
+    assert_eq!(
+        properties.get("timezone").map(String::as_str),
+        Some("+08:00")
+    );
+    let effective_options = MySqlConnectOptions::from_str(driver_url)
+        .expect("映射后的 URL 必须能由真实 SQLx MySQL 驱动解析")
+        .to_url_lossy();
+    let effective_properties = effective_options
+        .query_pairs()
+        .into_owned()
+        .collect::<std::collections::HashMap<_, _>>();
+    assert_eq!(
+        effective_properties.get("charset").map(String::as_str),
+        Some("utf8")
+    );
+    assert_eq!(
+        effective_properties.get("ssl-mode").map(String::as_str),
+        Some("DISABLED")
+    );
+    assert_eq!(resolved.url(), "rdbc:mysql://cloud-mysql:13306/qumall_mall");
+    assert!(!format!("{resolved:?}").contains("xxxx"));
 }
 
 #[test]
@@ -335,6 +432,9 @@ fn unified_rdbc_url_rejects_non_rdbc_scheme_and_user_info() {
     assert!(DruidDatabasePoolBuilder::from_rdbc_url("mysql://localhost/app").is_err());
     assert!(
         DruidDatabasePoolBuilder::from_rdbc_url("rdbc://user:secret@mysql/localhost/app").is_err()
+    );
+    assert!(
+        DruidDatabasePoolBuilder::from_rdbc_url("rdbc:mysql://user:secret@localhost/app").is_err()
     );
 }
 

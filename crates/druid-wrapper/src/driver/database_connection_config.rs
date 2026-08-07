@@ -59,7 +59,7 @@ impl DatabaseConnectionConfig {
 
 impl std::fmt::Debug for DatabaseConnectionConfig {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let display_url = if self.url.starts_with("rdbc://") {
+        let display_url = if self.url.starts_with("rdbc:") {
             self.url
                 .split_once('?')
                 .map_or(self.url.as_str(), |(url, _)| url)

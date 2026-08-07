@@ -94,11 +94,11 @@ impl DruidDriverRegistry {
         config: &DatabaseConnectionConfig,
     ) -> Result<ResolvedDatabaseDriver, DriverRegistryError> {
         let profile = self.profile(config.profile_id())?.clone();
-        let (driver_url, display_url, properties) = if config.url().starts_with("rdbc://") {
+        let (driver_url, display_url, properties) = if config.url().starts_with("rdbc:") {
             let rdbc_url =
                 RdbcUrl::parse(config.url()).map_err(|_| DriverRegistryError::InvalidUrl {
                     profile: profile.id().to_string(),
-                    url: "rdbc://<redacted>".to_owned(),
+                    url: "rdbc:<redacted>".to_owned(),
                 })?;
             if rdbc_url.profile() != profile.id().as_str() {
                 return Err(DriverRegistryError::InvalidUrl {
@@ -109,7 +109,7 @@ impl DruidDriverRegistry {
             let mut properties = rdbc_url.properties().clone();
             properties.extend(config.properties().clone());
             (
-                Self::rdbc_driver_url(&profile, &rdbc_url)?,
+                Self::rdbc_driver_url(&profile, &rdbc_url, &properties)?,
                 rdbc_url.redacted(),
                 properties,
             )
@@ -261,21 +261,27 @@ impl DruidDriverRegistry {
     fn rdbc_driver_url(
         profile: &DatabaseProfile,
         rdbc_url: &RdbcUrl,
+        properties: &HashMap<String, String>,
     ) -> Result<String, DriverRegistryError> {
         let invalid = || DriverRegistryError::InvalidUrl {
             profile: profile.id().to_string(),
             url: rdbc_url.redacted(),
         };
         let network = |scheme: &str| rdbc_url.network_url(scheme).map_err(|_| invalid());
-        let authenticated_network = |scheme: &str| {
-            rdbc_url
-                .authenticated_network_url(scheme)
-                .map_err(|_| invalid())
-        };
         match profile.runtime_mode() {
             DriverRuntimeMode::Sqlx => match profile.protocol_family() {
-                ProtocolFamily::MySql => authenticated_network("mysql"),
-                ProtocolFamily::PostgreSql => authenticated_network("postgresql"),
+                ProtocolFamily::MySql => Self::sqlx_network_url(
+                    profile,
+                    &network("mysql")?,
+                    properties,
+                    &rdbc_url.redacted(),
+                ),
+                ProtocolFamily::PostgreSql => Self::sqlx_network_url(
+                    profile,
+                    &network("postgresql")?,
+                    properties,
+                    &rdbc_url.redacted(),
+                ),
                 ProtocolFamily::SQLite => {
                     if rdbc_url.endpoint() == ":memory:" {
                         Ok("sqlite::memory:".to_owned())
@@ -347,6 +353,101 @@ impl DruidDriverRegistry {
             }
             DriverRuntimeMode::Native => Err(invalid()),
         }
+    }
+
+    fn sqlx_network_url(
+        profile: &DatabaseProfile,
+        network_url: &str,
+        properties: &HashMap<String, String>,
+        display_url: &str,
+    ) -> Result<String, DriverRegistryError> {
+        let invalid = || DriverRegistryError::InvalidUrl {
+            profile: profile.id().to_string(),
+            url: display_url.to_owned(),
+        };
+        let mut parsed = url::Url::parse(network_url).map_err(|_| invalid())?;
+        if let Some(user_name) = properties.get("user") {
+            parsed.set_username(user_name).map_err(|()| invalid())?;
+        }
+        if let Some(password) = properties.get("password") {
+            parsed
+                .set_password(Some(password))
+                .map_err(|()| invalid())?;
+        }
+
+        let mut effective_properties = properties.clone();
+        if profile.protocol_family() == ProtocolFamily::MySql {
+            if !effective_properties.contains_key("charset") {
+                if let Some(character_encoding) = properties.get("characterEncoding") {
+                    effective_properties.insert("charset".to_owned(), character_encoding.clone());
+                }
+            }
+            if !effective_properties.contains_key("sslmode")
+                && !effective_properties.contains_key("ssl-mode")
+            {
+                if let Some(use_ssl) = properties.get("useSSL") {
+                    let ssl_mode = if use_ssl.eq_ignore_ascii_case("false") {
+                        "DISABLED"
+                    } else if use_ssl.eq_ignore_ascii_case("true") {
+                        "PREFERRED"
+                    } else {
+                        return Err(invalid());
+                    };
+                    effective_properties.insert("ssl-mode".to_owned(), ssl_mode.to_owned());
+                }
+            }
+            if !effective_properties.contains_key("timezone")
+                && !effective_properties.contains_key("time-zone")
+            {
+                if let Some(server_timezone) = properties.get("serverTimezone") {
+                    effective_properties.insert(
+                        "timezone".to_owned(),
+                        Self::sqlx_mysql_timezone(server_timezone),
+                    );
+                }
+            }
+        }
+
+        let mut driver_properties = effective_properties
+            .iter()
+            .filter(|(name, _)| name.as_str() != "user" && name.as_str() != "password")
+            .collect::<Vec<_>>();
+        driver_properties.sort_by_key(|(name, _)| *name);
+        if !driver_properties.is_empty() {
+            let mut query = parsed.query_pairs_mut();
+            for (name, value) in driver_properties {
+                query.append_pair(name, value);
+            }
+        }
+        Ok(parsed.into())
+    }
+
+    fn sqlx_mysql_timezone(server_timezone: &str) -> String {
+        let Some(offset) = server_timezone
+            .strip_prefix("GMT")
+            .or_else(|| server_timezone.strip_prefix("UTC"))
+        else {
+            return server_timezone.to_owned();
+        };
+        if offset.is_empty() {
+            return "+00:00".to_owned();
+        }
+        let (sign, digits) = match offset.as_bytes().first() {
+            Some(b'+') => ('+', &offset[1..]),
+            Some(b'-') => ('-', &offset[1..]),
+            _ => return server_timezone.to_owned(),
+        };
+        let (hours, minutes) = digits.split_once(':').map_or((digits, "0"), |parts| parts);
+        let Ok(hours) = hours.parse::<u8>() else {
+            return server_timezone.to_owned();
+        };
+        let Ok(minutes) = minutes.parse::<u8>() else {
+            return server_timezone.to_owned();
+        };
+        if hours > 14 || minutes > 59 || (hours == 14 && minutes != 0) {
+            return server_timezone.to_owned();
+        }
+        format!("{sign}{hours:02}:{minutes:02}")
     }
 
     fn normalize_sqlx_url(

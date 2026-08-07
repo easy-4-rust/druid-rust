@@ -7,7 +7,7 @@ use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 ///
 /// 对应 Java: `DruidDataSource#createPhysicalConnection`。
 /// 每次 `create` 都打开一个未池化的 SQLx 连接，由 DruidPool 独占池化职责。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct SqlxConnectionFactory {
     url: String,
 }
@@ -23,6 +23,24 @@ impl SqlxConnectionFactory {
     /// 返回数据库连接 URL。
     pub fn url(&self) -> &str {
         &self.url
+    }
+}
+
+impl std::fmt::Debug for SqlxConnectionFactory {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let display_url = url::Url::parse(&self.url).map_or_else(
+            |_| "<redacted>".to_owned(),
+            |mut url| {
+                let _ = url.set_username("");
+                let _ = url.set_password(None);
+                url.set_query(None);
+                url.to_string()
+            },
+        );
+        formatter
+            .debug_struct("SqlxConnectionFactory")
+            .field("url", &display_url)
+            .finish()
     }
 }
 

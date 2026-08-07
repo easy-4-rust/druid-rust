@@ -149,3 +149,24 @@ fn unified_rdbc_url_separates_profile_endpoint_database_and_properties() {
         "postgresql://localhost:5432/app/main"
     );
 }
+
+#[test]
+fn java_style_mysql_rdbc_url_preserves_driver_properties() {
+    let url = RdbcUrl::parse(
+        "rdbc:mysql://cloud-mysql:13306/qumall_mall?characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&useJDBCCompliantTimezoneShift=true&useLegacyDatetimeCode=false&serverTimezone=GMT%2B8&allowMultiQueries=true&allowPublicKeyRetrieval=true",
+    )
+    .expect("Java 风格的 MySQL RDBC URL 必须可解析");
+
+    assert_eq!(url.profile(), "mysql");
+    assert_eq!(url.endpoint(), "cloud-mysql:13306");
+    assert_eq!(url.database(), "qumall_mall");
+    assert_eq!(url.property("characterEncoding"), Some("utf8"));
+    assert_eq!(url.property("zeroDateTimeBehavior"), Some("convertToNull"));
+    assert_eq!(url.property("useSSL"), Some("false"));
+    assert_eq!(url.property("useJDBCCompliantTimezoneShift"), Some("true"));
+    assert_eq!(url.property("useLegacyDatetimeCode"), Some("false"));
+    assert_eq!(url.property("serverTimezone"), Some("GMT+8"));
+    assert_eq!(url.property("allowMultiQueries"), Some("true"));
+    assert_eq!(url.property("allowPublicKeyRetrieval"), Some("true"));
+    assert_eq!(url.redacted(), "rdbc:mysql://cloud-mysql:13306/qumall_mall");
+}

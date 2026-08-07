@@ -23,13 +23,13 @@ pub struct DruidDatabasePoolBuilder {
 }
 
 impl DruidDatabasePoolBuilder {
-    /// 从统一 `rdbc://profile/endpoint/database` URL 创建建池器。
+    /// 从统一 `rdbc:profile://endpoint/database` URL 创建建池器。
     pub fn from_rdbc_url(url: impl Into<String>) -> Result<Self, DriverRegistryError> {
         let url = url.into();
         let parsed = RdbcUrl::parse(&url).map_err(|_| DriverRegistryError::InvalidUrl {
             profile: "unknown".to_owned(),
-            url: if url.starts_with("rdbc://") {
-                "rdbc://<redacted>".to_owned()
+            url: if url.starts_with("rdbc:") {
+                "rdbc:<redacted>".to_owned()
             } else {
                 url.clone()
             },

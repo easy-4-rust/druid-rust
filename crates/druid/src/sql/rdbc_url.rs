@@ -4,10 +4,13 @@ use crate::core::DruidError;
 
 /// Druid's unified database connection URL.
 ///
-/// The form is `rdbc://<profile>/<endpoint>/<database>?key=value`, for example
-/// `rdbc://postgresql/localhost:5432/app?user=druid`. `profile` selects a catalog entry;
-/// the wrapper registry converts endpoint and database to a native driver URL. Credentials
-/// belong in query properties. User-info and fragments are forbidden. Logs use `redacted`.
+/// The canonical form follows Java's JDBC subprotocol convention:
+/// `rdbc:<profile>://<endpoint>/<database>?key=value`, for example
+/// `rdbc:postgresql://localhost:5432/app?sslmode=require`. The legacy
+/// `rdbc://<profile>/<endpoint>/<database>` form remains accepted for compatibility.
+/// `profile` selects a catalog entry; the wrapper registry converts the endpoint, database,
+/// and properties to a native driver URL. Credentials belong in connection properties.
+/// User-info and fragments are forbidden. Logs use `redacted`.
 #[derive(Clone, PartialEq, Eq)]
 pub struct RdbcUrl {
     raw: String,
@@ -15,6 +18,7 @@ pub struct RdbcUrl {
     endpoint: String,
     database: String,
     properties: HashMap<String, String>,
+    subprotocol_style: bool,
 }
 
 impl RdbcUrl {
@@ -24,40 +28,98 @@ impl RdbcUrl {
     /// decoded, with the last duplicate winning. Invalid syntax, user-info, or a fragment returns
     /// `InvalidArgument`.
     pub fn parse(value: &str) -> Result<Self, DruidError> {
-        let parsed = url::Url::parse(value)
-            .map_err(|error| DruidError::InvalidArgument(format!("invalid RDBC URL: {error}")))?;
-        if parsed.scheme() != "rdbc" {
-            return Err(DruidError::InvalidArgument(
-                "RDBC URL scheme must be 'rdbc'".to_owned(),
-            ));
-        }
+        let (parsed, profile, subprotocol_style) = if let Some(rest) = value.strip_prefix("rdbc:") {
+            if rest.starts_with("//") {
+                let parsed = url::Url::parse(value).map_err(|error| {
+                    DruidError::InvalidArgument(format!("invalid RDBC URL: {error}"))
+                })?;
+                let profile = parsed
+                    .host_str()
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        DruidError::InvalidArgument(
+                            "RDBC URL must contain a database profile".to_owned(),
+                        )
+                    })?
+                    .to_owned();
+                (parsed, profile, false)
+            } else {
+                let (profile, target) = rest.split_once("://").ok_or_else(|| {
+                    DruidError::InvalidArgument(
+                        "RDBC URL must use 'rdbc:<profile>://<endpoint>'".to_owned(),
+                    )
+                })?;
+                if profile.is_empty() {
+                    return Err(DruidError::InvalidArgument(
+                        "RDBC URL must contain a database profile".to_owned(),
+                    ));
+                }
+                let parsed = url::Url::parse(&format!("rdbc://{target}")).map_err(|error| {
+                    DruidError::InvalidArgument(format!("invalid RDBC URL: {error}"))
+                })?;
+                (parsed, profile.to_owned(), true)
+            }
+        } else {
+            let parsed = url::Url::parse(value).map_err(|error| {
+                DruidError::InvalidArgument(format!("invalid RDBC URL: {error}"))
+            })?;
+            return if parsed.scheme() == "rdbc" {
+                Err(DruidError::InvalidArgument(
+                    "RDBC URL must use 'rdbc:<profile>://<endpoint>'".to_owned(),
+                ))
+            } else {
+                Err(DruidError::InvalidArgument(
+                    "RDBC URL scheme must be 'rdbc'".to_owned(),
+                ))
+            };
+        };
         if parsed.username() != "" || parsed.password().is_some() || parsed.fragment().is_some() {
             return Err(DruidError::InvalidArgument(
-                "RDBC URL forbids user-info and fragments; use query properties".to_owned(),
+                "RDBC URL forbids user-info and fragments; use connection properties".to_owned(),
             ));
         }
-        let profile = parsed
-            .host_str()
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| {
-                DruidError::InvalidArgument("RDBC URL must contain a database profile".to_owned())
-            })?;
-        let mut segments = parsed
-            .path_segments()
-            .ok_or_else(|| DruidError::InvalidArgument("RDBC URL path is invalid".to_owned()))?
-            .filter(|value| !value.is_empty());
-        let endpoint = segments.next().unwrap_or_default().to_owned();
-        let database = segments.collect::<Vec<_>>().join("/");
+        let (endpoint, database) = if subprotocol_style {
+            let host = parsed
+                .host_str()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| {
+                    DruidError::InvalidArgument("RDBC URL must contain an endpoint".to_owned())
+                })?;
+            let host = if host.contains(':') {
+                format!("[{host}]")
+            } else {
+                host.to_owned()
+            };
+            let endpoint = parsed
+                .port()
+                .map_or(host.clone(), |port| format!("{host}:{port}"));
+            let database = parsed
+                .path_segments()
+                .ok_or_else(|| DruidError::InvalidArgument("RDBC URL path is invalid".to_owned()))?
+                .filter(|value| !value.is_empty())
+                .collect::<Vec<_>>()
+                .join("/");
+            (endpoint, database)
+        } else {
+            let mut segments = parsed
+                .path_segments()
+                .ok_or_else(|| DruidError::InvalidArgument("RDBC URL path is invalid".to_owned()))?
+                .filter(|value| !value.is_empty());
+            let endpoint = segments.next().unwrap_or_default().to_owned();
+            let database = segments.collect::<Vec<_>>().join("/");
+            (endpoint, database)
+        };
         let properties = parsed
             .query_pairs()
             .map(|(key, value)| (key.into_owned(), value.into_owned()))
             .collect();
         Ok(Self {
             raw: value.to_owned(),
-            profile: profile.to_owned(),
+            profile,
             endpoint,
             database,
             properties,
+            subprotocol_style,
         })
     }
 
@@ -102,7 +164,11 @@ impl RdbcUrl {
         } else {
             format!("/{}", self.database)
         };
-        format!("rdbc://{}/{}{suffix}", self.profile, self.endpoint)
+        if self.subprotocol_style {
+            format!("rdbc:{}://{}{suffix}", self.profile, self.endpoint)
+        } else {
+            format!("rdbc://{}/{}{suffix}", self.profile, self.endpoint)
+        }
     }
 
     /// Builds a credential-free driver URL using the native network `scheme`.
