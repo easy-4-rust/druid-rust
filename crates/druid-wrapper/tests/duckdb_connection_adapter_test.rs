@@ -308,6 +308,8 @@ async fn duckdb_file_database_survives_physical_database_restart() {
         .expect("测试工作目录必须可读取")
         .join("target")
         .join(&file_name);
+    std::fs::create_dir_all(path.parent().expect("DuckDB 测试路径必须有父目录"))
+        .expect("DuckDB 测试数据库目录必须可创建");
     let url = format!("duckdb:target/{file_name}");
 
     let mut first = DuckDbConnectionAdapter::connect(&url)
