@@ -1,10 +1,12 @@
-# `druid-rust` 数据库驱动集成矩阵
+# 数据库驱动集成矩阵规格
 
-> 基线日期：2026-08-07
-> 目标：区分“数据库驱动”“协议/类型库”“ORM”“连接池”，并为
-> `PhysicalConnectionFactory -> PhysicalConnection` 的真实集成建立验收门。  
-> 状态约束：依赖可编译不等于运行时已集成；未经过真实服务器验证的对象只能标
-> `COMPILE_VERIFIED` 或 `PLANNED`。
+> 日期：2026-08-12  来源：原 docs/druid-wrapper/数据库驱动集成矩阵.md
+
+基线日期：2026-08-07
+目标：区分"数据库驱动""协议/类型库""ORM""连接池"，并为
+`PhysicalConnectionFactory -> PhysicalConnection` 的真实集成建立验收门。
+状态约束：依赖可编译不等于运行时已集成；未经过真实服务器验证的对象只能标
+`COMPILE_VERIFIED` 或 `PLANNED`。
 
 ## 1. 统一边界
 
@@ -59,7 +61,7 @@ toasty-driver-postgresql`，其余四条分别为底层 driver ->
 SQLite 升至该版本。SQLx 0.8.6 使用的 `libsqlite3-sys` 与 rusqlite 0.40.x
 使用不同 `links=sqlite3` 版本，Cargo 禁止同一依赖图链接两份 SQLite C
 库。当前 `vendor/toasty-driver-sqlite` 只把 Toasty 0.9.0 的 rusqlite 约束
-降到 API 兼容的 0.32.1，使 Toasty 与 SQLx SQLite 能在同一 workspace 共存。
+降到 API 兼容的 `0.32.1`，使 Toasty 与 SQLx SQLite 能在同一 workspace 共存。
 
 升级门禁：
 
@@ -171,7 +173,7 @@ SHA-256，并按 `profile/objects/<sha256>/...` 内容寻址保存。activation 
 
 禁止规则：
 
-- D1 不能写成“已集成”；
+- D1 不能写成"已集成"；
 - SQLite D3 不能外推 PostgreSQL/MySQL；
 - ORM CRUD 测试不能替代 raw `PhysicalConnection` 合同；
 - protocol/types crate 的编译不能替代 driver 连接测试。

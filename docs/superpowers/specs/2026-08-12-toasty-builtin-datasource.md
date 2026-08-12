@@ -1,13 +1,15 @@
-# Toasty 内置数据源标准实现
+# Toasty 内置数据源标准实现规格
 
-> 决策日期：2026-07-28  
-> 冻结版本：Toasty `0.9.0`  
-> 决策：Toasty 是 `druid-rust` 内置数据源的标准实现；SQLx、RBDC、bb8、
-> deadpool 等保持为 `druid-wrapper` 扩展。
+> 日期：2026-08-12  来源：原 docs/druid/Toasty-内置数据源标准实现.md
+
+决策日期：2026-07-28
+冻结版本：Toasty `0.9.0`
+决策：Toasty 是 `druid-rust` 内置数据源的标准实现；SQLx、RBDC、bb8、
+deadpool 等保持为 `druid-wrapper` 扩展。
 
 ## 1. 决策含义
 
-“内置标准实现”不是把 Druid 改造成 Toasty ORM，也不是让两个连接池互相嵌套。
+"内置标准实现"不是把 Druid 改造成 Toasty ORM，也不是让两个连接池互相嵌套。
 它表示：
 
 1. `PhysicalConnection` 仍是 Druid 内部唯一、稳定、且不泄漏第三方类型的 SPI；
@@ -154,7 +156,7 @@ Toasty `RawSqlRet::Infer` 按 SQLite runtime storage class 解码。SQLite 的
 | streaming ResultSet/cancel/timeout/完整 metadata | TODO |
 | Toasty ORM model 与 Druid Filter/Stat 事件统一 | TODO |
 
-因此“内置标准实现已建立”不等于多数据库和整个 Java Druid 已迁移完成。
+因此"内置标准实现已建立"不等于多数据库和整个 Java Druid 已迁移完成。
 
 ## 5. Feature 与发布边界
 

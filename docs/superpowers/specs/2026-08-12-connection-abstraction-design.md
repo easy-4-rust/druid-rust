@@ -1,10 +1,12 @@
-# druid-rust 跨模块连接抽象与驱动适配架构
+# 连接抽象与驱动适配架构设计
 
-> 核心决策：`DruidPooledConnection` 是对外稳定的 Druid 池化连接；
-> `PhysicalConnection` 是 druid-rust 内部、对象安全、最小化的驱动 SPI；
-> Toasty 0.9 位于 `druid::toasty`，是内置默认实现；SQLx/RBDC/bb8/deadpool
-> 全部位于唯一的 `druid-wrapper` 模块。bb8/deadpool 作为外部连接池接入
-> Provider 层，禁止嵌套进入 native pool 形成双重池。
+> 日期：2026-08-12  来源：原 docs/连接抽象与驱动适配架构.md
+
+核心决策：`DruidPooledConnection` 是对外稳定的 Druid 池化连接；
+`PhysicalConnection` 是 druid-rust 内部、对象安全、最小化的驱动 SPI；
+Toasty 0.9 位于 `druid::toasty`，是内置默认实现；SQLx/RBDC/bb8/deadpool
+全部位于唯一的 `druid-wrapper` 模块。bb8/deadpool 作为外部连接池接入
+Provider 层，禁止嵌套进入 native pool 形成双重池。
 
 ## 1. 设计目标
 
@@ -56,7 +58,7 @@
 | Dynamic 租约 | `DynamicDataSource::route` → `Arc<dyn Pool>` | 路由后 acquire/drop 的 native active/idle/recycle 计数测试 | 已修复 |
 
 当前连接主干严格采用下列关系；`DruidConnectionHolder` 是不暴露给应用的
-Druid 生命周期容器，因此不改变“公开连接只依赖内部物理 SPI”的边界：
+Druid 生命周期容器，因此不改变"公开连接只依赖内部物理 SPI"的边界：
 
 ```text
 DruidPooledConnection                 对外池化连接
@@ -91,7 +93,7 @@ DruidPooledConnection
 | `ConnectionProxy/Impl` | Druid 迁移对象 | 是 | Filter 上下文、属性和异常处理 |
 | `DruidDataSource` | Druid 迁移对象 | 是 | 获取、归还、维护、配置和统计 |
 
-对象账本必须把“Druid 对象迁移”和“平台依赖映射”分栏，不能把 `java.sql.*` 计入 1,719 个 Druid 生产对象的完成率。
+对象账本必须把"Druid 对象迁移"和"平台依赖映射"分栏，不能把 `java.sql.*` 计入 1,719 个 Druid 生产对象的完成率。
 
 Rust `std` 没有 JDBC 那样统一的数据库连接标准库。Toasty、SQLx、RBDC、
 Diesel 及各数据库驱动都是生态 crate，而且接口粒度不同。因此
@@ -240,8 +242,7 @@ flowchart LR
 
 保持 Java 对象名称和职责：
 
-- 作为 native pool 的 holder/idle 元数据容器；借出时整个 holder 移入
-  `DruidPooledConnection`，归还时整个 holder 通过 take-once callback 移回，任何时刻只有一个所有者；
+- 作为 native pool 的 holder/idle 元数据容器；借出时整个 holder 移入 `DruidPooledConnection`，归还时整个 holder 通过 take-once callback 移回，任何时刻只有一个所有者；
 - 当前保存物理连接、创建/最后活跃/执行/校验/keepAlive 时间、使用次数、密码版本快照；
 - 当前保存借出前的 `ConnectionDefaults`、initSchema 恢复策略和 discard/active 状态；
 - 当前惰性持有 `PreparedStatementPool`，并在 schema 变化、holder 销毁/取走物理连接时清理；
@@ -367,7 +368,7 @@ Connection warning 使用独立 SPI，不塞进执行结果中。当前 Adapter 
 | SQLx | 公开 Connection SPI 无 warning 链，返回 `None` | 成功 | 关闭后 `ConnectionDiscarded` |
 | RBDC | 公开 Connection SPI 无 warning 链，返回 `None` | 成功 | 关闭/丢弃后 `ConnectionDiscarded` |
 
-这一区分了“驱动确认没有可观察 warning”与默认 SPI 的
+这一区分了"驱动确认没有可观察 warning"与默认 SPI 的
 `UnsupportedOperation`，避免用常量返回掩盖尚未审计的 Adapter。
 
 PreparedStatement 不直接暴露驱动 statement 类型。当前实现由
@@ -436,7 +437,7 @@ flowchart TD
 当前 `PhysicalConnection::prepare_physical_call` 默认返回结构化
 `UnsupportedOperation`。只有 Adapter 能创建真实 callable 句柄时才覆盖该方法，
 返回普通 `PhysicalPreparedStatement` 会被 pooled 层拒绝并按异常语句从缓存淘汰。
-这保证“暂不支持”不会被误写成“执行成功”。
+这保证"暂不支持"不会被误写成"执行成功"。
 
 `PhysicalCallableStatement` 已包含 OUT 注册、命名 IN、typed OUT、`was_null`
 以及日期时间、Blob、Clob/NClob、Reader、URL、Array/Ref/RowId/SQLXML 等资源
@@ -565,7 +566,6 @@ DruidDataSource
 | `druid-wrapper/src/sqlx/deadpool` | `druid-sqlx-deadpool` | Bridge | `SqlxDeadpoolPool`、`SqlxDeadpoolConnectionManager`、`PhysicalConnectionLease` | deadpool Object | 已移除 native factory 角色 |
 
 四组 Adapter 已成为 `druid-wrapper` 的内部实现包，不是四个可独立发布的 crate。
-| 未来 driver | Native/Bridge | 独立 factory/provider + adapter | driver-specific | 通过 contract suite |
 
 迁移前基线中三个 adapter 的 `create()` 固定返回未实现。当前 SQLx/RBDC 已成为 direct adapter；bb8/deadpool 已从 `ConnectionFactory` 角色移出并直接实现 `Pool`。兼容名称 `SqlxBb8Adapter`/`SqlxDeadpoolAdapter` 只是 deprecated 重导出，不再定义第二套对象或 factory 行为。
 
@@ -723,7 +723,7 @@ stateDiagram-v2
 
 ## 14. 异步 Drop 与回收协议
 
-Rust `Drop` 不能 `.await`，因此采用“多入口、同一 take-once 所有权协议”：
+Rust `Drop` 不能 `.await`，因此采用"多入口、同一 take-once 所有权协议"：
 
 1. `PhysicalConnection::close(&mut self).await`：业务代码的异步关闭入口，执行完整 rollback/reset/testOnReturn。
 2. `DruidPooledConnection::recycle(self)`：显式同步所有权归还入口；与 Drop 一样不能异步复位。
@@ -1019,8 +1019,7 @@ native 和 bridge provider 均需执行：
 9. `DruidConnectionHolder` 的状态、时间、useCount、默认值与回收结果可观测。
 10. DynamicDataSource 路由后的返回类型仍为 `DruidPooledConnection`。
 11. workspace 的产品模块只有 `druid`、`druid-admin`、`druid-wrapper`。
-12. Toasty 源码位于 `druid::toasty`；SQLx/RBDC/bb8/deadpool 源码位于
-    `druid-wrapper` 内部目录，不能以 facade 重导出代替物理归并。
+12. Toasty 源码位于 `druid::toasty`；SQLx/RBDC/bb8/deadpool 源码位于 `druid-wrapper` 内部目录，不能以 facade 重导出代替物理归并。
 
 ## 24. ADR 决策
 
