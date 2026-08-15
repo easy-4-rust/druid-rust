@@ -217,6 +217,175 @@ fn error_class_name_variants() {
     );
 }
 
+// ── GetConnectionTimeout Display branches ──────────────────────
+
+#[test]
+fn error_display_get_connection_timeout_basic() {
+    let e = DruidError::GetConnectionTimeout {
+        wait_millis: 5000,
+        active_count: 10,
+        max_active: 10,
+        creating_count: 2,
+        create_elapsed_millis: None,
+        create_error_count: 0,
+        running_sql: vec![],
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("5000"));
+    assert!(s.contains("active 10"));
+    assert!(!s.contains("createElapseMillis"));
+    assert!(!s.contains("createErrorCount"));
+}
+
+#[test]
+fn error_display_get_connection_timeout_with_elapsed() {
+    let e = DruidError::GetConnectionTimeout {
+        wait_millis: 3000,
+        active_count: 5,
+        max_active: 8,
+        creating_count: 1,
+        create_elapsed_millis: Some(1500),
+        create_error_count: 0,
+        running_sql: vec![],
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("createElapseMillis 1500"));
+}
+
+#[test]
+fn error_display_get_connection_timeout_with_errors() {
+    let e = DruidError::GetConnectionTimeout {
+        wait_millis: 3000,
+        active_count: 5,
+        max_active: 8,
+        creating_count: 1,
+        create_elapsed_millis: None,
+        create_error_count: 3,
+        running_sql: vec![],
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("createErrorCount 3"));
+}
+
+#[test]
+fn error_display_get_connection_timeout_with_running_sql() {
+    let e = DruidError::GetConnectionTimeout {
+        wait_millis: 3000,
+        active_count: 5,
+        max_active: 8,
+        creating_count: 1,
+        create_elapsed_millis: Some(100),
+        create_error_count: 1,
+        running_sql: vec![
+            (1, "SELECT * FROM t1".to_owned()),
+            (2, "INSERT INTO t2 VALUES (1)".to_owned()),
+        ],
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("runningSqlCount 1"));
+    assert!(s.contains("SELECT * FROM t1"));
+    assert!(s.contains("runningSqlCount 2"));
+}
+
+#[test]
+fn error_display_get_connection_timeout_zero_elapsed() {
+    let e = DruidError::GetConnectionTimeout {
+        wait_millis: 3000,
+        active_count: 5,
+        max_active: 8,
+        creating_count: 1,
+        create_elapsed_millis: Some(0),
+        create_error_count: 0,
+        running_sql: vec![],
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(!s.contains("createElapseMillis"));
+}
+
+// ── OnFatalError Display branches ──────────────────────────────
+
+#[test]
+fn error_display_on_fatal_error_basic() {
+    let e = DruidError::OnFatalError {
+        active_count: 5,
+        max_active: 10,
+        last_error_time_millis: 0,
+        last_sql: None,
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("activeCount 5"));
+    assert!(s.contains("onFatalErrorMaxActive 10"));
+    assert!(!s.contains("time"));
+    assert!(!s.contains("sql"));
+}
+
+#[test]
+fn error_display_on_fatal_error_with_time() {
+    let e = DruidError::OnFatalError {
+        active_count: 3,
+        max_active: 10,
+        last_error_time_millis: 1700000000000,
+        last_sql: None,
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("time"));
+}
+
+#[test]
+fn error_display_on_fatal_error_with_sql() {
+    use druid::core::RdbcString;
+    let e = DruidError::OnFatalError {
+        active_count: 3,
+        max_active: 10,
+        last_error_time_millis: 0,
+        last_sql: Some(RdbcString::from_rust_str("SELECT 1")),
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("sql"));
+    assert!(s.contains("SELECT 1"));
+}
+
+#[test]
+fn error_display_on_fatal_error_zero_time() {
+    let e = DruidError::OnFatalError {
+        active_count: 3,
+        max_active: 10,
+        last_error_time_millis: 0,
+        last_sql: None,
+        cause: None,
+    };
+    let s = format!("{}", e);
+    assert!(!s.contains("time"));
+}
+
+// ── DataSourceClosed Display ───────────────────────────────────
+
+#[test]
+fn error_display_datasource_closed_valid_time() {
+    let e = DruidError::DataSourceClosed {
+        close_time_millis: 1700000000000,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("closed"));
+}
+
+#[test]
+fn error_display_datasource_closed_zero_time() {
+    let e = DruidError::DataSourceClosed {
+        close_time_millis: 0,
+    };
+    let s = format!("{}", e);
+    assert!(s.contains("0"));
+}
+
 // ── sql_exception / batch_update_counts ────────────────────────
 
 #[test]
