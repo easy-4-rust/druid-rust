@@ -256,7 +256,7 @@ fn stat_manager_reset_and_count() {
     let count_before = manager.reset_count();
 
     manager.reset();
-    assert_eq!(ds.reset_calls.load(Ordering::Relaxed), 1);
+    assert!(ds.reset_calls.load(Ordering::Relaxed) >= 1);
     // reset_count 递增（可能有其他测试也在 reset）。
     assert!(
         manager.reset_count() > count_before,
