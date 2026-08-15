@@ -9,9 +9,7 @@
 //! - `RdbcTraceManager`：进程级单例。
 //! - `MergeStatFilter`：Before/After/ResultSetFilter no-op 透传。
 
-use druid::core::{
-    AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult, PoolState,
-};
+use druid::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult, PoolState};
 use druid::stats::{
     DataSourceMonitorable, DruidDataSourceStatManager, DruidDataSourceStatValue,
     DruidStatManagerFacade, DruidStatService, MergeStatFilter, RdbcStatContext, RdbcTraceManager,
@@ -279,7 +277,10 @@ fn stat_manager_log_and_reset() {
     manager.log_and_reset_data_source();
     assert_eq!(ds.log_calls.load(Ordering::Relaxed), 1);
     // reset_count 递增（可能有其他测试也在 reset）。
-    assert!(manager.reset_count() > count_before, "reset_count must increase");
+    assert!(
+        manager.reset_count() > count_before,
+        "reset_count must increase"
+    );
 
     let _ = manager.unregister(id);
 }
