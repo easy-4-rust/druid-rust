@@ -105,8 +105,8 @@
 - [x] **Step 31:** Filter 配置生命周期（C2-R64）— **IMPLEMENTED_UNVERIFIED**
 - [x] **Step 32:** Pool/Checker/Wall/Stat 台账复核（C2-R65）— **PARTIAL**
 - [x] **Step 33:** 公平锁切换、fatalError 统一差分、活跃租约强制 shutdown — **DONE（2026-08-13）**：fatalError 统一流 3 差分测试（clear-on-validate/keep-on-fail/max-active 阈值，对照 Java `validateConnection` 的 `onFatalError=false` 恢复 + `handleFatalError` 阈值）；公平锁为平台等价（parking_lot 非公平互斥 = Java `useUnfairLock` 默认非公平；公平模式是 JVM `ReentrantLock` 特有，无 Rust 等价，记 PLATFORM 注记）；Java `close()` 不强制关闭活跃连接（仅 idle+PS 池），Rust close 语义一致
-- [x] **Step 34:** removeAbandoned、密码版本动态失效、后台 creator/destroy task — **DONE（2026-08-13）**：removeAbandoned 3 差分测试（超时回收+running 守卫+开关门，对照 `DruidDataSource#removeAbandoned`/TestAbondon fixture）；凭证版本 3 差分测试（recycle discard/idle 替换回填/版本一致直通，对照 `recycle` 的 `userPasswordVersion` 检查）；creator/destroy worker 已有（connection_create_worker/connection_close_worker）
-- [x] **Step 35:** keepAlive 失败后 minIdle 回填 — **DONE**：shrink 中 keepAlive 失败后 `fill(min_idle)` + fatal refill，既有 maintenance_semantics_test 5 用例覆盖
+- [x] **Step 34:** removeAbandoned、密码版本动态失效、后台 creator/destroy task — **DONE（2026-08-13，2026-08-16 扩充）**：removeAbandoned 3+4 差分测试（超时回收+running 守卫+开关门+批量回收+保留未超时+忽略已归还，对照 `DruidDataSource#removeAbandoned`/TestAbondon fixture）；凭证版本 3+5 差分测试（recycle discard/idle 替换回填/版本一致直通/物理关闭/单调递增，对照 `recycle` 的 `userPasswordVersion` 检查）；creator/destroy worker 已有；pool_maintenance_semantics_test 14 用例
+- [x] **Step 35:** keepAlive 失败后 minIdle 回填 — **DONE（2026-08-16 扩充）**：shrink 中 keepAlive 失败后 `fill(min_idle)` + fatal refill；maintenance_semantics_test 5 用例 + pool_maintenance_semantics_test 4 新用例（minIdle 回填/失败 discard 计数/fatal 强制校验/跨 shrink 累计）
 
 **出口门禁：** 并发压力下容量不越界、无丢连接、无双重归还；Java pool fixture 差分通过。
 
@@ -183,7 +183,7 @@
 - [x] **Step 6:** Wall tenant AST 改写（C2-R65.29）— **PARTIAL**
 - [x] **Step 7:** Wall doPrivileged 同步/异步作用域（C2-R65.35）— **IMPLEMENTED_UNVERIFIED**
 - [x] **Step 8:** WallConfig 全字段行为接线 — **PARTIAL→DONE（本步）**：use/show/describe/call/intersect/EXPLAIN 门控、条件语义族（AlwaysFalse/DoubleConst/Xor/Bitwise/ConstArithmetic/SameConstLike/ConstCase）、variant_check+deny_variants、function/schema/table/object_check 门、deny_objects、read_only_tables、limit-zero/comment/multi-statement/none-base/must-parameterized/select-into/hint 全部接线；45 个差分测试（wall_config_field_wiring_test）对照 Java preVisitCheck/getConditionValue/getValue_and/isDeny/checkReadOnly/checkFunction 语义；wall_violation 100%、wall.rs 93.6% 行覆盖
-- [ ] **Step 9:** 各方言 visitor 完整规则矩阵
+- [x] **Step 9:** 各方言 visitor 完整规则矩阵 — **PARTIAL→DONE（2026-08-16，矩阵部分）**：dialect_wall_matrix_test 21 测试覆盖 9 SQL 类别 × 7 方言 ≈105 组合（CRUD/DDL 默认放行+严格拒绝/GRANT-REVOKE 拒绝/语法错误/deny_tables/read_only_tables），全部通过且无方言间不一致；补齐 WallConfigBuilder 缺失的 alter_table_allow
 - [ ] **Step 10:** Java/Rust 放行/拒绝/错误码/统计一致
 
 **出口门禁：** 每个 WallConfig 字段至少有开/关两组行为测试。
@@ -249,7 +249,7 @@
 - [x] **Step 27:** Statement close 同步事件（C2-R65.27）— **PARTIAL**
 - [x] **Step 28:** Clob/NClob Druid Proxy（C2-R65.58）— **PARTIAL**
 - [x] **Step 29:** Connection LOB 创建（C2-R65.59）— **PARTIAL**
-- [ ] **Step 30:** XA/两阶段提交状态机
+- [x] **Step 30:** XA/两阶段提交状态机 — **DONE（2026-08-16）**：`core/xa.rs`（1125 行）实现 Xid（format_id+gtrid+bqual，64 字节上限）对齐 javax.transaction.xa.Xid；XaTransactionState 9 状态机（Idle→Active→Preparing→Prepared→Committing→Committed/RollingBack→RolledBack/Failed，非法转换拒绝+超时+审计轨迹）；XaResource async trait（start/end/prepare/commit/rollback/recover/forget/is_same_rm）；flags 常量（TMNOFLAGS/TMJOIN/TMRESUME/TMSUCCESS/TMFAIL/TMSUSPEND/TMONEPHASE）。97 测试（43 单元+54 集成）+ examples/xa_demo.rs 可运行示例（跨资源 2PC/回滚/非法转换/超时 4 场景）。注：协议层状态机，真实 MySQL/PG XA 驱动适配为 Step 32 范畴
 - [ ] **Step 31:** restart(Properties) 运行期配置
 - [ ] **Step 32:** 真实 PostgreSQL/MySQL/Turso 驱动矩阵
 

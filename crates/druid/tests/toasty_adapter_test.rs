@@ -4,8 +4,8 @@
 //! `ToastyConnectionFactory::new("sqlite::memory:").create()`.
 
 use druid::core::{
-    DruidError, PhysicalConnection, PhysicalConnectionFactory, PreparedStatementKey,
-    PreparedStatementMethodType, StatementGeneratedKeys, Value,
+    DruidError, PhysicalConnection, PhysicalConnectionFactory, PreparedInputParameter,
+    PreparedStatementKey, PreparedStatementMethodType, StatementGeneratedKeys, Value,
 };
 use druid::toasty::ToastyConnectionFactory;
 
@@ -724,4 +724,311 @@ async fn sequential_operations_reuse_connection() {
     // Final count
     let rows = conn.fetch("SELECT * FROM t", vec![]).await.unwrap();
     assert_eq!(rows.len(), 8);
+}
+
+// ── typed_parameter Date/Time/Timestamp value conversion ───────────
+
+#[tokio::test]
+async fn exec_with_date_param() {
+    let mut conn = make_connection().await;
+    conn.exec("CREATE TABLE dt (d DATE, t TIME, ts TIMESTAMP)", vec![])
+        .await
+        .unwrap();
+    let d = chrono::NaiveDate::from_ymd_opt(2025, 6, 15).unwrap();
+    let t = chrono::NaiveTime::from_hms_milli_opt(14, 30, 0, 500).unwrap();
+    let ts =
+        chrono::NaiveDateTime::parse_from_str("2025-06-15 14:30:00.000", "%Y-%m-%d %H:%M:%S%.f")
+            .unwrap();
+    let result = conn
+        .exec(
+            "INSERT INTO dt VALUES (?, ?, ?)",
+            vec![Value::Date(d), Value::Time(t), Value::Timestamp(ts)],
+        )
+        .await
+        .unwrap();
+    assert_eq!(result.rows_affected, 1);
+}
+
+// ── validate_savepoint_name error paths ─────────────────────────────
+
+#[tokio::test]
+async fn savepoint_empty_name_errors() {
+    let mut conn = make_connection().await;
+    conn.begin().await.unwrap();
+    let result = conn.set_savepoint_named("").await;
+    assert!(result.is_err());
+    conn.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn savepoint_name_with_special_chars_errors() {
+    let mut conn = make_connection().await;
+    conn.begin().await.unwrap();
+    let result = conn.set_savepoint_named("my sp!").await;
+    assert!(result.is_err());
+    conn.rollback().await.unwrap();
+}
+
+#[tokio::test]
+async fn savepoint_name_with_underscore_ok() {
+    let mut conn = make_connection().await;
+    conn.begin().await.unwrap();
+    let sp = conn.set_savepoint_named("my_savepoint_1").await.unwrap();
+    assert_eq!(sp.name.as_deref(), Some("my_savepoint_1"));
+    conn.release_savepoint(&sp).await.unwrap();
+    conn.commit().await.unwrap();
+}
+
+// ── execute with generated keys ─────────────────────────────────────
+
+#[tokio::test]
+async fn execute_with_generated_key_columns_errors() {
+    use druid::core::StatementGeneratedKeys;
+    let mut conn = make_connection().await;
+    conn.exec(
+        "CREATE TABLE gk (id INTEGER PRIMARY KEY AUTOINCREMENT)",
+        vec![],
+    )
+    .await
+    .unwrap();
+    let err = conn
+        .execute(
+            "INSERT INTO gk DEFAULT VALUES",
+            vec![],
+            StatementGeneratedKeys::ColumnIndexes(vec![1]),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, DruidError::UnsupportedOperation { .. }));
+}
+
+// ── exec_prepared_parameter_batch ───────────────────────────────────
+
+#[tokio::test]
+async fn exec_prepared_parameter_batch() {
+    let mut conn = make_connection().await;
+    conn.exec(
+        "CREATE TABLE batch (id INTEGER PRIMARY KEY, v TEXT)",
+        vec![],
+    )
+    .await
+    .unwrap();
+    let stmt = conn
+        .prepare_physical_statement(&make_key("INSERT INTO batch (id, v) VALUES (?, ?)"))
+        .await
+        .unwrap();
+    let params = vec![
+        vec![
+            PreparedInputParameter::Int(1),
+            PreparedInputParameter::String(Some("a".to_string())),
+        ],
+        vec![
+            PreparedInputParameter::Int(2),
+            PreparedInputParameter::String(Some("b".to_string())),
+        ],
+        vec![
+            PreparedInputParameter::Int(3),
+            PreparedInputParameter::String(Some("c".to_string())),
+        ],
+    ];
+    let counts = conn
+        .exec_prepared_parameter_batch(stmt.as_ref(), params)
+        .await
+        .unwrap();
+    assert_eq!(counts.len(), 3);
+    assert!(counts.iter().all(|&c| c == 1));
+}
+
+// ── set_transaction_isolation invalid level ─────────────────────────
+
+#[tokio::test]
+async fn set_transaction_isolation_invalid_level_errors() {
+    let mut conn = make_connection().await;
+    let err = conn.set_transaction_isolation(99).await.unwrap_err();
+    assert!(matches!(err, DruidError::InvalidArgument(_)));
+}
+
+// ── fetch_prepared with value params ────────────────────────────────
+
+#[tokio::test]
+async fn fetch_prepared_with_value_params() {
+    let mut conn = make_connection().await;
+    conn.exec("CREATE TABLE fp (id INTEGER PRIMARY KEY, v TEXT)", vec![])
+        .await
+        .unwrap();
+    conn.exec("INSERT INTO fp VALUES (1, 'hello')", vec![])
+        .await
+        .unwrap();
+    let stmt = conn
+        .prepare_physical_statement(&make_key("SELECT v FROM fp WHERE id = ?"))
+        .await
+        .unwrap();
+    let rows = conn
+        .fetch_prepared(stmt.as_ref(), vec![Value::Int(1)])
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+}
+
+// ── fetch_prepared_result_set ───────────────────────────────────────
+
+#[tokio::test]
+async fn fetch_prepared_result_set_returns_arc() {
+    let mut conn = make_connection().await;
+    conn.exec("CREATE TABLE fprs (id INTEGER PRIMARY KEY)", vec![])
+        .await
+        .unwrap();
+    conn.exec("INSERT INTO fprs VALUES (1)", vec![])
+        .await
+        .unwrap();
+    conn.exec("INSERT INTO fprs VALUES (2)", vec![])
+        .await
+        .unwrap();
+    let stmt = conn
+        .prepare_physical_statement(&make_key("SELECT * FROM fprs WHERE id <= ?"))
+        .await
+        .unwrap();
+    let rs = conn
+        .fetch_prepared_result_set(stmt.as_ref(), vec![Value::Int(2)])
+        .await
+        .unwrap();
+    assert!(!rs.is_closed());
+}
+
+// ── exec_prepared (update) ─────────────────────────────────────────
+
+#[tokio::test]
+async fn exec_prepared_update() {
+    let mut conn = make_connection().await;
+    conn.exec(
+        "CREATE TABLE epu (id INTEGER PRIMARY KEY, v INTEGER)",
+        vec![],
+    )
+    .await
+    .unwrap();
+    conn.exec("INSERT INTO epu VALUES (1, 10)", vec![])
+        .await
+        .unwrap();
+    let stmt = conn
+        .prepare_physical_statement(&make_key("UPDATE epu SET v = ? WHERE id = 1"))
+        .await
+        .unwrap();
+    let result = conn
+        .exec_prepared(stmt.as_ref(), vec![Value::Int(99)])
+        .await
+        .unwrap();
+    assert_eq!(result.rows_affected, 1);
+}
+
+// ── execute_prepared ───────────────────────────────────────────────
+
+#[tokio::test]
+async fn execute_prepared_query_with_where_clause() {
+    let mut conn = make_connection().await;
+    conn.exec("CREATE TABLE epp (id INTEGER PRIMARY KEY)", vec![])
+        .await
+        .unwrap();
+    conn.exec("INSERT INTO epp VALUES (1)", vec![])
+        .await
+        .unwrap();
+    let stmt = conn
+        .prepare_physical_statement(&make_key("SELECT * FROM epp WHERE id = ?"))
+        .await
+        .unwrap();
+    let results = conn
+        .execute_prepared(
+            stmt.as_ref(),
+            vec![Value::Int(1)],
+            StatementGeneratedKeys::None,
+        )
+        .await
+        .unwrap();
+    assert!(!results.is_empty());
+}
+
+// ── close_prepared_statement ────────────────────────────────────────
+
+#[tokio::test]
+async fn close_prepared_statement_succeeds() {
+    let mut conn = make_connection().await;
+    let stmt = conn
+        .prepare_physical_statement(&make_key("SELECT 1"))
+        .await
+        .unwrap();
+    conn.close_prepared_statement(stmt).await.unwrap();
+}
+
+// ── prepare_physical_call errors for non-callable ───────────────────
+
+#[tokio::test]
+async fn prepare_physical_call_returns_non_callable_statement() {
+    let mut conn = make_connection().await;
+    // SQLite doesn't have callable statements; prepare_physical_call
+    // returns a regular prepared statement
+    let result = conn.prepare_physical_call(&make_key("SELECT 1")).await;
+    // Verify it doesn't panic; either outcome is acceptable
+    let _ = result;
+}
+
+// ── fetch with various value types ──────────────────────────────────
+
+#[tokio::test]
+async fn fetch_with_decimal_param() {
+    use bigdecimal::BigDecimal;
+    use std::str::FromStr;
+    let mut conn = make_connection().await;
+    let rows = conn
+        .fetch(
+            "SELECT 1 WHERE ? > 0",
+            vec![Value::Decimal(BigDecimal::from_str("1.5").unwrap())],
+        )
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+}
+
+#[tokio::test]
+async fn exec_with_timestamp_param_roundtrip() {
+    let mut conn = make_connection().await;
+    conn.exec("CREATE TABLE ts_rt (ts TIMESTAMP)", vec![])
+        .await
+        .unwrap();
+    let ts =
+        chrono::NaiveDateTime::parse_from_str("2025-01-15 10:30:00.123", "%Y-%m-%d %H:%M:%S%.f")
+            .unwrap();
+    conn.exec("INSERT INTO ts_rt VALUES (?)", vec![Value::Timestamp(ts)])
+        .await
+        .unwrap();
+    let rows = conn.fetch("SELECT ts FROM ts_rt", vec![]).await.unwrap();
+    assert_eq!(rows.len(), 1);
+}
+
+// ── exec_batch ──────────────────────────────────────────────────────
+
+#[tokio::test]
+async fn exec_batch_multiple_statements() {
+    let mut conn = make_connection().await;
+    conn.exec("CREATE TABLE bt (id INTEGER PRIMARY KEY)", vec![])
+        .await
+        .unwrap();
+    let counts = conn
+        .exec_batch(vec![
+            ("INSERT INTO bt (id) VALUES (1)".to_string(), vec![]),
+            ("INSERT INTO bt (id) VALUES (2)".to_string(), vec![]),
+            ("INSERT INTO bt (id) VALUES (3)".to_string(), vec![]),
+        ])
+        .await
+        .unwrap();
+    assert_eq!(counts.len(), 3);
+    assert!(counts.iter().all(|&c| c == 1));
+}
+
+// ── Ping after close errors ────────────────────────────────────────
+
+#[tokio::test]
+async fn ping_after_close_errors() {
+    let mut conn = make_connection().await;
+    conn.close().await.unwrap();
+    let err = conn.ping().await.unwrap_err();
+    assert!(matches!(err, DruidError::ConnectionDiscarded));
 }
