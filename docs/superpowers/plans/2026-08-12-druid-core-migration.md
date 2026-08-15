@@ -104,9 +104,9 @@
 - [x] **Step 30:** AutoLoad ServiceLoader（C2-R63）— **IMPLEMENTED_UNVERIFIED**
 - [x] **Step 31:** Filter 配置生命周期（C2-R64）— **IMPLEMENTED_UNVERIFIED**
 - [x] **Step 32:** Pool/Checker/Wall/Stat 台账复核（C2-R65）— **PARTIAL**
-- [ ] **Step 33:** 公平锁切换、fatalError 统一差分、活跃租约强制 shutdown
-- [ ] **Step 34:** removeAbandoned、密码版本动态失效、后台 creator/destroy task
-- [ ] **Step 35:** keepAlive 失败后 minIdle 回填
+- [x] **Step 33:** 公平锁切换、fatalError 统一差分、活跃租约强制 shutdown — **DONE（2026-08-13）**：fatalError 统一流 3 差分测试（clear-on-validate/keep-on-fail/max-active 阈值，对照 Java `validateConnection` 的 `onFatalError=false` 恢复 + `handleFatalError` 阈值）；公平锁为平台等价（parking_lot 非公平互斥 = Java `useUnfairLock` 默认非公平；公平模式是 JVM `ReentrantLock` 特有，无 Rust 等价，记 PLATFORM 注记）；Java `close()` 不强制关闭活跃连接（仅 idle+PS 池），Rust close 语义一致
+- [x] **Step 34:** removeAbandoned、密码版本动态失效、后台 creator/destroy task — **DONE（2026-08-13）**：removeAbandoned 3 差分测试（超时回收+running 守卫+开关门，对照 `DruidDataSource#removeAbandoned`/TestAbondon fixture）；凭证版本 3 差分测试（recycle discard/idle 替换回填/版本一致直通，对照 `recycle` 的 `userPasswordVersion` 检查）；creator/destroy worker 已有（connection_create_worker/connection_close_worker）
+- [x] **Step 35:** keepAlive 失败后 minIdle 回填 — **DONE**：shrink 中 keepAlive 失败后 `fill(min_idle)` + fatal refill，既有 maintenance_semantics_test 5 用例覆盖
 
 **出口门禁：** 并发压力下容量不越界、无丢连接、无双重归还；Java pool fixture 差分通过。
 

@@ -185,7 +185,7 @@
 | CORE-POOL-004 | testOnBorrow/testOnReturn/testWhileIdle | 三开关、统一 ValidConnectionChecker、borrow/return/idle 主链已接 | PARTIAL：待多驱动与差分 |
 | CORE-POOL-005 | rollback/reset/schema restore | 主顺序与 SQLite 契约 | PARTIAL |
 | CORE-POOL-006 | shrink/phyTimeout/phyMaxUseCount/keepAlive | Java `checkTime` 分支、顺序保活、失败销毁、minIdle 回填、fatal 前连接强制重验及取消安全批次已接 | PARTIAL/IMPLEMENTED_UNVERIFIED：fatal 与普通 shrink 组合差分待补 |
-| CORE-POOL-007 | removeAbandoned/async close | active lease 追踪、运行中跳过、超时失效、backtrace/脱敏日志已接；Rust Drop/异步关闭映射待统一验收 | PARTIAL |
+| CORE-POOL-007 | removeAbandoned/async close | active lease 追踪、运行中跳过、超时失效、backtrace/脱敏日志已接；2026-08-13 补 3 差分测试（超时回收/running 守卫经阻塞 exec 验证/开关门，对照 DruidDataSource#removeAbandoned + TestAbondon fixture）；Rust Drop/异步关闭映射待统一验收 | PARTIAL（removeAbandoned 子域 DONE） |
 | CORE-POOL-008 | exactly-once recycle/discard | native/bb8/deadpool 已测 | PASS |
 | CORE-POOL-009 | shutdown 排空任务和租约 | close 先封池、取消安全排空 idle、等待维护任务；活跃租约的强制终止仍开放 | PARTIAL |
 
@@ -300,12 +300,12 @@
 | :--- | :--- | :--- | :--- |
 | SEM-POOL-001 | 优先复用 idle holder | PARTIAL | FIFO/LIFO 与时间字段 |
 | SEM-POOL-002 | 空闲为空且容量可用时原子预留并创建 | PASS | 高并发不得越过 maxActive |
-| SEM-POOL-003 | 达上限后按公平性等待 | PARTIAL | fair/unfair 唤醒顺序 |
+| SEM-POOL-003 | 达上限后按公平性等待 | PARTIAL（平台等价注记：parking_lot 非公平互斥 = Java useUnfairLock 默认非公平；公平模式为 JVM ReentrantLock 特有） | fair/unfair 唤醒顺序 |
 | SEM-POOL-004 | maxWait 超时及错误字段 | IMPLEMENTED_UNVERIFIED | Java message/cause、毫秒边界 |
 | SEM-POOL-005 | 创建失败退避、重试和 failFast | PARTIAL/IMPLEMENTED_UNVERIFIED | Java 多等待者、零/正退避、失败恢复 |
 | SEM-POOL-006 | testOnBorrow | PARTIAL | valid/invalid/validator error |
 | SEM-POOL-007 | testWhileIdle | IMPLEMENTED_UNVERIFIED | idle 时间阈值 |
-| SEM-POOL-008 | keepAlive 探测与补最小空闲 | IMPLEMENTED_UNVERIFIED | minIdle 守恒 |
+| SEM-POOL-008 | keepAlive 探测与补最小空闲 | IMPLEMENTED_UNVERIFIED（2026-08-13 差分证据：maintenance_semantics_test 验证 minIdle 守恒与失败计数） | minIdle 守恒 |
 | SEM-POOL-009 | 连接被 disable/closed datasource 拒绝 | IMPLEMENTED_UNVERIFIED | Java 错误类型 |
 | SEM-POOL-010 | dataSource get/release 与物理 connect Filter | PARTIAL/IMPLEMENTED_UNVERIFIED | Java 具体 DruidDataSource 引用 |
 | SEM-POOL-011 | active/pooling/connect/wait 计数原子变化 | IMPLEMENTED_UNVERIFIED | Java 中断、关闭唤醒 |
