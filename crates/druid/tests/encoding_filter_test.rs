@@ -1,4 +1,6 @@
-use druid::core::{EncodingConvertFilter, MySQL8DateTimeSqlTypeFilter, Value};
+use druid::core::{
+    AfterFilter, BeforeFilter, EncodingConvertFilter, MySQL8DateTimeSqlTypeFilter, Value,
+};
 
 // ── EncodingConvertFilter ──────────────────────────────────────
 
@@ -84,6 +86,37 @@ fn encoding_filter_debug() {
     let f = EncodingConvertFilter::new(None, None).unwrap();
     let dbg = format!("{:?}", f);
     assert!(dbg.contains("EncodingConvertFilter"));
+}
+
+#[test]
+fn encoding_filter_clone() {
+    let f = EncodingConvertFilter::new(None, None).unwrap();
+    let f2 = f.clone();
+    let encoded = f2.encode("hello").unwrap();
+    assert_eq!(encoded, "hello");
+}
+
+#[test]
+fn encoding_filter_before_filter_name() {
+    let f = EncodingConvertFilter::new(None, None).unwrap();
+    assert_eq!(druid::core::BeforeFilter::name(&f), "encoding");
+    assert_eq!(druid::core::AfterFilter::name(&f), "encoding");
+}
+
+#[test]
+fn encoding_filter_prepare_statement_sql() {
+    let f = EncodingConvertFilter::new(None, None).unwrap();
+    let sql = f.prepare_statement_sql("SELECT 1").unwrap();
+    assert_eq!(sql, "SELECT 1");
+}
+
+#[test]
+fn encoding_filter_statement_add_batch_sql() {
+    let f = EncodingConvertFilter::new(None, None).unwrap();
+    let sql = f
+        .statement_add_batch_sql("INSERT INTO t VALUES (1)")
+        .unwrap();
+    assert_eq!(sql, "INSERT INTO t VALUES (1)");
 }
 
 // ── MySQL8DateTimeSqlTypeFilter ────────────────────────────────
