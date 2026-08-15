@@ -82,3 +82,29 @@ fn rdbc_result_set_stat_updates_opening_peak_atomically() {
     assert_eq!(stat.alive_millis_max(), 0);
     assert_eq!(stat.alive_millis_min(), 0);
 }
+
+#[test]
+fn result_set_stat_default_trait() {
+    let stat = RdbcResultSetStat::default();
+    assert_eq!(stat.open_count(), 0);
+}
+
+#[test]
+fn result_set_stat_alive_millis_min_max() {
+    let stat = RdbcResultSetStat::new();
+    stat.before_open();
+    stat.after_close(10_000_000); // 10ms
+    stat.before_open();
+    stat.after_close(50_000_000); // 50ms
+    assert!(stat.alive_millis_min() <= stat.alive_millis_max());
+    assert!(stat.alive_millis_max() >= 50);
+}
+
+#[test]
+fn result_set_stat_multiple_errors() {
+    let stat = RdbcResultSetStat::new();
+    stat.error(DruidError::Other("err1".to_owned()));
+    stat.error(DruidError::Other("err2".to_owned()));
+    stat.error(DruidError::Other("err3".to_owned()));
+    assert_eq!(stat.error_count(), 3);
+}
