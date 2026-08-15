@@ -38,3 +38,20 @@ fn config_tools_decrypt_with_public_key_text_none() {
 fn config_tools_get_public_key_none() {
     let _ = ConfigTools::get_public_key(None);
 }
+
+#[test]
+fn config_tools_encrypt_with_key_text_none_key() {
+    let _ = ConfigTools::encrypt_with_key_text(None, "hello");
+}
+
+#[test]
+fn config_tools_decrypt_none_cipher_text() {
+    let result = ConfigTools::decrypt(None).unwrap();
+    assert!(result.is_none());
+}
+
+#[test]
+fn config_tools_decrypt_with_public_key_text_none_both() {
+    let result = ConfigTools::decrypt_with_public_key_text(None, None).unwrap();
+    assert!(result.is_none());
+}
