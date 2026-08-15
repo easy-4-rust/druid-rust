@@ -442,3 +442,305 @@ fn table_stat_mode_clone_eq() {
     let m2 = m;
     assert_eq!(m, m2);
 }
+
+// ── TableStat mode mark ──────────────────────────────────────────
+
+#[test]
+fn table_stat_mode_mark() {
+    assert_eq!(TableStatMode::Insert.mark(), 1);
+    assert_eq!(TableStatMode::Desc.mark(), 2048);
+}
+
+// ── TableStat Display with multiple operation types ──────────────
+
+#[test]
+fn table_stat_display_all_operation_types() {
+    let mut stat = TableStat::default();
+    stat.increment_select_count();
+    stat.increment_update_count();
+    stat.increment_delete_count();
+    stat.increment_insert_count();
+    stat.increment_drop_count();
+    stat.increment_merge_count();
+    stat.increment_create_count();
+    stat.increment_alter_count();
+    stat.increment_create_index_count();
+    stat.increment_drop_index_count();
+    stat.increment_add_count();
+    stat.increment_add_partition_count();
+    stat.increment_analyze_count();
+    let s = format!("{}", stat);
+    // All names should appear
+    assert!(s.contains("Merge"));
+    assert!(s.contains("Insert"));
+    assert!(s.contains("Update"));
+    assert!(s.contains("Select"));
+    assert!(s.contains("Delete"));
+    assert!(s.contains("Drop"));
+    assert!(s.contains("Create"));
+    assert!(s.contains("Alter"));
+    assert!(s.contains("CreateIndex"));
+    assert!(s.contains("DropIndex"));
+    assert!(s.contains("Add"));
+    assert!(s.contains("AddPartition"));
+    assert!(s.contains("Analyze"));
+}
+
+// ── TableStat wrapping arithmetic ────────────────────────────────
+
+#[test]
+fn table_stat_increment_wraps_at_i32_max() {
+    let mut stat = TableStat::default();
+    stat.set_select_count(i32::MAX);
+    stat.increment_select_count();
+    assert_eq!(stat.select_count(), i32::MIN);
+}
+
+// ── TableStatName Display with normalized identifiers ────────────
+
+#[test]
+fn table_stat_name_display_bracket_quoted() {
+    let name = TableStatName::new("[USERS]");
+    let s = format!("{}", name);
+    assert_eq!(s, "USERS");
+}
+
+#[test]
+fn table_stat_name_display_double_quoted() {
+    let name = TableStatName::new("\"users\"");
+    let s = format!("{}", name);
+    assert_eq!(s, "users");
+}
+
+#[test]
+fn table_stat_name_display_backtick_quoted() {
+    let name = TableStatName::new("`users`");
+    let s = format!("{}", name);
+    assert_eq!(s, "users");
+}
+
+#[test]
+fn table_stat_name_display_single_quoted() {
+    let name = TableStatName::new("'users'");
+    let s = format!("{}", name);
+    assert_eq!(s, "users");
+}
+
+#[test]
+fn table_stat_name_display_plain() {
+    let name = TableStatName::new("users");
+    let s = format!("{}", name);
+    assert_eq!(s, "users");
+}
+
+#[test]
+fn table_stat_name_hash_case_insensitive() {
+    let n1 = TableStatName::new("USERS");
+    let n2 = TableStatName::new("users");
+    // Java FNV-1a normalizes to lowercase
+    assert_eq!(n1, n2);
+}
+
+// ── TableStatColumn Display with normalized identifiers ──────────
+
+#[test]
+fn table_stat_column_display_bracket_quoted_table_and_column() {
+    let col = TableStatColumn::new(Some("[USERS]".to_owned()), "[ID]");
+    let s = format!("{}", col);
+    // After normalization, brackets removed, backtick-dot replaced
+    assert!(s.contains("USERS"));
+    assert!(s.contains("ID"));
+}
+
+#[test]
+fn table_stat_column_display_backtick_quoted() {
+    let col = TableStatColumn::new(Some("`users`".to_owned()), "`id`");
+    let s = format!("{}", col);
+    assert!(s.contains("users"));
+    assert!(s.contains("id"));
+}
+
+// ── TableStatColumn hash for multi-part table names ──────────────
+
+#[test]
+fn table_stat_column_hash_multi_part_table() {
+    let col1 = TableStatColumn::new(Some("schema.users".to_owned()), "id");
+    let col2 = TableStatColumn::new(Some("schema.users".to_owned()), "id");
+    assert_eq!(col1, col2);
+    assert_ne!(col1.hash_code_64(), 0);
+}
+
+#[test]
+fn table_stat_column_hash_differs_by_table() {
+    let col1 = TableStatColumn::new(Some("a".to_owned()), "id");
+    let col2 = TableStatColumn::new(Some("b".to_owned()), "id");
+    assert_ne!(col1.hash_code_64(), col2.hash_code_64());
+}
+
+// ── TableStatColumn full_name caching ────────────────────────────
+
+#[test]
+fn table_stat_column_full_name_returns_cached_value() {
+    let col = TableStatColumn::new(Some("users".to_owned()), "id");
+    let first = col.full_name().to_string();
+    let second = col.full_name().to_string();
+    assert_eq!(first, second);
+    assert_eq!(first, "users.id");
+}
+
+// ── TableStatColumn with_hash ────────────────────────────────────
+
+#[test]
+fn table_stat_column_with_hash_custom() {
+    let col = TableStatColumn::with_hash(Some("t".to_owned()), "c", 12345);
+    assert_eq!(col.hash_code_64(), 12345);
+    assert_eq!(col.table(), Some("t"));
+    assert_eq!(col.name(), "c");
+}
+
+// ── TableStatCondition Display with string values (java_value) ──
+
+#[test]
+fn table_stat_condition_display_with_string_value() {
+    let col = TableStatColumn::new(None, "name");
+    let mut cond = TableStatCondition::new(col, "=");
+    cond.add_value(Value::String("Alice".to_owned()));
+    let s = format!("{}", cond);
+    assert!(s.contains("name"));
+    assert!(s.contains("="));
+    assert!(s.contains("Alice"));
+}
+
+#[test]
+fn table_stat_condition_display_with_null_value() {
+    let col = TableStatColumn::new(None, "name");
+    let mut cond = TableStatCondition::new(col, "IS");
+    cond.add_value(Value::Null);
+    let s = format!("{}", cond);
+    assert!(s.contains("null"));
+}
+
+#[test]
+fn table_stat_condition_display_with_number_value() {
+    let col = TableStatColumn::new(None, "id");
+    let mut cond = TableStatCondition::new(col, ">");
+    cond.add_value(Value::Number(42.into()));
+    let s = format!("{}", cond);
+    assert!(s.contains("42"));
+}
+
+#[test]
+fn table_stat_condition_display_multiple_string_values() {
+    let col = TableStatColumn::new(None, "name");
+    let mut cond = TableStatCondition::new(col, "IN");
+    cond.add_value(Value::String("Alice".to_owned()));
+    cond.add_value(Value::String("Bob".to_owned()));
+    let s = format!("{}", cond);
+    assert!(s.contains("("));
+    assert!(s.contains(")"));
+    assert!(s.contains("Alice"));
+    assert!(s.contains("Bob"));
+}
+
+// ── TableStatCondition column accessor ───────────────────────────
+
+#[test]
+fn table_stat_condition_column_accessor() {
+    let col = TableStatColumn::new(None, "id");
+    let cond = TableStatCondition::new(col, "=");
+    assert_eq!(cond.column().name(), "id");
+}
+
+// ── TableStatRelationship left/right accessors ───────────────────
+
+#[test]
+fn table_stat_relationship_left_right_accessors() {
+    let left = TableStatColumn::new(Some("a".to_owned()), "id");
+    let right = TableStatColumn::new(Some("b".to_owned()), "id");
+    let rel = TableStatRelationship::new(left, right, "=");
+    assert_eq!(rel.left().name(), "id");
+    assert_eq!(rel.right().name(), "id");
+    assert_eq!(rel.left().table(), Some("a"));
+    assert_eq!(rel.right().table(), Some("b"));
+}
+
+// ── TableStatName Hash trait ─────────────────────────────────────
+
+#[test]
+fn table_stat_name_hash_trait_different_names() {
+    let n1 = TableStatName::new("users");
+    let n2 = TableStatName::new("orders");
+    let mut h1 = DefaultHasher::new();
+    let mut h2 = DefaultHasher::new();
+    n1.hash(&mut h1);
+    n2.hash(&mut h2);
+    assert_ne!(h1.finish(), h2.finish());
+}
+
+// ── TableStatColumn Hash trait ───────────────────────────────────
+
+#[test]
+fn table_stat_column_hash_trait_different() {
+    let c1 = TableStatColumn::new(None, "id");
+    let c2 = TableStatColumn::new(None, "name");
+    let mut h1 = DefaultHasher::new();
+    let mut h2 = DefaultHasher::new();
+    c1.hash(&mut h1);
+    c2.hash(&mut h2);
+    assert_ne!(h1.finish(), h2.finish());
+}
+
+// ── TableStatColumn clone preserves all flags ────────────────────
+
+#[test]
+fn table_stat_column_clone_preserves_all_flags() {
+    let mut col = TableStatColumn::new(Some("t".to_owned()), "c");
+    col.set_where(true);
+    col.set_selec(true);
+    col.set_group_by(true);
+    col.set_having(true);
+    col.set_join(true);
+    col.set_primary_key(true);
+    col.set_unique(true);
+    col.set_update(true);
+    col.set_data_type(Some("VARCHAR".to_owned()));
+    let col2 = col.clone();
+    assert!(col2.is_where());
+    assert!(col2.is_select());
+    assert!(col2.is_group_by());
+    assert!(col2.is_having());
+    assert!(col2.is_join());
+    assert!(col2.is_primary_key());
+    assert!(col2.is_unique());
+    assert!(col2.is_update());
+    assert_eq!(col2.data_type(), Some("VARCHAR"));
+}
+
+// ── TableStatCondition ne by operator ────────────────────────────
+
+#[test]
+fn table_stat_condition_ne_by_operator() {
+    let col = TableStatColumn::new(None, "id");
+    let c1 = TableStatCondition::new(col.clone(), "=");
+    let c2 = TableStatCondition::new(col, "!=");
+    assert_ne!(c1, c2);
+}
+
+// ── TableStatColumn ne by hash ───────────────────────────────────
+
+#[test]
+fn table_stat_column_ne_by_hash() {
+    let c1 = TableStatColumn::with_hash(None, "a", 1);
+    let c2 = TableStatColumn::with_hash(None, "a", 2);
+    assert_ne!(c1, c2);
+}
+
+// ── TableStatCondition display with backtick-quoted column ───────
+
+#[test]
+fn table_stat_condition_display_with_quoted_column() {
+    let col = TableStatColumn::new(Some("`t`".to_owned()), "`id`");
+    let cond = TableStatCondition::new(col, "IS NULL");
+    let s = format!("{}", cond);
+    assert!(s.contains("IS NULL"));
+}

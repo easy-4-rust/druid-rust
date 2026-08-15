@@ -132,6 +132,7 @@ pub mod valid_connection_checker_adapter;
 pub mod value;
 pub mod wrapper;
 pub mod wrapper_adapter;
+pub mod xa;
 
 pub use crate::rdbc::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
 pub use abstract_oracle_exception_sorter::{
@@ -288,3 +289,7 @@ pub use valid_connection_checker_adapter::ValidConnectionCheckerAdapter;
 pub use value::Value;
 pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
 pub use wrapper_adapter::WrapperAdapter;
+pub use xa::{
+    flags as xa_flags, XaOperation, XaPrepareResult, XaResource, XaState, XaStateTransitionError,
+    XaStateTransitionRecord, XaTransactionState, Xid,
+};

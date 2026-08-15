@@ -357,6 +357,11 @@ impl WallConfigBuilder {
         self
     }
     #[must_use]
+    pub fn alter_table_allow(mut self, v: bool) -> Self {
+        self.0.alter_table_allow = v;
+        self
+    }
+    #[must_use]
     pub fn update_must_have_where(mut self, v: bool) -> Self {
         self.0.update_must_have_where = v;
         self
