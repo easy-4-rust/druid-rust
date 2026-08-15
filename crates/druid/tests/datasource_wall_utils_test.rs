@@ -3,8 +3,7 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory,
-    Row, Value,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
 };
 use druid::pool::{DruidDataSource, DruidPool};
 use druid::sql::{WallConfig, WallVisitorUtils};
