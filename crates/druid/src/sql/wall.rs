@@ -1,14 +1,15 @@
-//! 对应 Java 类：com.alibaba.druid.wall.WallProvider + WallVisitor
+//! 对应 Java 类：`com.alibaba.druid.wall.WallProvider` + `WallVisitor`
 //!
-//! SQL 防火墙，基于 sqlparser-rs AST 检查 SQL 安全性。
+//! SQL 防火墙，基于 `sqlparser-rs` AST 检查 SQL 安全性。
 
 use super::wall_config::WallConfig;
 use super::wall_violation::WallViolation;
 use super::{DbType, SqlUtils, WallContext, WallUpdateCheckItem};
 use parking_lot::RwLock;
 use sqlparser::ast::{
-    visit_expressions, AssignmentTarget, BinaryOperator, Expr, FromTable, ObjectName, ObjectType,
-    Query, Select, SelectItem, SetExpr, Statement, TableFactor, Value,
+    visit_expressions, AssignmentTarget, BinaryOperator, DescribeAlias, Expr, FromTable,
+    ObjectName, ObjectType, Query, Select, SelectItem, SetExpr, SetOperator, Statement,
+    TableFactor, Value,
 };
 use sqlparser::parser::Parser;
 use sqlparser::tokenizer::{Token, Tokenizer, Whitespace};
@@ -93,21 +94,42 @@ impl Wall {
         let mut update_check_items = Vec::new();
         for stmt in ast {
             self.check_statement(stmt, &mut violations);
-            self.collect_wall_context_warnings(stmt);
+            Self::collect_wall_context_warnings(stmt);
             self.collect_update_check_items(stmt, &mut violations, &mut update_check_items);
             let _: ControlFlow<()> = visit_expressions(stmt, |expression| {
-                if let Expr::Function(function) = expression {
-                    let function_name = function.name.to_string().to_ascii_lowercase();
-                    if self
-                        .config
-                        .deny_functions
-                        .iter()
-                        .any(|deny| function_name.eq_ignore_ascii_case(deny))
-                    {
-                        Self::push_unique(
-                            &mut violations,
-                            WallViolation::DeniedFunction(function_name),
-                        );
+                if self.config.function_check {
+                    if let Expr::Function(function) = expression {
+                        let function_name = function.name.to_string().to_ascii_lowercase();
+                        if self
+                            .config
+                            .deny_functions
+                            .iter()
+                            .any(|deny| function_name.eq_ignore_ascii_case(deny))
+                        {
+                            Self::push_unique(
+                                &mut violations,
+                                WallViolation::DeniedFunction(function_name),
+                            );
+                        }
+                    }
+                }
+                if self.config.variant_check {
+                    if let Expr::Identifier(identifier) = expression {
+                        if identifier.value.starts_with('@') {
+                            let variant_name = identifier
+                                .value
+                                .trim_start_matches('@')
+                                .to_ascii_lowercase();
+                            if self.config.deny_variants.iter().any(|deny| {
+                                deny.eq_ignore_ascii_case(&identifier.value)
+                                    || deny.eq_ignore_ascii_case(&variant_name)
+                            }) {
+                                Self::push_unique(
+                                    &mut violations,
+                                    WallViolation::DeniedVariant(identifier.value.clone()),
+                                );
+                            }
+                        }
                     }
                 }
                 if self.config.must_parameterized
@@ -134,54 +156,29 @@ impl Wall {
                 }
                 self.check_query(query, v);
             }
-            Statement::Delete(delete) => {
-                if !self.config.delete_allow {
-                    v.push(WallViolation::OperationNotAllowed("DELETE".to_owned()));
-                }
-                if delete.selection.is_none() && self.config.delete_must_have_where {
-                    v.push(WallViolation::DeleteWithoutWhere);
-                }
-                if self.config.delete_where_alway_true_check
-                    && delete.selection.as_ref().is_some_and(is_always_true)
-                {
-                    Self::push_unique(
-                        v,
-                        WallViolation::AlwaysTrueCondition("DELETE WHERE".to_owned()),
-                    );
-                }
-                self.check_from_table(&delete.from, v);
-            }
+            Statement::Delete(delete) => self.check_delete_statement(delete, v),
             Statement::Update {
                 table, selection, ..
-            } => {
-                if !self.config.update_allow {
-                    v.push(WallViolation::OperationNotAllowed("UPDATE".to_owned()));
-                }
-                if selection.is_none() && self.config.update_must_have_where {
-                    v.push(WallViolation::UpdateWithoutWhere);
-                }
-                if self.config.update_where_alway_true_check
-                    && selection.as_ref().is_some_and(is_always_true)
-                {
-                    Self::push_unique(
-                        v,
-                        WallViolation::AlwaysTrueCondition("UPDATE WHERE".to_owned()),
-                    );
-                }
-                self.check_table_factor(&table.relation, v);
-            }
+            } => self.check_update_statement(table, selection.as_ref(), v),
             Statement::Insert(insert) => {
                 if !self.config.insert_allow {
                     v.push(WallViolation::OperationNotAllowed("INSERT".to_owned()));
                 }
                 self.check_object_name(&insert.table_name, v);
+                self.check_read_only(&insert.table_name, v);
             }
             Statement::Drop {
                 object_type, names, ..
             } => {
-                if *object_type == ObjectType::Table && !self.config.drop_table_allow {
-                    for name in names {
-                        v.push(WallViolation::DropTableNotAllowed(name.to_string()));
+                if !self.config.drop_table_allow {
+                    if *object_type == ObjectType::Table {
+                        for name in names {
+                            v.push(WallViolation::DropTableNotAllowed(name.to_string()));
+                        }
+                    } else {
+                        v.push(WallViolation::OperationNotAllowed(format!(
+                            "DROP {object_type}"
+                        )));
                     }
                 }
             }
@@ -191,40 +188,40 @@ impl Wall {
                 }
                 for target in table_names {
                     self.check_object_name(&target.name, v);
+                    self.check_read_only(&target.name, v);
                 }
             }
-            Statement::CreateTable(_) => {
-                if !self.config.create_table_allow {
-                    v.push(WallViolation::OperationNotAllowed(
-                        "CREATE TABLE".to_owned(),
-                    ));
+            Statement::CreateTable(_)
+            | Statement::AlterTable { .. }
+            | Statement::Commit { .. }
+            | Statement::Rollback { .. }
+            | Statement::StartTransaction { .. }
+            | Statement::SetVariable { .. }
+            | Statement::Use(_)
+            | Statement::Call(_)
+            | Statement::ShowFunctions { .. }
+            | Statement::ShowVariable { .. }
+            | Statement::ShowStatus { .. }
+            | Statement::ShowVariables { .. }
+            | Statement::ShowCreate { .. }
+            | Statement::ShowColumns { .. }
+            | Statement::ShowDatabases { .. }
+            | Statement::ShowSchemas { .. }
+            | Statement::ShowTables { .. }
+            | Statement::ShowViews { .. }
+            | Statement::ShowCollation { .. } => {
+                if let Some(violation) = self.statement_gate(stmt) {
+                    v.push(violation);
                 }
             }
-            Statement::AlterTable { .. } => {
-                if !self.config.alter_table_allow {
-                    v.push(WallViolation::OperationNotAllowed("ALTER TABLE".to_owned()));
-                }
-            }
-            Statement::Commit { .. } => {
-                if !self.config.commit_allow {
-                    v.push(WallViolation::OperationNotAllowed("COMMIT".to_owned()));
-                }
-            }
-            Statement::Rollback { .. } => {
-                if !self.config.rollback_allow {
-                    v.push(WallViolation::OperationNotAllowed("ROLLBACK".to_owned()));
-                }
-            }
-            Statement::StartTransaction { .. } => {
-                if !self.config.start_transaction_allow {
-                    v.push(WallViolation::OperationNotAllowed(
-                        "START TRANSACTION".to_owned(),
-                    ));
-                }
-            }
-            Statement::SetVariable { .. } => {
-                if !self.config.set_allow {
-                    v.push(WallViolation::OperationNotAllowed("SET".to_owned()));
+            // Java preVisitCheck：SQLExplainStatement → allow=true（无需配置）。
+            Statement::Explain { .. } => {}
+            Statement::ExplainTable {
+                describe_alias: DescribeAlias::Desc | DescribeAlias::Describe,
+                ..
+            } => {
+                if !self.config.describe_allow {
+                    v.push(WallViolation::OperationNotAllowed("DESCRIBE".to_owned()));
                 }
             }
             _ if !self.config.none_base_statement_allow => {
@@ -240,6 +237,79 @@ impl Wall {
         }
     }
 
+    /// DELETE 语句门控 + WHERE 语义 + 只读表检查。
+    ///
+    /// 对应 Java `WallVisitorUtils#checkDelete`。
+    fn check_delete_statement(&self, delete: &sqlparser::ast::Delete, v: &mut Vec<WallViolation>) {
+        if !self.config.delete_allow {
+            v.push(WallViolation::OperationNotAllowed("DELETE".to_owned()));
+        }
+        if delete.selection.is_none() && self.config.delete_must_have_where {
+            v.push(WallViolation::DeleteWithoutWhere);
+        }
+        if self.config.delete_where_alway_true_check
+            && delete.selection.as_ref().is_some_and(is_always_true)
+        {
+            Self::push_unique(
+                v,
+                WallViolation::AlwaysTrueCondition("DELETE WHERE".to_owned()),
+            );
+        }
+        self.check_condition_opt(delete.selection.as_ref(), v);
+        self.check_from_table(&delete.from, v);
+        for table_with_joins in tables_of(&delete.from) {
+            if let TableFactor::Table { name, .. } = &table_with_joins.relation {
+                self.check_read_only(name, v);
+            }
+        }
+    }
+
+    /// UPDATE 语句门控 + WHERE 语义 + 只读表检查。
+    ///
+    /// 对应 Java `WallVisitorUtils#checkUpdate`。
+    fn check_update_statement(
+        &self,
+        table: &sqlparser::ast::TableWithJoins,
+        selection: Option<&Expr>,
+        v: &mut Vec<WallViolation>,
+    ) {
+        if !self.config.update_allow {
+            v.push(WallViolation::OperationNotAllowed("UPDATE".to_owned()));
+        }
+        if selection.is_none() && self.config.update_must_have_where {
+            v.push(WallViolation::UpdateWithoutWhere);
+        }
+        if self.config.update_where_alway_true_check && selection.is_some_and(is_always_true) {
+            Self::push_unique(
+                v,
+                WallViolation::AlwaysTrueCondition("UPDATE WHERE".to_owned()),
+            );
+        }
+        self.check_condition_opt(selection, v);
+        self.check_table_factor(&table.relation, v);
+        if let TableFactor::Table { name, .. } = &table.relation {
+            self.check_read_only(name, v);
+        }
+    }
+
+    /// 单一布尔开关语句门控；对应 Java `preVisitCheck` 的 allow 位查表。
+    fn statement_gate(&self, stmt: &Statement) -> Option<WallViolation> {
+        let (allow, name): (bool, &str) = match stmt {
+            Statement::CreateTable(_) => (self.config.create_table_allow, "CREATE TABLE"),
+            Statement::AlterTable { .. } => (self.config.alter_table_allow, "ALTER TABLE"),
+            Statement::Commit { .. } => (self.config.commit_allow, "COMMIT"),
+            Statement::Rollback { .. } => (self.config.rollback_allow, "ROLLBACK"),
+            Statement::StartTransaction { .. } => {
+                (self.config.start_transaction_allow, "START TRANSACTION")
+            }
+            Statement::SetVariable { .. } => (self.config.set_allow, "SET"),
+            Statement::Use(_) => (self.config.use_allow, "USE"),
+            Statement::Call(_) => (self.config.call_allow, "CALL"),
+            _ => (self.config.show_allow, "SHOW"),
+        };
+        (!allow).then(|| WallViolation::OperationNotAllowed(name.to_owned()))
+    }
+
     fn check_query(&self, query: &Query, v: &mut Vec<WallViolation>) {
         if !self.config.limit_zero_allow && query.limit.as_ref().is_some_and(is_zero_literal) {
             Self::push_unique(v, WallViolation::LimitZeroNotAllowed);
@@ -251,7 +321,15 @@ impl Wall {
             SetExpr::Query(subquery) => {
                 self.check_query(subquery, v);
             }
-            SetExpr::SetOperation { left, right, .. } => {
+            SetExpr::SetOperation {
+                op, left, right, ..
+            } => {
+                if *op == SetOperator::Intersect && !self.config.intersect_allow {
+                    Self::push_unique(
+                        v,
+                        WallViolation::OperationNotAllowed("INTERSECT".to_owned()),
+                    );
+                }
                 if let SetExpr::Select(l) = &**left {
                     self.check_select(l, v);
                 }
@@ -296,9 +374,132 @@ impl Wall {
                 WallViolation::AlwaysTrueCondition("SELECT HAVING".to_owned()),
             );
         }
+        self.check_condition_opt(select.selection.as_ref(), v);
+        self.check_condition_opt(select.having.as_ref(), v);
         // 检查 FROM 子句中的表
         for table_with_joins in &select.from {
             self.check_table_factor(&table_with_joins.relation, v);
+        }
+    }
+
+    /// 对可选条件表达式执行 Java `WallVisitorUtils#checkCondition` 语义检查。
+    fn check_condition_opt(&self, expression: Option<&Expr>, v: &mut Vec<WallViolation>) {
+        if let Some(expression) = expression {
+            self.check_condition(expression, v);
+        }
+    }
+
+    /// 迁移 Java `getConditionValue`/`getValue_and` 的条件语义检查族。
+    ///
+    /// 覆盖 `conditionAndAlwayTrueAllow`、`conditionAndAlwayFalseAllow`、
+    /// `conditionDoubleConstAllow`、`conditionOpXorAllow`、
+    /// `conditionOpBitwiseAllow`、`constArithmeticAllow`、
+    /// `conditionLikeTrueAllow`（same-const like）与 `caseConditionConstAllow`。
+    fn check_condition(&self, expression: &Expr, v: &mut Vec<WallViolation>) {
+        let mut parts = Vec::new();
+        split_boolean_and(expression, &mut parts);
+        let mut consecutive_const = 0_usize;
+        for (index, part) in parts.iter().enumerate() {
+            match const_bool_value(part) {
+                Some(true) => {
+                    if index > 0 && !self.config.condition_and_alway_true_allow {
+                        Self::push_unique(v, WallViolation::AlwaysTrueCondition("part".to_owned()));
+                    }
+                    consecutive_const += 1;
+                }
+                Some(false) => {
+                    if index > 0 && !self.config.condition_and_alway_false_allow {
+                        Self::push_unique(
+                            v,
+                            WallViolation::AlwaysFalseCondition("part".to_owned()),
+                        );
+                    }
+                    consecutive_const += 1;
+                }
+                None => consecutive_const = 0,
+            }
+            if consecutive_const == 2 && !self.config.condition_double_const_allow {
+                Self::push_unique(v, WallViolation::DoubleConstCondition);
+            }
+        }
+        let _: ControlFlow<()> = visit_expressions(expression, |expr| {
+            if let Expr::BinaryOp { left, op, right } = expr {
+                match op {
+                    BinaryOperator::Xor if !self.config.condition_op_xor_allow => {
+                        Self::push_unique(v, WallViolation::XorNotAllowed);
+                    }
+                    BinaryOperator::BitwiseOr
+                    | BinaryOperator::BitwiseAnd
+                    | BinaryOperator::BitwiseXor
+                    | BinaryOperator::PGBitwiseXor
+                    | BinaryOperator::PGBitwiseShiftLeft
+                    | BinaryOperator::PGBitwiseShiftRight
+                        if !self.config.condition_op_bitwise_allow =>
+                    {
+                        Self::push_unique(v, WallViolation::BitwiseNotAllowed);
+                    }
+                    BinaryOperator::Plus
+                    | BinaryOperator::Minus
+                    | BinaryOperator::Multiply
+                    | BinaryOperator::Modulo
+                    | BinaryOperator::Divide
+                        if !self.config.const_arithmetic_allow
+                            && is_const_expr(left)
+                            && is_const_expr(right) =>
+                    {
+                        Self::push_unique(v, WallViolation::ConstArithmeticNotAllowed);
+                    }
+                    _ => {}
+                }
+            }
+            if let Expr::Like { expr, pattern, .. } = expr {
+                if let (
+                    Expr::Value(
+                        Value::SingleQuotedString(left_value)
+                        | Value::DoubleQuotedString(left_value),
+                    ),
+                    Expr::Value(
+                        Value::SingleQuotedString(right_value)
+                        | Value::DoubleQuotedString(right_value),
+                    ),
+                ) = (expr.as_ref(), pattern.as_ref())
+                {
+                    if left_value == right_value {
+                        Self::push_unique(v, WallViolation::SameConstLike);
+                    }
+                }
+            }
+            if !self.config.case_condition_const_allow {
+                if let Expr::Case {
+                    operand: None,
+                    conditions,
+                    ..
+                } = expr
+                {
+                    if conditions.iter().any(is_const_bool_true_expr) {
+                        Self::push_unique(v, WallViolation::ConstCaseCondition);
+                    }
+                }
+            }
+            ControlFlow::Continue(())
+        });
+    }
+
+    /// 检查写入目标是否命中只读表清单。
+    ///
+    /// 对应 Java `WallVisitorUtils#checkReadOnly` + `WallConfig#isReadOnly`。
+    fn check_read_only(&self, name: &ObjectName, v: &mut Vec<WallViolation>) {
+        let table = simple_name(name);
+        if table.is_empty() {
+            return;
+        }
+        if self
+            .config
+            .read_only_tables
+            .iter()
+            .any(|deny| deny.eq_ignore_ascii_case(&table))
+        {
+            Self::push_unique(v, WallViolation::ReadOnlyTable(name.to_string()));
         }
     }
 
@@ -329,7 +530,7 @@ impl Wall {
             .split('.')
             .map(|segment| segment.trim_matches(['`', '"', '[', ']']))
             .collect::<Vec<_>>();
-        if segments.len() > 1 {
+        if self.config.schema_check && segments.len() > 1 {
             let schema = segments[..segments.len() - 1].join(".");
             if self
                 .config
@@ -340,10 +541,19 @@ impl Wall {
                 Self::push_unique(v, WallViolation::DeniedSchema(schema));
             }
         }
-        let table = segments.last().copied().unwrap_or(name_str.as_str());
-        for deny in &self.config.deny_tables {
-            if table.eq_ignore_ascii_case(deny) {
-                Self::push_unique(v, WallViolation::DeniedTable(name_str.clone()));
+        if self.config.object_check {
+            for deny in &self.config.deny_objects {
+                if name_str.eq_ignore_ascii_case(deny) {
+                    Self::push_unique(v, WallViolation::DeniedObject(name_str.clone()));
+                }
+            }
+        }
+        if self.config.table_check {
+            let table = segments.last().copied().unwrap_or(name_str.as_str());
+            for deny in &self.config.deny_tables {
+                if table.eq_ignore_ascii_case(deny) {
+                    Self::push_unique(v, WallViolation::DeniedTable(name_str.clone()));
+                }
             }
         }
     }
@@ -354,7 +564,7 @@ impl Wall {
         }
     }
 
-    fn collect_wall_context_warnings(&self, statement: &Statement) {
+    fn collect_wall_context_warnings(statement: &Statement) {
         let Some(context) = WallContext::current() else {
             return;
         };
@@ -515,6 +725,13 @@ impl Wall {
     }
 }
 
+/// 返回 FROM 子句中全部表连接的引用。
+fn tables_of(from: &FromTable) -> &[sqlparser::ast::TableWithJoins] {
+    match from {
+        FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables) => tables,
+    }
+}
+
 fn from_has_join(from: &FromTable) -> bool {
     let tables = match from {
         FromTable::WithFromKeyword(tables) | FromTable::WithoutKeyword(tables) => tables,
@@ -610,7 +827,7 @@ fn placeholder_indices(statement: &Statement) -> HashMap<usize, usize> {
         if let Expr::Value(Value::Placeholder(placeholder)) = expression {
             occurrence += 1;
             let index = explicit_parameter_index(placeholder).unwrap_or(occurrence);
-            indices.insert(expression as *const Expr as usize, index);
+            indices.insert(std::ptr::from_ref::<Expr>(expression) as usize, index);
         }
         ControlFlow::Continue(())
     });
@@ -625,7 +842,7 @@ fn expression_parameter_index(
         return None;
     }
     placeholder_indices
-        .get(&(expression as *const Expr as usize))
+        .get(&(std::ptr::from_ref::<Expr>(expression) as usize))
         .copied()
         .or_else(|| {
             let Expr::Value(Value::Placeholder(placeholder)) = expression else {
@@ -659,6 +876,61 @@ fn is_always_true(expression: &Expr) -> bool {
         Expr::Nested(expression) => is_always_true(expression),
         _ => false,
     }
+}
+
+/// 求常量表达式的布尔值；非常量返回 `None`。
+///
+/// 对应 Java `SQLEvalVisitorUtils#castToBoolean(getValue(...))` 的常量子集。
+fn const_bool_value(expression: &Expr) -> Option<bool> {
+    match expression {
+        Expr::Value(Value::Boolean(value)) => Some(*value),
+        Expr::Value(Value::Number(value, _)) => value.parse::<f64>().ok().map(|n| n != 0.0),
+        Expr::Nested(expression) => const_bool_value(expression),
+        Expr::BinaryOp { left, op, right } => match op {
+            BinaryOperator::Eq => match (const_scalar(left), const_scalar(right)) {
+                (Some(left), Some(right)) => Some(left == right),
+                _ => None,
+            },
+            BinaryOperator::NotEq => match (const_scalar(left), const_scalar(right)) {
+                (Some(left), Some(right)) => Some(left != right),
+                _ => None,
+            },
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn const_scalar(expression: &Expr) -> Option<Value> {
+    match expression {
+        Expr::Value(
+            value @ (Value::Boolean(_)
+            | Value::Number(_, _)
+            | Value::SingleQuotedString(_)
+            | Value::DoubleQuotedString(_)),
+        ) => Some(value.clone()),
+        Expr::Nested(expression) => const_scalar(expression),
+        _ => None,
+    }
+}
+
+/// 判断表达式是否为纯常量（字面量或常量的算术组合）。
+fn is_const_expr(expression: &Expr) -> bool {
+    match expression {
+        Expr::Value(
+            Value::Boolean(_)
+            | Value::Number(_, _)
+            | Value::SingleQuotedString(_)
+            | Value::DoubleQuotedString(_),
+        ) => true,
+        Expr::Nested(expression) => is_const_expr(expression),
+        Expr::BinaryOp { left, right, .. } => is_const_expr(left) && is_const_expr(right),
+        _ => false,
+    }
+}
+
+fn is_const_bool_true_expr(expression: &Expr) -> bool {
+    const_bool_value(expression) == Some(true)
 }
 
 fn contains_disallowed_comment(sql: &str, hint_allow: bool) -> bool {

@@ -1,7 +1,7 @@
 //! 对应 Java 类：com.alibaba.druid.wall.WallConfig
 //! 来源文件：core/src/main/java/com/alibaba/druid/wall/WallConfig.java
 //!
-//! Wall 配置，对齐 Druid Java WallConfig 的 30+ 规则。
+//! Wall 配置，对齐 Druid Java `WallConfig` 的 `30+` 规则。
 
 use super::{TenantCallBack, WallUpdateCheckHandler};
 use indexmap::{IndexMap, IndexSet};
@@ -10,6 +10,9 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 /// Wall 配置，每个 boolean 默认值与 Druid Java 一致。
+///
+/// 字段位按 Java `WallConfig` 一一保留（40+ 布尔位），不做拆分。
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone)]
 pub struct WallConfig {
     pub none_base_statement_allow: bool,
@@ -323,50 +326,62 @@ impl WallConfig {
 }
 
 impl WallConfigBuilder {
+    #[must_use]
     pub fn select_allow(mut self, v: bool) -> Self {
         self.0.select_allow = v;
         self
     }
+    #[must_use]
     pub fn insert_allow(mut self, v: bool) -> Self {
         self.0.insert_allow = v;
         self
     }
+    #[must_use]
     pub fn update_allow(mut self, v: bool) -> Self {
         self.0.update_allow = v;
         self
     }
+    #[must_use]
     pub fn delete_allow(mut self, v: bool) -> Self {
         self.0.delete_allow = v;
         self
     }
+    #[must_use]
     pub fn drop_table_allow(mut self, v: bool) -> Self {
         self.0.drop_table_allow = v;
         self
     }
+    #[must_use]
     pub fn truncate_allow(mut self, v: bool) -> Self {
         self.0.truncate_allow = v;
         self
     }
+    #[must_use]
     pub fn update_must_have_where(mut self, v: bool) -> Self {
         self.0.update_must_have_where = v;
         self
     }
+    #[must_use]
     pub fn delete_must_have_where(mut self, v: bool) -> Self {
         self.0.delete_must_have_where = v;
         self
     }
+    #[must_use]
     pub fn multi_statement_allow(mut self, v: bool) -> Self {
         self.0.multi_statement_allow = v;
         self
     }
+    #[must_use]
     pub fn comment_allow(mut self, v: bool) -> Self {
         self.0.comment_allow = v;
         self
     }
+    #[must_use]
     pub fn variant_check(mut self, v: bool) -> Self {
         self.0.variant_check = v;
         self
     }
+    #[must_use]
     pub fn limit_zero_allow(mut self, v: bool) -> Self {
         self.0.limit_zero_allow = v;
         self
@@ -377,18 +392,124 @@ impl WallConfigBuilder {
         self.0.do_privileged_allow = v;
         self
     }
+    /// 设置是否允许 `START TRANSACTION`（对应 Java `startTransactionAllow`）。
+    #[must_use]
+    pub fn start_transaction_allow(mut self, v: bool) -> Self {
+        self.0.start_transaction_allow = v;
+        self
+    }
+    /// 设置是否允许 `SELECT INTO`（对应 Java `selectIntoAllow`）。
+    #[must_use]
+    pub fn select_into_allow(mut self, v: bool) -> Self {
+        self.0.select_into_allow = v;
+        self
+    }
+    /// 设置是否允许 SQL hint（对应 Java `hintAllow`）。
+    #[must_use]
+    pub fn hint_allow(mut self, v: bool) -> Self {
+        self.0.hint_allow = v;
+        self
+    }
+    /// 设置是否允许 `SELECT *`（对应 Java `selectAllColumnAllow`）。
+    #[must_use]
+    pub fn select_all_column_allow(mut self, v: bool) -> Self {
+        self.0.select_all_column_allow = v;
+        self
+    }
+    /// 设置 SQL 是否必须参数化（对应 Java `mustParameterized`）。
+    #[must_use]
+    pub fn must_parameterized(mut self, v: bool) -> Self {
+        self.0.must_parameterized = v;
+        self
+    }
+    /// 设置是否允许 `USE` 语句（对应 Java `useAllow`）。
+    #[must_use]
+    pub fn use_allow(mut self, v: bool) -> Self {
+        self.0.use_allow = v;
+        self
+    }
+    /// 设置是否允许 `SHOW` 语句族（对应 Java `showAllow`）。
+    #[must_use]
+    pub fn show_allow(mut self, v: bool) -> Self {
+        self.0.show_allow = v;
+        self
+    }
+    /// 设置是否允许 `DESC`/`DESCRIBE` 语句（对应 Java `describeAllow`）。
+    #[must_use]
+    pub fn describe_allow(mut self, v: bool) -> Self {
+        self.0.describe_allow = v;
+        self
+    }
+    /// 设置是否允许 `CALL` 语句（对应 Java `callAllow`）。
+    #[must_use]
+    pub fn call_allow(mut self, v: bool) -> Self {
+        self.0.call_allow = v;
+        self
+    }
+    /// 设置是否允许 `INTERSECT` 集合运算（对应 Java `intersectAllow`）。
+    #[must_use]
+    pub fn intersect_allow(mut self, v: bool) -> Self {
+        self.0.intersect_allow = v;
+        self
+    }
+    /// 设置是否允许 AND 链非首位恒真条件（对应 Java `conditionAndAlwayTrueAllow`）。
+    #[must_use]
+    pub fn condition_and_alway_true_allow(mut self, v: bool) -> Self {
+        self.0.condition_and_alway_true_allow = v;
+        self
+    }
+    /// 设置是否允许 AND 链相邻双常量（对应 Java `conditionDoubleConstAllow`）。
+    #[must_use]
+    pub fn condition_double_const_allow(mut self, v: bool) -> Self {
+        self.0.condition_double_const_allow = v;
+        self
+    }
+    /// 设置是否允许 `CASE WHEN` 常量条件（对应 Java `caseConditionConstAllow`）。
+    #[must_use]
+    pub fn case_condition_const_allow(mut self, v: bool) -> Self {
+        self.0.case_condition_const_allow = v;
+        self
+    }
+    /// 设置是否允许条件中的常量算术（对应 Java `constArithmeticAllow`）。
+    #[must_use]
+    pub fn const_arithmetic_allow(mut self, v: bool) -> Self {
+        self.0.const_arithmetic_allow = v;
+        self
+    }
+    /// 设置是否允许条件中的位运算（对应 Java `conditionOpBitwiseAllow`）。
+    #[must_use]
+    pub fn condition_op_bitwise_allow(mut self, v: bool) -> Self {
+        self.0.condition_op_bitwise_allow = v;
+        self
+    }
+    /// 追加禁止的数据库变量（对应 Java `denyVariants` 集合元素）。
+    #[must_use]
+    pub fn deny_variant(mut self, variant: impl Into<String>) -> Self {
+        insert_rule(&mut self.0.deny_variants, variant.into());
+        self
+    }
+    /// 追加只读表（对应 Java `readOnlyTables` 集合元素）。
+    #[must_use]
+    pub fn read_only_table(mut self, table: impl Into<String>) -> Self {
+        insert_rule(&mut self.0.read_only_tables, table.into());
+        self
+    }
+    #[must_use]
     pub fn deny_table(mut self, t: impl Into<String>) -> Self {
         insert_rule(&mut self.0.deny_tables, t.into());
         self
     }
+    #[must_use]
     pub fn deny_function(mut self, f: impl Into<String>) -> Self {
         insert_rule(&mut self.0.deny_functions, f.into());
         self
     }
+    #[must_use]
     pub fn deny_schema(mut self, s: impl Into<String>) -> Self {
         insert_rule(&mut self.0.deny_schemas, s.into());
         self
     }
+    #[must_use]
     pub fn tenant_column(mut self, v: impl Into<String>) -> Self {
         self.0.tenant_column = v.into();
         self
@@ -434,8 +555,8 @@ fn normalize_identifier(identifier: &str) -> String {
         .to_lowercase()
 }
 
-fn insert_rule(target: &mut Vec<String>, rule: String) {
-    let rule = rule.trim().to_lowercase();
+fn insert_rule(target: &mut Vec<String>, rule: impl AsRef<str>) {
+    let rule = rule.as_ref().trim().to_lowercase();
     if !rule.is_empty() && !target.contains(&rule) {
         target.push(rule);
         target.sort_unstable();

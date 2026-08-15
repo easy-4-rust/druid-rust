@@ -23,6 +23,34 @@ pub enum WallViolation {
     SelectAllColumnNotAllowed,
     /// 恒真条件绕过 WHERE。
     AlwaysTrueCondition(String),
+    /// AND 链中非首位恒假条件。
+    ///
+    /// 对应 Java `ErrorCode.ALWAYS_FALSE`（2113）。
+    AlwaysFalseCondition(String),
+    /// AND 链中出现两个相邻常量操作数。
+    ///
+    /// 对应 Java `ErrorCode.DOUBLE_CONST_CONDITION`（2107）。
+    DoubleConstCondition,
+    /// 条件表达式使用 XOR 运算符。
+    ///
+    /// 对应 Java `ErrorCode.XOR`（2102）。
+    XorNotAllowed,
+    /// 条件表达式使用位运算符。
+    ///
+    /// 对应 Java `ErrorCode.BITWISE`（2103）。
+    BitwiseNotAllowed,
+    /// 条件表达式包含常量算术运算。
+    ///
+    /// 对应 Java `ErrorCode.CONST_ARITHMETIC`（2101）。
+    ConstArithmeticNotAllowed,
+    /// `LIKE` 两侧为相同常量。
+    ///
+    /// 对应 Java `ErrorCode.SAME_CONST_LIKE`（2108）。
+    SameConstLike,
+    /// `CASE WHEN` 条件为常量。
+    ///
+    /// 对应 Java `ErrorCode.CONST_CASE_CONDITION`（2109）。
+    ConstCaseCondition,
     /// SQL 必须参数化。
     MustParameterized,
     /// UPDATE 业务一致性检查失败。
@@ -60,6 +88,15 @@ impl fmt::Display for WallViolation {
             Self::AlwaysTrueCondition(clause) => {
                 write!(f, "always true {clause} condition not allowed")
             }
+            Self::AlwaysFalseCondition(clause) => {
+                write!(f, "always false {clause} condition not allowed")
+            }
+            Self::DoubleConstCondition => write!(f, "double const condition not allowed"),
+            Self::XorNotAllowed => write!(f, "xor operator not allowed"),
+            Self::BitwiseNotAllowed => write!(f, "bitwise operator not allowed"),
+            Self::ConstArithmeticNotAllowed => write!(f, "const arithmetic not allowed"),
+            Self::SameConstLike => write!(f, "same const like not allowed"),
+            Self::ConstCaseCondition => write!(f, "const case condition not allowed"),
             Self::MustParameterized => write!(f, "sql must be parameterized"),
             Self::UpdateCheckFailed => write!(f, "update check failed."),
             Self::LimitZeroNotAllowed => write!(f, "LIMIT 0 not allowed"),

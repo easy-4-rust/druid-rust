@@ -94,7 +94,7 @@ impl DruidDriverRegistry {
         config: &DatabaseConnectionConfig,
     ) -> Result<ResolvedDatabaseDriver, DriverRegistryError> {
         let profile = self.profile(config.profile_id())?.clone();
-        let (driver_url, display_url, _properties) = if config.url().starts_with("rdbc:") {
+        let (driver_url, display_url, properties) = if config.url().starts_with("rdbc:") {
             let rdbc_url =
                 RdbcUrl::parse(config.url()).map_err(|_| DriverRegistryError::InvalidUrl {
                     profile: profile.id().to_string(),
@@ -158,7 +158,7 @@ impl DruidDriverRegistry {
                         profile.validation_query().map(str::to_owned),
                         options,
                     );
-                    for (name, value) in &_properties {
+                    for (name, value) in &properties {
                         factory = factory.property(name, value);
                     }
                     let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
@@ -205,7 +205,7 @@ impl DruidDriverRegistry {
                             });
                         }
                         let mut factory = LibSqlConnectionFactory::new(&driver_url);
-                        for (name, value) in &_properties {
+                        for (name, value) in &properties {
                             factory = factory.property(name, value);
                         }
                         let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);

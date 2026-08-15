@@ -246,7 +246,7 @@
 | CORE-SQL-003 | Visitor、clone、parent、attributes | TODO |
 | CORE-SQL-004 | canonical output/format | TODO |
 | CORE-SQL-005 | parameterize/merge/fingerprint | PARTIAL |
-| CORE-WALL-001 | WallConfig 全字段 | PARTIAL |
+| CORE-WALL-001 | WallConfig 全字段 | PARTIAL（2026-08-13：use/show/describe/call/intersect/条件语义族/variant/object/read-only/检查门已接线并有 45 差分测试；wall_violation 100% 行覆盖） |
 | CORE-WALL-002 | rule/violation/cache/provider | PARTIAL |
 | CORE-STAT-001 | SQL/dataSource/web/spring 统计 | PARTIAL |
 | CORE-STAT-002 | reset/MBean/JSON 结果 | TODO |
@@ -446,9 +446,9 @@
 | :--- | :--- | :--- | :--- |
 | SEM-WALL-001 | provider 根据 DbType 选择，未知方言走 SPI | TODO | provider 矩阵 |
 | SEM-WALL-002 | select/insert/update/delete allow | PARTIAL | 每项开/关 |
-| SEM-WALL-003 | DDL、transaction、set/show/use 等 allow | PARTIAL | 每项开/关 |
+| SEM-WALL-003 | DDL、transaction、set/show/use 等 allow | PARTIAL（show/use/describe/call/intersect/START/EXPLAIN 已接线并测试） | 每项开/关 |
 | SEM-WALL-004 | update/delete 必须有 where | PARTIAL | AST 语义 |
-| SEM-WALL-005 | 恒真/恒假/double const/like/case 条件 | TODO | Java Wall corpus |
+| SEM-WALL-005 | 恒真/恒假/double const/like/case 条件 | PARTIAL（AlwaysFalse/DoubleConst/Xor/Bitwise/ConstArithmetic/SameConstLike/ConstCase 七类已按 Java getConditionValue/getValue_and 接线并差分测试） | Java Wall corpus |
 | SEM-WALL-006 | deny/permit table/function/schema/variant | PARTIAL/IMPLEMENTED_UNVERIFIED | 大小写、schema、嵌套、permit 优先级 |
 | SEM-WALL-007 | white list 与 cache | PARTIAL | hit/miss/reset |
 | SEM-WALL-008 | multiStatement/comment/hint/metadata | PARTIAL/IMPLEMENTED_UNVERIFIED | parser feature 组合 |

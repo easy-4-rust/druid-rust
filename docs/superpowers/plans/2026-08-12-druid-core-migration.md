@@ -182,7 +182,7 @@
 - [x] **Step 5:** Wall tenant ResultSet 隐藏列（C2-R65.28）— **PARTIAL**
 - [x] **Step 6:** Wall tenant AST 改写（C2-R65.29）— **PARTIAL**
 - [x] **Step 7:** Wall doPrivileged 同步/异步作用域（C2-R65.35）— **IMPLEMENTED_UNVERIFIED**
-- [ ] **Step 8:** WallConfig 全字段行为接线
+- [x] **Step 8:** WallConfig 全字段行为接线 — **PARTIAL→DONE（本步）**：use/show/describe/call/intersect/EXPLAIN 门控、条件语义族（AlwaysFalse/DoubleConst/Xor/Bitwise/ConstArithmetic/SameConstLike/ConstCase）、variant_check+deny_variants、function/schema/table/object_check 门、deny_objects、read_only_tables、limit-zero/comment/multi-statement/none-base/must-parameterized/select-into/hint 全部接线；45 个差分测试（wall_config_field_wiring_test）对照 Java preVisitCheck/getConditionValue/getValue_and/isDeny/checkReadOnly/checkFunction 语义；wall_violation 100%、wall.rs 93.6% 行覆盖
 - [ ] **Step 9:** 各方言 visitor 完整规则矩阵
 - [ ] **Step 10:** Java/Rust 放行/拒绝/错误码/统计一致
 
