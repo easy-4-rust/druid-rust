@@ -98,9 +98,9 @@
 - [x] **Step 24:** 物理 ResultSet 贯通（C2-R41）— **DONE**
 - [x] **Step 25:** ResultSet FilterChain 全方法族（C2-R42~R56）— **DONE**：185 个精确 Filter 调用
 - [x] **Step 26:** FilterAdapter/EventAdapter/Manager（C2-R57~R59）— **DONE**
-- [x] **Step 27:** MergeStat/编码/日期 Filter（C2-R60）— **IMPLEMENTED_UNVERIFIED**
-- [x] **Step 28:** 日志语义边界（C2-R61）— **IMPLEMENTED_UNVERIFIED**
-- [x] **Step 29:** ConfigFilter/ConfigTools（C2-R62）— **IMPLEMENTED_UNVERIFIED**
+- [x] **Step 27:** MergeStat/编码/日期 Filter（C2-R60）— **编码/日期子域 DONE（2026-08-13）**：EncodingConvertFilter/CharsetConvert/CharsetParameter/MySQL8DateTime 家族 11 差分测试（builtin_filter_semantics_test：同名关闭/异名往返/Value 直通/LocalDateTime→Timestamp 类名恢复/七键 configFromProperties）；MergeStatFilter 仍开放
+- [x] **Step 28:** 日志语义边界（C2-R61）— **PARTIAL（2026-08-13）**：LogFilter 分类名/默认开关/七键配置/钩子 no-op 有差分测试（40.5% 行覆盖）；完整 hook 矩阵仍开放
+- [x] **Step 29:** ConfigFilter/ConfigTools（C2-R62）— **DONE（2026-08-13）**：filters=config 启用/三段 decrypt 优先级/file://+classpath 加载/配置覆盖/RSA 默认+生成密钥往返/可空契约/非法输入 12 差分测试
 - [x] **Step 30:** AutoLoad ServiceLoader（C2-R63）— **IMPLEMENTED_UNVERIFIED**
 - [x] **Step 31:** Filter 配置生命周期（C2-R64）— **IMPLEMENTED_UNVERIFIED**
 - [x] **Step 32:** Pool/Checker/Wall/Stat 台账复核（C2-R65）— **PARTIAL**
