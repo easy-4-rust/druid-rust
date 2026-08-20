@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::{RdbcConnectionStat, RdbcConnectionStatEntry};
+use druid_core::stats::{RdbcConnectionStat, RdbcConnectionStatEntry};
 use std::sync::Arc;
 use std::time::Duration;
 

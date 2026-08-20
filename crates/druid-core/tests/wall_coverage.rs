@@ -4,7 +4,7 @@
 //! wall_violation.rs (10 uncovered).
 
 extern crate druid_core as druid;
-use druid::sql::{Wall, WallConfig, WallViolation};
+use druid_core::sql::{Wall, WallConfig, WallViolation};
 
 // ══════════════════════════════════════════════════════════════════
 // 1. wall_violation.rs: Display for all variants

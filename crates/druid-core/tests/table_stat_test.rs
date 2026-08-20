@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::{
+use druid_core::stats::{
     TableStat, TableStatColumn, TableStatCondition, TableStatMode, TableStatName,
     TableStatRelationship,
 };

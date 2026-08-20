@@ -4,7 +4,7 @@
 //! 测试文件对应 Java `javax.transaction.xa.XAResource` 状态语义。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, XaOperation, XaState, XaStateTransitionError, XaStateTransitionRecord,
     XaTransactionState, Xid,
 };
@@ -497,7 +497,7 @@ fn xa_xid_hash_consistency() {
 // ── XaFlags Constants ───────────────────────────────────────────────────────
 
 mod xa_flags_tests {
-    use druid::core::xa_flags;
+    use druid_core::core::xa_flags;
 
     #[test]
     fn tm_no_flags_is_zero() {

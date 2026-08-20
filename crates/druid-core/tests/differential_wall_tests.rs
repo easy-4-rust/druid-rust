@@ -7,7 +7,7 @@
 //!   - core/src/test/java/com/alibaba/druid/bvt/wall/MySqlWallTest.java
 
 extern crate druid_core as druid;
-use druid::sql::{Wall, WallConfig, WallViolation};
+use druid_core::sql::{Wall, WallConfig, WallViolation};
 
 // ── WallConfig 46-field defaults match DruidJava WallConfig constructor ──
 

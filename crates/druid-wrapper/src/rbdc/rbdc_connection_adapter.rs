@@ -3,7 +3,7 @@
 use super::rbdc_prepared_statement::RbdcPreparedStatement;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
     PreparedStatementKey, Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, Value,
@@ -135,10 +135,10 @@ impl RbdcConnectionAdapter {
             rbs::Value::String(value) => Ok(Value::String(value)),
             rbs::Value::Binary(value) => Ok(Value::Bytes(value)),
             rbs::Value::Array(_) => Err(DruidError::DriverError(
-                "RBDC array value is not represented by druid::core::Value".to_string(),
+                "RBDC array value is not represented by druid_core::core::Value".to_string(),
             )),
             rbs::Value::Map(_) => Err(DruidError::DriverError(
-                "RBDC map value is not represented by druid::core::Value".to_string(),
+                "RBDC map value is not represented by druid_core::core::Value".to_string(),
             )),
             rbs::Value::Ext("Decimal", value) => parse_rbdc_string(*value, "Decimal")?
                 .parse::<BigDecimal>()
@@ -172,7 +172,7 @@ impl RbdcConnectionAdapter {
                     })
             }
             rbs::Value::Ext(name, _) => Err(DruidError::DriverError(format!(
-                "RBDC extension value {name} is not represented by druid::core::Value"
+                "RBDC extension value {name} is not represented by druid_core::core::Value"
             ))),
         }
     }

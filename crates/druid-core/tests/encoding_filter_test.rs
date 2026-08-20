@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BeforeFilter, EncodingConvertFilter, MySQL8DateTimeSqlTypeFilter, Value,
 };
 
@@ -100,8 +100,8 @@ fn encoding_filter_clone() {
 #[test]
 fn encoding_filter_before_filter_name() {
     let f = EncodingConvertFilter::new(None, None).unwrap();
-    assert_eq!(druid::core::BeforeFilter::name(&f), "encoding");
-    assert_eq!(druid::core::AfterFilter::name(&f), "encoding");
+    assert_eq!(druid_core::core::BeforeFilter::name(&f), "encoding");
+    assert_eq!(druid_core::core::AfterFilter::name(&f), "encoding");
 }
 
 #[test]

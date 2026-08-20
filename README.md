@@ -338,23 +338,50 @@ cargo run -p druid-admin --bin druid-driver -- doctor <root> h2
 
 ## 7. Cargo Features
 
-The Toasty feature contract is exposed directly by `druid`:
+The facade `druid` crate exposes optional integrations through Cargo features.
+Default features are empty; the facade depends only on `druid-core` unless a
+feature explicitly activates an upstream crate.
 
-| Feature | Default | Capability | Boundary |
-| :--- | :---: | :--- | :--- |
-| `sqlite` | ✅ | Toasty SQLite driver | built-in real SQLite gate |
-| `postgresql` | ❌ | Toasty PostgreSQL driver | real container pending |
-| `mysql` | ❌ | Toasty MySQL driver | real container pending |
-| `turso` | ❌ | Toasty Turso driver | real service pending |
+### 7.1 Feature matrix
+
+| Feature | Default | Upstream crate | Capability | Boundary |
+| :--- | :---: | :--- | :--- | :--- |
+| `sqlite` | ❌ | druid-core | Toasty SQLite driver | built-in real SQLite gate |
+| `postgresql` | ❌ | druid-core | Toasty PostgreSQL driver | real container pending |
+| `mysql` | ❌ | druid-core | Toasty MySQL driver | real container pending |
+| `turso` | ❌ | druid-core | Toasty Turso driver | real service pending |
+| `metrics` | ❌ | druid-metrics | Non-blocking local metrics runtime, Prometheus export | `druid::metrics` module |
+| `wrapper` | ❌ | druid-wrapper | SQLx, RBDC, bb8, deadpool, driver catalog, JDBC Agent | `druid::wrapper` module |
 
 Non-SQL Toasty providers such as DynamoDB are intentionally not exposed as Druid
 features and do not enter the database support count.
 
+### 7.2 Usage
+
 ```bash
+# Core only (default, no optional deps)
+cargo check -p druid --no-default-features
+
+# With metrics runtime
+cargo check -p druid --features metrics
+
+# With driver wrappers (SQLx, RBDC, Toasty, etc.)
+cargo check -p druid --features wrapper
+
+# All features
 cargo check -p druid --all-features
 ```
 
-SQLx/RBDC/bb8/deadpool features must likewise be unified under `druid-wrapper`, not
+### 7.3 Dependency topology
+
+```text
+druid (facade)
+├── druid-core (always)
+├── druid-metrics (optional, feature = "metrics")
+└── druid-wrapper (optional, feature = "wrapper")
+```
+
+SQLx/RBDC/bb8/deadpool features are unified under `druid-wrapper`, not
 form independent version contracts in separately published crates. A new feature must
 update the capability matrix, dependency tree, real integration tests, and release
 notes.

@@ -4,8 +4,8 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 extern crate druid_core as druid;
-use druid::core::PhysicalDatabaseMetaData;
-use druid::sql::{WallSqlStat, WallSqlTableStat, WallTableStat, WallViolation};
+use druid_core::core::PhysicalDatabaseMetaData;
+use druid_core::sql::{WallSqlStat, WallSqlTableStat, WallTableStat, WallViolation};
 use std::collections::HashMap;
 
 // ── WallTableStat ─────────────────────────────────────────
@@ -75,7 +75,7 @@ fn wall_sql_stat_new_with_stats() {
     let mut function_stats = HashMap::new();
     function_stats.insert(
         "count".to_owned(),
-        druid::sql::WallSqlFunctionStat::default(),
+        druid_core::sql::WallSqlFunctionStat::default(),
     );
 
     let stat = WallSqlStat::new_with_stats(
@@ -172,60 +172,60 @@ async fn physical_database_meta_data_default_methods() {
     let err = md.all_procedures_are_callable().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_url().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_user_name().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.is_read_only().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_database_product_name().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_driver_name().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.supports_transactions().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_schemas().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_schemas().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 
     let err = md.supports_batch_updates().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid_core::core::DruidError::UnsupportedOperation { .. }
     ));
 }

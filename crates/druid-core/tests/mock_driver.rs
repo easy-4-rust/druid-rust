@@ -1,7 +1,7 @@
 //! druid-core S1 验收测试：每个 trait 至少 1 个 mock 实现测试。
 
 extern crate druid_core as druid;
-use druid::core::*;
+use druid_core::core::*;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -286,7 +286,7 @@ async fn test_before_filter_block_drop() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Query,
+        operation: druid_core::core::ExecOperation::Query,
     };
     assert!(filter.before(&mut ctx).await.is_ok());
 
@@ -311,7 +311,7 @@ async fn test_after_filter_count() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Query,
+        operation: druid_core::core::ExecOperation::Query,
     };
     filter
         .after(
@@ -348,7 +348,7 @@ async fn test_filter_chain_before_short_circuit() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Query,
+        operation: druid_core::core::ExecOperation::Query,
     };
     assert!(chain.before_execute(&mut ctx).await.is_ok());
 
@@ -375,7 +375,7 @@ async fn test_filter_chain_after_reverse_order() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Query,
+        operation: druid_core::core::ExecOperation::Query,
     };
     chain
         .after_execute(
@@ -404,7 +404,7 @@ async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
         statements: &statements,
         parameter_sets: &[],
         prepared_parameter_sets: None,
-        kind: druid::core::BatchExecKind::Statement,
+        kind: druid_core::core::BatchExecKind::Statement,
         data_source: "batch-default",
         start: std::time::Instant::now(),
         fingerprint: None,
@@ -429,7 +429,7 @@ async fn test_filter_chain_batch_defaults_enter_and_exit_once() {
         statements: &blocked,
         parameter_sets: &[],
         prepared_parameter_sets: None,
-        kind: druid::core::BatchExecKind::Statement,
+        kind: druid_core::core::BatchExecKind::Statement,
         data_source: "batch-default",
         start: std::time::Instant::now(),
         fingerprint: None,

@@ -5,11 +5,11 @@
 //! 对照测试：`DruidDataSourceShrinkTest`、`MaxPhyTimeMillisTest`。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row,
     ValidConnectionChecker, Value,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

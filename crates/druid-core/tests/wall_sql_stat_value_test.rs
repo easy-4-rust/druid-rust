@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::WallSqlStatValue;
+use druid_core::sql::WallSqlStatValue;
 
 fn sample_value() -> WallSqlStatValue {
     WallSqlStatValue {

@@ -2,7 +2,7 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::Value;
+use druid_core::core::Value;
 use druid_wrapper::jdbc_agent::AgentValue;
 use std::str::FromStr;
 

@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::CallableOutParameter;
+use druid_core::core::CallableOutParameter;
 
 #[test]
 fn callable_out_parameter_new() {

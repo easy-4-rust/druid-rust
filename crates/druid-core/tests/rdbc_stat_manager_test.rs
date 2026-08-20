@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::{RdbcStatContext, RdbcStatManager};
+use druid_core::stats::{RdbcStatContext, RdbcStatManager};
 
 #[test]
 fn stat_manager_global_singleton() {

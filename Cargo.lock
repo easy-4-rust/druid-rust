@@ -1606,6 +1606,8 @@ name = "druid"
 version = "0.0.0-design"
 dependencies = [
  "druid-core",
+ "druid-metrics",
+ "druid-wrapper",
 ]
 
 [[package]]
@@ -1713,7 +1715,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "deadpool 0.12.3",
- "druid",
+ "druid-core",
  "duckdb",
  "fs2",
  "futures",

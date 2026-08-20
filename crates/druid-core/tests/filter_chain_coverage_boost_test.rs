@@ -5,7 +5,7 @@
 //! the goal is to exercise the FilterChainImpl proxy code paths.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory, Value,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -555,7 +555,7 @@ async fn filter_chain_prepared_statement_paths() {
 
 #[tokio::test]
 async fn filter_chain_with_log_filter() {
-    use druid::core::LogFilter;
+    use druid_core::core::LogFilter;
     let mut chain = FilterChainImpl::new();
     chain.add_filter(Arc::new(LogFilter::new()));
     let factory = ToastyConnectionFactory::new("sqlite::memory:")

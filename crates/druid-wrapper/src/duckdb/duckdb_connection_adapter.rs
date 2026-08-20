@@ -3,7 +3,7 @@
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
     Row, RowSetResultSet, SqlException, SqlWarning, StatementExecuteResult, StatementGeneratedKeys,

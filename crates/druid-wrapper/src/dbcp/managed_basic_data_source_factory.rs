@@ -1,5 +1,5 @@
-use druid::core::{DruidError, PhysicalConnectionFactory};
-use druid::pool::DruidDataSource;
+use druid_core::core::{DruidError, PhysicalConnectionFactory};
+use druid_core::pool::DruidDataSource;
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -1,6 +1,8 @@
 extern crate druid_core as druid;
-use druid::core::{OracleValidConnectionChecker, ValidConnectionChecker};
-use druid::sql::{CkWallProvider, DbType, WallConfig, WallProvider, WallViolation, WallVisitor};
+use druid_core::core::{OracleValidConnectionChecker, ValidConnectionChecker};
+use druid_core::sql::{
+    CkWallProvider, DbType, WallConfig, WallProvider, WallViolation, WallVisitor,
+};
 use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
@@ -46,7 +48,7 @@ fn ck_wall_provider_check_valid() {
 fn clickhouse_wall_visitor_new() {
     let provider = WallProvider::new(WallConfig::default());
     provider.set_db_type(DbType::ClickHouse);
-    let visitor = druid::sql::ClickhouseWallVisitor::new(&provider);
+    let visitor = druid_core::sql::ClickhouseWallVisitor::new(&provider);
     assert_eq!(visitor.db_type(), DbType::ClickHouse);
 }
 
@@ -54,7 +56,7 @@ fn clickhouse_wall_visitor_new() {
 fn clickhouse_wall_visitor_check_valid() {
     let provider = WallProvider::new(WallConfig::default());
     provider.set_db_type(DbType::ClickHouse);
-    let mut visitor = druid::sql::ClickhouseWallVisitor::new(&provider);
+    let mut visitor = druid_core::sql::ClickhouseWallVisitor::new(&provider);
     let stmts = Parser::parse_sql(&GenericDialect, "SELECT 1").unwrap();
     visitor.check("SELECT 1", &stmts);
     assert!(visitor.violations().is_empty());
@@ -65,7 +67,7 @@ fn clickhouse_wall_visitor_check_deny_table() {
     let config = WallConfig::builder().deny_table("blocked").build();
     let provider = WallProvider::new(config);
     provider.set_db_type(DbType::ClickHouse);
-    let mut visitor = druid::sql::ClickhouseWallVisitor::new(&provider);
+    let mut visitor = druid_core::sql::ClickhouseWallVisitor::new(&provider);
     let stmts = Parser::parse_sql(&GenericDialect, "SELECT * FROM blocked").unwrap();
     visitor.check("SELECT * FROM blocked", &stmts);
     assert!(visitor
@@ -78,7 +80,7 @@ fn clickhouse_wall_visitor_check_deny_table() {
 fn clickhouse_wall_visitor_setters() {
     let provider = WallProvider::new(WallConfig::default());
     provider.set_db_type(DbType::ClickHouse);
-    let mut visitor = druid::sql::ClickhouseWallVisitor::new(&provider);
+    let mut visitor = druid_core::sql::ClickhouseWallVisitor::new(&provider);
     assert!(!visitor.sql_modified());
     visitor.set_sql_modified(true);
     assert!(visitor.sql_modified());
@@ -92,14 +94,14 @@ fn clickhouse_wall_visitor_setters() {
 #[test]
 fn sqlite_wall_visitor_new() {
     let provider = WallProvider::new(WallConfig::default());
-    let visitor = druid::sql::SQLiteWallVisitor::new(&provider);
+    let visitor = druid_core::sql::SQLiteWallVisitor::new(&provider);
     assert_eq!(visitor.db_type(), DbType::PostgreSql);
 }
 
 #[test]
 fn sqlite_wall_visitor_check_valid() {
     let provider = WallProvider::new(WallConfig::default());
-    let mut visitor = druid::sql::SQLiteWallVisitor::new(&provider);
+    let mut visitor = druid_core::sql::SQLiteWallVisitor::new(&provider);
     let stmts = Parser::parse_sql(&GenericDialect, "SELECT 1").unwrap();
     visitor.check("SELECT 1", &stmts);
     assert!(visitor.violations().is_empty());
@@ -109,7 +111,7 @@ fn sqlite_wall_visitor_check_valid() {
 fn sqlite_wall_visitor_check_deny_table() {
     let config = WallConfig::builder().deny_table("forbidden").build();
     let provider = WallProvider::new(config);
-    let mut visitor = druid::sql::SQLiteWallVisitor::new(&provider);
+    let mut visitor = druid_core::sql::SQLiteWallVisitor::new(&provider);
     let stmts = Parser::parse_sql(&GenericDialect, "SELECT * FROM forbidden").unwrap();
     visitor.check("SELECT * FROM forbidden", &stmts);
     assert!(visitor
@@ -121,7 +123,7 @@ fn sqlite_wall_visitor_check_deny_table() {
 #[test]
 fn sqlite_wall_visitor_setters() {
     let provider = WallProvider::new(WallConfig::default());
-    let mut visitor = druid::sql::SQLiteWallVisitor::new(&provider);
+    let mut visitor = druid_core::sql::SQLiteWallVisitor::new(&provider);
     visitor.set_sql_modified(true);
     assert!(visitor.sql_modified());
     visitor.set_sql_end_of_comment(true);

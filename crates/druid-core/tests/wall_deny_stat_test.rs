@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::WallDenyStat;
+use druid_core::sql::WallDenyStat;
 
 #[test]
 fn wall_deny_stat_default() {

@@ -7,8 +7,8 @@
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::Value;
-use druid::sql::SqlInput;
+use druid_core::core::Value;
+use druid_core::sql::SqlInput;
 
 // ══════════════════════════════════════════════════════════════════
 // 1. new + read_value 基础路径

@@ -5,12 +5,12 @@
 //! `AfterFilter::after_connection_event`, `ResultSetFilter::result_set_open_after`.
 
 extern crate druid_core as druid;
-use druid::core::PreparedInputParameter;
-use druid::core::{
+use druid_core::core::PreparedInputParameter;
+use druid_core::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
     ExecContext, ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterContext,
 };
-use druid::stats::{StatFilter, StatsCollector};
+use druid_core::stats::{StatFilter, StatsCollector};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

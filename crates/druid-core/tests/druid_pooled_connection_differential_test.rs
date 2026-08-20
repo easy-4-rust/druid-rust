@@ -5,7 +5,7 @@
 //! listeners, error paths, and the Wrapper trait.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     ConnectionEventListener, DruidError, DruidPooledConnection, ExceptionSorter,
     ExceptionSorterProperties, PhysicalConnection, PhysicalConnectionFactory, ProxyAttributeValue,
     SqlException, StatementEventListener, Value, Wrapper,

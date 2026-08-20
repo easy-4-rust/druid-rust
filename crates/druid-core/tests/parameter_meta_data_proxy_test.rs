@@ -4,8 +4,8 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 extern crate druid_core as druid;
-use druid::core::{ProxyAttributeValue, ResultSetMetaData, ResultSetMetaDataProxyImpl};
-use druid::sql::{ParameterMetaData, ParameterMode, ParameterNullability, RdbcType};
+use druid_core::core::{ProxyAttributeValue, ResultSetMetaData, ResultSetMetaDataProxyImpl};
+use druid_core::sql::{ParameterMetaData, ParameterMode, ParameterNullability, RdbcType};
 
 // ── ParameterMetaData（Java ParameterMetaData）─────────────────
 

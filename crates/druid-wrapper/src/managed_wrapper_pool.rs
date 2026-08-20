@@ -1,7 +1,7 @@
 use crate::sqlx::deadpool::SqlxDeadpoolPool;
 use crate::WrapperPoolState;
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use druid::pool::DruidDataSource;
+use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid_core::pool::DruidDataSource;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

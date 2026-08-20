@@ -6,7 +6,7 @@
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, PreparedInputParameter, PreparedTypeNameArgument, RdbcCalendar,
     RdbcCalendarArgument, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcParameter,
     RdbcParameterType, RdbcParameterValue, RdbcReader, RdbcStreamLength, Value,
@@ -394,7 +394,9 @@ fn object_rdbc_object_scalar_conversion() {
 
 #[test]
 fn object_rdbc_url_converts_to_string() {
-    let url = RdbcObject::Url(druid::core::RdbcUrl::new("https://example.com".to_string()));
+    let url = RdbcObject::Url(druid_core::core::RdbcUrl::new(
+        "https://example.com".to_string(),
+    ));
     let p = PreparedInputParameter::object(Some(url));
     match p.scalar_value().unwrap() {
         Value::String(s) => assert_eq!(s, "https://example.com"),

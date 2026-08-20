@@ -1,8 +1,8 @@
 //! druid-pool S2 验收测试：FR-020 ~ FR-024
 
 extern crate druid_core as druid;
-use druid::core::*;
-use druid::pool::DruidPool;
+use druid_core::core::*;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

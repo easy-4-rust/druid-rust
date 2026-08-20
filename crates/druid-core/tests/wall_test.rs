@@ -1,7 +1,7 @@
 //! druid-sql S3 验收测试：FR-010 ~ FR-015
 
 extern crate druid_core as druid;
-use druid::sql::{Wall, WallConfig, WallViolation};
+use druid_core::sql::{Wall, WallConfig, WallViolation};
 
 // FR-010: SELECT 1 解析通过
 #[test]

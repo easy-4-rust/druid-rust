@@ -3,7 +3,7 @@
 //! property getter/setter families.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory,
     ProxyAttributeValue,
 };

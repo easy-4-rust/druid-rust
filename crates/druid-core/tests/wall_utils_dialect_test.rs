@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::{WallConfig, WallUtils};
+use druid_core::sql::{WallConfig, WallUtils};
 
 #[test]
 fn wall_utils_is_validate_my_sql_valid() {

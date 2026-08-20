@@ -1,11 +1,11 @@
 //! java.sql.Clob/NClob 与 java.io.Reader/Writer 的资源语义契约。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalCharacterReader, PhysicalCharacterWriter, RdbcClob, RdbcInputStream,
     RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
-use druid::spi::{
+use druid_core::spi::{
     RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
     RdbcResourceFactory,
 };

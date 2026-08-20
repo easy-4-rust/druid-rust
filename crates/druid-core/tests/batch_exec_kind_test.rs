@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{BatchExecKind, ExecOperation};
+use druid_core::core::{BatchExecKind, ExecOperation};
 
 // ── BatchExecKind ──────────────────────────────────────────────
 

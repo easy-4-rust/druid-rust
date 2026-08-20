@@ -3,13 +3,13 @@
 extern crate druid_wrapper as wrapper;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
 };
 use std::str::FromStr;
 use wrapper::toasty::ToastyConnectionFactory;
 
-async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {
+async fn sqlite_connection() -> Box<dyn druid_core::core::PhysicalConnection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
         .await
         .expect("Toasty SQLite 工厂必须创建成功");

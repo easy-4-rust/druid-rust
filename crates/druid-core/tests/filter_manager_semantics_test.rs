@@ -1,11 +1,11 @@
 //! Java `FilterManager` 别名、工厂、去重与真实 Toasty SQLite 验证。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BeforeFilter, DruidError, DruidPooledConnection, ExecContext, ExecResult,
     FilterChain, FilterManager, PhysicalConnectionFactory, ResultSetFilter,
 };
-use druid::stats::{StatFilter, StatsCollector};
+use druid_core::stats::{StatFilter, StatsCollector};
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

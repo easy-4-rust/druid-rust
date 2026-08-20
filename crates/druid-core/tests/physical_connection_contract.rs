@@ -6,12 +6,12 @@
 //! - `FilterChainImpl` 的前向进入、逆向退出调用链
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BeforeFilter, ConnectionFactory, DruidError, ExecContext, ExecResult, FilterChain,
     PhysicalConnection, PhysicalPreparedStatement, PreparedInputParameter, Row,
     SqlTextPreparedStatement, StatementGeneratedKeys, Value,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -325,7 +325,7 @@ fn unwind_drop_recycles_exactly_once() {
     let observed_recycle_count = recycle_count.clone();
 
     let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-        let _connection = druid::core::DruidPooledConnection::new(
+        let _connection = druid_core::core::DruidPooledConnection::new(
             Box::new(ContractPhysicalConnection),
             41,
             Box::new(move |_connection, connection_id| {

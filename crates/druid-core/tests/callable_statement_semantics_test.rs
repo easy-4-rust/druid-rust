@@ -9,7 +9,7 @@
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidError, DruidPooledCallableStatement,
     DruidPooledCallableStatementHandle, ExecResult, PhysicalCallableStatement, PhysicalConnection,
@@ -20,8 +20,8 @@ use druid::core::{
     ResultSetStatement, Row, SqlTextPreparedStatement, StatementExecuteResult,
     StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
-use druid::pool::DruidPool;
-use druid::spi::{
+use druid_core::pool::DruidPool;
+use druid_core::spi::{
     RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
     RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory, RdbcSqlXmlAccess,
 };
@@ -931,7 +931,7 @@ struct CallableFactory {
 }
 
 #[async_trait::async_trait]
-impl druid::core::PhysicalConnectionFactory for CallableFactory {
+impl druid_core::core::PhysicalConnectionFactory for CallableFactory {
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         Ok(Box::new(CallableConnection {
             prepare_count: self.prepare_count.clone(),

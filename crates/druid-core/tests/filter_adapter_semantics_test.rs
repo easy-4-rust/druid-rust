@@ -1,7 +1,7 @@
 //! Java `FilterAdapter` 默认适配语义与真实 Toasty SQLite 验证。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BeforeFilter, DruidError, DruidPooledConnection, ExtendedFilter, FilterAdapter,
     FilterChain, PhysicalConnectionFactory, Wrapper, WrapperExt,
 };

@@ -3,7 +3,7 @@ use super::{
     DriverRegistryError, DriverRuntimeMode, DriverSupportStatus, DriverVerificationEvidence,
     ProtocolFamily, WallMode,
 };
-use druid::sql::DbType;
+use druid_core::sql::DbType;
 
 /// 经过清单校验的数据库产品档案。
 #[derive(Debug, Clone)]

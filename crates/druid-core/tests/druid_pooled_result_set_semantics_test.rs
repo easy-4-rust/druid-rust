@@ -3,7 +3,7 @@
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, DruidPooledConnection, DruidPooledResultSet, PhysicalConnection,
     PhysicalConnectionFactory, PhysicalRdbcOpaqueObject, PhysicalResultSet,
     PhysicalResultSetMetaData, RdbcArray, RdbcBlob, RdbcCalendar, RdbcCalendarArgument,
@@ -3591,9 +3591,9 @@ fn row_set_default_getters_cover_null_label_conversion_and_stream_contracts() {
     assert!(result_set.absolute(1).unwrap());
 
     let physical: Arc<dyn PhysicalResultSet> = Arc::new(result_set);
-    let first = druid::core::RdbcResultSet::new(physical.clone());
+    let first = druid_core::core::RdbcResultSet::new(physical.clone());
     let same = first.clone();
-    let other = druid::core::RdbcResultSet::new(Arc::new(SparsePhysicalResultSet));
+    let other = druid_core::core::RdbcResultSet::new(Arc::new(SparsePhysicalResultSet));
     assert_eq!(first, same);
     assert_ne!(first, other);
     assert!(std::ptr::eq(first.physical(), physical.as_ref()));
@@ -3771,7 +3771,7 @@ fn result_set_metadata_preserves_complete_rdbc_column_contract() {
         .with_shape(24, 19, 4)
         .with_nullability(ResultSetNullability::Unknown)
         .with_flags(true, false, true, true, true, false, true, true);
-    let meta_data = druid::core::ResultSetMetaData::new(vec![column]);
+    let meta_data = druid_core::core::ResultSetMetaData::new(vec![column]);
 
     assert_eq!(meta_data.column_count().unwrap(), 1);
     assert_eq!(meta_data.column_label(1).unwrap(), "amount_alias");

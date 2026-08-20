@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::PoolConfig;
+use druid_core::core::PoolConfig;
 use std::time::Duration;
 
 // ── PoolConfig builder ─────────────────────────────────────────

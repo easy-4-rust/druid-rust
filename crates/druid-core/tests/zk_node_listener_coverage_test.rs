@@ -6,8 +6,8 @@
 //! construction, set_* setters, NodeEvent generation and diff.
 
 extern crate druid_core as druid;
-use druid::dynamic::node::{NodeEvent, NodeEventTypeEnum, ZookeeperNodeListener};
-use druid::dynamic::{NodeListener, PropertiesUtils};
+use druid_core::dynamic::node::{NodeEvent, NodeEventTypeEnum, ZookeeperNodeListener};
+use druid_core::dynamic::{NodeListener, PropertiesUtils};
 use std::collections::HashMap;
 use std::sync::Arc;
 

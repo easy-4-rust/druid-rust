@@ -1,6 +1,6 @@
 extern crate druid_core as druid;
-use druid::core::DruidError;
-use druid::stats::RdbcResultSetStat;
+use druid_core::core::DruidError;
+use druid_core::stats::RdbcResultSetStat;
 use std::sync::Arc;
 use std::thread;
 

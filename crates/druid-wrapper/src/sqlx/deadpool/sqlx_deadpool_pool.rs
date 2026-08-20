@@ -2,7 +2,7 @@
 
 use super::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager;
 use deadpool::managed::{Pool as DeadpoolPool, PoolError, Timeouts};
-use druid::core::{
+use druid_core::core::{
     ConnectionRecycleDisposition, DruidError, DruidPooledConnection, FilterChain,
     PhysicalConnectionLease, Pool as DruidPool, PoolState,
 };

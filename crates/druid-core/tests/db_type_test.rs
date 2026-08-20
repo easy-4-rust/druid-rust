@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::DbType;
+use druid_core::sql::DbType;
 
 // ── of() round-trip ────────────────────────────────────────────
 

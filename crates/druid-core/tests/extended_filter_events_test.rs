@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{ClobEvent, DataSourceEvent, StatementPropertyEvent};
+use druid_core::core::{ClobEvent, DataSourceEvent, StatementPropertyEvent};
 
 // ── StatementPropertyEvent ─────────────────────────────────────
 

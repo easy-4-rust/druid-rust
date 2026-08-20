@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::ConfigTools;
+use druid_core::core::ConfigTools;
 
 #[test]
 fn config_tools_decrypt_none() {

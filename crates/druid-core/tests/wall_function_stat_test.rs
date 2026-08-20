@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::{WallFunctionStat, WallSqlFunctionStat};
+use druid_core::sql::{WallFunctionStat, WallSqlFunctionStat};
 
 #[test]
 fn wall_function_stat_default() {

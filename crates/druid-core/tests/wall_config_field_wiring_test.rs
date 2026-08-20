@@ -7,7 +7,7 @@
 //! 每条断言记录 Java 默认值与行为来源。
 
 extern crate druid_core as druid;
-use druid::sql::{DbType, Wall, WallConfig, WallViolation};
+use druid_core::sql::{DbType, Wall, WallConfig, WallViolation};
 
 fn wall_with(config: WallConfig) -> Wall {
     Wall::with_db_type(config, DbType::MySql)
@@ -705,8 +705,8 @@ fn const_value_covers_not_equal_and_nested() {
 
 // ── WallContext 警告计数与 update-check 路径 ─────────────────
 
-use druid::core::Value;
-use druid::sql::{WallContext, WallUpdateCheckHandler};
+use druid_core::core::Value;
+use druid_core::sql::{WallContext, WallUpdateCheckHandler};
 use std::sync::Arc;
 
 struct RecordingHandler {
@@ -876,8 +876,8 @@ fn comment_marker_inside_string_literal_not_detected() {
 /// update-check 过滤条件覆盖 Eq 两侧字面量、IN 列表与复合列名。
 #[test]
 fn update_check_covers_eq_in_list_and_compound_columns() {
-    use druid::core::Value;
-    use druid::sql::WallUpdateCheckHandler;
+    use druid_core::core::Value;
+    use druid_core::sql::WallUpdateCheckHandler;
 
     struct DenyAll;
     impl WallUpdateCheckHandler for DenyAll {

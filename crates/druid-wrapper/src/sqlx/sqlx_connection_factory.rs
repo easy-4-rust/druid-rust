@@ -1,7 +1,7 @@
 //! SQLx 物理连接工厂。
 
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid_core::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 
 /// SQLx 物理连接工厂。
 ///

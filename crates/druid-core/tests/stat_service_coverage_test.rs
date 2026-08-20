@@ -5,7 +5,7 @@
 //! 比较语义。
 
 extern crate druid_core as druid;
-use druid::stats::DruidStatService;
+use druid_core::stats::DruidStatService;
 
 // ===========================================================================
 // 1. 基础 URL 路由

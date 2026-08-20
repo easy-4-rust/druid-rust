@@ -2,7 +2,7 @@
 
 use super::ToastyPreparedStatement;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
     PreparedStatementKey, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,

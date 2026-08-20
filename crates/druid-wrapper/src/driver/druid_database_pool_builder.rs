@@ -1,13 +1,13 @@
 use super::{DatabaseConnectionConfig, DriverRegistryError, DruidDriverRegistry};
 #[cfg(feature = "jdbc-agent")]
 use crate::jdbc_agent::JdbcAgentOptions;
-use druid::core::{
+use druid_core::core::{
     ExceptionSorter, MsSqlValidConnectionChecker, MySqlExceptionSorter,
     MySqlValidConnectionChecker, OracleExceptionSorter, OracleValidConnectionChecker,
     PgExceptionSorter, PgValidConnectionChecker, ValidConnectionChecker,
 };
-use druid::pool::{DruidDataSource, DruidPool, DruidPoolBuilder};
-use druid::sql::RdbcUrl;
+use druid_core::pool::{DruidDataSource, DruidPool, DruidPoolBuilder};
+use druid_core::sql::RdbcUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 

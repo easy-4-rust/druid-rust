@@ -1,5 +1,5 @@
 use super::{HttpSqlConnectionAdapter, HttpSqlProvider};
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid_core::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 
 /// 为每个 Druid holder 创建独立 HTTP SQL 逻辑会话的未池化工厂。

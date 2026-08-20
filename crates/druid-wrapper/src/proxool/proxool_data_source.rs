@@ -1,5 +1,5 @@
 use crate::{ManagedWrapperPool, ProxoolConfigKey, WrapperDataSourceFactory};
-use druid::core::DruidError;
+use druid_core::core::DruidError;
 use std::collections::HashMap;
 
 /// Proxool 兼容数据源配置对象。

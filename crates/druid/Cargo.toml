@@ -14,8 +14,14 @@ postgresql = ["druid-core/postgresql"]
 mysql = ["druid-core/mysql"]
 turso = ["druid-core/turso"]
 
+# Optional upstream integrations
+metrics = ["dep:druid-metrics", "druid-metrics/client"]
+wrapper = ["dep:druid-wrapper"]
+
 [dependencies]
-druid-core = { version = "0.0.0-design", path = "../druid-core" }
+druid-core    = { version = "0.0.0-design", path = "../druid-core" }
+druid-metrics = { version = "0.0.0-design", path = "../druid-metrics", optional = true }
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", optional = true, default-features = false }
 
 [lints]
 workspace = true

@@ -7,10 +7,10 @@
 //! stat_value_and_reset、login_timeout、db_type_name、url、raw_url、
 //! connect_properties、filter_class_names、wall_provider 等路径。
 
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -735,7 +735,7 @@ async fn pool_last_create_error() {
 #[tokio::test]
 async fn pool_trait_state() {
     let (pool, _factory) = make_pool("trait-state", 4).await;
-    let state = druid::core::Pool::state(&pool);
+    let state = druid_core::core::Pool::state(&pool);
     assert_eq!(state.name, "trait-state");
 }
 
@@ -743,12 +743,15 @@ async fn pool_trait_state() {
 #[tokio::test]
 async fn pool_trait_driver_name() {
     let (pool, _factory) = make_pool("trait-driver", 4).await;
-    assert_eq!(druid::core::Pool::driver_name(&pool), "pool-lifecycle-test");
+    assert_eq!(
+        druid_core::core::Pool::driver_name(&pool),
+        "pool-lifecycle-test"
+    );
 }
 
 /// Java Pool trait：name() 委托。
 #[tokio::test]
 async fn pool_trait_name() {
     let (pool, _factory) = make_pool("trait-name", 4).await;
-    assert_eq!(druid::core::Pool::name(&pool), "trait-name");
+    assert_eq!(druid_core::core::Pool::name(&pool), "trait-name");
 }

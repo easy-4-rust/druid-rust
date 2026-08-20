@@ -4,7 +4,7 @@
 //! `ToastyConnectionFactory::new("sqlite::memory:").create()`.
 
 extern crate druid_wrapper as wrapper;
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalConnection, PhysicalConnectionFactory, PreparedInputParameter,
     PreparedStatementKey, PreparedStatementMethodType, StatementGeneratedKeys, Value,
 };
@@ -784,7 +784,7 @@ async fn savepoint_name_with_underscore_ok() {
 
 #[tokio::test]
 async fn execute_with_generated_key_columns_errors() {
-    use druid::core::StatementGeneratedKeys;
+    use druid_core::core::StatementGeneratedKeys;
     let mut conn = make_connection().await;
     conn.exec(
         "CREATE TABLE gk (id INTEGER PRIMARY KEY AUTOINCREMENT)",

@@ -10,13 +10,13 @@
 //! - druid_stat_service.rs: page nested key, sql_detail MaxTimespanOccurTime, wall sort
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, DruidError, ExecContext,
     ExecOperation, ExecResult, PreparedInputParameter, PreparedTypeNameArgument,
     RdbcCalendarArgument, RdbcCharacterLength, RdbcObject, RdbcStreamLength, ResultSetFilter,
     ResultSetFilterChain, ResultSetFilterContext, Value,
 };
-use druid::stats::{RdbcStatManager, StatFilter, StatsCollector};
+use druid_core::stats::{RdbcStatManager, StatFilter, StatsCollector};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -92,7 +92,7 @@ fn make_batch_context<'a>(
 
 #[derive(Debug)]
 struct EmptyResultSet;
-impl druid::core::PhysicalResultSet for EmptyResultSet {
+impl druid_core::core::PhysicalResultSet for EmptyResultSet {
     fn close(&self) -> Result<(), DruidError> {
         Ok(())
     }
@@ -190,7 +190,7 @@ async fn log_slow_sql_error_level_default() {
 #[tokio::test]
 async fn effective_sql_with_stat_context_sql() {
     let (filter, _collector) = make_filter();
-    let mut ctx_data = druid::stats::RdbcStatContext::new();
+    let mut ctx_data = druid_core::stats::RdbcStatContext::new();
     ctx_data.set_sql(Some("SELECT /* overridden */ 1".to_owned()));
     RdbcStatManager::global().set_stat_context(Some(ctx_data));
     let mut ctx = make_exec_context("SELECT original", ExecOperation::Query, false);
@@ -210,7 +210,7 @@ async fn effective_sql_with_stat_context_sql() {
 #[tokio::test]
 async fn effective_sql_with_empty_context_sql_falls_back() {
     let (filter, _collector) = make_filter();
-    let mut ctx_data = druid::stats::RdbcStatContext::new();
+    let mut ctx_data = druid_core::stats::RdbcStatContext::new();
     ctx_data.set_sql(Some(String::new()));
     RdbcStatManager::global().set_stat_context(Some(ctx_data));
     let mut ctx = make_exec_context("SELECT fallback", ExecOperation::Query, false);
@@ -230,7 +230,7 @@ async fn effective_sql_with_empty_context_sql_falls_back() {
 #[tokio::test]
 async fn context_identity_with_name_and_file() {
     let (filter, _collector) = make_filter();
-    let mut ctx_data = druid::stats::RdbcStatContext::new();
+    let mut ctx_data = druid_core::stats::RdbcStatContext::new();
     ctx_data.set_name(Some("my-service".to_owned()));
     ctx_data.set_file(Some("handler.rs".to_owned()));
     RdbcStatManager::global().set_stat_context(Some(ctx_data));
@@ -497,7 +497,7 @@ fn result_set_close_with_sql_stat_association() {
     context.add_read_bytes_length(100);
     context.increment_open_input_stream_count();
     context.increment_open_reader_count();
-    let filters: Vec<Arc<dyn druid::core::ResultSetFilter>> = vec![];
+    let filters: Vec<Arc<dyn druid_core::core::ResultSetFilter>> = vec![];
     let mut chain = ResultSetFilterChain::new(&filters, &physical, &context);
     filter.result_set_close(&mut chain).unwrap();
 }
@@ -518,7 +518,7 @@ fn result_set_close_with_merge_sql_and_sql_stat() {
         Some(Duration::from_millis(10)),
     );
     context.record_fetch_row_count(3);
-    let filters: Vec<Arc<dyn druid::core::ResultSetFilter>> = vec![];
+    let filters: Vec<Arc<dyn druid_core::core::ResultSetFilter>> = vec![];
     let mut chain = ResultSetFilterChain::new(&filters, &physical, &context);
     filter.result_set_close(&mut chain).unwrap();
 }

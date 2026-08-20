@@ -4,9 +4,11 @@
 //! `ZookeeperNodeInfo`, `NodeEvent`, `PropertiesUtils`.
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use druid::dynamic::node::{NodeEvent, NodeEventTypeEnum, NodeListener, ZookeeperNodeListener};
-use druid::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
+use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid_core::dynamic::node::{
+    NodeEvent, NodeEventTypeEnum, NodeListener, ZookeeperNodeListener,
+};
+use druid_core::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -359,28 +361,28 @@ fn properties_utils_filter_none_prefix() {
 
 #[test]
 fn zk_info_empty_prefix() {
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_prefix(Some(""));
     assert_eq!(info.prefix(), "");
 }
 
 #[test]
 fn zk_info_trailing_dot_prefix() {
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_prefix(Some("ha."));
     assert_eq!(info.prefix(), "ha.");
 }
 
 #[test]
 fn zk_info_no_dot_prefix() {
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_prefix(Some("ha"));
     assert_eq!(info.prefix(), "ha.");
 }
 
 #[test]
 fn zk_info_defaults() {
-    let info = druid::dynamic::ZookeeperNodeInfo::new();
+    let info = druid_core::dynamic::ZookeeperNodeInfo::new();
     assert_eq!(info.prefix(), "");
     assert!(info.host().is_none());
     assert_eq!(info.port(), None);
@@ -391,7 +393,7 @@ fn zk_info_defaults() {
 
 #[test]
 fn zk_info_all_fields() {
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_host(Some("db.example.com".to_owned()));
     info.set_port(Some(5432));
     info.set_database(Some("production".to_owned()));
@@ -407,7 +409,7 @@ fn zk_info_all_fields() {
 
 #[test]
 fn zk_info_clone_eq() {
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_host(Some("host".to_owned()));
     info.set_port(Some(3306));
     let cloned = info.clone();
@@ -416,7 +418,7 @@ fn zk_info_clone_eq() {
 
 #[test]
 fn zk_info_debug() {
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_host(Some("host".to_owned()));
     let debug = format!("{:?}", info);
     assert!(debug.contains("host"));
@@ -428,7 +430,7 @@ fn zk_info_debug() {
 
 #[test]
 fn zk_register_setters() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
     reg.set_zk_connect_string("localhost:2181");
     assert_eq!(reg.zk_connect_string().as_deref(), Some("localhost:2181"));
     reg.set_path("/ha-druid");
@@ -438,14 +440,14 @@ fn zk_register_setters() {
 
 #[tokio::test]
 async fn zk_register_init_no_connect_string() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
     let result = reg.init().await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn zk_register_empty_payload() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
     let result = reg.register("node1", &[]).await;
     assert!(result.is_ok());
     assert!(!result.unwrap());
@@ -453,8 +455,8 @@ async fn zk_register_empty_payload() {
 
 #[tokio::test]
 async fn zk_register_before_init() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
-    let mut info = druid::dynamic::ZookeeperNodeInfo::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
+    let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_host(Some("host".to_owned()));
     let result = reg.register("node1", &[info]).await;
     assert!(result.is_err());
@@ -462,21 +464,21 @@ async fn zk_register_before_init() {
 
 #[tokio::test]
 async fn zk_register_deregister_noop() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
     let result = reg.deregister().await;
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn zk_register_destroy_noop() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
     let result = reg.destroy().await;
     assert!(result.is_ok());
 }
 
 #[test]
 fn zk_register_path_default() {
-    let reg = druid::dynamic::ZookeeperNodeRegister::new();
+    let reg = druid_core::dynamic::ZookeeperNodeRegister::new();
     assert_eq!(reg.path(), "/ha-druid-datasources");
 }
 
@@ -486,7 +488,7 @@ fn zk_register_path_default() {
 
 #[test]
 fn file_listener_setters() {
-    let listener = druid::dynamic::FileNodeListener::new("/tmp/test.properties");
+    let listener = druid_core::dynamic::FileNodeListener::new("/tmp/test.properties");
     assert!(listener.prefix().is_empty());
     listener.set_prefix("druid.ha.");
     assert_eq!(listener.prefix(), "druid.ha.");
@@ -506,7 +508,7 @@ async fn file_listener_zero_interval_fallback() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "n.url=jdbc:sqlite:n.db\n").unwrap();
 
-    let listener = Arc::new(druid::dynamic::FileNodeListener::new(&file));
+    let listener = Arc::new(druid_core::dynamic::FileNodeListener::new(&file));
     listener.set_interval_seconds(0);
     assert_eq!(listener.interval_seconds(), 0);
     let _ = std::fs::remove_dir_all(&dir);
@@ -514,6 +516,6 @@ async fn file_listener_zero_interval_fallback() {
 
 #[test]
 fn file_listener_last_update_time() {
-    let listener = druid::dynamic::FileNodeListener::new("/tmp/test.properties");
+    let listener = druid_core::dynamic::FileNodeListener::new("/tmp/test.properties");
     assert_eq!(NodeListener::last_update_time_millis(&listener), 0);
 }

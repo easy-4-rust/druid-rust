@@ -1,6 +1,6 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, Value,
 };
 use druid_wrapper::driver::{
@@ -527,7 +527,7 @@ fn assert_scalar_row(family: ProtocolFamily, actual: &[Value], expected: &[Value
 }
 
 async fn database_version(
-    connection: &mut druid::core::DruidPooledConnection,
+    connection: &mut druid_core::core::DruidPooledConnection,
     family: ProtocolFamily,
 ) -> String {
     let configured_sql = std::env::var("DRUID_CONTRACT_DATABASE_VERSION_SQL")
@@ -699,7 +699,7 @@ fn installation_paths(runtime_mode: DriverRuntimeMode) -> Vec<&'static str> {
 }
 
 async fn verify_error_classification(
-    connection: &mut druid::core::DruidPooledConnection,
+    connection: &mut druid_core::core::DruidPooledConnection,
     table: &str,
 ) {
     let error = connection
@@ -876,7 +876,9 @@ async fn verify_jdbc_agent_failures_if_required(
 }
 
 #[cfg(feature = "duckdb-native")]
-async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPooledConnection) {
+async fn verify_duckdb_timeout_and_cancel(
+    connection: &mut druid_core::core::DruidPooledConnection,
+) {
     let sql = "SELECT SUM(a.i * b.i) FROM range(1000000) AS a(i), range(1000000) AS b(i)";
     let mut statement = connection
         .prepare_statement(sql)
@@ -907,10 +909,10 @@ async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPoo
     let mut physical = DuckDbConnectionAdapter::connect("duckdb::memory:")
         .await
         .expect("取消契约的未池化 DuckDB 连接必须打开");
-    let key = druid::core::PreparedStatementKey::new(
+    let key = druid_core::core::PreparedStatementKey::new(
         Some(sql.to_owned()),
         None,
-        druid::core::PreparedStatementMethodType::M1,
+        druid_core::core::PreparedStatementMethodType::M1,
     )
     .expect("取消契约 prepare key 必须合法");
     let prepared = physical
@@ -942,7 +944,9 @@ async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPoo
 }
 
 #[cfg(not(feature = "duckdb-native"))]
-async fn verify_duckdb_timeout_and_cancel(_connection: &mut druid::core::DruidPooledConnection) {
+async fn verify_duckdb_timeout_and_cancel(
+    _connection: &mut druid_core::core::DruidPooledConnection,
+) {
     panic!("DuckDB 完整契约必须启用 duckdb-native feature");
 }
 

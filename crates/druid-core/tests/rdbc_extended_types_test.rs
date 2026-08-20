@@ -1,13 +1,13 @@
 //! URL/Ref/Array/RowId/SQLXML 平台对象完整资源契约。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalCharacterWriter, PhysicalResultSet, PhysicalXmlResult, PhysicalXmlSource,
     RdbcArray, RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcResultSet, RdbcRowId, RdbcString,
     RdbcTargetType, RdbcTypeMap, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult,
     RdbcXmlSource, Value,
 };
-use druid::spi::{
+use druid_core::spi::{
     RdbcArrayAccess, RdbcRefAccess, RdbcResourceAccess, RdbcResourceCapabilities,
     RdbcResourceFactory, RdbcSqlXmlAccess,
 };
@@ -265,9 +265,9 @@ impl RdbcSqlXmlAccess for TestSqlXml {
         Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    async fn character_stream(&self) -> Result<druid::core::RdbcReader, DruidError> {
+    async fn character_stream(&self) -> Result<druid_core::core::RdbcReader, DruidError> {
         self.ensure_open()?;
-        Ok(druid::core::RdbcReader::from_utf16(
+        Ok(druid_core::core::RdbcReader::from_utf16(
             self.value
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -398,9 +398,9 @@ async fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle()
     assert_eq!(row_id.bytes(), &[0, 1, 255]);
     assert_eq!(row_id, RdbcRowId::new(vec![0, 1, 255]));
 
-    let url = druid::core::RdbcUrl::new("https://example.test/a?b=1#c");
+    let url = druid_core::core::RdbcUrl::new("https://example.test/a?b=1#c");
     assert_eq!(url.external_form(), "https://example.test/a?b=1#c");
-    assert_eq!(url, druid::core::RdbcUrl::from(url.external_form()));
+    assert_eq!(url, druid_core::core::RdbcUrl::from(url.external_form()));
 
     let xml = RdbcResourceFactory::sql_xml(Arc::new(TestSqlXml {
         value: Mutex::new(RdbcString::from("<root>值</root>")),

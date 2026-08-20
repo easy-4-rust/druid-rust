@@ -5,8 +5,8 @@
 //! - db_type.rs: of/as_str/mask/hash_code_64/mask_of/equals_name/is_postgresql_style/Display
 
 extern crate druid_core as druid;
-use druid::sql::{DbType, SqlFormatOption, SqlUtils};
-use druid::stats::{DruidStatManagerFacade, DruidStatService};
+use druid_core::sql::{DbType, SqlFormatOption, SqlUtils};
+use druid_core::stats::{DruidStatManagerFacade, DruidStatService};
 
 // ===========================================================================
 // 1. DruidStatService: page nested key, sql_detail, wall sort, parameters

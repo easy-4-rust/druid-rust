@@ -4,13 +4,13 @@
 //! trait, config, destroy, selector management), `RandomDataSourceValidateTask`.
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use druid::dynamic::node::{NodeListener, PoolUpdater};
-use druid::dynamic::selector::{
+use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid_core::dynamic::node::{NodeListener, PoolUpdater};
+use druid_core::dynamic::selector::{
     DataSourceSelector, NamedDataSourceSelector, RandomDataSourceSelector,
     RandomDataSourceValidateTask,
 };
-use druid::dynamic::{DataSourceCreator, HighAvailableDataSource};
+use druid_core::dynamic::{DataSourceCreator, HighAvailableDataSource};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::RdbcUrl;
+use druid_core::sql::RdbcUrl;
 
 // ── Error paths ────────────────────────────────────────────────
 

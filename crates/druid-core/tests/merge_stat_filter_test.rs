@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::{MergeStatFilter, StatsCollector};
+use druid_core::stats::{MergeStatFilter, StatsCollector};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -24,6 +24,6 @@ fn merge_stat_filter_as_stat_filter() {
 #[test]
 fn merge_stat_filter_name() {
     let f = make_filter();
-    assert_eq!(druid::core::BeforeFilter::name(&f), "mergeStat");
-    assert_eq!(druid::core::AfterFilter::name(&f), "mergeStat");
+    assert_eq!(druid_core::core::BeforeFilter::name(&f), "mergeStat");
+    assert_eq!(druid_core::core::AfterFilter::name(&f), "mergeStat");
 }

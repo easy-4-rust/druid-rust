@@ -1,6 +1,6 @@
 //! Differential tests: druid-rust vs Druid Java 1.2.28.
 extern crate druid_core as druid;
-use druid::core::*;
+use druid_core::core::*;
 use std::sync::Arc;
 use std::time::Duration;
 

@@ -12,7 +12,7 @@
 //! and explicit-deny configurations.
 
 extern crate druid_core as druid;
-use druid::sql::{
+use druid_core::sql::{
     CkWallProvider, Db2WallProvider, MySqlWallProvider, OracleWallProvider, PgWallProvider,
     SQLiteWallProvider, SqlServerWallProvider, WallCheckResult, WallConfig, WallProvider,
     WallViolation,

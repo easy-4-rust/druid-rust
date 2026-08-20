@@ -1,5 +1,5 @@
 use super::AgentRequestHandle;
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedStatementKey,
     StatementGeneratedKeys,
 };

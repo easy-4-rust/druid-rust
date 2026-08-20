@@ -1,7 +1,7 @@
 //! Dynamic datasource coverage tests.
 extern crate druid_core as druid;
-use druid::core::*;
-use druid::dynamic::*;
+use druid_core::core::*;
+use druid_core::dynamic::*;
 use std::sync::Arc;
 use std::time::Duration;
 

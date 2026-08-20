@@ -1,7 +1,7 @@
 //! Java Druid vendor `ExceptionSorter` 差分契约。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AbstractOracleExceptionSorter, Db2ExceptionSorter, ExceptionSorter, ExceptionSorterProperties,
     InformixExceptionSorter, MockExceptionSorter, MySqlExceptionSorter, NullExceptionSorter,
     OceanBaseOracleExceptionSorter, OracleExceptionSorter, PgExceptionSorter,

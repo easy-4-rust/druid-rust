@@ -1,6 +1,6 @@
 extern crate druid_core as druid;
-use druid::core::DriverProperty;
-use druid::sql::SqlPermission;
+use druid_core::core::DriverProperty;
+use druid_core::sql::SqlPermission;
 
 // ── SqlPermission ──────────────────────────────────────────────
 

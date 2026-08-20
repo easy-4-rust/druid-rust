@@ -326,18 +326,45 @@ cargo run -p druid-admin --bin druid-driver -- doctor <root> h2
 
 ## 7. Cargo Features
 
-Toasty feature 已由 `druid` 统一暴露：
+Facade `druid` crate 通过 Cargo features 暴露可选集成。默认 features 为空；
+除非显式启用 feature，facade 仅依赖 `druid-core`。
 
-| Feature | 默认 | 能力 | 边界 |
-| :--- | :---: | :--- | :--- |
-| `sqlite` | ✅ | Toasty SQLite driver | 内置真实 SQLite 门禁 |
-| `postgresql` | ❌ | Toasty PostgreSQL driver | 真实容器待补 |
-| `mysql` | ❌ | Toasty MySQL driver | 真实容器待补 |
-| `turso` | ❌ | Toasty Turso driver | 真实服务待补 |
-| `dynamodb` | ❌ | Toasty DynamoDB driver | 非 SQL，不进入 `PhysicalConnection` |
+### 7.1 Feature 矩阵
+
+| Feature | 默认 | 上游 crate | 能力 | 边界 |
+| :--- | :---: | :--- | :--- | :--- |
+| `sqlite` | ❌ | druid-core | Toasty SQLite driver | 内置真实 SQLite 门禁 |
+| `postgresql` | ❌ | druid-core | Toasty PostgreSQL driver | 真实容器待补 |
+| `mysql` | ❌ | druid-core | Toasty MySQL driver | 真实容器待补 |
+| `turso` | ❌ | druid-core | Toasty Turso driver | 真实服务待补 |
+| `metrics` | ❌ | druid-metrics | 本地非阻塞指标运行时、Prometheus 导出 | `druid::metrics` 模块 |
+| `wrapper` | ❌ | druid-wrapper | SQLx、RBDC、bb8、deadpool、驱动目录、JDBC Agent | `druid::wrapper` 模块 |
+
+非 SQL 的 Toasty 提供者（如 DynamoDB）不作为 Druid feature 暴露，不计入数据库支持数。
+
+### 7.2 用法
 
 ```bash
+# 仅 Core（默认，无可选依赖）
+cargo check -p druid --no-default-features
+
+# 启用指标运行时
+cargo check -p druid --features metrics
+
+# 启用驱动包装器（SQLx、RBDC、Toasty 等）
+cargo check -p druid --features wrapper
+
+# 全部 features
 cargo check -p druid --all-features
+```
+
+### 7.3 依赖拓扑
+
+```text
+druid (facade)
+├── druid-core (始终)
+├── druid-metrics (可选，feature = "metrics")
+└── druid-wrapper (可选，feature = "wrapper")
 ```
 
 `druid-wrapper` 的 SQLx/RBDC/bb8/deadpool feature 也必须在 wrapper 模块统一

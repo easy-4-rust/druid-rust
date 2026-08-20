@@ -1,11 +1,11 @@
 //! Java `DruidAbstractDataSource` Filter 配置与生产装配语义测试。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BeforeFilter, DruidError, ExecContext, ExecResult, FilterManager,
     PhysicalConnection, PhysicalConnectionFactory, ResultSetFilter,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

@@ -1,10 +1,10 @@
 extern crate druid_core as druid;
-use druid::core::{RdbcObject, RdbcParameter, RdbcParameterString, RdbcParameterValue};
-use druid::sql::CommonDataSource;
+use druid_core::core::{RdbcObject, RdbcParameter, RdbcParameterString, RdbcParameterValue};
+use druid_core::sql::CommonDataSource;
 
 struct MinimalDataSource;
 
-impl druid::sql::CommonDataSource for MinimalDataSource {}
+impl druid_core::sql::CommonDataSource for MinimalDataSource {}
 
 // ── CommonDataSource default impls ─────────────────────────────
 

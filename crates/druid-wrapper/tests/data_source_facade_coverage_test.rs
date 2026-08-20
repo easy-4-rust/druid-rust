@@ -5,11 +5,11 @@
 //! stat_value_and_reset, publish_stats, close_for_removal_if_idle, is_full,
 //! try_get_connection, fill_to, restart, notify_credentials_changed.
 
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Pool, Row, Value,
 };
-use druid::pool::{DruidDataSource, DruidPool};
-use druid::stats::DataSourceMonitorable;
+use druid_core::pool::{DruidDataSource, DruidPool};
+use druid_core::stats::DataSourceMonitorable;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

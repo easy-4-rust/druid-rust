@@ -2,7 +2,7 @@ use super::{
     libsql_prepared_statement::LibSqlStatementExecutionError, LibSqlDatabaseMetaData,
     LibSqlPreparedStatement,
 };
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
     Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, StatementExecuteResult,

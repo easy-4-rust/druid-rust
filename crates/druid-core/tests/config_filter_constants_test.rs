@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::ConfigFilter;
+use druid_core::core::ConfigFilter;
 
 #[test]
 fn config_filter_constants() {

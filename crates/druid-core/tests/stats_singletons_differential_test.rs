@@ -10,9 +10,11 @@
 //! - `MergeStatFilter`：Before/After/ResultSetFilter no-op 透传。
 
 extern crate druid_core as druid;
-use druid::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult, PoolState};
-use druid::dynamic::DataSourceCreator;
-use druid::stats::{
+use druid_core::core::{
+    AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult, PoolState,
+};
+use druid_core::dynamic::DataSourceCreator;
+use druid_core::stats::{
     DataSourceMonitorable, DruidDataSourceStatManager, DruidDataSourceStatValue,
     DruidStatManagerFacade, DruidStatService, MergeStatFilter, RdbcStatContext, RdbcTraceManager,
     StatFilterContextListener, StatsCollector, TableStat, TableStatName,
@@ -55,12 +57,12 @@ impl DataSourceMonitorable for FakeDataSource {
     fn reset_stat(&self) {
         self.reset_calls.fetch_add(1, Ordering::Relaxed);
     }
-    fn log_stats(&self) -> Result<(), druid::core::DruidError> {
+    fn log_stats(&self) -> Result<(), druid_core::core::DruidError> {
         self.log_calls.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
-    fn identity(&self) -> druid::stats::DataSourceIdentity {
-        druid::stats::DataSourceIdentity {
+    fn identity(&self) -> druid_core::stats::DataSourceIdentity {
+        druid_core::stats::DataSourceIdentity {
             id: 0,
             name: "fake".to_string(),
             driver_name: None,
@@ -68,8 +70,9 @@ impl DataSourceMonitorable for FakeDataSource {
     }
     fn try_snapshot(
         &self,
-    ) -> Result<druid::stats::DruidTelemetrySnapshot, druid::stats::SnapshotUnavailable> {
-        Err(druid::stats::SnapshotUnavailable::Busy)
+    ) -> Result<druid_core::stats::DruidTelemetrySnapshot, druid_core::stats::SnapshotUnavailable>
+    {
+        Err(druid_core::stats::SnapshotUnavailable::Busy)
     }
 }
 
@@ -352,7 +355,7 @@ async fn merge_stat_filter_name_and_hooks() {
     assert!(filter.is_merge_sql());
 
     // BeforeFilter/AfterFilter no-op。
-    let params: Vec<druid::core::Value> = Vec::new();
+    let params: Vec<druid_core::core::Value> = Vec::new();
     let mut ctx = ExecContext {
         connection_id: 1,
         statement_id: None,
@@ -477,9 +480,9 @@ fn stat_manager_facade_singleton_and_basic_ops() {
 /// 更新器配置 setter 与默认值。
 #[test]
 fn pool_updater_config_setters() {
-    use druid::dynamic::node::PoolUpdater;
+    use druid_core::dynamic::node::PoolUpdater;
     // 通过 HighAvailableDataSource 创建更新器。
-    let ha = druid::dynamic::HighAvailableDataSource::new(
+    let ha = druid_core::dynamic::HighAvailableDataSource::new(
         "updater-test",
         DataSourceCreator::noop_for_test(),
     );
@@ -500,15 +503,17 @@ impl CountingPool {
 }
 
 #[async_trait::async_trait]
-impl druid::core::Pool for CountingPool {
-    async fn get(&self) -> Result<druid::core::DruidPooledConnection, druid::core::DruidError> {
-        Err(druid::core::DruidError::Other("mock".to_owned()))
+impl druid_core::core::Pool for CountingPool {
+    async fn get(
+        &self,
+    ) -> Result<druid_core::core::DruidPooledConnection, druid_core::core::DruidError> {
+        Err(druid_core::core::DruidError::Other("mock".to_owned()))
     }
     async fn get_timeout(
         &self,
         _: Duration,
-    ) -> Result<druid::core::DruidPooledConnection, druid::core::DruidError> {
-        Err(druid::core::DruidError::Other("mock".to_owned()))
+    ) -> Result<druid_core::core::DruidPooledConnection, druid_core::core::DruidError> {
+        Err(druid_core::core::DruidError::Other("mock".to_owned()))
     }
     fn state(&self) -> PoolState {
         PoolState::default()
@@ -614,7 +619,7 @@ fn stat_value_default_and_field_assignment() {
 /// new / reset / `before_open` / `after_close` 全生命周期。
 #[test]
 fn result_set_stat_lifecycle() {
-    use druid::stats::RdbcResultSetStat;
+    use druid_core::stats::RdbcResultSetStat;
 
     let stat = RdbcResultSetStat::new();
     assert_eq!(stat.open_count(), 0);
@@ -657,7 +662,7 @@ fn result_set_stat_lifecycle() {
 /// 进程级单例、listener 注册/注销、事件分发（Java `StatFilterContext` 全生命周期）。
 #[test]
 fn stat_filter_context_listener_lifecycle() {
-    use druid::stats::StatFilterContext;
+    use druid_core::stats::StatFilterContext;
     use std::sync::atomic::AtomicI32;
 
     struct RecordingListener {
@@ -669,53 +674,56 @@ fn stat_filter_context_listener_lifecycle() {
             &self,
             _sql: &str,
             _in_transaction: bool,
-        ) -> Result<(), druid::core::DruidError> {
+        ) -> Result<(), druid_core::core::DruidError> {
             self.execute_before_count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
-        fn commit(&self) -> Result<(), druid::core::DruidError> {
+        fn commit(&self) -> Result<(), druid_core::core::DruidError> {
             self.commit_count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
-        fn add_update_count(&self, _count: i32) -> Result<(), druid::core::DruidError> {
+        fn add_update_count(&self, _count: i32) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn add_fetch_row_count(&self, _count: i32) -> Result<(), druid::core::DruidError> {
+        fn add_fetch_row_count(&self, _count: i32) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
         fn execute_after(
             &self,
             _sql: Option<&str>,
             _span: i64,
-            _error: Option<&druid::core::DruidError>,
-        ) -> Result<(), druid::core::DruidError> {
+            _error: Option<&druid_core::core::DruidError>,
+        ) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn rollback(&self) -> Result<(), druid::core::DruidError> {
+        fn rollback(&self) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn pool_connect(&self) -> Result<(), druid::core::DruidError> {
+        fn pool_connect(&self) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn pool_close(&self, _nanos: i64) -> Result<(), druid::core::DruidError> {
+        fn pool_close(&self, _nanos: i64) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn physical_connection_connect(&self) -> Result<(), druid::core::DruidError> {
+        fn physical_connection_connect(&self) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn physical_connection_close(&self, _nanos: i64) -> Result<(), druid::core::DruidError> {
+        fn physical_connection_close(
+            &self,
+            _nanos: i64,
+        ) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn result_set_open(&self) -> Result<(), druid::core::DruidError> {
+        fn result_set_open(&self) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn result_set_close(&self, _nanos: i64) -> Result<(), druid::core::DruidError> {
+        fn result_set_close(&self, _nanos: i64) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn clob_open(&self) -> Result<(), druid::core::DruidError> {
+        fn clob_open(&self) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
-        fn blob_open(&self) -> Result<(), druid::core::DruidError> {
+        fn blob_open(&self) -> Result<(), druid_core::core::DruidError> {
             Ok(())
         }
     }
@@ -747,7 +755,7 @@ fn stat_filter_context_listener_lifecycle() {
 /// 其余分发方法的 no-op 调用（无 listener 时不报错）。
 #[test]
 fn stat_filter_context_dispatch_without_listeners() {
-    use druid::stats::StatFilterContext;
+    use druid_core::stats::StatFilterContext;
     let ctx = StatFilterContext::global();
     ctx.add_update_count(5).unwrap();
     ctx.add_fetch_row_count(10).unwrap();

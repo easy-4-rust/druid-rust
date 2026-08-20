@@ -1,7 +1,7 @@
 //! Java WrapperAdapter/PoolableWrapper 的差分语义契约。
 
 extern crate druid_core as druid;
-use druid::core::{PoolableWrapper, Unwrapped, Wrapper, WrapperAdapter, WrapperExt};
+use druid_core::core::{PoolableWrapper, Unwrapped, Wrapper, WrapperAdapter, WrapperExt};
 use std::any::{Any, TypeId};
 
 #[derive(Debug)]

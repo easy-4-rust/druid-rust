@@ -17,7 +17,7 @@
 //! - ResultSet scalar getter proxy 链（getString/getInt 等）
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     ConnectionEvent, DruidPooledConnection, FilterAdapter, FilterChainImpl, LogFilter,
     PhysicalConnectionFactory, ResultSetFilterContext, StatementEvent, Value,
 };
@@ -283,7 +283,7 @@ fn filter_chain_impl_after_statement_close_with_identity() {
 async fn filter_chain_impl_before_execute_empty() {
     let chain = FilterChainImpl::new();
     let params: Vec<Value> = vec![];
-    let mut ctx = druid::core::ExecContext {
+    let mut ctx = druid_core::core::ExecContext {
         connection_id: 0,
         statement_id: None,
         sql: "SELECT 1".to_owned(),
@@ -293,7 +293,7 @@ async fn filter_chain_impl_before_execute_empty() {
         start: Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Execute,
+        operation: druid_core::core::ExecOperation::Execute,
     };
     chain.before_execute(&mut ctx).await.unwrap();
 }
@@ -302,7 +302,7 @@ async fn filter_chain_impl_before_execute_empty() {
 async fn filter_chain_impl_after_execute_empty() {
     let chain = FilterChainImpl::new();
     let params: Vec<Value> = vec![];
-    let ctx = druid::core::ExecContext {
+    let ctx = druid_core::core::ExecContext {
         connection_id: 0,
         statement_id: None,
         sql: "SELECT 1".to_owned(),
@@ -312,12 +312,12 @@ async fn filter_chain_impl_after_execute_empty() {
         start: Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Query,
+        operation: druid_core::core::ExecOperation::Query,
     };
     chain
         .after_execute(
             &ctx,
-            &Ok(druid::core::ExecResult::default()),
+            &Ok(druid_core::core::ExecResult::default()),
             Duration::from_millis(1),
         )
         .await
@@ -328,14 +328,14 @@ async fn filter_chain_impl_after_execute_empty() {
 async fn filter_chain_impl_before_batch_empty() {
     let chain = FilterChainImpl::new();
     let stmts = vec!["INSERT INTO t VALUES (1)".to_string()];
-    let mut ctx = druid::core::BatchExecContext {
+    let mut ctx = druid_core::core::BatchExecContext {
         connection_id: 0,
         statement_id: None,
         sql: "INSERT INTO t VALUES (1)",
         statements: &stmts,
         parameter_sets: &[],
         prepared_parameter_sets: None,
-        kind: druid::core::BatchExecKind::Statement,
+        kind: druid_core::core::BatchExecKind::Statement,
         data_source: "test",
         start: Instant::now(),
         fingerprint: None,
@@ -348,14 +348,14 @@ async fn filter_chain_impl_before_batch_empty() {
 async fn filter_chain_impl_after_batch_empty() {
     let chain = FilterChainImpl::new();
     let stmts = vec!["UPDATE t SET a = 1".to_string()];
-    let ctx = druid::core::BatchExecContext {
+    let ctx = druid_core::core::BatchExecContext {
         connection_id: 0,
         statement_id: None,
         sql: "UPDATE t SET a = 1",
         statements: &stmts,
         parameter_sets: &[],
         prepared_parameter_sets: None,
-        kind: druid::core::BatchExecKind::Statement,
+        kind: druid_core::core::BatchExecKind::Statement,
         data_source: "test",
         start: Instant::now(),
         fingerprint: None,

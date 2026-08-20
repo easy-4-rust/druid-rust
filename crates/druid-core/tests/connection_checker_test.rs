@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     MsSqlValidConnectionChecker, OceanBaseValidConnectionChecker, ValidConnectionChecker,
 };
 use std::time::Duration;

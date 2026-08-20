@@ -3,7 +3,7 @@
 //! Debug format with statement pool, and remove_connection_event_listener.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     ConnectionEventListener, DruidConnectionHolder, DruidError, PhysicalConnectionFactory,
     PreparedStatementCacheStats, StatementEventListener,
 };

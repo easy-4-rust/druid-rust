@@ -3,7 +3,7 @@ use super::{
     HttpSqlPreparedStatement, HttpSqlProvider,
 };
 use base64::Engine;
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
     Row, RowSetResultSet, SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
@@ -181,7 +181,7 @@ impl HttpSqlConnectionAdapter {
         } else {
             "HY000"
         };
-        let exception = druid::core::SqlException::new(
+        let exception = druid_core::core::SqlException::new(
             i32::from(status.as_u16()),
             Some(sql_state.to_owned()),
             Some(message.into()),
@@ -375,7 +375,7 @@ impl HttpSqlConnectionAdapter {
             Err(HttpSqlStatementExecutionError::TimedOut) => {
                 self.discarded = true;
                 Err(DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_core::core::SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
                         Some("HTTP SQL request timed out".to_owned()),
@@ -386,7 +386,7 @@ impl HttpSqlConnectionAdapter {
             Err(HttpSqlStatementExecutionError::Cancelled) => {
                 self.discarded = true;
                 Err(DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_core::core::SqlException::new(
                         0,
                         Some("HY008".to_owned()),
                         Some("HTTP SQL request was cancelled".to_owned()),

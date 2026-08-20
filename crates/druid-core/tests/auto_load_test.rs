@@ -7,7 +7,7 @@
 //! - with_order 自定义 order
 
 extern crate druid_core as druid;
-use druid::core::{AutoLoad, FilterManager};
+use druid_core::core::{AutoLoad, FilterManager};
 
 /// 无副作用的 register 空函数。
 fn noop_register(_manager: &FilterManager) {}

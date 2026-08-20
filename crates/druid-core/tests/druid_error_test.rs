@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{DruidError, SqlException};
+use druid_core::core::{DruidError, SqlException};
 use std::time::Duration;
 
 // ── Display ────────────────────────────────────────────────────
@@ -341,7 +341,7 @@ fn error_display_on_fatal_error_with_time() {
 
 #[test]
 fn error_display_on_fatal_error_with_sql() {
-    use druid::core::RdbcString;
+    use druid_core::core::RdbcString;
     let e = DruidError::OnFatalError {
         active_count: 3,
         max_active: 10,

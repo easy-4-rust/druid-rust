@@ -1,7 +1,7 @@
 //! `DruidPooledStatement` 的 Java 对照与真实 SQLite 契约测试。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, DruidPooledConnection, DruidPooledStatement, ExecResult, PhysicalConnection,
     PhysicalConnectionFactory, PhysicalStatement, PhysicalStatementOptions, Row, SqlTextStatement,
     StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper, WrapperExt,

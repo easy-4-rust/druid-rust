@@ -3,7 +3,7 @@
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, DruidPooledConnection, FilterChain, PhysicalConnectionFactory,
     PhysicalRdbcOpaqueObject, PhysicalResultSet, RdbcArray, RdbcBlob, RdbcCalendar,
     RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject,
@@ -11,7 +11,7 @@ use druid::core::{
     RdbcTypeMap, RdbcUrl, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
     ResultSetMetaData, ResultSetStatement, ResultSetUpdate, Value,
 };
-use druid::stats::{StatFilter, StatsCollector};
+use druid_core::stats::{StatFilter, StatsCollector};
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::Any;
 use std::str::FromStr;

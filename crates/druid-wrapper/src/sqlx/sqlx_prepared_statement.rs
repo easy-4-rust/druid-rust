@@ -2,7 +2,7 @@
 
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions,
     PreparedInputParameter, SqlTextStatement, Value,
 };
@@ -290,7 +290,7 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
         Ok(())
     }
 
-    fn warnings(&self) -> Result<Option<druid::core::SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<druid_core::core::SqlWarning>, DruidError> {
         self.statement.warnings()
     }
 

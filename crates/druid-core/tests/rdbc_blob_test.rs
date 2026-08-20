@@ -1,8 +1,8 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, RdbcBlob, RdbcInputStream, RdbcObject, RdbcOutputStream};
-use druid::spi::{
+use druid_core::core::{DruidError, RdbcBlob, RdbcInputStream, RdbcObject, RdbcOutputStream};
+use druid_core::spi::{
     RdbcBlobAccess, RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory,
 };
 use std::io::{Error, Read, Write};

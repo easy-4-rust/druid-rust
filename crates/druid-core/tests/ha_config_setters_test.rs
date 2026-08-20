@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::dynamic::{DataSourceCreator, HighAvailableDataSource};
+use druid_core::dynamic::{DataSourceCreator, HighAvailableDataSource};
 use std::collections::HashMap;
 use std::time::Duration;
 

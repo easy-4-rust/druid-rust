@@ -6,7 +6,9 @@
 
 extern crate druid_core as druid;
 
-use druid::stats::{DataSourceIdentity, DruidTelemetrySnapshot, PoolSnapshot, SnapshotUnavailable};
+use druid_core::stats::{
+    DataSourceIdentity, DruidTelemetrySnapshot, PoolSnapshot, SnapshotUnavailable,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -31,7 +33,7 @@ impl MockMonitorable {
     }
 }
 
-impl druid::stats::DataSourceMonitorable for MockMonitorable {
+impl druid_core::stats::DataSourceMonitorable for MockMonitorable {
     fn name(&self) -> &str {
         &self.name
     }
@@ -73,7 +75,7 @@ impl druid::stats::DataSourceMonitorable for MockMonitorable {
 #[test]
 fn try_snapshot_returns_identity_and_pool_data() {
     let mock = MockMonitorable::new(42, "test-ds");
-    let monitorable: Arc<dyn druid::stats::DataSourceMonitorable> = Arc::new(mock);
+    let monitorable: Arc<dyn druid_core::stats::DataSourceMonitorable> = Arc::new(mock);
 
     // identity() must return a valid DataSourceIdentity
     let identity = monitorable.identity();
@@ -106,7 +108,7 @@ fn try_snapshot_returns_identity_and_pool_data() {
 fn try_snapshot_on_closed_datasource_returns_closed() {
     let mock = MockMonitorable::new(1, "closed-ds");
     mock.close(); // close before wrapping in Arc
-    let monitorable: Arc<dyn druid::stats::DataSourceMonitorable> = Arc::new(mock);
+    let monitorable: Arc<dyn druid_core::stats::DataSourceMonitorable> = Arc::new(mock);
 
     // try_snapshot should return Closed
     let result = monitorable.try_snapshot();
@@ -120,7 +122,7 @@ fn try_snapshot_on_closed_datasource_returns_closed() {
 #[test]
 fn identity_is_stable_across_calls() {
     let mock = MockMonitorable::new(99, "stable-ds");
-    let monitorable: Arc<dyn druid::stats::DataSourceMonitorable> = Arc::new(mock);
+    let monitorable: Arc<dyn druid_core::stats::DataSourceMonitorable> = Arc::new(mock);
 
     let id1 = monitorable.identity();
     let id2 = monitorable.identity();
@@ -132,7 +134,7 @@ fn identity_is_stable_across_calls() {
 #[test]
 fn reset_stat_does_not_panic() {
     let mock = MockMonitorable::new(7, "reset-ds");
-    let monitorable: Arc<dyn druid::stats::DataSourceMonitorable> = Arc::new(mock);
+    let monitorable: Arc<dyn druid_core::stats::DataSourceMonitorable> = Arc::new(mock);
 
     // reset_stat should not panic
     monitorable.reset_stat();

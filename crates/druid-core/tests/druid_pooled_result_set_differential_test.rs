@@ -5,7 +5,7 @@
 //! paths that are NOT already covered in `druid_pooled_result_set_semantics_test.rs`.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, DruidPooledConnection, PhysicalConnection, PhysicalConnectionFactory, Value,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -39,7 +39,7 @@ async fn setup_table(conn: &mut DruidPooledConnection) {
 
 #[test]
 fn result_set_constants_match_java() {
-    use druid::core::DruidPooledResultSet;
+    use druid_core::core::DruidPooledResultSet;
     assert_eq!(DruidPooledResultSet::FETCH_FORWARD, 1000);
     assert_eq!(DruidPooledResultSet::FETCH_REVERSE, 1001);
     assert_eq!(DruidPooledResultSet::FETCH_UNKNOWN, 1002);
@@ -752,7 +752,7 @@ async fn statement_object_returns_statement_variant() {
         .unwrap();
     let so = rs.statement_object(&mut conn).unwrap();
     // For regular Statement, should be Statement variant
-    use druid::core::ResultSetStatement;
+    use druid_core::core::ResultSetStatement;
     assert!(matches!(so, ResultSetStatement::Statement(_)));
     rs.close_with_connection(&mut conn).unwrap();
 }
@@ -804,7 +804,7 @@ async fn result_set_attributes_empty_initially() {
     assert_eq!(rs.attributes_size(), 0);
     assert!(rs.attributes().is_empty());
     assert!(rs.attribute("missing").is_none());
-    rs.put_attribute("k", druid::core::ProxyAttributeValue::new(42));
+    rs.put_attribute("k", druid_core::core::ProxyAttributeValue::new(42));
     assert_eq!(rs.attributes_size(), 1);
     rs.clear_attributes();
     assert_eq!(rs.attributes_size(), 0);

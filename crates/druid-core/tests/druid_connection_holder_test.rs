@@ -6,7 +6,7 @@
 //! - `LastActiveTest_0.java`
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidConnectionHolder, DruidError, DruidPooledConnection, ExecResult, PhysicalConnection,
     PhysicalConnectionCapabilities, Row, Value,
 };

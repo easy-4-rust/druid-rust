@@ -1,5 +1,5 @@
 use super::{AgentRequest, AgentResponse, JdbcAgentOptions, JdbcAgentRuntimeMetrics};
-use druid::core::DruidError;
+use druid_core::core::DruidError;
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::fs::File;

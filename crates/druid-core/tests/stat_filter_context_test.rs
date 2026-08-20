@@ -1,10 +1,10 @@
 //! Java `StatFilterContext` 与 `StatFilterContextListener` 的监听器及真实 SQLite 语义。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, DruidPooledConnection, FilterChain, PhysicalConnection, PhysicalConnectionFactory,
 };
-use druid::stats::{
+use druid_core::stats::{
     StatFilter, StatFilterContext, StatFilterContextListener, StatFilterContextListenerAdapter,
     StatsCollector,
 };
@@ -411,8 +411,8 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
         .add_batch(
             &mut connection,
             vec![
-                druid::core::Value::Int(30),
-                druid::core::Value::String("prepared-1".to_string()),
+                druid_core::core::Value::Int(30),
+                druid_core::core::Value::String("prepared-1".to_string()),
             ],
         )
         .unwrap();
@@ -420,8 +420,8 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
         .add_batch(
             &mut connection,
             vec![
-                druid::core::Value::Int(31),
-                druid::core::Value::String("prepared-2".to_string()),
+                druid_core::core::Value::Int(31),
+                druid_core::core::Value::String("prepared-2".to_string()),
             ],
         )
         .unwrap();
@@ -715,17 +715,17 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     assert_eq!(
         ids,
         [
-            druid::core::Value::Int(1),
-            druid::core::Value::Int(4),
-            druid::core::Value::Int(5),
-            druid::core::Value::Int(10),
-            druid::core::Value::Int(11),
-            druid::core::Value::Int(12),
-            druid::core::Value::Int(20),
-            druid::core::Value::Int(21),
-            druid::core::Value::Int(30),
-            druid::core::Value::Int(31),
-            druid::core::Value::Int(40)
+            druid_core::core::Value::Int(1),
+            druid_core::core::Value::Int(4),
+            druid_core::core::Value::Int(5),
+            druid_core::core::Value::Int(10),
+            druid_core::core::Value::Int(11),
+            druid_core::core::Value::Int(12),
+            druid_core::core::Value::Int(20),
+            druid_core::core::Value::Int(21),
+            druid_core::core::Value::Int(30),
+            druid_core::core::Value::Int(31),
+            druid_core::core::Value::Int(40)
         ],
         "before 失败不得执行；after/commit 失败发生在物理副作用后；rollback 失败发生在物理回滚后"
     );

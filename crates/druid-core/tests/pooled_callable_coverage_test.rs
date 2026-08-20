@@ -3,7 +3,7 @@
 //! getter/setter families via real Toasty SQLite.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     CallableOutParameter, DruidPooledConnection, FilterAdapter, FilterChainImpl,
     PhysicalConnectionFactory, Value, Wrapper,
 };
@@ -92,13 +92,13 @@ async fn cs_wrapper_trait() {
         let any_ref = Wrapper::as_any(&cs);
         assert_eq!(
             any_ref.type_id(),
-            TypeId::of::<druid::core::DruidPooledCallableStatement>()
+            TypeId::of::<druid_core::core::DruidPooledCallableStatement>()
         );
 
         // is_wrapper_for
         assert!(Wrapper::is_wrapper_for(
             &cs,
-            Some(TypeId::of::<druid::core::DruidPooledCallableStatement>())
+            Some(TypeId::of::<druid_core::core::DruidPooledCallableStatement>())
         ));
         assert!(!Wrapper::is_wrapper_for(&cs, None));
         assert!(!Wrapper::is_wrapper_for(&cs, Some(TypeId::of::<String>())));
@@ -106,7 +106,7 @@ async fn cs_wrapper_trait() {
         // unwrap
         assert!(Wrapper::unwrap(
             &cs,
-            Some(TypeId::of::<druid::core::DruidPooledCallableStatement>())
+            Some(TypeId::of::<druid_core::core::DruidPooledCallableStatement>())
         )
         .is_some());
         assert!(Wrapper::unwrap(&cs, None).is_none());

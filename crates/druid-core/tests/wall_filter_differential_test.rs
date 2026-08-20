@@ -5,8 +5,8 @@
 //! BeforeFilter/AfterFilter/ResultSetFilter trait 实现、以及辅助函数。
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, ExecResult};
-use druid::sql::{DbType, WallConfig, WallFilter, WallProvider, WallSqlStat, WallViolation};
+use druid_core::core::{DruidError, ExecResult};
+use druid_core::sql::{DbType, WallConfig, WallFilter, WallProvider, WallSqlStat, WallViolation};
 
 use std::sync::Arc;
 

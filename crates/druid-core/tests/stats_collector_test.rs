@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::StatsCollector;
+use druid_core::stats::StatsCollector;
 use std::time::Duration;
 
 fn make_collector() -> StatsCollector {

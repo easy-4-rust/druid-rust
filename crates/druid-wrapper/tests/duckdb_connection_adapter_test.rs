@@ -4,7 +4,7 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalConnection, PhysicalPreparedStatement, PreparedStatementKey,
     PreparedStatementMethodType, Value,
 };

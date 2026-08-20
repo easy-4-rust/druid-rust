@@ -1,8 +1,8 @@
 //! druid-stats S4 验收测试
 
 extern crate druid_core as druid;
-use druid::core::*;
-use druid::stats::*;
+use druid_core::core::*;
+use druid_core::stats::*;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -149,7 +149,7 @@ async fn test_stat_filter_as_after_filter() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Update,
+        operation: druid_core::core::ExecOperation::Update,
     };
 
     // ok execution

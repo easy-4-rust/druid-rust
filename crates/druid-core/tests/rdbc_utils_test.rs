@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::{DbType, RdbcUtils};
+use druid_core::sql::{DbType, RdbcUtils};
 
 // ── infer_db_type ──────────────────────────────────────────────
 

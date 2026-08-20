@@ -3,12 +3,12 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use druid::dynamic::node::{
+use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid_core::dynamic::node::{
     NodeEvent, NodeEventTypeEnum, ZookeeperNodeInfo, ZookeeperNodeListener, ZookeeperNodeRegister,
 };
-use druid::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
-use druid::stats::RdbcSqlStat;
+use druid_core::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
+use druid_core::stats::RdbcSqlStat;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -159,7 +159,7 @@ fn zk_listener_config_setters() {
 #[tokio::test]
 async fn zk_listener_check_parameters_rejects_missing() {
     let listener = ZookeeperNodeListener::new();
-    let result = druid::dynamic::node::NodeListener::init(Arc::new(listener)).await;
+    let result = druid_core::dynamic::node::NodeListener::init(Arc::new(listener)).await;
     assert!(result.is_err());
 }
 
@@ -170,7 +170,7 @@ async fn zk_listener_check_parameters_passes_but_no_zk() {
     listener.set_zk_connect_string("localhost:12345");
     listener.set_path("/ha-druid-datasources");
     listener.set_url_template("jdbc:mysql://${host}:${port}/${database}");
-    let result = druid::dynamic::node::NodeListener::init(Arc::new(listener)).await;
+    let result = druid_core::dynamic::node::NodeListener::init(Arc::new(listener)).await;
     assert!(result.is_err());
 }
 
@@ -182,7 +182,7 @@ async fn zk_listener_refresh_empty_cache() {
     listener.set_zk_connect_string("localhost:2181");
     listener.set_path("/test");
     listener.set_url_template("jdbc:mysql://${host}:${port}");
-    let events = druid::dynamic::node::NodeListener::refresh(&listener).await;
+    let events = druid_core::dynamic::node::NodeListener::refresh(&listener).await;
     assert!(events.is_empty());
 }
 
@@ -190,7 +190,7 @@ async fn zk_listener_refresh_empty_cache() {
 #[tokio::test]
 async fn zk_listener_destroy_without_init() {
     let listener = ZookeeperNodeListener::new();
-    druid::dynamic::node::NodeListener::destroy(&listener).await;
+    druid_core::dynamic::node::NodeListener::destroy(&listener).await;
     assert!(listener.client().is_none());
 }
 
@@ -199,7 +199,7 @@ async fn zk_listener_destroy_without_init() {
 fn zk_listener_last_update_time_initial() {
     let listener = ZookeeperNodeListener::new();
     assert_eq!(
-        druid::dynamic::node::NodeListener::last_update_time_millis(&listener),
+        druid_core::dynamic::node::NodeListener::last_update_time_millis(&listener),
         0
     );
 }

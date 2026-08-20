@@ -5,7 +5,7 @@
 //! data_source_by_name/sql_stat_data/pooling_connection_info 空数据源路径。
 
 extern crate druid_core as druid;
-use druid::stats::DruidStatManagerFacade;
+use druid_core::stats::DruidStatManagerFacade;
 use serde_json::json;
 
 // ===========================================================================

@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{ConnectionEvent, ExecOperation};
+use druid_core::core::{ConnectionEvent, ExecOperation};
 
 // ── ExecOperation ──────────────────────────────────────────────
 

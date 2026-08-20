@@ -6,7 +6,7 @@
 //! value.rs (16 uncovered), exception_sorter.rs (11 uncovered).
 
 extern crate druid_core as druid;
-use druid::core::*;
+use druid_core::core::*;
 use std::collections::HashMap;
 use std::time::Duration;
 

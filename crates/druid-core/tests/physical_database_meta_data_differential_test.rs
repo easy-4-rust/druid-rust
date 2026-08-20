@@ -4,7 +4,7 @@
 //! `UnsupportedOperation` paths through a real pooled SQLite connection.
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, DruidPooledConnection, PhysicalConnectionFactory};
+use druid_core::core::{DruidError, DruidPooledConnection, PhysicalConnectionFactory};
 use druid_wrapper::toasty::ToastyConnectionFactory;
 
 async fn make_pooled() -> DruidPooledConnection {

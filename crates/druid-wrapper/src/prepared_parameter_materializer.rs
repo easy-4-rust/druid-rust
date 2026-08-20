@@ -1,6 +1,6 @@
 //! 扩展 Adapter 共用的 Prepared 参数物化策略。
 
-use druid::core::{
+use druid_core::core::{
     DruidError, PreparedInputParameter, RdbcCharacterLength, RdbcObject, RdbcStreamLength, Value,
 };
 
@@ -41,7 +41,7 @@ impl PreparedParameterMaterializer {
     }
 
     fn read_stream(
-        stream: &druid::core::RdbcInputStream,
+        stream: &druid_core::core::RdbcInputStream,
         length: RdbcStreamLength,
     ) -> Result<Vec<u8>, DruidError> {
         let Some(length) = Self::stream_length(length)? else {
@@ -62,7 +62,7 @@ impl PreparedParameterMaterializer {
     }
 
     fn read_reader(
-        reader: &druid::core::RdbcReader,
+        reader: &druid_core::core::RdbcReader,
         length: RdbcCharacterLength,
     ) -> Result<String, DruidError> {
         let Some(length) = Self::character_length(length)? else {
@@ -244,7 +244,7 @@ impl PreparedParameterMaterializer {
 #[cfg(test)]
 mod tests {
     use super::PreparedParameterMaterializer;
-    use druid::core::{
+    use druid_core::core::{
         PreparedInputParameter, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,
         RdbcRowId, RdbcStreamLength, Value,
     };

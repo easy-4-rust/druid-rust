@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     ConnectionEvent, ConnectionEventContext, ResultSetEvent, StatementEvent, StatementEventContext,
 };
 use std::time::Duration;

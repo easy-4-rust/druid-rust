@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::{DataSourceMonitorable, DruidDataSourceStatManager};
+use druid_core::stats::{DataSourceMonitorable, DruidDataSourceStatManager};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -29,15 +29,15 @@ impl DataSourceMonitorable for MockMonitorable {
     fn reset_stat(&self) {
         self.reset_calls.fetch_add(1, Ordering::Relaxed);
     }
-    fn log_stats(&self) -> Result<(), druid::core::DruidError> {
+    fn log_stats(&self) -> Result<(), druid_core::core::DruidError> {
         self.log_calls.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
     fn data_source_stat_data(&self) -> serde_json::Value {
         serde_json::Value::Null
     }
-    fn identity(&self) -> druid::stats::DataSourceIdentity {
-        druid::stats::DataSourceIdentity {
+    fn identity(&self) -> druid_core::stats::DataSourceIdentity {
+        druid_core::stats::DataSourceIdentity {
             id: 0,
             name: self.name.to_string(),
             driver_name: None,
@@ -45,8 +45,9 @@ impl DataSourceMonitorable for MockMonitorable {
     }
     fn try_snapshot(
         &self,
-    ) -> Result<druid::stats::DruidTelemetrySnapshot, druid::stats::SnapshotUnavailable> {
-        Err(druid::stats::SnapshotUnavailable::Busy)
+    ) -> Result<druid_core::stats::DruidTelemetrySnapshot, druid_core::stats::SnapshotUnavailable>
+    {
+        Err(druid_core::stats::SnapshotUnavailable::Busy)
     }
 }
 

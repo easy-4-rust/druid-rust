@@ -5,7 +5,7 @@
 //! - External pool adapters (bb8, deadpool) return `DruidPooledConnection`
 //! - A single type must NOT act as both a direct factory and an external pool
 
-use druid::core::{PhysicalConnection, PhysicalConnectionFactory};
+use druid_core::core::{PhysicalConnection, PhysicalConnectionFactory};
 
 // ---------------------------------------------------------------------------
 // Compile-time assertion helpers

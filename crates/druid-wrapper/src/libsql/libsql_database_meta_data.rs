@@ -1,4 +1,4 @@
-use druid::core::{DruidError, PhysicalDatabaseMetaData};
+use druid_core::core::{DruidError, PhysicalDatabaseMetaData};
 
 /// Turso/libSQL 连接公开的可证明数据库元数据。
 pub struct LibSqlDatabaseMetaData {

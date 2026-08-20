@@ -14,13 +14,13 @@
 //! - set_statement_parameter_log_enabled 旧 API 兼容
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent,
     ConnectionEventContext, DruidError, ExecContext, ExecOperation, ExecResult, LogFilter,
     PhysicalResultSet, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
     ResultSetMetaData, StatementEvent, StatementEventContext, Value,
 };
-use druid::sql::SqlFormatOption;
+use druid_core::sql::SqlFormatOption;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};

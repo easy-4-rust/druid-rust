@@ -20,13 +20,13 @@
 #![allow(deprecated)]
 
 extern crate druid_core as druid;
-use druid::core::filter::config::{ConfigFilter, ConfigTools};
-use druid::core::filter::encoding::{CharsetConvert, CharsetParameter, EncodingConvertFilter};
-use druid::core::filter::mysql8datetime::{
+use druid_core::core::filter::config::{ConfigFilter, ConfigTools};
+use druid_core::core::filter::encoding::{CharsetConvert, CharsetParameter, EncodingConvertFilter};
+use druid_core::core::filter::mysql8datetime::{
     MySQL8DateTimeResultSetMetaData, MySQL8DateTimeSqlTypeFilter,
 };
-use druid::core::log_filter::LogFilter;
-use druid::core::{ResultSetColumnMeta, ResultSetColumnType, Value};
+use druid_core::core::log_filter::LogFilter;
+use druid_core::core::{ResultSetColumnMeta, ResultSetColumnType, Value};
 use std::collections::HashMap;
 
 fn props(entries: &[(&str, &str)]) -> HashMap<String, String> {
@@ -347,7 +347,7 @@ fn mysql8_datetime_value_replace_is_identity() {
 /// Filter 名与 before/after no-op。
 #[tokio::test]
 async fn mysql8_datetime_filter_identity_hooks() {
-    use druid::core::{AfterFilter, BeforeFilter, ExecContext, ExecResult};
+    use druid_core::core::{AfterFilter, BeforeFilter, ExecContext, ExecResult};
     let filter = MySQL8DateTimeSqlTypeFilter::new();
     assert_eq!(BeforeFilter::name(&filter), "mysql8DateTime");
 
@@ -362,7 +362,7 @@ async fn mysql8_datetime_filter_identity_hooks() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Execute,
+        operation: druid_core::core::ExecOperation::Execute,
     };
     BeforeFilter::before(&filter, &mut context).await.unwrap();
     AfterFilter::after(
@@ -380,7 +380,7 @@ async fn mysql8_datetime_filter_identity_hooks() {
 /// metadata 装饰器：LocalDateTime 类名恢复为 Timestamp，其余透传。
 #[test]
 fn mysql8_datetime_metadata_restores_timestamp_class_name() {
-    use druid::core::ResultSetMetaData;
+    use druid_core::core::ResultSetMetaData;
 
     let dt_column = ResultSetColumnMeta::new("dt_col", ResultSetColumnType::Timestamp, true)
         .with_type_identity("DATETIME", "java.time.LocalDateTime");
@@ -471,7 +471,7 @@ fn log_filter_default_switches() {
 /// `BeforeFilter` 钩子：`before()` 用 `encode` 改写 SQL；SQL/批次入口同样编码。
 #[tokio::test]
 async fn encoding_convert_filter_before_hooks_encode_sql() {
-    use druid::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult};
+    use druid_core::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult};
 
     let filter = EncodingConvertFilter::new(Some("UTF-8"), Some("GBK")).unwrap();
     assert_eq!(BeforeFilter::name(&filter), "encoding");
@@ -515,7 +515,7 @@ async fn encoding_convert_filter_before_hooks_encode_sql() {
 /// `config_from_properties` 重建转换器（Java init 从连接属性读取编码）。
 #[test]
 fn encoding_convert_filter_config_from_properties_rebuilds() {
-    use druid::core::BeforeFilter;
+    use druid_core::core::BeforeFilter;
 
     let filter = EncodingConvertFilter::new(None, None).unwrap();
     assert_eq!(filter.encode("stable").unwrap(), "stable");
@@ -537,7 +537,7 @@ fn encoding_convert_filter_config_from_properties_rebuilds() {
 /// `LogFilter` trait 身份与 `before`/`after` no-op。
 #[tokio::test]
 async fn log_filter_trait_hooks_are_noop() {
-    use druid::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult};
+    use druid_core::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult};
 
     let filter = LogFilter::new();
     assert_eq!(BeforeFilter::name(&filter), "log");

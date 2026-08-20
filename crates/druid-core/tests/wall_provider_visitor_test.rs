@@ -4,7 +4,7 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 extern crate druid_core as druid;
-use druid::sql::{DbType, WallConfig, WallProvider, WallViolation, WallVisitorBase};
+use druid_core::sql::{DbType, WallConfig, WallProvider, WallViolation, WallVisitorBase};
 use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
@@ -96,7 +96,7 @@ fn wall_provider_try_check_valid() {
 #[test]
 fn wall_provider_tenant_value() {
     assert!(WallProvider::tenant_value().is_none());
-    WallProvider::set_tenant_value(Some(druid::core::Value::String("tenant-1".to_owned())));
+    WallProvider::set_tenant_value(Some(druid_core::core::Value::String("tenant-1".to_owned())));
     assert!(WallProvider::tenant_value().is_some());
     WallProvider::set_tenant_value(None);
     assert!(WallProvider::tenant_value().is_none());

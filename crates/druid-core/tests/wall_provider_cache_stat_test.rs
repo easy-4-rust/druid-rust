@@ -5,8 +5,8 @@
 //! violation 计数、统计快照、clear_cache、tenant_value、do_privileged 等路径。
 
 extern crate druid_core as druid;
-use druid::core::Value;
-use druid::sql::{
+use druid_core::core::Value;
+use druid_core::sql::{
     DbType, WallConfig, WallProvider, WallProviderStatValue, WallSqlStat, WallViolation,
 };
 

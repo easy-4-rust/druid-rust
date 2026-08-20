@@ -3,7 +3,7 @@
 //! 对应 Java：`java.sql.PreparedStatement` 的驱动句柄职责。
 
 use super::toasty_connection_adapter::ToastyConnectionAdapter;
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
     SqlTextPreparedStatement, SqlWarning, Value,
 };

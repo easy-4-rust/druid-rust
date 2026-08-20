@@ -2,7 +2,7 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     ConnectionRecycleDisposition, DruidError, DruidPooledConnection, ExceptionSorter,
     ExceptionSorterProperties, PhysicalConnection, PhysicalConnectionFactory, PhysicalResultSet,
     Pool, RowSetResultSet, SqlException, Value, Wrapper, WrapperExt,
@@ -51,10 +51,10 @@ async fn direct_sqlx_wrapper_uses_real_sqlite_and_reports_callable_capability() 
 
     let callable = connection
         .prepare_physical_call(
-            &druid::core::PreparedStatementKey::new(
+            &druid_core::core::PreparedStatementKey::new(
                 Some("{call sqlite_has_no_procedure()}".to_string()),
                 None,
-                druid::core::PreparedStatementMethodType::Precall1,
+                druid_core::core::PreparedStatementMethodType::Precall1,
             )
             .unwrap(),
         )

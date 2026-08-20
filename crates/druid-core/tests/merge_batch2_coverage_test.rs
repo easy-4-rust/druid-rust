@@ -9,7 +9,7 @@
 //!   record_with_merge_stat, record (merge_sql=false path via sql_key)
 
 extern crate druid_core as druid;
-use druid::stats::{fingerprint, parameterize, SqlMerger};
+use druid_core::stats::{fingerprint, parameterize, SqlMerger};
 use std::time::Duration;
 
 // ===========================================================================

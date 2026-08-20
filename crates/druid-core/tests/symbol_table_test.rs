@@ -1,6 +1,6 @@
 extern crate druid_core as druid;
-use druid::core::RdbcString;
-use druid::sql::SymbolTable;
+use druid_core::core::RdbcString;
+use druid_core::sql::SymbolTable;
 use std::sync::Arc;
 
 #[test]
@@ -113,7 +113,7 @@ fn symbol_table_substring() {
 
 #[test]
 fn symbol_table_global_exists() {
-    let st = druid::sql::GLOBAL_SYMBOL_TABLE.lock().unwrap();
+    let st = druid_core::sql::GLOBAL_SYMBOL_TABLE.lock().unwrap();
     assert!(st.find_symbol(0).is_none());
 }
 

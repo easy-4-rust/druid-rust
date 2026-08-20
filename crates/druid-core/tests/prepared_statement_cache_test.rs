@@ -6,7 +6,7 @@
 //! - `com.alibaba.druid.bvt.pool.PSCacheTest3`
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementKey,
     PreparedStatementMethodType, PreparedStatementPool, SqlTextPreparedStatement,
     StatementGeneratedKeys,

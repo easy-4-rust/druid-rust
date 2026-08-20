@@ -4,8 +4,8 @@
 //! pooled_connection.rs (42 uncovered), config.rs (33 uncovered).
 
 extern crate druid_core as druid;
-use druid::core::*;
-use druid::pool::DruidPool;
+use druid_core::core::*;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -100,7 +100,7 @@ async fn build_pool(max_open: usize, max_idle: usize) -> DruidPool {
 
 #[test]
 fn test_pool_inner_config_default() {
-    let cfg = druid::pool::PoolInnerConfig::default();
+    let cfg = druid_core::pool::PoolInnerConfig::default();
     assert_eq!(cfg.db_type_name, None);
     assert_eq!(cfg.max_open, 8);
     assert_eq!(cfg.min_idle, 0);
@@ -168,7 +168,7 @@ fn test_druid_pool_builder_all_methods() {
 
 #[test]
 fn test_druid_pool_builder_default() {
-    let _ = druid::pool::DruidPoolBuilder::default();
+    let _ = druid_core::pool::DruidPoolBuilder::default();
 }
 
 #[tokio::test]
@@ -184,7 +184,7 @@ async fn test_druid_pool_builder_without_factory() {
 #[tokio::test]
 async fn test_druid_pool_new_direct() {
     let (factory, _) = make_factory();
-    let config = druid::pool::PoolInnerConfig::default();
+    let config = druid_core::pool::PoolInnerConfig::default();
     let pool = DruidPool::new("direct".into(), "mock".into(), factory, config, None);
     assert_eq!(pool.name(), "direct");
     assert_eq!(pool.driver_name(), "mock");
@@ -477,7 +477,7 @@ async fn test_pool_inner_concurrent_acquire_release() {
 #[tokio::test]
 async fn test_pool_trait_get() {
     let pool = build_pool(2, 2).await;
-    let pool_trait: &dyn druid::core::Pool = &pool;
+    let pool_trait: &dyn druid_core::core::Pool = &pool;
     let conn = pool_trait.get().await.unwrap();
     assert!(conn.id() > 0);
 }
@@ -486,7 +486,7 @@ async fn test_pool_trait_get() {
 async fn test_pool_trait_get_timeout() {
     let pool = build_pool(1, 1).await;
     let _c = pool.get().await.unwrap();
-    let pool_trait: &dyn druid::core::Pool = &pool;
+    let pool_trait: &dyn druid_core::core::Pool = &pool;
     let result = pool_trait.get_timeout(Duration::from_millis(100)).await;
     assert!(result.is_err());
 }
@@ -494,7 +494,7 @@ async fn test_pool_trait_get_timeout() {
 #[tokio::test]
 async fn test_pool_trait_state() {
     let pool = build_pool(2, 2).await;
-    let pool_trait: &dyn druid::core::Pool = &pool;
+    let pool_trait: &dyn druid_core::core::Pool = &pool;
     let st = pool_trait.state();
     assert_eq!(st.name, "test");
     assert_eq!(pool_trait.driver_name(), "mock");
@@ -512,7 +512,7 @@ async fn test_pool_trait_state() {
 #[tokio::test]
 async fn test_pool_trait_get_timeout_success() {
     let pool = build_pool(2, 2).await;
-    let pool_trait: &dyn druid::core::Pool = &pool;
+    let pool_trait: &dyn druid_core::core::Pool = &pool;
     let conn = pool_trait
         .get_timeout(Duration::from_secs(2))
         .await
@@ -545,13 +545,13 @@ async fn test_pool_inner_should_evict() {
 fn test_pool_inner_should_evict_direct() {
     // Directly test should_evict method
     let (factory, _) = make_factory();
-    let config = druid::pool::PoolInnerConfig {
+    let config = druid_core::pool::PoolInnerConfig {
         max_open: 4,
         min_idle: 2,
         max_idle: 4,
         ..Default::default()
     };
-    let inner = druid::pool::PoolInner::new(factory, config);
+    let inner = druid_core::pool::PoolInner::new(factory, config);
     // Empty idle queue - should not evict
     assert!(!inner.should_evict());
 }
@@ -566,7 +566,7 @@ fn test_pool_inner_should_evict_direct() {
 
 #[tokio::test]
 async fn test_pool_connection_before_execute_error() {
-    use druid::core::{BeforeFilter, ExecContext};
+    use druid_core::core::{BeforeFilter, ExecContext};
 
     struct BlockingFilter;
     #[async_trait::async_trait]

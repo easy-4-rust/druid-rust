@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::RdbcStatContext;
+use druid_core::stats::RdbcStatContext;
 
 #[test]
 fn stat_context_new_default() {

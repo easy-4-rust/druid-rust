@@ -3,7 +3,7 @@
 //! generated keys, more_results, warnings, and Debug format.
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory,
     ProxyAttributeValue, Value, Wrapper,
 };
@@ -481,17 +481,17 @@ async fn ps_wrapper_trait() {
     let any_ref = Wrapper::as_any(&ps);
     assert_eq!(
         any_ref.type_id(),
-        TypeId::of::<druid::core::DruidPooledPreparedStatement>()
+        TypeId::of::<druid_core::core::DruidPooledPreparedStatement>()
     );
 
     // is_wrapper_for
     assert!(Wrapper::is_wrapper_for(
         &ps,
-        Some(TypeId::of::<druid::core::DruidPooledPreparedStatement>())
+        Some(TypeId::of::<druid_core::core::DruidPooledPreparedStatement>())
     ));
     assert!(Wrapper::is_wrapper_for(
         &ps,
-        Some(TypeId::of::<dyn druid::core::PhysicalPreparedStatement>())
+        Some(TypeId::of::<dyn druid_core::core::PhysicalPreparedStatement>())
     ));
     assert!(!Wrapper::is_wrapper_for(&ps, None));
     assert!(!Wrapper::is_wrapper_for(&ps, Some(TypeId::of::<String>())));
@@ -499,12 +499,12 @@ async fn ps_wrapper_trait() {
     // unwrap
     assert!(Wrapper::unwrap(
         &ps,
-        Some(TypeId::of::<druid::core::DruidPooledPreparedStatement>())
+        Some(TypeId::of::<druid_core::core::DruidPooledPreparedStatement>())
     )
     .is_some());
     assert!(Wrapper::unwrap(
         &ps,
-        Some(TypeId::of::<dyn druid::core::PhysicalPreparedStatement>())
+        Some(TypeId::of::<dyn druid_core::core::PhysicalPreparedStatement>())
     )
     .is_some());
     assert!(Wrapper::unwrap(&ps, None).is_none());

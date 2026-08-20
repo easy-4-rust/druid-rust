@@ -12,11 +12,11 @@
 //!   `if (result && onFatalError) { onFatalError = false; }` 恢复语义。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, MySqlExceptionSorter, PhysicalConnection, PhysicalConnectionFactory,
     Row, ValidConnectionChecker, Value,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -420,7 +420,7 @@ async fn successful_validation_clears_on_fatal_error() {
     // 借出连接并注入 fatal SQL 异常（MySql sorter 判 1042 为 fatal）。
     let mut connection = pool.get().await.unwrap();
     assert!(!pool.is_on_fatal_error());
-    let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+    let fatal = DruidError::SqlException(Box::new(druid_core::core::SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));
@@ -471,7 +471,7 @@ async fn failing_validation_keeps_on_fatal_error() {
 
     // 初始验证成功：正常借出。
     let mut connection = pool.get_timeout(Duration::from_millis(200)).await.unwrap();
-    let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+    let fatal = DruidError::SqlException(Box::new(druid_core::core::SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));
@@ -514,7 +514,7 @@ async fn on_fatal_error_max_active_gates_onset() {
     // 第 1、2 个 fatal：increment(1,2) <= 2 → 不置位。
     for _ in 0..2 {
         let mut connection = pool.get().await.unwrap();
-        let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+        let fatal = DruidError::SqlException(Box::new(druid_core::core::SqlException::driver(
             1042,
             "fatal connection error".to_owned(),
         )));
@@ -525,7 +525,7 @@ async fn on_fatal_error_max_active_gates_onset() {
 
     // 第 3 个 fatal：increment(3) > 2 → 置位。
     let mut connection = pool.get().await.unwrap();
-    let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+    let fatal = DruidError::SqlException(Box::new(druid_core::core::SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));

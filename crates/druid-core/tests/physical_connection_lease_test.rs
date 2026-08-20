@@ -1,7 +1,7 @@
 //! `PhysicalConnectionLease` 透明委托契约测试。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     ConnectionDefaults, DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalConnectionLease, PhysicalPreparedStatement, Row, Savepoint, SqlTextPreparedStatement,
     SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,

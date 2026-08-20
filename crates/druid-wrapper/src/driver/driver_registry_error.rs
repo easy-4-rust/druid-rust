@@ -14,5 +14,5 @@ pub enum DriverRegistryError {
     #[error("database profile '{profile}' received incompatible URL '{url}'")]
     InvalidUrl { profile: String, url: String },
     #[error(transparent)]
-    Pool(#[from] druid::core::DruidError),
+    Pool(#[from] druid_core::core::DruidError),
 }

@@ -2,13 +2,13 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     ConnectionFactory, DruidError, DruidPooledConnection, DruidPooledPreparedStatement,
     PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, RdbcBlob, RdbcClob,
     RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRowId, RdbcString, RdbcUrl,
     RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
-use druid::spi::{
+use druid_core::spi::{
     RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
     RdbcResourceFactory, RdbcSqlXmlAccess,
 };

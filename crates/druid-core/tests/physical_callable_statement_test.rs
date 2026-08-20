@@ -6,7 +6,7 @@
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
+use druid_core::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidError, PhysicalCallableStatement, PhysicalPreparedStatement,
     RdbcObject, Value,

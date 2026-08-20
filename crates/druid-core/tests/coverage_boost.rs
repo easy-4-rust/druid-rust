@@ -1,6 +1,6 @@
 //! Coverage boost tests targeting specific uncovered lines.
 extern crate druid_core as druid;
-use druid::core::*;
+use druid_core::core::*;
 use std::sync::Arc;
 use std::time::Duration;
 

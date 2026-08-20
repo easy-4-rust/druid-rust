@@ -24,11 +24,11 @@
 //!    连接若版本落后也立即销毁。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, MySqlExceptionSorter, PhysicalConnection, PhysicalConnectionFactory,
     Row, SqlException, ValidConnectionChecker, Value,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

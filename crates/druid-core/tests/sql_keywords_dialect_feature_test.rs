@@ -9,11 +9,11 @@
 //! - `Lexer`：通过 sqlparser 直接验证词法输出。
 
 extern crate druid_core as druid;
-use druid::sql::dialect_feature::{
+use druid_core::sql::dialect_feature::{
     DialectFeature, DialectFeatureValue, LexerFeature, ParserFeature,
 };
-use druid::sql::keywords::{Keywords, DEFAULT_KEYWORDS, SQLITE_KEYWORDS};
-use druid::sql::sql_parser_feature::SqlParserFeature;
+use druid_core::sql::keywords::{Keywords, DEFAULT_KEYWORDS, SQLITE_KEYWORDS};
+use druid_core::sql::sql_parser_feature::SqlParserFeature;
 
 // ── Keywords（Java Druid 关键字表）────────────────────────────
 
@@ -105,7 +105,7 @@ fn keywords_hash_lookup_matches_direct_lookup() {
 #[test]
 fn keywords_custom_table() {
     let mut map = HashMap::new();
-    map.insert("CUSTOM_KEYWORD".to_owned(), druid::sql::Token::Select);
+    map.insert("CUSTOM_KEYWORD".to_owned(), druid_core::sql::Token::Select);
     let keywords = Keywords::new(map);
     assert!(keywords.get_keyword("CUSTOM_KEYWORD").is_some());
     assert!(
@@ -325,7 +325,7 @@ fn sql_parser_feature_of_empty() {
 /// Token 关键字变体 Debug 和 `PartialEq`。
 #[test]
 fn token_keyword_variants() {
-    use druid::sql::Token;
+    use druid_core::sql::Token;
     assert_eq!(Token::Select, Token::Select);
     assert_ne!(Token::Select, Token::Insert);
     assert_eq!(format!("{:?}", Token::Select), "Select");

@@ -15,11 +15,11 @@
 //! - `TestDefault#test_close`
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalConnectionFactory, Row, ValidConnectionChecker, Value,
 };
-use druid::pool::DruidPool;
+use druid_core::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -309,7 +309,7 @@ impl PhysicalConnectionFactory for TrackingFactory {
 
 async fn build_pool(
     factory: Arc<TrackingFactory>,
-    configure: impl FnOnce(druid::pool::DruidPoolBuilder) -> druid::pool::DruidPoolBuilder,
+    configure: impl FnOnce(druid_core::pool::DruidPoolBuilder) -> druid_core::pool::DruidPoolBuilder,
 ) -> DruidPool {
     configure(
         DruidPool::builder()

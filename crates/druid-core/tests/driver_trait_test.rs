@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::{Driver, DriverProperty, DruidError, PhysicalConnection};
+use druid_core::core::{Driver, DriverProperty, DruidError, PhysicalConnection};
 use std::collections::HashMap;
 
 struct MockDriver;

@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::RdbcStatementStat;
+use druid_core::stats::RdbcStatementStat;
 use std::time::Duration;
 
 #[test]

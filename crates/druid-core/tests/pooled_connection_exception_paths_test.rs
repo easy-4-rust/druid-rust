@@ -4,7 +4,7 @@
 //! `com.alibaba.druid.bvt.pool.exception.OracleExceptionSorterTest_*`。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties, ExecResult,
     PhysicalConnection, PhysicalPreparedStatement, PreparedStatementKey,
     PreparedStatementMethodType, Row, Savepoint, SqlException, SqlTextPreparedStatement,

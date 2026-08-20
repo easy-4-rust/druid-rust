@@ -1,4 +1,4 @@
-use druid::core::{DruidError, SqlException, SqlExceptionCause};
+use druid_core::core::{DruidError, SqlException, SqlExceptionCause};
 use serde::Deserialize;
 
 /// JDBC Agent 返回的结构化驱动异常。
@@ -88,7 +88,7 @@ impl AgentError {
 #[cfg(test)]
 mod tests {
     use super::AgentError;
-    use druid::core::{DruidError, SqlExceptionCause};
+    use druid_core::core::{DruidError, SqlExceptionCause};
     use serde_json::json;
 
     #[test]

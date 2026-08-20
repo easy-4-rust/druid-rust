@@ -4,7 +4,7 @@
 //! `Vec<Row>`，但查询侧仍使用 `fetch_all`，因此不是流式游标。真正的流式结果集
 //! 需要先把同步 `PhysicalResultSet::next()` 演进为可等待的 C7 生命周期接口。
 
-use druid::core::{
+use druid_core::core::{
     DruidError, PhysicalResultSet, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData,
     Value,
 };

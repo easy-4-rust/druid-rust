@@ -13,15 +13,15 @@
 //! - `ZookeeperNodeInfo`：连接信息组装。
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use druid::dynamic::node::{
+use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid_core::dynamic::node::{
     FileNodeListener, NodeEvent, NodeEventTypeEnum, NodeListener, ZookeeperNodeInfo,
 };
-use druid::dynamic::selector::{
+use druid_core::dynamic::selector::{
     DataSourceSelector, DataSourceSelectorEnum, DataSourceSelectorFactory, NamedDataSourceSelector,
     StickyDataSourceHolder, StickyRandomDataSourceSelector,
 };
-use druid::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
+use druid_core::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;

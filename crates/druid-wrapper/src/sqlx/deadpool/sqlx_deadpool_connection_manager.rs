@@ -2,7 +2,7 @@
 
 use crate::sqlx::SqlxConnectionFactory;
 use deadpool::managed::{Manager, Metrics, RecycleResult};
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid_core::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// SQLx 物理连接的 deadpool 管理器。

@@ -4,8 +4,8 @@
 //! 事务和回收语义。SQLite 没有存储过程，因此 CallableStatement 必须明确报错。
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, PhysicalConnection, Value};
-use druid::pool::DruidPool;
+use druid_core::core::{DruidError, PhysicalConnection, Value};
+use druid_core::pool::DruidPool;
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 

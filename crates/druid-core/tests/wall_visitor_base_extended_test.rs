@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::sql::{
+use druid_core::sql::{
     DbType, WallConfig, WallProvider, WallUpdateCheckItem, WallViolation, WallVisitorBase,
 };
 use sqlparser::ast::{Expr, Value};

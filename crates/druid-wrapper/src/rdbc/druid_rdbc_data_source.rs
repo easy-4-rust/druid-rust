@@ -1,9 +1,9 @@
 use std::any::Any;
 
 use async_trait::async_trait;
-use druid::core::{DruidError, DruidPooledConnection, SqlException, Wrapper};
-use druid::pool::DruidDataSource;
-use druid::sql::{CommonDataSource, DataSource};
+use druid_core::core::{DruidError, DruidPooledConnection, SqlException, Wrapper};
+use druid_core::pool::DruidDataSource;
+use druid_core::sql::{CommonDataSource, DataSource};
 
 use crate::driver::{DriverRegistryError, DruidDatabasePoolBuilder};
 

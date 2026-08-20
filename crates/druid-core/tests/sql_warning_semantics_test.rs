@@ -6,7 +6,7 @@
 //! `DruidPooledResultSet#getWarnings/clearWarnings`。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     BeforeFilter, ConnectionWarningFilterChain, DruidError, DruidPooledConnection, ExceptionSorter,
     ExceptionSorterProperties, ExecContext, ExecResult, FilterChain, PhysicalConnection,
     PhysicalConnectionFactory, ResultSetFilter, ResultSetFilterChain, Row, SqlException,

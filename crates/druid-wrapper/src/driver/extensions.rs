@@ -3,13 +3,13 @@
 //! Each `inventory::submit!` registers a `DriverExtensionDescriptor` that
 //! Core's `lookup_driver_extension` can resolve by database type.
 
-use druid::core::{
+use druid_core::core::{
     Db2ExceptionSorter, DruidError, MySqlExceptionSorter, MySqlValidConnectionChecker,
     OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker, OracleExceptionSorter,
     OracleValidConnectionChecker, PgExceptionSorter, PgValidConnectionChecker,
     PhysicalConnectionFactory,
 };
-use druid::spi::driver_extension_descriptor::DriverExtensionDescriptor;
+use druid_core::spi::driver_extension_descriptor::DriverExtensionDescriptor;
 use std::sync::Arc;
 
 use crate::toasty::ToastyConnectionFactory;

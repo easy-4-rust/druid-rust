@@ -4,8 +4,8 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 extern crate druid_core as druid;
-use druid::core::RdbcParameterImpl;
-use druid::sql::{WallCheckResult, WallProviderStatValue, WallSqlStat, WallViolation};
+use druid_core::core::RdbcParameterImpl;
+use druid_core::sql::{WallCheckResult, WallProviderStatValue, WallSqlStat, WallViolation};
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
 use std::sync::Arc;

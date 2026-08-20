@@ -10,12 +10,12 @@
 //! - merge_sql parameterization
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
     ExecContext, ExecOperation, ExecResult, PhysicalResultSet, ResultSetFilter,
     ResultSetFilterChain, ResultSetFilterContext, Value,
 };
-use druid::stats::{StatFilter, StatsCollector};
+use druid_core::stats::{StatFilter, StatsCollector};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -670,8 +670,8 @@ fn slow_sql_millis_zero_all_slow() {
 #[test]
 fn on_statement_close_context() {
     let (filter, _collector) = make_filter();
-    let event = druid::core::StatementEvent::Close;
-    let context = druid::core::StatementEventContext {
+    let event = druid_core::core::StatementEvent::Close;
+    let context = druid_core::core::StatementEventContext {
         connection_id: 1,
         statement_id: 1,
         event: &event,

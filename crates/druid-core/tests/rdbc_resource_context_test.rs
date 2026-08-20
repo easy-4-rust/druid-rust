@@ -1,6 +1,6 @@
 extern crate druid_core as druid;
-use druid::core::{DruidError, RdbcObject, RdbcTypeMap, Value};
-use druid::spi::{
+use druid_core::core::{DruidError, RdbcObject, RdbcTypeMap, Value};
+use druid_core::spi::{
     RdbcRefAccess, RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceContext,
     RdbcResourceFactory, RdbcResourceId, RdbcResourceKind, RdbcResourceOwner, RdbcResourceState,
 };

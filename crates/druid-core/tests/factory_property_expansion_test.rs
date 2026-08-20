@@ -6,8 +6,8 @@
 //! various property combinations.
 
 extern crate druid_core as druid;
-use druid::core::DruidError;
-use druid::pool::DruidDataSourceFactory;
+use druid_core::core::DruidError;
+use druid_core::pool::DruidDataSourceFactory;
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;

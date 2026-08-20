@@ -4,8 +4,8 @@
 //! stat_filter.rs (8 uncovered).
 
 extern crate druid_core as druid;
-use druid::core::*;
-use druid::stats::*;
+use druid_core::core::*;
+use druid_core::stats::*;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -353,7 +353,7 @@ async fn test_stat_filter_after_ok() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Update,
+        operation: druid_core::core::ExecOperation::Update,
     };
     filter
         .after(
@@ -385,7 +385,7 @@ async fn test_stat_filter_after_error() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Update,
+        operation: druid_core::core::ExecOperation::Update,
     };
     filter
         .after(
@@ -415,7 +415,7 @@ async fn test_stat_filter_after_slow_sql() {
         start: std::time::Instant::now(),
         fingerprint: None,
         in_transaction: false,
-        operation: druid::core::ExecOperation::Query,
+        operation: druid_core::core::ExecOperation::Query,
     };
     filter
         .after(&ctx, &Ok(ExecResult::default()), Duration::from_millis(200))
@@ -431,7 +431,7 @@ async fn test_stat_filter_ignores_generic_close_event() {
     // 真实物理关闭只允许进入 BeforeFilter 的有位置 connection_close 链；
     // 通用 after-event 对 Close 不应再伪造物理关闭副作用。
     filter
-        .after_connection_event(&druid::core::ConnectionEvent::Close, Duration::ZERO)
+        .after_connection_event(&druid_core::core::ConnectionEvent::Close, Duration::ZERO)
         .await
         .unwrap();
 }

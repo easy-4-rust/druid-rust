@@ -3,8 +3,8 @@
 //! Java 基线：`com.alibaba.druid.sql.parser.Lexer`。
 
 extern crate druid_core as druid;
-use druid::core::RdbcString;
-use druid::sql::{
+use druid_core::core::RdbcString;
+use druid_core::sql::{
     CommentHandler, DbType, Lexer, LexerError, LexerFeature, SqlInsertNumber, SqlParserFeature,
     Token,
 };

@@ -8,12 +8,12 @@
 //! `LoadBalancer`, `DataSourceGroup`, `SqlHint`.
 
 extern crate druid_core as druid;
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
-use druid::dynamic::selector::{
+use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid_core::dynamic::selector::{
     DataSourceSelector, NamedDataSourceSelector, RandomDataSourceSelector,
     RandomDataSourceValidateFilter, StickyDataSourceHolder, StickyRandomDataSourceSelector,
 };
-use druid::dynamic::{
+use druid_core::dynamic::{
     DataSourceCreator, DynamicDataSource, HighAvailableDataSource, LoadBalancer, SqlHint,
 };
 use std::sync::Arc;
@@ -482,36 +482,36 @@ fn sticky_selector_expired_holder() {
 #[test]
 fn selector_enum_case_insensitive() {
     assert_eq!(
-        druid::dynamic::DataSourceSelectorEnum::of("BYNAME"),
-        Some(druid::dynamic::DataSourceSelectorEnum::ByName)
+        druid_core::dynamic::DataSourceSelectorEnum::of("BYNAME"),
+        Some(druid_core::dynamic::DataSourceSelectorEnum::ByName)
     );
     assert_eq!(
-        druid::dynamic::DataSourceSelectorEnum::of("RANDOM"),
-        Some(druid::dynamic::DataSourceSelectorEnum::Random)
+        druid_core::dynamic::DataSourceSelectorEnum::of("RANDOM"),
+        Some(druid_core::dynamic::DataSourceSelectorEnum::Random)
     );
     assert_eq!(
-        druid::dynamic::DataSourceSelectorEnum::of("STICKYRANDOM"),
-        Some(druid::dynamic::DataSourceSelectorEnum::StickyRandom)
+        druid_core::dynamic::DataSourceSelectorEnum::of("STICKYRANDOM"),
+        Some(druid_core::dynamic::DataSourceSelectorEnum::StickyRandom)
     );
 }
 
 #[test]
 fn selector_enum_empty() {
-    assert!(druid::dynamic::DataSourceSelectorEnum::of("").is_none());
+    assert!(druid_core::dynamic::DataSourceSelectorEnum::of("").is_none());
 }
 
 #[test]
 fn selector_enum_all_names() {
     assert_eq!(
-        druid::dynamic::DataSourceSelectorEnum::ByName.name(),
+        druid_core::dynamic::DataSourceSelectorEnum::ByName.name(),
         "byName"
     );
     assert_eq!(
-        druid::dynamic::DataSourceSelectorEnum::Random.name(),
+        druid_core::dynamic::DataSourceSelectorEnum::Random.name(),
         "random"
     );
     assert_eq!(
-        druid::dynamic::DataSourceSelectorEnum::StickyRandom.name(),
+        druid_core::dynamic::DataSourceSelectorEnum::StickyRandom.name(),
         "stickyRandom"
     );
 }
@@ -519,15 +519,17 @@ fn selector_enum_all_names() {
 #[test]
 fn factory_all_valid_names() {
     let ha = HighAvailableDataSource::new("factory-all", DataSourceCreator::noop_for_test());
-    assert!(druid::dynamic::DataSourceSelectorFactory::get_selector("byName", &ha).is_some());
-    assert!(druid::dynamic::DataSourceSelectorFactory::get_selector("random", &ha).is_some());
-    assert!(druid::dynamic::DataSourceSelectorFactory::get_selector("stickyRandom", &ha).is_some());
+    assert!(druid_core::dynamic::DataSourceSelectorFactory::get_selector("byName", &ha).is_some());
+    assert!(druid_core::dynamic::DataSourceSelectorFactory::get_selector("random", &ha).is_some());
+    assert!(
+        druid_core::dynamic::DataSourceSelectorFactory::get_selector("stickyRandom", &ha).is_some()
+    );
 }
 
 #[test]
 fn factory_invalid_name() {
     let ha = HighAvailableDataSource::new("factory-invalid", DataSourceCreator::noop_for_test());
-    assert!(druid::dynamic::DataSourceSelectorFactory::get_selector("invalid", &ha).is_none());
+    assert!(druid_core::dynamic::DataSourceSelectorFactory::get_selector("invalid", &ha).is_none());
 }
 
 // ===========================================================================
@@ -590,14 +592,14 @@ fn holder_clone() {
 #[test]
 fn recover_task_default_interval() {
     assert_eq!(
-        druid::dynamic::RandomDataSourceRecoverTask::DEFAULT_RECOVER_INTERVAL_SECONDS,
+        druid_core::dynamic::RandomDataSourceRecoverTask::DEFAULT_RECOVER_INTERVAL_SECONDS,
         120
     );
 }
 
 #[test]
 fn validate_filter_name() {
-    use druid::core::{AfterFilter, BeforeFilter};
+    use druid_core::core::{AfterFilter, BeforeFilter};
     let filter = RandomDataSourceValidateFilter;
     assert_eq!(BeforeFilter::name(&filter), "randomDataSourceValidate");
     assert_eq!(AfterFilter::name(&filter), "randomDataSourceValidate");
@@ -610,11 +612,11 @@ fn validate_filter_name() {
 #[test]
 fn dynamic_route_write() {
     let master = MockPool::arc("master");
-    let group = druid::dynamic::DataSourceGroup::new(
+    let group = druid_core::dynamic::DataSourceGroup::new(
         "g1",
         master,
         vec![],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     let ds = DynamicDataSource::new(group);
     let pool = ds.route(SqlHint::Write);
@@ -624,11 +626,11 @@ fn dynamic_route_write() {
 #[test]
 fn dynamic_route_read_fallback() {
     let master = MockPool::arc("master");
-    let group = druid::dynamic::DataSourceGroup::new(
+    let group = druid_core::dynamic::DataSourceGroup::new(
         "g2",
         master,
         vec![],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     let ds = DynamicDataSource::new(group);
     let pool = ds.route(SqlHint::Read);
@@ -638,11 +640,11 @@ fn dynamic_route_read_fallback() {
 #[test]
 fn dynamic_route_auto() {
     let master = MockPool::arc("master");
-    let group = druid::dynamic::DataSourceGroup::new(
+    let group = druid_core::dynamic::DataSourceGroup::new(
         "g3",
         master,
         vec![],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     let ds = DynamicDataSource::new(group);
     let pool = ds.route(SqlHint::Auto);
@@ -651,20 +653,20 @@ fn dynamic_route_auto() {
 
 #[test]
 fn dynamic_switch() {
-    let g1 = druid::dynamic::DataSourceGroup::new(
+    let g1 = druid_core::dynamic::DataSourceGroup::new(
         "v1",
         MockPool::arc("m1"),
         vec![],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     let ds = DynamicDataSource::new(g1);
     assert_eq!(ds.current_name(), "v1");
 
-    let g2 = druid::dynamic::DataSourceGroup::new(
+    let g2 = druid_core::dynamic::DataSourceGroup::new(
         "v2",
         MockPool::arc("m2"),
         vec![],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     ds.switch(g2);
     assert_eq!(ds.current_name(), "v2");
@@ -672,11 +674,11 @@ fn dynamic_switch() {
 
 #[test]
 fn dynamic_current_snapshot() {
-    let g = druid::dynamic::DataSourceGroup::new(
+    let g = druid_core::dynamic::DataSourceGroup::new(
         "snap",
         MockPool::arc("m"),
         vec![],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     let ds = DynamicDataSource::new(g);
     let current = ds.current();
@@ -687,11 +689,11 @@ fn dynamic_current_snapshot() {
 fn dynamic_route_read_with_slaves() {
     let master = MockPool::arc("master");
     let slave = MockPool::arc("slave");
-    let group = druid::dynamic::DataSourceGroup::new(
+    let group = druid_core::dynamic::DataSourceGroup::new(
         "g4",
         master,
         vec![slave],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     let ds = DynamicDataSource::new(group);
     let pool = ds.route(SqlHint::Read);
@@ -704,7 +706,7 @@ fn dynamic_route_read_with_slaves() {
 
 #[test]
 fn round_robin_single_pool() {
-    let lb = druid::dynamic::RoundRobinBalancer::new();
+    let lb = druid_core::dynamic::RoundRobinBalancer::new();
     let pools: Vec<Arc<dyn Pool>> = vec![MockPool::arc("only")];
     assert_eq!(lb.pick(&pools).unwrap().name(), "only");
     assert_eq!(lb.pick(&pools).unwrap().name(), "only");
@@ -712,14 +714,14 @@ fn round_robin_single_pool() {
 
 #[test]
 fn random_balancer_single() {
-    let lb = druid::dynamic::RandomBalancer;
+    let lb = druid_core::dynamic::RandomBalancer;
     let pools: Vec<Arc<dyn Pool>> = vec![MockPool::arc("only")];
     assert_eq!(lb.pick(&pools).unwrap().name(), "only");
 }
 
 #[test]
 fn round_robin_default() {
-    let lb = druid::dynamic::RoundRobinBalancer::default();
+    let lb = druid_core::dynamic::RoundRobinBalancer::default();
     assert_eq!(lb.name(), "round_robin");
 }
 
@@ -729,11 +731,11 @@ fn round_robin_default() {
 
 #[test]
 fn datasource_group_new() {
-    let g = druid::dynamic::DataSourceGroup::new(
+    let g = druid_core::dynamic::DataSourceGroup::new(
         "group1",
         MockPool::arc("master"),
         vec![MockPool::arc("s1"), MockPool::arc("s2")],
-        Arc::new(druid::dynamic::RoundRobinBalancer::new()),
+        Arc::new(druid_core::dynamic::RoundRobinBalancer::new()),
     );
     assert_eq!(g.name, "group1");
     assert_eq!(g.slaves.len(), 2);

@@ -3,11 +3,11 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
 };
-use druid::pool::{DruidDataSource, DruidPool};
-use druid::sql::{WallConfig, WallVisitorUtils};
+use druid_core::pool::{DruidDataSource, DruidPool};
+use druid_core::sql::{WallConfig, WallVisitorUtils};
 use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;

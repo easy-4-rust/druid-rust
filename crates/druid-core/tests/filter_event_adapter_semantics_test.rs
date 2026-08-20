@@ -1,7 +1,7 @@
 //! Java `FilterEventAdapter` 事件模板与真实 Toasty SQLite 验证。
 
 extern crate druid_core as druid;
-use druid::core::{
+use druid_core::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
     DruidPooledConnection, ExecContext, ExecOperation, ExecResult, ExtendedFilter, FilterChain,
     FilterEventAdapter, FilterEventListener, PhysicalConnectionFactory, ResultSetFilter,
@@ -94,7 +94,7 @@ impl FilterEventListener for RecordingListener {
 
     async fn statement_execute_batch_before(
         &self,
-        context: &druid::core::BatchExecContext<'_>,
+        context: &druid_core::core::BatchExecContext<'_>,
     ) -> Result<(), DruidError> {
         self.record(format!("batch_before:{}", context.sql));
         Ok(())
@@ -102,7 +102,7 @@ impl FilterEventListener for RecordingListener {
 
     async fn statement_execute_batch_after(
         &self,
-        context: &druid::core::BatchExecContext<'_>,
+        context: &druid_core::core::BatchExecContext<'_>,
         update_counts: &[i32],
     ) -> Result<(), DruidError> {
         self.record(format!("batch_after:{}:{update_counts:?}", context.sql));

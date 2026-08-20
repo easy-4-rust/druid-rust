@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::stats::{StatFilter, StatsCollector};
+use druid_core::stats::{StatFilter, StatsCollector};
 use std::sync::Arc;
 use std::time::Duration;
 

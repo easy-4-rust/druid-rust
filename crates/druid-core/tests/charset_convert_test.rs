@@ -1,5 +1,5 @@
 extern crate druid_core as druid;
-use druid::core::CharsetConvert;
+use druid_core::core::CharsetConvert;
 
 #[test]
 fn charset_convert_new_same_encoding() {
