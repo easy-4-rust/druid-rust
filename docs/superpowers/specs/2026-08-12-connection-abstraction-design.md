@@ -1032,8 +1032,34 @@ native 和 bridge provider 均需执行：
 | ADR-CONN-005 | 显式 async close + Drop enqueue | ACCEPTED |
 | ADR-CONN-006 | driver capability 启动校验，unsupported 不静默 | ACCEPTED |
 | ADR-CONN-007 | `java.sql.*` 归入平台依赖映射，不计 Druid 对象完成率 | ACCEPTED |
-| ADR-CONN-008 | 产品与发布边界固定为 `druid`、`druid-admin`、`druid-wrapper` 三个 crate | ACCEPTED |
+| ADR-CONN-008 | 产品与发布边界固定为 `druid`、`druid-admin`、`druid-wrapper` 三个 crate | SUPERSEDED_BY ADR-CRATE-001 |
 | ADR-CONN-009 | Toasty 归 `druid::toasty`；其余数据库实现统一归 `druid-wrapper`，禁止独立发布 | ACCEPTED |
+| ADR-CRATE-001 | 五 Crate 目标拓扑：`druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`；当前源码仍为三 crate，批准目标为五 crate | ACCEPTED |
+| ADR-METRICS-001 | 统计 registry、sampler、timeline、Prometheus model 和 gRPC protocol/runtime 从 `druid` core 移入独立 `druid-metrics` crate | ACCEPTED |
+| ADR-TRANSPORT-001 | 管理面 ingest repository、REST、认证、兼容静态 UI 和独立 binary 从 `druid-admin` 拆分出独立传输层职责 | ACCEPTED |
+| ADR-ADMIN-001 | `druid-admin` 只消费 `druid-metrics` 协议，不反向依赖 `druid-wrapper`；管理统计归属 Metrics，HTTP/REST service 归属 Admin | ACCEPTED |
+
+### 五 Crate 目标依赖图
+
+> 以下为已批准的五 Crate 目标拓扑。当前源码仍为三 Crate，源码迁移按
+> `docs/superpowers/plans/` 下的专项计划执行。
+
+```text
+druid-core ──> druid-wrapper
+druid-core ──> druid-metrics
+druid-core ──> druid (facade)
+druid-metrics ──> druid-admin
+druid-admin -X-> druid-wrapper（禁止反向依赖）
+```
+
+`druid`（facade）可选依赖 `druid-metrics` 和 `druid-wrapper`，Cargo 方向不会
+形成循环。`druid-core` 是无具体驱动和无管理传输的核心；`druid` 是稳定门面；
+Wrapper 和 Metrics 分别从 Core 向上扩展；Admin 只消费 Metrics 协议。
+
+Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、vendor checker/sorter、
+driver tooling 目标归属 Wrapper。registry、sampler、timeline、Prometheus
+model、gRPC protocol/runtime 目标归属 Metrics。ingest repository、REST、
+认证、兼容静态 UI、独立 binary 目标归属 Admin。
 
 ---
 

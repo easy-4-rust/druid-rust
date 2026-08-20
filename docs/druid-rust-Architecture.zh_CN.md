@@ -466,7 +466,28 @@ flowchart LR
 | ADR-010 | Admin 的 Java 兼容面与 Rust-only API 分账 | 已确认 |
 | ADR-011 | 完成状态由差分和真实门禁决定，不由文件/方法计数决定 | 已确认 |
 | ADR-012 | 产品、文档和发布边界只有 `druid`、`druid-wrapper`、`druid-admin` | 已确认 |
-| ADR-013 | 现有内部 crate 必须归并为三模块目录，facade 重导出不等于完成归并 | 已执行 |
+| ADR-013 | 现有内部 crate 必须归并为三模块目录，facade 重导出不等于完成归并 | SUPERSEDED_BY ADR-CRATE-001 |
+| ADR-CRATE-001 | 五 Crate 目标拓扑：`druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`；当前源码仍为三 crate，批准目标为五 crate | ACCEPTED |
+| ADR-METRICS-001 | 统计 registry、sampler、timeline、Prometheus model 和 gRPC protocol/runtime 从 `druid` core 移入独立 `druid-metrics` crate | ACCEPTED |
+| ADR-TRANSPORT-001 | 管理面 ingest repository、REST、认证、兼容静态 UI 和独立 binary 从 `druid-admin` 拆分出独立传输层职责 | ACCEPTED |
+| ADR-ADMIN-001 | `druid-admin` 只消费 `druid-metrics` 协议，不反向依赖 `druid-wrapper`；管理统计归属 Metrics，HTTP/REST service 归属 Admin | ACCEPTED |
+
+### 五 Crate 目标依赖图
+
+> 以下为已批准的五 Crate 目标拓扑。当前源码仍为三 Crate，源码迁移按
+> `docs/superpowers/plans/` 下的专项计划执行。
+
+```text
+druid-core ──> druid-wrapper
+druid-core ──> druid-metrics
+druid-core ──> druid (facade)
+druid-metrics ──> druid-admin
+druid-admin -X-> druid-wrapper（禁止反向依赖）
+```
+
+`druid`（facade）可选依赖 `druid-metrics` 和 `druid-wrapper`，Cargo 方向不会
+形成循环。`druid-core` 是无具体驱动和无管理传输的核心；`druid` 是稳定门面；
+Wrapper 和 Metrics 分别从 Core 向上扩展；Admin 只消费 Metrics 协议。
 
 ADR 反转必须同步修改源码、架构、对象账本、语义账本、测试和发布说明。
 

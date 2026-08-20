@@ -24,7 +24,8 @@
 | Java 提交 | `33824c3dec1612711f9bb4e409319bcab2e4cd0e` | `git rev-parse HEAD` |
 | Java 主源码 | core 1,644 个 `.java`；全仓 1,719 个 | `rg --files` |
 | Rust 源仓库 | `/Users/wandl/workspaces/workspace-github-easy-4-rust/druid-rust` | 本地 Git |
-| Rust 产品模块 | `druid`、`druid-admin`、`druid-wrapper` | workspace member |
+| Rust 产品模块（当前源码） | `druid`、`druid-admin`、`druid-wrapper` | workspace member |
+| Rust 产品模块（已批准目标） | `druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin` | ADR-CRATE-001 |
 | Rust 迁移基线提交 | `194fec5e4351ab562ca1708383e80f320ecc1f83` | `git rev-parse HEAD` |
 | Rust 工具链 | MSRV 1.95，默认 1.97.1 | `cargo check --workspace` |
 | Rust 当前规模 | druid 368 .rs，druid-admin 52 .rs，druid-wrapper 108 .rs | 2026-08-12 源码扫描 |
@@ -81,13 +82,13 @@ P4 可以与 P1/P2 并行，但 Wall 必须等待 SQL 兼容层稳定；P10 不�
 
 **目标：** 建立可信基线，修复会让后续验收失真的基础缺陷。
 
-- [ ] **Step 1:** 将 workspace 产品边界收敛为三个 crate（druid、druid-admin、druid-wrapper），按职责物理迁入 `druid/src/*` 与 `druid-wrapper/src/*`
-- [ ] **Step 2:** 固定可构建 Rust MSRV/lockfile，CI 执行 fmt、clippy、test、doc、audit
-- [ ] **Step 3:** 修复 B-01（DruidPool 空 return callback）、B-02（run_after_filter 未 await）、B-03（fetch 绕过 Filter）、B-04（after context 丢失参数）— **已 CLOSED**
-- [ ] **Step 4:** 修复 B-07（扩容判断非原子预留）— **已 CLOSED**：CAS 原子容量预留
-- [ ] **Step 5:** 修复 B-10（工具链固定 Rust 1.75.0）— **已 CLOSED**：MSRV 1.95，默认 1.97.1
-- [ ] **Step 6:** 建立对象总账、语义契约 ID、命名检查和差分测试目录
-- [ ] **Step 7:** 为 Java oracle 提供可重复运行的 fixture runner
+- [x] **Step 1:** 将 workspace 产品边界收敛为三个 crate（druid、druid-admin、druid-wrapper），按职责物理迁入 `druid/src/*` 与 `druid-wrapper/src/*` — **DONE**
+- [x] **Step 2:** 固定可构建 Rust MSRV/lockfile，CI 执行 fmt、clippy、test、doc、audit — **DONE**
+- [x] **Step 3:** 修复 B-01（DruidPool 空 return callback）、B-02（run_after_filter 未 await）、B-03（fetch 绕过 Filter）、B-04（after context 丢失参数）— **DONE**
+- [x] **Step 4:** 修复 B-07（扩容判断非原子预留）— **DONE**：CAS 原子容量预留
+- [x] **Step 5:** 修复 B-10（工具链固定 Rust 1.75.0）— **DONE**：MSRV 1.95，默认 1.97.1
+- [x] **Step 6:** 建立对象总账、语义契约 ID、命名检查和差分测试目录 — **DONE**（1,644 对象分母已冻结；语义契约 ID 嵌入测试命名；差分测试目录已建立）
+- [ ] **Step 7:** 为 Java oracle 提供可重复运行的 fixture runner — **IMPLEMENTED_UNVERIFIED**（`./mvnw -pl core -DskipTests=false test` 可执行；无独立自动化 fixture runner 脚本）
 
 **出口门禁：** workspace 仅剩三 crate；默认工具链全绿；所有取还连接路径计数守恒；Filter before/after 对 exec/fetch/错误路径都执行一次。
 
@@ -98,12 +99,12 @@ P4 可以与 P1/P2 并行，但 Wall 必须等待 SQL 兼容层稳定；P10 不�
 **目标：** 把 JDBC 的"获得物理连接并执行数据库操作"迁移为真实 Rust 能力。
 
 - [ ] **Step 1:** 建立对象安全、异步、最小化的 `PhysicalConnection` SPI — **PARTIAL**
-- [ ] **Step 2:** 在 `druid::toasty` 内实现 Toasty 内置标准 raw adapter — **DONE**（SQLite 已证，多数据库 PARTIAL）
+- [x] **Step 2:** 在 `druid::toasty` 内实现 Toasty 内置标准 raw adapter — **DONE**（SQLite 已证，多数据库 PARTIAL）
 - [ ] **Step 3:** `druid_wrapper::sqlx` 与 `druid_wrapper::rbdc` 提供 direct adapter — **PARTIAL**
 - [ ] **Step 4:** bb8/deadpool 改为 `ExternalPoolProvider` bridge — **PARTIAL**
-- [ ] **Step 5:** 所有 adapter 完成连接创建/租借、验证、错误分类、状态复位和关闭/归还
-- [ ] **Step 6:** 对齐 Connection/Statement/PreparedStatement/ResultSet/metadata/LOB/事务结果语义
-- [ ] **Step 7:** 建立 PostgreSQL、MySQL、SQLite 容器测试
+- [ ] **Step 5:** 所有 adapter 完成连接创建/租借、验证、错误分类、状态复位和关闭/归还 — **PARTIAL**
+- [ ] **Step 6:** 对齐 Connection/Statement/PreparedStatement/ResultSet/metadata/LOB/事务结果语义 — **PARTIAL**
+- [ ] **Step 7:** 建立 PostgreSQL、MySQL、SQLite 容器测试 — **PARTIAL**（SQLite 已有真实测试；PG/MySQL 容器测试待建立）
 
 **出口门禁：** adapter 不含固定"未实现"返回；真实数据库完成 connect/exec/fetch/transaction/cancel/timeout/close 契约；native/bridge 均只返回 `DruidPooledConnection`。
 
@@ -116,8 +117,8 @@ P4 可以与 P1/P2 并行，但 Wall 必须等待 SQL 兼容层稳定；P10 不�
 - [ ] **Step 1:** 初始化、创建/销毁任务、公平/非公平等待、超时、失败退避、容量预留 — **IMPLEMENTED_UNVERIFIED**
 - [ ] **Step 2:** min_idle/initial_size/max_active/max_wait/keepAlive/驱逐和物理寿命 — **PARTIAL**
 - [ ] **Step 3:** borrow/return 校验、rollback、状态 reset、schema 恢复、fatal error、discard — **PARTIAL**
-- [ ] **Step 4:** removeAbandoned、使用次数、密码版本、PS cache、关闭/禁用重启/fill
-- [ ] **Step 5:** vendor checker/sorter 的数据库错误矩阵 — **DONE**（sorter 对象族 10/10 通过）
+- [ ] **Step 4:** removeAbandoned、使用次数、密码版本、PS cache、关闭/禁用重启/fill — **PARTIAL**（removeAbandoned/密码版本/creator-destroy worker 已实现；PS cache/关闭重启待验证）
+- [x] **Step 5:** vendor checker/sorter 的数据库错误矩阵 — **DONE**（sorter 对象族 10/10 通过）
 
 **出口门禁：** 并发压力下容量不越界、无丢连接、无双重归还；Java pool fixture 差分通过。
 
@@ -152,7 +153,7 @@ P4 可以与 P1/P2 并行，但 Wall 必须等待 SQL 兼容层稳定；P10 不�
 - [ ] **Step 2:** SQLStatementParser/AST 类型族/Parent/Attribute 元数据 — **PARTIAL**
 - [ ] **Step 3:** Visitor/output visitor/format/parameterize/restore/fingerprint — **TODO**
 - [ ] **Step 4:** schema repository/表列解析/SQL transform/builder — **TODO**
-- [ ] **Step 5:** 对每个方言建立能力矩阵（原生支持/扩展 parser/兼容 AST/需 fork）
+- [ ] **Step 5:** 对每个方言建立能力矩阵（原生支持/扩展 parser/兼容 AST/需 fork） — **TODO**
 
 **出口门禁：** Druid SQL 测试语料按方言差分；parse→AST→output、parameterize、visitor 结果达 100%。
 
@@ -211,9 +212,9 @@ P4 可以与 P1/P2 并行，但 Wall 必须等待 SQL 兼容层稳定；P10 不�
 
 **目标：** 迁移 XA/两阶段提交行为。
 
-- [ ] **Step 1:** DruidXADataSource/XAConnection/XAResource 状态机
-- [ ] **Step 2:** Rust TransactionManager SPI 与数据库适配器能力探测
-- [ ] **Step 3:** prepare/commit/rollback/recover/heuristic error/超时/幂等
+- [x] **Step 1:** DruidXADataSource/XAConnection/XAResource 状态机 — **DONE**（`core/xa.rs` 1125 行：Xid 对齐 javax.transaction.xa.Xid；XaTransactionState 9 状态机；XaResource async trait；flags 常量；97 测试 + xa_demo.rs 示例）
+- [ ] **Step 2:** Rust TransactionManager SPI 与数据库适配器能力探测 — **PARTIAL**（协议层状态机已完成；真实 MySQL/PG XA 驱动适配待实现）
+- [x] **Step 3:** prepare/commit/rollback/recover/heuristic error/超时/幂等 — **DONE**（XaTransactionState 状态机覆盖全部转换路径；非法转换拒绝+超时+审计轨迹）
 
 **出口门禁：** 支持适配器完成 2PC 故障注入；不支持的数据库明确返回能力错误。
 
@@ -221,10 +222,10 @@ P4 可以与 P1/P2 并行，但 Wall 必须等待 SQL 兼容层稳定；P10 不�
 
 ## Stage P10 — 全量差分、性能与生产发布
 
-- [ ] **Step 1:** 对象总账和语义契约 100% 关闭
-- [ ] **Step 2:** 混沌测试、loom 并发模型、长稳、泄漏、背压、取消安全
-- [ ] **Step 3:** 与 Java Druid 同配置的吞吐、P99、内存和连接恢复基准
-- [ ] **Step 4:** SemVer、迁移指南、兼容矩阵、SLO、告警、回滚和发布签名
+- [ ] **Step 1:** 对象总账和语义契约 100% 关闭 — **TODO**
+- [ ] **Step 2:** 混沌测试、loom 并发模型、长稳、泄漏、背压、取消安全 — **TODO**
+- [ ] **Step 3:** 与 Java Druid 同配置的吞吐、P99、内存和连接恢复基准 — **TODO**
+- [ ] **Step 4:** SemVer、迁移指南、兼容矩阵、SLO、告警、回滚和发布签名 — **TODO**
 
 **出口门禁：** `1.0-semantic-parity` 发布检查全部通过。
 

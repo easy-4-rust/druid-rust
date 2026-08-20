@@ -109,9 +109,16 @@ Logback、JMX MBean 等 JVM 专属对象只登记为 `NOT_APPLICABLE/EXCLUDED`�
 `Sqlx*`/`Rbdc*` 是扩展名称。三者都只能实现 `PhysicalConnection` 边界，不能
 取代 `DruidPooledConnection`。
 
-模块名称结论：这里只允许 `druid`、`druid-admin`、`druid-wrapper` 三个产品
-模块。`druid-core`、`druid-pool`、`druid-toasty` 等名称只能标注历史归并来源，
-不能出现在最终公共包名、发布清单或完成度统计中。
+Toasty 归属结论：当前态 `Toasty` 属于 `druid` 内置默认实现；目标态
+（ADR-CRATE-001）Toasty 收敛到 `druid-wrapper`。实现状态仍保持当前事实。
+
+模块名称结论（历史）：当前源码只允许 `druid`、`druid-admin`、`druid-wrapper`
+三个产品模块。`druid-core`、`druid-pool`、`druid-toasty` 等名称只能标注历史
+归并来源，不能出现在最终公共包名、发布清单或完成度统计中。
+
+模块名称结论（目标态）：已批准五 Crate 目标拓扑（ADR-CRATE-001）为
+`druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`。
+当前源码仍为三 Crate，源码迁移按 `docs/superpowers/plans/` 下的专项计划执行。
 
 ### 方法名称检查
 

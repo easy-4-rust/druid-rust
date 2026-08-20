@@ -18,13 +18,25 @@
 - **状态基于代码事实**：每处 DONE 标注引用具体 crate 路径或文件数或测试覆盖率；TODO 引用 Java 侧缺失对象清单。
 - **架构文档**：[druid-rust-Architecture.zh_CN.md](../druid-rust-Architecture.zh_CN.md) 独立于 superpowers 的权威架构文档。
 
-### 三模块治理基线
+### 三模块治理基线（当前源码）
 
 | 模块 | Java 来源与职责 | Rust crate |
 | :--- | :--- | :--- |
 | `druid` | Java `/core` 的完整语义迁移；内部包含 core、pool、SQL/Wall、Stat、Dynamic 和默认 Toasty 数据源实现 | `crates/druid/`（325 .rs） |
 | `druid-admin` | Java `/druid-admin` 的管理、监控、认证与 API 语义迁移 | `crates/druid-admin/`（49 .rs） |
 | `druid-wrapper` | Java `/druid-wrapper` 及 Rust 数据库生态封装；内部包含 SQLx、RBDC、bb8、deadpool | `crates/druid-wrapper/`（95 .rs） |
+
+### 五 Crate 目标拓扑（已批准，ADR-CRATE-001）
+
+> 当前源码仍为三 Crate。以下为已批准的五 Crate 目标归属。
+
+| 目标 Crate | 职责 | 依赖 |
+| :--- | :--- | :--- |
+| `druid-core` | RDBC/JDBC 类型、Pool、Filter、SQL、Wall、Dynamic、统计原始状态和 typed snapshot | -- |
+| `druid`（facade） | stable re-exports and optional features only | druid-core |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、vendor checker/sorter、driver tooling | druid-core |
+| `druid-metrics` | registry、sampler、timeline、Prometheus model、gRPC protocol/runtime | druid-core |
+| `druid-admin` | ingest repository、REST、认证、兼容静态 UI、独立 binary | druid-metrics |
 
 ---
 
@@ -66,6 +78,19 @@
 | 05 | [standalone-druid-admin.md](plans/2026-08-20-standalone-druid-admin.md) | 独立 Axum Admin、repository、兼容 UI/API | 待执行 |
 | 06 | [druid-facade-cutover.md](plans/2026-08-20-druid-facade-cutover.md) | Facade features、示例与迁移指南 | 待执行 |
 | 07 | [five-crate-verification.md](plans/2026-08-20-five-crate-verification.md) | 依赖、功能、可靠性、性能和发布门禁 | 待执行 |
+
+### 八份专项计划导航
+
+| 序号 | 计划文件 | 目标 |
+|---:|---|---|
+| 00 | [five-crate-architecture-spec.md](plans/2026-08-20-five-crate-architecture-spec.md) | 五 Crate 规格、ADR 与文档一致性门禁 |
+| 01 | [druid-core-facade-split.md](plans/2026-08-20-druid-core-facade-split.md) | `druid-core` 编译边界、`druid` 门面、typed snapshot SPI |
+| 02 | [druid-wrapper-boundary.md](plans/2026-08-20-druid-wrapper-boundary.md) | Toasty/vendor/driver tooling 收敛到 Wrapper |
+| 03 | [druid-metrics-runtime.md](plans/2026-08-20-druid-metrics-runtime.md) | 非阻塞采样、聚合、timeline、Prometheus model |
+| 04 | [druid-metrics-grpc.md](plans/2026-08-20-druid-metrics-grpc.md) | gRPC bidi、sequence/ACK、重连与 reset |
+| 05 | [standalone-druid-admin.md](plans/2026-08-20-standalone-druid-admin.md) | 独立 Axum Admin、repository、兼容 UI/API |
+| 06 | [druid-facade-cutover.md](plans/2026-08-20-druid-facade-cutover.md) | Facade features、示例与迁移指南 |
+| 07 | [five-crate-verification.md](plans/2026-08-20-five-crate-verification.md) | 依赖、功能、可靠性、性能和发布门禁 |
 
 ### 按模块状态明细
 

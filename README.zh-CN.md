@@ -9,7 +9,7 @@
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
 [定位与状态](#1-项目定位与状态) · [功能与成熟度](#2-功能与成熟度) ·
-[三模块架构](#4-三模块架构) ·
+[三模块架构与五目标](#4-三模块架构与五目标) ·
 [示例与调用路径](#6-可执行示例与调用路径) ·
 [迁移路线](#11-迁移路线与阶段) ·
 [贡献与许可证](#19-贡献安全与许可证)
@@ -43,7 +43,8 @@ Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结�
 | 字段 | 值 |
 | :--- | :--- |
 | Java 基线 | Druid `1.2.28`，提交 `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
-| 产品模块 | `druid`、`druid-admin`、`druid-wrapper`，且只允许这三个 |
+| 产品模块（当前源码） | `druid`、`druid-admin`、`druid-wrapper`（三 Crate） |
+| 产品模块（已批准目标） | `druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`（五 Crate；ADR-CRATE-001） |
 | 对外连接 | `DruidPooledConnection` |
 | 内部物理 SPI | `PhysicalConnection` / `PhysicalConnectionFactory` |
 | Native pool | `DruidPool` |
@@ -130,7 +131,7 @@ Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结�
 Linux、macOS 和 Windows 的稳定支持矩阵需要 CI 证据。当前本地验证环境不能被
 解释为跨平台发布承诺。
 
-## 4. 三模块架构
+## 4. 三模块架构与五目标
 
 ### 4.1 一眼看懂
 
@@ -182,13 +183,48 @@ flowchart TB
 
 ### 4.3 Module Map
 
+**当前源码（三 Crate）：**
+
 | 模块 | Java 来源 | 职责 | 默认/可选 |
 | :--- | :---: | :--- | :--- |
 | `druid` | Java `/core` | 1,644 个 core 对象语义；内含 pool/sql/wall/stat/dynamic；默认 Toasty | 默认 |
 | `druid-wrapper` | Java `/druid-wrapper` | SQLx、RBDC、bb8、deadpool 和各种数据库操作/连接生态封装 | 可选 |
 | `druid-admin` | Java `/druid-admin` | 服务发现、监控聚合、DTO、路由、资源和管理扩展 | 可选 |
 
-### 4.4 已完成的物理归并
+**已批准目标（五 Crate，ADR-CRATE-001）：**
+
+| 目标 Crate | 职责 | 依赖 |
+| :--- | :--- | :--- |
+| `druid-core` | RDBC/JDBC 类型、Pool、Filter、SQL、Wall、Dynamic、统计原始状态和 typed snapshot | -- |
+| `druid`（facade） | stable re-exports and optional features only | druid-core |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、vendor checker/sorter、driver tooling | druid-core |
+| `druid-metrics` | registry、sampler、timeline、Prometheus model、gRPC protocol/runtime | druid-core |
+| `druid-admin` | ingest repository、REST、认证、兼容静态 UI、独立 binary | druid-metrics |
+
+五 Crate 源码迁移尚未开始。详见
+[docs/superpowers/plans/](docs/superpowers/plans/) 下的八份专项迁移计划。
+
+### 4.4 五 Crate 目标依赖图
+
+> 当前源码仍为三 Crate。以下为已批准的五 Crate 目标拓扑（ADR-CRATE-001）。
+> 源码迁移尚未开始。
+
+```mermaid
+flowchart TD
+    CORE["druid-core<br/>RDBC/JDBC 类型、Pool、Filter、<br/>SQL、Wall、Dynamic、统计原始状态"]
+    FACADE["druid (facade)<br/>stable re-exports,<br/>optional features"]
+    WRAPPER["druid-wrapper<br/>Toasty/SQLx/RBDC/DuckDB/<br/>libSQL/HTTP SQL/JDBC Agent"]
+    METRICS["druid-metrics<br/>registry、sampler、timeline、<br/>Prometheus model、gRPC"]
+    ADMIN["druid-admin<br/>ingest repository、REST、<br/>认证、静态 UI、独立 binary"]
+
+    CORE --> FACADE
+    CORE --> WRAPPER
+    CORE --> METRICS
+    METRICS --> ADMIN
+    WRAPPER -. "禁止依赖" .-> ADMIN
+```
+
+### 4.5 已完成的物理归并
 
 workspace 已物理收敛为三个 crate；原十个内部 crate 已删除并迁入具名内部目录：
 

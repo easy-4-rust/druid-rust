@@ -157,6 +157,24 @@
 本文件已经承接原仓库级对象总账中属于 Java core 的全部明细；本模块完成率只以
 1,644 个 Java core 对象逐项关闭为准。
 
+#### 五 Crate 目标归属（ADR-CRATE-001）
+
+> 以下为已批准的五 Crate 目标归属。当前源码仍为三 Crate，实现状态保持当前事实。
+
+| 目标 Crate | 归属对象 |
+| :--- | :--- |
+| `druid-core` | RDBC/JDBC 类型、Pool、Filter、SQL、Wall、Dynamic、统计原始状态和 typed snapshot |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、vendor checker/sorter、driver tooling |
+| `druid-metrics` | registry、sampler、timeline、Prometheus model、gRPC protocol/runtime |
+| `druid-admin` | ingest repository、REST、认证、兼容静态 UI、独立 binary |
+| `druid`（facade） | stable re-exports and optional features only |
+
+Toasty 目标归属 Wrapper（当前态：Toasty 属于 `druid` 内置默认实现；目标态：
+Toasty 收敛到 `druid-wrapper`）。
+
+`StatFilter` 和统计状态留在 Core；全局 registry/facade/exporter 移入 Metrics；
+HTTP/REST service 移入 Admin。
+
 ---
 
 ### 语义迁移对照表

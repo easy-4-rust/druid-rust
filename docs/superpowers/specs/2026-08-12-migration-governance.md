@@ -158,6 +158,21 @@ cargo +stable clippy --workspace --all-targets -- -D warnings
 - 名称检查、无 stub 检查、CodeGraph 调用链检查通过；
 - 若由 enum 承载，源对象对应的 variant 不与其他对象混账。
 
+## 五 Crate 目标归属（ADR-CRATE-001）
+
+> 以下为已批准的五 Crate 目标归属。当前源码仍为三 Crate，实现状态保持当前事实。
+
+| 目标 Crate | 归属对象 |
+| :--- | :--- |
+| `druid-core` | RDBC/JDBC 类型、Pool、Filter、SQL、Wall、Dynamic、统计原始状态和 typed snapshot |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、vendor checker/sorter、driver tooling |
+| `druid-metrics` | registry、sampler、timeline、Prometheus model、gRPC protocol/runtime |
+| `druid-admin` | ingest repository、REST、认证、兼容静态 UI、独立 binary |
+| `druid`（facade） | stable re-exports and optional features only |
+
+`StatFilter` 和统计状态留在 Core；全局 registry/facade/exporter 移入 Metrics；
+HTTP/REST service 移入 Admin。
+
 ## 测试基线（保留并升级原验收）
 
 原 `druid-core` 等测试已并入 `druid`；adapter 合同已并入 `druid-wrapper`。

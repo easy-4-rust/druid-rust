@@ -1,6 +1,6 @@
 //! Java Druid `druid-wrapper` 模块的 Rust 语义迁移。
 //!
-//! 对应 Java 模块：`/druid-wrapper`。Java 模块包装 c3p0、DBCP、Proxool；
+//! 对应 Java 模块：`/druid-wrapper`。Java 模块包装 c3p0、DBBC、Proxool；
 //! Rust 迁移按等价职责在本 crate 内部聚合 RBDC、SQLx、bb8 与 deadpool Adapter。
 
 mod managed_wrapper_pool;

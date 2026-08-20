@@ -10,7 +10,7 @@
 
 [Positioning](#1-project-positioning-and-status) ·
 [Features](#2-features-and-maturity) ·
-[Three-module architecture](#4-three-module-architecture) ·
+[Three-module architecture](#4-three-module-architecture-and-five-crate-target) ·
 [Examples](#6-executable-examples-and-call-paths) ·
 [Migration roadmap](#11-migration-roadmap-and-phases) ·
 [Contributing](#19-contributing-security-and-license)
@@ -48,7 +48,8 @@ the obligation to migrate Druid result semantics.
 | Field | Value |
 | :--- | :--- |
 | Java baseline | Druid `1.2.28`, commit `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
-| Product modules | `druid`, `druid-admin`, and `druid-wrapper`; no fourth module |
+| Product modules (current source) | `druid`, `druid-admin`, and `druid-wrapper` (three crates) |
+| Product modules (approved target) | `druid-core`, `druid` (facade), `druid-wrapper`, `druid-metrics`, `druid-admin` (five crates; ADR-CRATE-001) |
 | Public connection | `DruidPooledConnection` |
 | Internal physical SPI | `PhysicalConnection` / `PhysicalConnectionFactory` |
 | Native pool | `DruidPool` |
@@ -139,7 +140,7 @@ the obligation to migrate Druid result semantics.
 Stable Linux, macOS, and Windows support requires CI evidence. The current local
 verification environment is not a cross-platform release commitment.
 
-## 4. Three-Module Architecture
+## 4. Three-Module Architecture and Five-Crate Target
 
 ### 4.1 One-screen view
 
@@ -192,13 +193,48 @@ flowchart TB
 
 ### 4.3 Module map
 
+**Current source (three crates):**
+
 | Module | Java source | Responsibility | Default/optional |
 | :--- | :---: | :--- | :--- |
 | `druid` | Java `/core` | 1,644 core-object semantics; pool/sql/wall/stat/dynamic; Toasty by default | default |
 | `druid-wrapper` | Java `/druid-wrapper` | SQLx, RBDC, bb8, deadpool, database-operation and connection-ecosystem adapters | optional |
 | `druid-admin` | Java `/druid-admin` | discovery, monitoring aggregation, DTOs, routing, resources, management extensions | optional |
 
-### 4.4 Completed Physical Consolidation
+**Approved target (five crates, ADR-CRATE-001):**
+
+| Target crate | Responsibility | Depends on |
+| :--- | :--- | :--- |
+| `druid-core` | RDBC/JDBC types, Pool, Filter, SQL, Wall, Dynamic, raw stats and typed snapshot | -- |
+| `druid` (facade) | Stable re-exports and optional features only | druid-core |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent, vendor checker/sorter, driver tooling | druid-core |
+| `druid-metrics` | Registry, sampler, timeline, Prometheus model, gRPC protocol/runtime | druid-core |
+| `druid-admin` | Ingest repository, REST, authentication, compatible static UI, standalone binary | druid-metrics |
+
+The five-crate source migration is not yet started. See
+[docs/superpowers/plans/](docs/superpowers/plans/) for the eight migration plans.
+
+### 4.4 Five-Crate Target Dependency Graph
+
+> Current source remains three crates. The following is the approved five-crate
+> target topology (ADR-CRATE-001). Source migration is pending.
+
+```mermaid
+flowchart TD
+    CORE["druid-core<br/>RDBC/JDBC types, Pool, Filter,<br/>SQL, Wall, Dynamic, raw stats"]
+    FACADE["druid (facade)<br/>stable re-exports,<br/>optional features"]
+    WRAPPER["druid-wrapper<br/>Toasty/SQLx/RBDC/DuckDB/<br/>libSQL/HTTP SQL/JDBC Agent"]
+    METRICS["druid-metrics<br/>registry, sampler, timeline,<br/>Prometheus model, gRPC"]
+    ADMIN["druid-admin<br/>ingest repository, REST,<br/>auth, static UI, binary"]
+
+    CORE --> FACADE
+    CORE --> WRAPPER
+    CORE --> METRICS
+    METRICS --> ADMIN
+    WRAPPER -. "no dependency" .-> ADMIN
+```
+
+### 4.5 Completed Physical Consolidation
 
 The workspace has physically converged to three crates. The former ten internal crates
 were removed and moved into named internal directories:

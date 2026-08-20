@@ -1605,6 +1605,43 @@ checksum = "117240f60069e65410b3ae1bb213295bd828f707b5bec6596a1afc8793ce0cbc"
 name = "druid"
 version = "0.0.0-design"
 dependencies = [
+ "druid-core",
+]
+
+[[package]]
+name = "druid-admin"
+version = "0.0.0-design"
+dependencies = [
+ "async-trait",
+ "axum",
+ "axum-valid",
+ "chrono",
+ "druid",
+ "druid-wrapper",
+ "fs2",
+ "k8s-openapi",
+ "kube",
+ "parking_lot",
+ "prometheus",
+ "prost 0.14.4",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-metrics",
+ "topcoat",
+ "tower 0.5.3",
+ "tracing",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "druid-core"
+version = "0.0.0-design"
+dependencies = [
  "arc-swap",
  "async-trait",
  "base64 0.22.1",
@@ -1638,36 +1675,6 @@ dependencies = [
  "x509-cert",
  "xxhash-rust",
  "zookeeper-client",
-]
-
-[[package]]
-name = "druid-admin"
-version = "0.0.0-design"
-dependencies = [
- "async-trait",
- "axum",
- "axum-valid",
- "chrono",
- "druid",
- "druid-wrapper",
- "fs2",
- "k8s-openapi",
- "kube",
- "parking_lot",
- "prometheus",
- "prost 0.14.4",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 1.0.69",
- "tokio",
- "tokio-metrics",
- "topcoat",
- "tower 0.5.3",
- "tracing",
- "uuid",
- "validator",
 ]
 
 [[package]]

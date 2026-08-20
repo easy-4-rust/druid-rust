@@ -133,7 +133,8 @@ transaction、ping、close、autoCommit、readOnly 与 isolation；LOB、metadat
 
 ### 3.3 显式驱动供应链
 
-`druid-admin` 的 `druid-driver` 命令负责显式安装；核心建池永不下载。安装器
+`druid-admin` 的 `druid-driver` 命令负责显式安装（当前态）；核心建池永不下载。
+目标态（ADR-CRATE-001）：driver tooling 收敛到 `druid-wrapper`。安装器
 校验产品必须是 `jdbc_agent` 模式、JAR/ZIP 魔数、256 MiB 上限和可选/必填
 SHA-256，并按 `profile/objects/<sha256>/...` 内容寻址保存。activation 是只追加
 元数据，解析时再次计算 SHA-256，因此工件被修改后会失败关闭。远程 HTTPS URL 安装

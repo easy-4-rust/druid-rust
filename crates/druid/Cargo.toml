@@ -4,53 +4,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description  = "Druid 1.2.28 core semantic migration with built-in Toasty integration"
+description  = "Druid stable public facade — re-exports druid-core modules"
 repository.workspace = true
 
 [features]
 default = ["sqlite"]
-sqlite = ["toasty/sqlite"]
-postgresql = ["toasty/postgresql"]
-mysql = ["toasty/mysql"]
-turso = ["toasty/turso"]
+sqlite = ["druid-core/sqlite"]
+postgresql = ["druid-core/postgresql"]
+mysql = ["druid-core/mysql"]
+turso = ["druid-core/turso"]
 
 [dependencies]
-arc-swap.workspace = true
-async-trait.workspace = true
-bitflags.workspace = true
-bigdecimal.workspace = true
-num-bigint.workspace = true
-base64.workspace = true
-chrono.workspace = true
-dashmap.workspace = true
-encoding_rs.workspace = true
-fastrand.workspace = true
-moka = { workspace = true, features = ["sync"] }
-jiff.workspace = true
-inventory.workspace = true
-indexmap.workspace = true
-parking_lot.workspace = true
-prometheus.workspace = true
-quick-xml.workspace = true
-reqwest.workspace = true
-rsa.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-sqlparser = { workspace = true, features = ["visitor"] }
-thiserror.workspace = true
-toasty.workspace = true
-toasty-core.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-java-properties.workspace = true
-url.workspace = true
-zookeeper-client.workspace = true
-uuid = { version = "1", features = ["v4"] }
-xxhash-rust.workspace = true
-x509-cert.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true
+druid-core = { version = "0.0.0-design", path = "../druid-core" }
 
 [lints]
 workspace = true

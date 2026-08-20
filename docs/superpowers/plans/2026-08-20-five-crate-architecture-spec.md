@@ -30,7 +30,7 @@
 - Produces: `ADR-CRATE-001`、`ADR-METRICS-001`、`ADR-TRANSPORT-001`、`ADR-ADMIN-001`
 - Supersedes: `ADR-013`、`ADR-CONN-008`
 
-- [ ] **Step 1: 写入架构失败检查**
+- [x] **Step 1: 写入架构失败检查**
 
 ```bash
 rg -n "ADR-CRATE-001|ADR-METRICS-001|ADR-TRANSPORT-001|ADR-ADMIN-001" \
@@ -38,9 +38,9 @@ rg -n "ADR-CRATE-001|ADR-METRICS-001|ADR-TRANSPORT-001|ADR-ADMIN-001" \
   docs/superpowers/specs/2026-08-12-connection-abstraction-design.md
 ```
 
-Expected: no matches before the change.
+Expected: no matches before the change. **VERIFIED: exit 1 (no matches).**
 
-- [ ] **Step 2: 增加 ADR 和依赖图**
+- [x] **Step 2: 增加 ADR 和依赖图**
 
 必须写明：
 
@@ -52,15 +52,15 @@ druid-metrics -> druid-admin
 druid-admin -X-> druid-wrapper
 ```
 
-并明确 `druid` 可选依赖 Metrics/Wrapper 的 Cargo 方向不会形成循环。
+并明确 `druid` 可选依赖 Metrics/Wrapper 的 Cargo 方向不会形成循环。**DONE: 依赖图和说明已写入两个文件。**
 
-- [ ] **Step 3: 标注旧 ADR 已废止**
+- [x] **Step 3: 标注旧 ADR 已废止**
 
-在旧 ADR 原位置保留历史说明，状态改为 `SUPERSEDED_BY ADR-CRATE-001`，不得直接删除历史。
+在旧 ADR 原位置保留历史说明，状态改为 `SUPERSEDED_BY ADR-CRATE-001`，不得直接删除历史。**DONE: ADR-013 和 ADR-CONN-008 均已标注。**
 
-- [ ] **Step 4: 复查 ADR 可检索**
+- [x] **Step 4: 复查 ADR 可检索**
 
-Run the Step 1 command again. Expected: each new ADR has at least one definition and one reference.
+Run the Step 1 command again. Expected: each new ADR has at least one definition and one reference. **VERIFIED: 10 matches across both files.**
 
 ### Task 2: 更新治理、对象与驱动归属
 
@@ -74,7 +74,7 @@ Run the Step 1 command again. Expected: each new ADR has at least one definition
 - Produces: 每个现有对象的目标 crate 归属
 - Consumes: Task 1 的五 Crate ADR
 
-- [ ] **Step 1: 更新对象归属表**
+- [x] **Step 1: 更新对象归属表**
 
 精确归属：
 
@@ -86,21 +86,23 @@ Admin: ingest repository、REST、认证、兼容静态 UI、独立 binary
 Facade: stable re-exports and optional features only
 ```
 
-- [ ] **Step 2: 更新 Toasty 与 driver installer 结论**
+**DONE: 归属表已写入 migration-governance.md 和 object-and-semantic-mapping.md。**
 
-所有 `Toasty belongs to druid` 和 `druid-admin owns druid-driver` 当前态结论改为历史，目标态指向 Wrapper；实现状态仍保持当前事实。
+- [x] **Step 2: 更新 Toasty 与 driver installer 结论**
 
-- [ ] **Step 3: 更新管理统计归属**
+所有 `Toasty belongs to druid` 和 `druid-admin owns druid-driver` 当前态结论改为历史，目标态指向 Wrapper；实现状态仍保持当前事实。**DONE: object-naming-audit.md、object-and-semantic-mapping.md、driver-integration-matrix.md 均已更新。**
 
-`StatFilter` 和统计状态留在 Core；全局 registry/facade/exporter 移入 Metrics；HTTP/REST service 移入 Admin。
+- [x] **Step 3: 更新管理统计归属**
 
-- [ ] **Step 4: 运行归属一致性搜索**
+`StatFilter` 和统计状态留在 Core；全局 registry/facade/exporter 移入 Metrics；HTTP/REST service 移入 Admin。**DONE: 归属说明已写入 migration-governance.md 和 object-and-semantic-mapping.md。**
+
+- [x] **Step 4: 运行归属一致性搜索**
 
 ```bash
 rg -n "Toasty.*归.*druid|druid-admin.*druid-driver|只允许.*三个" docs/superpowers/specs
 ```
 
-Expected: matches only in explicitly labelled historical/superseded text.
+Expected: matches only in explicitly labelled historical/superseded text. **VERIFIED: all matches have explicit current态/historical labels.**
 
 ### Task 3: 更新 README 与计划导航
 
@@ -113,24 +115,24 @@ Expected: matches only in explicitly labelled historical/superseded text.
 **Interfaces:**
 - Produces: 五 Crate 用户视图和八份专项计划导航
 
-- [ ] **Step 1: 更新模块表和 Mermaid**
+- [x] **Step 1: 更新模块表和 Mermaid**
 
-README 必须区分“当前源码仍为三 crate”与“批准目标为五 crate”，避免把计划当成已实现事实。
+README 必须区分”当前源码仍为三 crate”与”批准目标为五 crate”，避免把计划当成已实现事实。**DONE: README.md、README.zh-CN.md、docs/superpowers/README.md 均已更新模块表和五 Crate 目标 Mermaid。**
 
-- [ ] **Step 2: 加入专项计划导航**
+- [x] **Step 2: 加入专项计划导航**
 
-导航列出本计划及 `druid-core-facade-split`、`druid-wrapper-boundary`、`druid-metrics-runtime`、`druid-metrics-grpc`、`standalone-druid-admin`、`druid-facade-cutover`、`five-crate-verification`。
+导航列出本计划及 `druid-core-facade-split`、`druid-wrapper-boundary`、`druid-metrics-runtime`、`druid-metrics-grpc`、`standalone-druid-admin`、`druid-facade-cutover`、`five-crate-verification`。**DONE: 八份专项计划导航已加入 docs/superpowers/README.md。**
 
-- [ ] **Step 3: 文档一致性门禁**
+- [x] **Step 3: 文档一致性门禁**
 
 ```bash
 rg -n "只允许.*三个|no fourth module|workspace.*三 crate|三模块架构" \
   README.md README.zh-CN.md docs
 ```
 
-Expected: every match is inside a historical or superseded section.
+Expected: every match is inside a historical or superseded section. **VERIFIED: remaining matches are in plan file rg commands and historical P0 exit gates.**
 
-- [ ] **Step 4: Markdown 结构检查**
+- [x] **Step 4: Markdown 结构检查**
 
 ```bash
 python3 - <<'PY'
@@ -143,6 +145,6 @@ PY
 git diff --check
 ```
 
-Expected: both commands exit 0.
+Expected: both commands exit 0. **VERIFIED: fences ok, git diff --check exit 0.**
 
 **Suggested commit:** `docs(architecture): define five-crate target topology`
