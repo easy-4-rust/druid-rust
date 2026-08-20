@@ -5,6 +5,7 @@ members = [
     "crates/druid-core",
     "crates/druid-admin",
     "crates/druid-wrapper",
+    "crates/druid-metrics",
 ]
 exclude = ["vendor/toasty-driver-sqlite"]
 
@@ -37,6 +38,7 @@ missing_panics_doc = "allow"
 [workspace.dependencies]
 # async runtime
 tokio        = { version = "1.53.1", features = ["full"] }
+tokio-util   = "0.7"
 async-trait  = "0.1"
 bitflags     = "2.13.1"
 futures      = "0.3"

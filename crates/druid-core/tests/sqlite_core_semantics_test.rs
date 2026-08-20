@@ -6,7 +6,7 @@
 extern crate druid_core as druid;
 use druid::core::{DruidError, PhysicalConnection, Value};
 use druid::pool::DruidPool;
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 
 async fn sqlite_pool() -> DruidPool {

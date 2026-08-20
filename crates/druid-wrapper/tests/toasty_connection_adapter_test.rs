@@ -1,12 +1,12 @@
 //! Toasty 内置数据源的真实 `SQLite` 契约测试。
 
-extern crate druid_core as druid;
+extern crate druid_wrapper as wrapper;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
 };
-use druid::toasty::ToastyConnectionFactory;
+use wrapper::toasty::ToastyConnectionFactory;
 use std::str::FromStr;
 
 async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {

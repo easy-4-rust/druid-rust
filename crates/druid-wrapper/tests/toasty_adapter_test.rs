@@ -3,12 +3,12 @@
 //! The adapter constructor is `pub(crate)`, so we exercise it through
 //! `ToastyConnectionFactory::new("sqlite::memory:").create()`.
 
-extern crate druid_core as druid;
+extern crate druid_wrapper as wrapper;
 use druid::core::{
     DruidError, PhysicalConnection, PhysicalConnectionFactory, PreparedInputParameter,
     PreparedStatementKey, PreparedStatementMethodType, StatementGeneratedKeys, Value,
 };
-use druid::toasty::ToastyConnectionFactory;
+use wrapper::toasty::ToastyConnectionFactory;
 
 async fn make_connection() -> Box<dyn PhysicalConnection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")

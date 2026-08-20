@@ -7,7 +7,7 @@ use druid::core::{
     ConnectionEventListener, DruidConnectionHolder, DruidError, PhysicalConnectionFactory,
     PreparedStatementCacheStats, StatementEventListener,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 
 // -- helpers ----------------------------------------------------------------

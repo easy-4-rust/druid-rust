@@ -7,7 +7,7 @@ use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
 use druid::dynamic::node::{
     NodeEvent, NodeEventTypeEnum, ZookeeperNodeInfo, ZookeeperNodeListener, ZookeeperNodeRegister,
 };
-use druid::dynamic::{HighAvailableDataSource, PropertiesUtils};
+use druid::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
 use druid::stats::RdbcSqlStat;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
@@ -78,7 +78,7 @@ fn props(entries: &[(&str, &str)]) -> HashMap<String, String> {
 /// `黑名单管理：add/remove/is_in_blacklist`。
 #[test]
 fn ha_blacklist_management() {
-    let ha = HighAvailableDataSource::new("bl-test");
+    let ha = HighAvailableDataSource::new("bl-test", DataSourceCreator::noop_for_test());
     ha.insert_data_source("n1", MockPool::arc("n1"));
     ha.insert_data_source("n2", MockPool::arc("n2"));
 
@@ -95,7 +95,7 @@ fn ha_blacklist_management() {
 /// selector 安装与查询。
 #[test]
 fn ha_selector_management() {
-    let ha = HighAvailableDataSource::new("sel-test");
+    let ha = HighAvailableDataSource::new("sel-test", DataSourceCreator::noop_for_test());
     assert!(ha.selector_name().is_none());
     ha.set_selector("byName");
     assert_eq!(ha.selector_name(), Some("byName"));
@@ -111,7 +111,7 @@ fn ha_selector_management() {
 /// insert / remove / `set_data_source_map` / `data_source_map` 全生命周期。
 #[test]
 fn ha_datasource_map_lifecycle() {
-    let ha = HighAvailableDataSource::new("map-test");
+    let ha = HighAvailableDataSource::new("map-test", DataSourceCreator::noop_for_test());
     assert!(ha.data_source_map().is_empty());
 
     ha.insert_data_source("master", MockPool::arc("master"));
@@ -133,7 +133,7 @@ fn ha_datasource_map_lifecycle() {
 /// `allow_empty_pool` 配置（通过 init 间接触发）。
 #[test]
 fn ha_test_on_borrow_and_return_config() {
-    let ha = HighAvailableDataSource::new("config-test");
+    let ha = HighAvailableDataSource::new("config-test", DataSourceCreator::noop_for_test());
     assert!(!ha.is_test_on_borrow());
     ha.set_test_on_borrow(true);
     assert!(ha.is_test_on_borrow());

@@ -1,7 +1,7 @@
 //! Toasty 物理连接适配器。
 
 use super::ToastyPreparedStatement;
-use crate::core::{
+use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
     PreparedStatementKey, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,

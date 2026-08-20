@@ -8,8 +8,12 @@ description  = "Druid database driver and external-pool wrapper integrations"
 repository.workspace = true
 
 [features]
-default = ["driver-catalog"]
+default = ["driver-catalog", "sqlite"]
 driver-catalog = []
+sqlite = ["dep:toasty", "toasty/sqlite"]
+postgresql = ["dep:toasty", "toasty/postgresql"]
+mysql = ["dep:toasty", "toasty/mysql"]
+turso = ["dep:toasty", "toasty/turso"]
 duckdb-native = ["driver-catalog", "dep:duckdb"]
 http-sql = ["driver-catalog", "dep:reqwest"]
 libsql-native = ["driver-catalog", "dep:libsql"]
@@ -27,6 +31,8 @@ deadpool.workspace = true
 druid = { version = "0.0.0-design", path = "../druid" }
 duckdb = { workspace = true, optional = true }
 futures.workspace = true
+inventory.workspace = true
+jiff.workspace = true
 libsql = { workspace = true, optional = true }
 parking_lot.workspace = true
 rbdc.workspace = true
@@ -37,6 +43,8 @@ serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
+toasty = { workspace = true, optional = true }
+toasty-core.workspace = true
 tokio.workspace = true
 url.workspace = true
 

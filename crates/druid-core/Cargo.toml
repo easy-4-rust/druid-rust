@@ -11,11 +11,11 @@ repository.workspace = true
 name = "druid_core"
 
 [features]
-default = ["sqlite"]
-sqlite = ["toasty/sqlite"]
-postgresql = ["toasty/postgresql"]
-mysql = ["toasty/mysql"]
-turso = ["toasty/turso"]
+default = []
+sqlite = []
+postgresql = []
+mysql = []
+turso = []
 
 [dependencies]
 arc-swap.workspace = true
@@ -33,7 +33,6 @@ jiff.workspace = true
 inventory.workspace = true
 indexmap.workspace = true
 parking_lot.workspace = true
-prometheus.workspace = true
 quick-xml.workspace = true
 reqwest.workspace = true
 rsa.workspace = true
@@ -41,8 +40,6 @@ serde.workspace = true
 serde_json.workspace = true
 sqlparser = { workspace = true, features = ["visitor"] }
 thiserror.workspace = true
-toasty.workspace = true
-toasty-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 java-properties.workspace = true
@@ -54,6 +51,7 @@ x509-cert.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper" }
 
 [lints]
 workspace = true

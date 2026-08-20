@@ -11,6 +11,7 @@
 
 extern crate druid_core as druid;
 use druid::core::{AfterFilter, BeforeFilter, ExecContext, ExecOperation, ExecResult, PoolState};
+use druid::dynamic::DataSourceCreator;
 use druid::stats::{
     DataSourceMonitorable, DruidDataSourceStatManager, DruidDataSourceStatValue,
     DruidStatManagerFacade, DruidStatService, MergeStatFilter, RdbcStatContext, RdbcTraceManager,
@@ -476,7 +477,7 @@ fn stat_manager_facade_singleton_and_basic_ops() {
 fn pool_updater_config_setters() {
     use druid::dynamic::node::PoolUpdater;
     // 通过 HighAvailableDataSource 创建更新器。
-    let ha = druid::dynamic::HighAvailableDataSource::new("updater-test");
+    let ha = druid::dynamic::HighAvailableDataSource::new("updater-test", DataSourceCreator::noop_for_test());
     ha.insert_data_source("node-a", CountingPool::arc("node-a"));
 
     // 更新器通过 HA init 内部创建；此处直接测试配置常量。

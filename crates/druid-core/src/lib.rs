@@ -25,5 +25,3 @@ pub mod spi;
 pub mod sql;
 /// Druid 统计实现。
 pub mod stats;
-/// 内置 Toasty 标准数据源实现。
-pub mod toasty;

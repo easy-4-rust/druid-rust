@@ -100,6 +100,12 @@ pub enum DruidError {
     UnsupportedOperation {
         operation: &'static str,
     },
+    /// 没有为指定数据库类型注册的驱动扩展。
+    ///
+    /// 当 `DriverExtensionRegistry` 按 `db_type` 查找但无匹配项时返回。
+    NoDriverExtension {
+        db_type: String,
+    },
     Other(String),
 }
 
@@ -228,6 +234,12 @@ impl fmt::Display for DruidError {
                     "operation is not supported by the physical connection: {operation}"
                 )
             }
+            Self::NoDriverExtension { db_type } => {
+                write!(
+                    f,
+                    "no driver extension registered for database type: {db_type}"
+                )
+            }
             Self::Other(msg) => write!(f, "{msg}"),
         }
     }
@@ -304,6 +316,7 @@ impl DruidError {
             Self::DataSourceNotAvailable { .. } => "druid::DataSourceNotAvailable",
             Self::InvalidArgument(_) => "druid::InvalidArgument",
             Self::UnsupportedOperation { .. } => "druid::UnsupportedOperation",
+            Self::NoDriverExtension { .. } => "druid::NoDriverExtension",
             Self::Other(_) => "druid::Other",
         }
     }

@@ -293,3 +293,13 @@ pub use xa::{
     flags as xa_flags, XaOperation, XaPrepareResult, XaResource, XaState, XaStateTransitionError,
     XaStateTransitionRecord, XaTransactionState, Xid,
 };
+
+/// Look up a driver extension by database type.
+///
+/// Delegates to [`crate::spi::driver_extension_registry::lookup_driver_extension`].
+pub fn lookup_driver_extension(
+    db_type: &str,
+) -> Result<&'static crate::spi::driver_extension_descriptor::DriverExtensionDescriptor, DruidError>
+{
+    crate::spi::driver_extension_registry::lookup_driver_extension(db_type)
+}

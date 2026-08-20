@@ -14,10 +14,24 @@ use druid::spi::{
     RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceFactory,
     RdbcResourceId, RdbcResourceKind, RdbcResourceOwner, RdbcResourceState, RdbcSqlXmlAccess,
 };
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+/// Helper: create a Toasty SQLite data source using the factory path.
+async fn create_toasty_data_source(
+    properties: &HashMap<String, String>,
+) -> Result<druid::pool::DruidDataSource, DruidError> {
+    let url = properties
+        .get("url")
+        .map(String::as_str)
+        .unwrap_or("sqlite::memory:");
+    let factory: Arc<dyn PhysicalConnectionFactory> =
+        Arc::new(ToastyConnectionFactory::new(url).await?);
+    DruidDataSourceFactory::create_data_source_with_factory(properties, factory, "sqlite").await
+}
 
 // ===========================================================================
 // Test infrastructure
@@ -652,7 +666,7 @@ async fn unknown_db_type_no_auto_checker() {
 async fn factory_missing_url_returns_error() {
     let mut props = HashMap::new();
     props.insert("name".to_owned(), "test".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert!(format!("{err}").contains("url is required"));
@@ -664,7 +678,7 @@ async fn factory_username_password_without_extension_returns_error() {
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("username".to_owned(), "user".to_owned());
     props.insert("password".to_owned(), "pass".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert!(format!("{err}").contains("Toasty default datasource requires credentials in the URL"));
@@ -675,7 +689,7 @@ async fn factory_invalid_bool_property_returns_error() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("testOnBorrow".to_owned(), "notabool".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert!(format!("{err}").contains("must be true or false"));
@@ -686,7 +700,7 @@ async fn factory_invalid_int_property_returns_error() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("maxActive".to_owned(), "not_a_number".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
     let err = result.err().unwrap();
     assert!(format!("{err}").contains("is not a non-negative integer"));
@@ -697,7 +711,7 @@ async fn factory_max_wait_negative_sets_duration_max() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("maxWait".to_owned(), "-1".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
     if let Ok(ds) = result {
         assert!(!ds.is_initialized());
@@ -712,7 +726,7 @@ async fn factory_connection_error_retry_attempts_zero() {
         "druid.connectionErrorRetryAttempts".to_owned(),
         "0".to_owned(),
     );
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -721,7 +735,7 @@ async fn factory_phy_max_use_count_negative_disables() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("phyMaxUseCount".to_owned(), "-1".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -730,7 +744,7 @@ async fn factory_max_wait_thread_count_zero_unlimited() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.maxWaitThreadCount".to_owned(), "0".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -739,7 +753,7 @@ async fn factory_validation_query_timeout_negative_error() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("validationQueryTimeout".to_owned(), "-5".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
 }
 
@@ -748,7 +762,7 @@ async fn factory_remove_abandoned_timeout_negative_error() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("removeAbandonedTimeout".to_owned(), "-1".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
 }
 
@@ -760,7 +774,7 @@ async fn factory_time_between_connect_error_negative_error() {
         "druid.timeBetweenConnectErrorMillis".to_owned(),
         "-100".to_owned(),
     );
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
 }
 
@@ -772,7 +786,7 @@ async fn factory_connection_properties_parsed() {
         "connectionProperties".to_owned(),
         "key1=val1;key2=val2;emptykey".to_owned(),
     );
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -788,7 +802,7 @@ async fn factory_transaction_isolation_named_values() {
         let mut props = HashMap::new();
         props.insert("url".to_owned(), "sqlite::memory:".to_owned());
         props.insert("defaultTransactionIsolation".to_owned(), level.to_string());
-        let result = DruidDataSourceFactory::create_data_source(&props).await;
+        let result = create_toasty_data_source(&props).await;
         assert!(result.is_ok(), "level={level} should succeed");
     }
 }
@@ -799,7 +813,7 @@ async fn factory_transaction_isolation_numeric_values() {
         let mut props = HashMap::new();
         props.insert("url".to_owned(), "sqlite::memory:".to_owned());
         props.insert("defaultTransactionIsolation".to_owned(), level.to_string());
-        let result = DruidDataSourceFactory::create_data_source(&props).await;
+        let result = create_toasty_data_source(&props).await;
         assert!(result.is_ok(), "level={level} should succeed");
     }
 }
@@ -812,7 +826,7 @@ async fn factory_transaction_isolation_invalid_returns_none() {
         "defaultTransactionIsolation".to_owned(),
         "UNKNOWN_LEVEL".to_owned(),
     );
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -821,7 +835,7 @@ async fn factory_transaction_isolation_out_of_range_error() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("defaultTransactionIsolation".to_owned(), "999".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
 }
 
@@ -834,7 +848,7 @@ async fn factory_wall_config_select_allow() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.selectAllow".to_owned(), "false".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -843,7 +857,7 @@ async fn factory_wall_config_selelct_allow_typo() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.selelctAllow".to_owned(), "true".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -879,7 +893,7 @@ async fn factory_wall_config_all_boolean_properties() {
         let mut props = HashMap::new();
         props.insert("url".to_owned(), "sqlite::memory:".to_owned());
         props.insert(prop.to_owned(), "true".to_owned());
-        let result = DruidDataSourceFactory::create_data_source(&props).await;
+        let result = create_toasty_data_source(&props).await;
         assert!(result.is_ok(), "{prop} should succeed");
     }
 }
@@ -890,7 +904,7 @@ async fn factory_wall_config_tenant_properties() {
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.tenantColumn".to_owned(), "tenant_id".to_owned());
     props.insert("druid.wall.tenantTablePattern".to_owned(), "t_%".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
 }
 
@@ -899,7 +913,7 @@ async fn factory_wall_config_invalid_bool_returns_error() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.selectAllow".to_owned(), "notabool".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_err());
 }
 
@@ -912,7 +926,7 @@ async fn factory_init_true_succeeds() {
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("init".to_owned(), "true".to_owned());
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
+    let result = create_toasty_data_source(&props).await;
     assert!(result.is_ok());
     if let Ok(ds) = result {
         assert!(ds.is_initialized());

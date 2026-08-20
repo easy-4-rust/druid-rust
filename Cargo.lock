@@ -1649,6 +1649,7 @@ dependencies = [
  "bitflags 2.13.1",
  "chrono",
  "dashmap",
+ "druid-wrapper",
  "encoding_rs",
  "fastrand",
  "indexmap",
@@ -1658,7 +1659,6 @@ dependencies = [
  "moka",
  "num-bigint",
  "parking_lot",
- "prometheus",
  "quick-xml",
  "reqwest",
  "rsa",
@@ -1666,8 +1666,6 @@ dependencies = [
  "serde_json",
  "sqlparser",
  "thiserror 1.0.69",
- "toasty",
- "toasty-core",
  "tokio",
  "tracing",
  "url",
@@ -1675,6 +1673,21 @@ dependencies = [
  "x509-cert",
  "xxhash-rust",
  "zookeeper-client",
+]
+
+[[package]]
+name = "druid-metrics"
+version = "0.0.0-design"
+dependencies = [
+ "arc-swap",
+ "druid-core",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
@@ -1690,6 +1703,8 @@ dependencies = [
  "druid",
  "duckdb",
  "futures",
+ "inventory",
+ "jiff",
  "libsql",
  "parking_lot",
  "rbdc",
@@ -1700,6 +1715,8 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx",
  "thiserror 1.0.69",
+ "toasty",
+ "toasty-core",
  "tokio",
  "url",
 ]

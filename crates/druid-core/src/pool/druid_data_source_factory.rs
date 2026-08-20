@@ -4,32 +4,16 @@ use std::time::Duration;
 
 use crate::core::{ConfigFilter, DruidError, PhysicalConnectionFactory};
 use crate::sql::{RdbcUtils, WallConfig};
-use crate::toasty::ToastyConnectionFactory;
 
 use super::{DruidDataSource, DruidPoolBuilder};
 
 /// 从 Java Druid 属性创建 canonical 数据源。
 ///
-/// 对应 Java: `com.alibaba.druid.pool.DruidDataSourceFactory`。默认入口使用
-/// Toasty 创建未池化物理连接；SQLx/RBDC 等扩展通过
-/// [`Self::create_data_source_with_factory`] 注入自己的最小 SPI factory。
+/// 对应 Java: `com.alibaba.druid.pool.DruidDataSourceFactory`。所有入口接受
+/// 外部 `PhysicalConnectionFactory`；Toasty 默认工厂已迁移至 `druid-wrapper`。
 pub struct DruidDataSourceFactory;
 
 impl DruidDataSourceFactory {
-    /// 使用内置 Toasty 驱动创建数据源。
-    ///
-    /// # Errors
-    ///
-    /// 缺少 URL、属性格式错误、使用独立 username/password 或 Toasty 连接失败
-    /// 时返回结构化错误。独立凭据必须交给能原生表达它们的扩展 factory，不能
-    /// 无声丢弃。
-    pub async fn create_data_source(
-        properties: &HashMap<String, String>,
-    ) -> Result<DruidDataSource, DruidError> {
-        let properties = Self::resolve_config_properties(properties).await?;
-        Self::create_data_source_resolved(&properties).await
-    }
-
     /// 在构造具体驱动 factory 前执行 Java `ConfigFilter` 初始化语义。
     ///
     /// SQLx/RBDC 等扩展应先调用此方法，再用返回的 URL、用户名与密码构造
@@ -42,41 +26,6 @@ impl DruidDataSourceFactory {
         } else {
             Ok(properties.clone())
         }
-    }
-
-    async fn create_data_source_resolved(
-        properties: &HashMap<String, String>,
-    ) -> Result<DruidDataSource, DruidError> {
-        if properties.contains_key(Self::PROP_USERNAME)
-            || properties.contains_key(Self::PROP_PASSWORD)
-        {
-            return Err(DruidError::InvalidArgument(
-                "Toasty default datasource requires credentials in the URL; use an extension PhysicalConnectionFactory for separate username/password".to_owned(),
-            ));
-        }
-        let configured_url = required(properties, Self::PROP_URL)?;
-        let url = RdbcUtils::to_rust_url(configured_url).ok_or_else(|| {
-            DruidError::InvalidArgument(format!(
-                "Toasty does not support RDBC URL `{configured_url}`; select a druid-wrapper PhysicalConnectionFactory adapter"
-            ))
-        })?;
-        let factory = ToastyConnectionFactory::new(url.as_ref()).await?;
-        let driver_name = properties
-            .get(Self::PROP_DRIVER_CLASS_NAME)
-            .cloned()
-            .unwrap_or_else(|| factory.driver_name().to_owned());
-        if let (Some(limit), Some(max_active)) = (
-            factory.max_connections(),
-            optional_usize(properties, Self::PROP_MAX_ACTIVE)?,
-        ) {
-            if max_active > limit {
-                return Err(DruidError::InvalidArgument(format!(
-                    "maxActive {max_active} exceeds driver connection limit {limit}"
-                )));
-            }
-        }
-        Self::create_data_source_with_factory_resolved(properties, Arc::new(factory), driver_name)
-            .await
     }
 
     /// 使用外部未池化物理连接 factory 创建数据源。

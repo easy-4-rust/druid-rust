@@ -13,6 +13,7 @@ mod driver_verification_evidence;
 mod driver_verification_run;
 mod druid_database_pool_builder;
 mod druid_driver_registry;
+pub(crate) mod extensions;
 mod protocol_family;
 mod resolved_database_driver;
 mod wall_mode;

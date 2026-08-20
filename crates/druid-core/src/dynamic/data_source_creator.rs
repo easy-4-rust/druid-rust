@@ -1,21 +1,59 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.DataSourceCreator`。
 
 use super::high_available_data_source::HighAvailableDataSourceInner;
-use crate::core::{DruidError, Pool};
+use crate::core::{DruidError, PhysicalConnectionFactory, Pool};
 use crate::pool::DruidPoolBuilder;
 use crate::sql::RdbcUtils;
-use crate::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 
 /// 根据 HA 父数据源配置创建 Druid 子池。
 ///
-/// 对应 Java: `com.alibaba.druid.pool.ha.DataSourceCreator`。Rust 内置实现使用
-/// Toasty 的未池化 Driver SPI 构造物理连接，仍由 `DruidPool` 作为唯一连接池。
-pub struct DataSourceCreator;
+/// 对应 Java: `com.alibaba.druid.pool.ha.DataSourceCreator`。工厂由外部通过
+/// `DataSourceCreator::new` 注入，Core 不绑定具体驱动。
+pub struct DataSourceCreator {
+    factory_creator: Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync>,
+}
 
 impl DataSourceCreator {
+    /// 使用指定工厂创建器构造 DataSourceCreator。
+    pub fn new(
+        factory_creator: Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync>,
+    ) -> Self {
+        Self { factory_creator }
+    }
+
+    /// 返回工厂创建器的克隆，供内部派生使用。
+    pub(crate) fn clone_factory_creator(
+        &self,
+    ) -> Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync> {
+        Arc::clone(&self.factory_creator)
+    }
+
+    /// 创建一个用于测试的 no-op creator；调用 `create` 会 panic。
+    pub fn noop_for_test() -> Self {
+        use crate::core::PhysicalConnection;
+        struct NoopFactory;
+        #[async_trait::async_trait]
+        impl PhysicalConnectionFactory for NoopFactory {
+            fn connection_url(&self) -> Option<&str> {
+                None
+            }
+            async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+                panic!("noop factory should not be called")
+            }
+            async fn validate(
+                &self,
+                _connection: &mut Box<dyn PhysicalConnection>,
+            ) -> Result<(), DruidError> {
+                Ok(())
+            }
+        }
+        Self::new(Arc::new(|_url| Arc::new(NoopFactory)))
+    }
+
     /// 创建、初始化并返回一个命名子数据源。
     pub(crate) async fn create(
+        &self,
         node_name: &str,
         url: Option<&str>,
         username: Option<&str>,
@@ -29,7 +67,7 @@ impl DataSourceCreator {
             operation: "ha_node_driver_adapter_required",
         })?;
         let driver_url = Self::apply_credentials(rust_url.as_ref(), username, password)?;
-        let factory = Arc::new(ToastyConnectionFactory::new(&driver_url).await?);
+        let factory = (self.factory_creator)(&driver_url);
         let config = high_available_data_source.config.read().clone();
         let mut connection_properties = config.connect_properties.clone();
         if let Some(username) = username {
@@ -41,7 +79,7 @@ impl DataSourceCreator {
 
         let mut builder = DruidPoolBuilder::new()
             .name(format!("{node_name}-{}", uuid::Uuid::new_v4()))
-            .driver_name(factory.driver_name())
+            .driver_name(factory.driver_name().unwrap_or("unknown"))
             .url(raw_url)
             .raw_url(driver_url)
             .factory(factory)

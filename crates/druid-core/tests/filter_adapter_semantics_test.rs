@@ -5,7 +5,7 @@ use druid::core::{
     AfterFilter, BeforeFilter, DruidError, DruidPooledConnection, ExtendedFilter, FilterAdapter,
     FilterChain, PhysicalConnectionFactory, Wrapper, WrapperExt,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::{type_name, TypeId};
 use std::collections::HashMap;
 use std::ptr;

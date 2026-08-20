@@ -12,7 +12,7 @@ use druid::core::{
     PhysicalConnectionFactory, ResultSetFilter, ResultSetFilterChain, Row, SqlException,
     SqlWarning, StatementWarningFilterChain, Value,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::{Arc, Mutex};
 
 fn fatal_warning_error() -> DruidError {

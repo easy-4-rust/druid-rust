@@ -21,7 +21,7 @@ use druid::core::{
     ConnectionEvent, DruidPooledConnection, FilterAdapter, FilterChainImpl, LogFilter,
     PhysicalConnectionFactory, ResultSetFilterContext, StatementEvent, Value,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 

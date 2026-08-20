@@ -8,7 +8,7 @@ extern crate druid_core as druid;
 use druid::core::{
     DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory, Value,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 
 // -- helpers ----------------------------------------------------------------

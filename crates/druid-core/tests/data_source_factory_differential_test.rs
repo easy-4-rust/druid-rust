@@ -21,43 +21,9 @@ async fn factory_resolve_config_no_filter() {
     assert_eq!(resolved.get("url").unwrap(), "jdbc:mysql://localhost/db");
 }
 
-#[tokio::test]
-async fn factory_missing_url() {
-    let props = HashMap::new();
-    let e = expect_err(DruidDataSourceFactory::create_data_source(&props).await);
-    match e {
-        DruidError::InvalidArgument(msg) => assert!(msg.contains("url"), "msg: {msg}"),
-        other => panic!("expected InvalidArgument, got {other:?}"),
-    }
-}
-
-#[tokio::test]
-async fn factory_toasty_rejects_credentials() {
-    let mut props = HashMap::new();
-    props.insert("url".to_owned(), "jdbc:mysql://localhost/db".to_owned());
-    props.insert("username".to_owned(), "root".to_owned());
-    let e = expect_err(DruidDataSourceFactory::create_data_source(&props).await);
-    match e {
-        DruidError::InvalidArgument(msg) => {
-            assert!(
-                msg.contains("username") || msg.contains("credentials"),
-                "msg: {msg}"
-            )
-        }
-        other => panic!("expected InvalidArgument, got {other:?}"),
-    }
-}
-
-#[tokio::test]
-async fn factory_toasty_unsupported_url() {
-    let mut props = HashMap::new();
-    props.insert(
-        "url".to_owned(),
-        "jdbc:oracle:thin:@localhost:1521:xe".to_owned(),
-    );
-    let result = DruidDataSourceFactory::create_data_source(&props).await;
-    assert!(result.is_err(), "unsupported URL should fail");
-}
+/// Removed: `create_data_source` (Toasty default) was migrated to druid-wrapper.
+/// The missing-URL, credentials, and unsupported-URL error paths are now tested
+/// via `druid_wrapper::dbcp::BasicDataSourceFactory::create_data_source`.
 
 #[test]
 fn factory_property_constants() {
@@ -217,7 +183,7 @@ fn factory_property_constants() {
 
 #[tokio::test]
 async fn factory_invalid_boolean_property() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("defaultAutoCommit".to_owned(), "not_a_bool".to_owned());
@@ -239,7 +205,7 @@ async fn factory_invalid_boolean_property() {
 
 #[tokio::test]
 async fn factory_invalid_integer_property() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("maxActive".to_owned(), "not_a_number".to_owned());
@@ -259,7 +225,7 @@ async fn factory_invalid_integer_property() {
 
 #[tokio::test]
 async fn factory_negative_max_wait() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("maxWait".to_owned(), "-1".to_owned());
@@ -274,7 +240,7 @@ async fn factory_negative_max_wait() {
 
 #[tokio::test]
 async fn factory_negative_validation_query_timeout() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("validationQueryTimeout".to_owned(), "-5".to_owned());
@@ -296,7 +262,7 @@ async fn factory_negative_validation_query_timeout() {
 
 #[tokio::test]
 async fn factory_negative_remove_abandoned_timeout() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("removeAbandonedTimeout".to_owned(), "-10".to_owned());
@@ -318,7 +284,7 @@ async fn factory_negative_remove_abandoned_timeout() {
 
 #[tokio::test]
 async fn factory_connection_properties() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -336,7 +302,7 @@ async fn factory_connection_properties() {
 
 #[tokio::test]
 async fn factory_connection_properties_empty_entries() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -354,7 +320,7 @@ async fn factory_connection_properties_empty_entries() {
 
 #[tokio::test]
 async fn factory_wall_config_from_properties() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.selectAllow".to_owned(), "false".to_owned());
@@ -370,7 +336,7 @@ async fn factory_wall_config_from_properties() {
 
 #[tokio::test]
 async fn factory_wall_config_legacy_spelling() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.selelctAllow".to_owned(), "false".to_owned());
@@ -385,7 +351,7 @@ async fn factory_wall_config_legacy_spelling() {
 
 #[tokio::test]
 async fn factory_wall_config_tenant() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.wall.tenantColumn".to_owned(), "tenant_id".to_owned());
@@ -404,7 +370,7 @@ async fn factory_wall_config_tenant() {
 
 #[tokio::test]
 async fn factory_multiple_boolean_properties() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("testOnBorrow".to_owned(), "true".to_owned());
@@ -425,7 +391,7 @@ async fn factory_multiple_boolean_properties() {
 
 #[tokio::test]
 async fn factory_max_wait_thread_count_leq_zero() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("druid.maxWaitThreadCount".to_owned(), "-1".to_owned());
@@ -440,7 +406,7 @@ async fn factory_max_wait_thread_count_leq_zero() {
 
 #[tokio::test]
 async fn factory_connection_error_retry_attempts_leq_zero() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -458,7 +424,7 @@ async fn factory_connection_error_retry_attempts_leq_zero() {
 
 #[tokio::test]
 async fn factory_phy_max_use_count_negative() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("phyMaxUseCount".to_owned(), "-1".to_owned());
@@ -473,7 +439,7 @@ async fn factory_phy_max_use_count_negative() {
 
 #[tokio::test]
 async fn factory_invalid_on_fatal_error_max_active() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -492,7 +458,7 @@ async fn factory_invalid_on_fatal_error_max_active() {
 
 #[tokio::test]
 async fn factory_invalid_query_timeout() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("queryTimeout".to_owned(), "99999999999999".to_owned());
@@ -508,7 +474,7 @@ async fn factory_invalid_query_timeout() {
 
 #[tokio::test]
 async fn factory_invalid_login_timeout() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("loginTimeout".to_owned(), "99999999999999".to_owned());
@@ -524,7 +490,7 @@ async fn factory_invalid_login_timeout() {
 
 #[tokio::test]
 async fn factory_invalid_stat_sql_max_size() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -543,7 +509,7 @@ async fn factory_invalid_stat_sql_max_size() {
 
 #[tokio::test]
 async fn factory_invalid_not_full_timeout_retry_count() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -562,7 +528,7 @@ async fn factory_invalid_not_full_timeout_retry_count() {
 
 #[tokio::test]
 async fn factory_invalid_transaction_query_timeout() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -581,7 +547,7 @@ async fn factory_invalid_transaction_query_timeout() {
 
 #[tokio::test]
 async fn factory_connection_properties_no_key() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -599,7 +565,7 @@ async fn factory_connection_properties_no_key() {
 
 #[tokio::test]
 async fn factory_boolean_case_insensitive() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("defaultAutoCommit".to_owned(), "TRUE".to_owned());
@@ -614,7 +580,7 @@ async fn factory_boolean_case_insensitive() {
 
 #[tokio::test]
 async fn factory_transaction_isolation_read_committed() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -632,7 +598,7 @@ async fn factory_transaction_isolation_read_committed() {
 
 #[tokio::test]
 async fn factory_transaction_isolation_serializable() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(
@@ -650,7 +616,7 @@ async fn factory_transaction_isolation_serializable() {
 
 #[tokio::test]
 async fn factory_transaction_isolation_minus_one() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert("defaultTransactionIsolation".to_owned(), "-1".to_owned());
@@ -665,7 +631,7 @@ async fn factory_transaction_isolation_minus_one() {
 
 #[tokio::test]
 async fn factory_transaction_isolation_invalid_string() {
-    use druid::toasty::ToastyConnectionFactory;
+    use druid_wrapper::toasty::ToastyConnectionFactory;
     let mut props = HashMap::new();
     props.insert("url".to_owned(), "sqlite::memory:".to_owned());
     props.insert(

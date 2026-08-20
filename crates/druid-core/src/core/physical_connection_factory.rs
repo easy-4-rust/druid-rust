@@ -21,6 +21,11 @@ pub trait PhysicalConnectionFactory: Send + Sync {
         None
     }
 
+    /// 返回驱动/Adapter 名称；未知时保持 `None`。
+    fn driver_name(&self) -> Option<&str> {
+        None
+    }
+
     /// 创建一个未池化的物理连接。
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError>;
 

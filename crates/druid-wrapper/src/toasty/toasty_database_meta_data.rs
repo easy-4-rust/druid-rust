@@ -1,6 +1,6 @@
 //! Toasty 数据库元数据 Adapter。
 
-use crate::core::{DruidError, PhysicalDatabaseMetaData};
+use druid::core::{DruidError, PhysicalDatabaseMetaData};
 
 /// Toasty driver capability 的数据库元数据视图。
 ///

@@ -6,7 +6,7 @@ use druid::core::{
     PhysicalConnectionFactory, PhysicalStatement, PhysicalStatementOptions, Row, SqlTextStatement,
     StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::TypeId;
 use std::sync::{Arc, Mutex};
 

@@ -8,7 +8,7 @@ use druid::stats::{
     StatFilter, StatFilterContext, StatFilterContextListener, StatFilterContextListenerAdapter,
     StatsCollector,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

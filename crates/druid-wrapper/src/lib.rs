@@ -40,6 +40,8 @@ pub mod rbdc;
 pub mod rdbc;
 /// SQLx 直连驱动 Adapter，以及 bb8、deadpool 池适配器。
 pub mod sqlx;
+/// 内置 Toasty 标准数据源实现。
+pub mod toasty;
 
 pub use managed_wrapper_pool::ManagedWrapperPool;
 pub use proxool_config_key::ProxoolConfigKey;

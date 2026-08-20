@@ -12,10 +12,11 @@ use tokio::task::JoinHandle;
 
 /// 接收节点事件并动态增删 HA 子池。
 ///
-/// 对应 Java: `com.alibaba.druid.pool.ha.node.PoolUpdater`。删除采用“先加入
+/// 对应 Java: `com.alibaba.druid.pool.ha.node.PoolUpdater`。删除采用”先加入
 /// blacklist，等 activeCount 归零再关闭并移除”的两阶段协议。
 pub struct PoolUpdater {
     high_available_data_source: Weak<HighAvailableDataSourceInner>,
+    data_source_creator: DataSourceCreator,
     nodes_to_delete: DashSet<String>,
     update_lock: Mutex<()>,
     interval_seconds: AtomicI32,
@@ -31,10 +32,14 @@ impl PoolUpdater {
 
     /// 为指定 HA 数据源创建更新器。
     #[must_use]
-    pub(crate) fn new(high_available_data_source: Weak<HighAvailableDataSourceInner>) -> Self {
+    pub(crate) fn new(
+        high_available_data_source: Weak<HighAvailableDataSourceInner>,
+        data_source_creator: DataSourceCreator,
+    ) -> Self {
         let (shutdown_tx, _) = watch::channel(false);
         Self {
             high_available_data_source,
+            data_source_creator,
             nodes_to_delete: DashSet::new(),
             update_lock: Mutex::new(()),
             interval_seconds: AtomicI32::new(Self::DEFAULT_INTERVAL),
@@ -165,7 +170,7 @@ impl PoolUpdater {
             self.cancel_blacklist_node(&data_source, node_name);
             return;
         }
-        match DataSourceCreator::create(
+        match self.data_source_creator.create(
             node_name,
             event.url(),
             event.username(),

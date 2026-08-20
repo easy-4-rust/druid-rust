@@ -7,7 +7,7 @@ use druid::core::{
     DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory,
     ProxyAttributeValue,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
 
 // ── helpers ────────────────────────────────────────────────────────

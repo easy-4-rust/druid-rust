@@ -12,7 +12,7 @@ use druid::core::{
     RdbcUrl, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData, ResultSetNullability,
     ResultSetUpdate, Row, RowSetResultSet, SqlWarning, Value, Wrapper, WrapperExt,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::{Any, TypeId};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};

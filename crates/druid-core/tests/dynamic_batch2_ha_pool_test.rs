@@ -10,7 +10,7 @@ use druid::dynamic::selector::{
     DataSourceSelector, NamedDataSourceSelector, RandomDataSourceSelector,
     RandomDataSourceValidateTask,
 };
-use druid::dynamic::HighAvailableDataSource;
+use druid::dynamic::{DataSourceCreator, HighAvailableDataSource};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -91,7 +91,7 @@ async fn ha_init_creates_pool_updater_and_listener() {
     )
     .unwrap();
 
-    let ha = HighAvailableDataSource::new("init-test");
+    let ha = HighAvailableDataSource::new("init-test", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_property_prefix("");
     ha.set_pool_purge_interval_seconds(60);
@@ -111,7 +111,7 @@ async fn ha_init_idempotent() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "n.url=jdbc:sqlite:n.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("idem-test");
+    let ha = HighAvailableDataSource::new("idem-test", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     let _ = ha.init().await;
@@ -121,7 +121,7 @@ async fn ha_init_idempotent() {
 
 #[tokio::test]
 async fn ha_init_with_preexisting_skips_listener() {
-    let ha = HighAvailableDataSource::new("preexist");
+    let ha = HighAvailableDataSource::new("preexist", DataSourceCreator::noop_for_test());
     ha.insert_data_source("p1", MockPool::arc("p1"));
     let _ = ha.init().await;
     ha.destroy().await;
@@ -134,7 +134,7 @@ async fn pool_updater_delete_last_node_protected() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "solo.url=jdbc:sqlite:solo.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("protect-test");
+    let ha = HighAvailableDataSource::new("protect-test", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_allow_empty_pool_when_update(false);
     let _ = ha.init().await;
@@ -159,7 +159,7 @@ async fn pool_updater_delete_last_node_allowed() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "solo.url=jdbc:sqlite:solo.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("allow-test");
+    let ha = HighAvailableDataSource::new("allow-test", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_allow_empty_pool_when_update(true);
     let _ = ha.init().await;
@@ -176,7 +176,7 @@ async fn pool_updater_small_interval_warning() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "n.url=jdbc:sqlite:n.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("small-interval");
+    let ha = HighAvailableDataSource::new("small-interval", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_pool_purge_interval_seconds(5);
     let _ = ha.init().await;
@@ -191,7 +191,7 @@ async fn pool_updater_zero_interval_fallback() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "n.url=jdbc:sqlite:n.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("zero-interval");
+    let ha = HighAvailableDataSource::new("zero-interval", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_pool_purge_interval_seconds(0);
     let _ = ha.init().await;
@@ -206,7 +206,7 @@ async fn pool_updater_negative_interval_fallback() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "n.url=jdbc:sqlite:n.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("neg-interval");
+    let ha = HighAvailableDataSource::new("neg-interval", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_pool_purge_interval_seconds(-5);
     let _ = ha.init().await;
@@ -221,7 +221,7 @@ async fn pool_updater_update_empty_noop() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "").unwrap();
 
-    let ha = HighAvailableDataSource::new("empty-update");
+    let ha = HighAvailableDataSource::new("empty-update", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     if let Some(listener) = ha.node_listener() {
@@ -239,7 +239,7 @@ async fn ha_init_update_cycle_add_empty_name() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "node1.url=jdbc:sqlite:n1.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("add-empty");
+    let ha = HighAvailableDataSource::new("add-empty", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     if let Some(listener) = ha.node_listener() {
@@ -260,7 +260,7 @@ async fn ha_init_multiple_nodes() {
     )
     .unwrap();
 
-    let ha = HighAvailableDataSource::new("multi");
+    let ha = HighAvailableDataSource::new("multi", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     ha.destroy().await;
@@ -278,7 +278,7 @@ async fn ha_init_with_prefix() {
     )
     .unwrap();
 
-    let ha = HighAvailableDataSource::new("prefix-test");
+    let ha = HighAvailableDataSource::new("prefix-test", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     ha.set_property_prefix("ha.");
     let _ = ha.init().await;
@@ -293,7 +293,7 @@ async fn ha_init_empty_url_warning() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "node1.url=\nnode2.url=jdbc:sqlite:n2.db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("empty-url");
+    let ha = HighAvailableDataSource::new("empty-url", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     ha.destroy().await;
@@ -311,7 +311,7 @@ async fn ha_init_with_credentials() {
     )
     .unwrap();
 
-    let ha = HighAvailableDataSource::new("creds-test");
+    let ha = HighAvailableDataSource::new("creds-test", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     ha.destroy().await;
@@ -325,7 +325,7 @@ async fn ha_init_unsupported_url_scheme() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "node1.url=ftp://example.com/db\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("unsup-scheme");
+    let ha = HighAvailableDataSource::new("unsup-scheme", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     ha.destroy().await;
@@ -339,7 +339,7 @@ async fn ha_init_invalid_url() {
     let file = dir.join("ha.properties");
     std::fs::write(&file, "node1.url=not-a-valid-url\n").unwrap();
 
-    let ha = HighAvailableDataSource::new("invalid-url");
+    let ha = HighAvailableDataSource::new("invalid-url", DataSourceCreator::noop_for_test());
     ha.set_data_source_file(&file);
     let _ = ha.init().await;
     ha.destroy().await;
@@ -352,46 +352,46 @@ async fn ha_init_invalid_url() {
 
 #[tokio::test]
 async fn ha_pool_get_no_pools() {
-    let ha = HighAvailableDataSource::new("no-pools");
+    let ha = HighAvailableDataSource::new("no-pools", DataSourceCreator::noop_for_test());
     let result = Pool::get(&ha).await;
     assert!(result.is_err());
 }
 
 #[tokio::test]
 async fn ha_pool_get_timeout_no_pools() {
-    let ha = HighAvailableDataSource::new("no-pools-timeout");
+    let ha = HighAvailableDataSource::new("no-pools-timeout", DataSourceCreator::noop_for_test());
     let result = Pool::get_timeout(&ha, Duration::from_secs(1)).await;
     assert!(result.is_err());
 }
 
 #[test]
 fn ha_pool_state_no_selector() {
-    let ha = HighAvailableDataSource::new("state-test");
+    let ha = HighAvailableDataSource::new("state-test", DataSourceCreator::noop_for_test());
     let state = Pool::state(&ha);
     assert_eq!(state.name, "state-test");
 }
 
 #[test]
 fn ha_pool_driver_name() {
-    let ha = HighAvailableDataSource::new("driver-test");
+    let ha = HighAvailableDataSource::new("driver-test", DataSourceCreator::noop_for_test());
     assert_eq!(Pool::driver_name(&ha), "druid-ha");
 }
 
 #[test]
 fn ha_pool_name() {
-    let ha = HighAvailableDataSource::new("my-ha");
+    let ha = HighAvailableDataSource::new("my-ha", DataSourceCreator::noop_for_test());
     assert_eq!(Pool::name(&ha), "my-ha");
 }
 
 #[tokio::test]
 async fn ha_pool_close_pool() {
-    let ha = HighAvailableDataSource::new("close-test");
+    let ha = HighAvailableDataSource::new("close-test", DataSourceCreator::noop_for_test());
     Pool::close_pool(&ha).await;
 }
 
 #[test]
 fn ha_set_data_source_selector_replaces() {
-    let ha = HighAvailableDataSource::new("replace-sel");
+    let ha = HighAvailableDataSource::new("replace-sel", DataSourceCreator::noop_for_test());
     ha.set_selector("random");
     assert_eq!(ha.selector_name(), Some("random"));
 
@@ -402,7 +402,7 @@ fn ha_set_data_source_selector_replaces() {
 
 #[test]
 fn ha_set_selector_unknown_no_change() {
-    let ha = HighAvailableDataSource::new("unknown-sel");
+    let ha = HighAvailableDataSource::new("unknown-sel", DataSourceCreator::noop_for_test());
     ha.set_selector("random");
     ha.set_selector("no-such-selector");
     assert_eq!(ha.selector_name(), Some("random"));
@@ -410,33 +410,33 @@ fn ha_set_selector_unknown_no_change() {
 
 #[test]
 fn ha_set_connection_properties_empty_clears() {
-    let ha = HighAvailableDataSource::new("conn-props");
+    let ha = HighAvailableDataSource::new("conn-props", DataSourceCreator::noop_for_test());
     ha.set_connection_properties(Some("user=admin;password=secret"));
     ha.set_connection_properties(Some(""));
 }
 
 #[test]
 fn ha_set_connection_properties_no_equals() {
-    let ha = HighAvailableDataSource::new("conn-props2");
+    let ha = HighAvailableDataSource::new("conn-props2", DataSourceCreator::noop_for_test());
     ha.set_connection_properties(Some("key_without_value"));
 }
 
 #[test]
 fn ha_set_connection_properties_none_clears() {
-    let ha = HighAvailableDataSource::new("conn-props3");
+    let ha = HighAvailableDataSource::new("conn-props3", DataSourceCreator::noop_for_test());
     ha.set_connection_properties(Some("k=v"));
     ha.set_connection_properties(None);
 }
 
 #[test]
 fn ha_set_connect_properties_none() {
-    let ha = HighAvailableDataSource::new("cp-none");
+    let ha = HighAvailableDataSource::new("cp-none", DataSourceCreator::noop_for_test());
     ha.set_connect_properties(None);
 }
 
 #[test]
 fn ha_set_connect_properties_extends() {
-    let ha = HighAvailableDataSource::new("cp-ext");
+    let ha = HighAvailableDataSource::new("cp-ext", DataSourceCreator::noop_for_test());
     let mut p1 = HashMap::new();
     p1.insert("k1".to_owned(), "v1".to_owned());
     ha.set_connect_properties(Some(p1));
@@ -447,7 +447,7 @@ fn ha_set_connect_properties_extends() {
 
 #[test]
 fn ha_available_excludes_blacklist() {
-    let ha = HighAvailableDataSource::new("avail-test");
+    let ha = HighAvailableDataSource::new("avail-test", DataSourceCreator::noop_for_test());
     ha.insert_data_source("a", MockPool::arc("a"));
     ha.insert_data_source("b", MockPool::arc("b"));
     ha.add_blacklist("a");
@@ -457,20 +457,20 @@ fn ha_available_excludes_blacklist() {
 
 #[test]
 fn ha_add_blacklist_nonexistent() {
-    let ha = HighAvailableDataSource::new("bl-nonexist");
+    let ha = HighAvailableDataSource::new("bl-nonexist", DataSourceCreator::noop_for_test());
     ha.add_blacklist("ghost");
     assert!(!ha.is_in_blacklist("ghost"));
 }
 
 #[test]
 fn ha_remove_blacklist_nonexistent() {
-    let ha = HighAvailableDataSource::new("rm-bl-nonexist");
+    let ha = HighAvailableDataSource::new("rm-bl-nonexist", DataSourceCreator::noop_for_test());
     ha.remove_blacklist("ghost");
 }
 
 #[tokio::test]
 async fn ha_destroy_with_pools() {
-    let ha = HighAvailableDataSource::new("destroy-pools");
+    let ha = HighAvailableDataSource::new("destroy-pools", DataSourceCreator::noop_for_test());
     ha.insert_data_source("p1", MockPool::arc("p1"));
     ha.insert_data_source("p2", MockPool::arc("p2"));
     ha.destroy().await;
@@ -478,7 +478,7 @@ async fn ha_destroy_with_pools() {
 
 #[tokio::test]
 async fn ha_get_connection_no_selector() {
-    let ha = HighAvailableDataSource::new("no-sel-conn");
+    let ha = HighAvailableDataSource::new("no-sel-conn", DataSourceCreator::noop_for_test());
     ha.insert_data_source("p1", MockPool::arc("p1"));
     let result = ha.get_connection().await;
     match result {
@@ -490,7 +490,7 @@ async fn ha_get_connection_no_selector() {
 
 #[test]
 fn ha_set_target_with_byname() {
-    let ha = HighAvailableDataSource::new("target-test");
+    let ha = HighAvailableDataSource::new("target-test", DataSourceCreator::noop_for_test());
     ha.set_selector("byName");
     ha.set_target_data_source(Some("master".to_owned()));
     ha.set_target_data_source(None);
@@ -498,21 +498,21 @@ fn ha_set_target_with_byname() {
 
 #[test]
 fn ha_set_target_with_random() {
-    let ha = HighAvailableDataSource::new("target-random");
+    let ha = HighAvailableDataSource::new("target-random", DataSourceCreator::noop_for_test());
     ha.set_selector("random");
     ha.set_target_data_source(Some("master".to_owned()));
 }
 
 #[test]
 fn ha_set_target_with_sticky() {
-    let ha = HighAvailableDataSource::new("target-sticky");
+    let ha = HighAvailableDataSource::new("target-sticky", DataSourceCreator::noop_for_test());
     ha.set_selector("stickyRandom");
     ha.set_target_data_source(Some("master".to_owned()));
 }
 
 #[test]
 fn ha_set_target_no_selector() {
-    let ha = HighAvailableDataSource::new("target-none");
+    let ha = HighAvailableDataSource::new("target-none", DataSourceCreator::noop_for_test());
     ha.set_target_data_source(Some("master".to_owned()));
     ha.set_target_data_source(None);
 }

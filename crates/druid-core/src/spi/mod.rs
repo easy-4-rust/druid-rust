@@ -3,6 +3,8 @@
 //! Applications use the concrete handles in [`crate::rdbc`]. Database adapters implement the
 //! access traits in this module and create handles through [`crate::spi::RdbcResourceFactory`].
 
+pub mod driver_extension_descriptor;
+pub mod driver_extension_registry;
 mod rdbc_array_access;
 mod rdbc_blob_access;
 mod rdbc_clob_access;

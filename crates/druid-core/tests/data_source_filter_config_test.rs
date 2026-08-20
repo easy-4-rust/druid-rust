@@ -6,7 +6,7 @@ use druid::core::{
     PhysicalConnection, PhysicalConnectionFactory, ResultSetFilter,
 };
 use druid::pool::DruidPool;
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

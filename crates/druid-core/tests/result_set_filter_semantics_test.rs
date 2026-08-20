@@ -12,7 +12,7 @@ use druid::core::{
     ResultSetMetaData, ResultSetStatement, ResultSetUpdate, Value,
 };
 use druid::stats::{StatFilter, StatsCollector};
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::Any;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

@@ -8,7 +8,7 @@ description  = "Druid stable public facade — re-exports druid-core modules"
 repository.workspace = true
 
 [features]
-default = ["sqlite"]
+default = []
 sqlite = ["druid-core/sqlite"]
 postgresql = ["druid-core/postgresql"]
 mysql = ["druid-core/mysql"]

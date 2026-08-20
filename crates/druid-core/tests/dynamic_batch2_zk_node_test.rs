@@ -6,7 +6,7 @@
 extern crate druid_core as druid;
 use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
 use druid::dynamic::node::{NodeEvent, NodeEventTypeEnum, NodeListener, ZookeeperNodeListener};
-use druid::dynamic::{HighAvailableDataSource, PropertiesUtils};
+use druid::dynamic::{DataSourceCreator, HighAvailableDataSource, PropertiesUtils};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -172,7 +172,7 @@ async fn zk_destroy_no_task() {
 
 #[test]
 fn zk_set_observer_and_time() {
-    let ha = HighAvailableDataSource::new("zk-obs");
+    let ha = HighAvailableDataSource::new("zk-obs", DataSourceCreator::noop_for_test());
     ha.insert_data_source("p1", MockPool::arc("p1"));
     assert!(ha.node_listener().is_none());
 }

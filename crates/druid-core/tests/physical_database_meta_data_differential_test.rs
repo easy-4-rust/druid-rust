@@ -5,7 +5,7 @@
 
 extern crate druid_core as druid;
 use druid::core::{DruidError, DruidPooledConnection, PhysicalConnectionFactory};
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 
 async fn make_pooled() -> DruidPooledConnection {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")

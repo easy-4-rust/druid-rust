@@ -1,5 +1,6 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.HighAvailableDataSource`。
 
+use super::data_source_creator::DataSourceCreator;
 use super::node::{FileNodeListener, NodeListener, PoolUpdater};
 use super::selector::{DataSourceSelector, DataSourceSelectorFactory};
 use crate::core::{DruidError, DruidPooledConnection, Pool, PoolState};
@@ -92,6 +93,7 @@ pub(crate) struct HighAvailableDataSourceInner {
     pub(crate) initialized: AtomicBool,
     pub(crate) init_lock: tokio::sync::Mutex<()>,
     pub(crate) config: RwLock<HighAvailableDataSourceConfig>,
+    pub(crate) data_source_creator: DataSourceCreator,
     pub(crate) pool_updater: RwLock<Option<Arc<PoolUpdater>>>,
     pub(crate) node_listener: RwLock<Option<Arc<dyn NodeListener>>>,
 }
@@ -123,8 +125,11 @@ pub struct HighAvailableDataSource {
 
 impl HighAvailableDataSource {
     /// 创建空 HA 数据源；首次 init 默认安装 `random` 选择器。
+    ///
+    /// `data_source_creator` 负责根据 URL 创建物理连接工厂；具体驱动由
+    /// `druid-wrapper` 注入，Core 不绑定。
     #[must_use]
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, data_source_creator: DataSourceCreator) -> Self {
         Self {
             name: name.into(),
             driver_name: "druid-ha".to_owned(),
@@ -137,6 +142,7 @@ impl HighAvailableDataSource {
                 initialized: AtomicBool::new(false),
                 init_lock: tokio::sync::Mutex::new(()),
                 config: RwLock::new(HighAvailableDataSourceConfig::default()),
+                data_source_creator,
                 pool_updater: RwLock::new(None),
                 node_listener: RwLock::new(None),
             }),
@@ -158,7 +164,10 @@ impl HighAvailableDataSource {
         }
         if self.inner.data_sources.is_empty() {
             let config = self.inner.config.read().clone();
-            let updater = Arc::new(PoolUpdater::new(self.weak_inner()));
+            let updater = Arc::new(PoolUpdater::new(
+                self.weak_inner(),
+                DataSourceCreator::new(self.inner.data_source_creator.clone_factory_creator()),
+            ));
             updater.set_interval_seconds(config.pool_purge_interval_seconds);
             updater.set_allow_empty_pool(config.allow_empty_pool_when_update);
             updater.init().await;

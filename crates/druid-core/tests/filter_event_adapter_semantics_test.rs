@@ -7,7 +7,7 @@ use druid::core::{
     FilterEventAdapter, FilterEventListener, PhysicalConnectionFactory, ResultSetFilter,
     ResultSetFilterContext, StatementEvent, WrapperExt,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::type_name;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

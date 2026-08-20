@@ -7,7 +7,7 @@ use druid::core::{
     CallableOutParameter, DruidPooledConnection, FilterAdapter, FilterChainImpl,
     PhysicalConnectionFactory, Value, Wrapper,
 };
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::TypeId;
 use std::sync::Arc;
 

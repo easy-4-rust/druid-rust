@@ -8,7 +8,7 @@
 extern crate druid_core as druid;
 use druid::core::DruidError;
 use druid::pool::DruidDataSourceFactory;
-use druid::toasty::ToastyConnectionFactory;
+use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
 
