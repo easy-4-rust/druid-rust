@@ -216,7 +216,7 @@ impl PhysicalConnection for TrackingConnection {
             .discarded
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "tracking"
     }
 }
@@ -318,7 +318,7 @@ async fn build_pool(
             .factory(factory)
             .max_open(2)
             .max_idle(2)
-            .max_lifetime(Duration::from_secs(60))
+            .max_lifetime(Duration::from_mins(1))
             .acquire_timeout(Duration::from_secs(1)),
     )
     .build()

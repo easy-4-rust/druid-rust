@@ -6,7 +6,7 @@ use druid_core::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
     SnapshotUnavailable,
 };
-use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime, MetricsError};
+use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
 use serde_json::Value;
 
 /// Mock datasource for shutdown tests.

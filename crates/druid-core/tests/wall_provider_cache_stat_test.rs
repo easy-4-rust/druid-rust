@@ -1,16 +1,15 @@
 //! Differential tests for `WallProvider` cache, stats, tenant and privileged paths.
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
-//! 目标：覆盖 wall_provider.rs 中白/黑名单缓存命中、语法错误计数、
-//! violation 计数、统计快照、clear_cache、tenant_value、do_privileged 等路径。
+//! 目标：覆盖 `wall_provider.rs` 中白/黑名单缓存命中、语法错误计数、
+//! violation `计数、统计快照、clear_cache、tenant_value、do_privileged` 等路径。
 
 extern crate druid_core as druid;
 use druid_core::core::Value;
 use druid_core::sql::{
-    DbType, WallConfig, WallProvider, WallProviderStatValue, WallSqlStat, WallViolation,
+    WallConfig, WallProvider, WallViolation,
 };
 
-use std::sync::Arc;
 
 // ══════════════════════════════════════════════════════════════════
 // 1. 白名单缓存命中路径
@@ -95,7 +94,7 @@ fn black_list_hit_preserves_violations() {
 // 3. 语法错误计数
 // ══════════════════════════════════════════════════════════════════
 
-/// 语法错误 SQL 增加 syntax_error_count。
+/// 语法错误 SQL 增加 `syntax_error_count`。
 #[test]
 fn syntax_error_count_increments() {
     let provider = WallProvider::new(WallConfig::default());
@@ -106,7 +105,7 @@ fn syntax_error_count_increments() {
     assert_eq!(provider.syntax_error_count(), 2);
 }
 
-/// 合法 SQL 不增加 syntax_error_count。
+/// 合法 SQL 不增加 `syntax_error_count`。
 #[test]
 fn valid_sql_no_syntax_error() {
     let provider = WallProvider::new(WallConfig::default());
@@ -118,7 +117,7 @@ fn valid_sql_no_syntax_error() {
 // 4. violation 计数
 // ══════════════════════════════════════════════════════════════════
 
-/// 违规 SQL 增加 violation_count。
+/// 违规 SQL 增加 `violation_count`。
 #[test]
 fn violation_count_increments() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -130,7 +129,7 @@ fn violation_count_increments() {
     assert_eq!(provider.violation_count(), 2);
 }
 
-/// 合法 SQL 不增加 violation_count。
+/// 合法 SQL 不增加 `violation_count`。
 #[test]
 fn valid_sql_no_violation() {
     let provider = WallProvider::new(WallConfig::default());
@@ -142,7 +141,7 @@ fn valid_sql_no_violation() {
 // 5. hard_check_count
 // ══════════════════════════════════════════════════════════════════
 
-/// 每次 SQL 不在缓存中时 hard_check_count 增加。
+/// 每次 SQL 不在缓存中时 `hard_check_count` 增加。
 #[test]
 fn hard_check_count_only_on_cache_miss() {
     let provider = WallProvider::new(WallConfig::default());
@@ -158,7 +157,7 @@ fn hard_check_count_only_on_cache_miss() {
 // 6. stat_value 快照
 // ══════════════════════════════════════════════════════════════════
 
-/// stat_value(false) 返回当前计数不重置。
+/// `stat_value(false)` 返回当前计数不重置。
 #[test]
 fn stat_value_no_reset() {
     let provider = WallProvider::new(WallConfig::default());
@@ -174,7 +173,7 @@ fn stat_value_no_reset() {
     assert_eq!(sv2.check_count, 2);
 }
 
-/// stat_value(true) 返回当前计数并重置。
+/// `stat_value(true)` 返回当前计数并重置。
 #[test]
 fn stat_value_with_reset() {
     let provider = WallProvider::new(WallConfig::default());
@@ -186,7 +185,7 @@ fn stat_value_with_reset() {
     assert_eq!(provider.hard_check_count(), 0);
 }
 
-/// stat_value 包含 violation_effect_row_count。
+/// `stat_value` 包含 `violation_effect_row_count`。
 #[test]
 fn stat_value_violation_effect_row_count() {
     let provider = WallProvider::new(WallConfig::default());
@@ -196,7 +195,7 @@ fn stat_value_violation_effect_row_count() {
     assert_eq!(sv.violation_effect_row_count, 150);
 }
 
-/// stats_map 返回管理字段映射。
+/// `stats_map` 返回管理字段映射。
 #[test]
 fn stats_map_contains_keys() {
     let provider = WallProvider::new(WallConfig::default());
@@ -210,7 +209,7 @@ fn stats_map_contains_keys() {
     assert!(map.contains_key("syntaxErrorCount"));
 }
 
-/// stat_value 白名单过滤 execute_count==0 的 SQL。
+/// `stat_value` 白名单过滤 `execute_count==0` 的 SQL。
 #[test]
 fn stat_value_filters_empty_entries() {
     let provider = WallProvider::new(WallConfig::default());
@@ -219,7 +218,7 @@ fn stat_value_filters_empty_entries() {
     assert!(sv.black_list.is_empty());
 }
 
-/// stat_value 包含有执行数据的 SQL。
+/// `stat_value` 包含有执行数据的 SQL。
 #[test]
 fn stat_value_includes_active_sql() {
     let provider = WallProvider::new(WallConfig::default());
@@ -233,7 +232,7 @@ fn stat_value_includes_active_sql() {
 // 7. clear_cache
 // ══════════════════════════════════════════════════════════════════
 
-/// clear_cache 清空白/黑名单但保留计数。
+/// `clear_cache` 清空白/黑名单但保留计数。
 #[test]
 fn clear_cache_preserves_counts() {
     let provider = WallProvider::new(WallConfig::default());
@@ -275,7 +274,7 @@ fn reset_clears_all() {
 // 9. white_list / black_list / sql_stat
 // ══════════════════════════════════════════════════════════════════
 
-/// white_list 返回白名单 SQL 集合。
+/// `white_list` 返回白名单 SQL 集合。
 #[test]
 fn white_list_returns_set() {
     let provider = WallProvider::new(WallConfig::default());
@@ -284,7 +283,7 @@ fn white_list_returns_set() {
     assert!(wl.contains("SELECT 1"));
 }
 
-/// black_list 返回黑名单 SQL 集合。
+/// `black_list` 返回黑名单 SQL 集合。
 #[test]
 fn black_list_returns_set() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -294,7 +293,7 @@ fn black_list_returns_set() {
     assert!(bl.contains("DROP TABLE t"));
 }
 
-/// sql_stat 查询白名单。
+/// `sql_stat` 查询白名单。
 #[test]
 fn sql_stat_from_white_list() {
     let provider = WallProvider::new(WallConfig::default());
@@ -303,7 +302,7 @@ fn sql_stat_from_white_list() {
     assert!(stat.is_some());
 }
 
-/// sql_stat 查询黑名单。
+/// `sql_stat` 查询黑名单。
 #[test]
 fn sql_stat_from_black_list() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -313,7 +312,7 @@ fn sql_stat_from_black_list() {
     assert!(stat.is_some());
 }
 
-/// sql_stat 不存在的 SQL。
+/// `sql_stat` 不存在的 SQL。
 #[test]
 fn sql_stat_not_found() {
     let provider = WallProvider::new(WallConfig::default());
@@ -369,7 +368,7 @@ fn function_stat_values_from_select() {
     assert!(functions.iter().any(|f| f.name == "count"));
 }
 
-/// sql_stat_values 包含白/黑 SQL。
+/// `sql_stat_values` 包含白/黑 SQL。
 #[test]
 fn sql_stat_values_combined() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -380,7 +379,7 @@ fn sql_stat_values_combined() {
     assert!(values.len() >= 2);
 }
 
-/// white_list_values 只包含白名单。
+/// `white_list_values` 只包含白名单。
 #[test]
 fn white_list_values_only() {
     let provider = WallProvider::new(WallConfig::default());
@@ -389,7 +388,7 @@ fn white_list_values_only() {
     assert!(!values.is_empty());
 }
 
-/// black_list_values 只包含黑名单。
+/// `black_list_values` 只包含黑名单。
 #[test]
 fn black_list_values_only() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -403,7 +402,7 @@ fn black_list_values_only() {
 // 11. record_effect_rows
 // ══════════════════════════════════════════════════════════════════
 
-/// record_effect_rows 回写表统计行数。
+/// `record_effect_rows` 回写表统计行数。
 #[test]
 fn record_effect_rows_updates_table_stat() {
     let provider = WallProvider::new(WallConfig::default());
@@ -414,7 +413,7 @@ fn record_effect_rows_updates_table_stat() {
     assert!(orders.is_some());
 }
 
-/// record_effect_rows 无缓存命中时安全跳过。
+/// `record_effect_rows` 无缓存命中时安全跳过。
 #[test]
 fn record_effect_rows_no_stat_skips() {
     let provider = WallProvider::new(WallConfig::default());
@@ -422,7 +421,7 @@ fn record_effect_rows_no_stat_skips() {
     provider.record_effect_rows("SELECT 1", 10, Some(10));
 }
 
-/// record_effect_rows 路径（select_count > 0）。
+/// `record_effect_rows` `路径（select_count` > 0）。
 #[test]
 fn record_effect_rows_select_fetch() {
     let provider = WallProvider::new(WallConfig::default());
@@ -437,7 +436,7 @@ fn record_effect_rows_select_fetch() {
 // 12. tenant_value / set_tenant_value
 // ══════════════════════════════════════════════════════════════════
 
-/// 线程级 tenant_value 设置与获取。
+/// 线程级 `tenant_value` 设置与获取。
 #[test]
 fn thread_tenant_value_set_and_get() {
     assert!(WallProvider::tenant_value().is_none());
@@ -452,7 +451,7 @@ fn thread_tenant_value_set_and_get() {
     assert!(WallProvider::tenant_value().is_none());
 }
 
-/// tenant_value 在不同线程独立。
+/// `tenant_value` 在不同线程独立。
 #[test]
 fn tenant_value_thread_isolation() {
     WallProvider::set_tenant_value(Some(Value::String("main-thread".to_owned())));
@@ -480,7 +479,7 @@ fn tenant_value_thread_isolation() {
 // 13. scope_tenant_value（Tokio task-local）
 // ══════════════════════════════════════════════════════════════════
 
-/// scope_tenant_value 在作用域内设置、退出后恢复。
+/// `scope_tenant_value` 在作用域内设置、退出后恢复。
 #[tokio::test]
 async fn scope_tenant_value_sets_and_restores() {
     WallProvider::set_tenant_value(None);
@@ -496,7 +495,7 @@ async fn scope_tenant_value_sets_and_restores() {
     assert!(WallProvider::tenant_value().is_none());
 }
 
-/// scope_tenant_value 嵌套作用域。
+/// `scope_tenant_value` 嵌套作用域。
 #[tokio::test]
 async fn scope_tenant_value_nested() {
     WallProvider::scope_tenant_value(Value::Int(1), async {
@@ -526,7 +525,7 @@ fn not_privileged_by_default() {
     assert!(!WallProvider::is_privileged());
 }
 
-/// do_privileged 内部为 true，退出后恢复。
+/// `do_privileged` 内部为 true，退出后恢复。
 #[test]
 fn do_privileged_sets_and_restores() {
     assert!(!WallProvider::is_privileged());
@@ -538,7 +537,7 @@ fn do_privileged_sets_and_restores() {
     assert!(!WallProvider::is_privileged());
 }
 
-/// do_privileged 嵌套。
+/// `do_privileged` 嵌套。
 #[test]
 fn do_privileged_nested() {
     assert!(!WallProvider::is_privileged());
@@ -552,7 +551,7 @@ fn do_privileged_nested() {
     assert!(!WallProvider::is_privileged());
 }
 
-/// do_privileged 恢复即使闭包 panic。
+/// `do_privileged` 恢复即使闭包 panic。
 #[test]
 fn do_privileged_restores_on_panic() {
     assert!(!WallProvider::is_privileged());
@@ -570,7 +569,7 @@ fn do_privileged_restores_on_panic() {
 // 15. scope_privileged（Tokio task-local）
 // ══════════════════════════════════════════════════════════════════
 
-/// scope_privileged 在作用域内启用，退出后恢复。
+/// `scope_privileged` 在作用域内启用，退出后恢复。
 #[tokio::test]
 async fn scope_privileged_sets_and_restores() {
     assert!(!WallProvider::is_privileged());
@@ -585,7 +584,7 @@ async fn scope_privileged_sets_and_restores() {
 // 16. privileged check 绕过 wall 检查
 // ══════════════════════════════════════════════════════════════════
 
-/// do_privileged_allow=true + is_privileged → 快速通行。
+/// `do_privileged_allow=true` + `is_privileged` → 快速通行。
 #[test]
 fn privileged_bypass_wall_check() {
     let mut config = WallConfig::default();
@@ -600,7 +599,7 @@ fn privileged_bypass_wall_check() {
     assert_eq!(result.sql(), "DROP TABLE users");
 }
 
-/// do_privileged_allow=false → privileged 不绕过。
+/// `do_privileged_allow=false` → privileged 不绕过。
 #[test]
 fn privileged_no_bypass_when_disabled() {
     let config = WallConfig::builder()
@@ -618,7 +617,7 @@ fn privileged_no_bypass_when_disabled() {
 // 17. 多 tenant SQL 缓存绕过
 // ══════════════════════════════════════════════════════════════════
 
-/// tenant_table_pattern 非空时绕过白/黑名单缓存。
+/// `tenant_table_pattern` 非空时绕过白/黑名单缓存。
 #[test]
 fn tenant_pattern_disables_cache() {
     let config = WallConfig::builder()

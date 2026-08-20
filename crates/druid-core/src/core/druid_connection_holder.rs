@@ -78,7 +78,7 @@ pub enum ConnectionState {
 /// `DruidPooledConnection` 之间唯一的物理连接所有者，保存首次入池时的默认
 /// 属性、创建/活跃/执行/保活时间、借用次数、密码版本和回收标记。
 ///
-/// PreparedStatement cache 已由同名 `PreparedStatementPool`/holder 对象承载；
+/// `PreparedStatement` cache 已由同名 `PreparedStatementPool`/holder 对象承载；
 /// ConnectionEventListener、StatementEventListener 与 statement trace 已迁入。
 pub struct DruidConnectionHolder {
     physical_connection: Option<Box<dyn PhysicalConnection>>,
@@ -117,6 +117,7 @@ pub struct DruidConnectionHolder {
     pub last_fingerprint: Mutex<Option<u64>>,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for DruidConnectionHolder {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -427,7 +428,7 @@ impl DruidConnectionHolder {
     /// 关闭并清空本次逻辑连接遗留的所有 Statement。
     ///
     /// 对应 Java：`DruidConnectionHolder#reset()` 对 `statementTrace` 的处理。
-    /// 先从锁内取走快照，再逐项关闭，避免 PreparedStatement 的缓存归还路径
+    /// 先从锁内取走快照，再逐项关闭，避免 `PreparedStatement` 的缓存归还路径
     /// 在关闭过程中重入 holder 时形成锁递归。
     pub(crate) fn close_statement_trace(&self) {
         let statements = {
@@ -473,7 +474,7 @@ impl DruidConnectionHolder {
         &self.defaults
     }
 
-    /// 配置单连接 PreparedStatement 缓存。
+    /// 配置单连接 `PreparedStatement` 缓存。
     ///
     /// 对应 Java：`poolPreparedStatements`、
     /// `maxPoolPreparedStatementPerConnectionSize`、`sharePreparedStatements` 和
@@ -497,12 +498,12 @@ impl DruidConnectionHolder {
         self.prepared_statement_stats = stats;
     }
 
-    /// 返回是否启用单连接 PreparedStatement 缓存。
+    /// 返回是否启用单连接 `PreparedStatement` 缓存。
     pub fn is_pool_prepared_statements(&self) -> bool {
         self.pool_prepared_statements
     }
 
-    /// 惰性创建并返回 PreparedStatement pool。
+    /// 惰性创建并返回 `PreparedStatement` pool。
     ///
     /// 对应 Java：`DruidConnectionHolder#getStatementPool()`。
     pub fn statement_pool(&mut self) -> Arc<Mutex<PreparedStatementPool>> {
@@ -520,14 +521,14 @@ impl DruidConnectionHolder {
             .clone()
     }
 
-    /// 返回已经创建的 PreparedStatement pool；不会触发惰性初始化。
+    /// 返回已经创建的 `PreparedStatement` pool；不会触发惰性初始化。
     ///
     /// 对应 Java：`DruidConnectionHolder#getStatementPoolDirect()`。
     pub fn statement_pool_direct(&self) -> Option<Arc<Mutex<PreparedStatementPool>>> {
         self.statement_pool.clone()
     }
 
-    /// 清空当前连接的 PreparedStatement cache；从未创建 cache 时不做任何事。
+    /// 清空当前连接的 `PreparedStatement` cache；从未创建 cache 时不做任何事。
     ///
     /// 对应 Java：`DruidConnectionHolder#clearStatementCache()`。
     pub fn clear_statement_cache(&mut self) {
@@ -549,7 +550,7 @@ impl DruidConnectionHolder {
         })
     }
 
-    /// 从缓存取得 PreparedStatement holder。
+    /// 从缓存取得 `PreparedStatement` holder。
     pub fn get_cached_prepared_statement(
         &mut self,
         key: &PreparedStatementKey,
@@ -560,7 +561,7 @@ impl DruidConnectionHolder {
             .get(key)
     }
 
-    /// 将 PreparedStatement holder 放回缓存。
+    /// 将 `PreparedStatement` holder 放回缓存。
     pub fn cache_prepared_statement(&mut self, holder: Arc<PreparedStatementHolder>) {
         self.statement_pool()
             .lock()
@@ -568,7 +569,7 @@ impl DruidConnectionHolder {
             .put(holder);
     }
 
-    /// 从缓存删除 PreparedStatement holder。
+    /// 从缓存删除 `PreparedStatement` holder。
     pub fn remove_cached_prepared_statement(&mut self, holder: &Arc<PreparedStatementHolder>) {
         self.statement_pool()
             .lock()
@@ -576,7 +577,7 @@ impl DruidConnectionHolder {
             .remove(holder);
     }
 
-    /// 返回数据源级 PreparedStatement 统计。
+    /// 返回数据源级 `PreparedStatement` 统计。
     pub fn prepared_statement_stats(&self) -> &Arc<PreparedStatementCacheStats> {
         &self.prepared_statement_stats
     }
@@ -775,7 +776,7 @@ impl DruidConnectionHolder {
 
     /// 保存首次修改 schema 前的原始值。
     ///
-    /// 对应 Java MySQL 分支中的 `holder.initSchema`；只记录第一次值。
+    /// 对应 Java `MySQL` 分支中的 `holder.initSchema`；只记录第一次值。
     pub fn remember_initial_schema(&self, schema: Option<String>) {
         let mut initial = self
             .init_schema

@@ -7,6 +7,8 @@
 //! The standalone admin mode (binary `druid-admin`) uses an in-memory
 //! [`repository::MetricsRepository`] instead of remote HTTP pull.
 
+use std::fmt::Write as _;
+
 pub mod admin_state;
 pub mod config;
 pub mod druid_admin_application;
@@ -356,7 +358,7 @@ async fn api_handler() -> impl IntoResponse {
 /// /metrics: returns Prometheus text format metrics from the repository.
 ///
 /// Outputs metric families in Prometheus exposition format (text/plain; version=0.0.4).
-/// Labels are restricted to allowed set (service, instance, datasource, db_type, driver).
+/// Labels are restricted to allowed set (service, instance, datasource, `db_type`, driver).
 async fn metrics_handler(
     axum::extract::State(repo): axum::extract::State<MetricsRepository>,
 ) -> impl IntoResponse {
@@ -368,18 +370,19 @@ async fn metrics_handler(
 
     output.push_str("# HELP druid_admin_ingest_total Total number of ingest batches received.\n");
     output.push_str("# TYPE druid_admin_ingest_total counter\n");
-    output.push_str(&format!("druid_admin_ingest_total {ingest_total}\n"));
+    let _ = writeln!(output, "druid_admin_ingest_total {ingest_total}");
 
     output.push_str("# HELP druid_admin_ingest_rejected_total Total number of rejected (stale/duplicate) ingest batches.\n");
     output.push_str("# TYPE druid_admin_ingest_rejected_total counter\n");
-    output.push_str(&format!(
-        "druid_admin_ingest_rejected_total {rejected_total}\n"
-    ));
+    let _ = writeln!(
+        output,
+        "druid_admin_ingest_rejected_total {rejected_total}"
+    );
 
     output
         .push_str("# HELP druid_admin_datasource_count Number of tracked datasource instances.\n");
     output.push_str("# TYPE druid_admin_datasource_count gauge\n");
-    output.push_str(&format!("druid_admin_datasource_count {ds_count}\n"));
+    let _ = writeln!(output, "druid_admin_datasource_count {ds_count}");
 
     // Per-datasource metrics
     for entry in repo.all_datasources() {
@@ -394,45 +397,51 @@ async fn metrics_handler(
 
         output.push_str("# HELP druid_admin_datasource_active_count Active connection count.\n");
         output.push_str("# TYPE druid_admin_datasource_active_count gauge\n");
-        output.push_str(&format!(
-            "druid_admin_datasource_active_count{{{labels}}} {val}\n",
+        let _ = writeln!(
+            output,
+            "druid_admin_datasource_active_count{{{labels}}} {val}",
             val = ds.active_count
-        ));
+        );
 
         output.push_str("# HELP druid_admin_datasource_pooling_count Pooled connection count.\n");
         output.push_str("# TYPE druid_admin_datasource_pooling_count gauge\n");
-        output.push_str(&format!(
-            "druid_admin_datasource_pooling_count{{{labels}}} {val}\n",
+        let _ = writeln!(
+            output,
+            "druid_admin_datasource_pooling_count{{{labels}}} {val}",
             val = ds.pooling_count
-        ));
+        );
 
         output.push_str("# HELP druid_admin_datasource_execute_count Total execute count.\n");
         output.push_str("# TYPE druid_admin_datasource_execute_count counter\n");
-        output.push_str(&format!(
-            "druid_admin_datasource_execute_count{{{labels}}} {val}\n",
+        let _ = writeln!(
+            output,
+            "druid_admin_datasource_execute_count{{{labels}}} {val}",
             val = ds.execute_count
-        ));
+        );
 
         output.push_str("# HELP druid_admin_datasource_error_count Total error count.\n");
         output.push_str("# TYPE druid_admin_datasource_error_count counter\n");
-        output.push_str(&format!(
-            "druid_admin_datasource_error_count{{{labels}}} {val}\n",
+        let _ = writeln!(
+            output,
+            "druid_admin_datasource_error_count{{{labels}}} {val}",
             val = ds.error_count
-        ));
+        );
 
         output.push_str("# HELP druid_admin_datasource_commit_count Total commit count.\n");
         output.push_str("# TYPE druid_admin_datasource_commit_count counter\n");
-        output.push_str(&format!(
-            "druid_admin_datasource_commit_count{{{labels}}} {val}\n",
+        let _ = writeln!(
+            output,
+            "druid_admin_datasource_commit_count{{{labels}}} {val}",
             val = ds.commit_count
-        ));
+        );
 
         output.push_str("# HELP druid_admin_datasource_rollback_count Total rollback count.\n");
         output.push_str("# TYPE druid_admin_datasource_rollback_count counter\n");
-        output.push_str(&format!(
-            "druid_admin_datasource_rollback_count{{{labels}}} {val}\n",
+        let _ = writeln!(
+            output,
+            "druid_admin_datasource_rollback_count{{{labels}}} {val}",
             val = ds.rollback_count
-        ));
+        );
     }
 
     (

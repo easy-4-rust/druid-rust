@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.DataSourceCreator`。
 
 use super::high_available_data_source::HighAvailableDataSourceInner;
@@ -15,7 +16,7 @@ pub struct DataSourceCreator {
 }
 
 impl DataSourceCreator {
-    /// 使用指定工厂创建器构造 DataSourceCreator。
+    /// 使用指定工厂创建器构造 `DataSourceCreator`。
     pub fn new(
         factory_creator: Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync>,
     ) -> Self {

@@ -1,7 +1,7 @@
 //! Comprehensive coverage tests for druid-stats crate.
 //!
 //! Targets: merge.rs (75 uncovered), collector.rs (22 uncovered),
-//! stat_filter.rs (8 uncovered).
+//! `stat_filter.rs` (8 uncovered).
 
 extern crate druid_core as druid;
 use druid_core::core::*;

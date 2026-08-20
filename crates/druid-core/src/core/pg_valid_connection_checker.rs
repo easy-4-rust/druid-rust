@@ -4,7 +4,7 @@ use super::{
     DruidError, PhysicalConnection, ValidConnectionChecker, ValidConnectionCheckerAdapter,
 };
 
-/// PostgreSQL 连接校验器。
+/// `PostgreSQL` 连接校验器。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.vendor.PGValidConnectionChecker`。
 #[derive(Clone, Copy, Debug, Default)]

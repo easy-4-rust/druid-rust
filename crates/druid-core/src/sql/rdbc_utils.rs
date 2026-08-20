@@ -135,7 +135,7 @@ impl RdbcUtils {
         }
     }
 
-    /// 返回是否为 MySQL 协议族。
+    /// 返回是否为 `MySQL` 协议族。
     #[must_use]
     pub const fn is_mysql_db_type(db_type: DbType) -> bool {
         matches!(
@@ -170,13 +170,13 @@ impl RdbcUtils {
             || db_type.eq_ignore_ascii_case(DbType::AliOracle.as_str())
     }
 
-    /// 按 Java 字符串重载判断 MySQL 协议族。
+    /// 按 Java 字符串重载判断 `MySQL` 协议族。
     #[must_use]
     pub fn is_mysql_db_type_name(db_type_name: &str) -> bool {
         DbType::of(db_type_name).is_some_and(Self::is_mysql_db_type)
     }
 
-    /// 返回是否属于 Java RdbcUtils 的 PostgreSQL 协议族。
+    /// 返回是否属于 Java `RdbcUtils` 的 `PostgreSQL` 协议族。
     #[must_use]
     pub const fn is_pgsql_db_type(db_type: DbType) -> bool {
         matches!(
@@ -190,13 +190,13 @@ impl RdbcUtils {
         )
     }
 
-    /// 按 Java 字符串重载判断 PostgreSQL 协议族。
+    /// 按 Java 字符串重载判断 `PostgreSQL` 协议族。
     #[must_use]
     pub fn is_pgsql_db_type_name(db_type_name: &str) -> bool {
         DbType::of(db_type_name).is_some_and(Self::is_pgsql_db_type)
     }
 
-    /// 返回是否属于 Java RdbcUtils 的 SQL Server 协议族。
+    /// 返回是否属于 Java `RdbcUtils` 的 SQL Server 协议族。
     #[must_use]
     pub const fn is_sqlserver_db_type(db_type: DbType) -> bool {
         matches!(db_type, DbType::SqlServer | DbType::Jtds)
@@ -208,7 +208,7 @@ impl RdbcUtils {
         DbType::of(db_type_name).is_some_and(Self::is_sqlserver_db_type)
     }
 
-    /// 判断是否为 Java MySQL Connector/J 的四个标准 driver class name。
+    /// 判断是否为 Java `MySQL` Connector/J 的四个标准 driver class name。
     #[must_use]
     pub fn is_my_sql_driver(driver_class_name: &str) -> bool {
         matches!(
@@ -308,7 +308,7 @@ const RDBC_URL_PREFIXES: &[(&str, DbType)] = &[
 ///
 /// Toasty 0.9 接受 `sqlite`、`postgresql`/`postgres`、`mysql`、`turso`
 /// scheme；SQLx 使用相同的前三类主流 scheme。Turso/libSQL 在 Druid SQL
-/// 方言与 Wall 层按 SQLite 族处理。
+/// 方言与 Wall 层按 `SQLite` 族处理。
 const RUST_URL_PREFIXES: &[(&str, DbType)] = &[
     ("sqlite:", DbType::SQLite),
     ("libsql:", DbType::SQLite),

@@ -74,7 +74,7 @@ fn stat_context_clone_eq() {
 #[test]
 fn stat_context_debug() {
     let ctx = RdbcStatContext::new();
-    let dbg = format!("{:?}", ctx);
+    let dbg = format!("{ctx:?}");
     assert!(dbg.contains("RdbcStatContext"));
 }
 

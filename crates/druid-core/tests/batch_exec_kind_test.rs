@@ -7,14 +7,14 @@ use druid_core::core::{BatchExecKind, ExecOperation};
 fn batch_exec_kind_debug() {
     let k1 = BatchExecKind::Statement;
     let k2 = BatchExecKind::PreparedStatement;
-    assert!(format!("{:?}", k1).contains("Statement"));
-    assert!(format!("{:?}", k2).contains("PreparedStatement"));
+    assert!(format!("{k1:?}").contains("Statement"));
+    assert!(format!("{k2:?}").contains("PreparedStatement"));
 }
 
 #[test]
 fn batch_exec_kind_clone_eq() {
     let k1 = BatchExecKind::Statement;
-    let k2 = k1.clone();
+    let k2 = k1;
     assert_eq!(k1, k2);
 }
 
@@ -29,7 +29,7 @@ fn exec_operation_debug() {
         ExecOperation::Batch,
     ];
     for op in &ops {
-        let _ = format!("{:?}", op);
+        let _ = format!("{op:?}");
     }
 }
 

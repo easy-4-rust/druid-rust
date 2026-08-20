@@ -1,4 +1,4 @@
-//! Differential tests for Wall deny_schema, deny_function, multi-statement branches.
+//! Differential tests for Wall `deny_schema`, `deny_function`, multi-statement branches.
 
 extern crate druid_core as druid;
 use druid_core::sql::{Wall, WallConfig, WallViolation};

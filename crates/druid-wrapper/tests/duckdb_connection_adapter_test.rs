@@ -1,6 +1,6 @@
 #![cfg(feature = "duckdb-native")]
 
-//! DuckDB 原生 Adapter 的真实内存数据库合同。
+//! `DuckDB` 原生 Adapter 的真实内存数据库合同。
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};

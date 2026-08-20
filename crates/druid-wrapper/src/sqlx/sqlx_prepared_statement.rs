@@ -16,7 +16,7 @@ use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::watch;
 
-/// SQLx 语句执行期间由 Druid 控制面产生的中断结果。
+/// `SQLx` 语句执行期间由 Druid 控制面产生的中断结果。
 pub(crate) enum SqlxStatementExecutionError {
     Driver(DruidError),
     TimedOut,
@@ -202,9 +202,9 @@ impl SqlxPreparedStatement {
         self.parameter_state.take_batches(expected_count).await
     }
 
-    /// 执行一个真实 SQLx future，并同时监听 Statement timeout 与显式 cancel。
+    /// 执行一个真实 `SQLx` future，并同时监听 Statement timeout 与显式 cancel。
     ///
-    /// SQLx 不为所有后端暴露统一的 wire-level cancel handle。中断发生时调用方
+    /// `SQLx` 不为所有后端暴露统一的 wire-level cancel handle。中断发生时调用方
     /// 必须丢弃承载该 future 的物理连接，不能把协议状态未知的连接放回 Druid。
     pub(crate) async fn execute_with_controls<T, F>(
         &self,

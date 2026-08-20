@@ -1,8 +1,8 @@
 //! Pool deep-branch coverage: error/timeout/fault injection paths.
 //!
-//! Covers uncovered lines in pool_inner.rs, druid_pool.rs,
-//! druid_data_source_factory.rs, connection_create_worker.rs,
-//! connection_close_worker.rs, and spi/ modules.
+//! Covers uncovered lines in `pool_inner.rs`, `druid_pool.rs`,
+//! `druid_data_source_factory.rs`, `connection_create_worker.rs`,
+//! `connection_close_worker.rs`, and spi/ modules.
 
 use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, SqlException, Value,
@@ -19,14 +19,13 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Helper: create a Toasty SQLite data source using the factory path.
+/// Helper: create a Toasty `SQLite` data source using the factory path.
 async fn create_toasty_data_source(
     properties: &HashMap<String, String>,
 ) -> Result<druid_core::pool::DruidDataSource, DruidError> {
     let url = properties
         .get("url")
-        .map(String::as_str)
-        .unwrap_or("sqlite::memory:");
+        .map_or("sqlite::memory:", String::as_str);
     let factory: Arc<dyn PhysicalConnectionFactory> =
         Arc::new(ToastyConnectionFactory::new(url).await?);
     DruidDataSourceFactory::create_data_source_with_factory(properties, factory, "sqlite").await
@@ -83,7 +82,7 @@ impl PhysicalConnection for FaultConnection {
     }
 }
 
-/// Factory that always fails create().
+/// Factory that always fails `create()`.
 struct FailingFactory {
     fail_count: Arc<AtomicU64>,
     error_message: String,
@@ -440,7 +439,7 @@ async fn shrink_evicts_physically_expired_connections() {
     let factory = Arc::new(SuccessFactory::new());
     let pool = make_fault_pool_with_config("shrink-phys-timeout", factory, |b| {
         b.physical_connection_timeout(Duration::from_millis(10))
-            .idle_timeout(Duration::from_secs(3600))
+            .idle_timeout(Duration::from_hours(1))
             .min_idle(0)
     })
     .await;

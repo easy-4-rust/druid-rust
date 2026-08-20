@@ -33,7 +33,7 @@ pub struct TableStat {
 
 macro_rules! table_counter {
     ($getter:ident, $increment:ident, $field:ident) => {
-        #[doc = "返回对应 Java TableStat 计数。"]
+        #[doc = "返回对应 Java `TableStat` 计数。"]
         #[must_use]
         pub const fn $getter(&self) -> i32 {
             self.$field

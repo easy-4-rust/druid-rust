@@ -1,11 +1,11 @@
-//! SQLx 物理连接的 deadpool 管理器。
+//! `SQLx` 物理连接的 deadpool 管理器。
 
 use crate::sqlx::SqlxConnectionFactory;
 use deadpool::managed::{Manager, Metrics, RecycleResult};
 use druid_core::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// SQLx 物理连接的 deadpool 管理器。
+/// `SQLx` 物理连接的 deadpool 管理器。
 ///
 /// 对应 Java: `DruidDataSource#createPhysicalConnection` 与连接有效性检查。
 /// 每次 `create` 只创建一个未池化的 `SqlxConnectionAdapter`。
@@ -18,7 +18,7 @@ pub struct SqlxDeadpoolConnectionManager {
 impl SqlxDeadpoolConnectionManager {
     /// 创建 deadpool 连接管理器。
     ///
-    /// 参数 `url` 为 SQLx 数据库连接 URL。
+    /// 参数 `url` 为 `SQLx` 数据库连接 URL。
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             factory: SqlxConnectionFactory::new(url),

@@ -1,4 +1,4 @@
-//! 对外池化 CallableStatement。
+//! 对外池化 `CallableStatement`。
 //!
 //! 对应 Java：
 //! `com.alibaba.druid.pool.DruidPooledCallableStatement`。
@@ -27,7 +27,7 @@ pub struct DruidPooledCallableStatement {
     prepared_statement: DruidPooledPreparedStatement,
 }
 
-/// `ResultSet#getStatement()` 返回的 CallableStatement 共享身份句柄。
+/// `ResultSet#getStatement()` 返回的 `CallableStatement` 共享身份句柄。
 ///
 /// 对应 Java：`DruidPooledCallableStatement` 继承
 /// `DruidPooledPreparedStatement`，结果集保存并返回原 callable 对象。Rust
@@ -54,23 +54,23 @@ impl DruidPooledCallableStatementHandle {
         self.prepared_statement.pooled_statement()
     }
 
-    /// 返回继承的 PreparedStatement 身份视图。
+    /// 返回继承的 `PreparedStatement` 身份视图。
     pub fn prepared_statement(&self) -> &DruidPooledPreparedStatementHandle {
         &self.prepared_statement
     }
 
-    /// 返回原逻辑 CallableStatement 是否已关闭。
+    /// 返回原逻辑 `CallableStatement` 是否已关闭。
     pub fn is_closed(&self) -> bool {
         self.prepared_statement.is_closed()
     }
 
-    /// 判断句柄是否与给定 CallableStatement 表示同一逻辑 Java 对象。
+    /// 判断句柄是否与给定 `CallableStatement` 表示同一逻辑 Java 对象。
     pub fn is_same_statement(&self, statement: &DruidPooledCallableStatement) -> bool {
         self.prepared_statement
             .is_same_statement(&statement.prepared_statement)
     }
 
-    /// 关闭原逻辑 CallableStatement。
+    /// 关闭原逻辑 `CallableStatement`。
     pub fn close(&self) -> Result<(), DruidError> {
         self.prepared_statement.close()
     }
@@ -174,7 +174,7 @@ impl DruidPooledCallableStatement {
         self.prepared_statement.is_closed()
     }
 
-    /// 返回物理 CallableStatement SPI。
+    /// 返回物理 `CallableStatement` SPI。
     ///
     /// 对应 Java：`getCallableStatementRaw()` 的平台能力语义，但不泄漏具体驱动类型。
     pub fn physical_callable_statement(
@@ -208,7 +208,7 @@ impl DruidPooledCallableStatement {
         self.prepared_statement.fetch(connection, params).await
     }
 
-    /// 执行查询并返回保持 CallableStatement 动态身份的池化结果集。
+    /// 执行查询并返回保持 `CallableStatement` 动态身份的池化结果集。
     pub async fn fetch_result_set(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -221,7 +221,7 @@ impl DruidPooledCallableStatement {
         Ok(result_set.with_callable_statement(self.result_set_statement_handle()))
     }
 
-    /// 执行 `CallableStatement#execute()` 并返回首结果是否为 ResultSet。
+    /// 执行 `CallableStatement#execute()` 并返回首结果是否为 `ResultSet`。
     pub async fn execute(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -230,7 +230,7 @@ impl DruidPooledCallableStatement {
         self.prepared_statement.execute(connection, params).await
     }
 
-    /// 返回 generic execute 的当前结果集，并恢复 CallableStatement 身份。
+    /// 返回 generic execute 的当前结果集，并恢复 `CallableStatement` 身份。
     pub fn result_set(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -252,7 +252,7 @@ impl DruidPooledCallableStatement {
         self.prepared_statement.update_count(connection)
     }
 
-    /// 返回 generated keys，并恢复 CallableStatement 身份。
+    /// 返回 generated keys，并恢复 `CallableStatement` 身份。
     pub fn generated_keys(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -282,15 +282,15 @@ impl DruidPooledCallableStatement {
             .more_results_with_current(connection, current)
     }
 
-    /// 关闭逻辑 CallableStatement。
+    /// 关闭逻辑 `CallableStatement`。
     pub fn close(&mut self) -> Result<(), DruidError> {
         self.prepared_statement.close()
     }
 
-    /// 在原池化连接上下文中关闭 CallableStatement。
+    /// 在原池化连接上下文中关闭 `CallableStatement`。
     ///
     /// 对应 Java：`DruidPooledConnection#closePoolableStatement`。除执行
-    /// PreparedStatement 的缓存归还与异常分类外，还会从 holder 的
+    /// `PreparedStatement` 的缓存归还与异常分类外，还会从 holder 的
     /// statement trace 中移除该逻辑对象。
     pub fn close_with_connection(
         &mut self,
@@ -511,7 +511,7 @@ impl DruidPooledCallableStatement {
         self.set_named_input(parameter_name, CallableInputParameter::String(value))
     }
 
-    /// 设置命名 Unicode NString 参数。
+    /// 设置命名 Unicode `NString` 参数。
     ///
     /// 对应 Java：`setNString(String parameterName, String value)`。独立 variant
     /// 保留 national-character setter 身份，交由具体驱动映射。
@@ -748,7 +748,7 @@ impl DruidPooledCallableStatement {
         )
     }
 
-    /// 设置命名 NClob 对象参数。
+    /// 设置命名 `NClob` 对象参数。
     ///
     /// 对应 Java：`setNClob(String parameterName, NClob value)`。
     pub fn set_named_n_clob(
@@ -759,7 +759,7 @@ impl DruidPooledCallableStatement {
         self.set_named_input(parameter_name, CallableInputParameter::NClob(value))
     }
 
-    /// 设置未指定长度的命名 NClob Reader。
+    /// 设置未指定长度的命名 `NClob` Reader。
     ///
     /// 对应 Java：`setNClob(String parameterName, Reader reader)`。
     pub fn set_named_n_clob_reader(
@@ -776,7 +776,7 @@ impl DruidPooledCallableStatement {
         )
     }
 
-    /// 设置带 long 长度的命名 NClob Reader。
+    /// 设置带 long 长度的命名 `NClob` Reader。
     ///
     /// 对应 Java：`setNClob(String parameterName, Reader reader, long length)`。
     pub fn set_named_n_clob_reader_with_length(
@@ -1070,7 +1070,7 @@ impl DruidPooledCallableStatement {
             .out_parameter_as(&parameter, target_type)
     }
 
-    /// 读取索引 BigDecimal OUT 参数。
+    /// 读取索引 `BigDecimal` OUT 参数。
     ///
     /// 对应 Java：`getBigDecimal(int)`。
     pub fn get_big_decimal(
@@ -1081,7 +1081,7 @@ impl DruidPooledCallableStatement {
         self.apply_callable(|statement| statement.big_decimal_out_parameter(&parameter))
     }
 
-    /// 读取索引 BigDecimal OUT 参数并应用已废弃 RDBC scale 重载。
+    /// 读取索引 `BigDecimal` OUT 参数并应用已废弃 RDBC scale 重载。
     ///
     /// 对应 Java：`getBigDecimal(int, int)`。
     #[deprecated(note = "对应 RDBC 已废弃的 getBigDecimal(int, int)")]
@@ -1096,7 +1096,7 @@ impl DruidPooledCallableStatement {
         })
     }
 
-    /// 读取命名 BigDecimal OUT 参数。
+    /// 读取命名 `BigDecimal` OUT 参数。
     ///
     /// 对应 Java：`getBigDecimal(String)`。
     pub fn get_named_big_decimal(
@@ -1483,13 +1483,13 @@ impl DruidPooledCallableStatement {
         result
     }
 
-    /// 读取索引 NClob OUT 参数。
+    /// 读取索引 `NClob` OUT 参数。
     pub fn get_n_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
     }
 
-    /// 读取命名 NClob OUT 参数。
+    /// 读取命名 `NClob` OUT 参数。
     pub fn get_named_n_clob(
         &mut self,
         parameter_name: &str,

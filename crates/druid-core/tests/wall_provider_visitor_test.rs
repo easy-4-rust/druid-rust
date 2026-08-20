@@ -1,4 +1,4 @@
-//! WallProvider + WallVisitorBase 差分测试
+//! `WallProvider` + `WallVisitorBase` 差分测试
 //! （C9 批次：sql 0% 文件）。
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
@@ -30,7 +30,7 @@ fn wall_provider_name() {
     assert!(provider.name().is_none());
 }
 
-/// db_type setter/getter。
+/// `db_type` setter/getter。
 #[test]
 fn wall_provider_db_type() {
     let provider = WallProvider::new(WallConfig::default());
@@ -41,7 +41,7 @@ fn wall_provider_db_type() {
     assert_eq!(provider.db_type(), DbType::PostgreSql);
 }
 
-/// check：合法 SQL 返回 WallCheckResult。
+/// check：合法 SQL 返回 `WallCheckResult`。
 #[test]
 fn wall_provider_check_valid_sql() {
     let provider = WallProvider::new(WallConfig::default());
@@ -51,7 +51,7 @@ fn wall_provider_check_valid_sql() {
     assert!(!result.is_syntax_error());
 }
 
-/// check：违规 SQL 返回 violation（drop_table_allow 默认 true，需显式关闭）。
+/// check：违规 SQL 返回 `violation（drop_table_allow` 默认 true，需显式关闭）。
 #[test]
 fn wall_provider_check_violation() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -64,7 +64,7 @@ fn wall_provider_check_violation() {
         .any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
 }
 
-/// check_valid：合法 SQL 返回 Ok(true)。
+/// `check_valid：合法` SQL 返回 Ok(true)。
 #[test]
 fn wall_provider_check_valid() {
     let provider = WallProvider::new(WallConfig::default());
@@ -72,7 +72,7 @@ fn wall_provider_check_valid() {
     assert!(result);
 }
 
-/// try_check：语法错误返回 Ok 但包含 SyntaxError violation。
+/// `try_check：语法错误返回` Ok 但包含 `SyntaxError` violation。
 #[test]
 fn wall_provider_try_check_syntax_error() {
     let provider = WallProvider::new(WallConfig::default());
@@ -84,7 +84,7 @@ fn wall_provider_try_check_syntax_error() {
         .any(|v| matches!(v, WallViolation::SyntaxError(_))));
 }
 
-/// try_check：合法 SQL 返回 Ok。
+/// `try_check：合法` SQL 返回 Ok。
 #[test]
 fn wall_provider_try_check_valid() {
     let provider = WallProvider::new(WallConfig::default());
@@ -92,7 +92,7 @@ fn wall_provider_try_check_valid() {
     assert!(result.violations().is_empty());
 }
 
-/// tenant_value / set_tenant_value。
+/// `tenant_value` / `set_tenant_value`。
 #[test]
 fn wall_provider_tenant_value() {
     assert!(WallProvider::tenant_value().is_none());
@@ -102,7 +102,7 @@ fn wall_provider_tenant_value() {
     assert!(WallProvider::tenant_value().is_none());
 }
 
-/// is_privileged / do_privileged。
+/// `is_privileged` / `do_privileged`。
 #[test]
 fn wall_provider_privileged() {
     assert!(!WallProvider::is_privileged());
@@ -114,7 +114,7 @@ fn wall_provider_privileged() {
     assert!(!WallProvider::is_privileged());
 }
 
-/// sql_stat：新 SQL 无统计。
+/// `sql_stat：新` SQL 无统计。
 #[test]
 fn wall_provider_sql_stat() {
     let provider = WallProvider::new(WallConfig::default());
@@ -128,13 +128,13 @@ fn wall_provider_sql_stat() {
 #[test]
 fn wall_visitor_base_new_and_violations() {
     let provider = WallProvider::new(WallConfig::default());
-    let mut visitor = WallVisitorBase::new(&provider);
+    let visitor = WallVisitorBase::new(&provider);
     assert!(visitor.violations().is_empty());
     assert!(!visitor.sql_modified());
     assert!(!visitor.sql_end_of_comment());
 }
 
-/// push_unique：去重。
+/// `push_unique：去重`。
 #[test]
 fn wall_visitor_base_push_unique() {
     let provider = WallProvider::new(WallConfig::default());
@@ -147,7 +147,7 @@ fn wall_visitor_base_push_unique() {
     assert_eq!(visitor.violations().len(), 2);
 }
 
-/// sql_modified / sql_end_of_comment setters。
+/// `sql_modified` / `sql_end_of_comment` setters。
 #[test]
 fn wall_visitor_base_setters() {
     let provider = WallProvider::new(WallConfig::default());
@@ -160,16 +160,16 @@ fn wall_visitor_base_setters() {
     assert!(visitor.sql_end_of_comment());
 }
 
-/// add_wall_update_check_item / update_check_items。
+/// `add_wall_update_check_item` / `update_check_items`。
 #[test]
 fn wall_visitor_base_update_check_items() {
     let provider = WallProvider::new(WallConfig::default());
-    let mut visitor = WallVisitorBase::new(&provider);
+    let visitor = WallVisitorBase::new(&provider);
     assert!(visitor.update_check_items().is_none());
     // add_wall_update_check_item 需要 WallUpdateCheckItem，暂用空测试。
 }
 
-/// db_type：继承自 provider。
+/// `db_type：继承自` provider。
 #[test]
 fn wall_visitor_base_db_type() {
     let config = WallConfig::default();
@@ -178,7 +178,7 @@ fn wall_visitor_base_db_type() {
     assert_eq!(visitor.db_type(), DbType::Other);
 }
 
-/// check_common：空语句列表。
+/// `check_common：空语句列表`。
 #[test]
 fn wall_visitor_base_check_common_empty() {
     let provider = WallProvider::new(WallConfig::default());
@@ -188,7 +188,7 @@ fn wall_visitor_base_check_common_empty() {
     assert!(visitor.violations().is_empty());
 }
 
-/// check_deny_variants：无配置时不报错。
+/// `check_deny_variants：无配置时不报错`。
 #[test]
 fn wall_visitor_base_check_deny_variants_empty() {
     let provider = WallProvider::new(WallConfig::default());
@@ -198,7 +198,7 @@ fn wall_visitor_base_check_deny_variants_empty() {
     assert!(visitor.violations().is_empty());
 }
 
-/// check_virtual_tables：无配置时不报错。
+/// `check_virtual_tables：无配置时不报错`。
 #[test]
 fn wall_visitor_base_check_virtual_tables_empty() {
     let provider = WallProvider::new(WallConfig::default());
@@ -208,7 +208,7 @@ fn wall_visitor_base_check_virtual_tables_empty() {
     assert!(visitor.violations().is_empty());
 }
 
-/// check_common：含 deny_tables 时产生 DeniedTable violation。
+/// `check_common：含` `deny_tables` 时产生 `DeniedTable` violation。
 #[test]
 fn wall_visitor_base_check_common_with_violation() {
     let config = WallConfig::builder().deny_table("secret_table").build();
@@ -222,7 +222,7 @@ fn wall_visitor_base_check_common_with_violation() {
         .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
-/// check_deny_variants：有 deny_variants 配置。
+/// `check_deny_variants：有` `deny_variants` 配置。
 #[test]
 fn wall_visitor_base_check_deny_variants_with_config() {
     let config = WallConfig::builder().deny_variant("secret_var").build();
@@ -234,7 +234,7 @@ fn wall_visitor_base_check_deny_variants_with_config() {
     assert!(visitor.violations().is_empty());
 }
 
-/// provider() 方法。
+/// `provider()` 方法。
 #[test]
 fn wall_visitor_base_provider() {
     let provider = WallProvider::new(WallConfig::default());

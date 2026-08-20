@@ -40,13 +40,13 @@ pub enum PushEvent {
 /// // pair.client_rx and pair.server_tx are still available for the test.
 /// ```
 pub struct TransportPair {
-    /// Test reads ClientFrames the worker sent.
+    /// Test reads `ClientFrames` the worker sent.
     pub client_rx: mpsc::Receiver<ClientFrame>,
-    /// Test sends ServerFrames (simulated ACKs) to the worker.
+    /// Test sends `ServerFrames` (simulated ACKs) to the worker.
     pub server_tx: mpsc::Sender<ServerFrame>,
-    /// Worker sends ClientFrames here.
+    /// Worker sends `ClientFrames` here.
     client_tx: mpsc::Sender<ClientFrame>,
-    /// Worker reads ServerFrames from here.
+    /// Worker reads `ServerFrames` from here.
     server_rx: mpsc::Receiver<ServerFrame>,
 }
 
@@ -56,9 +56,9 @@ impl TransportPair {
         let (client_tx, client_rx) = mpsc::channel(capacity);
         let (server_tx, server_rx) = mpsc::channel(capacity);
         Self {
-            client_tx,
             client_rx,
             server_tx,
+            client_tx,
             server_rx,
         }
     }
@@ -66,9 +66,9 @@ impl TransportPair {
     /// Split into test-side channels and a [`PushWorker`].
     ///
     /// Returns `(client_rx, server_tx, worker)` where:
-    /// - `client_rx`: test reads ClientFrames the worker sent.
-    /// - `server_tx`: test sends ServerFrames (simulated ACKs) to the worker.
-    /// - `worker`: the ready-to-run PushWorker.
+    /// - `client_rx`: test reads `ClientFrames` the worker sent.
+    /// - `server_tx`: test sends `ServerFrames` (simulated ACKs) to the worker.
+    /// - `worker`: the ready-to-run `PushWorker`.
     pub fn into_worker(
         self,
         batch_rx: mpsc::Receiver<PushEvent>,
@@ -147,20 +147,17 @@ impl PushWorker {
 
                 // ── receive ACKs from server ──
                 server_frame = self.transport_rx.recv() => {
-                    match server_frame {
-                        Some(frame) => {
-                            if let Some(reply) = self.handle_server_frame(frame) {
-                                if self.transport_tx.send(reply).await.is_err() {
-                                    tracing::error!("transport closed while sending command ACK");
-                                    break;
-                                }
+                    if let Some(frame) = server_frame {
+                        if let Some(reply) = self.handle_server_frame(frame) {
+                            if self.transport_tx.send(reply).await.is_err() {
+                                tracing::error!("transport closed while sending command ACK");
+                                break;
                             }
                         }
-                        None => {
-                            // Server disconnected. Caller must reconnect.
-                            tracing::warn!("server disconnected (ACK channel closed)");
-                            break;
-                        }
+                    } else {
+                        // Server disconnected. Caller must reconnect.
+                        tracing::warn!("server disconnected (ACK channel closed)");
+                        break;
                     }
                 }
 
@@ -222,7 +219,7 @@ impl PushWorker {
     /// Handle a server frame (ACK, command, error, etc.).
     ///
     /// Returns an optional [`ClientFrame`] to send back to the server
-    /// (e.g. a CommandAck in response to a command).
+    /// (e.g. a `CommandAck` in response to a command).
     fn handle_server_frame(&mut self, frame: ServerFrame) -> Option<ClientFrame> {
         use crate::protocol::server_frame::Payload;
 
@@ -263,7 +260,7 @@ impl PushWorker {
         }
     }
 
-    /// Process a server command and return a CommandAck reply.
+    /// Process a server command and return a `CommandAck` reply.
     fn handle_command(&self, cmd: crate::protocol::Command) -> Option<ClientFrame> {
         use crate::protocol::command::Payload as CmdPayload;
 

@@ -11,8 +11,8 @@ use std::time::Duration;
 
 /// Java wrapper 属性到 Rust 单池 provider 的统一工厂。
 ///
-/// 规划迁移 DBCP/DBCP2 Factory、c3p0 与 Proxool DataSource 配置。provider
-/// 可选 `native`、`bb8`、`deadpool`；native 使用 SQLx raw factory 进入
+/// 规划迁移 DBCP/DBCP2 Factory、c3p0 与 Proxool `DataSource` 配置。provider
+/// 可选 `native`、`bb8`、`deadpool`；native 使用 `SQLx` raw factory 进入
 /// DruidPool，外部池则直接实现 Pool，绝不嵌套。
 #[derive(Debug, Default, Clone, Copy)]
 pub struct WrapperDataSourceFactory;
@@ -21,7 +21,7 @@ impl WrapperDataSourceFactory {
     /// 使用调用方提供的 raw connection factory 创建 native Druid wrapper。
     ///
     /// RBDC 及其他扩展通过此入口复用 DBCP/Proxool 属性语义；factory 每次只
-    /// 创建一条物理连接，池化仍唯一属于 DruidPool。
+    /// 创建一条物理连接，池化仍唯一属于 `DruidPool`。
     pub async fn create_with_factory(
         properties: &HashMap<String, String>,
         factory: Arc<dyn PhysicalConnectionFactory>,

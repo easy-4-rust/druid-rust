@@ -197,7 +197,7 @@ impl PhysicalConnection for ContractConnection {
         Ok(())
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "lease-contract"
     }
 }

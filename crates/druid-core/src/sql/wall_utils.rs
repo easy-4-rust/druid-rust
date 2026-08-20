@@ -20,12 +20,12 @@ impl WallUtils {
         Db2WallProvider::with_config(config).check_valid(sql)
     }
 
-    /// 使用 PostgreSQL 默认规则校验 SQL。
+    /// 使用 `PostgreSQL` 默认规则校验 SQL。
     pub fn is_validate_postgres(sql: &str) -> Result<bool, DruidError> {
         PgWallProvider::new().check_valid(sql)
     }
 
-    /// 使用 PostgreSQL 调用方规则校验 SQL。
+    /// 使用 `PostgreSQL` 调用方规则校验 SQL。
     pub fn is_validate_postgres_with_config(
         sql: &str,
         config: WallConfig,
@@ -33,12 +33,12 @@ impl WallUtils {
         PgWallProvider::with_config(config).check_valid(sql)
     }
 
-    /// 使用 MySQL 默认规则校验 SQL。
+    /// 使用 `MySQL` 默认规则校验 SQL。
     pub fn is_validate_my_sql(sql: &str) -> Result<bool, DruidError> {
         MySqlWallProvider::new().check_valid(sql)
     }
 
-    /// 使用 MySQL 调用方规则校验 SQL。
+    /// 使用 `MySQL` 调用方规则校验 SQL。
     pub fn is_validate_my_sql_with_config(
         sql: &str,
         config: WallConfig,

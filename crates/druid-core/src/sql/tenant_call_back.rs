@@ -21,7 +21,7 @@ pub enum TenantStatementType {
     Delete,
 }
 
-/// 为 Wall SQL 改写和 ResultSet 租户列过滤提供业务回调。
+/// 为 Wall SQL 改写和 `ResultSet` 租户列过滤提供业务回调。
 ///
 /// 对应 Java：`WallConfig.TenantCallBack`。回调由调用方保证线程安全，因而可在
 /// Tokio 多线程运行时中共享；它不依赖 Java `ThreadLocal`。
@@ -36,7 +36,7 @@ pub trait TenantCallBack: Send + Sync {
         table_name: &str,
     ) -> Option<String>;
 
-    /// 返回 ResultSet 中应隐藏的物理列名；`None` 对应 Java `null`。
+    /// 返回 `ResultSet` 中应隐藏的物理列名；`None` 对应 Java `null`。
     fn hidden_column(&self, table_name: &str) -> Option<String>;
 
     /// 在成功移动到一行且结果中包含租户列时接收该列值。

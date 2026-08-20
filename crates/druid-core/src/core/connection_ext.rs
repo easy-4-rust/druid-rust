@@ -23,7 +23,7 @@ pub trait ConnectionExt: PhysicalConnection {
             .await
     }
 
-    /// 创建 PreparedStatement 对象。
+    /// 创建 `PreparedStatement` 对象。
     async fn prepare_statement(
         &mut self,
         sql: &str,
@@ -36,7 +36,7 @@ pub trait ConnectionExt: PhysicalConnection {
         self.prepare_physical_statement(&key).await
     }
 
-    /// 创建 CallableStatement 对象。
+    /// 创建 `CallableStatement` 对象。
     async fn prepare_call(
         &mut self,
         sql: &str,

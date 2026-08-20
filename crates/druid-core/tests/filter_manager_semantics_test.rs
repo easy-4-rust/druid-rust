@@ -1,4 +1,4 @@
-//! Java `FilterManager` 别名、工厂、去重与真实 Toasty SQLite 验证。
+//! Java `FilterManager` 别名、工厂、去重与真实 Toasty `SQLite` 验证。
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -18,7 +18,7 @@ struct ProbeFilter;
 
 #[async_trait::async_trait]
 impl BeforeFilter for ProbeFilter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "probe"
     }
 
@@ -29,7 +29,7 @@ impl BeforeFilter for ProbeFilter {
 
 #[async_trait::async_trait]
 impl AfterFilter for ProbeFilter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "probe"
     }
 
@@ -217,7 +217,7 @@ fn explicit_factories_preserve_alias_expansion_case_insensitive_dedup_and_failur
 async fn real_toasty_sqlite_uses_filter_loaded_from_builtin_stat_alias() {
     let collector = Arc::new(StatsCollector::new(
         "filter-manager-sqlite",
-        Duration::from_secs(60),
+        Duration::from_mins(1),
     ));
     let manager = FilterManager::new();
     let factory_collector = Arc::clone(&collector);

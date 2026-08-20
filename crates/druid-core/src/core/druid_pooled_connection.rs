@@ -126,6 +126,7 @@ pub struct DruidPooledConnection {
     attributes: ProxyAttributes,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for DruidPooledConnection {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -217,11 +218,11 @@ impl Wrapper for DruidPooledConnection {
 impl DruidPooledConnection {
     /// RDBC 不支持事务隔离。
     pub const TRANSACTION_NONE: i32 = 0;
-    /// RDBC READ_UNCOMMITTED。
+    /// RDBC `READ_UNCOMMITTED`。
     pub const TRANSACTION_READ_UNCOMMITTED: i32 = 1;
-    /// RDBC READ_COMMITTED。
+    /// RDBC `READ_COMMITTED`。
     pub const TRANSACTION_READ_COMMITTED: i32 = 2;
-    /// RDBC REPEATABLE_READ。
+    /// RDBC `REPEATABLE_READ`。
     pub const TRANSACTION_REPEATABLE_READ: i32 = 4;
     /// RDBC SERIALIZABLE。
     pub const TRANSACTION_SERIALIZABLE: i32 = 8;
@@ -416,7 +417,7 @@ impl DruidPooledConnection {
         self.borrowed_at = Instant::now();
     }
 
-    /// 返回从 StatFilter 记录的连接获取时刻起经过的时间。
+    /// 返回从 `StatFilter` 记录的连接获取时刻起经过的时间。
     #[must_use]
     pub fn connection_hold_duration(&self) -> Duration {
         self.borrowed_at.elapsed()
@@ -776,7 +777,7 @@ impl DruidPooledConnection {
     /// 返回创建物理连接时采集的会话变量。
     ///
     /// 对应 Java：`DruidPooledConnection#getVariables()`。未启用
-    /// `initVariants` 时返回 `None`，启用但数据库不是 MySQL 协议族时返回空表。
+    /// `initVariants` 时返回 `None`，启用但数据库不是 `MySQL` 协议族时返回空表。
     #[must_use]
     pub fn variables(&self) -> Option<&HashMap<String, JsonValue>> {
         self.holder
@@ -872,7 +873,7 @@ impl DruidPooledConnection {
     /// 创建驱动 Blob。
     ///
     /// 对应 Java：`DruidPooledConnection#createBlob()`。Java Druid 对 Blob
-    /// 只做连接状态检查和 FilterChain 转发，不创建 `BlobProxy`。
+    /// 只做连接状态检查和 `FilterChain` 转发，不创建 `BlobProxy`。
     pub async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
         let filter_chain = self
             .filter_chain
@@ -884,7 +885,7 @@ impl DruidPooledConnection {
         self.classify_result(result)
     }
 
-    /// 创建经 Druid FilterChain 包装的 Clob。
+    /// 创建经 Druid `FilterChain` 包装的 Clob。
     ///
     /// 对应 Java：`ConnectionProxyImpl#createClob()` 与
     /// `FilterChainImpl#wrap(ConnectionProxy, Clob)`。
@@ -900,7 +901,7 @@ impl DruidPooledConnection {
         Ok(ClobProxyImpl::new(self.id, clob, filter_chain))
     }
 
-    /// 创建经 Druid FilterChain 包装并保持类型身份的 NClob。
+    /// 创建经 Druid `FilterChain` 包装并保持类型身份的 `NClob`。
     ///
     /// 对应 Java：`ConnectionProxyImpl#createNClob()`。
     pub async fn create_n_clob(&mut self) -> Result<NClobProxyImpl, DruidError> {
@@ -1295,29 +1296,26 @@ impl DruidPooledConnection {
                 .get(&key)
         });
 
-        let statement_holder = match cached {
-            Some(statement_holder) => statement_holder,
-            None => {
-                let result = if callable {
-                    self.physical_mut()?.prepare_physical_call(&key).await
-                } else {
-                    self.physical_mut()?.prepare_physical_statement(&key).await
-                };
-                let statement = self.classify_result(result)?;
-                let query_timeout = self.effective_query_timeout();
-                if query_timeout > 0 {
-                    let timeout_result = statement.set_query_timeout(query_timeout);
-                    self.classify_result(timeout_result)?;
-                }
-                let stats = self
-                    .holder
-                    .as_ref()
-                    .ok_or(DruidError::ConnectionDiscarded)?
-                    .prepared_statement_stats()
-                    .clone();
-                stats.record_prepare();
-                Arc::new(PreparedStatementHolder::new(key, statement))
+        let statement_holder = if let Some(statement_holder) = cached { statement_holder } else {
+            let result = if callable {
+                self.physical_mut()?.prepare_physical_call(&key).await
+            } else {
+                self.physical_mut()?.prepare_physical_statement(&key).await
+            };
+            let statement = self.classify_result(result)?;
+            let query_timeout = self.effective_query_timeout();
+            if query_timeout > 0 {
+                let timeout_result = statement.set_query_timeout(query_timeout);
+                self.classify_result(timeout_result)?;
             }
+            let stats = self
+                .holder
+                .as_ref()
+                .ok_or(DruidError::ConnectionDiscarded)?
+                .prepared_statement_stats()
+                .clone();
+            stats.record_prepare();
+            Arc::new(PreparedStatementHolder::new(key, statement))
         };
         statement_holder.increment_in_use_count();
         let stats = self
@@ -1708,7 +1706,7 @@ impl DruidPooledConnection {
         result
     }
 
-    /// 以 Java `preparedStatement_execute` 边界执行 generic PreparedStatement。
+    /// 以 Java `preparedStatement_execute` 边界执行 generic `PreparedStatement`。
     ///
     /// 固定预编译 SQL 与本次参数快照只进入一次 Filter before/after；物理
     /// Adapter 返回 query/update 有序结果，不能由 Druid 层分析 SQL 前缀。
@@ -1777,7 +1775,7 @@ impl DruidPooledConnection {
         result
     }
 
-    /// 以完整 setter 描述符执行 generic PreparedStatement。
+    /// 以完整 setter 描述符执行 generic `PreparedStatement`。
     pub(crate) async fn execute_prepared_parameters_with_filters(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -1896,9 +1894,9 @@ impl DruidPooledConnection {
         result
     }
 
-    /// 以单次 Java `statement_executeBatch` Filter 边界执行 PreparedStatement 批次。
+    /// 以单次 Java `statement_executeBatch` Filter 边界执行 `PreparedStatement` 批次。
     ///
-    /// PreparedStatement 的 `getBatchSql()` 始终为原始预编译 SQL，而继承的
+    /// `PreparedStatement` 的 `getBatchSql()` 始终为原始预编译 SQL，而继承的
     /// `getBatchSqlList()` 为空；参数批次由物理驱动消费。只有进入物理执行后才
     /// 清空调用方批次，因而 before Filter 短路时仍可重试。
     pub(crate) async fn exec_prepared_batch_with_filters(
@@ -2125,7 +2123,7 @@ impl DruidPooledConnection {
         result
     }
 
-    /// 以完整 setter 描述符执行更新 PreparedStatement。
+    /// 以完整 setter 描述符执行更新 `PreparedStatement`。
     pub(crate) async fn exec_prepared_parameters_with_filters(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -2291,7 +2289,7 @@ impl DruidPooledConnection {
         result
     }
 
-    /// 以完整 setter 描述符执行查询 PreparedStatement。
+    /// 以完整 setter 描述符执行查询 `PreparedStatement`。
     pub(crate) async fn fetch_prepared_parameters_with_filters(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -2681,7 +2679,7 @@ impl PhysicalConnection for DruidPooledConnection {
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::physical_connection)
-            .is_none_or(|connection| connection.auto_commit())
+            .is_none_or(super::physical_connection::PhysicalConnection::auto_commit)
     }
 
     async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
@@ -2701,7 +2699,7 @@ impl PhysicalConnection for DruidPooledConnection {
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::physical_connection)
-            .is_some_and(|connection| connection.read_only())
+            .is_some_and(super::physical_connection::PhysicalConnection::read_only)
     }
 
     async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
@@ -2717,7 +2715,7 @@ impl PhysicalConnection for DruidPooledConnection {
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::physical_connection)
-            .map_or(2, |connection| connection.transaction_isolation())
+            .map_or(2, super::physical_connection::PhysicalConnection::transaction_isolation)
     }
 
     async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
@@ -2733,7 +2731,7 @@ impl PhysicalConnection for DruidPooledConnection {
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::physical_connection)
-            .map_or(0, |connection| connection.holdability())
+            .map_or(0, super::physical_connection::PhysicalConnection::holdability)
     }
 
     async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {

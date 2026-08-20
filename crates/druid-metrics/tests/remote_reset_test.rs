@@ -1,11 +1,10 @@
-//! Tests for the remote ResetStats command flow.
+#![allow(dead_code)]
+//! Tests for the remote `ResetStats` command flow.
 //!
 //! Server sends a `Command{ResetStats}` to the client via the server->client
 //! stream. The client executes a local reset on the specified datasource IDs
 //! and replies with a `CommandAck`.
 
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
 use std::time::Duration;
 
 use druid_metrics::ingest_handler::IngestHandler;
@@ -73,7 +72,7 @@ fn make_batch_frame(seq: u64) -> ClientFrame {
 
 // ─── tests ──────────────────────────────────────────────────────────────────
 
-/// Test: client receives a ResetStats command, executes local reset, and
+/// Test: client receives a `ResetStats` command, executes local reset, and
 /// replies with CommandAck(success=true).
 #[tokio::test]
 async fn client_resets_on_command_and_acks() {

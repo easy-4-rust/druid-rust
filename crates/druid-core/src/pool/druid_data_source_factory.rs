@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+#![allow(clippy::match_same_arms)]
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

@@ -1,8 +1,9 @@
+#![allow(clippy::unused_async)]
 //! XA/2PC 使用示例：跨两个资源的分布式事务。
 //!
-//! 运行：cargo run -p druid --example xa_demo
+//! 运行：cargo run -p druid --example `xa_demo`
 //!
-//! 对应 Java: javax.transaction.xa.{Xid, XAResource} +
+//! 对应 Java: javax.transaction.xa.{Xid, `XAResource`} +
 //! com.alibaba.druid.pool.xa.DruidXADataSource 的协议层。
 
 extern crate druid_core as druid;
@@ -13,8 +14,8 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
 
-/// 示例资源：内存账本。实现 XaResource 后即可参与 2PC。
-/// 真实场景中这里是 MySQL XA / PostgreSQL prepared transaction 等驱动适配器。
+/// 示例资源：内存账本。实现 `XaResource` 后即可参与 2PC。
+/// 真实场景中这里是 `MySQL` XA / `PostgreSQL` prepared transaction 等驱动适配器。
 struct InMemoryLedger {
     name: &'static str,
     committed: Mutex<HashMap<Vec<u8>, String>>,
@@ -144,8 +145,8 @@ impl XaResource for InMemoryLedger {
 
     async fn is_same_rm(&self, other: &dyn XaResource) -> Result<bool, druid::core::DruidError> {
         Ok(std::ptr::eq(
-            self as *const dyn XaResource as *const u8,
-            other as *const dyn XaResource as *const u8,
+            std::ptr::from_ref::<dyn XaResource>(self).cast::<u8>(),
+            std::ptr::from_ref::<dyn XaResource>(other).cast::<u8>(),
         ))
     }
 }
@@ -178,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     account_b.end(&branch_b, xa_flags::TMSUCCESS).await?;
     let pa = account_a.prepare(&branch_a).await?;
     let pb = account_b.prepare(&branch_b).await?;
-    println!("prepare 结果: A={:?}, B={:?}", pa, pb);
+    println!("prepare 结果: A={pa:?}, B={pb:?}");
 
     // 阶段 2：全部 Ok 则 commit
     if matches!((pa, pb), (XaPrepareResult::Ok, XaPrepareResult::Ok)) {
@@ -207,15 +208,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     db.start(&bad, xa_flags::TMNOFLAGS).await?;
     db.end(&bad, xa_flags::TMSUCCESS).await?;
     let pr = db.prepare(&bad).await?; // 空 staged → ReadOnly
-    println!("prepare 返回 {:?}，上层决定 rollback", pr);
+    println!("prepare 返回 {pr:?}，上层决定 rollback");
     db.rollback(&bad).await?;
     println!("回滚完成，分支数 = {}", db.branches.lock().unwrap().len());
 
     println!("\n=== 场景 3：非法状态转换被拒绝 ===");
     let mut sm = XaTransactionState::with_timeout(tx, Duration::from_secs(30));
     let err = sm.commit(false).unwrap_err(); // Idle 直接 commit
-    println!("Idle→commit 被拒绝: {}", err);
-    assert!(sm.is_timed_out() == false);
+    println!("Idle→commit 被拒绝: {err}");
+    assert!(!sm.is_timed_out());
 
     println!("\n=== 场景 4：超时检测 ===");
     let mut sm2 = XaTransactionState::with_timeout(new_xid(3, b"t3", b"b"), Duration::ZERO);

@@ -71,7 +71,7 @@ fn connection_event_debug_all_variants() {
         ConnectionEvent::GetNetworkTimeout,
     ];
     for event in events {
-        let _ = format!("{:?}", event);
+        let _ = format!("{event:?}");
     }
 }
 
@@ -90,7 +90,7 @@ fn statement_event_debug() {
         StatementEvent::ExecuteBatch,
     ];
     for event in events {
-        let _ = format!("{:?}", event);
+        let _ = format!("{event:?}");
     }
 }
 
@@ -115,7 +115,7 @@ fn result_set_event_debug() {
         ResultSetEvent::Last,
     ];
     for event in events {
-        let _ = format!("{:?}", event);
+        let _ = format!("{event:?}");
     }
 }
 
@@ -135,7 +135,7 @@ fn connection_event_context_debug() {
         connection_id: 42,
         event: &event,
     };
-    let dbg = format!("{:?}", ctx);
+    let dbg = format!("{ctx:?}");
     assert!(dbg.contains("42"));
 }
 
@@ -147,7 +147,7 @@ fn statement_event_context_debug() {
         statement_id: 2,
         event: &event,
     };
-    let dbg = format!("{:?}", ctx);
-    assert!(dbg.contains("1"));
-    assert!(dbg.contains("2"));
+    let dbg = format!("{ctx:?}");
+    assert!(dbg.contains('1'));
+    assert!(dbg.contains('2'));
 }

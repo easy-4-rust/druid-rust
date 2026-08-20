@@ -11,7 +11,7 @@ use druid_admin::ingest::ingest_proto::{DataSourceStats, MetricsSnapshot, SqlSta
 use druid_admin::ingest::IngestService;
 use druid_admin::repository::MetricsRepository;
 
-/// Helper: start a gRPC server and return (addr, server_handle).
+/// Helper: start a gRPC server and return (addr, `server_handle`).
 async fn start_grpc_server() -> (String, tokio::task::JoinHandle<()>) {
     let repo = MetricsRepository::new();
     let service = IngestService::new(repo);

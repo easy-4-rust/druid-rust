@@ -1,3 +1,4 @@
+#![allow(clippy::approx_constant)]
 //! Differential tests for `PreparedInputParameter` — Java `PreparedStatement.setXxx` semantics.
 //!
 //! Covers all variants of `PreparedInputParameter`, `scalar_value()`, `RdbcParameter` trait
@@ -122,7 +123,7 @@ fn float_scalar_promotes_to_f64() {
     let p = PreparedInputParameter::Float(3.14_f32);
     // f32->f64 promotion preserves f32 precision
     match p.scalar_value().unwrap() {
-        Value::Float(v) => assert!((v - 3.14_f32 as f64).abs() < f64::EPSILON),
+        Value::Float(v) => assert!((v - f64::from(3.14_f32)).abs() < f64::EPSILON),
         other => panic!("expected Float, got {other:?}"),
     }
     assert_eq!(p.sql_type(), 6); // FLOAT

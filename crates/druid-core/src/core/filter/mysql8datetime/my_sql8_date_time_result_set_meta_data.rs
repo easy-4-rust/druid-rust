@@ -4,7 +4,7 @@
 use crate::core::{DruidError, ResultSetMetaData};
 use std::ops::Deref;
 
-/// 将 MySQL 8 DATETIME 的 Java 类名恢复为 `java.sql.Timestamp`。
+/// 将 `MySQL` 8 DATETIME 的 Java 类名恢复为 `java.sql.Timestamp`。
 ///
 /// 其余方法经 `Deref` 原样委托给底层 metadata；底层物理 Wrapper 身份不会
 /// 被 eager 复制或丢失，对应 Java 装饰器的逐方法委托语义。

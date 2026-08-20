@@ -1,3 +1,4 @@
+#![allow(clippy::match_same_arms)]
 //! Server-side ingest handler.
 //!
 //! Receives [`ClientFrame`] messages from a gRPC stream, deduplicates by
@@ -46,7 +47,7 @@ struct StreamState {
     expected_seq: u64,
     /// Whether the stream has completed its initial full snapshot.
     initialized: bool,
-    /// Latest snapshot entries, keyed by datasource_id.
+    /// Latest snapshot entries, keyed by `datasource_id`.
     snapshots: HashMap<u64, SnapshotEntry>,
 }
 
@@ -115,6 +116,7 @@ impl IngestHandler {
     }
 
     /// Handle a snapshot batch: dedup, sequence check, ingest or resync.
+    #[allow(clippy::unused_async)]
     async fn handle_snapshot_batch(
         &self,
         batch: &crate::protocol::SnapshotBatch,
@@ -217,7 +219,7 @@ impl IngestHandler {
         }
     }
 
-    /// Process a CommandAck from the client: remove the command from pending.
+    /// Process a `CommandAck` from the client: remove the command from pending.
     fn handle_command_ack(&self, ack: &CommandAck) {
         let mut state = self.state.lock().expect("ingest lock poisoned");
         state.pending_commands.remove(&ack.command_id);
@@ -232,7 +234,7 @@ impl IngestHandler {
         }
     }
 
-    /// Issue a ResetStats command targeting the given datasource IDs.
+    /// Issue a `ResetStats` command targeting the given datasource IDs.
     ///
     /// Returns a [`ServerFrame`] containing the command to send to the client.
     /// The command is tracked as pending until a matching [`CommandAck`] arrives.
@@ -275,7 +277,7 @@ impl IngestHandler {
     }
 
     /// Total number of batches successfully ingested (duplicates that
-    /// returned BatchAck without re-ingestion are NOT counted).
+    /// returned `BatchAck` without re-ingestion are NOT counted).
     pub fn ingest_count(&self) -> u64 {
         self.ingest_count.load(Ordering::Relaxed)
     }

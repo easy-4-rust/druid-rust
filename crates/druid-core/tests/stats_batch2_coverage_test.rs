@@ -1,13 +1,14 @@
+#![allow(clippy::approx_constant)]
 //! Batch 2 coverage tests for stats module deep branches.
 //!
 //! Targets uncovered branches in:
-//! - stat_filter.rs: log_slow_sql levels, effective_sql/context_identity via StatFilterContext,
-//!   slow_value/slow_prepared_parameter all variants, json_rdbc_string truncation,
-//!   json_decimal failure path, resource_marker Some path
+//! - `stat_filter.rs`: `log_slow_sql` levels, `effective_sql/context_identity` via `StatFilterContext`,
+//!   `slow_value/slow_prepared_parameter` all variants, `json_rdbc_string` truncation,
+//!   `json_decimal` failure path, `resource_marker` Some path
 //! - merge.rs: parameterize edge cases (hex, scientific, negative, bracket identifier,
-//!   block comment, escaped quote), SqlMerger capacity eviction, set_max_sql_size shrink, reset
-//! - druid_stat_manager_facade.rs: merge_wall_stat/merge_wall_value/merge_black_list/merge_named_list
-//! - druid_stat_service.rs: page nested key, sql_detail MaxTimespanOccurTime, wall sort
+//!   block comment, escaped quote), `SqlMerger` capacity eviction, `set_max_sql_size` shrink, reset
+//! - `druid_stat_manager_facade.rs`: `merge_wall_stat/merge_wall_value/merge_black_list/merge_named_list`
+//! - `druid_stat_service.rs`: page nested key, `sql_detail` `MaxTimespanOccurTime`, wall sort
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -31,11 +32,11 @@ fn make_filter() -> (StatFilter, Arc<StatsCollector>) {
     (filter, collector)
 }
 
-fn make_exec_context<'a>(
-    sql: &'a str,
+fn make_exec_context(
+    sql: &str,
     operation: ExecOperation,
     in_transaction: bool,
-) -> ExecContext<'a> {
+) -> ExecContext<'_> {
     ExecContext {
         connection_id: 1,
         statement_id: Some(1),

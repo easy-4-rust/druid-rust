@@ -116,7 +116,7 @@ pub trait PhysicalConnection: Any + Send {
         })
     }
 
-    /// 按完整 `prepareCall` 缓存键创建物理 CallableStatement。
+    /// 按完整 `prepareCall` 缓存键创建物理 `CallableStatement`。
     ///
     /// 不支持存储过程调用的 Adapter 必须返回明确错误。
     async fn prepare_physical_call(
@@ -178,7 +178,7 @@ pub trait PhysicalConnection: Any + Send {
         self.execute(statement.sql(), params, generated_keys).await
     }
 
-    /// 使用完整 RDBC setter 描述符执行 generic PreparedStatement。
+    /// 使用完整 RDBC setter 描述符执行 generic `PreparedStatement`。
     async fn execute_prepared_parameters(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -224,7 +224,7 @@ pub trait PhysicalConnection: Any + Send {
         Ok(update_counts)
     }
 
-    /// 使用完整 RDBC setter 描述符执行 PreparedStatement 参数批次。
+    /// 使用完整 RDBC setter 描述符执行 `PreparedStatement` 参数批次。
     async fn exec_prepared_parameter_batch(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -348,16 +348,16 @@ pub trait PhysicalConnection: Any + Send {
     /// 创建驱动拥有的 Clob 句柄。
     ///
     /// 对应 Java：`Connection#createClob()`。返回 raw 句柄，由 Druid 连接
-    /// FilterChain 在池化边界包装为 `ClobProxyImpl`。
+    /// `FilterChain` 在池化边界包装为 `ClobProxyImpl`。
     async fn create_clob(&mut self) -> Result<RdbcClob, DruidError> {
         Err(DruidError::UnsupportedOperation {
             operation: "connection_create_clob",
         })
     }
 
-    /// 创建驱动拥有的 NClob 句柄。
+    /// 创建驱动拥有的 `NClob` 句柄。
     ///
-    /// 对应 Java：`Connection#createNClob()`。NClob 必须保持独立类型身份，
+    /// 对应 Java：`Connection#createNClob()`。`NClob` 必须保持独立类型身份，
     /// 不能降级成普通 Clob。
     async fn create_n_clob(&mut self) -> Result<RdbcNClob, DruidError> {
         Err(DruidError::UnsupportedOperation {

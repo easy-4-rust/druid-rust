@@ -48,12 +48,12 @@ pub enum StatementExecuteResult {
 }
 
 impl StatementExecuteResult {
-    /// 返回当前结果是否为 RDBC ResultSet。
+    /// 返回当前结果是否为 RDBC `ResultSet`。
     pub fn is_result_set(&self) -> bool {
         matches!(self, Self::ResultSet(_))
     }
 
-    /// 返回 RDBC `getUpdateCount()`；ResultSet 返回 `-1`。
+    /// 返回 RDBC `getUpdateCount()`；`ResultSet` 返回 `-1`。
     pub fn update_count(&self) -> i64 {
         match self {
             Self::ResultSet(_) => -1,
@@ -149,7 +149,7 @@ pub trait PhysicalStatement: Any + Send + Sync {
     /// 返回当前批处理快照。
     fn batch(&self) -> Result<Vec<String>, DruidError>;
 
-    /// 访问当前 ResultSet 前执行驱动 getter。
+    /// 访问当前 `ResultSet` 前执行驱动 getter。
     ///
     /// 对应 Java：`Statement#getResultSet()`。把 getter 保留在物理 SPI，确保
     /// 驱动可在该时点报告错误并进入池化连接 `ExceptionSorter`。
@@ -164,7 +164,7 @@ pub trait PhysicalStatement: Any + Send + Sync {
         Ok(())
     }
 
-    /// 访问生成键 ResultSet 前执行驱动 getter。
+    /// 访问生成键 `ResultSet` 前执行驱动 getter。
     ///
     /// 对应 Java：`Statement#getGeneratedKeys()`。
     fn get_generated_keys(&self) -> Result<(), DruidError> {

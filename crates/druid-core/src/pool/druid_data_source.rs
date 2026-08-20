@@ -504,15 +504,15 @@ impl DataSourceMonitorable for DruidDataSource {
             Some(WallSnapshot {
                 check_count: wall_stats
                     .get("CheckCount")
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .unwrap_or(0),
                 deny_count: wall_stats
                     .get("DenyCount")
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .unwrap_or(0),
                 violation_count: wall_stats
                     .get("ViolationCount")
-                    .and_then(|v| v.as_u64())
+                    .and_then(serde_json::Value::as_u64)
                     .unwrap_or(0),
             })
         };

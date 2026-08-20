@@ -8,7 +8,7 @@
 //!
 //! - Sequence numbers start at **1** and are monotonically increasing.
 //! - The window holds at most `capacity` pending batches.
-//! - ACKing an unknown or already-ACKed sequence is an error.
+//! - `ACKing` an unknown or already-ACKed sequence is an error.
 
 use std::collections::BTreeMap;
 

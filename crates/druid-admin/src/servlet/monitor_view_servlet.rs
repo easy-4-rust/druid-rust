@@ -1,3 +1,6 @@
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
+#![allow(clippy::unused_async)] // axum handlers require async signature even when no .await
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 

@@ -1,3 +1,4 @@
+#![allow(unused_comparisons)]
 //! `DruidDataSource` + `WallVisitorUtils` 差分测试（C9 批次：pool + sql 0%）。
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。

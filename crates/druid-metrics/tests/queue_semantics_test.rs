@@ -1,3 +1,4 @@
+#![allow(clippy::match_same_arms)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -144,7 +145,7 @@ async fn saturated_metrics_queue_never_blocks_datasource_operations() {
         // Run for a few ticks then cancel
         for _ in 0..5 {
             tokio::select! {
-                _ = sampler_cancel.cancelled() => break,
+                () = sampler_cancel.cancelled() => break,
                 _ = ticker.tick() => {
                     // Inline sample_all logic
                     let entries: Vec<druid_metrics::registry::RegistryEntry> = {
@@ -212,7 +213,7 @@ async fn busy_datasource_increments_snapshot_busy_total() {
     registry.write().push(entry);
 
     // Create a large-capacity channel (not the bottleneck)
-    let (tx, _rx): (
+    let (_tx, _rx): (
         tokio::sync::mpsc::Sender<druid_metrics::aggregator::PendingSnapshot>,
         _,
     ) = tokio::sync::mpsc::channel(1024);
@@ -228,7 +229,7 @@ async fn busy_datasource_increments_snapshot_busy_total() {
 
         for _ in 0..5 {
             tokio::select! {
-                _ = sampler_cancel.cancelled() => break,
+                () = sampler_cancel.cancelled() => break,
                 _ = ticker.tick() => {
                     let entries: Vec<druid_metrics::registry::RegistryEntry> = {
                         let guard = sampler_registry.read();
@@ -274,7 +275,7 @@ async fn runtime_end_to_end_with_many_datasources() {
         .unwrap();
 
     let runtime = DruidMetricsRuntime::start(config).await.unwrap();
-    let metrics = runtime.self_metrics().clone();
+    let _metrics = runtime.self_metrics().clone();
 
     // Register 10 datasources
     let mut guards = Vec::new();

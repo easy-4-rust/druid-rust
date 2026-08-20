@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// 把 WallProvider 接入 Druid FilterChain 的 canonical Filter。
+/// 把 `WallProvider` 接入 Druid `FilterChain` 的 canonical Filter。
 ///
 /// 对应 Java：`com.alibaba.druid.wall.WallFilter`。违规可按配置记录日志，并可
 /// 选择抛出 `WallViolation` 阻断执行；成功/失败及影响行数回写同一 SQL 统计。
@@ -117,7 +117,7 @@ impl WallFilter {
                 provider.ok_or_else(|| {
                     DruidError::InvalidArgument(format!(
                         "dbType not support : {}, url {}",
-                        other.map(|db_type| db_type.as_str()).unwrap_or("null"),
+                        other.map_or("null", super::db_type::DbType::as_str),
                         data_source_url.unwrap_or("null")
                     ))
                 })?

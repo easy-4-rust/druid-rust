@@ -1,4 +1,4 @@
-//! PhysicalCallableStatement 默认强类型转换契约。
+//! `PhysicalCallableStatement` 默认强类型转换契约。
 //!
 //! Java oracle：
 //! `DruidPooledCallableStatement` 与 `MockCallableStatement` 的标量 OUT 参数行为。
@@ -15,7 +15,7 @@ use std::any::Any;
 use std::str::FromStr;
 use std::sync::Mutex;
 
-/// 可切换 OUT 值的最小物理 CallableStatement。
+/// 可切换 OUT 值的最小物理 `CallableStatement`。
 struct DefaultCallableStatement {
     output: Mutex<RdbcObject>,
 }
@@ -36,7 +36,7 @@ impl DefaultCallableStatement {
 }
 
 impl PhysicalPreparedStatement for DefaultCallableStatement {
-    fn sql(&self) -> &str {
+    fn sql(&self) -> &'static str {
         "{call default(?)}"
     }
 

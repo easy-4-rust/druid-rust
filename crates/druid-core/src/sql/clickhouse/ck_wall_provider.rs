@@ -3,7 +3,7 @@
 use crate::sql::{DbType, WallConfig, WallProvider};
 use std::ops::Deref;
 
-/// ClickHouse Wall Provider。
+/// `ClickHouse` Wall Provider。
 pub struct CkWallProvider {
     provider: WallProvider,
 }
@@ -11,13 +11,13 @@ pub struct CkWallProvider {
 impl CkWallProvider {
     pub const DEFAULT_CONFIG_DIR: &'static str = "META-INF/druid/wall/clickhouse";
 
-    /// 使用 Java 默认规则创建 ClickHouse Provider。
+    /// 使用 Java 默认规则创建 `ClickHouse` Provider。
     #[must_use]
     pub fn new() -> Self {
         Self::with_config(WallConfig::with_config_dir(Self::DEFAULT_CONFIG_DIR))
     }
 
-    /// 使用调用方配置创建 ClickHouse Provider。
+    /// 使用调用方配置创建 `ClickHouse` Provider。
     #[must_use]
     pub fn with_config(config: WallConfig) -> Self {
         let provider = WallProvider::new(config);

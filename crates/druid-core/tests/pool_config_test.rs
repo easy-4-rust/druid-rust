@@ -91,25 +91,25 @@ fn pool_config_builder_not_full_timeout_retry_count() {
 #[test]
 fn pool_config_builder_max_lifetime() {
     let config = PoolConfig::builder()
-        .max_lifetime(Duration::from_secs(3600))
+        .max_lifetime(Duration::from_hours(1))
         .build();
-    assert_eq!(config.max_lifetime, Duration::from_secs(3600));
+    assert_eq!(config.max_lifetime, Duration::from_hours(1));
 }
 
 #[test]
 fn pool_config_builder_eviction_interval() {
     let config = PoolConfig::builder()
-        .eviction_interval(Duration::from_secs(60))
+        .eviction_interval(Duration::from_mins(1))
         .build();
-    assert_eq!(config.eviction_interval, Duration::from_secs(60));
+    assert_eq!(config.eviction_interval, Duration::from_mins(1));
 }
 
 #[test]
 fn pool_config_builder_min_evictable_idle() {
     let config = PoolConfig::builder()
-        .min_evictable_idle(Duration::from_secs(300))
+        .min_evictable_idle(Duration::from_mins(5))
         .build();
-    assert_eq!(config.min_evictable_idle, Duration::from_secs(300));
+    assert_eq!(config.min_evictable_idle, Duration::from_mins(5));
 }
 
 #[test]
@@ -151,9 +151,9 @@ fn pool_config_builder_leak_detection() {
 #[test]
 fn pool_config_builder_leak_threshold() {
     let config = PoolConfig::builder()
-        .leak_threshold(Duration::from_secs(60))
+        .leak_threshold(Duration::from_mins(1))
         .build();
-    assert_eq!(config.leak_threshold, Duration::from_secs(60));
+    assert_eq!(config.leak_threshold, Duration::from_mins(1));
 }
 
 #[test]

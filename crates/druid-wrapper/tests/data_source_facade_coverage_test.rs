@@ -1,9 +1,9 @@
-//! DruidDataSource facade differential coverage tests (Java Druid 1.2.28).
+//! `DruidDataSource` facade differential coverage tests (Java Druid 1.2.28).
 //!
-//! Covers: from_pool, DataSourceProxy trait, DataSourceMonitorable trait,
-//! ManagedDataSource trait, Pool trait delegation, register_monitoring,
-//! stat_value_and_reset, publish_stats, close_for_removal_if_idle, is_full,
-//! try_get_connection, fill_to, restart, notify_credentials_changed.
+//! Covers: `from_pool`, `DataSourceProxy` trait, `DataSourceMonitorable` trait,
+//! `ManagedDataSource` trait, Pool trait delegation, `register_monitoring`,
+//! `stat_value_and_reset`, `publish_stats`, `close_for_removal_if_idle`, `is_full`,
+//! `try_get_connection`, `fill_to`, restart, `notify_credentials_changed`.
 
 use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Pool, Row, Value,
@@ -12,7 +12,6 @@ use druid_core::pool::{DruidDataSource, DruidPool};
 use druid_core::stats::DataSourceMonitorable;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 // ===========================================================================
 // Test infrastructure

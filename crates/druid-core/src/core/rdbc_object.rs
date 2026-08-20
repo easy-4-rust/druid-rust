@@ -1,3 +1,4 @@
+#![allow(clippy::match_same_arms)]
 //! RDBC `Object` 平台值。
 //!
 //! 对应 Java：`ResultSet#getObject`、`CallableStatement#getObject`、

@@ -120,6 +120,6 @@ fn symbol_table_global_exists() {
 #[test]
 fn symbol_table_debug() {
     let st = SymbolTable::new(8);
-    let dbg = format!("{:?}", st);
+    let dbg = format!("{st:?}");
     assert!(dbg.contains("SymbolTable"));
 }

@@ -3,10 +3,10 @@
 use crate::sql::{DbType, WallConfig, WallProvider};
 use std::ops::Deref;
 
-/// SQLite Wall Provider。
+/// `SQLite` Wall Provider。
 ///
-/// Java 使用 MySQL parser/export visitor 承载 SQLite，再使用独立
-/// `SQLiteWallVisitor` 收紧方言规则；Rust 固定 SQLite parser 方言。
+/// Java 使用 `MySQL` parser/export visitor 承载 SQLite，再使用独立
+/// `SQLiteWallVisitor` 收紧方言规则；Rust 固定 `SQLite` parser 方言。
 pub struct SQLiteWallProvider {
     provider: WallProvider,
 }
@@ -14,13 +14,13 @@ pub struct SQLiteWallProvider {
 impl SQLiteWallProvider {
     pub const DEFAULT_CONFIG_DIR: &'static str = "META-INF/druid/wall/sqlite";
 
-    /// 使用 Java 默认目录创建 SQLite Provider。
+    /// 使用 Java 默认目录创建 `SQLite` Provider。
     #[must_use]
     pub fn new() -> Self {
         Self::with_config(WallConfig::with_config_dir(Self::DEFAULT_CONFIG_DIR))
     }
 
-    /// 使用调用方配置创建 SQLite Provider。
+    /// 使用调用方配置创建 `SQLite` Provider。
     #[must_use]
     pub fn with_config(config: WallConfig) -> Self {
         let provider = WallProvider::new(config);

@@ -100,7 +100,7 @@ enum KeywordSet {
 /// 对应 Java：`com.alibaba.druid.sql.parser.Lexer`。本对象不以
 /// `sqlparser-rs` tokenizer 替代 Druid Token：它直接在 Java String 等价的
 /// UTF-16 code unit 上维护 `pos/mark/bufPos/ch/token/hash` 状态，并保留
-/// SQLite、DM 关键字表、注释安全开关和 SavePoint 回溯语义。
+/// SQLite、DM 关键字表、注释安全开关和 `SavePoint` 回溯语义。
 pub struct Lexer {
     text: RdbcString,
     features: i32,
@@ -349,7 +349,7 @@ impl Lexer {
         self.var_index
     }
 
-    /// 配置 Java SQLParserFeature mask 及关联快捷字段。
+    /// 配置 Java `SQLParserFeature` mask 及关联快捷字段。
     pub fn config(&mut self, feature: SqlParserFeature, state: bool) {
         self.features = SqlParserFeature::config(self.features, feature, state);
         match feature {
@@ -363,7 +363,7 @@ impl Lexer {
         }
     }
 
-    /// 判断 SQLParserFeature 是否启用。
+    /// 判断 `SQLParserFeature` 是否启用。
     #[must_use]
     pub const fn is_enabled(&self, feature: SqlParserFeature) -> bool {
         SqlParserFeature::is_enabled(self.features, feature)
@@ -599,7 +599,7 @@ impl Lexer {
             self.scan_char();
             self.token = Some(Token::Error);
             return Err(ParserException::with_position(
-                format!("illegal.char, {}", illegal),
+                format!("illegal.char, {illegal}"),
                 self.line as i32,
                 self.pos_column as i32,
             )

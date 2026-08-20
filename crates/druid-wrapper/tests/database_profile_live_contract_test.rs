@@ -1,3 +1,4 @@
+#![allow(clippy::match_same_arms, clippy::unused_async)]
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use druid_core::core::{

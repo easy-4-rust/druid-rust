@@ -1,12 +1,13 @@
-//! Differential tests for `WallFilter` (Java WallFilter 语义对照)。
+#![allow(unused_must_use)]
+//! Differential tests for `WallFilter` (Java `WallFilter` 语义对照)。
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
-//! 目标：覆盖 wall_filter.rs 中 create_provider 全方言分支、公共 API、
+//! 目标：覆盖 `wall_filter.rs` 中 `create_provider` 全方言分支、公共 API、
 //! BeforeFilter/AfterFilter/ResultSetFilter trait 实现、以及辅助函数。
 
 extern crate druid_core as druid;
 use druid_core::core::{DruidError, ExecResult};
-use druid_core::sql::{DbType, WallConfig, WallFilter, WallProvider, WallSqlStat, WallViolation};
+use druid_core::sql::{DbType, WallConfig, WallFilter, WallProvider, WallSqlStat};
 
 use std::sync::Arc;
 
@@ -237,7 +238,7 @@ fn wall_filter_provider_white_list() {
 // 4. before_sql 内部路径（通过 try_check 间接覆盖）
 // ══════════════════════════════════════════════════════════════════
 
-/// 合法 SQL：provider try_check 返回无 violation，before_sql 应成功。
+/// 合法 SQL：provider `try_check` 返回无 `violation，before_sql` 应成功。
 #[test]
 fn wall_filter_valid_sql_no_violation() {
     let filter = WallFilter::default();
@@ -247,7 +248,7 @@ fn wall_filter_valid_sql_no_violation() {
     assert!(result.violations().is_empty());
 }
 
-/// 违规 SQL + throw_exception=true：provider try_check 返回带 violation 的 Ok。
+/// 违规 SQL + `throw_exception=true：provider` `try_check` 返回带 violation 的 Ok。
 #[test]
 fn wall_filter_violation_detected_by_provider() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -259,7 +260,7 @@ fn wall_filter_violation_detected_by_provider() {
     assert!(!check.violations().is_empty());
 }
 
-/// 违规 SQL + throw_exception=false：provider try_check 不 panic。
+/// 违规 SQL + `throw_exception=false：provider` `try_check` 不 panic。
 #[test]
 fn wall_filter_violation_no_throw_when_exception_disabled() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -273,7 +274,7 @@ fn wall_filter_violation_no_throw_when_exception_disabled() {
 // 5. after_sql 路径（通过 WallSqlStat 直接验证语义）
 // ══════════════════════════════════════════════════════════════════
 
-/// after_sql: Ok(ExecResult) 路径 -- update_count 累加。
+/// `after_sql`: Ok(ExecResult) 路径 -- `update_count` 累加。
 #[test]
 fn wall_sql_stat_add_update_count() {
     let stat = WallSqlStat::new("SELECT 1".to_owned(), vec![], false);
@@ -283,7 +284,7 @@ fn wall_sql_stat_add_update_count() {
     assert_eq!(sv.update_count, 15);
 }
 
-/// after_sql: Ok(ExecResult) 路径 -- fetch_row_count 累加。
+/// `after_sql`: Ok(ExecResult) 路径 -- `fetch_row_count` 累加。
 #[test]
 fn wall_sql_stat_add_fetch_row_count() {
     let stat = WallSqlStat::new("SELECT 1".to_owned(), vec![], false);
@@ -293,7 +294,7 @@ fn wall_sql_stat_add_fetch_row_count() {
     assert_eq!(sv.fetch_row_count, 150);
 }
 
-/// after_sql: Err 路径 -- execute_error_count 增加。
+/// `after_sql`: Err 路径 -- `execute_error_count` 增加。
 #[test]
 fn wall_sql_stat_increment_execute_error_count() {
     let stat = WallSqlStat::new("SELECT 1".to_owned(), vec![], false);
@@ -307,7 +308,7 @@ fn wall_sql_stat_increment_execute_error_count() {
 // 6. servlet_path_matches 辅助函数（通过 WallConfig + provider 间接验证）
 // ══════════════════════════════════════════════════════════════════
 
-/// tenant_table_pattern 前缀通配：`t*` 匹配 `t_orders`。
+/// `tenant_table_pattern` 前缀通配：`t*` 匹配 `t_orders`。
 #[test]
 fn tenant_pattern_prefix_wildcard() {
     let config = WallConfig::builder()
@@ -319,7 +320,7 @@ fn tenant_pattern_prefix_wildcard() {
     let _ = provider.try_check("SELECT * FROM t_orders WHERE id = 1");
 }
 
-/// tenant_table_pattern 后缀通配：`*_log` 匹配 `access_log`。
+/// `tenant_table_pattern` 后缀通配：`*_log` 匹配 `access_log`。
 #[test]
 fn tenant_pattern_suffix_wildcard() {
     let config = WallConfig::builder()
@@ -330,7 +331,7 @@ fn tenant_pattern_suffix_wildcard() {
     let _ = provider.try_check("SELECT * FROM access_log WHERE id = 1");
 }
 
-/// tenant_table_pattern 精确匹配：`users` 仅匹配 `users`。
+/// `tenant_table_pattern` 精确匹配：`users` 仅匹配 `users`。
 #[test]
 fn tenant_pattern_exact_match() {
     let config = WallConfig::builder()
@@ -341,7 +342,7 @@ fn tenant_pattern_exact_match() {
     let _ = provider.try_check("SELECT * FROM users WHERE id = 1");
 }
 
-/// tenant_table_pattern 中间通配：`t_*_data` 匹配 `t_user_data`。
+/// `tenant_table_pattern` 中间通配：`t_*_data` 匹配 `t_user_data`。
 #[test]
 fn tenant_pattern_middle_wildcard() {
     let config = WallConfig::builder()
@@ -356,7 +357,7 @@ fn tenant_pattern_middle_wildcard() {
 // 7. connection_get_meta_data 路径
 // ══════════════════════════════════════════════════════════════════
 
-/// metadata_allow=false + throw_exception=true 时行为验证。
+/// `metadata_allow=false` + `throw_exception=true` 时行为验证。
 #[test]
 fn wall_filter_metadata_not_allowed_config() {
     let mut config = WallConfig::default();
@@ -367,7 +368,7 @@ fn wall_filter_metadata_not_allowed_config() {
     assert!(!filter.provider().config().metadata_allow);
 }
 
-/// do_privileged_allow=true + is_privileged() 时 metadata 放行。
+/// `do_privileged_allow=true` + `is_privileged()` 时 metadata 放行。
 #[test]
 fn wall_filter_metadata_privileged_bypass() {
     let mut config = WallConfig::default();
@@ -384,7 +385,7 @@ fn wall_filter_metadata_privileged_bypass() {
 // 8. update_check 路径（before_sql 中 evaluate_update_items=true）
 // ══════════════════════════════════════════════════════════════════
 
-/// 无 handler 时 update_check_item 路径应报 "handler missing"。
+/// 无 handler 时 `update_check_item` 路径应报 "handler missing"。
 #[test]
 fn wall_filter_update_check_handler_missing() {
     let config = WallConfig::builder()
@@ -400,7 +401,7 @@ fn wall_filter_update_check_handler_missing() {
 // 9. provider 复用语义（Java WallFilter.provider 字段）
 // ══════════════════════════════════════════════════════════════════
 
-/// 多次调用 try_check 共用同一 provider 实例。
+/// 多次调用 `try_check` 共用同一 provider 实例。
 #[test]
 fn wall_filter_provider_reuse_across_checks() {
     let provider = Arc::new(WallProvider::new(WallConfig::default()));
@@ -430,7 +431,7 @@ fn wall_filter_provider_reset_preserves_instance() {
 // 10. WallFilter + 不同方言 provider 的 check 语义
 // ══════════════════════════════════════════════════════════════════
 
-/// MySQL 方言 provider 对 DROP TABLE 的拦截。
+/// `MySQL` 方言 provider 对 DROP TABLE 的拦截。
 #[test]
 fn wall_filter_mysql_drop_table_blocked() {
     let config = WallConfig::builder().drop_table_allow(false).build();
@@ -440,7 +441,7 @@ fn wall_filter_mysql_drop_table_blocked() {
     assert!(!result.violations().is_empty());
 }
 
-/// PostgreSQL 方言 provider 对合法 SELECT 放行。
+/// `PostgreSQL` 方言 provider 对合法 SELECT 放行。
 #[test]
 fn wall_filter_pg_select_allowed() {
     let provider = WallFilter::create_provider(None, None, Some(DbType::PostgreSql), None).unwrap();
@@ -448,7 +449,7 @@ fn wall_filter_pg_select_allowed() {
     assert!(result.violations().is_empty());
 }
 
-/// SQLite 方言 provider 对语法错误检测。
+/// `SQLite` 方言 provider 对语法错误检测。
 #[test]
 fn wall_filter_sqlite_syntax_error() {
     let provider = WallFilter::create_provider(None, None, Some(DbType::SQLite), None).unwrap();
@@ -456,7 +457,7 @@ fn wall_filter_sqlite_syntax_error() {
     assert!(result.is_syntax_error());
 }
 
-/// ClickHouse 方言 provider 对 INSERT 放行。
+/// `ClickHouse` 方言 provider 对 INSERT 放行。
 #[test]
 fn wall_filter_clickhouse_insert_allowed() {
     let provider = WallFilter::create_provider(None, None, Some(DbType::ClickHouse), None).unwrap();
@@ -472,7 +473,7 @@ fn wall_filter_oracle_select_allowed() {
     assert!(result.violations().is_empty());
 }
 
-/// SqlServer 方言 provider 对 SELECT 放行。
+/// `SqlServer` 方言 provider 对 SELECT 放行。
 #[test]
 fn wall_filter_sqlserver_select_allowed() {
     let provider = WallFilter::create_provider(None, None, Some(DbType::SqlServer), None).unwrap();
@@ -484,7 +485,7 @@ fn wall_filter_sqlserver_select_allowed() {
 // 11. ExecResult 语义（after_sql 的 Ok 路径行数回写）
 // ══════════════════════════════════════════════════════════════════
 
-/// ExecResult 带 rows_affected 和 row_count。
+/// `ExecResult` 带 `rows_affected` 和 `row_count`。
 #[test]
 fn exec_result_rows_affected_and_row_count() {
     let result = ExecResult {
@@ -496,7 +497,7 @@ fn exec_result_rows_affected_and_row_count() {
     assert_eq!(result.row_count, Some(200));
 }
 
-/// ExecResult 默认值。
+/// `ExecResult` 默认值。
 #[test]
 fn exec_result_default() {
     let result = ExecResult::default();

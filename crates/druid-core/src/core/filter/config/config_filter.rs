@@ -1,3 +1,4 @@
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
 //! 对应 Java：`com.alibaba.druid.filter.config.ConfigFilter`。
 //! 来源文件：`core/src/main/java/com/alibaba/druid/filter/config/ConfigFilter.java`。
 

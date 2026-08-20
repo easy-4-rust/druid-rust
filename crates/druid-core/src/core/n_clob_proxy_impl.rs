@@ -4,14 +4,14 @@ use super::{ClobProxy, ClobProxyImpl, FilterChain, NClobProxy, RdbcClob, RdbcNCl
 use std::ops::Deref;
 use std::sync::Arc;
 
-/// 保持 NClob 类型身份并复用 Clob FilterChain 的 Proxy。
+/// 保持 `NClob` 类型身份并复用 `Clob` `FilterChain` 的 Proxy。
 pub struct NClobProxyImpl {
     clob_proxy: ClobProxyImpl,
     n_clob: RdbcNClob,
 }
 
 impl NClobProxyImpl {
-    /// 创建 NClob Proxy。
+    /// 创建 `NClob` Proxy。
     #[must_use]
     pub fn new(connection_id: u64, n_clob: RdbcNClob, filter_chain: Arc<FilterChain>) -> Self {
         let raw_clob = n_clob.as_clob().clone();

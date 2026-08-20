@@ -1,3 +1,4 @@
+#![allow(clippy::match_same_arms)]
 //! 对应 Java 类：com.alibaba.druid.filter.stat.StatFilter
 //!
 //! 统计 `Filter`，实现 `AfterFilter` 接口。

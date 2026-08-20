@@ -12,7 +12,7 @@ const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
 /// 默认 Druid 关键字表。
 pub static DEFAULT_KEYWORDS: LazyLock<Keywords> = LazyLock::new(Keywords::default_keywords);
 
-/// SQLite 关键字表。
+/// `SQLite` 关键字表。
 ///
 /// Java baseline 在默认表基础上再次写入同一个 LIMIT 映射，最终内容相同但
 /// 保持独立对象身份。

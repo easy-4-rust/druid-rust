@@ -6,7 +6,7 @@ use sqlparser::ast::{
 };
 use std::ops::ControlFlow;
 
-/// 各数据库 WallVisitor 共用的状态与基础规则。
+/// 各数据库 `WallVisitor` 共用的状态与基础规则。
 pub struct WallVisitorBase<'a> {
     provider: &'a WallProvider,
     violations: Vec<WallViolation>,

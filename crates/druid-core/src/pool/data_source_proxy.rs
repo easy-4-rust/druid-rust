@@ -41,7 +41,7 @@ pub trait DataSourceProxy {
     /// 分配 Statement ID。
     fn create_statement_id(&self) -> u64;
 
-    /// 分配 ResultSet ID。
+    /// 分配 `ResultSet` ID。
     fn create_result_set_id(&self) -> u64;
 
     /// 分配 metadata ID。

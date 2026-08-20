@@ -28,8 +28,8 @@ use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 /// Druid 风格连接池。
 ///
-/// 对应 Druid Java 的 `DruidDataSource`，实现 max_open / min_idle /
-/// acquire_timeout / FilterChain 装配 / DruidPooledConnection::drop 归还。
+/// 对应 Druid Java 的 `DruidDataSource`，实现 `max_open` / `min_idle` /
+/// `acquire_timeout` / `FilterChain` 装配 / `DruidPooledConnection::drop` 归还。
 pub struct DruidPool {
     name: String,
     driver_name: String,
@@ -367,7 +367,7 @@ impl DruidPool {
     /// 绕过数据源获取 Filter，直接进入 native pool 状态机。
     ///
     /// 对应 Java：`DruidDataSource#getConnectionDirect(long)`。物理驱动建连
-    /// Filter 仍在 PoolInner 内执行；绕过的只是 dataSource_getConnection
+    /// Filter 仍在 `PoolInner` 内执行；绕过的只是 `dataSource_getConnection`
     /// 这一外层 hook。
     pub async fn get_connection_direct(
         &self,
@@ -688,7 +688,7 @@ impl DruidPool {
             tokio::pin!(notify);
             if let Some(deadline) = deadline {
                 match tokio::time::timeout_at(deadline.into(), notify).await {
-                    Ok(_) => continue,
+                    Ok(_) => {},
                     Err(_) => {
                         return Err(self.inner.connection_timeout_error(started_at.elapsed()));
                     }
@@ -1002,7 +1002,7 @@ impl DruidPool {
         self.statement_id_seed.fetch_add(1, Ordering::AcqRel)
     }
 
-    /// 分配 Java 语义的 ResultSet ID。
+    /// 分配 Java 语义的 `ResultSet` ID。
     pub fn create_result_set_id(&self) -> u64 {
         self.result_set_id_seed.fetch_add(1, Ordering::AcqRel)
     }
@@ -1166,7 +1166,7 @@ impl DruidPool {
         self.inner.fill(to_count).await
     }
 
-    /// 通知池：外部 PhysicalConnectionFactory 的连接凭据已经更新。
+    /// 通知池：外部 `PhysicalConnectionFactory` 的连接凭据已经更新。
     ///
     /// 调用方应先更新 factory，再调用本方法。池会递增凭据版本，替换旧空闲
     /// 连接，并在旧活跃连接归还时销毁它们。

@@ -1,6 +1,6 @@
 //! 对应 Java 类：com.alibaba.druid.pool.GetConnectionTimeoutException 等
 //!
-//! druid-rust 统一错误枚举，替代 SQLException 层级。
+//! druid-rust 统一错误枚举，替代 `SQLException` 层级。
 
 use std::fmt;
 use std::time::Duration;
@@ -247,6 +247,7 @@ impl fmt::Display for DruidError {
 
 impl std::error::Error for DruidError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        #[allow(clippy::match_same_arms)] // each arm has distinct pattern despite same body
         match self {
             Self::BatchUpdateException { cause, .. } => Some(cause.as_ref()),
             Self::OnFatalError {

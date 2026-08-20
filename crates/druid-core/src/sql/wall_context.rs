@@ -14,7 +14,7 @@ thread_local! {
 
 /// 一次同步 Wall 检查的线程局部上下文。
 ///
-/// Java 对象使用 `ThreadLocal`，WallFilter 会在同步检查前创建、finally 中清除。
+/// Java 对象使用 `ThreadLocal`，`WallFilter` 会在同步检查前创建、finally 中清除。
 /// Rust 同样只在不跨 `.await` 的检查区间使用线程局部槽；共享句柄允许 provider、
 /// visitor 与 filter 观察同一个可变上下文，而不会暴露 JVM 对象模型。
 pub struct WallContext {

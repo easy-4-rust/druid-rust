@@ -1,4 +1,4 @@
-//! AdminState and endpoint_list tests.
+//! `AdminState` and `endpoint_list` tests.
 #[test]
 fn test_admin_state_new() {
     let s = druid_admin::AdminState::new("main", "postgres");
@@ -15,7 +15,7 @@ fn test_admin_state_clone() {
 #[test]
 fn test_admin_state_debug() {
     let s = druid_admin::AdminState::new("x", "y");
-    assert!(format!("{:?}", s).contains("x"));
+    assert!(format!("{s:?}").contains('x'));
 }
 #[test]
 fn test_endpoint_list() {

@@ -15,11 +15,11 @@ use zookeeper_client::{
     AddWatchMode, Client, Error as ZookeeperError, EventType, SessionState, WatchedEvent,
 };
 
-/// 监听 ZooKeeper 路径直接子节点的 HA 节点监听器。
+/// 监听 `ZooKeeper` 路径直接子节点的 HA 节点监听器。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.ha.node.ZookeeperNodeListener`。Curator
-/// PathChildrenCache 映射为 persistent recursive watcher 加本地直接子节点快照；
-/// CHILD_UPDATED 仍被忽略，重连后完整重建快照。
+/// `PathChildrenCache` 映射为 persistent recursive watcher 加本地直接子节点快照；
+/// `CHILD_UPDATED` 仍被忽略，重连后完整重建快照。
 pub struct ZookeeperNodeListener {
     state: NodeListenerState,
     zk_connect_string: RwLock<Option<String>>,
@@ -52,7 +52,7 @@ impl Default for ZookeeperNodeListener {
 }
 
 impl ZookeeperNodeListener {
-    /// 创建未初始化的 ZooKeeper listener。
+    /// 创建未初始化的 `ZooKeeper` listener。
     #[must_use]
     pub fn new() -> Self {
         Self::default()
@@ -63,7 +63,7 @@ impl ZookeeperNodeListener {
         self.state.set_prefix(prefix);
     }
 
-    /// 设置 ZooKeeper ensemble 连接串。
+    /// 设置 `ZooKeeper` ensemble 连接串。
     pub fn set_zk_connect_string(&self, connect_string: impl Into<String>) {
         *self.zk_connect_string.write() = Some(connect_string.into());
     }
@@ -78,13 +78,13 @@ impl ZookeeperNodeListener {
         *self.url_template.write() = Some(url_template.into());
     }
 
-    /// 注入外部 ZooKeeper client；listener 不接管其生命周期。
+    /// 注入外部 `ZooKeeper` client；listener 不接管其生命周期。
     pub fn set_client(&self, client: Arc<Client>) {
         *self.client.write() = Some(client);
         self.private_zk_client.store(false, Ordering::Release);
     }
 
-    /// 返回 ZooKeeper client。
+    /// 返回 `ZooKeeper` client。
     #[must_use]
     pub fn client(&self) -> Option<Arc<Client>> {
         self.client.read().clone()

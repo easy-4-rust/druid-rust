@@ -66,7 +66,7 @@ impl PhysicalConnection for MaintenanceConnection {
         self.discarded
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "maintenance"
     }
 }
@@ -235,7 +235,7 @@ async fn keep_alive_validates_due_connections_and_preserves_queue_order() {
         .max_open(2)
         .max_idle(2)
         .min_idle(2)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .time_between_eviction_runs(Duration::ZERO)
         .keep_alive(true)
         .keep_alive_between_time(Duration::from_millis(5))
@@ -272,7 +272,7 @@ async fn keep_alive_failure_discards_and_counts_each_physical_connection() {
         .max_open(2)
         .max_idle(2)
         .min_idle(0)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .keep_alive_between_time(Duration::from_millis(5))
         .valid_connection_checker(factory.checker())
         .build()

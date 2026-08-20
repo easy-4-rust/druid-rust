@@ -4,7 +4,7 @@ use super::{
     DruidError, PhysicalConnection, ValidConnectionChecker, ValidConnectionCheckerAdapter,
 };
 
-/// OceanBase 连接校验器。
+/// `OceanBase` 连接校验器。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.vendor.OceanBaseValidConnectionChecker`。
 #[derive(Clone, Copy, Debug, Default)]
@@ -15,7 +15,7 @@ pub struct OceanBaseValidConnectionChecker {
 impl OceanBaseValidConnectionChecker {
     /// Oracle 兼容模式默认 SQL。
     pub const COMMON_VALIDATE_QUERY: &'static str = "SELECT 'x' FROM DUAL";
-    /// MySQL 兼容模式默认 SQL。
+    /// `MySQL` 兼容模式默认 SQL。
     pub const MYSQL_VALIDATE_QUERY: &'static str = "/* ping */ SELECT 1";
 
     /// 创建 Oracle 兼容模式校验器。
@@ -24,7 +24,7 @@ impl OceanBaseValidConnectionChecker {
         Self { mysql_mode: false }
     }
 
-    /// 创建 MySQL 兼容模式校验器。
+    /// 创建 `MySQL` 兼容模式校验器。
     #[must_use]
     pub const fn mysql_mode() -> Self {
         Self { mysql_mode: true }

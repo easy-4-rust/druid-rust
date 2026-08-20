@@ -145,7 +145,7 @@ fn table_stat_setters() {
 #[test]
 fn table_stat_display_empty() {
     let stat = TableStat::default();
-    assert_eq!(format!("{}", stat), "");
+    assert_eq!(format!("{stat}"), "");
 }
 
 #[test]
@@ -153,7 +153,7 @@ fn table_stat_display_with_counts() {
     let mut stat = TableStat::default();
     stat.increment_select_count();
     stat.increment_insert_count();
-    let s = format!("{}", stat);
+    let s = format!("{stat}");
     assert!(s.contains("Insert"));
     assert!(s.contains("Select"));
 }
@@ -169,7 +169,7 @@ fn table_stat_clone_eq() {
 #[test]
 fn table_stat_debug() {
     let stat = TableStat::default();
-    let dbg = format!("{:?}", stat);
+    let dbg = format!("{stat:?}");
     assert!(dbg.contains("TableStat"));
 }
 
@@ -215,7 +215,7 @@ fn table_stat_name_hash_trait() {
 #[test]
 fn table_stat_name_display() {
     let name = TableStatName::new("USERS");
-    let s = format!("{}", name);
+    let s = format!("{name}");
     assert!(!s.is_empty());
 }
 
@@ -234,8 +234,8 @@ fn table_stat_relationship_display() {
     let left = TableStatColumn::new(None, "a");
     let right = TableStatColumn::new(None, "b");
     let rel = TableStatRelationship::new(left, right, "=");
-    let s = format!("{}", rel);
-    assert!(s.contains("="));
+    let s = format!("{rel}");
+    assert!(s.contains('='));
 }
 
 #[test]
@@ -269,7 +269,7 @@ fn table_stat_condition_add_value() {
 fn table_stat_condition_display_empty_values() {
     let col = TableStatColumn::new(None, "id");
     let cond = TableStatCondition::new(col, "IS NULL");
-    let s = format!("{}", cond);
+    let s = format!("{cond}");
     assert!(s.contains("IS NULL"));
 }
 
@@ -278,8 +278,8 @@ fn table_stat_condition_display_single_value() {
     let col = TableStatColumn::new(None, "id");
     let mut cond = TableStatCondition::new(col, "=");
     cond.add_value(Value::Number(42.into()));
-    let s = format!("{}", cond);
-    assert!(s.contains("="));
+    let s = format!("{cond}");
+    assert!(s.contains('='));
 }
 
 #[test]
@@ -289,9 +289,9 @@ fn table_stat_condition_display_multiple_values() {
     cond.add_value(Value::Number(1.into()));
     cond.add_value(Value::Number(2.into()));
     cond.add_value(Value::Number(3.into()));
-    let s = format!("{}", cond);
+    let s = format!("{cond}");
     assert!(s.contains("IN"));
-    assert!(s.contains("("));
+    assert!(s.contains('('));
 }
 
 #[test]
@@ -392,15 +392,15 @@ fn table_stat_column_attributes() {
 #[test]
 fn table_stat_column_display_with_table() {
     let col = TableStatColumn::new(Some("USERS".to_owned()), "ID");
-    let s = format!("{}", col);
-    assert!(s.contains("."));
+    let s = format!("{col}");
+    assert!(s.contains('.'));
 }
 
 #[test]
 fn table_stat_column_display_without_table() {
     let col = TableStatColumn::new(None, "id");
-    let s = format!("{}", col);
-    assert!(!s.contains("."));
+    let s = format!("{col}");
+    assert!(!s.contains('.'));
 }
 
 #[test]
@@ -470,7 +470,7 @@ fn table_stat_display_all_operation_types() {
     stat.increment_add_count();
     stat.increment_add_partition_count();
     stat.increment_analyze_count();
-    let s = format!("{}", stat);
+    let s = format!("{stat}");
     // All names should appear
     assert!(s.contains("Merge"));
     assert!(s.contains("Insert"));
@@ -502,35 +502,35 @@ fn table_stat_increment_wraps_at_i32_max() {
 #[test]
 fn table_stat_name_display_bracket_quoted() {
     let name = TableStatName::new("[USERS]");
-    let s = format!("{}", name);
+    let s = format!("{name}");
     assert_eq!(s, "USERS");
 }
 
 #[test]
 fn table_stat_name_display_double_quoted() {
     let name = TableStatName::new("\"users\"");
-    let s = format!("{}", name);
+    let s = format!("{name}");
     assert_eq!(s, "users");
 }
 
 #[test]
 fn table_stat_name_display_backtick_quoted() {
     let name = TableStatName::new("`users`");
-    let s = format!("{}", name);
+    let s = format!("{name}");
     assert_eq!(s, "users");
 }
 
 #[test]
 fn table_stat_name_display_single_quoted() {
     let name = TableStatName::new("'users'");
-    let s = format!("{}", name);
+    let s = format!("{name}");
     assert_eq!(s, "users");
 }
 
 #[test]
 fn table_stat_name_display_plain() {
     let name = TableStatName::new("users");
-    let s = format!("{}", name);
+    let s = format!("{name}");
     assert_eq!(s, "users");
 }
 
@@ -547,7 +547,7 @@ fn table_stat_name_hash_case_insensitive() {
 #[test]
 fn table_stat_column_display_bracket_quoted_table_and_column() {
     let col = TableStatColumn::new(Some("[USERS]".to_owned()), "[ID]");
-    let s = format!("{}", col);
+    let s = format!("{col}");
     // After normalization, brackets removed, backtick-dot replaced
     assert!(s.contains("USERS"));
     assert!(s.contains("ID"));
@@ -556,7 +556,7 @@ fn table_stat_column_display_bracket_quoted_table_and_column() {
 #[test]
 fn table_stat_column_display_backtick_quoted() {
     let col = TableStatColumn::new(Some("`users`".to_owned()), "`id`");
-    let s = format!("{}", col);
+    let s = format!("{col}");
     assert!(s.contains("users"));
     assert!(s.contains("id"));
 }
@@ -606,9 +606,9 @@ fn table_stat_condition_display_with_string_value() {
     let col = TableStatColumn::new(None, "name");
     let mut cond = TableStatCondition::new(col, "=");
     cond.add_value(Value::String("Alice".to_owned()));
-    let s = format!("{}", cond);
+    let s = format!("{cond}");
     assert!(s.contains("name"));
-    assert!(s.contains("="));
+    assert!(s.contains('='));
     assert!(s.contains("Alice"));
 }
 
@@ -617,7 +617,7 @@ fn table_stat_condition_display_with_null_value() {
     let col = TableStatColumn::new(None, "name");
     let mut cond = TableStatCondition::new(col, "IS");
     cond.add_value(Value::Null);
-    let s = format!("{}", cond);
+    let s = format!("{cond}");
     assert!(s.contains("null"));
 }
 
@@ -626,7 +626,7 @@ fn table_stat_condition_display_with_number_value() {
     let col = TableStatColumn::new(None, "id");
     let mut cond = TableStatCondition::new(col, ">");
     cond.add_value(Value::Number(42.into()));
-    let s = format!("{}", cond);
+    let s = format!("{cond}");
     assert!(s.contains("42"));
 }
 
@@ -636,9 +636,9 @@ fn table_stat_condition_display_multiple_string_values() {
     let mut cond = TableStatCondition::new(col, "IN");
     cond.add_value(Value::String("Alice".to_owned()));
     cond.add_value(Value::String("Bob".to_owned()));
-    let s = format!("{}", cond);
-    assert!(s.contains("("));
-    assert!(s.contains(")"));
+    let s = format!("{cond}");
+    assert!(s.contains('('));
+    assert!(s.contains(')'));
     assert!(s.contains("Alice"));
     assert!(s.contains("Bob"));
 }
@@ -742,6 +742,6 @@ fn table_stat_column_ne_by_hash() {
 fn table_stat_condition_display_with_quoted_column() {
     let col = TableStatColumn::new(Some("`t`".to_owned()), "`id`");
     let cond = TableStatCondition::new(col, "IS NULL");
-    let s = format!("{}", cond);
+    let s = format!("{cond}");
     assert!(s.contains("IS NULL"));
 }

@@ -38,7 +38,7 @@ impl RdbcParameterType {
 
 /// `RdbcParameter#getValue()` 的 Rust 无损平台值。
 ///
-/// Java 返回 `Object`，既可能是标量/LOB，也可能是有状态 InputStream 或
+/// Java 返回 `Object`，既可能是标量/LOB，也可能是有状态 `InputStream` 或
 /// Reader；Rust 必须显式区分这些资源句柄，不能提前读取。
 #[derive(Debug, Clone, PartialEq)]
 pub enum RdbcParameterValue {
@@ -50,7 +50,7 @@ pub enum RdbcParameterValue {
     Reader(RdbcReader),
 }
 
-/// PreparedStatement 参数的可观察代理合同。
+/// `PreparedStatement` 参数的可观察代理合同。
 pub trait RdbcParameter {
     /// 返回参数值；`None` 对应 Java null。
     fn value(&self) -> Option<RdbcParameterValue>;

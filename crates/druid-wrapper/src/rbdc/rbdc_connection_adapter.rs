@@ -472,7 +472,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         }
     }
 
-    /// 返回 RBDC 连接的 SQLWarning 链。
+    /// 返回 RBDC 连接的 `SQLWarning` 链。
     ///
     /// 对应 Java：`java.sql.Connection#getWarnings()`。RBDC 的公开 Connection
     /// SPI 不暴露 JDBC warning 链，因此存活连接返回 `None`；关闭或已丢弃连接
@@ -484,7 +484,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         Ok(None)
     }
 
-    /// 清除 RBDC 连接的 SQLWarning。
+    /// 清除 RBDC 连接的 `SQLWarning`。
     ///
     /// 对应 Java：`java.sql.Connection#clearWarnings()`。RBDC 不保留可清理的
     /// warning 状态，存活连接无操作成功。

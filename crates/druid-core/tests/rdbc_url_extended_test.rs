@@ -136,7 +136,7 @@ fn rdbc_url_authenticated_with_credentials() {
 fn rdbc_url_authenticated_without_credentials() {
     let url = RdbcUrl::parse("rdbc:mysql://host:3306/db").unwrap();
     let auth = url.authenticated_network_url("mysql").unwrap();
-    assert!(!auth.contains("@"));
+    assert!(!auth.contains('@'));
 }
 
 #[test]
@@ -160,7 +160,7 @@ fn rdbc_url_redacted_subprotocol() {
 fn rdbc_url_redacted_legacy() {
     let url = RdbcUrl::parse("rdbc://mysql/localhost:3306/mydb?password=x").unwrap();
     let redacted = url.redacted();
-    assert!(!redacted.contains("x"));
+    assert!(!redacted.contains('x'));
     assert!(redacted.contains("rdbc://mysql/localhost:3306/mydb"));
 }
 
@@ -189,7 +189,7 @@ fn rdbc_url_properties_map() {
 #[test]
 fn rdbc_url_debug() {
     let url = RdbcUrl::parse("rdbc:mysql://host/db?secret=val").unwrap();
-    let dbg = format!("{:?}", url);
+    let dbg = format!("{url:?}");
     assert!(dbg.contains("RdbcUrl"));
     assert!(!dbg.contains("val"));
 }

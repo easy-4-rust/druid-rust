@@ -21,7 +21,7 @@ async fn start_server() -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
 }
 
 /// /druid/datasource.json must return a Java-compatible response with
-/// ResultCode and Content fields.
+/// `ResultCode` and Content fields.
 #[tokio::test]
 async fn datasource_json_returns_java_format() {
     let (addr, handle) = start_server().await;

@@ -1,12 +1,12 @@
-//! FilterChainImpl coverage boost -- macro-generated proxy methods, Clob/NClob/Blob
+//! `FilterChainImpl` coverage boost -- macro-generated proxy methods, Clob/NClob/Blob
 //! chain, Connection LOB chain, navigation, temporal, resource, and update paths.
 //!
-//! All getter calls use `let _ = ...` because SQLite type conversions may fail;
-//! the goal is to exercise the FilterChainImpl proxy code paths.
+//! All getter calls use `let _ = ...` because `SQLite` type conversions may fail;
+//! the goal is to exercise the `FilterChainImpl` proxy code paths.
 
 extern crate druid_core as druid;
 use druid_core::core::{
-    DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory, Value,
+    DruidPooledConnection, FilterAdapter, FilterChainImpl, PhysicalConnectionFactory,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;

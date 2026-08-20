@@ -123,9 +123,9 @@ fn statement_stat_histogram_buckets() {
     // 100-1000ms
     stat.after_execute(Duration::from_millis(500));
     // 1000-10000ms
-    stat.after_execute(Duration::from_millis(5000));
+    stat.after_execute(Duration::from_secs(5));
     // > 10000ms
-    stat.after_execute(Duration::from_millis(15000));
+    stat.after_execute(Duration::from_secs(15));
     assert_eq!(stat.nano_total(), stat.nano_total());
 }
 

@@ -1,4 +1,4 @@
-//! Deprecated SQLParseException 兼容对象。
+//! Deprecated `SQLParseException` 兼容对象。
 
 use std::error::Error;
 use std::fmt;

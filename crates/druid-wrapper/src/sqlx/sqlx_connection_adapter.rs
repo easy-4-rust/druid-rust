@@ -1,4 +1,4 @@
-//! SQLx 物理连接适配器。
+//! `SQLx` 物理连接适配器。
 
 use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecutionError};
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
@@ -49,12 +49,12 @@ enum SqlxConnectionBackend {
     Sqlite(SqliteConnection),
 }
 
-/// SQLx 物理连接适配器。
+/// `SQLx` 物理连接适配器。
 ///
 /// 对应 Java 平台依赖: `java.sql.Connection` 的驱动实现。
-/// 本对象只包装一个 SQLx Connection，不包含 SQLx Pool、bb8 或 deadpool，
+/// 本对象只包装一个 `SQLx` Connection，不包含 `SQLx` Pool、bb8 或 deadpool，
 /// 因而不会形成 pool-in-pool。SQLite、MySQL、PostgreSQL 使用各自原生连接，
-/// 以保留 Decimal 和日期时间等强类型；未知 SQLx scheme 才回退到 `Any`。
+/// 以保留 Decimal 和日期时间等强类型；未知 `SQLx` scheme 才回退到 `Any`。
 pub struct SqlxConnectionAdapter {
     connection: Option<SqlxConnectionBackend>,
     url: String,
@@ -67,7 +67,7 @@ pub struct SqlxConnectionAdapter {
 impl SqlxConnectionAdapter {
     /// 直接连接数据库并创建 Adapter。
     ///
-    /// 参数 `url` 为 SQLx 数据库 URL；返回未池化的物理连接 Adapter。
+    /// 参数 `url` 为 `SQLx` 数据库 URL；返回未池化的物理连接 Adapter。
     pub async fn connect(url: &str) -> Result<Self, DruidError> {
         let connection = if url.starts_with("sqlite:") {
             SqlxConnectionBackend::Sqlite(
@@ -249,10 +249,10 @@ impl SqlxConnectionAdapter {
             .await
     }
 
-    fn bind_any_values<'query>(
-        sql: &'query str,
+    fn bind_any_values(
+        sql: &str,
         params: Vec<Value>,
-    ) -> Result<sqlx::query::Query<'query, Any, sqlx::any::AnyArguments<'query>>, DruidError> {
+    ) -> Result<sqlx::query::Query<'_, Any, sqlx::any::AnyArguments<'_>>, DruidError> {
         let mut query = sqlx::query(sql);
         for value in params {
             query = match value {
@@ -271,10 +271,10 @@ impl SqlxConnectionAdapter {
         Ok(query)
     }
 
-    fn bind_sqlite_values<'query>(
-        sql: &'query str,
+    fn bind_sqlite_values(
+        sql: &str,
         params: Vec<Value>,
-    ) -> sqlx::query::Query<'query, Sqlite, SqliteArguments<'query>> {
+    ) -> sqlx::query::Query<'_, Sqlite, SqliteArguments<'_>> {
         let mut query = sqlx::query(sql);
         for value in params {
             query = match value {
@@ -296,10 +296,10 @@ impl SqlxConnectionAdapter {
         query
     }
 
-    fn bind_mysql_values<'query>(
-        sql: &'query str,
+    fn bind_mysql_values(
+        sql: &str,
         params: Vec<Value>,
-    ) -> sqlx::query::Query<'query, MySql, MySqlArguments> {
+    ) -> sqlx::query::Query<'_, MySql, MySqlArguments> {
         let mut query = sqlx::query(sql);
         for value in params {
             query = match value {
@@ -318,10 +318,10 @@ impl SqlxConnectionAdapter {
         query
     }
 
-    fn bind_postgresql_values<'query>(
-        sql: &'query str,
+    fn bind_postgresql_values(
+        sql: &str,
         params: Vec<Value>,
-    ) -> sqlx::query::Query<'query, Postgres, PgArguments> {
+    ) -> sqlx::query::Query<'_, Postgres, PgArguments> {
         let mut query = sqlx::query(sql);
         for value in params {
             query = match value {
@@ -1609,9 +1609,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         Ok(())
     }
 
-    /// 返回 SQLx 连接的 SQLWarning 链。
+    /// 返回 `SQLx` 连接的 `SQLWarning` 链。
     ///
-    /// 对应 Java：`java.sql.Connection#getWarnings()`。SQLx 的公开 Connection
+    /// 对应 Java：`java.sql.Connection#getWarnings()`。`SQLx` 的公开 Connection
     /// SPI 不暴露 JDBC warning 链，因此存活连接返回 `None`；关闭或已丢弃连接
     /// 仍按 Druid 连接状态语义返回 `ConnectionDiscarded`。
     async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
@@ -1619,9 +1619,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         Ok(None)
     }
 
-    /// 清除 SQLx 连接的 SQLWarning。
+    /// 清除 `SQLx` 连接的 `SQLWarning`。
     ///
-    /// 对应 Java：`java.sql.Connection#clearWarnings()`。SQLx 不保留可清理的
+    /// 对应 Java：`java.sql.Connection#clearWarnings()`。`SQLx` 不保留可清理的
     /// warning 状态，存活连接无操作成功，关闭或已丢弃连接返回状态错误。
     async fn clear_warnings(&mut self) -> Result<(), DruidError> {
         self.connection_mut()?;

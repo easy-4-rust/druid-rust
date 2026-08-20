@@ -1343,7 +1343,7 @@ struct FilterVendorObjectProbe {
 }
 
 impl PhysicalRdbcOpaqueObject for FilterVendorObjectProbe {
-    fn class_name(&self) -> &str {
+    fn class_name(&self) -> &'static str {
         "example.FilterVendorObject"
     }
 

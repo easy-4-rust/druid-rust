@@ -1,8 +1,8 @@
 //! 对应 Java 类：com.alibaba.druid.filter.Filter
 //! 来源文件：core/src/main/java/com/alibaba/druid/filter/Filter.java
 //!
-//! Filter trait 定义，对齐 DruidJava Filter 的核心 hook 方法。
-//! DruidJava 有 100+ hook，这里保留最常用的 20+ 核心 hook，
+//! Filter trait 定义，对齐 `DruidJava` Filter 的核心 hook 方法。
+//! `DruidJava` 有 100+ hook，这里保留最常用的 20+ 核心 hook，
 //! 其余通过扩展 trait（ConnectionHook / StatementHook）覆盖。
 
 use super::error::DruidError;
@@ -27,7 +27,7 @@ pub mod mysql8datetime;
 
 /// SQL 执行上下文，传递给 Filter 的 before/after 方法。
 ///
-/// 对应 DruidJava Filter 方法的各种参数。
+/// 对应 `DruidJava` Filter 方法的各种参数。
 #[derive(Debug)]
 pub struct ExecContext<'a> {
     /// 创建本次执行的 Druid 连接 ID。
@@ -38,9 +38,9 @@ pub struct ExecContext<'a> {
     pub sql: String,
     /// SQL 参数
     pub params: &'a [Value],
-    /// PreparedStatement setter 的完整参数描述符。
+    /// `PreparedStatement` setter 的完整参数描述符。
     ///
-    /// 普通 Statement 为 `None`。PreparedStatement 执行时保留 setter 类型、
+    /// 普通 Statement 为 `None`。`PreparedStatement` 执行时保留 setter 类型、
     /// nullable、长度及资源句柄；`params` 仅作为标量兼容视图，不能替代本字段。
     pub prepared_parameters: Option<&'a [PreparedInputParameter]>,
     /// 数据源名称
@@ -72,11 +72,11 @@ pub struct BatchExecContext<'a> {
     /// 按 `PreparedStatement#addBatch()` 顺序保存的参数快照。
     ///
     /// 普通 Statement 为空；PreparedStatement 的 Java 代理不把参数批次放入
-    /// `getBatchSqlList()`，因此本字段不能用于 StatFilter 的 batch-size 统计。
+    /// `getBatchSqlList()`，因此本字段不能用于 `StatFilter` 的 batch-size 统计。
     pub parameter_sets: &'a [Vec<Value>],
-    /// PreparedStatement 参数描述符批次；普通 Statement 为 `None`。
+    /// `PreparedStatement` 参数描述符批次；普通 Statement 为 `None`。
     pub prepared_parameter_sets: Option<&'a [Vec<PreparedInputParameter>]>,
-    /// 区分普通 Statement 与 PreparedStatement 的回调语义。
+    /// 区分普通 Statement 与 `PreparedStatement` 的回调语义。
     pub kind: BatchExecKind,
     /// 数据源名称。
     pub data_source: &'a str,
@@ -104,56 +104,56 @@ pub enum BatchExecKind {
 pub enum ExecOperation {
     /// `Statement#execute(...)` / `PreparedStatement#execute()` generic 入口。
     Execute,
-    /// `executeQuery` / 查询类 PreparedStatement。
+    /// `executeQuery` / 查询类 `PreparedStatement`。
     Query,
-    /// `executeUpdate` / 更新类 PreparedStatement。
+    /// `executeUpdate` / 更新类 `PreparedStatement`。
     Update,
     /// `executeBatch` 批处理入口。
     Batch,
 }
 
-/// 连接事件类型，对应 DruidJava 的 connection_* hook 系列。
+/// 连接事件类型，对应 `DruidJava` 的 connection_* hook 系列。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnectionEvent {
-    /// 连接创建（对应 connection_connect）
+    /// 连接创建（对应 `connection_connect`）
     Connect,
-    /// 连接关闭（对应 connection_close）
+    /// 连接关闭（对应 `connection_close`）
     Close,
-    /// 设置自动提交（对应 connection_setAutoCommit）
+    /// 设置自动提交（对应 `connection_setAutoCommit`）
     SetAutoCommit(bool),
-    /// 获取自动提交（对应 connection_getAutoCommit）
+    /// 获取自动提交（对应 `connection_getAutoCommit`）
     GetAutoCommit,
-    /// 提交事务（对应 connection_commit）
+    /// 提交事务（对应 `connection_commit`）
     Commit,
-    /// 回滚事务（对应 connection_rollback）
+    /// 回滚事务（对应 `connection_rollback`）
     Rollback,
-    /// 设置只读（对应 connection_setReadOnly）
+    /// 设置只读（对应 `connection_setReadOnly`）
     SetReadOnly(bool),
-    /// 获取只读（对应 connection_isReadOnly）
+    /// 获取只读（对应 `connection_isReadOnly`）
     GetReadOnly,
-    /// 设置 catalog（对应 connection_setCatalog）
+    /// 设置 catalog（对应 `connection_setCatalog`）
     SetCatalog(String),
-    /// 获取 catalog（对应 connection_getCatalog）
+    /// 获取 catalog（对应 `connection_getCatalog`）
     GetCatalog,
-    /// 设置事务隔离级别（对应 connection_setTransactionIsolation）
+    /// 设置事务隔离级别（对应 `connection_setTransactionIsolation`）
     SetTransactionIsolation(u8),
-    /// 获取事务隔离级别（对应 connection_getTransactionIsolation）
+    /// 获取事务隔离级别（对应 `connection_getTransactionIsolation`）
     GetTransactionIsolation,
-    /// 清除警告（对应 connection_clearWarnings）
+    /// 清除警告（对应 `connection_clearWarnings`）
     ClearWarnings,
-    /// 设置 schema（对应 connection_setSchema）
+    /// 设置 schema（对应 `connection_setSchema`）
     SetSchema(String),
-    /// 获取 schema（对应 connection_getSchema）
+    /// 获取 schema（对应 `connection_getSchema`）
     GetSchema,
-    /// 中止连接（对应 connection_abort）
+    /// 中止连接（对应 `connection_abort`）
     Abort,
-    /// 验证连接（对应 connection_isValid）
+    /// 验证连接（对应 `connection_isValid`）
     IsValid,
-    /// 原生 SQL（对应 connection_nativeSQL）
+    /// 原生 SQL（对应 `connection_nativeSQL`）
     NativeSQL(String),
-    /// 设置网络超时（对应 connection_setNetworkTimeout）
+    /// 设置网络超时（对应 `connection_setNetworkTimeout`）
     SetNetworkTimeout(Duration),
-    /// 获取网络超时（对应 connection_getNetworkTimeout）
+    /// 获取网络超时（对应 `connection_getNetworkTimeout`）
     GetNetworkTimeout,
 }
 
@@ -166,24 +166,24 @@ pub struct ConnectionEventContext<'a> {
     pub event: &'a ConnectionEvent,
 }
 
-/// 语句事件类型，对应 DruidJava 的 statement_* / preparedStatement_* hook 系列。
+/// 语句事件类型，对应 `DruidJava` 的 statement_* / preparedStatement_* hook 系列。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementEvent {
-    /// 创建 Statement（对应 connection_createStatement）
+    /// 创建 Statement（对应 `connection_createStatement`）
     CreateStatement,
-    /// 创建 PreparedStatement（对应 connection_prepareStatement）
+    /// 创建 PreparedStatement（对应 `connection_prepareStatement`）
     PrepareStatement(String),
-    /// 创建 CallableStatement（对应 connection_prepareCall）
+    /// 创建 CallableStatement（对应 `connection_prepareCall`）
     PrepareCall(String),
-    /// 执行语句（对应 statement_execute）
+    /// 执行语句（对应 `statement_execute`）
     Execute(String),
-    /// 执行查询（对应 statement_executeQuery）
+    /// 执行查询（对应 `statement_executeQuery`）
     ExecuteQuery(String),
-    /// 执行更新（对应 statement_executeUpdate）
+    /// 执行更新（对应 `statement_executeUpdate`）
     ExecuteUpdate(String),
-    /// 关闭语句（对应 statement_close）
+    /// 关闭语句（对应 `statement_close`）
     Close,
-    /// 批量执行（对应 statement_executeBatch）
+    /// 批量执行（对应 `statement_executeBatch`）
     ExecuteBatch,
 }
 
@@ -198,28 +198,28 @@ pub struct StatementEventContext<'a> {
     pub event: &'a StatementEvent,
 }
 
-/// 结果集事件类型，对应 DruidJava 的 resultSet_* hook 系列。
+/// 结果集事件类型，对应 `DruidJava` 的 resultSet_* hook 系列。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResultSetEvent {
-    /// 移到下一行（对应 resultSet_next）
+    /// 移到下一行（对应 `resultSet_next`）
     Next,
-    /// 关闭结果集（对应 resultSet_close）
+    /// 关闭结果集（对应 `resultSet_close`）
     Close,
-    /// 获取 String（对应 resultSet_getString）
+    /// 获取 String（对应 `resultSet_getString`）
     GetString,
-    /// 获取 Boolean（对应 resultSet_getBoolean）
+    /// 获取 Boolean（对应 `resultSet_getBoolean`）
     GetBoolean,
-    /// 获取 Int（对应 resultSet_getInt）
+    /// 获取 Int（对应 `resultSet_getInt`）
     GetInt,
-    /// 移到首行（对应 resultSet_first）
+    /// 移到首行（对应 `resultSet_first`）
     First,
-    /// 移到末行（对应 resultSet_last）
+    /// 移到末行（对应 `resultSet_last`）
     Last,
 }
 
 /// 前置 Filter trait。
 ///
-/// 对应 DruidJava `Filter` 接口的 before 系列 hook。
+/// 对应 `DruidJava` `Filter` 接口的 before 系列 hook。
 /// 在 SQL 执行前调用，任一 Filter 返回 Err 则短路。
 #[async_trait::async_trait]
 pub trait BeforeFilter: Send + Sync {
@@ -486,7 +486,7 @@ pub trait BeforeFilter: Send + Sync {
         Ok(())
     }
 
-    /// 包围 `Statement#getWarnings()`；PreparedStatement 继承同一调用链。
+    /// 包围 `Statement#getWarnings()`；`PreparedStatement` 继承同一调用链。
     ///
     /// 对应 Java：`Filter#statement_getWarnings`。
     async fn statement_get_warnings(
@@ -496,7 +496,7 @@ pub trait BeforeFilter: Send + Sync {
         chain.statement_get_warnings().await
     }
 
-    /// 包围 `Statement#clearWarnings()`；PreparedStatement 继承同一调用链。
+    /// 包围 `Statement#clearWarnings()`；`PreparedStatement` 继承同一调用链。
     ///
     /// 对应 Java：`Filter#statement_clearWarnings`。
     async fn statement_clear_warnings(
@@ -630,12 +630,12 @@ pub trait BeforeFilter: Send + Sync {
             .await
     }
 
-    /// 过滤器生命周期（对应 Filter.init()）。
+    /// 过滤器生命周期（对应 `Filter.init()`）。
     async fn init(&self) -> Result<(), DruidError> {
         Ok(())
     }
 
-    /// 过滤器销毁（对应 Filter.destroy()）。
+    /// 过滤器销毁（对应 `Filter.destroy()`）。
     async fn destroy(&self) -> Result<(), DruidError> {
         Ok(())
     }
@@ -643,7 +643,7 @@ pub trait BeforeFilter: Send + Sync {
 
 /// 后置 Filter trait。
 ///
-/// 对应 DruidJava `Filter` 接口的 after-execute hook。
+/// 对应 `DruidJava` `Filter` 接口的 after-execute hook。
 /// 即使 SQL 执行失败也会调用。
 #[async_trait::async_trait]
 pub trait AfterFilter: Send + Sync {
@@ -725,84 +725,84 @@ pub trait AfterFilter: Send + Sync {
 
 // ── 扩展事件枚举（V2+ 阶段）────────────────────────────────────
 
-/// Statement 属性查询/设置事件，对应 DruidJava 的 statement_set* / statement_get* hook。
+/// Statement 属性查询/设置事件，对应 `DruidJava` 的 `statement_set*` / `statement_get*` hook。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatementPropertyEvent {
-    /// 设置查询超时（对应 statement_setQueryTimeout）
+    /// 设置查询超时（对应 `statement_setQueryTimeout`）
     SetQueryTimeout(i32),
-    /// 获取查询超时（对应 statement_getQueryTimeout）
+    /// 获取查询超时（对应 `statement_getQueryTimeout`）
     GetQueryTimeout,
-    /// 获取更新计数（对应 statement_getUpdateCount）
+    /// 获取更新计数（对应 `statement_getUpdateCount`）
     GetUpdateCount,
-    /// 设置最大行数（对应 statement_setMaxRows）
+    /// 设置最大行数（对应 `statement_setMaxRows`）
     SetMaxRows(i32),
-    /// 获取最大行数（对应 statement_getMaxRows）
+    /// 获取最大行数（对应 `statement_getMaxRows`）
     GetMaxRows,
-    /// 设置最大字段大小（对应 statement_setMaxFieldSize）
+    /// 设置最大字段大小（对应 `statement_setMaxFieldSize`）
     SetMaxFieldSize(i32),
-    /// 获取最大字段大小（对应 statement_getMaxFieldSize）
+    /// 获取最大字段大小（对应 `statement_getMaxFieldSize`）
     GetMaxFieldSize,
-    /// 设置获取方向（对应 statement_setFetchDirection）
+    /// 设置获取方向（对应 `statement_setFetchDirection`）
     SetFetchDirection(i32),
-    /// 获取获取方向（对应 statement_getFetchDirection）
+    /// 获取获取方向（对应 `statement_getFetchDirection`）
     GetFetchDirection,
-    /// 设置获取大小（对应 statement_setFetchSize）
+    /// 设置获取大小（对应 `statement_setFetchSize`）
     SetFetchSize(i32),
-    /// 获取获取大小（对应 statement_getFetchSize）
+    /// 获取获取大小（对应 `statement_getFetchSize`）
     GetFetchSize,
-    /// 检查是否池化（对应 statement_isPoolable）
+    /// 检查是否池化（对应 `statement_isPoolable`）
     IsPoolable,
-    /// 检查是否关闭（对应 statement_isClosed）
+    /// 检查是否关闭（对应 `statement_isClosed`）
     IsClosed,
-    /// 获取更多结果（对应 statement_getMoreResults）
+    /// 获取更多结果（对应 `statement_getMoreResults`）
     GetMoreResults,
-    /// 获取结果集并发性（对应 statement_getResultSetConcurrency）
+    /// 获取结果集并发性（对应 `statement_getResultSetConcurrency`）
     GetResultSetConcurrency,
-    /// 获取结果集类型（对应 statement_getResultSetType）
+    /// 获取结果集类型（对应 `statement_getResultSetType`）
     GetResultSetType,
-    /// 获取结果集保持性（对应 statement_getResultSetHoldability）
+    /// 获取结果集保持性（对应 `statement_getResultSetHoldability`）
     GetResultSetHoldability,
-    /// 获取生成的键（对应 statement_getGeneratedKeys）
+    /// 获取生成的键（对应 `statement_getGeneratedKeys`）
     GetGeneratedKeys,
-    /// 清除警告（对应 statement_clearWarnings）
+    /// 清除警告（对应 `statement_clearWarnings`）
     ClearWarnings,
-    /// 重命名结果集（对应 statement_setCursorName）
+    /// 重命名结果集（对应 `statement_setCursorName`）
     SetCursorName(String),
-    /// 添加批次（对应 statement_addBatch）
+    /// 添加批次（对应 `statement_addBatch`）
     AddBatch(String),
 }
 
-/// Clob 事件，对应 DruidJava 的 clob_* hook。
+/// Clob 事件，对应 `DruidJava` 的 clob_* hook。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClobEvent {
-    /// 获取长度（对应 clob_length）
+    /// 获取长度（对应 `clob_length`）
     Length,
-    /// 获取子串（对应 clob_getSubString）
+    /// 获取子串（对应 `clob_getSubString`）
     GetSubString(i64, i32),
-    /// 设置字符串（对应 clob_setString）
+    /// 设置字符串（对应 `clob_setString`）
     SetString(i64, String),
-    /// 截断（对应 clob_truncate）
+    /// 截断（对应 `clob_truncate`）
     Truncate(i64),
-    /// 释放（对应 clob_free）
+    /// 释放（对应 `clob_free`）
     Free,
 }
 
-/// DataSource 级别事件，对应 DruidJava 的 dataSource_* hook。
+/// `DataSource` 级别事件，对应 `DruidJava` 的 `dataSource_*` hook。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataSourceEvent {
-    /// 获取连接（对应 dataSource_getConnection）
+    /// 获取连接（对应 `dataSource_getConnection`）
     GetConnection,
-    /// 获取连接带认证（对应 dataSource_getConnection(user, pass)）
+    /// 获取连接带认证（对应 `dataSource_getConnection(user`, pass)）
     GetConnectionWithAuth(String, String),
-    /// 释放连接（对应 dataSource_releaseConnection）
+    /// 释放连接（对应 `dataSource_releaseConnection`）
     ReleaseConnection,
-    /// 日志记录（对应 dataSource_log）
+    /// 日志记录（对应 `dataSource_log`）
     Log(String),
 }
 
 // ── 扩展 BeforeFilter（V2+ 阶段）────────────────────────────
 
-/// 扩展 Filter hook（V2+ 阶段），覆盖 DruidJava 的全部 384 个 hook 中的
+/// 扩展 Filter hook（V2+ 阶段），覆盖 `DruidJava` 的全部 384 个 hook 中的
 /// statement 属性、clob 和 dataSource 级别事件。
 #[async_trait::async_trait]
 pub trait ExtendedFilter: Send + Sync {
@@ -819,7 +819,7 @@ pub trait ExtendedFilter: Send + Sync {
         Ok(())
     }
 
-    /// DataSource 级别事件。
+    /// `DataSource` 级别事件。
     async fn on_datasource_event(&self, _event: &DataSourceEvent) -> Result<(), DruidError> {
         Ok(())
     }

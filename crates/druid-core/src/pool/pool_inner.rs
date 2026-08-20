@@ -966,10 +966,10 @@ impl PoolInner {
         Ok(())
     }
 
-    /// 在 raw connection 上执行初始化 SQL并按 Java 规则采集 MySQL 变量。
+    /// 在 raw connection 上执行初始化 SQL并按 Java 规则采集 `MySQL` 变量。
     ///
     /// 返回值对应 Java `initSqls(...)` 的 `checked`：只要执行过初始化 SQL或
-    /// MySQL variables 查询，创建流程就不再追加 validation query。
+    /// `MySQL` variables 查询，创建流程就不再追加 validation query。
     async fn initialize_sqls_and_variables(
         &self,
         connection_info: &mut crate::core::PhysicalConnectionInfo,
@@ -1044,9 +1044,7 @@ impl PoolInner {
             RdbcValue::Null => JsonValue::Null,
             RdbcValue::Bool(value) => JsonValue::Bool(*value),
             RdbcValue::Int(value) => JsonValue::Number((*value).into()),
-            RdbcValue::Float(value) => JsonNumber::from_f64(*value)
-                .map(JsonValue::Number)
-                .unwrap_or_else(|| JsonValue::String(value.to_string())),
+            RdbcValue::Float(value) => JsonNumber::from_f64(*value).map_or_else(|| JsonValue::String(value.to_string()), JsonValue::Number),
             RdbcValue::Decimal(value) => JsonValue::String(value.to_string()),
             RdbcValue::Date(value) => JsonValue::String(value.to_string()),
             RdbcValue::Time(value) => JsonValue::String(value.to_string()),

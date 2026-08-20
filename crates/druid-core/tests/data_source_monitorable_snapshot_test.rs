@@ -12,7 +12,7 @@ use druid_core::stats::{
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// Mock DataSourceMonitorable for testing the typed SPI.
+/// Mock `DataSourceMonitorable` for testing the typed SPI.
 struct MockMonitorable {
     id: u64,
     name: String,
@@ -114,8 +114,7 @@ fn try_snapshot_on_closed_datasource_returns_closed() {
     let result = monitorable.try_snapshot();
     assert!(
         matches!(result, Err(SnapshotUnavailable::Closed)),
-        "expected SnapshotUnavailable::Closed, got {:?}",
-        result
+        "expected SnapshotUnavailable::Closed, got {result:?}"
     );
 }
 

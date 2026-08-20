@@ -1,4 +1,4 @@
-//! DuckDB 原生预编译语句句柄。
+//! `DuckDB` 原生预编译语句句柄。
 
 use druid_core::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, SqlTextPreparedStatement,
@@ -7,7 +7,7 @@ use duckdb::InterruptHandle;
 use std::any::Any;
 use std::sync::Arc;
 
-/// DuckDB 连接级预编译语句描述。
+/// `DuckDB` 连接级预编译语句描述。
 ///
 /// duckdb-rs 的 `Statement` 借用 `Connection` 且既非 `Send` 也非 `Sync`，不能
 /// 跨 Druid 异步资源边界保存。本对象记录经过原生 `prepare_cached` 校验的 SQL
@@ -19,7 +19,7 @@ pub struct DuckDbPreparedStatement {
 }
 
 impl DuckDbPreparedStatement {
-    /// 创建已经由 DuckDB 原生 prepare 校验的语句描述。
+    /// 创建已经由 `DuckDB` 原生 prepare 校验的语句描述。
     pub(crate) fn new(
         connection_id: u64,
         sql: impl Into<String>,

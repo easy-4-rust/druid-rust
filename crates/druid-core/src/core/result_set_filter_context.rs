@@ -49,7 +49,7 @@ impl ResultSetFilterContext {
         }
     }
 
-    /// 创建并绑定产生该 ResultSet 的 SQL。
+    /// 创建并绑定产生该 `ResultSet` 的 SQL。
     #[must_use]
     pub fn with_sql_and_execute_elapsed(
         sql: Option<String>,
@@ -95,19 +95,19 @@ impl ResultSetFilterContext {
         self.statement_id
     }
 
-    /// 返回本 ResultSet ID。
+    /// 返回本 `ResultSet` ID。
     #[must_use]
     pub const fn result_set_id(&self) -> u64 {
         self.result_set_id
     }
 
-    /// 返回产生该 ResultSet 的 SQL。
+    /// 返回产生该 `ResultSet` 的 SQL。
     #[must_use]
     pub fn sql(&self) -> Option<&str> {
         self.sql.get().map(String::as_str)
     }
 
-    /// 返回创建该 ResultSet 的 Statement 执行耗时。
+    /// 返回创建该 `ResultSet` 的 Statement 执行耗时。
     #[must_use]
     pub fn statement_execute_elapsed(&self) -> Option<Duration> {
         self.statement_execute_elapsed.get().copied()
@@ -163,12 +163,12 @@ impl ResultSetFilterContext {
             .fetch_add(u64::try_from(length).unwrap_or(u64::MAX), Ordering::Relaxed);
     }
 
-    /// 记录一次成功打开的 ASCII/Binary InputStream。
+    /// 记录一次成功打开的 ASCII/Binary `InputStream`。
     pub fn increment_open_input_stream_count(&self) {
         self.open_input_stream_count.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 记录一次成功打开的 CharacterStream Reader。
+    /// 记录一次成功打开的 `CharacterStream` Reader。
     pub fn increment_open_reader_count(&self) {
         self.open_reader_count.fetch_add(1, Ordering::Relaxed);
     }
@@ -183,7 +183,7 @@ impl ResultSetFilterContext {
         self.read_bytes_length.load(Ordering::Acquire)
     }
 
-    /// 返回打开 InputStream 次数。
+    /// 返回打开 `InputStream` 次数。
     pub fn open_input_stream_count(&self) -> u64 {
         self.open_input_stream_count.load(Ordering::Acquire)
     }
@@ -193,9 +193,9 @@ impl ResultSetFilterContext {
         self.open_reader_count.load(Ordering::Acquire)
     }
 
-    /// 替换当前 ResultSet 中需要在 `next()` 成功后检查的租户列。
+    /// 替换当前 `ResultSet` 中需要在 `next()` 成功后检查的租户列。
     ///
-    /// 对应 Java：`WallFilter.tenantColumnsLocal`。Rust 将状态绑定到 ResultSet
+    /// 对应 Java：`WallFilter.tenantColumnsLocal`。Rust 将状态绑定到 `ResultSet`
     /// 身份，避免异步任务跨线程时丢失或串用另一个游标的列配置。
     pub fn set_tenant_columns(&self, tenant_columns: Vec<usize>) {
         *self.tenant_columns.write() = tenant_columns;

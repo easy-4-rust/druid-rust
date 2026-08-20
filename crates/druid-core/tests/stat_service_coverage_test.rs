@@ -1,7 +1,7 @@
-//! DruidStatService 差分覆盖测试（Java Druid 1.2.28 语义对照）。
+//! `DruidStatService` 差分覆盖测试（Java Druid 1.2.28 语义对照）。
 //!
-//! 覆盖 stat_service 的 URL 路由分发、page 排序分页、sql_detail 格式化、
-//! between_id 解析、parameters 解析、value_by_key 嵌套键、compare_map_value
+//! 覆盖 `stat_service` 的 URL 路由分发、page `排序分页、sql_detail` 格式化、
+//! `between_id` 解析、parameters `解析、value_by_key` `嵌套键、compare_map_value`
 //! 比较语义。
 
 extern crate druid_core as druid;
@@ -215,7 +215,7 @@ fn service_reset_enable_toggle() {
     assert!(svc.is_reset_enable());
 }
 
-/// Java reset-all：reset_enable=false 时 reset_all 无副作用。
+/// Java reset-all：reset_enable=false 时 `reset_all` 无副作用。
 #[test]
 fn service_reset_all_when_disabled() {
     let svc = DruidStatService;
@@ -303,7 +303,7 @@ fn service_parameter_no_value() {
 // 6. wall stat 路由
 // ===========================================================================
 
-/// Java service("/wall.json") — sort_wall_stat 处理 tables/functions 键。
+/// Java service("/wall.json") — `sort_wall_stat` 处理 tables/functions 键。
 #[test]
 fn service_wall_stat_sort() {
     let svc = DruidStatService;
@@ -325,7 +325,7 @@ fn service_wall_with_datasource_filter() {
 // 7. SQL detail 路由
 // ===========================================================================
 
-/// Java service("/sql-{id}.json") — formattedSql 与 MaxTimespanOccurTime。
+/// Java service("/sql-{id}.json") — formattedSql 与 `MaxTimespanOccurTime`。
 #[test]
 fn service_sql_detail_nonexistent() {
     let svc = DruidStatService;

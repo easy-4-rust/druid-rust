@@ -304,7 +304,7 @@ impl RdbcDataSourceStat {
         &self.statement_stat
     }
 
-    /// 重置本数据源的累计 SQL、连接、批处理与 ResultSet 统计。
+    /// 重置本数据源的累计 SQL、连接、批处理与 `ResultSet` 统计。
     pub fn reset(&self) {
         if !self.is_reset_stat_enable() {
             return;

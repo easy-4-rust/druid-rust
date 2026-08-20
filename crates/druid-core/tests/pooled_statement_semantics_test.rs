@@ -1,4 +1,4 @@
-//! `DruidPooledStatement` 的 Java 对照与真实 SQLite 契约测试。
+//! `DruidPooledStatement` 的 Java 对照与真实 `SQLite` 契约测试。
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -84,7 +84,7 @@ impl PhysicalConnection for MultiResultConnection {
         self.closed
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "multi-result"
     }
 }

@@ -1,6 +1,6 @@
 //! Differential tests for `DruidPooledResultSet` — Java Druid 1.2.28 semantics.
 //!
-//! Uses real Toasty SQLite. Focuses on uncovered cursor operations, column mapping,
+//! Uses real Toasty `SQLite`. Focuses on uncovered cursor operations, column mapping,
 //! hidden columns, metadata, close paths, statement identity, constants, and error
 //! paths that are NOT already covered in `druid_pooled_result_set_semantics_test.rs`.
 

@@ -1,3 +1,6 @@
+#![allow(unused_imports)]
+#![allow(dead_code)]
+#![allow(clippy::match_same_arms)]
 //! Second batch HA/PoolUpdater coverage tests for the `dynamic` module.
 //!
 //! Targets uncovered lines in `PoolUpdater`, `HighAvailableDataSource` (Pool
@@ -7,7 +10,7 @@ extern crate druid_core as druid;
 use druid_core::core::{DruidError, DruidPooledConnection, Pool, PoolState};
 use druid_core::dynamic::node::{NodeListener, PoolUpdater};
 use druid_core::dynamic::selector::{
-    DataSourceSelector, NamedDataSourceSelector, RandomDataSourceSelector,
+    DataSourceSelector, NamedDataSourceSelector,
     RandomDataSourceValidateTask,
 };
 use druid_core::dynamic::{DataSourceCreator, HighAvailableDataSource};

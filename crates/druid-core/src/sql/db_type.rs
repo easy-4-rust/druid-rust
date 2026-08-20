@@ -1,6 +1,7 @@
+#![allow(clippy::match_same_arms)]
 /// Druid 支持的数据库类型。
 ///
-/// 对应 Java：`com.alibaba.druid.DbType`。Rust variant 使用 PascalCase，
+/// 对应 Java：`com.alibaba.druid.DbType`。Rust variant 使用 `PascalCase`，
 /// [`Self::as_str`] 保留 Java enum 的精确外部名称。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DbType {
@@ -338,7 +339,7 @@ impl DbType {
         }
     }
 
-    /// 返回是否属于 PostgreSQL 风格。
+    /// 返回是否属于 `PostgreSQL` 风格。
     #[must_use]
     pub const fn is_postgresql_style(self) -> bool {
         matches!(

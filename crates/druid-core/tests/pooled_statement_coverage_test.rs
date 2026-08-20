@@ -1,5 +1,5 @@
-//! DruidPooledStatement coverage boost — batch, cancel, close, attribute,
-//! generated keys, more_results, close_on_completion, poolable, and
+//! `DruidPooledStatement` coverage boost — batch, cancel, close, attribute,
+//! generated keys, `more_results`, `close_on_completion`, poolable, and
 //! property getter/setter families.
 
 extern crate druid_core as druid;
@@ -240,9 +240,9 @@ async fn statement_result_set_properties() {
     let mut conn = make_connection().await;
     let mut stmt = conn.create_statement().await.unwrap();
 
-    let _ = stmt.result_set_type(&mut conn).unwrap();
-    let _ = stmt.result_set_concurrency(&mut conn).unwrap();
-    let _ = stmt.result_set_holdability(&mut conn).unwrap();
+    let _ = stmt.result_set_type(&conn).unwrap();
+    let _ = stmt.result_set_concurrency(&conn).unwrap();
+    let _ = stmt.result_set_holdability(&conn).unwrap();
 
     stmt.close_with_connection(&mut conn).unwrap();
 }

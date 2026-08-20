@@ -1,6 +1,6 @@
 //! Round-trip tests for the gRPC protocol message types.
 //!
-//! Every ClientFrame and ServerFrame variant must survive Prost encode/decode
+//! Every `ClientFrame` and `ServerFrame` variant must survive Prost encode/decode
 //! with all fields intact.
 
 use druid_metrics::protocol::*;

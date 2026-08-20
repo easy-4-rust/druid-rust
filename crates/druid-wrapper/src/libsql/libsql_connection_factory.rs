@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 /// Turso/libSQL 原生远程未池化物理连接工厂。
 ///
-/// 每次 `create` 都构造独立的 libSQL `Database` 与 `Connection`，DruidPool
+/// 每次 `create` 都构造独立的 libSQL `Database` 与 `Connection`，`DruidPool`
 /// 是唯一池化边界，不复用 libSQL 客户端池。
 #[derive(Clone)]
 pub struct LibSqlConnectionFactory {

@@ -56,7 +56,7 @@ impl PhysicalConnection for ContractPhysicalConnection {
         Ok(())
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "contract"
     }
 }
@@ -103,13 +103,13 @@ impl ContextContractFilter {
 
 #[async_trait::async_trait]
 impl BeforeFilter for ContextContractFilter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "context-contract"
     }
 
     async fn before(&self, context: &mut ExecContext<'_>) -> Result<(), DruidError> {
         *self.before.lock().expect("before snapshot lock poisoned") = Some(BeforeSnapshot {
-            sql: context.sql.to_string(),
+            sql: context.sql.clone(),
             params: context.params.to_vec(),
             data_source: context.data_source.to_string(),
             start: context.start,
@@ -121,7 +121,7 @@ impl BeforeFilter for ContextContractFilter {
 
 #[async_trait::async_trait]
 impl AfterFilter for ContextContractFilter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "context-contract"
     }
 

@@ -9,8 +9,8 @@ use std::time::Duration;
 
 /// 统一管理 native/external wrapper pool 的门面。
 ///
-/// 规划迁移 Java `ManagedBasicDataSource`、c3p0/Proxool DataSource 的共同
-/// DataSource 语义。它只委托一个已选定的 Pool，不拥有第二层 idle queue。
+/// 规划迁移 Java `ManagedBasicDataSource`、c3p0/Proxool `DataSource` 的共同
+/// `DataSource` 语义。它只委托一个已选定的 Pool，不拥有第二层 idle queue。
 pub struct ManagedWrapperPool {
     provider: String,
     inner: Arc<dyn Pool>,

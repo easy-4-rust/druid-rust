@@ -26,7 +26,7 @@ fn execution_key() -> ExecutionKey {
 
 /// RDBC 代理层的进程级统计管理器。
 ///
-/// Java ThreadLocal 在 Rust 中映射为 Tokio task identity，非 runtime 调用回退
+/// Java `ThreadLocal` 在 Rust 中映射为 Tokio task identity，非 runtime 调用回退
 /// 当前 OS thread identity；同时保留全局 Connection/Statement/ResultSet
 /// 统计、SQL ID 和 reset 顺序。
 pub struct RdbcStatManager {
@@ -71,7 +71,7 @@ impl RdbcStatManager {
         &self.statement_stat
     }
 
-    /// 返回全局 ResultSet 统计。
+    /// 返回全局 `ResultSet` 统计。
     #[must_use]
     pub fn result_set_stat(&self) -> &RdbcResultSetStat {
         &self.result_set_stat

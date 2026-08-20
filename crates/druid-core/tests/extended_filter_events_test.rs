@@ -29,7 +29,7 @@ fn statement_property_event_debug() {
         StatementPropertyEvent::AddBatch("INSERT INTO t VALUES (1)".to_owned()),
     ];
     for event in events {
-        let _ = format!("{:?}", event);
+        let _ = format!("{event:?}");
     }
 }
 
@@ -52,7 +52,7 @@ fn clob_event_debug() {
         ClobEvent::Free,
     ];
     for event in events {
-        let _ = format!("{:?}", event);
+        let _ = format!("{event:?}");
     }
 }
 
@@ -74,7 +74,7 @@ fn data_source_event_debug() {
         DataSourceEvent::Log("test log".to_owned()),
     ];
     for event in events {
-        let _ = format!("{:?}", event);
+        let _ = format!("{event:?}");
     }
 }
 

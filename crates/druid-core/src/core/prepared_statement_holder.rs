@@ -21,6 +21,7 @@ pub struct PreparedStatementHolder {
     pooling: AtomicBool,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for PreparedStatementHolder {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

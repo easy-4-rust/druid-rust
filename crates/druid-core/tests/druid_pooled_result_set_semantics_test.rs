@@ -1,4 +1,4 @@
-//! `DruidPooledResultSet` 的 Java 对照与真实 SQLite 契约测试。
+//! `DruidPooledResultSet` 的 Java 对照与真实 `SQLite` 契约测试。
 
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
@@ -24,7 +24,7 @@ struct VendorObjectProbe {
 }
 
 impl PhysicalRdbcOpaqueObject for VendorObjectProbe {
-    fn class_name(&self) -> &str {
+    fn class_name(&self) -> &'static str {
         "com.example.VendorObject"
     }
 

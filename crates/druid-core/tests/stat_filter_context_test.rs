@@ -1,4 +1,4 @@
-//! Java `StatFilterContext` 与 `StatFilterContextListener` 的监听器及真实 SQLite 语义。
+//! Java `StatFilterContext` 与 `StatFilterContextListener` 的监听器及真实 `SQLite` 语义。
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -54,9 +54,7 @@ impl StatFilterContextListener for RecordingListener {
         let sql = sql.unwrap_or("null");
         self.record(format!(
             "execute_after:{sql}:{nano_span}:{}",
-            error
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "null".to_string())
+            error.map_or_else(|| "null".to_string(), ToString::to_string)
         ))
     }
 

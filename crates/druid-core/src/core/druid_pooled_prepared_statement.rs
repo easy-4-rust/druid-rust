@@ -48,7 +48,7 @@ macro_rules! prepared_value_setter {
         #[doc = concat!("执行 Java `PreparedStatement#", $java_method, "(int, ..)`。")]
         ///
         /// 参数在 setter 调用时立即进入物理 PreparedStatement；成功后才更新
-        /// Rust 绑定快照，错误由同一连接的 ExceptionSorter 分类。
+        /// Rust 绑定快照，错误由同一连接的 `ExceptionSorter` 分类。
         pub fn $method(
             &mut self,
             connection: &mut DruidPooledConnection,
@@ -196,9 +196,9 @@ impl Drop for DruidPooledPreparedStatementShared {
     }
 }
 
-/// 借用池化连接执行并在关闭时复用物理 PreparedStatement 的逻辑语句。
+/// 借用池化连接执行并在关闭时复用物理 `PreparedStatement` 的逻辑语句。
 ///
-/// 语句句柄不独占连接借用，因此同一连接可同时持有多个 PreparedStatement，
+/// 语句句柄不独占连接借用，因此同一连接可同时持有多个 `PreparedStatement`，
 /// 保留 Java `inUseCount`、`sharePreparedStatements` 和 LRU 替换语义。执行时
 /// 显式传入原 `DruidPooledConnection`，关闭/Drop 则通过共享 statement pool
 /// 归还物理语句。
@@ -207,12 +207,12 @@ pub struct DruidPooledPreparedStatement {
     statement_base: DruidPooledStatement,
 }
 
-/// `ResultSet#getStatement()` 返回的 PreparedStatement 共享身份句柄。
+/// `ResultSet#getStatement()` 返回的 `PreparedStatement` 共享身份句柄。
 ///
 /// 对应 Java：`DruidPooledResultSet#getStatement()` 返回原
 /// `DruidPooledPreparedStatement` 实例。Rust 句柄与原对象共享 holder、
 /// Statement 状态、关闭状态和缓存归还所有权；即使原局部变量先离开作用域，
-/// ResultSet 持有的句柄也会阻止物理语句被提前回收。
+/// `ResultSet` 持有的句柄也会阻止物理语句被提前回收。
 #[derive(Clone)]
 pub struct DruidPooledPreparedStatementHandle {
     shared: Arc<DruidPooledPreparedStatementShared>,
@@ -230,7 +230,7 @@ impl DruidPooledPreparedStatementHandle {
         self.shared.holder.statement().as_ref()
     }
 
-    /// 返回原 PreparedStatement 的完整缓存键。
+    /// 返回原 `PreparedStatement` 的完整缓存键。
     pub fn key(&self) -> &PreparedStatementKey {
         self.shared.holder.key()
     }
@@ -240,17 +240,17 @@ impl DruidPooledPreparedStatementHandle {
         &self.statement_base
     }
 
-    /// 返回原逻辑 PreparedStatement 是否已关闭。
+    /// 返回原逻辑 `PreparedStatement` 是否已关闭。
     pub fn is_closed(&self) -> bool {
         self.shared.is_closed()
     }
 
-    /// 判断句柄是否与给定 PreparedStatement 表示同一逻辑 Java 对象。
+    /// 判断句柄是否与给定 `PreparedStatement` 表示同一逻辑 Java 对象。
     pub fn is_same_statement(&self, statement: &DruidPooledPreparedStatement) -> bool {
         Arc::ptr_eq(&self.shared, &statement.shared)
     }
 
-    /// 通过 ResultSet 返回的句柄关闭原逻辑 PreparedStatement。
+    /// 通过 `ResultSet` 返回的句柄关闭原逻辑 `PreparedStatement`。
     pub fn close(&self) -> Result<(), DruidError> {
         if self.shared.is_closed() {
             return Ok(());
@@ -356,7 +356,7 @@ impl DruidPooledPreparedStatement {
         Arc::clone(&self.shared)
     }
 
-    /// 返回该逻辑 PreparedStatement 的对象身份。
+    /// 返回该逻辑 `PreparedStatement` 的对象身份。
     pub(crate) fn statement_trace_identity(&self) -> usize {
         Arc::as_ptr(&self.shared) as usize
     }
@@ -484,12 +484,12 @@ impl DruidPooledPreparedStatement {
         self.statement_base.id()
     }
 
-    /// 返回 ResultSet 类型。对应 Java：`Statement#getResultSetType()`。
+    /// 返回 `ResultSet` 类型。对应 Java：`Statement#getResultSetType()`。
     pub fn result_set_type(&self, connection: &DruidPooledConnection) -> Result<i32, DruidError> {
         self.statement_base.result_set_type(connection)
     }
 
-    /// 返回 ResultSet 并发模式。对应 Java：`Statement#getResultSetConcurrency()`。
+    /// 返回 `ResultSet` 并发模式。对应 Java：`Statement#getResultSetConcurrency()`。
     pub fn result_set_concurrency(
         &self,
         connection: &DruidPooledConnection,
@@ -497,7 +497,7 @@ impl DruidPooledPreparedStatement {
         self.statement_base.result_set_concurrency(connection)
     }
 
-    /// 返回 ResultSet 保持性。对应 Java：`Statement#getResultSetHoldability()`。
+    /// 返回 `ResultSet` 保持性。对应 Java：`Statement#getResultSetHoldability()`。
     pub fn result_set_holdability(
         &self,
         connection: &DruidPooledConnection,
@@ -646,7 +646,7 @@ impl DruidPooledPreparedStatement {
         self.statement_base.set_poolable(connection, poolable)
     }
 
-    /// Java Druid 的池化 PreparedStatement wrapper 仍返回 `false`。
+    /// Java Druid 的池化 `PreparedStatement` wrapper 仍返回 `false`。
     pub fn is_poolable(&self) -> bool {
         self.statement_base.is_poolable()
     }
@@ -1230,10 +1230,10 @@ impl DruidPooledPreparedStatement {
         }
     }
 
-    /// 返回 PreparedStatement 警告链。
+    /// 返回 `PreparedStatement` 警告链。
     ///
     /// 对应 Java：继承的 `DruidPooledStatement#getWarnings()`；使用同一个物理
-    /// PreparedStatement handle 和 `statement_getWarnings` Filter around-chain。
+    /// `PreparedStatement` handle 和 `statement_getWarnings` Filter around-chain。
     pub async fn warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1258,7 +1258,7 @@ impl DruidPooledPreparedStatement {
         }
     }
 
-    /// 清除 PreparedStatement 警告链。
+    /// 清除 `PreparedStatement` 警告链。
     ///
     /// 对应 Java：继承的 `DruidPooledStatement#clearWarnings()`。
     pub async fn clear_warnings(
@@ -1623,7 +1623,7 @@ impl DruidPooledPreparedStatement {
         self.statement_base.update_count(connection)
     }
 
-    /// 返回 generated keys 的池化 ResultSet。
+    /// 返回 generated keys 的池化 `ResultSet`。
     pub fn generated_keys(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1660,7 +1660,7 @@ impl DruidPooledPreparedStatement {
         self.more_results_internal(connection, Some(current))
     }
 
-    /// 把当前参数快照加入 PreparedStatement 批次。
+    /// 把当前参数快照加入 `PreparedStatement` 批次。
     ///
     /// 对应 Java：`DruidPooledPreparedStatement#addBatch()`。Rust 没有可变的
     /// `setXxx` 绑定槽位，因此调用方显式传入本次快照；后续参数修改和
@@ -1738,7 +1738,7 @@ impl DruidPooledPreparedStatement {
         Ok(())
     }
 
-    /// 清空 PreparedStatement 参数批次；关闭后与 Java `clearBatch()` 一样无操作。
+    /// 清空 `PreparedStatement` 参数批次；关闭后与 Java `clearBatch()` 一样无操作。
     pub fn clear_batch(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1763,7 +1763,7 @@ impl DruidPooledPreparedStatement {
         Ok(())
     }
 
-    /// 执行当前 PreparedStatement 参数批次。
+    /// 执行当前 `PreparedStatement` 参数批次。
     ///
     /// 对应 Java：`DruidPooledPreparedStatement#executeBatch()`。参数按
     /// `add_batch` 时的快照顺序执行；整个批次只进入一次 Filter before/after。
@@ -1806,7 +1806,7 @@ impl DruidPooledPreparedStatement {
         result
     }
 
-    /// 返回尚未执行的 PreparedStatement 参数批次数量。
+    /// 返回尚未执行的 `PreparedStatement` 参数批次数量。
     pub fn batch_size(&self) -> usize {
         self.shared
             .state

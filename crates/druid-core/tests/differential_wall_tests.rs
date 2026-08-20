@@ -1,4 +1,4 @@
-//! Differential tests: druid-sql Wall vs Druid Java 1.2.28 WallConfig + WallProvider.
+//! Differential tests: druid-sql Wall vs Druid Java 1.2.28 `WallConfig` + `WallProvider`.
 //!
 //! References:
 //!   - core/src/main/java/com/alibaba/druid/wall/WallConfig.java
@@ -11,7 +11,7 @@ use druid_core::sql::{Wall, WallConfig, WallViolation};
 
 // ── WallConfig 46-field defaults match DruidJava WallConfig constructor ──
 
-/// All WallConfig boolean defaults verified against DruidJava source.
+/// All `WallConfig` boolean defaults verified against `DruidJava` source.
 #[test]
 fn test_wall_config_all_46_defaults() {
     let c = WallConfig::default();
@@ -73,7 +73,7 @@ fn test_wall_config_all_46_defaults() {
 
 // ── DruidJava WallBVTTest.java behavioral tests ──
 
-/// WallBVTTest#test_delete_0: DELETE without WHERE → Denied.
+/// `WallBVTTest#test_delete_0`: DELETE without WHERE → Denied.
 #[test]
 fn test_wall_delete_without_where() {
     let wall = Wall::new(WallConfig::builder().delete_must_have_where(true).build());
@@ -85,14 +85,14 @@ fn test_wall_delete_without_where() {
         .any(|v| matches!(v, WallViolation::DeleteWithoutWhere)));
 }
 
-/// WallBVTTest#test_delete_1: DELETE with WHERE → Allowed.
+/// `WallBVTTest#test_delete_1`: DELETE with WHERE → Allowed.
 #[test]
 fn test_wall_delete_with_where() {
     let wall = Wall::new(WallConfig::default());
     assert!(wall.check("DELETE FROM users WHERE id = 1").is_ok());
 }
 
-/// WallBVTTest#test_update_0: UPDATE without WHERE → Denied.
+/// `WallBVTTest#test_update_0`: UPDATE without WHERE → Denied.
 #[test]
 fn test_wall_update_without_where() {
     let wall = Wall::new(WallConfig::builder().update_must_have_where(true).build());
@@ -104,7 +104,7 @@ fn test_wall_update_without_where() {
         .any(|v| matches!(v, WallViolation::UpdateWithoutWhere)));
 }
 
-/// WallBVTTest#test_update_1: UPDATE with WHERE → Allowed.
+/// `WallBVTTest#test_update_1`: UPDATE with WHERE → Allowed.
 #[test]
 fn test_wall_update_with_where() {
     let wall = Wall::new(WallConfig::default());
@@ -113,7 +113,7 @@ fn test_wall_update_with_where() {
         .is_ok());
 }
 
-/// WallBVTTest#test_drop: DROP TABLE → Denied.
+/// `WallBVTTest#test_drop`: DROP TABLE → Denied.
 #[test]
 fn test_wall_drop_table_denied() {
     let wall = Wall::new(WallConfig::builder().drop_table_allow(false).build());
@@ -125,7 +125,7 @@ fn test_wall_drop_table_denied() {
         .any(|v| matches!(v, WallViolation::DropTableNotAllowed(_))));
 }
 
-/// WallBVTTest#test_truncate: TRUNCATE → Denied.
+/// `WallBVTTest#test_truncate`: TRUNCATE → Denied.
 #[test]
 fn test_wall_truncate_denied() {
     let wall = Wall::new(WallConfig::builder().truncate_allow(false).build());
@@ -137,7 +137,7 @@ fn test_wall_truncate_denied() {
         .any(|v| matches!(v, WallViolation::TruncateNotAllowed)));
 }
 
-/// WallBVTTest#test_select: SELECT → Allowed.
+/// `WallBVTTest#test_select`: SELECT → Allowed.
 #[test]
 fn test_wall_select_allowed() {
     let wall = Wall::new(WallConfig::default());
@@ -146,7 +146,7 @@ fn test_wall_select_allowed() {
         .is_ok());
 }
 
-/// WallBVTTest#test_insert: INSERT → Allowed.
+/// `WallBVTTest#test_insert`: INSERT → Allowed.
 #[test]
 fn test_wall_insert_allowed() {
     let wall = Wall::new(WallConfig::default());
@@ -155,7 +155,7 @@ fn test_wall_insert_allowed() {
         .is_ok());
 }
 
-/// WallBVTTest#test_deny_table: denied table → Blocked.
+/// `WallBVTTest#test_deny_table`: denied table → Blocked.
 #[test]
 fn test_wall_deny_table() {
     let c = WallConfig::builder().deny_table("secret_data").build();
@@ -168,21 +168,21 @@ fn test_wall_deny_table() {
         .any(|v| matches!(v, WallViolation::DeniedTable(_))));
 }
 
-/// WallBVTTest#test_drop_table_allowed: DROP TABLE allowed when configured.
+/// `WallBVTTest#test_drop_table_allowed`: DROP TABLE allowed when configured.
 #[test]
 fn test_wall_drop_allowed_when_configured() {
     let c = WallConfig::builder().drop_table_allow(true).build();
     assert!(Wall::new(c).check("DROP TABLE users").is_ok());
 }
 
-/// WallBVTTest#test_truncate_allowed: TRUNCATE allowed when configured.
+/// `WallBVTTest#test_truncate_allowed`: TRUNCATE allowed when configured.
 #[test]
 fn test_wall_truncate_allowed_when_configured() {
     let c = WallConfig::builder().truncate_allow(true).build();
     assert!(Wall::new(c).check("TRUNCATE users").is_ok());
 }
 
-/// WallBVTTest#test_delete_denied: DELETE denied when configured.
+/// `WallBVTTest#test_delete_denied`: DELETE denied when configured.
 #[test]
 fn test_wall_delete_denied_when_configured() {
     let c = WallConfig::builder().delete_allow(false).build();
@@ -190,7 +190,7 @@ fn test_wall_delete_denied_when_configured() {
     assert!(result.is_err());
 }
 
-/// WallBVTTest#test_update_denied: UPDATE denied when configured.
+/// `WallBVTTest#test_update_denied`: UPDATE denied when configured.
 #[test]
 fn test_wall_update_denied_when_configured() {
     let c = WallConfig::builder().update_allow(false).build();
@@ -198,7 +198,7 @@ fn test_wall_update_denied_when_configured() {
     assert!(result.is_err());
 }
 
-/// WallBVTTest#test_syntax_error: malformed SQL → SyntaxError.
+/// `WallBVTTest#test_syntax_error`: malformed SQL → `SyntaxError`.
 #[test]
 fn test_wall_syntax_error() {
     let wall = Wall::new(WallConfig::default());
@@ -254,7 +254,7 @@ fn test_wall_deny_table_in_delete() {
         .is_err());
 }
 
-/// WallConfig builder chaining.
+/// `WallConfig` builder chaining.
 #[test]
 fn test_wall_config_builder_chain() {
     let c = WallConfig::builder()

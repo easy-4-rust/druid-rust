@@ -1,6 +1,6 @@
-//! Tests for the server-side IngestHandler.
+//! Tests for the server-side `IngestHandler`.
 //!
-//! The IngestHandler receives ClientFrame messages from a stream, deduplicates
+//! The `IngestHandler` receives `ClientFrame` messages from a stream, deduplicates
 //! by stream identity + sequence, and updates an in-memory snapshot repository.
 
 use druid_metrics::ingest_handler::IngestHandler;
@@ -84,7 +84,7 @@ fn make_full_snapshot_frame(
     }
 }
 
-/// Helper: initialize a stream by sending a full snapshot and asserting BatchAck.
+/// Helper: initialize a stream by sending a full snapshot and asserting `BatchAck`.
 async fn init_stream(handler: &IngestHandler, svc: &str, inst: &str, boot: &str, epoch: u64) {
     let r = handler
         .handle_frame(&make_full_snapshot_frame(1, svc, inst, boot, epoch))

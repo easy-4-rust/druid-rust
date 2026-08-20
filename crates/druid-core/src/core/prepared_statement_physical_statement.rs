@@ -1,4 +1,4 @@
-//! PreparedStatement 的 Statement 基类适配。
+//! `PreparedStatement` 的 Statement 基类适配。
 
 use super::{
     DruidError, PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, SqlWarning,
@@ -19,7 +19,7 @@ pub(crate) struct PreparedStatementPhysicalStatement {
 }
 
 impl PreparedStatementPhysicalStatement {
-    /// 创建共享同一真实 PreparedStatement 的 Statement 基类视图。
+    /// 创建共享同一真实 `PreparedStatement` 的 Statement 基类视图。
     pub(crate) fn new(
         statement: Arc<dyn PhysicalPreparedStatement>,
         options: PhysicalStatementOptions,

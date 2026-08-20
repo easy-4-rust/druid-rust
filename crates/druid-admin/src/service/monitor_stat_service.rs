@@ -1,3 +1,4 @@
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -214,7 +215,7 @@ impl MonitorStatService {
                     }
                     Err(error) => {
                         // Java 版记录 Kubernetes 异常后继续返回注册中心结果。
-                        tracing::error!(%error, "Kubernetes discovery failed")
+                        tracing::error!(%error, "Kubernetes discovery failed");
                     }
                 }
             }
@@ -255,7 +256,7 @@ impl MonitorStatService {
                     }
                     Err(error) => {
                         // Java 版记录 Kubernetes 异常后继续返回注册中心结果。
-                        tracing::error!(%error, "Kubernetes discovery failed")
+                        tracing::error!(%error, "Kubernetes discovery failed");
                     }
                 }
             }
@@ -322,7 +323,7 @@ impl MonitorStatService {
                     }
                 }
                 Err(error) => {
-                    tracing::warn!(%error, node = %node.id, "skipping failed datasource node")
+                    tracing::warn!(%error, node = %node.id, "skipping failed datasource node");
                 }
             }
         }

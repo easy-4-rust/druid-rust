@@ -471,7 +471,7 @@ struct FakeDriver {
 }
 
 impl rbdc::db::Driver for FakeDriver {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "fake-rbdc"
     }
 

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Adapter ownership boundary test.
 //!
 //! Static assertions that enforce the architectural contract:

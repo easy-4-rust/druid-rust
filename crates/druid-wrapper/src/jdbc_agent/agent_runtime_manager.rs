@@ -129,33 +129,30 @@ impl AgentRuntimeLease {
             }
         };
         let request_id = pending.request_id();
-        match tokio::time::timeout(self.request_timeout, pending.wait()).await {
-            Ok(result) => {
-                JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), result.is_err());
-                result
+        if let Ok(result) = tokio::time::timeout(self.request_timeout, pending.wait()).await {
+            JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), result.is_err());
+            result
+        } else {
+            JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), true);
+            JdbcAgentRuntimeMetrics::request_timed_out();
+            JdbcAgentRuntimeMetrics::cancellation_requested();
+            let runtime = Arc::clone(&self.managed.runtime);
+            let mut cancel_params = serde_json::Map::new();
+            cancel_params.insert("targetRequestId".to_owned(), request_id.into());
+            if let Some(session_id) = session_id {
+                cancel_params.insert("sessionId".to_owned(), session_id);
             }
-            Err(_) => {
-                JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), true);
-                JdbcAgentRuntimeMetrics::request_timed_out();
-                JdbcAgentRuntimeMetrics::cancellation_requested();
-                let runtime = Arc::clone(&self.managed.runtime);
-                let mut cancel_params = serde_json::Map::new();
-                cancel_params.insert("targetRequestId".to_owned(), request_id.into());
-                if let Some(session_id) = session_id {
-                    cancel_params.insert("sessionId".to_owned(), session_id);
-                }
-                tokio::spawn(async move {
-                    let _ = tokio::time::timeout(
-                        Duration::from_secs(1),
-                        runtime.request("cancel", JsonValue::Object(cancel_params)),
-                    )
-                    .await;
-                });
-                Err(DruidError::DriverError(format!(
-                    "JDBC Agent operation '{method}' requestId={request_id} exceeded {:?}; cancellation requested",
-                    self.request_timeout,
-                )))
-            }
+            tokio::spawn(async move {
+                let _ = tokio::time::timeout(
+                    Duration::from_secs(1),
+                    runtime.request("cancel", JsonValue::Object(cancel_params)),
+                )
+                .await;
+            });
+            Err(DruidError::DriverError(format!(
+                "JDBC Agent operation '{method}' requestId={request_id} exceeded {:?}; cancellation requested",
+                self.request_timeout,
+            )))
         }
     }
 

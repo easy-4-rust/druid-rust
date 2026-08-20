@@ -35,7 +35,7 @@ fn rdbc_facade_exports_only_rdbc_named_string_and_stream_resources() {
 
 #[async_trait::async_trait]
 impl Driver for ProbeDriver {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "rdbc-probe"
     }
 

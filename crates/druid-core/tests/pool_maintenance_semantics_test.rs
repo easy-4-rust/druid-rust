@@ -20,7 +20,7 @@
 //! 6. **密码版本失效 — 借出归还**：旧版本借出连接归还时被 discard。
 //! 7. **密码版本失效 — get 路径跳过**：从空闲队列取出旧版本连接时跳过，
 //!    继续取下一个或创建新连接。
-//! 8. **密码版本失效 — 新创建连接也检查**：create_connection_until 产出的
+//! 8. **密码版本失效 — 新创建连接也检查**：`create_connection_until` 产出的
 //!    连接若版本落后也立即销毁。
 
 extern crate druid_core as druid;
@@ -304,7 +304,7 @@ async fn keep_alive_validates_and_refills_below_min_idle() {
         .max_open(4)
         .max_idle(4)
         .min_idle(3)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .time_between_eviction_runs(Duration::ZERO)
         .keep_alive(true)
         .keep_alive_between_time(Duration::from_millis(5))
@@ -336,14 +336,13 @@ async fn keep_alive_validates_and_refills_below_min_idle() {
     let final_state = pool.state();
     assert!(
         final_state.idle_count >= 3 || final_state.idle_count + final_state.active_count >= 3,
-        "pool must be at or above minIdle after refill: {:?}",
-        final_state
+        "pool must be at or above minIdle after refill: {final_state:?}"
     );
 }
 
 /// Java：keepAlive 校验失败的连接被 discard，计入 keepAliveCheckErrorCount。
 /// 注意：shrink 内部的 `fill(minIdle)` 也依赖同一 factory 的 validate，
-/// 因此 validation_succeeds=false 时 fill 也无法成功。回填语义已在
+/// 因此 `validation_succeeds=false` 时 fill 也无法成功。回填语义已在
 /// `keep_alive_validates_and_refills_below_min_idle` 中单独覆盖。
 #[tokio::test]
 async fn keep_alive_failure_discards_and_counts() {
@@ -355,7 +354,7 @@ async fn keep_alive_failure_discards_and_counts() {
         .max_open(4)
         .max_idle(4)
         .min_idle(0)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .keep_alive_between_time(Duration::from_millis(5))
         .valid_connection_checker(factory.checker())
         .build()
@@ -396,7 +395,7 @@ async fn fatal_error_forces_idle_connections_into_keepalive_validation() {
         .max_open(4)
         .max_idle(4)
         .min_idle(0)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .keep_alive(false)
         .keep_alive_between_time(Duration::from_millis(5))
         .valid_connection_checker(factory.checker())
@@ -574,8 +573,8 @@ async fn credentials_change_get_skips_stale_idle_and_creates_new() {
 // ===========================================================================
 
 /// Java `credentials_changed` → 旧版本空闲连接被 `destroyHolder` 关闭物理连接。
-/// 验证 factory.closed_count 反映物理连接确实被关闭。
-/// destroy_holder 通过 close worker 异步关闭，需等待 worker 处理完毕。
+/// 验证 `factory.closed_count` 反映物理连接确实被关闭。
+/// `destroy_holder` 通过 close worker 异步关闭，需等待 worker 处理完毕。
 #[tokio::test]
 async fn credentials_change_closes_physical_connections_of_stale_idle() {
     let factory = Arc::new(TestFactory::new());
@@ -663,7 +662,7 @@ async fn keep_alive_check_count_accumulates_across_shrinks() {
         .max_open(4)
         .max_idle(4)
         .min_idle(0)
-        .idle_timeout(Duration::from_secs(60))
+        .idle_timeout(Duration::from_mins(1))
         .keep_alive_between_time(Duration::from_millis(5))
         .valid_connection_checker(factory.checker())
         .build()

@@ -58,7 +58,7 @@ pub struct LogFilter {
 }
 
 impl LogFilter {
-    /// 创建 Java 默认配置的 tracing LogFilter。
+    /// 创建 Java 默认配置的 tracing `LogFilter`。
     #[must_use]
     pub fn new() -> Self {
         let filter = Self {
@@ -156,13 +156,13 @@ impl LogFilter {
         flag.load(Ordering::Acquire)
     }
 
-    /// 返回 DataSource 结构化事件分类。
+    /// 返回 `DataSource` 结构化事件分类。
     #[must_use]
     pub fn data_source_category(&self) -> String {
         self.data_source_category.read().clone()
     }
 
-    /// 设置 DataSource 结构化事件分类。
+    /// 设置 `DataSource` 结构化事件分类。
     pub fn set_data_source_category(&self, category: impl Into<String>) {
         *self.data_source_category.write() = category.into();
     }
@@ -189,24 +189,24 @@ impl LogFilter {
         *self.statement_category.write() = category.into();
     }
 
-    /// 返回 ResultSet 结构化事件分类。
+    /// 返回 `ResultSet` 结构化事件分类。
     #[must_use]
     pub fn result_set_category(&self) -> String {
         self.result_set_category.read().clone()
     }
 
-    /// 设置 ResultSet 结构化事件分类。
+    /// 设置 `ResultSet` 结构化事件分类。
     pub fn set_result_set_category(&self, category: impl Into<String>) {
         *self.result_set_category.write() = category.into();
     }
 
-    /// 是否记录 DataSource。
+    /// 是否记录 `DataSource`。
     #[must_use]
     pub fn is_data_source_log_enabled(&self) -> bool {
         Self::enabled(&self.data_source_log_enabled)
     }
 
-    /// 设置是否记录 DataSource。
+    /// 设置是否记录 `DataSource`。
     pub fn set_data_source_log_enabled(&self, enabled: bool) {
         self.data_source_log_enabled
             .store(enabled, Ordering::Release);
@@ -464,61 +464,61 @@ impl LogFilter {
             .store(enabled, Ordering::Release);
     }
 
-    /// 是否记录 ResultSet。
+    /// 是否记录 `ResultSet`。
     #[must_use]
     pub fn is_result_set_log_enabled(&self) -> bool {
         Self::enabled(&self.result_set_log_enabled)
     }
 
-    /// 设置是否记录 ResultSet。
+    /// 设置是否记录 `ResultSet`。
     pub fn set_result_set_log_enabled(&self, enabled: bool) {
         self.result_set_log_enabled
             .store(enabled, Ordering::Release);
     }
 
-    /// 是否记录 ResultSet 错误。
+    /// 是否记录 `ResultSet` 错误。
     #[must_use]
     pub fn is_result_set_log_error_enabled(&self) -> bool {
         Self::enabled(&self.result_set_log_error_enabled)
     }
 
-    /// 设置 ResultSet 错误日志开关。
+    /// 设置 `ResultSet` 错误日志开关。
     pub fn set_result_set_log_error_enabled(&self, enabled: bool) {
         self.result_set_log_error_enabled
             .store(enabled, Ordering::Release);
     }
 
-    /// 是否记录 ResultSet open。
+    /// 是否记录 `ResultSet` open。
     #[must_use]
     pub fn is_result_set_open_after_log_enabled(&self) -> bool {
         self.is_result_set_log_enabled() && Self::enabled(&self.result_set_open_after_log_enabled)
     }
 
-    /// 设置 ResultSet open 日志开关。
+    /// 设置 `ResultSet` open 日志开关。
     pub fn set_result_set_open_after_log_enabled(&self, enabled: bool) {
         self.result_set_open_after_log_enabled
             .store(enabled, Ordering::Release);
     }
 
-    /// 是否记录 ResultSet next。
+    /// 是否记录 `ResultSet` next。
     #[must_use]
     pub fn is_result_set_next_after_log_enabled(&self) -> bool {
         self.is_result_set_log_enabled() && Self::enabled(&self.result_set_next_after_log_enabled)
     }
 
-    /// 设置 ResultSet next 日志开关。
+    /// 设置 `ResultSet` next 日志开关。
     pub fn set_result_set_next_after_log_enabled(&self, enabled: bool) {
         self.result_set_next_after_log_enabled
             .store(enabled, Ordering::Release);
     }
 
-    /// 是否记录 ResultSet close。
+    /// 是否记录 `ResultSet` close。
     #[must_use]
     pub fn is_result_set_close_after_log_enabled(&self) -> bool {
         self.is_result_set_log_enabled() && Self::enabled(&self.result_set_close_after_log_enabled)
     }
 
-    /// 设置 ResultSet close 日志开关。
+    /// 设置 `ResultSet` close 日志开关。
     pub fn set_result_set_close_after_log_enabled(&self, enabled: bool) {
         self.result_set_close_after_log_enabled
             .store(enabled, Ordering::Release);

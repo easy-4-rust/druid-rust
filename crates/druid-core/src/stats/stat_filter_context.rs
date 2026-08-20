@@ -121,12 +121,12 @@ impl StatFilterContext {
         self.dispatch(|listener| listener.physical_connection_close(nanos))
     }
 
-    /// 分发 ResultSet 打开事件。
+    /// 分发 `ResultSet` 打开事件。
     pub fn result_set_open(&self) -> Result<(), DruidError> {
         self.dispatch(|listener| listener.result_set_open())
     }
 
-    /// 分发 ResultSet 关闭事件。
+    /// 分发 `ResultSet` 关闭事件。
     pub fn result_set_close(&self, nanos: i64) -> Result<(), DruidError> {
         self.dispatch(|listener| listener.result_set_close(nanos))
     }

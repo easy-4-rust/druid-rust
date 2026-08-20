@@ -1,11 +1,11 @@
-//! DruidPool 生命周期差分覆盖测试（Java Druid 1.2.28 语义对照）。
+//! `DruidPool` 生命周期差分覆盖测试（Java Druid 1.2.28 语义对照）。
 //!
-//! 覆盖 acquire 超时路径、并发借还、close 幂等、state() 快照字段、
-//! fill/fill_to、restart、is_full、try_get_connection、get_timeout、
-//! get_connection_direct、init 幂等、select_valid_connection_checker /
-//! select_exception_sorter 分支、publish_stats、reset_stats、
-//! stat_value_and_reset、login_timeout、db_type_name、url、raw_url、
-//! connect_properties、filter_class_names、wall_provider 等路径。
+//! 覆盖 acquire 超时路径、并发借还、close `幂等、state()` 快照字段、
+//! `fill/fill_to、restart、is_full、try_get_connection、get_timeout`、
+//! `get_connection_direct、init` `幂等、select_valid_connection_checker` /
+//! `select_exception_sorter` `分支、publish_stats、reset_stats`、
+//! `stat_value_and_reset、login_timeout、db_type_name、url、raw_url`、
+//! `connect_properties、filter_class_names、wall_provider` 等路径。
 
 use druid_core::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
@@ -184,7 +184,7 @@ async fn pool_get_timeout() {
 // 3. acquire 超时
 // ===========================================================================
 
-/// Java getConnection(long)：池满且超时后返回 GetConnectionTimeout。
+/// Java getConnection(long)：池满且超时后返回 `GetConnectionTimeout`。
 #[tokio::test]
 async fn pool_acquire_timeout() {
     let (pool, _factory) = make_pool("acquire-timeout", 1).await;
@@ -293,11 +293,11 @@ async fn pool_state_snapshot() {
     assert_eq!(state.max_open, 4);
     assert_eq!(state.active_count, 0);
     assert_eq!(state.idle_count, 0);
-    assert_eq!(state.closed, false);
+    assert!(!state.closed);
     assert_eq!(state.connect_count, 0);
 }
 
-/// Java state()：获取连接后 active_count 变化。
+/// Java state()：获取连接后 `active_count` 变化。
 #[tokio::test]
 async fn pool_state_active_count() {
     let (pool, _factory) = make_pool("state-active", 4).await;
@@ -315,7 +315,7 @@ async fn pool_state_active_count() {
 /// Java fill()：将池填充到 maxActive。
 #[tokio::test]
 async fn pool_fill_to_max() {
-    let (pool, factory) = make_pool("fill-max", 4).await;
+    let (pool, _factory) = make_pool("fill-max", 4).await;
     let created = pool.fill().await.unwrap();
     assert!(created > 0);
     let state = pool.state();
@@ -345,7 +345,7 @@ async fn pool_fill_to_negative() {
 }
 
 /// Java fill(int)：关闭后 fill 的行为取决于实现。
-/// Rust 实现中 fill_to 先检查 closed，再 init，close 后 restart 可恢复。
+/// Rust 实现中 `fill_to` 先检查 closed，再 init，close 后 restart 可恢复。
 #[tokio::test]
 async fn pool_fill_to_after_close() {
     let (pool, _factory) = make_pool("fill-closed", 4).await;
@@ -491,7 +491,7 @@ async fn pool_stat_value_and_reset() {
     assert!(stat.max_active > 0);
 }
 
-/// Java resetStat：reset_enable=true 时递增 resetCount。
+/// Java `resetStat：reset_enable=true` 时递增 resetCount。
 #[tokio::test]
 async fn pool_reset_stats_increments() {
     let (pool, _factory) = make_pool("reset-incr", 4).await;
@@ -500,7 +500,7 @@ async fn pool_reset_stats_increments() {
     assert!(pool.reset_count() > before);
 }
 
-/// Java resetStat：reset_enable=false 时无副作用。
+/// Java `resetStat：reset_enable=false` 时无副作用。
 #[tokio::test]
 async fn pool_reset_stats_disabled() {
     let (pool, _factory) = make_pool("reset-disabled", 4).await;
@@ -550,7 +550,7 @@ async fn pool_create_ids() {
 // 15. remove_abandoned / is_remove_abandoned
 // ===========================================================================
 
-/// Java removeAbandoned：无 remove_abandoned 配置时返回 0。
+/// Java removeAbandoned：无 `remove_abandoned` 配置时返回 0。
 #[tokio::test]
 async fn pool_remove_abandoned_disabled() {
     let (pool, _factory) = make_pool("abandon-disabled", 4).await;
@@ -599,7 +599,7 @@ async fn pool_pooling_connection_info_with_idle() {
 // 18. active_connection_stack_trace
 // ===========================================================================
 
-/// Java getActiveConnectionStackTrace：无 remove_abandoned 时为空。
+/// Java getActiveConnectionStackTrace：无 `remove_abandoned` 时为空。
 #[tokio::test]
 async fn pool_active_connection_stack_trace_empty() {
     let (pool, _factory) = make_pool("stack-trace", 4).await;
@@ -622,7 +622,7 @@ async fn pool_shrink() {
     // 收缩后空闲连接数不变（未超过 maxIdle 且未过期）
 }
 
-/// Java shrink(boolean)：check_time=false。
+/// Java `shrink(boolean)：check_time=false`。
 #[tokio::test]
 async fn pool_shrink_check_time_false() {
     let (pool, _factory) = make_pool("shrink-ct-false", 4).await;
@@ -640,7 +640,7 @@ async fn pool_shrink_with_options() {
 // 20. notify_credentials_changed / user_password_version
 // ===========================================================================
 
-/// Java credentials_changed：版本递增。
+/// Java `credentials_changed：版本递增`。
 #[tokio::test]
 async fn pool_credentials_version() {
     let (pool, _factory) = make_pool("cred-version", 4).await;
@@ -731,7 +731,7 @@ async fn pool_last_create_error() {
 // 24. Pool trait
 // ===========================================================================
 
-/// Java Pool trait：state() 委托。
+/// Java Pool `trait：state()` 委托。
 #[tokio::test]
 async fn pool_trait_state() {
     let (pool, _factory) = make_pool("trait-state", 4).await;
@@ -739,7 +739,7 @@ async fn pool_trait_state() {
     assert_eq!(state.name, "trait-state");
 }
 
-/// Java Pool trait：driver_name() 委托。
+/// Java Pool `trait：driver_name()` 委托。
 #[tokio::test]
 async fn pool_trait_driver_name() {
     let (pool, _factory) = make_pool("trait-driver", 4).await;
@@ -749,7 +749,7 @@ async fn pool_trait_driver_name() {
     );
 }
 
-/// Java Pool trait：name() 委托。
+/// Java Pool `trait：name()` 委托。
 #[tokio::test]
 async fn pool_trait_name() {
     let (pool, _factory) = make_pool("trait-name", 4).await;

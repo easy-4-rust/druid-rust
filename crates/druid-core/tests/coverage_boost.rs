@@ -241,7 +241,7 @@ fn test_error_all_variants_display() {
         DruidError::Other("e".into()),
     ];
     for v in &variants {
-        let _ = format!("{}", v);
+        let _ = format!("{v}");
     }
     // Test Error trait
     for v in &variants {
@@ -254,25 +254,25 @@ fn test_error_all_variants_display() {
 fn test_value_all_conversions_and_display() {
     let bool_val: Value = true.into();
     assert_eq!(bool_val, Value::Bool(true));
-    assert_eq!(format!("{}", bool_val), "true");
+    assert_eq!(format!("{bool_val}"), "true");
     let int_val: Value = 42i64.into();
     assert_eq!(int_val, Value::Int(42));
-    assert_eq!(format!("{}", int_val), "42");
+    assert_eq!(format!("{int_val}"), "42");
     let int_val2: Value = 10i32.into();
     assert_eq!(int_val2, Value::Int(10));
     let float_val: Value = 3.125f64.into();
     assert_eq!(float_val, Value::Float(3.125));
-    assert_eq!(format!("{}", float_val), "3.125");
+    assert_eq!(format!("{float_val}"), "3.125");
     let str_val: Value = String::from("hello").into();
     assert_eq!(str_val, Value::String("hello".into()));
-    assert_eq!(format!("{}", str_val), "'hello'");
+    assert_eq!(format!("{str_val}"), "'hello'");
     let str_val2: Value = "world".into();
     assert_eq!(str_val2, Value::String("world".into()));
     let bytes_val: Value = vec![1u8, 2, 3].into();
     assert_eq!(bytes_val, Value::Bytes(vec![1, 2, 3]));
-    assert_eq!(format!("{}", bytes_val), "<3 bytes>");
+    assert_eq!(format!("{bytes_val}"), "<3 bytes>");
     let null_val = Value::Null;
-    assert_eq!(format!("{}", null_val), "NULL");
+    assert_eq!(format!("{null_val}"), "NULL");
 }
 
 // ── Row: all methods ──
@@ -299,7 +299,7 @@ fn test_connection_holder_all_paths() {
     assert_eq!(h.use_count.load(std::sync::atomic::Ordering::Relaxed), 1);
     assert!(h.mark_idle());
     assert_eq!(h.state(), ConnectionState::Idle);
-    assert!(h.is_alive(std::time::Duration::from_secs(60)));
+    assert!(h.is_alive(std::time::Duration::from_mins(1)));
     assert!(h.held_duration() >= std::time::Duration::ZERO);
 }
 
@@ -426,7 +426,7 @@ async fn test_driver_all_methods() {
     struct D;
     #[async_trait::async_trait]
     impl Driver for D {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "test"
         }
         async fn connect(&self, url: &str) -> Result<Box<dyn Connection>, DruidError> {
@@ -512,7 +512,7 @@ async fn test_before_filter_all_event_defaults() {
     struct F;
     #[async_trait::async_trait]
     impl BeforeFilter for F {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "f"
         }
         async fn before(&self, _: &mut ExecContext<'_>) -> Result<(), DruidError> {
@@ -684,7 +684,7 @@ async fn test_after_filter_all_defaults() {
     struct F;
     #[async_trait::async_trait]
     impl AfterFilter for F {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "f"
         }
         async fn after(

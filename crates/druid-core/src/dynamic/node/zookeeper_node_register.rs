@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use zookeeper_client::{Acls, Client, CreateMode, Error as ZookeeperError};
 
-/// 将数据库端点注册为 ZooKeeper 临时成员节点。
+/// 将数据库端点注册为 `ZooKeeper` 临时成员节点。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.ha.node.ZookeeperNodeRegister`。一个实例
 /// 同时只允许注册一个 member；使用外部 client 时 destroy 不接管其生命周期。
@@ -42,7 +42,7 @@ impl ZookeeperNodeRegister {
         Self::default()
     }
 
-    /// 没有外部 client 时建立私有异步 ZooKeeper client。
+    /// 没有外部 client 时建立私有异步 `ZooKeeper` client。
     pub async fn init(&self) -> Result<(), DruidError> {
         if self.client.read().is_some() {
             return Ok(());
@@ -130,12 +130,12 @@ impl ZookeeperNodeRegister {
         self.client.read().clone()
     }
 
-    /// 设置 ZooKeeper ensemble 连接串。
+    /// 设置 `ZooKeeper` ensemble 连接串。
     pub fn set_zk_connect_string(&self, value: impl Into<String>) {
         *self.zk_connect_string.write() = Some(value.into());
     }
 
-    /// 返回 ZooKeeper ensemble 连接串。
+    /// 返回 `ZooKeeper` ensemble 连接串。
     #[must_use]
     pub fn zk_connect_string(&self) -> Option<String> {
         self.zk_connect_string.read().clone()

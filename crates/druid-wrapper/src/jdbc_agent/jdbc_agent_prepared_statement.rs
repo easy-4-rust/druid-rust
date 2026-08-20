@@ -7,7 +7,7 @@ use serde_json::json;
 use std::any::Any;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
-/// JDBC Agent 中已创建真实 JDBC PreparedStatement 的远程句柄。
+/// JDBC Agent 中已创建真实 JDBC `PreparedStatement` 的远程句柄。
 pub struct JdbcAgentPreparedStatement {
     sql: String,
     statement_id: String,
@@ -20,7 +20,7 @@ pub struct JdbcAgentPreparedStatement {
 }
 
 impl JdbcAgentPreparedStatement {
-    /// 创建与 Agent 端真实 PreparedStatement 一一对应的物理语句。
+    /// 创建与 Agent 端真实 `PreparedStatement` 一一对应的物理语句。
     pub(crate) fn new(
         key: &PreparedStatementKey,
         statement_id: String,

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// 单个物理连接的管理统计条目。
 ///
 /// 对应 Java：`RdbcConnectionStat.Entry`。Java 异常对象/栈被映射为可安全跨线程
-/// 暴露的文本；JMX CompositeData 不进入 Rust 对象模型。
+/// 暴露的文本；JMX `CompositeData` 不进入 Rust 对象模型。
 pub struct RdbcConnectionStatEntry {
     id: u64,
     data_source: String,

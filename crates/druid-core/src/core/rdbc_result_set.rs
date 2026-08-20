@@ -1,7 +1,7 @@
 //! 物理 RDBC `ResultSet` 资源句柄。
 //!
 //! 对应 Java 平台对象：`java.sql.ResultSet`。本对象先承载 Array 返回行集所需的
-//! 身份和关闭生命周期；游标、metadata 与 pooled trace 继续由 ResultSet 专项迁移。
+//! 身份和关闭生命周期；游标、metadata 与 pooled trace 继续由 `ResultSet` 专项迁移。
 
 use super::{
     DruidError, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcCharacterLength, RdbcClob,

@@ -62,7 +62,7 @@ pub enum SqlParserFeature {
     Spark = 25,
     /// 启用 Presto 兼容。
     Presto = 26,
-    /// MySQL 标准注释兼容。
+    /// `MySQL` 标准注释兼容。
     MySqlSupportStandardComment = 27,
     /// 启用模板解析。
     Template = 28,

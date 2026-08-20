@@ -1,4 +1,4 @@
-//! CallableStatement 参数定位。
+//! `CallableStatement` 参数定位。
 //!
 //! 对应 Java 平台依赖：`java.sql.CallableStatement` 的 `parameterIndex` /
 //! `parameterName` 两组重载。

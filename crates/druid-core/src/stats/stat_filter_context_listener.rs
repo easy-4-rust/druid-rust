@@ -48,10 +48,10 @@ pub trait StatFilterContextListener: Send + Sync {
     /// 物理连接关闭事件。
     fn physical_connection_close(&self, nanos: i64) -> Result<(), DruidError>;
 
-    /// ResultSet 打开事件。
+    /// `ResultSet` 打开事件。
     fn result_set_open(&self) -> Result<(), DruidError>;
 
-    /// ResultSet 关闭事件。
+    /// `ResultSet` 关闭事件。
     fn result_set_close(&self, nanos: i64) -> Result<(), DruidError>;
 
     /// Clob 打开事件。

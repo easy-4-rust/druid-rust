@@ -35,6 +35,6 @@ fn callable_out_parameter_clone_eq() {
 #[test]
 fn callable_out_parameter_debug() {
     let p = CallableOutParameter::new(4);
-    let dbg = format!("{:?}", p);
+    let dbg = format!("{p:?}");
     assert!(dbg.contains("CallableOutParameter"));
 }

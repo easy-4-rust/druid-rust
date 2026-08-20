@@ -420,7 +420,7 @@ fn zk_info_clone_eq() {
 fn zk_info_debug() {
     let mut info = druid_core::dynamic::ZookeeperNodeInfo::new();
     info.set_host(Some("host".to_owned()));
-    let debug = format!("{:?}", info);
+    let debug = format!("{info:?}");
     assert!(debug.contains("host"));
 }
 

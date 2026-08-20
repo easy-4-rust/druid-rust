@@ -112,7 +112,7 @@ fn connection_stat_error() {
 #[test]
 fn connection_stat_after_close() {
     let stat = RdbcConnectionStat::new();
-    stat.after_close(Duration::from_secs(60));
+    stat.after_close(Duration::from_mins(1));
 }
 
 #[test]

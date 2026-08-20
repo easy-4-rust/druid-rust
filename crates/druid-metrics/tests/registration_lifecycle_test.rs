@@ -1,10 +1,11 @@
+#![allow(dead_code)]
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use druid_core::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
-    SnapshotUnavailable, SqlStatSnapshot,
+    SnapshotUnavailable,
 };
 use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
 use serde_json::Value;

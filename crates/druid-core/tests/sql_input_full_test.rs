@@ -1,8 +1,9 @@
-//! Comprehensive tests for `SqlInput` (Java SQLInput 语义对照)。
+#![allow(clippy::approx_constant)]
+//! Comprehensive tests for `SqlInput` (Java `SQLInput` 语义对照)。
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
-//! 目标：覆盖 sql_input.rs 全部公共方法，包括 read_value 耗尽、
-//! 各类型读取、NULL 行为、类型转换错误、read_url 等路径。
+//! 目标：覆盖 `sql_input.rs` 全部公共方法，包括 `read_value` 耗尽、
+//! 各类型读取、NULL `行为、类型转换错误、read_url` 等路径。
 
 extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
@@ -14,7 +15,7 @@ use druid_core::sql::SqlInput;
 // 1. new + read_value 基础路径
 // ══════════════════════════════════════════════════════════════════
 
-/// new 构造 + read_value 顺序消费。
+/// new 构造 + `read_value` 顺序消费。
 #[test]
 fn sql_input_new_and_read_value() {
     let mut input = SqlInput::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
@@ -23,7 +24,7 @@ fn sql_input_new_and_read_value() {
     assert_eq!(input.read_value().unwrap(), Value::Int(3));
 }
 
-/// read_value 耗尽后返回 InvalidArgument。
+/// `read_value` 耗尽后返回 `InvalidArgument`。
 #[test]
 fn sql_input_read_value_exhaustion() {
     let mut input = SqlInput::new(vec![Value::Int(1)]);
@@ -45,14 +46,14 @@ fn sql_input_empty_values_exhaustion() {
 // 2. was_null
 // ══════════════════════════════════════════════════════════════════
 
-/// 初始 was_null 为 false。
+/// 初始 `was_null` 为 false。
 #[test]
 fn sql_input_initial_was_null_false() {
     let input = SqlInput::new(vec![]);
     assert!(!input.was_null());
 }
 
-/// 读取非 NULL 值后 was_null 为 false。
+/// 读取非 NULL 值后 `was_null` 为 false。
 #[test]
 fn sql_input_was_null_false_for_non_null() {
     let mut input = SqlInput::new(vec![Value::Int(42)]);
@@ -60,7 +61,7 @@ fn sql_input_was_null_false_for_non_null() {
     assert!(!input.was_null());
 }
 
-/// 读取 NULL 值后 was_null 为 true。
+/// 读取 NULL 值后 `was_null` 为 true。
 #[test]
 fn sql_input_was_null_true_for_null() {
     let mut input = SqlInput::new(vec![Value::Null]);
@@ -98,7 +99,7 @@ fn read_boolean_false() {
     assert!(!input.read_boolean().unwrap());
 }
 
-/// NULL → false + was_null=true。
+/// NULL → false + `was_null=true`。
 #[test]
 fn read_boolean_null() {
     let mut input = SqlInput::new(vec![Value::Null]);
@@ -124,7 +125,7 @@ fn read_long_normal() {
     assert_eq!(input.read_long().unwrap(), 42);
 }
 
-/// NULL → 0 + was_null=true。
+/// NULL → 0 + `was_null=true`。
 #[test]
 fn read_long_null() {
     let mut input = SqlInput::new(vec![Value::Null]);
@@ -287,7 +288,7 @@ fn read_big_decimal_normal() {
     assert_eq!(result.unwrap(), bd);
 }
 
-/// Int → BigDecimal 转换。
+/// Int → `BigDecimal` 转换。
 #[test]
 fn read_big_decimal_from_int() {
     let mut input = SqlInput::new(vec![Value::Int(42)]);
@@ -447,7 +448,7 @@ fn read_timestamp_type_mismatch() {
 // 16. read_object
 // ══════════════════════════════════════════════════════════════════
 
-/// read_object 返回任意 Value。
+/// `read_object` 返回任意 Value。
 #[test]
 fn read_object_returns_value() {
     let mut input = SqlInput::new(vec![Value::Int(42)]);
@@ -455,7 +456,7 @@ fn read_object_returns_value() {
     assert_eq!(v, Value::Int(42));
 }
 
-/// read_object NULL。
+/// `read_object` NULL。
 #[test]
 fn read_object_null() {
     let mut input = SqlInput::new(vec![Value::Null]);
@@ -494,7 +495,7 @@ fn read_url_invalid() {
     assert!(format!("{err}").contains("DATALINK"));
 }
 
-/// 非 String 类型 → read_string 先报错。
+/// 非 String 类型 → `read_string` 先报错。
 #[test]
 fn read_url_type_mismatch() {
     let mut input = SqlInput::new(vec![Value::Int(42)]);
@@ -515,7 +516,7 @@ fn conversion_error_message_format() {
     assert!(msg.contains("BIGINT"));
 }
 
-/// 转换错误包含 SQLDataException 类名。
+/// 转换错误包含 `SQLDataException` 类名。
 #[test]
 fn conversion_error_class_name() {
     let mut input = SqlInput::new(vec![Value::String("x".to_owned())]);
@@ -549,7 +550,7 @@ fn sql_input_mixed_type_consumption() {
     assert!((v - 3.14).abs() < f64::EPSILON);
 }
 
-/// read_byte → read_short → read_int 链式消费。
+/// `read_byte` → `read_short` → `read_int` 链式消费。
 #[test]
 fn sql_input_integer_chain() {
     let mut input = SqlInput::new(vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
@@ -562,35 +563,35 @@ fn sql_input_integer_chain() {
 // 20. 边界值
 // ══════════════════════════════════════════════════════════════════
 
-/// read_byte 边界：i8::MAX。
+/// `read_byte` `边界：i8::MAX`。
 #[test]
 fn read_byte_i8_max() {
     let mut input = SqlInput::new(vec![Value::Int(i64::from(i8::MAX))]);
     assert_eq!(input.read_byte().unwrap(), i8::MAX);
 }
 
-/// read_byte 边界：i8::MIN。
+/// `read_byte` `边界：i8::MIN`。
 #[test]
 fn read_byte_i8_min() {
     let mut input = SqlInput::new(vec![Value::Int(i64::from(i8::MIN))]);
     assert_eq!(input.read_byte().unwrap(), i8::MIN);
 }
 
-/// read_short 边界：i16::MAX。
+/// `read_short` `边界：i16::MAX`。
 #[test]
 fn read_short_i16_max() {
     let mut input = SqlInput::new(vec![Value::Int(i64::from(i16::MAX))]);
     assert_eq!(input.read_short().unwrap(), i16::MAX);
 }
 
-/// read_int 边界：i32::MAX。
+/// `read_int` `边界：i32::MAX`。
 #[test]
 fn read_int_i32_max() {
     let mut input = SqlInput::new(vec![Value::Int(i64::from(i32::MAX))]);
     assert_eq!(input.read_int().unwrap(), i32::MAX);
 }
 
-/// read_long 边界：i64::MAX。
+/// `read_long` `边界：i64::MAX`。
 #[test]
 fn read_long_i64_max() {
     let mut input = SqlInput::new(vec![Value::Int(i64::MAX)]);

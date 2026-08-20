@@ -1,6 +1,6 @@
 //! 对应 Java 类：com.alibaba.druid.pool.ha.selector.DataSourceSelector
 //!
-//! 负载均衡器 trait，替代 Druid Java 的 DataSourceSelector。
+//! 负载均衡器 trait，替代 Druid Java 的 `DataSourceSelector`。
 
 use crate::core::Pool;
 use std::sync::Arc;

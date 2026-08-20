@@ -28,7 +28,7 @@ fn sql_permission_clone_eq() {
 #[test]
 fn sql_permission_debug() {
     let p = SqlPermission::new("test", None);
-    let dbg = format!("{:?}", p);
+    let dbg = format!("{p:?}");
     assert!(dbg.contains("SqlPermission"));
     assert!(dbg.contains("test"));
 }
@@ -62,7 +62,7 @@ fn driver_property_clone_eq() {
 #[test]
 fn driver_property_debug() {
     let p = DriverProperty::new("port", Some("5432".to_owned()));
-    let dbg = format!("{:?}", p);
+    let dbg = format!("{p:?}");
     assert!(dbg.contains("DriverProperty"));
     assert!(dbg.contains("port"));
 }

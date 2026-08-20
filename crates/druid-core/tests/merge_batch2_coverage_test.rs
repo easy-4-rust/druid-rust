@@ -1,12 +1,12 @@
-//! Batch 2 coverage tests for merge.rs (SqlMerger + parameterize).
+//! Batch 2 coverage tests for merge.rs (`SqlMerger` + parameterize).
 //!
 //! Targets uncovered branches:
 //! - parameterize: hex/binary numbers, scientific notation, negative numbers,
 //!   bracket identifiers, block comments, hash comments, escaped quotes, N'...' strings,
 //!   underscored numbers, dot-prefixed decimals
-//! - SqlMerger: capacity eviction (skip_sql_count), set_max_sql_size shrink,
-//!   reset retains active/evicts empty, active_stat_for_sql, take_skip_sql_count,
-//!   record_with_merge_stat, record (merge_sql=false path via sql_key)
+//! - `SqlMerger`: capacity eviction (`skip_sql_count`), `set_max_sql_size` shrink,
+//!   reset retains active/evicts empty, `active_stat_for_sql`, `take_skip_sql_count`,
+//!   `record_with_merge_stat`, record (`merge_sql=false` path via `sql_key`)
 
 extern crate druid_core as druid;
 use druid_core::stats::{fingerprint, parameterize, SqlMerger};
@@ -161,7 +161,7 @@ fn parameterize_escaped_quote_in_string() {
 
 #[test]
 fn parameterize_backslash_escaped_quote() {
-    let result = parameterize(r#"SELECT 'it\'s' FROM t"#);
+    let result = parameterize(r"SELECT 'it\'s' FROM t");
     assert_eq!(result.template, "SELECT ? FROM t");
 }
 

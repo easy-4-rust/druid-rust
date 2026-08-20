@@ -1,4 +1,4 @@
-//! Java `FilterEventAdapter` 事件模板与真实 Toasty SQLite 验证。
+//! Java `FilterEventAdapter` 事件模板与真实 Toasty `SQLite` 验证。
 
 extern crate druid_core as druid;
 use druid_core::core::{

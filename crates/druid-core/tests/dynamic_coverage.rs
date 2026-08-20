@@ -21,10 +21,10 @@ impl Pool for MockPool {
             ..Default::default()
         }
     }
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "mock"
     }
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "mock"
     }
 }

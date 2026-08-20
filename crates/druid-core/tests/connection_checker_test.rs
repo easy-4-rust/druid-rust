@@ -1,8 +1,7 @@
 extern crate druid_core as druid;
 use druid_core::core::{
-    MsSqlValidConnectionChecker, OceanBaseValidConnectionChecker, ValidConnectionChecker,
+    MsSqlValidConnectionChecker, OceanBaseValidConnectionChecker,
 };
-use std::time::Duration;
 
 // ── OceanBaseValidConnectionChecker ────────────────────────────
 
@@ -36,14 +35,14 @@ fn ocean_base_checker_default() {
 fn ocean_base_checker_clone_copy_debug() {
     let c = OceanBaseValidConnectionChecker::new();
     let c2 = c;
-    let _ = format!("{:?}", c2);
+    let _ = format!("{c2:?}");
 }
 
 // ── MsSqlValidConnectionChecker ────────────────────────────────
 
 #[test]
 fn mssql_checker_default() {
-    let c = MsSqlValidConnectionChecker::default();
+    let c = MsSqlValidConnectionChecker;
     assert_eq!(
         MsSqlValidConnectionChecker::DEFAULT_VALIDATION_QUERY,
         "SELECT 1"
@@ -53,7 +52,7 @@ fn mssql_checker_default() {
 
 #[test]
 fn mssql_checker_clone_copy_debug() {
-    let c = MsSqlValidConnectionChecker::default();
+    let c = MsSqlValidConnectionChecker;
     let c2 = c;
-    let _ = format!("{:?}", c2);
+    let _ = format!("{c2:?}");
 }

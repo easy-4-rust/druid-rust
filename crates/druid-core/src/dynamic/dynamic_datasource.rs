@@ -1,6 +1,7 @@
+#![allow(clippy::match_same_arms)]
 //! 对应 Java 类：com.alibaba.druid.pool.ha.HighAvailableDataSource
 //!
-//! 动态数据源，支持 ArcSwap 热切换。
+//! 动态数据源，支持 `ArcSwap` 热切换。
 
 use super::datasource_group::DataSourceGroup;
 use super::sql_hint::SqlHint;
@@ -10,7 +11,7 @@ use std::sync::Arc;
 
 /// 动态数据源。
 ///
-/// 对应 Druid Java 的 `HighAvailableDataSource`，使用 ArcSwap 实现 lock-free 热切换。
+/// 对应 Druid Java 的 `HighAvailableDataSource`，使用 `ArcSwap` 实现 lock-free 热切换。
 pub struct DynamicDataSource {
     current: ArcSwap<DataSourceGroup>,
 }
@@ -23,7 +24,7 @@ impl DynamicDataSource {
         }
     }
 
-    /// 按 SqlHint 路由到对应池。
+    /// 按 `SqlHint` 路由到对应池。
     pub fn route(&self, hint: SqlHint) -> Arc<dyn Pool> {
         let group = self.current.load();
         match hint {
@@ -52,7 +53,7 @@ impl DynamicDataSource {
 
     /// 热切换数据源（lock-free）。
     ///
-    /// 对应 Druid Java 的 HighAvailableDataSource 节点切换。
+    /// 对应 Druid Java 的 `HighAvailableDataSource` 节点切换。
     pub fn switch(&self, new_group: DataSourceGroup) {
         self.current.store(Arc::new(new_group));
     }

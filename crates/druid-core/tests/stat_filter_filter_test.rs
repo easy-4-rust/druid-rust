@@ -1,3 +1,4 @@
+#![allow(unused_comparisons)]
 //! Differential tests for `StatFilter` trait implementations:
 //! `BeforeFilter::before`, `BeforeFilter::before_batch`,
 //! `BeforeFilter::before_execute_error`, `BeforeFilter::config_from_properties`,
@@ -5,7 +6,6 @@
 //! `AfterFilter::after_connection_event`, `ResultSetFilter::result_set_open_after`.
 
 extern crate druid_core as druid;
-use druid_core::core::PreparedInputParameter;
 use druid_core::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
     ExecContext, ExecOperation, ExecResult, ResultSetFilter, ResultSetFilterContext,
@@ -21,11 +21,11 @@ fn make_filter() -> (StatFilter, Arc<StatsCollector>) {
     (filter, collector)
 }
 
-fn make_exec_context<'a>(
-    sql: &'a str,
+fn make_exec_context(
+    sql: &str,
     operation: ExecOperation,
     in_transaction: bool,
-) -> ExecContext<'a> {
+) -> ExecContext<'_> {
     ExecContext {
         connection_id: 1,
         statement_id: Some(1),

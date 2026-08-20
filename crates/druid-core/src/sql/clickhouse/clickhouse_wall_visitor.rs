@@ -5,13 +5,13 @@ use crate::sql::{
 };
 use sqlparser::ast::Statement;
 
-/// ClickHouse Wall 方言 Visitor。
+/// `ClickHouse` Wall 方言 Visitor。
 pub struct ClickhouseWallVisitor<'a> {
     base: WallVisitorBase<'a>,
 }
 
 impl<'a> ClickhouseWallVisitor<'a> {
-    /// 绑定 ClickHouse Provider。
+    /// 绑定 `ClickHouse` Provider。
     #[must_use]
     pub fn new(provider: &'a WallProvider) -> Self {
         Self {

@@ -1,6 +1,7 @@
-//! DruidPooledPreparedStatement coverage boost — parameter binding, batch,
+#![allow(clippy::approx_constant)]
+//! `DruidPooledPreparedStatement` coverage boost — parameter binding, batch,
 //! property getter/setter, wrapper trait, close paths, execute variants,
-//! generated keys, more_results, warnings, and Debug format.
+//! generated keys, `more_results`, warnings, and Debug format.
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -306,9 +307,9 @@ async fn ps_property_getter_setter_families() {
     let mut ps = conn.prepare_statement("SELECT 1").await.unwrap();
 
     // result_set_type / result_set_concurrency / result_set_holdability
-    let _ = ps.result_set_type(&mut conn).unwrap();
-    let _ = ps.result_set_concurrency(&mut conn).unwrap();
-    let _ = ps.result_set_holdability(&mut conn).unwrap();
+    let _ = ps.result_set_type(&conn).unwrap();
+    let _ = ps.result_set_concurrency(&conn).unwrap();
+    let _ = ps.result_set_holdability(&conn).unwrap();
 
     // max_field_size / set_max_field_size
     let default_mfs = ps.max_field_size(&mut conn).unwrap();

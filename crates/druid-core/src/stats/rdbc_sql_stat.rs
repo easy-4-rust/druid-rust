@@ -235,16 +235,16 @@ impl RdbcSqlStat {
         std::array::from_fn(|index| self.execute_time_histogram[index].load(Ordering::Acquire))
     }
 
-    /// 记录没有 ResultSet 首结果的执行耗时。
+    /// 记录没有 `ResultSet` 首结果的执行耗时。
     pub fn record_execute_and_result_hold_time(&self, elapsed: Duration) {
         self.execute_and_result_hold_time_histogram[time_bucket(elapsed)]
             .fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 在 ResultSet 首次关闭时记录持有时长及“执行 + 持有”总时长。
+    /// 在 `ResultSet` 首次关闭时记录持有时长及“执行 + 持有”总时长。
     ///
     /// 对应 Java：`RdbcSqlStat#addResultSetHoldTimeNano(long,long)`，包括其
-    /// 将一次 ResultSet 关闭计入 update `<1` 桶的历史行为。
+    /// 将一次 `ResultSet` 关闭计入 update `<1` 桶的历史行为。
     pub fn add_result_set_hold_time(
         &self,
         statement_execute_elapsed: Duration,
@@ -294,23 +294,23 @@ impl RdbcSqlStat {
         self.last_error_time_millis.store(millis, Ordering::Release);
     }
 
-    /// 累加 ResultSet `getString` 读取长度。
+    /// 累加 `ResultSet` `getString` 读取长度。
     pub fn add_read_string_length(&self, length: u64) {
         self.read_string_length.fetch_add(length, Ordering::Relaxed);
     }
 
-    /// 累加 ResultSet `getBytes` 读取长度。
+    /// 累加 `ResultSet` `getBytes` 读取长度。
     pub fn add_read_bytes_length(&self, length: u64) {
         self.read_bytes_length.fetch_add(length, Ordering::Relaxed);
     }
 
-    /// 累加 ResultSet 打开的 InputStream 数量。
+    /// 累加 `ResultSet` 打开的 `InputStream` 数量。
     pub fn add_input_stream_open_count(&self, count: u64) {
         self.input_stream_open_count
             .fetch_add(count, Ordering::Relaxed);
     }
 
-    /// 累加 ResultSet 打开的 Reader 数量。
+    /// 累加 `ResultSet` 打开的 Reader 数量。
     pub fn add_reader_open_count(&self, count: u64) {
         self.reader_open_count.fetch_add(count, Ordering::Relaxed);
     }

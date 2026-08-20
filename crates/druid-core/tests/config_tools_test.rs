@@ -1,4 +1,5 @@
 #![cfg(feature = "config-http")]
+#![allow(deprecated)] // ConfigTools is intentionally deprecated; tests exercise legacy compat
 
 extern crate druid_core as druid;
 use druid_core::core::ConfigTools;
@@ -26,7 +27,7 @@ fn config_tools_gen_key_pair_bytes() {
 
 #[test]
 fn config_tools_encrypt_decrypt_roundtrip() {
-    let keys = ConfigTools::gen_key_pair(2048).unwrap();
+    let _keys = ConfigTools::gen_key_pair(2048).unwrap();
     // encrypt 需要 public key text，decrypt 需要 private key。
     // 由于 encrypt_with_key_text 需要 PEM 格式，这里只测试 gen_key_pair 不 panic。
 }

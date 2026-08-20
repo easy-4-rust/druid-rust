@@ -21,12 +21,12 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     /// 返回驱动 Adapter 用于类型检查的只读动态对象。
     fn as_any(&self) -> &dyn Any;
 
-    /// 返回 CallableStatement 能力；普通 PreparedStatement 返回 `None`。
+    /// 返回 `CallableStatement` 能力；普通 `PreparedStatement` 返回 `None`。
     fn as_callable(&self) -> Option<&dyn PhysicalCallableStatement> {
         None
     }
 
-    /// 返回继承自 `Statement` 的 ResultSet 创建参数。
+    /// 返回继承自 `Statement` 的 `ResultSet` 创建参数。
     fn statement_options(&self) -> PhysicalStatementOptions {
         PhysicalStatementOptions::default()
     }
@@ -183,7 +183,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
         Ok(())
     }
 
-    /// 访问当前 ResultSet 前执行驱动 getter。
+    /// 访问当前 `ResultSet` 前执行驱动 getter。
     ///
     /// 对应 Java：`PreparedStatement` 继承的 `Statement#getResultSet()`。
     fn get_result_set(&self) -> Result<(), DruidError> {
@@ -203,7 +203,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     /// 推进到下一个 RDBC 结果。
     ///
     /// 对应 Java：PreparedStatement 继承的 `getMoreResults()` 与
-    /// `getMoreResults(int)`。非法 current 必须在关闭旧 ResultSet 前失败。
+    /// `getMoreResults(int)`。非法 current 必须在关闭旧 `ResultSet` 前失败。
     fn get_more_results(&self, current: Option<i32>) -> Result<(), DruidError> {
         if current.is_some_and(|value| !matches!(value, 1..=3)) {
             Err(DruidError::InvalidArgument(

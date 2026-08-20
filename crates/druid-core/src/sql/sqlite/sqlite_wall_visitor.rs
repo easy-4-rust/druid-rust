@@ -5,13 +5,13 @@ use crate::sql::{
 };
 use sqlparser::ast::Statement;
 
-/// SQLite Wall 方言 Visitor。
+/// `SQLite` Wall 方言 Visitor。
 pub struct SQLiteWallVisitor<'a> {
     base: WallVisitorBase<'a>,
 }
 
 impl<'a> SQLiteWallVisitor<'a> {
-    /// 绑定 SQLite Provider。
+    /// 绑定 `SQLite` Provider。
     #[must_use]
     pub fn new(provider: &'a WallProvider) -> Self {
         Self {

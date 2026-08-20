@@ -1,7 +1,7 @@
 //! Comprehensive coverage tests for druid-sql wall module.
 //!
-//! Targets: wall.rs (94 uncovered), wall_config.rs (23 uncovered),
-//! wall_violation.rs (10 uncovered).
+//! Targets: wall.rs (94 uncovered), `wall_config.rs` (23 uncovered),
+//! `wall_violation.rs` (10 uncovered).
 
 extern crate druid_core as druid;
 use druid_core::sql::{Wall, WallConfig, WallViolation};

@@ -36,7 +36,7 @@ pub(crate) async fn run_aggregator(
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => {
+            () = cancel.cancelled() => {
                 // Drain remaining snapshots before exit
                 while let Ok(snap) = snapshot_rx.try_recv() {
                     pending.insert(snap.datasource_id, snap);

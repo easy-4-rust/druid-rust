@@ -490,7 +490,7 @@ macro_rules! reader_update_family {
 /// Statement 结果集追踪表持有的共享关闭状态。
 ///
 /// Java `DruidPooledStatement#clearResultSet()` 保存的是包装结果集本身。Rust
-/// 使用弱物理引用和共享原子状态表达相同生命周期，避免 Statement 与 ResultSet
+/// 使用弱物理引用和共享原子状态表达相同生命周期，避免 Statement 与 `ResultSet`
 /// 形成强引用环。
 #[derive(Clone)]
 pub(crate) struct DruidPooledResultSetTrace {
@@ -522,7 +522,7 @@ impl DruidPooledResultSetTrace {
         }
     }
 
-    /// 仅把池化 wrapper 标记为关闭，不触发显式 ResultSet close Filter。
+    /// 仅把池化 wrapper 标记为关闭，不触发显式 `ResultSet` close Filter。
     ///
     /// 对应 Java：`DruidPooledStatement#getMoreResults(...)` 在底层 Statement
     /// 成功推进后直接设置最后一个 `DruidPooledResultSet.closed = true`。
@@ -539,7 +539,7 @@ impl DruidPooledResultSetTrace {
 ///
 /// 该对象保留 Java 的 Statement 身份、游标计数、抓取峰值回写、异常计数及
 /// 关闭生命周期。Rust 需要显式传入原 `DruidPooledConnection` 才能把物理
-/// ResultSet 错误交给同一连接的 `ExceptionSorter`。
+/// `ResultSet` 错误交给同一连接的 `ExceptionSorter`。
 pub struct DruidPooledResultSet {
     id: u64,
     attributes: super::ProxyAttributes,
@@ -645,7 +645,7 @@ impl DruidPooledResultSet {
         &self.statement
     }
 
-    /// 返回 Druid 数据源分配的 ResultSet proxy ID。
+    /// 返回 Druid 数据源分配的 `ResultSet` proxy ID。
     ///
     /// 对应 Java：`WrapperProxy#getId()`；每个数据源从 50000 开始递增。
     #[must_use]
@@ -653,30 +653,30 @@ impl DruidPooledResultSet {
         self.id
     }
 
-    /// 返回 ResultSet proxy attribute 数量。
+    /// 返回 `ResultSet` proxy attribute 数量。
     #[must_use]
     pub fn attributes_size(&self) -> usize {
         self.attributes.len()
     }
 
-    /// 清空 ResultSet proxy attributes。
+    /// 清空 `ResultSet` proxy attributes。
     pub fn clear_attributes(&self) {
         self.attributes.clear();
     }
 
-    /// 返回 ResultSet proxy attributes 快照。
+    /// 返回 `ResultSet` proxy attributes 快照。
     #[must_use]
     pub fn attributes(&self) -> std::collections::HashMap<String, super::ProxyAttributeValue> {
         self.attributes.snapshot()
     }
 
-    /// 返回指定 ResultSet proxy attribute。
+    /// 返回指定 `ResultSet` proxy attribute。
     #[must_use]
     pub fn attribute(&self, key: &str) -> Option<super::ProxyAttributeValue> {
         self.attributes.get(key)
     }
 
-    /// 保存或覆盖 ResultSet proxy attribute。
+    /// 保存或覆盖 `ResultSet` proxy attribute。
     pub fn put_attribute(
         &self,
         key: impl Into<String>,
@@ -693,13 +693,13 @@ impl DruidPooledResultSet {
         self.cursor_index.load(Ordering::Acquire)
     }
 
-    /// 返回成功完成的 ResultSet close Filter 链次数。
+    /// 返回成功完成的 `ResultSet` close Filter 链次数。
     #[must_use]
     pub fn close_count(&self) -> u64 {
         self.filter_context.close_count()
     }
 
-    /// 返回从 ResultSet open Filter 时点到当前的耗时。
+    /// 返回从 `ResultSet` open Filter 时点到当前的耗时。
     ///
     /// Rust `Instant` 不伪造 Java `System.nanoTime()` 的绝对数值，只保留其可比较
     /// 的单调耗时语义。
@@ -708,7 +708,7 @@ impl DruidPooledResultSet {
         self.filter_context.elapsed()
     }
 
-    /// 返回产生本 ResultSet 的 SQL。
+    /// 返回产生本 `ResultSet` 的 SQL。
     #[must_use]
     pub fn sql(&self) -> Option<&str> {
         self.filter_context.sql()
@@ -726,7 +726,7 @@ impl DruidPooledResultSet {
         self.filter_context.read_bytes_length()
     }
 
-    /// 返回打开 InputStream 的次数。
+    /// 返回打开 `InputStream` 的次数。
     #[must_use]
     pub fn open_input_stream_count(&self) -> u64 {
         self.filter_context.open_input_stream_count()
@@ -798,12 +798,12 @@ impl DruidPooledResultSet {
     /// 返回创建本结果集的 Statement。
     ///
     /// 对应 Java：`DruidPooledResultSet#getStatement()`；该方法返回池化
-    /// Statement 身份，不委托 raw ResultSet。
+    /// Statement 身份，不委托 raw `ResultSet`。
     pub fn statement(&self) -> &DruidPooledStatement {
         &self.statement
     }
 
-    /// 通过 FilterChain 返回创建本结果集的动态 Statement 平台对象。
+    /// 通过 `FilterChain` 返回创建本结果集的动态 Statement 平台对象。
     ///
     /// 对应 Java `ResultSet#getStatement()`：普通、Prepared、Callable 三种运行时
     /// 身份均保留为共享句柄，Filter 可以继续调用、短路替换或返回驱动错误。
@@ -832,16 +832,16 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 尝试把 `getStatement()` 的动态身份恢复为 PreparedStatement。
+    /// 尝试把 `getStatement()` 的动态身份恢复为 `PreparedStatement`。
     ///
     /// 对应 Java：当本结果集由 `DruidPooledPreparedStatement` 创建时，
-    /// `ResultSet#getStatement()` 返回同一逻辑 PreparedStatement 对象。普通
+    /// `ResultSet#getStatement()` 返回同一逻辑 `PreparedStatement` 对象。普通
     /// Statement 结果集返回 `None`。
     pub fn prepared_statement(&self) -> Option<&DruidPooledPreparedStatementHandle> {
         self.prepared_statement.as_ref()
     }
 
-    /// 尝试把 `getStatement()` 的动态身份恢复为 CallableStatement。
+    /// 尝试把 `getStatement()` 的动态身份恢复为 `CallableStatement`。
     ///
     /// 对应 Java：当结果集由 `DruidPooledCallableStatement` 创建时，返回同一
     /// callable 对象；普通 Statement/PreparedStatement 结果集返回 `None`。
@@ -919,7 +919,7 @@ impl DruidPooledResultSet {
         self.closed.load(Ordering::Acquire)
     }
 
-    /// 经 Java `ResultSet#isClosed()` FilterChain 查询物理关闭状态。
+    /// 经 Java `ResultSet#isClosed()` `FilterChain` 查询物理关闭状态。
     ///
     /// `is_closed()` 保留为 Rust 内部无失败生命周期观察器；对外 RDBC 语义入口
     /// 使用本方法，使 Filter 可以短路、改写或返回驱动错误。
@@ -1473,7 +1473,7 @@ impl DruidPooledResultSet {
     /// 按下标读取任意精度 Decimal。
     ///
     /// 对应 Java：`DruidPooledResultSet#getBigDecimal(int)`；委托物理
-    /// ResultSet 后的任何错误都进入 Statement `checkException` 等价路径。
+    /// `ResultSet` 后的任何错误都进入 Statement `checkException` 等价路径。
     pub fn big_decimal(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1868,7 +1868,7 @@ impl DruidPooledResultSet {
 
     /// 按下标读取并包装 canonical Druid `ClobProxyImpl`。
     ///
-    /// Java `ResultSet#getClob` 在 FilterChain 末端返回 ClobProxy；保留原
+    /// Java `ResultSet#getClob` 在 `FilterChain` 末端返回 ClobProxy；保留原
     /// `clob` 平台入口供 Adapter 内部使用，本入口恢复 Druid 对外代理语义。
     pub fn clob_proxy(
         &mut self,
@@ -2808,7 +2808,7 @@ impl DruidPooledResultSet {
         )
     }
 
-    /// 按下标读取 NString。
+    /// 按下标读取 `NString`。
     ///
     /// 对应 Java：`DruidPooledResultSet#getNString(int)`；Rust `String`
     /// 本身为 Unicode 值，eager Adapter 与普通字符串共享转换规则。
@@ -2831,7 +2831,7 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 NString。
+    /// 按标签读取 `NString`。
     pub fn n_string_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -3035,7 +3035,7 @@ impl DruidPooledResultSet {
         result
     }
 
-    /// 按下标读取 NCharacterStream。
+    /// 按下标读取 `NCharacterStream`。
     pub fn n_character_stream(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -3055,7 +3055,7 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    /// 按标签读取 NCharacterStream。
+    /// 按标签读取 `NCharacterStream`。
     pub fn n_character_stream_by_label(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -3388,7 +3388,7 @@ impl DruidPooledResultSet {
     /// 返回带 Druid Proxy 身份的结果列 metadata。
     ///
     /// 对应 Java：`ResultSetMetaDataProxyImpl`。底层 21 个列描述方法仍由
-    /// `ResultSetMetaData` 精确委托；代理层增加 metadata ID、所属 ResultSet
+    /// `ResultSetMetaData` 精确委托；代理层增加 metadata ID、所属 `ResultSet`
     /// ID、attributes 与 raw unwrap。
     pub fn meta_data_proxy(
         &mut self,
@@ -3981,6 +3981,7 @@ impl Wrapper for DruidPooledResultSet {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for DruidPooledResultSet {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter

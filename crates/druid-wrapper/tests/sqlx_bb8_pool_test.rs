@@ -1,4 +1,4 @@
-//! SQLx + bb8 外部池桥接契约测试。
+//! `SQLx` + bb8 外部池桥接契约测试。
 
 use druid_core::core::{PhysicalConnection, Pool, Value};
 use druid_wrapper::sqlx::bb8::SqlxBb8Pool;

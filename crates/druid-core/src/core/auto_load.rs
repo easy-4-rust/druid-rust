@@ -82,7 +82,7 @@ impl AutoLoad {
     ///
     /// # Errors
     ///
-    /// provider 注册的 factory 构造失败时，保留 FilterManager 的错误语义。
+    /// provider 注册的 factory 构造失败时，保留 `FilterManager` 的错误语义。
     pub(crate) fn load_registered(
         manager: &FilterManager,
         filter_chain: &mut FilterChain,

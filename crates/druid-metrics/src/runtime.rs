@@ -34,6 +34,7 @@ impl DruidMetricsRuntime {
     /// Start the metrics runtime with the given configuration.
     ///
     /// Spawns sampler, aggregator, and exporter tasks under a supervisor.
+    #[allow(clippy::unused_async)]
     pub async fn start(config: DruidMetricsConfig) -> Result<Self, MetricsError> {
         let cancel_token = CancellationToken::new();
         let self_metrics = Arc::new(RuntimeSelfMetrics::new());
@@ -155,12 +156,9 @@ impl DruidMetricsRuntime {
             }
         };
 
-        match tokio::time::timeout(deadline, join_all).await {
-            Ok(()) => Ok(()),
-            Err(_) => {
-                let unflushed = self.self_metrics.pending_snapshots();
-                Err(MetricsError::ShutdownTimeout { unflushed })
-            }
+        if let Ok(()) = tokio::time::timeout(deadline, join_all).await { Ok(()) } else {
+            let unflushed = self.self_metrics.pending_snapshots();
+            Err(MetricsError::ShutdownTimeout { unflushed })
         }
     }
 

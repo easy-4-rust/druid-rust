@@ -1,14 +1,16 @@
+#![allow(clippy::match_same_arms)]
+#![allow(clippy::type_complexity)]
 //! Dialect Wall Matrix Differential Tests — Step 9-10
 //!
 //! Validates Wall visitor rule consistency across 7 SQL dialects:
-//! MySQL, PostgreSQL, Oracle, SQLServer, DB2, SQLite, ClickHouse.
+//! `MySQL`, `PostgreSQL`, Oracle, `SQLServer`, DB2, `SQLite`, `ClickHouse`.
 //!
 //! Matrix: 9 SQL categories x 7 dialects = 63 base combinations,
-//! plus deny_tables and read_only_tables tests per dialect.
+//! plus `deny_tables` and `read_only_tables` tests per dialect.
 //!
 //! Key finding: `WallConfig::default()` sets `drop_table_allow`,
 //! `truncate_allow`, and `alter_table_allow` to **true** (matching
-//! Java WallConfig constructor). Tests verify both default-allow
+//! Java `WallConfig` constructor). Tests verify both default-allow
 //! and explicit-deny configurations.
 
 extern crate druid_core as druid;
@@ -360,7 +362,7 @@ fn matrix_ddl_alter_strict_deny_all_dialects() {
 // ===========================================================================
 
 /// GRANT should be denied across all dialects. If sqlparser cannot parse it
-/// for a given dialect, a SyntaxError is also acceptable (both prevent execution).
+/// for a given dialect, a `SyntaxError` is also acceptable (both prevent execution).
 #[test]
 fn matrix_grant_deny_all_dialects() {
     for &d in ALL_DIALECTS {
@@ -473,7 +475,7 @@ enum Expected {
     Deny,
     DenyOrSyntax, // GRANT/REVOKE: OperationNotAllowed or SyntaxError
     SyntaxError,
-    /// SQLite doesn't support TRUNCATE; SyntaxError is acceptable.
+    /// `SQLite` doesn't support TRUNCATE; `SyntaxError` is acceptable.
     DenyOrSkip,
 }
 
@@ -596,14 +598,12 @@ fn matrix_full_9x7_default_config() {
         }
     }
 
-    if !inconsistencies.is_empty() {
-        panic!(
-            "Matrix test: {}/{} passed. Inconsistencies:\n{}",
-            passed,
-            total,
-            inconsistencies.join("\n")
-        );
-    }
+    assert!(inconsistencies.is_empty(), 
+        "Matrix test: {}/{} passed. Inconsistencies:\n{}",
+        passed,
+        total,
+        inconsistencies.join("\n")
+    );
 }
 
 // ===========================================================================
@@ -666,14 +666,12 @@ fn matrix_strict_ddl_3x7() {
         }
     }
 
-    if !inconsistencies.is_empty() {
-        panic!(
-            "Strict DDL matrix: {}/{} passed. Inconsistencies:\n{}",
-            passed,
-            total,
-            inconsistencies.join("\n")
-        );
-    }
+    assert!(inconsistencies.is_empty(), 
+        "Strict DDL matrix: {}/{} passed. Inconsistencies:\n{}",
+        passed,
+        total,
+        inconsistencies.join("\n")
+    );
 }
 
 fn drop_table_sql_dialect(_d: Dialect) -> &'static str {
@@ -760,7 +758,7 @@ fn matrix_cross_dialect_consistency_drop_strict() {
     );
 }
 
-/// Verify deny_tables produces consistent DeniedTable across all 7 dialects.
+/// Verify `deny_tables` produces consistent `DeniedTable` across all 7 dialects.
 #[test]
 fn matrix_cross_dialect_consistency_deny_table() {
     let config = WallConfig::builder().deny_table("secret_data").build();
@@ -785,7 +783,7 @@ fn matrix_cross_dialect_consistency_deny_table() {
     );
 }
 
-/// Verify read_only_tables produces consistent ReadOnlyTable across all 7 dialects.
+/// Verify `read_only_tables` produces consistent `ReadOnlyTable` across all 7 dialects.
 #[test]
 fn matrix_cross_dialect_consistency_read_only() {
     let config = WallConfig::builder().read_only_table("audit_log").build();

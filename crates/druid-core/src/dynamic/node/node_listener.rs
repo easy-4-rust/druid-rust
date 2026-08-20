@@ -1,3 +1,4 @@
+#![allow(clippy::unused_async)]
 //! 对应 Java 抽象类：`com.alibaba.druid.pool.ha.node.NodeListener`。
 
 use super::{NodeEvent, PoolUpdater};
@@ -82,13 +83,13 @@ pub trait NodeListener: Send + Sync {
     /// 初始化监听器和后台资源。
     async fn init(self: Arc<Self>) -> Result<(), DruidError>;
 
-    /// 立即刷新并通知 PoolUpdater。
+    /// 立即刷新并通知 `PoolUpdater`。
     async fn update(&self);
 
     /// 停止监听器后台资源。
     async fn destroy(&self);
 
-    /// 设置唯一 PoolUpdater 观察者。
+    /// 设置唯一 `PoolUpdater` 观察者。
     fn set_observer(&self, observer: Arc<PoolUpdater>);
 
     /// 返回最近实际发布非空事件的时间。

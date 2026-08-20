@@ -136,10 +136,10 @@ impl DruidDriverRegistry {
             DriverRuntimeMode::JdbcAgent => {
                 #[cfg(not(feature = "jdbc-agent"))]
                 {
-                    return Err(DriverRegistryError::UnsupportedRuntime {
+                    Err(DriverRegistryError::UnsupportedRuntime {
                         profile: profile.id().to_string(),
                         runtime: "JdbcAgent feature disabled".to_owned(),
-                    });
+                    })
                 }
                 #[cfg(feature = "jdbc-agent")]
                 {
@@ -231,10 +231,10 @@ impl DruidDriverRegistry {
             DriverRuntimeMode::HttpSql => {
                 #[cfg(not(feature = "http-sql"))]
                 {
-                    return Err(DriverRegistryError::UnsupportedRuntime {
+                    Err(DriverRegistryError::UnsupportedRuntime {
                         profile: profile.id().to_string(),
                         runtime: "HttpSql feature disabled".to_owned(),
-                    });
+                    })
                 }
                 #[cfg(feature = "http-sql")]
                 {

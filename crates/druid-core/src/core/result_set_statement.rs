@@ -16,9 +16,9 @@ use super::{
 pub enum ResultSetStatement {
     /// 普通池化 Statement。
     Statement(DruidPooledStatement),
-    /// PreparedStatement 共享身份句柄。
+    /// `PreparedStatement` 共享身份句柄。
     Prepared(DruidPooledPreparedStatementHandle),
-    /// CallableStatement 共享身份句柄。
+    /// `CallableStatement` 共享身份句柄。
     Callable(DruidPooledCallableStatementHandle),
 }
 
@@ -32,7 +32,7 @@ impl ResultSetStatement {
         }
     }
 
-    /// 返回 PreparedStatement 身份；CallableStatement 也继承该身份。
+    /// 返回 `PreparedStatement` 身份；CallableStatement 也继承该身份。
     pub fn prepared_statement(&self) -> Option<&DruidPooledPreparedStatementHandle> {
         match self {
             Self::Statement(_) => None,
@@ -41,7 +41,7 @@ impl ResultSetStatement {
         }
     }
 
-    /// 返回 CallableStatement 身份。
+    /// 返回 `CallableStatement` 身份。
     pub fn callable_statement(&self) -> Option<&DruidPooledCallableStatementHandle> {
         match self {
             Self::Callable(statement) => Some(statement),

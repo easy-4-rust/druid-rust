@@ -1,4 +1,4 @@
-//! Connection、Statement、PreparedStatement 与 ResultSet 的 SQLWarning 差分契约。
+//! Connection、Statement、PreparedStatement 与 `ResultSet` 的 `SQLWarning` 差分契约。
 //!
 //! 对应 Java：
 //! `DruidPooledConnection#getWarnings/clearWarnings`、

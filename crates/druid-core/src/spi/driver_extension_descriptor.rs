@@ -14,8 +14,8 @@ pub struct DriverExtensionDescriptor {
     pub db_type: &'static str,
     /// Factory that creates unpoised physical connections for this database.
     pub factory: fn(&str) -> Result<Arc<dyn PhysicalConnectionFactory>, DruidError>,
-    /// Optional connection checker (e.g., MySqlValidConnectionChecker).
+    /// Optional connection checker (e.g., `MySqlValidConnectionChecker`).
     pub checker: Option<fn() -> Arc<dyn ValidConnectionChecker>>,
-    /// Optional exception sorter (e.g., MySqlExceptionSorter).
+    /// Optional exception sorter (e.g., `MySqlExceptionSorter`).
     pub sorter: Option<fn() -> Arc<dyn ExceptionSorter>>,
 }

@@ -1,10 +1,10 @@
-//! AutoLoad 全量覆盖测试（Java `AutoLoad.java` 差分对照）。
+//! `AutoLoad` 全量覆盖测试（Java `AutoLoad.java` 差分对照）。
 //!
 //! 覆盖目标：
-//! - AutoLoad::new 构造、value/filter_class_name/order 访问器
-//! - AutoLoad::with_order 构造、显式 order
+//! - `AutoLoad::new` `构造、value/filter_class_name/order` 访问器
+//! - `AutoLoad::with_order` 构造、显式 order
 //! - Default order = 0
-//! - with_order 自定义 order
+//! - `with_order` 自定义 order
 
 extern crate druid_core as druid;
 use druid_core::core::{AutoLoad, FilterManager};
@@ -12,7 +12,7 @@ use druid_core::core::{AutoLoad, FilterManager};
 /// 无副作用的 register 空函数。
 fn noop_register(_manager: &FilterManager) {}
 
-/// AutoLoad::new 默认 order = 0。
+/// `AutoLoad::new` 默认 order = 0。
 #[test]
 fn auto_load_new_default_order_is_zero() {
     let auto = AutoLoad::new("com.example.MyFilter", true, noop_register);
@@ -21,7 +21,7 @@ fn auto_load_new_default_order_is_zero() {
     assert!(auto.value());
 }
 
-/// AutoLoad::new value=false。
+/// `AutoLoad::new` value=false。
 #[test]
 fn auto_load_new_value_false() {
     let auto = AutoLoad::new("com.example.DisabledFilter", false, noop_register);
@@ -30,7 +30,7 @@ fn auto_load_new_value_false() {
     assert_eq!(auto.order(), 0);
 }
 
-/// AutoLoad::with_order 自定义 order。
+/// `AutoLoad::with_order` 自定义 order。
 #[test]
 fn auto_load_with_order_custom_order() {
     let auto = AutoLoad::with_order("com.example.OrderedFilter", true, 42, noop_register);
@@ -39,7 +39,7 @@ fn auto_load_with_order_custom_order() {
     assert!(auto.value());
 }
 
-/// AutoLoad::with_order 负数 order。
+/// `AutoLoad::with_order` 负数 order。
 #[test]
 fn auto_load_with_order_negative_order() {
     let auto = AutoLoad::with_order("com.example.NegFilter", true, -10, noop_register);
@@ -47,7 +47,7 @@ fn auto_load_with_order_negative_order() {
     assert!(auto.value());
 }
 
-/// AutoLoad::with_order value=false + 显式 order。
+/// `AutoLoad::with_order` value=false + 显式 order。
 #[test]
 fn auto_load_with_order_disabled_with_order() {
     let auto = AutoLoad::with_order("com.example.DisabledOrdered", false, 100, noop_register);
@@ -56,7 +56,7 @@ fn auto_load_with_order_disabled_with_order() {
     assert_eq!(auto.filter_class_name(), "com.example.DisabledOrdered");
 }
 
-/// filter_class_name 是 static 生命周期。
+/// `filter_class_name` 是 static 生命周期。
 #[test]
 fn auto_load_filter_class_name_is_static() {
     let class_name: &'static str = "com.example.StaticFilter";
@@ -104,7 +104,7 @@ fn auto_load_min_order() {
     assert_eq!(auto.order(), i32::MIN);
 }
 
-/// new 和 with_order 在 value=true, order=0 时语义等价。
+/// new 和 `with_order` 在 value=true, order=0 时语义等价。
 #[test]
 fn auto_load_new_and_with_order_equivalent_at_zero() {
     let a = AutoLoad::new("com.example.Equiv", true, noop_register);

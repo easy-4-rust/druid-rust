@@ -1,4 +1,4 @@
-//! SQLx + deadpool 外部池桥接契约测试。
+//! `SQLx` + deadpool 外部池桥接契约测试。
 
 use druid_core::core::{DruidError, PhysicalConnection, Pool, Value};
 use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;

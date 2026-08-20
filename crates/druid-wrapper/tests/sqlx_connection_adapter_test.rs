@@ -1,4 +1,4 @@
-//! SQLx Adapter 真实 SQLite 驱动合同测试。
+//! `SQLx` Adapter 真实 `SQLite` 驱动合同测试。
 
 use druid_core::core::{
     BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, PhysicalConnection,
@@ -17,7 +17,7 @@ struct SqlxPreparedDescriptorRecorder {
 
 #[async_trait::async_trait]
 impl BeforeFilter for SqlxPreparedDescriptorRecorder {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "sqlx_prepared_descriptor_recorder"
     }
 

@@ -2,7 +2,7 @@
 
 /// SQL 路由提示。
 ///
-/// 对应 Druid Java 中 DataSourceSelector 的选择策略。
+/// 对应 Druid Java 中 `DataSourceSelector` 的选择策略。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SqlHint {
     /// 写操作，路由到主库

@@ -90,7 +90,7 @@ fn eof_parser_exception_default() {
 #[test]
 fn eof_parser_exception_display() {
     let e = EofParserException::new();
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("EOF"));
 }
 
@@ -271,6 +271,6 @@ fn struct_clone_eq() {
 #[test]
 fn struct_debug() {
     let s = druid_core::sql::Struct::new("T", vec![]);
-    let dbg = format!("{:?}", s);
+    let dbg = format!("{s:?}");
     assert!(dbg.contains("Struct"));
 }

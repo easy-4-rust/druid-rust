@@ -12,7 +12,7 @@ use std::time::Duration;
 /// bb8 外部连接池桥接。
 ///
 /// 对应 Java: `javax.sql.DataSource` 的连接获取边界。该对象直接实现
-/// druid-rust 的 `Pool`，不会作为 `ConnectionFactory` 再嵌套到 DruidPool。
+/// druid-rust 的 `Pool`，不会作为 `ConnectionFactory` 再嵌套到 `DruidPool`。
 /// 借出的 bb8 租约经 `PhysicalConnectionLease` 透明委托给底层
 /// `SqlxConnectionAdapter`，对外仍统一返回 `DruidPooledConnection`。
 pub struct SqlxBb8Pool {
@@ -185,7 +185,7 @@ impl Pool for SqlxBb8Pool {
     }
 
     /// 返回驱动桥接名称。
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "sqlx-bb8"
     }
 

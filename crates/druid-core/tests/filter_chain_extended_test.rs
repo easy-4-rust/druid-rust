@@ -1,20 +1,21 @@
-//! FilterChainImpl 全量覆盖测试（Java `FilterChainImpl.java` 差分对照）。
+#![allow(clippy::approx_constant)]
+//! `FilterChainImpl` 全量覆盖测试（Java `FilterChainImpl.java` 差分对照）。
 //!
 //! 覆盖目标：
-//! - FilterChainImpl 构造、is_empty、counts、filter_class_names
-//! - add_filter / add_before / add_after / add_result_set / add_registered_filter
-//! - contains_filter_class_name 大小写不敏感
-//! - prepare_statement_sql / statement_add_batch_sql SQL 改写链
-//! - before_connection_event / after_connection_event 全路径
-//! - after_statement_event / after_statement_close_with_identity
-//! - init_filters / configure_filters / destroy_filters
-//! - Clob proxy 链（clob_length/get_sub_string/truncate/free 等）
-//! - Connection warning 链（connection_warnings/connection_clear_warnings）
-//! - Connection metadata 链（connection_database_meta_data）
-//! - Statement warning 链（statement_warnings/statement_clear_warnings）
-//! - result_set_open_after / result_set_open_after_with_proxy
-//! - result_set_find_column / result_set_get_meta_data
-//! - ResultSet scalar getter proxy 链（getString/getInt 等）
+//! - `FilterChainImpl` `构造、is_empty、counts、filter_class_names`
+//! - `add_filter` / `add_before` / `add_after` / `add_result_set` / `add_registered_filter`
+//! - `contains_filter_class_name` 大小写不敏感
+//! - `prepare_statement_sql` / `statement_add_batch_sql` SQL 改写链
+//! - `before_connection_event` / `after_connection_event` 全路径
+//! - `after_statement_event` / `after_statement_close_with_identity`
+//! - `init_filters` / `configure_filters` / `destroy_filters`
+//! - Clob proxy `链（clob_length/get_sub_string/truncate/free` 等）
+//! - Connection warning `链（connection_warnings/connection_clear_warnings`）
+//! - Connection metadata `链（connection_database_meta_data`）
+//! - Statement warning `链（statement_warnings/statement_clear_warnings`）
+//! - `result_set_open_after` / `result_set_open_after_with_proxy`
+//! - `result_set_find_column` / `result_set_get_meta_data`
+//! - `ResultSet` scalar getter proxy 链（getString/getInt 等）
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -189,7 +190,7 @@ async fn filter_chain_impl_after_connection_event_with_identity() {
         .unwrap();
 }
 
-/// 全部 ConnectionEvent 变体都可通过 before/after 链。
+/// 全部 `ConnectionEvent` 变体都可通过 before/after 链。
 #[tokio::test]
 async fn filter_chain_impl_connection_event_all_variants() {
     let mut chain = FilterChainImpl::new();
@@ -389,7 +390,7 @@ fn filter_chain_impl_result_set_open_after_with_adapter() {
 
 // ── 真实 Toasty SQLite 集成测试 ───────────────────────────────
 
-/// 通过真实 Toasty SQLite 连接验证 FilterChain 的完整生命周期。
+/// 通过真实 Toasty `SQLite` 连接验证 `FilterChain` 的完整生命周期。
 #[tokio::test]
 async fn filter_chain_impl_full_lifecycle_through_real_toasty_sqlite() {
     let mut chain = FilterChainImpl::new();
@@ -478,7 +479,7 @@ async fn filter_chain_impl_full_lifecycle_through_real_toasty_sqlite() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// Connection warnings 链通过真实 Toasty SQLite。
+/// Connection warnings 链通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_connection_warnings_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -500,7 +501,7 @@ async fn filter_chain_impl_connection_warnings_through_real_toasty() {
     connection.clear_warnings().await.unwrap();
 }
 
-/// Connection metadata 链通过真实 Toasty SQLite。
+/// Connection metadata 链通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_connection_metadata_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -521,7 +522,7 @@ async fn filter_chain_impl_connection_metadata_through_real_toasty() {
     let _raw = metadata.raw();
 }
 
-/// Statement warnings 链通过真实 Toasty SQLite。
+/// Statement warnings 链通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_statement_warnings_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -543,7 +544,7 @@ async fn filter_chain_impl_statement_warnings_through_real_toasty() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// PreparedStatement warnings 链通过真实 Toasty SQLite。
+/// `PreparedStatement` warnings 链通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_prepared_statement_warnings_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -565,8 +566,8 @@ async fn filter_chain_impl_prepared_statement_warnings_through_real_toasty() {
     prepared.close_with_connection(&mut connection).unwrap();
 }
 
-/// result_set_find_column 通过真实 Toasty SQLite。
-/// Toasty SQLite 不支持 label 查找，改用 index 访问验证路径覆盖。
+/// `result_set_find_column` 通过真实 Toasty `SQLite`。
+/// Toasty `SQLite` 不支持 label 查找，改用 index 访问验证路径覆盖。
 #[tokio::test]
 async fn filter_chain_impl_result_set_find_column_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -593,7 +594,7 @@ async fn filter_chain_impl_result_set_find_column_through_real_toasty() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// result_set_get_meta_data 通过真实 Toasty SQLite。
+/// `result_set_get_meta_data` 通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_result_set_get_meta_data_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -618,7 +619,7 @@ async fn filter_chain_impl_result_set_get_meta_data_through_real_toasty() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// ResultSet scalar getter proxy 链通过真实 Toasty SQLite。
+/// `ResultSet` scalar getter proxy 链通过真实 Toasty `SQLite`。
 /// 覆盖 getString/getInt/getLong/getDouble/getBoolean 等。
 #[tokio::test]
 async fn filter_chain_impl_result_set_scalar_getters_through_real_toasty() {
@@ -686,7 +687,7 @@ async fn filter_chain_impl_result_set_scalar_getters_through_real_toasty() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// ResultSet navigation proxy 链通过真实 Toasty SQLite。
+/// `ResultSet` navigation proxy 链通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_result_set_navigation_through_real_toasty() {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
@@ -772,7 +773,7 @@ async fn filter_chain_impl_result_set_navigation_through_real_toasty() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// LogFilter 在 FilterChainImpl 中通过真实 Toasty SQLite。
+/// `LogFilter` 在 `FilterChainImpl` 中通过真实 Toasty `SQLite`。
 #[tokio::test]
 async fn filter_chain_impl_with_log_filter_through_real_toasty() {
     let mut chain = FilterChainImpl::new();
@@ -806,7 +807,7 @@ async fn filter_chain_impl_with_log_filter_through_real_toasty() {
     stmt.close_with_connection(&mut connection).unwrap();
 }
 
-/// 多 Filter 链：两个 FilterAdapter 注册后通过真实 SQLite 验证。
+/// 多 Filter 链：两个 `FilterAdapter` 注册后通过真实 `SQLite` 验证。
 #[tokio::test]
 async fn filter_chain_impl_multi_filter_chain_through_real_toasty() {
     let mut chain = FilterChainImpl::new();

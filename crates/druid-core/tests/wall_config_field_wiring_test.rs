@@ -1,4 +1,4 @@
-//! WallConfig 全字段行为接线差分测试（C6 Step 8）。
+//! `WallConfig` 全字段行为接线差分测试（C6 Step 8）。
 //!
 //! 对照 Java 源：`WallVisitorUtils#preVisitCheck`（语句门控）、
 //! `WallVisitorUtils#getConditionValue/getValue_and`（条件语义族）、
@@ -22,7 +22,7 @@ fn violations_of(config: WallConfig, sql: &str) -> Vec<WallViolation> {
 
 // ── preVisitCheck 语句门控 ─────────────────────────────────────
 
-/// Java：`SQLUseStatement → useAllow`（默认 true，ErrorCode.USE_NOT_ALLOW 1203）。
+/// Java：`SQLUseStatement → useAllow`（默认 `true，ErrorCode.USE_NOT_ALLOW` 1203）。
 #[test]
 fn use_statement_blocked_when_disabled() {
     let blocked = violations_of(WallConfig::builder().use_allow(false).build(), "USE mydb");
@@ -34,7 +34,7 @@ fn use_statement_blocked_when_disabled() {
     assert!(allowed.is_empty());
 }
 
-/// Java：`SQLShowStatement 族 → showAllow`（默认 true，ErrorCode.SHOW_NOT_ALLOW 1202）。
+/// Java：`SQLShowStatement 族 → showAllow`（默认 `true，ErrorCode.SHOW_NOT_ALLOW` 1202）。
 #[test]
 fn show_statements_blocked_when_disabled() {
     for sql in [
@@ -55,7 +55,7 @@ fn show_statements_blocked_when_disabled() {
     }
 }
 
-/// Java：`SQLDescribeStatement → describeAllow`（默认 true，ErrorCode.DESC_NOT_ALLOW 1201）。
+/// Java：`SQLDescribeStatement → describeAllow`（默认 `true，ErrorCode.DESC_NOT_ALLOW` 1201）。
 #[test]
 fn describe_statements_blocked_when_disabled() {
     for sql in ["DESC t", "DESCRIBE t"] {
@@ -74,7 +74,7 @@ fn describe_statements_blocked_when_disabled() {
     assert!(explain.is_empty());
 }
 
-/// Java：`SQLCallStatement → callAllow`（默认 true，ErrorCode.CALL_NOT_ALLOW 1300）。
+/// Java：`SQLCallStatement → callAllow`（默认 `true，ErrorCode.CALL_NOT_ALLOW` 1300）。
 #[test]
 fn call_statement_blocked_when_disabled() {
     let blocked = violations_of(
@@ -118,7 +118,7 @@ fn intersect_blocked_when_disabled() {
 // ── 条件语义族（getConditionValue/getValue_and）──────────────
 
 /// Java：非首位恒假 part + `conditionAndAlwayFalseAllow=false`（默认）
-/// → ErrorCode.ALWAYS_FALSE（2113）"part alway false condition not allow"。
+/// → `ErrorCode.ALWAYS_FALSE（2113）"part` alway false condition not allow"。
 #[test]
 fn part_alway_false_denied_by_default() {
     let violations = violations_of(
@@ -156,7 +156,7 @@ fn part_alway_true_allowed_by_default() {
 }
 
 /// Java `getValue_and`：dalConst==2 且 `conditionDoubleConstAllow=false`（默认）
-/// → ErrorCode.DOUBLE_CONST_CONDITION（2107）。
+/// → `ErrorCode.DOUBLE_CONST_CONDITION（2107`）。
 #[test]
 fn double_const_condition_denied_by_default() {
     let violations = violations_of(
@@ -233,7 +233,7 @@ fn bitwise_operator_gated() {
 }
 
 /// Java：常量算术 + `constArithmeticAllow=true`（默认）放行；关闭后
-/// → ErrorCode.CONST_ARITHMETIC（2101）。
+/// → `ErrorCode.CONST_ARITHMETIC（2101`）。
 #[test]
 fn const_arithmetic_gated() {
     let allowed = violations_of(WallConfig::default(), "SELECT * FROM t WHERE a = 1 + 1");
@@ -251,7 +251,7 @@ fn const_arithmetic_gated() {
     );
 }
 
-/// Java：`LIKE` 两侧相同常量字符串 → ErrorCode.SAME_CONST_LIKE（2108）。
+/// Java：`LIKE` 两侧相同常量字符串 → `ErrorCode.SAME_CONST_LIKE（2108`）。
 #[test]
 fn same_const_like_denied() {
     let violations = violations_of(WallConfig::default(), "SELECT * FROM t WHERE 'a' LIKE 'a'");
@@ -268,7 +268,7 @@ fn same_const_like_denied() {
 }
 
 /// Java：`CASE WHEN` 常量条件 + `caseConditionConstAllow=false`（默认）
-/// → ErrorCode.CONST_CASE_CONDITION（2109）。
+/// → `ErrorCode.CONST_CASE_CONDITION（2109`）。
 #[test]
 fn const_case_condition_denied_by_default() {
     let violations = violations_of(
@@ -307,7 +307,7 @@ fn condition_checks_apply_to_having() {
 // ── 变量拒绝（MySqlWallVisitor#isDeny + WallVisitor#visit(SQLIdentifierExpr)）──
 
 /// Java `isDeny`：`@@version` 去掉 `@@` 前缀后小写匹配 denyVariants。
-/// 默认 MySQL 配置目录 deny-variant.txt 含 version/datadir。
+/// 默认 `MySQL` 配置目录 deny-variant.txt 含 version/datadir。
 #[test]
 fn deny_variant_blocks_system_variable() {
     let config = WallConfig::builder().deny_variant("secret").build();
@@ -410,7 +410,7 @@ fn table_check_gate_disables_table_deny() {
     );
 }
 
-/// Java denyObjects（objectCheck 门）：完整对象名匹配 → OBJECT_DENY（2005）。
+/// Java denyObjects（objectCheck 门）：完整对象名匹配 → `OBJECT_DENY（2005`）。
 #[test]
 fn deny_object_blocks_full_object_name() {
     let mut config = WallConfig::default();
@@ -434,7 +434,7 @@ fn deny_object_blocks_full_object_name() {
 
 // ── 只读表（WallVisitorUtils#checkReadOnly + WallConfig#isReadOnly）──
 
-/// Java：UPDATE/DELETE/INSERT/TRUNCATE 命中 readOnlyTables → READ_ONLY（4000）。
+/// Java：UPDATE/DELETE/INSERT/TRUNCATE 命中 readOnlyTables → `READ_ONLY（4000`）。
 #[test]
 fn read_only_table_blocks_writes() {
     let config = WallConfig::builder().read_only_table("archive").build();
@@ -593,7 +593,7 @@ fn violation_display_all_variants() {
 
 // ── 既有字段路径的补充覆盖 ─────────────────────────────────────
 
-/// `limitZeroAllow=false`（默认）→ LIMIT 0 拒绝（ErrorCode.LIMIT_ZERO 2200）。
+/// `limitZeroAllow=false`（默认）→ LIMIT 0 `拒绝（ErrorCode.LIMIT_ZERO` 2200）。
 #[test]
 fn limit_zero_denied_by_default() {
     let violations = violations_of(WallConfig::default(), "SELECT * FROM t LIMIT 0");
@@ -682,7 +682,7 @@ fn select_all_column_denied_when_disabled() {
     );
 }
 
-/// 常量求值覆盖 NotEq 与 Nested 路径（Java `getValue` 常量折叠语义）。
+/// 常量求值覆盖 `NotEq` 与 Nested 路径（Java `getValue` 常量折叠语义）。
 #[test]
 fn const_value_covers_not_equal_and_nested() {
     let not_equal = violations_of(
@@ -790,7 +790,7 @@ fn update_check_handler_allows_when_permitted() {
 
 // ── 边界路径补充（SELECT INTO / 双引号 LIKE / TRUE / hint / 引号转义）──
 
-/// `selectIntoAllow` 关闭时 `SELECT a INTO b` 拒绝（ErrorCode.SELECT_INTO_NOT_ALLOW 1003）。
+/// `selectIntoAllow` 关闭时 `SELECT a INTO b` `拒绝（ErrorCode.SELECT_INTO_NOT_ALLOW` 1003）。
 #[test]
 fn select_into_denied_when_disabled() {
     let config = WallConfig::builder().select_into_allow(false).build();

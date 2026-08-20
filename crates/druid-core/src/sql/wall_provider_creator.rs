@@ -22,7 +22,7 @@ pub trait WallProviderCreator: Send + Sync + 'static {
     }
 }
 
-/// Rust `inventory` 中的 WallProviderCreator 注册项。
+/// Rust `inventory` 中的 `WallProviderCreator` 注册项。
 pub struct WallProviderCreatorRegistration {
     pub name: &'static str,
     pub constructor: fn() -> Box<dyn WallProviderCreator>,
@@ -33,7 +33,7 @@ inventory::collect!(WallProviderCreatorRegistration);
 /// 返回按 Java `getOrder`、再按稳定名称排序的 Creator。
 ///
 /// Java 源码虽然构建了排序列表，却误迭代原 ServiceLoader；Rust 不继承
-/// ClassLoader 的偶然顺序，使用接口公开的 `getOrder` 作为确定性合同。
+/// `ClassLoader` 的偶然顺序，使用接口公开的 `getOrder` 作为确定性合同。
 #[must_use]
 pub fn registered_wall_provider_creators() -> Vec<Box<dyn WallProviderCreator>> {
     let mut creators = inventory::iter::<WallProviderCreatorRegistration>

@@ -90,7 +90,7 @@ fn wall_table_stat_value_clone_eq() {
 #[test]
 fn wall_table_stat_value_debug() {
     let v = sample_value();
-    let dbg = format!("{:?}", v);
+    let dbg = format!("{v:?}");
     assert!(dbg.contains("WallTableStatValue"));
     assert!(dbg.contains("users"));
 }

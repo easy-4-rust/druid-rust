@@ -17,7 +17,7 @@ use x509_cert::Certificate;
 ///
 /// Java `ConfigTools` 使用非典型的“私钥 PKCS#1 v1.5 type-1 运算、公钥恢复”
 /// 来隐藏数据源密码。该算法不应作为新协议使用，但迁移必须能读取现有 Druid
-/// 密文，因此这里显式实现其编码块并保留 PKCS#8 私钥、X.509 SubjectPublicKeyInfo
+/// 密文，因此这里显式实现其编码块并保留 PKCS#8 私钥、X.509 `SubjectPublicKeyInfo`
 /// 公钥、标准 Base64 以及默认 512-bit 历史密钥格式。
 #[derive(Debug, Default, Clone, Copy)]
 #[deprecated(note = "仅用于读取 Java Druid 旧配置密文；新系统应使用 secret manager")]

@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 //! XA/2PC 状态机集成测试。
 //!
 //! 验证 `XaTransactionState` 的状态转换合法性、非法转换拒绝与超时逻辑。
@@ -207,13 +208,13 @@ fn xa_committed_rejects_all_operations() {
     assert_eq!(tx.state(), XaState::Committed);
 
     let ops: Vec<Box<dyn Fn(&mut XaTransactionState) -> Result<(), XaStateTransitionError>>> = vec![
-        Box::new(|tx| tx.start()),
-        Box::new(|tx| tx.end()),
-        Box::new(|tx| tx.prepare()),
+        Box::new(druid::core::XaTransactionState::start),
+        Box::new(druid::core::XaTransactionState::end),
+        Box::new(druid::core::XaTransactionState::prepare),
         Box::new(|tx| tx.commit(false)),
         Box::new(|tx| tx.commit(true)),
-        Box::new(|tx| tx.rollback()),
-        Box::new(|tx| tx.mark_failed()),
+        Box::new(druid::core::XaTransactionState::rollback),
+        Box::new(druid::core::XaTransactionState::mark_failed),
     ];
 
     for op in ops {
@@ -231,12 +232,12 @@ fn xa_rolled_back_rejects_all_operations() {
     assert_eq!(tx.state(), XaState::RolledBack);
 
     let ops: Vec<Box<dyn Fn(&mut XaTransactionState) -> Result<(), XaStateTransitionError>>> = vec![
-        Box::new(|tx| tx.start()),
-        Box::new(|tx| tx.end()),
-        Box::new(|tx| tx.prepare()),
+        Box::new(druid::core::XaTransactionState::start),
+        Box::new(druid::core::XaTransactionState::end),
+        Box::new(druid::core::XaTransactionState::prepare),
         Box::new(|tx| tx.commit(false)),
-        Box::new(|tx| tx.rollback()),
-        Box::new(|tx| tx.mark_failed()),
+        Box::new(druid::core::XaTransactionState::rollback),
+        Box::new(druid::core::XaTransactionState::mark_failed),
     ];
 
     for op in ops {
@@ -258,11 +259,11 @@ fn xa_failed_allows_only_forget() {
 
     // 其他操作都应被拒绝
     let ops: Vec<Box<dyn Fn(&mut XaTransactionState) -> Result<(), XaStateTransitionError>>> = vec![
-        Box::new(|tx| tx.start()),
-        Box::new(|tx| tx.end()),
-        Box::new(|tx| tx.prepare()),
+        Box::new(druid::core::XaTransactionState::start),
+        Box::new(druid::core::XaTransactionState::end),
+        Box::new(druid::core::XaTransactionState::prepare),
         Box::new(|tx| tx.commit(false)),
-        Box::new(|tx| tx.rollback()),
+        Box::new(druid::core::XaTransactionState::rollback),
     ];
 
     for op in ops {
@@ -282,9 +283,9 @@ fn xa_no_timeout_never_expires() {
 
 #[test]
 fn xa_with_timeout_does_not_expire_immediately() {
-    let tx = XaTransactionState::with_timeout(test_xid(31), Duration::from_secs(60));
+    let tx = XaTransactionState::with_timeout(test_xid(31), Duration::from_mins(1));
     assert!(!tx.is_timed_out());
-    assert_eq!(tx.timeout(), Some(Duration::from_secs(60)));
+    assert_eq!(tx.timeout(), Some(Duration::from_mins(1)));
 }
 
 #[test]

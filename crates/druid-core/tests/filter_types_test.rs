@@ -12,7 +12,7 @@ fn exec_operation_debug() {
         ExecOperation::Batch,
     ];
     for op in &ops {
-        let dbg = format!("{:?}", op);
+        let dbg = format!("{op:?}");
         assert!(!dbg.is_empty());
     }
 }
@@ -44,7 +44,7 @@ fn connection_event_debug() {
         ConnectionEvent::Rollback,
     ];
     for event in &events {
-        let dbg = format!("{:?}", event);
+        let dbg = format!("{event:?}");
         assert!(!dbg.is_empty());
     }
 }

@@ -1,3 +1,4 @@
+#![allow(clippy::unused_async)]
 use axum::extract::{OriginalUri, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;

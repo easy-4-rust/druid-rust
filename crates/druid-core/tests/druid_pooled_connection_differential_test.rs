@@ -1,6 +1,6 @@
 //! Differential tests for `DruidPooledConnection` — Java Druid 1.2.28 semantics.
 //!
-//! Uses real Toasty SQLite in-memory connections. Focuses on uncovered getter/setter
+//! Uses real Toasty `SQLite` in-memory connections. Focuses on uncovered getter/setter
 //! families, transaction lifecycle, warning chain, close/Drop, attributes, event
 //! listeners, error paths, and the Wrapper trait.
 

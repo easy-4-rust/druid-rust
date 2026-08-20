@@ -1,4 +1,4 @@
-//! CallableStatement OUT 参数描述。
+//! `CallableStatement` OUT 参数描述。
 //!
 //! 对应 Java：`CallableStatement#registerOutParameter(...)` 的参数集合。
 

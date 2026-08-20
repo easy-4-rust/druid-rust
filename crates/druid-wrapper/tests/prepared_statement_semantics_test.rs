@@ -1,4 +1,4 @@
-//! Java Druid PreparedStatement pool 纵向契约。
+//! Java Druid `PreparedStatement` pool 纵向契约。
 //!
 //! Java oracle：
 //! - `DruidConnectionHolderTest4#test_toString`
@@ -31,7 +31,7 @@ struct RejectNextPreparedBatch {
 
 #[async_trait::async_trait]
 impl BeforeFilter for RejectNextPreparedBatch {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "reject_next_prepared_batch"
     }
 
@@ -58,7 +58,7 @@ struct PreparedDescriptorRecorder {
 
 #[async_trait::async_trait]
 impl BeforeFilter for PreparedDescriptorRecorder {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "prepared_descriptor_recorder"
     }
 
@@ -183,7 +183,7 @@ type PreparedExecuteEvent = (String, ExecOperation, Vec<Value>, bool, Option<u64
 
 #[async_trait::async_trait]
 impl BeforeFilter for PreparedExecuteRecorder {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "prepared_execute_recorder"
     }
 
@@ -192,7 +192,7 @@ impl BeforeFilter for PreparedExecuteRecorder {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((
-                context.sql.to_string(),
+                context.sql.clone(),
                 context.operation,
                 context.params.to_vec(),
                 true,
@@ -204,7 +204,7 @@ impl BeforeFilter for PreparedExecuteRecorder {
 
 #[async_trait::async_trait]
 impl AfterFilter for PreparedExecuteRecorder {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "prepared_execute_recorder"
     }
 
@@ -218,7 +218,7 @@ impl AfterFilter for PreparedExecuteRecorder {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push((
-                context.sql.to_string(),
+                context.sql.clone(),
                 context.operation,
                 context.params.to_vec(),
                 false,
@@ -309,7 +309,7 @@ struct PreparedPropertyStatement {
 }
 
 impl PhysicalPreparedStatement for PreparedPropertyStatement {
-    fn sql(&self) -> &str {
+    fn sql(&self) -> &'static str {
         "select 1"
     }
 
@@ -1138,7 +1138,7 @@ impl CleanupFailingStatement {
 }
 
 impl PhysicalPreparedStatement for CleanupFailingStatement {
-    fn sql(&self) -> &str {
+    fn sql(&self) -> &'static str {
         "select 1"
     }
 
@@ -1287,7 +1287,7 @@ impl PhysicalConnection for CleanupFailingConnection {
         self.discarded.load(Ordering::Acquire)
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "mysql"
     }
 }
@@ -1637,12 +1637,12 @@ async fn concurrent_logical_statements_preserve_java_in_use_and_lru_semantics() 
         let mut statement = connection.prepare_statement(sql).await.unwrap();
         statement.close().unwrap();
     }
-    let active_holder = active.prepared_statement_holder() as *const _;
+    let active_holder = std::ptr::from_ref(active.prepared_statement_holder());
     assert!(!active.prepared_statement_holder().is_pooling());
     active.close().unwrap();
     assert!(active.prepared_statement_holder().is_pooling());
     assert_eq!(
-        active.prepared_statement_holder() as *const _,
+        std::ptr::from_ref(active.prepared_statement_holder()),
         active_holder
     );
     drop(active);

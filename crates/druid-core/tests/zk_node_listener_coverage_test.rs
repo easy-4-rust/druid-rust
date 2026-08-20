@@ -1,9 +1,9 @@
-//! ZookeeperNodeListener differential coverage tests (Java Druid 1.2.28).
+//! `ZookeeperNodeListener` differential coverage tests (Java Druid 1.2.28).
 //!
 //! Covers paths that do not require a real ZK connection:
-//! direct_child_name, format_url placeholder substitution, check_parameters
-//! validation, properties_from_child_data prefix rewriting, Default
-//! construction, set_* setters, NodeEvent generation and diff.
+//! `direct_child_name`, `format_url` placeholder substitution, `check_parameters`
+//! validation, `properties_from_child_data` prefix rewriting, Default
+//! construction, set_* setters, `NodeEvent` generation and diff.
 
 extern crate druid_core as druid;
 use druid_core::dynamic::node::{NodeEvent, NodeEventTypeEnum, ZookeeperNodeListener};
@@ -227,7 +227,7 @@ fn node_event_debug_hides_password() {
         Some("root".to_owned()),
         Some("secret123".to_owned()),
     );
-    let debug = format!("{:?}", event);
+    let debug = format!("{event:?}");
     assert!(
         debug.contains("password_length"),
         "debug must show password_length"
@@ -241,7 +241,7 @@ fn node_event_debug_hides_password() {
 #[test]
 fn node_event_debug_no_password() {
     let event = NodeEvent::new(NodeEventTypeEnum::Add, "node1", None, None, None);
-    let debug = format!("{:?}", event);
+    let debug = format!("{event:?}");
     assert!(!debug.contains("password_length"));
 }
 

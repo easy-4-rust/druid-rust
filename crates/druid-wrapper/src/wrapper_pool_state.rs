@@ -3,7 +3,7 @@ use serde::Serialize;
 
 /// Wrapper 数据源的管理快照。
 ///
-/// 迁移 Java DBCP/c3p0/Proxool MBean 的共同可观察字段。
+/// 迁移 Java DBCP/c3p0/Proxool `MBean` 的共同可观察字段。
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WrapperPoolState {
@@ -24,7 +24,7 @@ pub struct WrapperPoolState {
 }
 
 impl WrapperPoolState {
-    /// 从统一 PoolState 创建 wrapper 快照。
+    /// 从统一 `PoolState` 创建 wrapper 快照。
     #[must_use]
     pub fn from_pool_state(provider: impl Into<String>, state: PoolState) -> Self {
         Self {

@@ -3,10 +3,8 @@ use druid_core::core::{OracleValidConnectionChecker, ValidConnectionChecker};
 use druid_core::sql::{
     CkWallProvider, DbType, WallConfig, WallProvider, WallViolation, WallVisitor,
 };
-use sqlparser::ast::Statement;
 use sqlparser::dialect::GenericDialect;
 use sqlparser::parser::Parser;
-use std::time::Duration;
 
 // ── CkWallProvider ─────────────────────────────────────────────
 
@@ -134,7 +132,7 @@ fn sqlite_wall_visitor_setters() {
 
 #[test]
 fn oracle_checker_new() {
-    let c = OracleValidConnectionChecker::new();
+    let _c = OracleValidConnectionChecker::new();
     assert_eq!(
         OracleValidConnectionChecker::DEFAULT_VALIDATE_QUERY,
         "SELECT 'x' FROM DUAL"
@@ -172,5 +170,5 @@ fn oracle_checker_config_from_properties_empty() {
 fn oracle_checker_clone_copy_debug() {
     let c = OracleValidConnectionChecker::new();
     let c2 = c;
-    let _ = format!("{:?}", c2);
+    let _ = format!("{c2:?}");
 }

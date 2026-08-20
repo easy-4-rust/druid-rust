@@ -25,7 +25,7 @@ pub(crate) async fn run_sampler(
     loop {
         tokio::select! {
             biased;
-            _ = cancel.cancelled() => break,
+            () = cancel.cancelled() => break,
             _ = ticker.tick() => {
                 sample_all(&registry, &snapshot_tx, &self_metrics).await;
             }
@@ -33,6 +33,7 @@ pub(crate) async fn run_sampler(
     }
 }
 
+#[allow(clippy::unused_async)]
 async fn sample_all(
     registry: &Arc<RwLock<Vec<RegistryEntry>>>,
     snapshot_tx: &mpsc::Sender<crate::aggregator::PendingSnapshot>,

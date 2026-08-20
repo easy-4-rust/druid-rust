@@ -53,7 +53,7 @@ impl Connection for MockConnection {
         self.closed = true;
         Ok(())
     }
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "mock"
     }
 }

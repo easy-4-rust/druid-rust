@@ -17,7 +17,7 @@ pub struct DruidRdbcDataSource {
 }
 
 impl DruidRdbcDataSource {
-    /// 从统一 RDBC URL 构建目录驱动的 canonical Druid DataSource。
+    /// 从统一 RDBC URL 构建目录驱动的 canonical Druid `DataSource`。
     pub async fn connect(rdbc_url: impl Into<String>) -> Result<Self, DriverRegistryError> {
         let data_source = DruidDatabasePoolBuilder::from_rdbc_url(rdbc_url)?
             .build_data_source()

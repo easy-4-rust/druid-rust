@@ -1,8 +1,8 @@
 //! Batch 2 coverage tests for:
-//! - druid_stat_manager_facade.rs: merge_wall_stat/merge_wall_value direct paths
-//! - druid_stat_service.rs: page nested keys, sql_detail, wall sort, parameters edge cases
-//! - sql_utils.rs: dialect mapping, format, parse_single_statement, to_sql_string
-//! - db_type.rs: of/as_str/mask/hash_code_64/mask_of/equals_name/is_postgresql_style/Display
+//! - `druid_stat_manager_facade.rs`: `merge_wall_stat/merge_wall_value` direct paths
+//! - `druid_stat_service.rs`: page nested keys, `sql_detail`, wall sort, parameters edge cases
+//! - `sql_utils.rs`: dialect mapping, format, `parse_single_statement`, `to_sql_string`
+//! - `db_type.rs`: `of/as_str/mask/hash_code_64/mask_of/equals_name/is_postgresql_style/Display`
 
 extern crate druid_core as druid;
 use druid_core::sql::{DbType, SqlFormatOption, SqlUtils};

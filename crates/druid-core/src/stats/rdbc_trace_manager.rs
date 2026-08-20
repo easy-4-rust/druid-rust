@@ -6,7 +6,7 @@ use std::sync::OnceLock;
 ///
 /// 对应 Java: `com.alibaba.druid.stat.RdbcTraceManager`。原 Java
 /// `RdbcTraceManagerMBean` 是空接口且 JMX 为 JVM 宿主边界，因此 Rust 只保留
-/// 可观察的稳定单例身份，不创建 MBean 或 SLF4J 对象。
+/// 可观察的稳定单例身份，不创建 `MBean` 或 SLF4J 对象。
 #[deprecated(note = "Java RdbcTraceManager 仅保留空 MBean 单例")]
 pub struct RdbcTraceManager;
 

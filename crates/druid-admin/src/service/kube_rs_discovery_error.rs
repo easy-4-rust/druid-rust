@@ -19,7 +19,7 @@ pub enum KubeRsDiscoveryError {
         service_name: String,
         field: &'static str,
     },
-    /// Kubernetes 端口超出 ServiceNode 表达范围。
+    /// Kubernetes 端口超出 `ServiceNode` 表达范围。
     #[error("service {service_name} has invalid port {port}")]
     InvalidPort { service_name: String, port: i32 },
 }

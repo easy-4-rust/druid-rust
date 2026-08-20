@@ -1,9 +1,9 @@
 //! Comprehensive coverage boost tests for druid-core.
 //!
 //! Targets: config.rs (47 uncovered), filter.rs (20 uncovered),
-//! pooled_connection.rs (31 uncovered), connection.rs (52 uncovered),
-//! connection_holder.rs (29 uncovered), error.rs (16 uncovered),
-//! value.rs (16 uncovered), exception_sorter.rs (11 uncovered).
+//! `pooled_connection.rs` (31 uncovered), connection.rs (52 uncovered),
+//! `connection_holder.rs` (29 uncovered), error.rs (16 uncovered),
+//! value.rs (16 uncovered), `exception_sorter.rs` (11 uncovered).
 
 extern crate druid_core as druid;
 use druid_core::core::*;
@@ -46,7 +46,7 @@ impl Connection for MockConnForPool {
     async fn close(&mut self) -> Result<(), DruidError> {
         Ok(())
     }
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "mock-pool"
     }
 }
@@ -69,17 +69,17 @@ fn test_pool_config_default_values() {
     assert_eq!(cfg.initial_size, 0);
     assert_eq!(cfg.acquire_timeout, Duration::MAX);
     assert_eq!(cfg.max_lifetime, Duration::MAX);
-    assert_eq!(cfg.eviction_interval, Duration::from_secs(60));
-    assert_eq!(cfg.min_evictable_idle, Duration::from_secs(1800));
+    assert_eq!(cfg.eviction_interval, Duration::from_mins(1));
+    assert_eq!(cfg.min_evictable_idle, Duration::from_mins(30));
     assert!(!cfg.test_on_borrow);
     assert!(!cfg.test_on_return);
     assert!(!cfg.test_while_idle);
     assert!(cfg.validation_query.is_none());
     assert_eq!(cfg.validation_query_timeout, Duration::ZERO);
     assert!(!cfg.keep_alive);
-    assert_eq!(cfg.keep_alive_interval, Duration::from_secs(120));
+    assert_eq!(cfg.keep_alive_interval, Duration::from_mins(2));
     assert!(!cfg.leak_detection);
-    assert_eq!(cfg.leak_threshold, Duration::from_secs(300));
+    assert_eq!(cfg.leak_threshold, Duration::from_mins(5));
     assert!(!cfg.leak_stack_trace);
     assert!(cfg.default_auto_commit.is_none());
     assert!(cfg.default_read_only.is_none());
@@ -109,16 +109,16 @@ fn test_pool_config_builder_all_methods() {
         .min_idle(5)
         .initial_size(3)
         .acquire_timeout(Duration::from_secs(10))
-        .max_lifetime(Duration::from_secs(3600))
+        .max_lifetime(Duration::from_hours(1))
         .eviction_interval(Duration::from_secs(30))
-        .min_evictable_idle(Duration::from_secs(600))
+        .min_evictable_idle(Duration::from_mins(10))
         .test_on_borrow(true)
         .test_on_return(true)
         .test_while_idle(true)
         .validation_query("SELECT 1")
         .keep_alive(true)
         .leak_detection(true)
-        .leak_threshold(Duration::from_secs(600))
+        .leak_threshold(Duration::from_mins(10))
         .slow_sql_threshold(Duration::from_secs(1))
         .pool_prepared_statements(true)
         .default_auto_commit(true)
@@ -136,16 +136,16 @@ fn test_pool_config_builder_all_methods() {
     assert_eq!(cfg.min_idle, 5);
     assert_eq!(cfg.initial_size, 3);
     assert_eq!(cfg.acquire_timeout, Duration::from_secs(10));
-    assert_eq!(cfg.max_lifetime, Duration::from_secs(3600));
+    assert_eq!(cfg.max_lifetime, Duration::from_hours(1));
     assert_eq!(cfg.eviction_interval, Duration::from_secs(30));
-    assert_eq!(cfg.min_evictable_idle, Duration::from_secs(600));
+    assert_eq!(cfg.min_evictable_idle, Duration::from_mins(10));
     assert!(cfg.test_on_borrow);
     assert!(cfg.test_on_return);
     assert!(cfg.test_while_idle);
     assert_eq!(cfg.validation_query.as_deref(), Some("SELECT 1"));
     assert!(cfg.keep_alive);
     assert!(cfg.leak_detection);
-    assert_eq!(cfg.leak_threshold, Duration::from_secs(600));
+    assert_eq!(cfg.leak_threshold, Duration::from_mins(10));
     assert_eq!(cfg.slow_sql_threshold, Duration::from_secs(1));
     assert!(cfg.pool_prepared_statements);
     assert_eq!(cfg.default_auto_commit, Some(true));
@@ -356,7 +356,7 @@ fn test_connection_holder_full_state_machine() {
 #[test]
 fn test_connection_holder_is_alive_variants() {
     let h = ConnectionHolder::new(1);
-    assert!(h.is_alive(Duration::from_secs(60)));
+    assert!(h.is_alive(Duration::from_mins(1)));
     let d = h.held_duration();
     assert!(d < Duration::from_secs(1));
 }
@@ -378,13 +378,13 @@ fn test_connection_holder_all_states_display() {
 
     h.try_transition(ConnectionState::Closing, ConnectionState::Closed);
     assert_eq!(h.state(), ConnectionState::Closed);
-    assert!(!h.is_alive(Duration::from_secs(60)));
+    assert!(!h.is_alive(Duration::from_mins(1)));
 
     // Error state
     let h2 = ConnectionHolder::new(2);
     h2.try_transition(ConnectionState::Idle, ConnectionState::Error);
     assert_eq!(h2.state(), ConnectionState::Error);
-    assert!(!h2.is_alive(Duration::from_secs(60)));
+    assert!(!h2.is_alive(Duration::from_mins(1)));
 
     // Validating state
     let h3 = ConnectionHolder::new(3);
@@ -415,7 +415,7 @@ fn test_error_display_all_variants() {
         DruidError::ValidationFailed("timeout".into()),
         DruidError::ConnectionLeaked {
             id: 1,
-            held_for: Duration::from_secs(60),
+            held_for: Duration::from_mins(1),
         },
         DruidError::ConnectionDiscarded,
         DruidError::DriverError("bad driver".into()),
@@ -437,7 +437,7 @@ fn test_error_display_all_variants() {
     .contains("closed"));
     assert!(format!("{}", DruidError::AcquireTimeout).contains("timed out"));
     assert!(format!("{}", DruidError::PoolExhausted).contains("exhausted"));
-    assert!(format!("{}", DruidError::ValidationFailed("x".into())).contains("x"));
+    assert!(format!("{}", DruidError::ValidationFailed("x".into())).contains('x'));
     assert!(format!(
         "{}",
         DruidError::ConnectionLeaked {
@@ -445,12 +445,12 @@ fn test_error_display_all_variants() {
             held_for: Duration::from_secs(10)
         }
     )
-    .contains("5"));
-    assert!(format!("{}", DruidError::DriverError("d".into())).contains("d"));
-    assert!(format!("{}", DruidError::SqlParseError("p".into())).contains("p"));
-    assert!(format!("{}", DruidError::WallViolation("w".into())).contains("w"));
-    assert!(format!("{}", DruidError::DataSourceNotFound("n".into())).contains("n"));
-    assert!(format!("{}", DruidError::Other("o".into())).contains("o"));
+    .contains('5'));
+    assert!(format!("{}", DruidError::DriverError("d".into())).contains('d'));
+    assert!(format!("{}", DruidError::SqlParseError("p".into())).contains('p'));
+    assert!(format!("{}", DruidError::WallViolation("w".into())).contains('w'));
+    assert!(format!("{}", DruidError::DataSourceNotFound("n".into())).contains('n'));
+    assert!(format!("{}", DruidError::Other("o".into())).contains('o'));
 }
 
 #[test]

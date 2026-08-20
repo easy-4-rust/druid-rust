@@ -53,14 +53,14 @@ fn sanitize_disabled(value: &Value) -> Result<Value, MetricsError> {
         }
         Value::Array(arr) => {
             let cleaned: Result<Vec<Value>, MetricsError> =
-                arr.iter().map(|v| sanitize_disabled(v)).collect();
+                arr.iter().map(sanitize_disabled).collect();
             Ok(Value::Array(cleaned?))
         }
         other => Ok(other.clone()),
     }
 }
 
-/// FingerprintOnly policy: keep fingerprint and parameterized SQL,
+/// `FingerprintOnly` policy: keep fingerprint and parameterized SQL,
 /// strip raw SQL and bind values.
 fn sanitize_fingerprint_only(value: &Value) -> Result<Value, MetricsError> {
     check_always_sensitive(value)?;
@@ -80,14 +80,14 @@ fn sanitize_fingerprint_only(value: &Value) -> Result<Value, MetricsError> {
         Ok(Value::Object(cleaned))
     } else if let Value::Array(arr) = value {
         let cleaned: Result<Vec<Value>, MetricsError> =
-            arr.iter().map(|v| sanitize_fingerprint_only(v)).collect();
+            arr.iter().map(sanitize_fingerprint_only).collect();
         Ok(Value::Array(cleaned?))
     } else {
         Ok(value.clone())
     }
 }
 
-/// RawWithoutParameters policy: keep raw SQL but strip bind values.
+/// `RawWithoutParameters` policy: keep raw SQL but strip bind values.
 fn sanitize_raw_no_params(value: &Value) -> Result<Value, MetricsError> {
     check_always_sensitive(value)?;
     if let Value::Object(map) = value {
@@ -99,7 +99,7 @@ fn sanitize_raw_no_params(value: &Value) -> Result<Value, MetricsError> {
         Ok(Value::Object(cleaned))
     } else if let Value::Array(arr) = value {
         let cleaned: Result<Vec<Value>, MetricsError> =
-            arr.iter().map(|v| sanitize_raw_no_params(v)).collect();
+            arr.iter().map(sanitize_raw_no_params).collect();
         Ok(Value::Array(cleaned?))
     } else {
         Ok(value.clone())

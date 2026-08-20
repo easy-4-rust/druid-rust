@@ -13,7 +13,7 @@ use std::time::Duration;
 /// deadpool 外部连接池桥接。
 ///
 /// 对应 Java: `javax.sql.DataSource` 的连接获取边界。该对象直接实现
-/// druid-rust 的 `Pool`，不会作为 `ConnectionFactory` 嵌套到 DruidPool。
+/// druid-rust 的 `Pool`，不会作为 `ConnectionFactory` 嵌套到 `DruidPool`。
 /// deadpool 租约经 `PhysicalConnectionLease` 委托到底层
 /// `SqlxConnectionAdapter`，对外仍返回统一的 `DruidPooledConnection`。
 pub struct SqlxDeadpoolPool {
@@ -70,7 +70,7 @@ impl SqlxDeadpoolPool {
     /// 用已有 deadpool Pool 创建桥接。
     ///
     /// 参数 `pool` 的对象必须由 `SqlxDeadpoolConnectionManager` 管理；
-    /// 该方法不会再创建 DruidPool。
+    /// 该方法不会再创建 `DruidPool`。
     pub fn from_pool(
         name: impl Into<String>,
         url: impl Into<String>,
@@ -200,7 +200,7 @@ impl DruidPool for SqlxDeadpoolPool {
     }
 
     /// 返回驱动桥接名称。
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "sqlx-deadpool"
     }
 

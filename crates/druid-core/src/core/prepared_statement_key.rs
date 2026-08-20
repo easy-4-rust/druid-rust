@@ -205,7 +205,7 @@ impl PreparedStatementKey {
     /// 替换 SQL，同时保留 catalog、prepare 重载和 generated-key 参数。
     ///
     /// 对应 Java Filter 在 `connection_prepareStatement` 下游调用前替换 SQL；
-    /// 改写后的文本必须参与 PreparedStatement cache equality。
+    /// 改写后的文本必须参与 `PreparedStatement` cache equality。
     #[must_use]
     pub fn with_sql(mut self, sql: impl Into<String>) -> Self {
         self.sql = sql.into();

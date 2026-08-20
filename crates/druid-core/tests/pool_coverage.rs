@@ -1,7 +1,7 @@
 //! Comprehensive coverage tests for druid-pool crate.
 //!
-//! Targets: pool_inner.rs (69 uncovered), druid_pool.rs (49 uncovered),
-//! pooled_connection.rs (42 uncovered), config.rs (33 uncovered).
+//! Targets: `pool_inner.rs` (69 uncovered), `druid_pool.rs` (49 uncovered),
+//! `pooled_connection.rs` (42 uncovered), config.rs (33 uncovered).
 
 extern crate druid_core as druid;
 use druid_core::core::*;
@@ -47,7 +47,7 @@ impl Connection for MockConn {
         self.closed.store(true, Ordering::Relaxed);
         Ok(())
     }
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "mock"
     }
 }
@@ -107,16 +107,16 @@ fn test_pool_inner_config_default() {
     assert_eq!(cfg.max_idle, 8);
     assert_eq!(cfg.acquire_timeout, Duration::MAX);
     assert_eq!(cfg.max_lifetime, Duration::MAX);
-    assert_eq!(cfg.idle_timeout, Duration::from_secs(1800));
+    assert_eq!(cfg.idle_timeout, Duration::from_mins(30));
     assert_eq!(
         cfg.max_evictable_idle_time,
-        Duration::from_secs(7 * 60 * 60)
+        Duration::from_hours(7)
     );
     assert_eq!(cfg.physical_connection_timeout, None);
     assert!(!cfg.test_on_borrow);
     assert!(!cfg.test_on_return);
     assert!(!cfg.keep_alive);
-    assert_eq!(cfg.keep_alive_between_time, Duration::from_secs(120));
+    assert_eq!(cfg.keep_alive_between_time, Duration::from_mins(2));
     assert!(!cfg.keep_connection_underlying_transaction_isolation);
     assert_eq!(cfg.max_use_count, 0);
     assert!(cfg.default_auto_commit);
@@ -138,16 +138,16 @@ fn test_druid_pool_builder_all_methods() {
         .min_idle(5)
         .max_idle(15)
         .acquire_timeout(Duration::from_secs(10))
-        .max_lifetime(Duration::from_secs(3600))
-        .idle_timeout(Duration::from_secs(1200))
-        .max_evictable_idle_time(Duration::from_secs(7200))
-        .physical_connection_timeout(Duration::from_secs(300))
+        .max_lifetime(Duration::from_hours(1))
+        .idle_timeout(Duration::from_mins(20))
+        .max_evictable_idle_time(Duration::from_hours(2))
+        .physical_connection_timeout(Duration::from_mins(5))
         .phy_timeout(Duration::from_secs(301))
         .test_on_borrow(true)
         .test_on_return(true)
         .time_between_eviction_runs(Duration::from_secs(30))
         .keep_alive(true)
-        .keep_alive_between_time(Duration::from_secs(60))
+        .keep_alive_between_time(Duration::from_mins(1))
         .keep_connection_underlying_transaction_isolation(true)
         .max_use_count(100)
         .default_auto_commit(false)
@@ -344,7 +344,7 @@ fn test_druid_pool_connection_debug() {
     rt.block_on(async {
         let pool = build_pool(2, 2).await;
         let conn = pool.get().await.unwrap();
-        let debug_str = format!("{:?}", conn);
+        let debug_str = format!("{conn:?}");
         assert!(debug_str.contains("DruidPooledConnection"));
         assert!(debug_str.contains("has_physical_connection"));
     });
@@ -571,7 +571,7 @@ async fn test_pool_connection_before_execute_error() {
     struct BlockingFilter;
     #[async_trait::async_trait]
     impl BeforeFilter for BlockingFilter {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "blocking"
         }
         async fn before(&self, _ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {

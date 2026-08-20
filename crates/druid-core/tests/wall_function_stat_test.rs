@@ -63,7 +63,7 @@ fn wall_sql_function_stat_clone_copy() {
 #[test]
 fn wall_sql_function_stat_debug() {
     let stat = WallSqlFunctionStat { invoke_count: 7 };
-    let dbg = format!("{:?}", stat);
+    let dbg = format!("{stat:?}");
     assert!(dbg.contains("WallSqlFunctionStat"));
-    assert!(dbg.contains("7"));
+    assert!(dbg.contains('7'));
 }

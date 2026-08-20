@@ -13,7 +13,7 @@ pub struct AgentRpcError {
 }
 
 impl AgentRpcError {
-    /// 转换为 Druid 驱动错误；JDBC 异常保留 SQLState 与 vendor code。
+    /// 转换为 Druid 驱动错误；JDBC 异常保留 `SQLState` 与 vendor code。
     #[must_use]
     pub fn into_druid_error(self) -> DruidError {
         self.data.map_or_else(

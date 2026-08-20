@@ -80,7 +80,7 @@ async fn metrics_content_type_is_prometheus() {
     handle.abort();
 }
 
-/// /metrics must contain druid_admin_datasource_active_count metric.
+/// /metrics must contain `druid_admin_datasource_active_count` metric.
 #[tokio::test]
 async fn metrics_contains_datasource_metrics() {
     let (addr, handle) = start_server_with_data().await;

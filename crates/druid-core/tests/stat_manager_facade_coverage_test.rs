@@ -1,12 +1,11 @@
-//! DruidStatManagerFacade 差分覆盖测试（Java Druid 1.2.28 语义对照）。
+//! `DruidStatManagerFacade` 差分覆盖测试（Java Druid 1.2.28 语义对照）。
 //!
-//! 覆盖 facade 的 reset_enable/reset_count/basic_stat/wall_stat_data 路径、
-//! merge_wall_stat 递归合并、merge_black_list 去重、merge_named_list 键匹配、
-//! data_source_by_name/sql_stat_data/pooling_connection_info 空数据源路径。
+//! 覆盖 facade 的 `reset_enable/reset_count/basic_stat/wall_stat_data` 路径、
+//! `merge_wall_stat` `递归合并、merge_black_list` `去重、merge_named_list` 键匹配、
+//! `data_source_by_name/sql_stat_data/pooling_connection_info` 空数据源路径。
 
 extern crate druid_core as druid;
 use druid_core::stats::DruidStatManagerFacade;
-use serde_json::json;
 
 // ===========================================================================
 // 1. reset_enable / reset_count
@@ -22,7 +21,7 @@ fn facade_reset_enable_toggle() {
     assert!(facade.is_reset_enable());
 }
 
-/// Java resetAll：reset_enable=false 时 reset_all 不递增 resetCount。
+/// Java `resetAll：reset_enable=false` 时 `reset_all` 不递增 resetCount。
 #[test]
 fn facade_reset_all_disabled() {
     let facade = DruidStatManagerFacade::global();
@@ -39,7 +38,7 @@ fn facade_reset_all_disabled() {
     facade.set_reset_enable(true);
 }
 
-/// Java resetAll：reset_enable=true 时 reset_all 递增 resetCount。
+/// Java `resetAll：reset_enable=true` 时 `reset_all` 递增 resetCount。
 #[test]
 fn facade_reset_all_increments_count() {
     let facade = DruidStatManagerFacade::global();
@@ -49,7 +48,7 @@ fn facade_reset_all_increments_count() {
     assert!(facade.reset_count() > before);
 }
 
-/// Java logAndResetDataSource：reset_enable=false 时无副作用。
+/// Java `logAndResetDataSource：reset_enable=false` 时无副作用。
 #[test]
 fn facade_log_and_reset_disabled() {
     let facade = DruidStatManagerFacade::global();
@@ -58,7 +57,7 @@ fn facade_log_and_reset_disabled() {
     facade.set_reset_enable(true);
 }
 
-/// Java logAndResetDataSource：reset_enable=true 时执行。
+/// Java `logAndResetDataSource：reset_enable=true` 时执行。
 #[test]
 fn facade_log_and_reset_enabled() {
     let facade = DruidStatManagerFacade::global();
@@ -84,7 +83,7 @@ fn facade_reset_sql_stat() {
 // 2. basic_stat
 // ===========================================================================
 
-/// Java basic_stat：返回 Version、Drivers、ResetEnable 等字段。
+/// Java `basic_stat：返回` Version、Drivers、ResetEnable 等字段。
 #[test]
 fn facade_basic_stat_fields() {
     let facade = DruidStatManagerFacade::global();
@@ -103,7 +102,7 @@ fn facade_basic_stat_fields() {
     assert!(stat["JavaClassPath"].is_null());
 }
 
-/// Java basic_stat：Version 非空。
+/// Java `basic_stat：Version` 非空。
 #[test]
 fn facade_basic_stat_version() {
     let facade = DruidStatManagerFacade::global();
@@ -112,7 +111,7 @@ fn facade_basic_stat_version() {
     assert!(!version.is_empty());
 }
 
-/// Java basic_stat：StartTime > 0。
+/// Java `basic_stat：StartTime` > 0。
 #[test]
 fn facade_basic_stat_start_time() {
     let facade = DruidStatManagerFacade::global();
@@ -238,7 +237,7 @@ fn facade_wall_merge_empty_maps() {
 // 8. merge_wall_value 的各种类型组合（通过 wall_stat_data 间接覆盖）
 // ===========================================================================
 
-/// Java mergeWallValue：Number + Number → wrapping_add。
+/// Java mergeWallValue：Number + Number → `wrapping_add`。
 #[test]
 fn facade_wall_stat_data_returns_object() {
     let facade = DruidStatManagerFacade::global();
@@ -251,7 +250,7 @@ fn facade_wall_stat_data_returns_object() {
 // 9. 综合场景：reset → basic → resetCount 递增
 // ===========================================================================
 
-/// Java 综合：reset_all 后 basic_stat 中的 ResetCount 递增。
+/// Java `综合：reset_all` 后 `basic_stat` 中的 `ResetCount` 递增。
 #[test]
 fn facade_reset_then_basic_stat_count() {
     let facade = DruidStatManagerFacade::global();

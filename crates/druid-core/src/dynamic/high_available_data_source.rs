@@ -337,7 +337,7 @@ impl HighAvailableDataSource {
         self.inner.config.write().test_on_return = value;
     }
 
-    /// 设置节点监听器；初始化时会注入当前 PoolUpdater。
+    /// 设置节点监听器；初始化时会注入当前 `PoolUpdater`。
     pub fn set_node_listener(&self, listener: Arc<dyn NodeListener>) {
         *self.inner.node_listener.write() = Some(listener);
     }
@@ -443,17 +443,17 @@ impl HighAvailableDataSource {
         self.inner.config.write().test_while_idle = value;
     }
 
-    /// 设置是否缓存 PreparedStatement。
+    /// 设置是否缓存 `PreparedStatement`。
     pub fn set_pool_prepared_statements(&self, value: bool) {
         self.inner.config.write().pool_prepared_statements = value;
     }
 
-    /// 设置是否跨逻辑连接共享 PreparedStatement。
+    /// 设置是否跨逻辑连接共享 `PreparedStatement`。
     pub fn set_share_prepared_statements(&self, value: bool) {
         self.inner.config.write().share_prepared_statements = value;
     }
 
-    /// 设置每物理连接 PreparedStatement 缓存上限。
+    /// 设置每物理连接 `PreparedStatement` 缓存上限。
     pub fn set_max_pool_prepared_statement_per_connection_size(&self, value: usize) {
         self.inner
             .config

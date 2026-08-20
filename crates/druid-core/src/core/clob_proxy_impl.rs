@@ -7,7 +7,7 @@ use super::{
 use std::fmt;
 use std::sync::Arc;
 
-/// 经 Druid FilterChain 访问的 Clob Proxy。
+/// 经 Druid `FilterChain` 访问的 Clob Proxy。
 pub struct ClobProxyImpl {
     connection_id: u64,
     clob: RdbcClob,

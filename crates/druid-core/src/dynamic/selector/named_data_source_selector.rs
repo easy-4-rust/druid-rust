@@ -9,7 +9,7 @@ use parking_lot::RwLock;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 
-/// Java ThreadLocal 在 Rust async 中的执行上下文键。
+/// Java `ThreadLocal` 在 Rust async 中的执行上下文键。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ExecutionKey {
     Task(tokio::task::Id),

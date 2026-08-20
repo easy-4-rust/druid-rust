@@ -34,7 +34,7 @@ impl JdbcAgentOptions {
             arguments: Vec::new(),
             request_timeout: Duration::from_secs(30),
             max_frame_bytes: 16 * 1024 * 1024,
-            idle_timeout: Duration::from_secs(60),
+            idle_timeout: Duration::from_mins(1),
             agent_key,
             artifact_version: "unmanaged".to_owned(),
             jvm_options_hash,

@@ -1,7 +1,7 @@
 //! 对应 Java 类：com.alibaba.druid.pool.DruidAbstractDataSource
 //! 来源文件：core/src/main/java/com/alibaba/druid/pool/DruidAbstractDataSource.java
 //!
-//! 连接池配置，替代 DruidAbstractDataSource 的 100+ setter。
+//! 连接池配置，替代 `DruidAbstractDataSource` 的 100+ setter。
 //! 每个字段对应 Druid Java 的一个 setter，保留语义一致性。
 
 use std::time::Duration;
@@ -169,7 +169,7 @@ impl Default for PoolConfig {
     }
 }
 
-/// PoolConfig Builder。
+/// `PoolConfig` Builder。
 pub struct PoolConfigBuilder(PoolConfig);
 
 impl PoolConfig {

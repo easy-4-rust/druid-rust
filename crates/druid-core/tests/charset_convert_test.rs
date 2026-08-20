@@ -78,6 +78,6 @@ fn charset_convert_clone() {
 #[test]
 fn charset_convert_debug() {
     let c = CharsetConvert::new(Some("utf-8"), Some("utf-8")).unwrap();
-    let dbg = format!("{:?}", c);
+    let dbg = format!("{c:?}");
     assert!(dbg.contains("CharsetConvert"));
 }

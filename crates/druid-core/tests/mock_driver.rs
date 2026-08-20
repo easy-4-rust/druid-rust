@@ -56,7 +56,7 @@ impl Connection for MockConnection {
         self.closed = true;
         Ok(())
     }
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "mock"
     }
     fn is_closed(&self) -> bool {
@@ -70,7 +70,7 @@ struct MockDriver;
 
 #[async_trait::async_trait]
 impl Driver for MockDriver {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "mock"
     }
     async fn connect(&self, _url: &str) -> Result<Box<dyn Connection>, DruidError> {
@@ -98,7 +98,7 @@ struct BlockDropFilter;
 
 #[async_trait::async_trait]
 impl BeforeFilter for BlockDropFilter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "block_drop"
     }
     async fn before(&self, ctx: &mut ExecContext<'_>) -> Result<(), DruidError> {
@@ -118,7 +118,7 @@ struct CountAfterFilter {
 
 #[async_trait::async_trait]
 impl AfterFilter for CountAfterFilter {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "count_after"
     }
     async fn after(
@@ -532,7 +532,7 @@ fn test_connection_holder_state_machine() {
 #[test]
 fn test_connection_holder_alive_check() {
     let holder = ConnectionHolder::new(1);
-    assert!(holder.is_alive(std::time::Duration::from_secs(60)));
+    assert!(holder.is_alive(std::time::Duration::from_mins(1)));
 }
 
 #[test]
@@ -572,7 +572,7 @@ fn test_druid_error_display() {
 
     let err = DruidError::ConnectionLeaked {
         id: 42,
-        held_for: std::time::Duration::from_secs(300),
+        held_for: std::time::Duration::from_mins(5),
     };
     assert!(format!("{err}").contains("42"));
     assert!(format!("{err}").contains("300s"));

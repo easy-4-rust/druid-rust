@@ -1,8 +1,8 @@
-//! DruidDataSourceFactory property parsing differential coverage tests (Java Druid 1.2.28).
+//! `DruidDataSourceFactory` property parsing differential coverage tests (Java Druid 1.2.28).
 //!
-//! Expands data_source_factory_differential_test.rs with more property parsing
-//! branches: parse_transaction_isolation variants, wall_config_from_properties
-//! full boolean set, parse_connection_properties edges, successful creation with
+//! Expands `data_source_factory_differential_test.rs` with more property parsing
+//! branches: `parse_transaction_isolation` variants, `wall_config_from_properties`
+//! full boolean set, `parse_connection_properties` edges, successful creation with
 //! various property combinations.
 
 extern crate druid_core as druid;
@@ -89,7 +89,7 @@ async fn factory_isolation_invalid_numeric() {
     );
     match e {
         DruidError::InvalidArgument(msg) => {
-            assert!(msg.contains("defaultTransactionIsolation"), "msg: {msg}")
+            assert!(msg.contains("defaultTransactionIsolation"), "msg: {msg}");
         }
         other => panic!("expected InvalidArgument, got {other:?}"),
     }
@@ -147,7 +147,7 @@ async fn factory_wall_invalid_boolean_property() {
     );
     match e {
         DruidError::InvalidArgument(msg) => {
-            assert!(msg.contains("druid.wall.selectAllow"), "msg: {msg}")
+            assert!(msg.contains("druid.wall.selectAllow"), "msg: {msg}");
         }
         other => panic!("expected InvalidArgument, got {other:?}"),
     }

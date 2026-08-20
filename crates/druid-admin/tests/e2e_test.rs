@@ -13,7 +13,7 @@ use druid_admin::repository::MetricsRepository;
 use serde_json::Value;
 
 /// Start both HTTP and gRPC servers sharing the same repository.
-/// Returns (http_addr, grpc_addr, repo, http_handle, grpc_handle).
+/// Returns (`http_addr`, `grpc_addr`, repo, `http_handle`, `grpc_handle`).
 async fn start_admin() -> (
     std::net::SocketAddr,
     String,

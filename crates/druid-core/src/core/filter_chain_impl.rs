@@ -417,7 +417,7 @@ pub trait DataSourceConnectionProvider: Send + Sync {
     /// 返回当前数据源状态快照。
     fn data_source_state(&self) -> PoolState;
 
-    /// 末端直接获取，不再次进入 dataSource_getConnection 链。
+    /// 末端直接获取，不再次进入 `dataSource_getConnection` 链。
     async fn get_connection_direct_for_filter(
         &self,
         max_wait: Duration,
@@ -458,7 +458,7 @@ pub struct PhysicalConnectionCloseContext {
 /// 单次物理连接关闭使用的有位置 around-chain。
 ///
 /// Filter 按注册顺序进入；遍历完成后才调用 `PhysicalConnectionFactory#close`。
-/// Filter 可以观察、短路或返回错误，与 Java FilterChain 的所有权规则一致。
+/// Filter 可以观察、短路或返回错误，与 Java `FilterChain` 的所有权规则一致。
 pub struct PhysicalConnectionCloseFilterChain<'a> {
     filters: &'a [Arc<dyn BeforeFilter>],
     position: usize,
@@ -928,7 +928,7 @@ impl<'a> ConnectionLobFilterChain<'a> {
 /// 单次 `Connection#getMetaData()` 使用的有位置 Filter 调用链。
 ///
 /// 两个生命周期分别约束 Filter 注册表和物理连接借用；返回 metadata 只绑定
-/// 物理连接，不能因 FilterChain 临时对象结束而失效或被提升为 `'static`。
+/// 物理连接，不能因 `FilterChain` 临时对象结束而失效或被提升为 `'static`。
 pub struct ConnectionDatabaseMetaDataFilterChain<'filters, 'connection> {
     filters: &'filters [Arc<dyn BeforeFilter>],
     position: usize,
@@ -1005,7 +1005,7 @@ impl<'a> ConnectionWarningFilterChain<'a> {
 /// 单次 Statement warning 操作使用的有位置 Filter 调用链。
 ///
 /// 对应 Java：`FilterChainImpl#statement_getWarnings` 与
-/// `statement_clearWarnings`。PreparedStatement 使用同一 Java 继承语义。
+/// `statement_clearWarnings`。`PreparedStatement` 使用同一 Java 继承语义。
 pub struct StatementWarningFilterChain<'a> {
     filters: &'a [Arc<dyn BeforeFilter>],
     position: usize,
@@ -1344,7 +1344,7 @@ impl FilterChainImpl {
 
     /// 把同一个 Java 风格 Filter 实例注册到全部已迁移的调用族。
     ///
-    /// Java 一个 `Filter` 对象同时接收 before、after 与 ResultSet 方法；该入口
+    /// Java 一个 `Filter` 对象同时接收 before、after 与 `ResultSet` 方法；该入口
     /// 保证三个 Rust trait 视图共享同一实例与注册位置，避免调用方漏接其中一族。
     pub fn add_filter<T>(&mut self, filter: Arc<T>)
     where
@@ -1411,7 +1411,7 @@ impl FilterChainImpl {
         Ok(())
     }
 
-    /// 在 ResultSet 代理构造边界执行可变 open-after 链。
+    /// 在 `ResultSet` 代理构造边界执行可变 open-after 链。
     ///
     /// 默认桥接只读 hook，保持第三方 `ResultSetFilter` 源码兼容。
     pub fn result_set_open_after_with_proxy(
@@ -1424,7 +1424,7 @@ impl FilterChainImpl {
         Ok(())
     }
 
-    /// 从位置 0 执行一次完整的 ResultSet next around-chain。
+    /// 从位置 0 执行一次完整的 `ResultSet` next around-chain。
     pub fn result_set_next(
         &self,
         physical: &dyn PhysicalResultSet,
@@ -1433,7 +1433,7 @@ impl FilterChainImpl {
         ResultSetFilterChain::new(&self.result_set, physical, context).result_set_next()
     }
 
-    /// 从位置 0 执行一次完整的 ResultSet close around-chain。
+    /// 从位置 0 执行一次完整的 `ResultSet` close around-chain。
     pub fn result_set_close(
         &self,
         physical: &dyn PhysicalResultSet,
@@ -2230,7 +2230,7 @@ impl FilterChainImpl {
             .await
     }
 
-    /// 从位置 0 执行 PreparedStatement 的 `Statement#getWarnings()` around-chain。
+    /// 从位置 0 执行 `PreparedStatement` 的 `Statement#getWarnings()` around-chain。
     pub async fn prepared_statement_warnings(
         &self,
         physical: &dyn PhysicalPreparedStatement,
@@ -2240,7 +2240,7 @@ impl FilterChainImpl {
             .await
     }
 
-    /// 从位置 0 执行 PreparedStatement 的 `Statement#clearWarnings()` around-chain。
+    /// 从位置 0 执行 `PreparedStatement` 的 `Statement#clearWarnings()` around-chain。
     pub async fn prepared_statement_clear_warnings(
         &self,
         physical: &dyn PhysicalPreparedStatement,

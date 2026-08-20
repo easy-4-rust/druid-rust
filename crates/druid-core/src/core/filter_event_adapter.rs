@@ -42,7 +42,7 @@ pub trait FilterEventListener: Send + Sync {
         Ok(())
     }
 
-    /// PreparedStatement 创建成功后事件。
+    /// `PreparedStatement` 创建成功后事件。
     ///
     /// 对应 Java：`FilterEventAdapter#statementPrepareAfter`。
     /// 参数 `sql` 为原始预编译 SQL；返回事件处理结果。
@@ -50,7 +50,7 @@ pub trait FilterEventListener: Send + Sync {
         Ok(())
     }
 
-    /// CallableStatement 创建成功后事件。
+    /// `CallableStatement` 创建成功后事件。
     ///
     /// 对应 Java：`FilterEventAdapter#statementPrepareCallAfter`。
     /// 参数 `sql` 为原始调用 SQL；返回事件处理结果。
@@ -176,7 +176,7 @@ impl FilterEventListener for () {}
 /// 把 Java `FilterEventAdapter` 的 before/after/error 模板映射到 Rust Filter 链。
 ///
 /// Java 对象继承 `FilterAdapter` 并通过 protected 方法供子类覆写。Rust 对象
-/// 持有一个 [`FilterEventListener`]，在相同成功、失败与 ResultSet 打开边界
+/// 持有一个 [`FilterEventListener`]，在相同成功、失败与 `ResultSet` 打开边界
 /// 调用对应方法。所有未覆写的 RDBC hook 仍通过 [`ResultSetFilter`] 默认方法
 /// 继续调用链。
 ///
@@ -306,18 +306,15 @@ where
                 }
                 ExecOperation::Query => self.listener.statement_execute_query_after(context).await,
                 ExecOperation::Update => {
-                    let update_count = match i32::try_from(execution.rows_affected) {
-                        Ok(update_count) => update_count,
-                        Err(_) => {
-                            let error = DruidError::InvalidArgument(format!(
-                                "update count exceeds RDBC int range: {}",
-                                execution.rows_affected
-                            ));
-                            self.listener
-                                .statement_execute_error_after(&context.sql, &error)
-                                .await?;
-                            return Err(error);
-                        }
+                    let update_count = if let Ok(update_count) = i32::try_from(execution.rows_affected) { update_count } else {
+                        let error = DruidError::InvalidArgument(format!(
+                            "update count exceeds RDBC int range: {}",
+                            execution.rows_affected
+                        ));
+                        self.listener
+                            .statement_execute_error_after(&context.sql, &error)
+                            .await?;
+                        return Err(error);
                     };
                     self.listener
                         .statement_execute_update_after(context, update_count)

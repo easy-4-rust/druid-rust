@@ -31,7 +31,7 @@ fn lexer_with_db_type() {
     assert_eq!(lexer.db_type(), Some(DbType::MySql));
 }
 
-/// `Lexer::with_db_type` SQLite 使用 SQLite 关键字表。
+/// `Lexer::with_db_type` `SQLite` 使用 `SQLite` 关键字表。
 #[test]
 fn lexer_with_db_type_sqlite() {
     let lexer = Lexer::with_db_type("SELECT 1", DbType::SQLite);
@@ -87,7 +87,7 @@ fn lexer_keywords_default() {
 #[test]
 fn lexer_debug_format() {
     let lexer = Lexer::new("SELECT 1");
-    let dbg = format!("{:?}", lexer);
+    let dbg = format!("{lexer:?}");
     assert!(dbg.contains("Lexer"));
     assert!(dbg.contains("utf16_length"));
 }
@@ -365,7 +365,7 @@ fn lexer_scan_line_comment() {
     assert!(lexer.is_end_of_comment());
 }
 
-/// 单行注释（//），skip_comment=false。
+/// `单行注释（//），skip_comment=false`。
 #[test]
 fn lexer_scan_line_comment_slash_slash() {
     let mut lexer = Lexer::from_rdbc_string(RdbcString::from_rust_str("1 // comment"), None, false);
@@ -375,7 +375,7 @@ fn lexer_scan_line_comment_slash_slash() {
     assert_eq!(lexer.comment_count(), 1);
 }
 
-/// 多行注释，skip_comment=false。
+/// `多行注释，skip_comment=false`。
 #[test]
 fn lexer_scan_multi_line_comment() {
     let mut lexer =
@@ -387,7 +387,7 @@ fn lexer_scan_multi_line_comment() {
     assert_eq!(lexer.next_token().unwrap(), Token::LiteralInt);
 }
 
-/// skip_comment=true 时注释被跳过。
+/// `skip_comment=true` 时注释被跳过。
 #[test]
 fn lexer_skip_comment() {
     let mut lexer = Lexer::from_rdbc_string(
@@ -399,7 +399,7 @@ fn lexer_skip_comment() {
     assert_eq!(lexer.comment_count(), 1);
 }
 
-/// allow_comment=false 时注释抛出 NotAllowComment。
+/// `allow_comment=false` 时注释抛出 `NotAllowComment`。
 #[test]
 fn lexer_not_allow_comment() {
     let mut lexer = Lexer::from_rdbc_string(
@@ -416,7 +416,7 @@ fn lexer_not_allow_comment() {
     }
 }
 
-/// 嵌套多行注释，skip_comment=false。
+/// `嵌套多行注释，skip_comment=false`。
 #[test]
 fn lexer_nested_multi_line_comment() {
     let mut lexer = Lexer::from_rdbc_string(
@@ -631,7 +631,7 @@ fn lexer_integer_value_long() {
     }
 }
 
-/// 十六进制整数（原始文本含 0x 前缀，parse::<i32> 失败后回退 BigInteger）。
+/// 十六进制整数（原始文本含 0x `前缀，parse::`<i32> 失败后回退 `BigInteger`）。
 #[test]
 fn lexer_integer_value_hex() {
     let mut lexer = Lexer::new("0xFF");
@@ -654,7 +654,7 @@ fn lexer_config_feature() {
     assert!(!lexer.is_enabled(SqlParserFeature::KeepComments));
 }
 
-/// `config` OptimizedForParameterized 设置内部标志。
+/// `config` `OptimizedForParameterized` 设置内部标志。
 #[test]
 fn lexer_config_optimized_for_parameterized() {
     let mut lexer = Lexer::new("SELECT 1");
@@ -662,7 +662,7 @@ fn lexer_config_optimized_for_parameterized() {
     assert!(lexer.is_enabled(SqlParserFeature::OptimizedForParameterized));
 }
 
-/// `config` KeepSourceLocation。
+/// `config` `KeepSourceLocation`。
 #[test]
 fn lexer_config_keep_source_location() {
     let mut lexer = Lexer::new("SELECT 1");
@@ -670,7 +670,7 @@ fn lexer_config_keep_source_location() {
     assert!(lexer.is_enabled(SqlParserFeature::KeepSourceLocation));
 }
 
-/// `config` SkipComments。
+/// `config` `SkipComments`。
 #[test]
 fn lexer_config_skip_comments() {
     let mut lexer = Lexer::new("SELECT 1");
@@ -816,7 +816,7 @@ fn lexer_em_dash_separator() {
 
 // ── 负数 ───────────────────────────────────────────────────────
 
-/// 负数在逗号后扫描为 LiteralInt。
+/// 负数在逗号后扫描为 `LiteralInt`。
 #[test]
 fn lexer_negative_after_comma() {
     let mut lexer = Lexer::new("(-1)");
@@ -826,7 +826,7 @@ fn lexer_negative_after_comma() {
 
 // ── 二进制位字面量 ─────────────────────────────────────────────
 
-/// 0b 前缀（需启用 ScanNumberPrefixB）。
+/// 0b 前缀（需启用 `ScanNumberPrefixB`）。
 #[test]
 fn lexer_bits_literal() {
     let mut lexer = Lexer::new("0b1010");
@@ -867,7 +867,7 @@ fn lexer_unterminated_string() {
 
 // ── 非法字符 ───────────────────────────────────────────────────
 
-/// 非法字符（不在空白/标识符/操作符表中的字符）返回 LexerError::Parser。
+/// 非法字符（不在空白/标识符/操作符表中的字符）返回 `LexerError::Parser`。
 ///
 /// `\u{00A1}`（¡）在 Latin-1 Supplement 区间 0xA1-0xBF，不是字母（0xC0+）、
 /// 不是空白（≤32 或 0x7F-0xA0）、不是操作符、不是标识符首字符。

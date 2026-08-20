@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Statement 层运行统计。
 ///
-/// 对应 Java：`com.alibaba.druid.stat.RdbcStatementStat`。JMX MBean 与
+/// 对应 Java：`com.alibaba.druid.stat.RdbcStatementStat`。JMX `MBean` 与
 /// `CompositeData` 属于 Java 宿主管理协议，不在 Rust 中创建伪类型。
 pub struct RdbcStatementStat {
     create_count: AtomicU64,
@@ -77,12 +77,12 @@ impl RdbcStatementStat {
         self.create_count.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 记录成功创建 PreparedStatement。
+    /// 记录成功创建 `PreparedStatement`。
     pub fn increment_prepare_counter(&self) {
         self.prepare_count.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 记录成功创建 CallableStatement。
+    /// 记录成功创建 `CallableStatement`。
     pub fn increment_prepare_call_count(&self) {
         self.prepare_call_count.fetch_add(1, Ordering::Relaxed);
     }

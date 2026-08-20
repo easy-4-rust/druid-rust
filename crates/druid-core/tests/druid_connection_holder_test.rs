@@ -175,7 +175,7 @@ impl PhysicalConnection for HolderConnection {
         Ok(())
     }
 
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "holder-probe"
     }
 }

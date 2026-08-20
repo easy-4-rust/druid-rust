@@ -28,7 +28,7 @@ impl SqlWarning {
         &self.message
     }
 
-    /// 返回可空 SQLState。
+    /// 返回可空 `SQLState`。
     pub fn sql_state(&self) -> Option<&str> {
         self.sql_state.as_deref()
     }

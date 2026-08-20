@@ -1,4 +1,4 @@
-//! 对应 Java 类：com.alibaba.druid.stat.RdbcSqlStat + SqlMerger
+//! 对应 Java 类：com.alibaba.druid.stat.RdbcSqlStat + `SqlMerger`
 //!
 //! SQL 合并统计：把参数化后的 SQL 模板作为 key，聚合执行统计。
 

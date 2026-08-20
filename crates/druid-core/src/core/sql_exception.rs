@@ -176,7 +176,7 @@ impl SqlException {
         &self.next_exceptions
     }
 
-    /// 按具体类名、recoverable 标志和 SQLState class 识别 RDBC 标准异常层级。
+    /// 按具体类名、recoverable 标志和 `SQLState` class 识别 RDBC 标准异常层级。
     #[must_use]
     pub fn kind(&self) -> SqlExceptionKind {
         match self.class_name.as_str() {

@@ -448,7 +448,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
     fn is_discarded(&self) -> bool {
         self.discarded
     }
-    fn driver_name(&self) -> &str {
+    fn driver_name(&self) -> &'static str {
         "libsql-rs"
     }
 }

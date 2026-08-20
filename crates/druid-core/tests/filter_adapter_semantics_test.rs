@@ -1,4 +1,4 @@
-//! Java `FilterAdapter` 默认适配语义与真实 Toasty SQLite 验证。
+//! Java `FilterAdapter` 默认适配语义与真实 Toasty `SQLite` 验证。
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -38,7 +38,7 @@ async fn filter_adapter_preserves_lifecycle_configuration_and_exact_wrapper_iden
     assert!(!Wrapper::is_wrapper_for(&adapter, None));
     assert!(Wrapper::unwrap(&adapter, None).is_none());
     let unwrapped = WrapperExt::unwrap_ref::<FilterAdapter>(&adapter).unwrap();
-    assert!(ptr::eq(unwrapped, &adapter));
+    assert!(ptr::eq(unwrapped, &raw const adapter));
     assert!(Wrapper::unwrap(&adapter, Some(TypeId::of::<String>())).is_none());
 
     // RUST_OBLIGATION / V1_RUST_LOCAL：

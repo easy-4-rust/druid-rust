@@ -1,7 +1,7 @@
 //! Differential tests for `PhysicalDatabaseMetaData` trait — Java `DatabaseMetaData` semantics.
 //!
 //! Exercises both the Toasty adapter implementations and the trait default
-//! `UnsupportedOperation` paths through a real pooled SQLite connection.
+//! `UnsupportedOperation` paths through a real pooled `SQLite` connection.
 
 extern crate druid_core as druid;
 use druid_core::core::{DruidError, DruidPooledConnection, PhysicalConnectionFactory};

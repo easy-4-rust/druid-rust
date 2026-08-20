@@ -1,13 +1,13 @@
-//! StatFilter ResultSetFilter path differential coverage tests (Java Druid 1.2.28).
+//! `StatFilter` `ResultSetFilter` path differential coverage tests (Java Druid 1.2.28).
 //!
 //! Covers:
-//! - ResultSetFilter::result_set_open_after
-//! - ResultSetFilter::result_set_close (with SQL stat association, merge_sql path)
-//! - config_from_properties all paths
-//! - before_batch / after_batch / before_batch_error
-//! - after_connection_event (Commit/Rollback)
-//! - slow_sql_millis negative/zero
-//! - merge_sql parameterization
+//! - `ResultSetFilter::result_set_open_after`
+//! - `ResultSetFilter::result_set_close` (with SQL stat association, `merge_sql` path)
+//! - `config_from_properties` all paths
+//! - `before_batch` / `after_batch` / `before_batch_error`
+//! - `after_connection_event` (Commit/Rollback)
+//! - `slow_sql_millis` negative/zero
+//! - `merge_sql` parameterization
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -26,11 +26,11 @@ fn make_filter() -> (StatFilter, Arc<StatsCollector>) {
     (filter, collector)
 }
 
-fn make_exec_context<'a>(
-    sql: &'a str,
+fn make_exec_context(
+    sql: &str,
     operation: ExecOperation,
     in_transaction: bool,
-) -> ExecContext<'a> {
+) -> ExecContext<'_> {
     ExecContext {
         connection_id: 1,
         statement_id: Some(1),
@@ -65,7 +65,7 @@ fn make_batch_context<'a>(
     }
 }
 
-/// Empty PhysicalResultSet for ResultSetFilterChain construction.
+/// Empty `PhysicalResultSet` for `ResultSetFilterChain` construction.
 #[derive(Debug)]
 struct EmptyResultSet;
 
@@ -250,7 +250,7 @@ fn config_from_properties_invalid_max_sql_size() {
 fn config_from_properties_empty_slow_sql_millis() {
     let (filter, _collector) = make_filter();
     let mut props = HashMap::new();
-    props.insert("druid.stat.slowSqlMillis".to_owned(), "".to_owned());
+    props.insert("druid.stat.slowSqlMillis".to_owned(), String::new());
     filter.config_from_properties(&props).unwrap();
     assert_eq!(filter.get_slow_sql_millis(), 3000);
 }

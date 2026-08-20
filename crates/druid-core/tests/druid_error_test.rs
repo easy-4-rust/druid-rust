@@ -55,37 +55,37 @@ fn error_display_datasource_disabled() {
 #[test]
 fn error_display_validation_failed() {
     let e = DruidError::ValidationFailed("bad conn".to_owned());
-    assert!(format!("{}", e).contains("bad conn"));
+    assert!(format!("{e}").contains("bad conn"));
 }
 
 #[test]
 fn error_display_driver_error() {
     let e = DruidError::DriverError("oops".to_owned());
-    assert!(format!("{}", e).contains("oops"));
+    assert!(format!("{e}").contains("oops"));
 }
 
 #[test]
 fn error_display_sql_parse_error() {
     let e = DruidError::SqlParseError("syntax".to_owned());
-    assert!(format!("{}", e).contains("syntax"));
+    assert!(format!("{e}").contains("syntax"));
 }
 
 #[test]
 fn error_display_wall_violation() {
     let e = DruidError::WallViolation("blocked".to_owned());
-    assert!(format!("{}", e).contains("blocked"));
+    assert!(format!("{e}").contains("blocked"));
 }
 
 #[test]
 fn error_display_datasource_not_found() {
     let e = DruidError::DataSourceNotFound("mydb".to_owned());
-    assert!(format!("{}", e).contains("mydb"));
+    assert!(format!("{e}").contains("mydb"));
 }
 
 #[test]
 fn error_display_invalid_argument() {
     let e = DruidError::InvalidArgument("bad param".to_owned());
-    assert!(format!("{}", e).contains("bad param"));
+    assert!(format!("{e}").contains("bad param"));
 }
 
 #[test]
@@ -93,13 +93,13 @@ fn error_display_unsupported_operation() {
     let e = DruidError::UnsupportedOperation {
         operation: "test_op",
     };
-    assert!(format!("{}", e).contains("test_op"));
+    assert!(format!("{e}").contains("test_op"));
 }
 
 #[test]
 fn error_display_other() {
     let e = DruidError::Other("something".to_owned());
-    assert_eq!(format!("{}", e), "something");
+    assert_eq!(format!("{e}"), "something");
 }
 
 #[test]
@@ -107,7 +107,7 @@ fn error_display_datasource_closed() {
     let e = DruidError::DataSourceClosed {
         close_time_millis: 0,
     };
-    assert!(format!("{}", e).contains("closed"));
+    assert!(format!("{e}").contains("closed"));
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn error_display_max_wait_thread_count() {
         max: 10,
         current: 11,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("10"));
     assert!(s.contains("11"));
 }
@@ -127,20 +127,20 @@ fn error_display_connection_leaked() {
         id: 42,
         held_for: Duration::from_secs(30),
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("42"));
 }
 
 #[test]
 fn error_display_active_connections_prevent_restart() {
     let e = DruidError::ActiveConnectionsPreventRestart { active_count: 5 };
-    assert!(format!("{}", e).contains("5"));
+    assert!(format!("{e}").contains('5'));
 }
 
 #[test]
 fn error_display_datasource_not_available_none() {
     let e = DruidError::DataSourceNotAvailable { cause: None };
-    assert!(format!("{}", e).contains("not available"));
+    assert!(format!("{e}").contains("not available"));
 }
 
 #[test]
@@ -148,14 +148,14 @@ fn error_display_datasource_not_available_with_cause() {
     let e = DruidError::DataSourceNotAvailable {
         cause: Some(Box::new(DruidError::PoolClosed)),
     };
-    assert!(format!("{}", e).contains("closed"));
+    assert!(format!("{e}").contains("closed"));
 }
 
 #[test]
 fn error_display_sql_exception() {
     let exc = SqlException::new(100, Some("HY000".to_owned()), Some("test error".to_owned()));
     let e = DruidError::SqlException(Box::new(exc));
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("100"));
     assert!(s.contains("test error"));
 }
@@ -166,7 +166,7 @@ fn error_display_batch_update() {
         update_counts: vec![1, 2, 3],
         cause: Box::new(DruidError::Other("fail".to_owned())),
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("3 result(s)"));
 }
 
@@ -232,7 +232,7 @@ fn error_display_get_connection_timeout_basic() {
         running_sql: vec![],
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("5000"));
     assert!(s.contains("active 10"));
     assert!(!s.contains("createElapseMillis"));
@@ -251,7 +251,7 @@ fn error_display_get_connection_timeout_with_elapsed() {
         running_sql: vec![],
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("createElapseMillis 1500"));
 }
 
@@ -267,7 +267,7 @@ fn error_display_get_connection_timeout_with_errors() {
         running_sql: vec![],
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("createErrorCount 3"));
 }
 
@@ -286,7 +286,7 @@ fn error_display_get_connection_timeout_with_running_sql() {
         ],
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("runningSqlCount 1"));
     assert!(s.contains("SELECT * FROM t1"));
     assert!(s.contains("runningSqlCount 2"));
@@ -304,7 +304,7 @@ fn error_display_get_connection_timeout_zero_elapsed() {
         running_sql: vec![],
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(!s.contains("createElapseMillis"));
 }
 
@@ -319,7 +319,7 @@ fn error_display_on_fatal_error_basic() {
         last_sql: None,
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("activeCount 5"));
     assert!(s.contains("onFatalErrorMaxActive 10"));
     assert!(!s.contains("time"));
@@ -335,7 +335,7 @@ fn error_display_on_fatal_error_with_time() {
         last_sql: None,
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("time"));
 }
 
@@ -349,7 +349,7 @@ fn error_display_on_fatal_error_with_sql() {
         last_sql: Some(RdbcString::from_rust_str("SELECT 1")),
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("sql"));
     assert!(s.contains("SELECT 1"));
 }
@@ -363,7 +363,7 @@ fn error_display_on_fatal_error_zero_time() {
         last_sql: None,
         cause: None,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(!s.contains("time"));
 }
 
@@ -374,7 +374,7 @@ fn error_display_datasource_closed_valid_time() {
     let e = DruidError::DataSourceClosed {
         close_time_millis: 1700000000000,
     };
-    let s = format!("{}", e);
+    let s = format!("{e}");
     assert!(s.contains("closed"));
 }
 
@@ -383,8 +383,8 @@ fn error_display_datasource_closed_zero_time() {
     let e = DruidError::DataSourceClosed {
         close_time_millis: 0,
     };
-    let s = format!("{}", e);
-    assert!(s.contains("0"));
+    let s = format!("{e}");
+    assert!(s.contains('0'));
 }
 
 // ── sql_exception / batch_update_counts ────────────────────────
@@ -484,5 +484,5 @@ fn error_clone_eq() {
 #[test]
 fn error_debug() {
     let e = DruidError::PoolClosed;
-    assert!(format!("{:?}", e).contains("PoolClosed"));
+    assert!(format!("{e:?}").contains("PoolClosed"));
 }

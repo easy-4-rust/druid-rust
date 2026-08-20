@@ -127,19 +127,19 @@ fn ha_set_transaction_query_timeout() {
 #[test]
 fn ha_set_time_between_eviction_runs() {
     let ha = HighAvailableDataSource::new("test", DataSourceCreator::noop_for_test());
-    ha.set_time_between_eviction_runs(Duration::from_secs(60));
+    ha.set_time_between_eviction_runs(Duration::from_mins(1));
 }
 
 #[test]
 fn ha_set_min_evictable_idle_time() {
     let ha = HighAvailableDataSource::new("test", DataSourceCreator::noop_for_test());
-    ha.set_min_evictable_idle_time(Duration::from_secs(300));
+    ha.set_min_evictable_idle_time(Duration::from_mins(5));
 }
 
 #[test]
 fn ha_set_max_evictable_idle_time() {
     let ha = HighAvailableDataSource::new("test", DataSourceCreator::noop_for_test());
-    ha.set_max_evictable_idle_time(Duration::from_secs(900));
+    ha.set_max_evictable_idle_time(Duration::from_mins(15));
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn ha_set_remove_abandoned() {
 #[test]
 fn ha_set_remove_abandoned_timeout() {
     let ha = HighAvailableDataSource::new("test", DataSourceCreator::noop_for_test());
-    ha.set_remove_abandoned_timeout(Duration::from_secs(300));
+    ha.set_remove_abandoned_timeout(Duration::from_mins(5));
 }
 
 #[test]

@@ -1,6 +1,6 @@
 extern crate druid_core as druid;
 use druid_core::core::{
-    AfterFilter, BeforeFilter, EncodingConvertFilter, MySQL8DateTimeSqlTypeFilter, Value,
+    BeforeFilter, EncodingConvertFilter, MySQL8DateTimeSqlTypeFilter, Value,
 };
 
 // ── EncodingConvertFilter ──────────────────────────────────────
@@ -85,7 +85,7 @@ fn encoding_filter_decode_value_non_string() {
 #[test]
 fn encoding_filter_debug() {
     let f = EncodingConvertFilter::new(None, None).unwrap();
-    let dbg = format!("{:?}", f);
+    let dbg = format!("{f:?}");
     assert!(dbg.contains("EncodingConvertFilter"));
 }
 
@@ -130,7 +130,7 @@ fn mysql8_filter_new() {
 
 #[test]
 fn mysql8_filter_default() {
-    let f = MySQL8DateTimeSqlTypeFilter::default();
+    let f = MySQL8DateTimeSqlTypeFilter;
     let _ = f;
 }
 
@@ -138,7 +138,7 @@ fn mysql8_filter_default() {
 fn mysql8_filter_get_object_replace_identity() {
     let val = Value::String("test".to_owned());
     let result = MySQL8DateTimeSqlTypeFilter::get_object_replace_local_date_time(val.clone());
-    assert_eq!(format!("{:?}", val), format!("{:?}", result));
+    assert_eq!(format!("{val:?}"), format!("{:?}", result));
 }
 
 #[test]
@@ -151,6 +151,6 @@ fn mysql8_filter_clone_copy() {
 #[test]
 fn mysql8_filter_debug() {
     let f = MySQL8DateTimeSqlTypeFilter::new();
-    let dbg = format!("{:?}", f);
+    let dbg = format!("{f:?}");
     assert!(dbg.contains("MySQL8DateTimeSqlTypeFilter"));
 }

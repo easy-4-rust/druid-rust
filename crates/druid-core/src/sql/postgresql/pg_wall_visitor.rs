@@ -5,13 +5,13 @@ use crate::sql::{
 };
 use sqlparser::ast::Statement;
 
-/// PostgreSQL Wall 方言 Visitor。
+/// `PostgreSQL` Wall 方言 Visitor。
 pub struct PgWallVisitor<'a> {
     base: WallVisitorBase<'a>,
 }
 
 impl<'a> PgWallVisitor<'a> {
-    /// 绑定 PostgreSQL Provider。
+    /// 绑定 `PostgreSQL` Provider。
     #[must_use]
     pub fn new(provider: &'a WallProvider) -> Self {
         Self {

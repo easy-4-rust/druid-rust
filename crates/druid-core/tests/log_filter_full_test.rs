@@ -1,17 +1,17 @@
-//! LogFilter 全量覆盖测试（Java `LogFilter.java` 差分对照）。
+//! `LogFilter` 全量覆盖测试（Java `LogFilter.java` 差分对照）。
 //!
 //! 覆盖目标：
-//! - 全部 is_xxx_log_enabled / set_xxx_log_enabled 开关（含父级开关联动）
-//! - config_from_properties 七键精确语义
-//! - operation_success_enabled 四种 ExecOperation 分支
-//! - after / after_batch 成功与错误日志分支
-//! - after_connection_event 六种 ConnectionEvent 分支
-//! - on_statement_event / on_statement_event_context 四种 StatementEvent 分支
-//! - on_statement_close_context
-//! - on_connection_event / on_connection_event_context no-op
-//! - ResultSetFilter 三方法（open_after / next / close）成功与错误分支
-//! - Default / statement_sql_format_option / statement_sql_pretty_format
-//! - set_statement_parameter_log_enabled 旧 API 兼容
+//! - 全部 `is_xxx_log_enabled` / `set_xxx_log_enabled` 开关（含父级开关联动）
+//! - `config_from_properties` 七键精确语义
+//! - `operation_success_enabled` 四种 `ExecOperation` 分支
+//! - after / `after_batch` 成功与错误日志分支
+//! - `after_connection_event` 六种 `ConnectionEvent` 分支
+//! - `on_statement_event` / `on_statement_event_context` 四种 `StatementEvent` 分支
+//! - `on_statement_close_context`
+//! - `on_connection_event` / `on_connection_event_context` no-op
+//! - `ResultSetFilter` `三方法（open_after` / next / close）成功与错误分支
+//! - Default / `statement_sql_format_option` / `statement_sql_pretty_format`
+//! - `set_statement_parameter_log_enabled` 旧 API 兼容
 
 extern crate druid_core as druid;
 use druid_core::core::{
@@ -186,7 +186,7 @@ fn log_filter_all_setters_toggle_getters() {
     assert!(f.is_statement_sql_pretty_format());
 }
 
-/// 旧 API set_statement_parameter_log_enabled 委托给 set_statement_parameter_set_log_enabled。
+/// 旧 API `set_statement_parameter_log_enabled` 委托给 `set_statement_parameter_set_log_enabled`。
 #[test]
 fn log_filter_legacy_parameter_log_setter_delegates() {
     let f = LogFilter::new();
@@ -289,7 +289,7 @@ fn log_filter_config_from_properties_irrelevant_keys_ignored() {
 
 // ── 3. SQL 格式选项 ────────────────────────────────────────────
 
-/// SqlFormatOption getter/setter 往返。
+/// `SqlFormatOption` getter/setter 往返。
 #[test]
 fn log_filter_sql_format_option_round_trip() {
     let f = LogFilter::new();
@@ -308,7 +308,7 @@ fn log_filter_sql_format_option_round_trip() {
 
 // ── 4. operation_success_enabled 四分支（间接通过 after） ───────
 
-/// Execute 操作在 after 中应触发 execute_after 开关。
+/// Execute 操作在 after 中应触发 `execute_after` 开关。
 #[tokio::test]
 async fn log_filter_after_execute_operation_uses_execute_switch() {
     let f = LogFilter::new();
@@ -326,7 +326,7 @@ async fn log_filter_after_execute_operation_uses_execute_switch() {
         .unwrap();
 }
 
-/// Query 操作在 after 中应触发 execute_query_after 开关。
+/// Query 操作在 after 中应触发 `execute_query_after` 开关。
 #[tokio::test]
 async fn log_filter_after_query_operation_uses_query_switch() {
     let f = LogFilter::new();
@@ -343,7 +343,7 @@ async fn log_filter_after_query_operation_uses_query_switch() {
         .unwrap();
 }
 
-/// Update 操作在 after 中应触发 execute_update_after 开关。
+/// Update 操作在 after 中应触发 `execute_update_after` 开关。
 #[tokio::test]
 async fn log_filter_after_update_operation_uses_update_switch() {
     let f = LogFilter::new();
@@ -360,7 +360,7 @@ async fn log_filter_after_update_operation_uses_update_switch() {
         .unwrap();
 }
 
-/// Batch 操作在 after 中不触发任何成功日志（走 after_batch 通道）。
+/// Batch 操作在 after 中不触发任何成功日志（走 `after_batch` 通道）。
 #[tokio::test]
 async fn log_filter_after_batch_operation_is_noop_for_success() {
     let f = LogFilter::new();
@@ -392,7 +392,7 @@ async fn log_filter_after_success_suppressed_when_switch_off() {
     }
 }
 
-/// 错误路径：statement_log_error_enabled 开启时发出 error 日志。
+/// `错误路径：statement_log_error_enabled` 开启时发出 error 日志。
 #[tokio::test]
 async fn log_filter_after_error_emitted_when_error_switch_on() {
     let f = LogFilter::new();
@@ -405,7 +405,7 @@ async fn log_filter_after_error_emitted_when_error_switch_on() {
         .unwrap();
 }
 
-/// 错误路径：statement_log_error_enabled 关闭时静默。
+/// `错误路径：statement_log_error_enabled` 关闭时静默。
 #[tokio::test]
 async fn log_filter_after_error_suppressed_when_error_switch_off() {
     let f = LogFilter::new();
@@ -524,7 +524,7 @@ async fn log_filter_after_batch_error_suppressed_when_error_disabled() {
 
 // ── 6. after_connection_event 六种 ConnectionEvent ─────────────
 
-/// Connect 事件始终静默（Java LogFilter 不覆盖 connectBefore）。
+/// Connect 事件始终静默（Java `LogFilter` 不覆盖 connectBefore）。
 #[tokio::test]
 async fn log_filter_after_connection_event_connect_always_silent() {
     let f = LogFilter::new();
@@ -579,7 +579,7 @@ async fn log_filter_after_connection_event_close_controlled() {
         .unwrap();
 }
 
-/// SetAutoCommit 等其他事件：由 connection_log_enabled 总开关控制。
+/// `SetAutoCommit` 等其他事件：由 `connection_log_enabled` 总开关控制。
 #[tokio::test]
 async fn log_filter_after_connection_event_other_events_use_connection_log_switch() {
     let f = LogFilter::new();
@@ -614,7 +614,7 @@ async fn log_filter_after_connection_event_other_events_use_connection_log_switc
 
 // ── 7. after_connection_event_context ──────────────────────────
 
-/// 带 connection_id 的事件上下文，走相同分支逻辑。
+/// 带 `connection_id` 的事件上下文，走相同分支逻辑。
 #[tokio::test]
 async fn log_filter_after_connection_event_context_with_identity() {
     let f = LogFilter::new();
@@ -646,7 +646,7 @@ async fn log_filter_after_connection_event_context_with_identity() {
 
 // ── 8. on_statement_event 四种 StatementEvent ──────────────────
 
-/// CreateStatement 事件：由 create_after 开关控制。
+/// `CreateStatement` 事件：由 `create_after` 开关控制。
 #[tokio::test]
 async fn log_filter_on_statement_event_create() {
     let f = LogFilter::new();
@@ -661,7 +661,7 @@ async fn log_filter_on_statement_event_create() {
         .unwrap();
 }
 
-/// PrepareStatement 事件：由 prepare_after 开关控制。
+/// `PrepareStatement` 事件：由 `prepare_after` 开关控制。
 #[tokio::test]
 async fn log_filter_on_statement_event_prepare() {
     let f = LogFilter::new();
@@ -682,7 +682,7 @@ async fn log_filter_on_statement_event_prepare() {
     .unwrap();
 }
 
-/// PrepareCall 事件：由 prepare_call_after 开关控制。
+/// `PrepareCall` 事件：由 `prepare_call_after` 开关控制。
 #[tokio::test]
 async fn log_filter_on_statement_event_prepare_call() {
     let f = LogFilter::new();
@@ -697,7 +697,7 @@ async fn log_filter_on_statement_event_prepare_call() {
         .unwrap();
 }
 
-/// Close 事件：由 close_after 开关控制。
+/// Close 事件：由 `close_after` 开关控制。
 #[tokio::test]
 async fn log_filter_on_statement_event_close() {
     let f = LogFilter::new();
@@ -791,7 +791,7 @@ async fn log_filter_on_statement_event_context_with_identity() {
 
 // ── 10. on_statement_close_context ─────────────────────────────
 
-/// on_statement_close_context 同步方法：开关开时发出日志。
+/// `on_statement_close_context` 同步方法：开关开时发出日志。
 #[test]
 fn log_filter_on_statement_close_context_enabled() {
     let f = LogFilter::new();
@@ -805,7 +805,7 @@ fn log_filter_on_statement_close_context_enabled() {
     BeforeFilter::on_statement_close_context(&f, &ctx).unwrap();
 }
 
-/// on_statement_close_context 同步方法：开关关时静默。
+/// `on_statement_close_context` 同步方法：开关关时静默。
 #[test]
 fn log_filter_on_statement_close_context_disabled() {
     let f = LogFilter::new();
@@ -912,7 +912,7 @@ async fn log_filter_before_params_switch_off() {
 
 // ── 13. ResultSetFilter 三个钩子 ───────────────────────────────
 
-/// result_set_open_after：开关开时发出日志。
+/// `result_set_open_after：开关开时发出日志`。
 #[test]
 fn log_filter_result_set_open_after_enabled() {
     let f = LogFilter::new();
@@ -921,7 +921,7 @@ fn log_filter_result_set_open_after_enabled() {
     ResultSetFilter::result_set_open_after(&f, &ctx).unwrap();
 }
 
-/// result_set_open_after：开关关时静默。
+/// `result_set_open_after：开关关时静默`。
 #[test]
 fn log_filter_result_set_open_after_disabled() {
     let f = LogFilter::new();
@@ -983,7 +983,7 @@ impl PhysicalResultSet for NoMoreRowsResultSet {
     }
 }
 
-/// result_set_next：成功(true) + 开关开时发出日志。
+/// `result_set_next：成功(true)` + 开关开时发出日志。
 #[test]
 fn log_filter_result_set_next_success_enabled() {
     let f = LogFilter::new();
@@ -994,7 +994,7 @@ fn log_filter_result_set_next_success_enabled() {
     assert!(chain.result_set_next().unwrap());
 }
 
-/// result_set_next：成功(true) + 开关关时静默。
+/// `result_set_next：成功(true)` + 开关关时静默。
 #[test]
 fn log_filter_result_set_next_success_disabled() {
     let f = LogFilter::new();
@@ -1005,7 +1005,7 @@ fn log_filter_result_set_next_success_disabled() {
     assert!(chain.result_set_next().unwrap());
 }
 
-/// result_set_next：错误 + error 开关开时发出 error 日志。
+/// `result_set_next：错误` + error 开关开时发出 error 日志。
 #[test]
 fn log_filter_result_set_next_error_enabled() {
     let f = LogFilter::new();
@@ -1016,7 +1016,7 @@ fn log_filter_result_set_next_error_enabled() {
     assert!(chain.result_set_next().is_err());
 }
 
-/// result_set_next：错误 + error 开关关时静默传播错误。
+/// `result_set_next：错误` + error 开关关时静默传播错误。
 #[test]
 fn log_filter_result_set_next_error_disabled() {
     let f = LogFilter::new();
@@ -1027,7 +1027,7 @@ fn log_filter_result_set_next_error_disabled() {
     assert!(chain.result_set_next().is_err());
 }
 
-/// result_set_close：成功 + 开关开时发出日志。
+/// `result_set_close：成功` + 开关开时发出日志。
 #[test]
 fn log_filter_result_set_close_success_enabled() {
     let f = LogFilter::new();
@@ -1038,7 +1038,7 @@ fn log_filter_result_set_close_success_enabled() {
     chain.result_set_close().unwrap();
 }
 
-/// result_set_close：成功 + 开关关时静默。
+/// `result_set_close：成功` + 开关关时静默。
 #[test]
 fn log_filter_result_set_close_success_disabled() {
     let f = LogFilter::new();
@@ -1049,7 +1049,7 @@ fn log_filter_result_set_close_success_disabled() {
     chain.result_set_close().unwrap();
 }
 
-/// result_set_close：错误 + error 开关开时发出 error 日志。
+/// `result_set_close：错误` + error 开关开时发出 error 日志。
 #[test]
 fn log_filter_result_set_close_error_enabled() {
     let f = LogFilter::new();
@@ -1060,7 +1060,7 @@ fn log_filter_result_set_close_error_enabled() {
     assert!(chain.result_set_close().is_err());
 }
 
-/// result_set_close：错误 + error 开关关时静默传播错误。
+/// `result_set_close：错误` + error 开关关时静默传播错误。
 #[test]
 fn log_filter_result_set_close_error_disabled() {
     let f = LogFilter::new();
@@ -1071,7 +1071,7 @@ fn log_filter_result_set_close_error_disabled() {
     assert!(chain.result_set_close().is_err());
 }
 
-/// result_set_next 返回 false（无更多行）时不发出日志，即使开关开。
+/// `result_set_next` 返回 false（无更多行）时不发出日志，即使开关开。
 #[test]
 fn log_filter_result_set_next_false_no_log() {
     let f = LogFilter::new();
@@ -1095,7 +1095,7 @@ fn log_filter_default_trait_matches_new() {
 
 // ── 15. config_from_properties trait 路径 ──────────────────────
 
-/// BeforeFilter::config_from_properties 委托给 LogFilter::config_from_properties。
+/// `BeforeFilter::config_from_properties` 委托给 `LogFilter::config_from_properties`。
 #[test]
 fn log_filter_before_filter_config_from_properties_trait_path() {
     let f = LogFilter::new();
@@ -1106,7 +1106,7 @@ fn log_filter_before_filter_config_from_properties_trait_path() {
 
 // ── 16. before_execute_error no-op 路径 ───────────────────────
 
-/// before_execute_error 是 BeforeFilter 默认 no-op。
+/// `before_execute_error` 是 `BeforeFilter` 默认 no-op。
 #[tokio::test]
 async fn log_filter_before_execute_error_is_noop() {
     let f = LogFilter::new();

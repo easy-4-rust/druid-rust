@@ -9,7 +9,7 @@ pub const ALLOWED_LABELS: &[&str] = &["service", "instance", "datasource", "db_t
 /// Prometheus-style metric family.
 #[derive(Debug, Clone)]
 pub struct PrometheusMetric {
-    /// Metric name (e.g. "druid_datasource_exec_count").
+    /// Metric name (e.g. "`druid_datasource_exec_count`").
     pub name: String,
     /// Label set (only keys from [`ALLOWED_LABELS`]).
     pub labels: BTreeMap<String, String>,

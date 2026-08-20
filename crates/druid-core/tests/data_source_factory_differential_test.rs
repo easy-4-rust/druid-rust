@@ -197,7 +197,7 @@ async fn factory_invalid_boolean_property() {
     );
     match e {
         DruidError::InvalidArgument(msg) => {
-            assert!(msg.contains("defaultAutoCommit"), "msg: {msg}")
+            assert!(msg.contains("defaultAutoCommit"), "msg: {msg}");
         }
         other => panic!("expected InvalidArgument, got {other:?}"),
     }
@@ -254,7 +254,7 @@ async fn factory_negative_validation_query_timeout() {
     );
     match e {
         DruidError::InvalidArgument(msg) => {
-            assert!(msg.contains("validationQueryTimeout"), "msg: {msg}")
+            assert!(msg.contains("validationQueryTimeout"), "msg: {msg}");
         }
         other => panic!("expected InvalidArgument, got {other:?}"),
     }
@@ -276,7 +276,7 @@ async fn factory_negative_remove_abandoned_timeout() {
     );
     match e {
         DruidError::InvalidArgument(msg) => {
-            assert!(msg.contains("removeAbandonedTimeout"), "msg: {msg}")
+            assert!(msg.contains("removeAbandonedTimeout"), "msg: {msg}");
         }
         other => panic!("expected InvalidArgument, got {other:?}"),
     }

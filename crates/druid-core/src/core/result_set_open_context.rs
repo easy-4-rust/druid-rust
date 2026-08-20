@@ -1,4 +1,4 @@
-//! ResultSet 建立后的可变 Filter 上下文。
+//! `ResultSet` 建立后的可变 Filter 上下文。
 //!
 //! 这是 Rust 对 Java `ResultSetProxy` 可变列映射能力的协议化承载。Java Filter
 //! 直接修改代理；Rust 在代理完成构造前收集映射，避免自引用和可变别名。
@@ -6,7 +6,7 @@
 use super::{PhysicalResultSet, ResultSetFilterContext};
 use std::collections::HashMap;
 
-/// ResultSet open-after Filter 可读取的物理资源及可写列映射。
+/// `ResultSet` open-after Filter 可读取的物理资源及可写列映射。
 pub struct ResultSetOpenContext<'a> {
     filter_context: &'a ResultSetFilterContext,
     physical: &'a dyn PhysicalResultSet,
@@ -16,7 +16,7 @@ pub struct ResultSetOpenContext<'a> {
 }
 
 impl<'a> ResultSetOpenContext<'a> {
-    /// 为刚创建的 ResultSet 建立 open-after 上下文。
+    /// 为刚创建的 `ResultSet` 建立 open-after 上下文。
     pub(crate) fn new(
         filter_context: &'a ResultSetFilterContext,
         physical: &'a dyn PhysicalResultSet,
@@ -30,13 +30,13 @@ impl<'a> ResultSetOpenContext<'a> {
         }
     }
 
-    /// 返回只读的 ResultSet 身份和统计上下文。
+    /// 返回只读的 `ResultSet` 身份和统计上下文。
     #[must_use]
     pub const fn filter_context(&self) -> &ResultSetFilterContext {
         self.filter_context
     }
 
-    /// 返回底层物理 ResultSet。
+    /// 返回底层物理 `ResultSet`。
     ///
     /// 对应 Java：`ResultSetProxy#getResultSetRaw()`。
     #[must_use]
@@ -54,7 +54,7 @@ impl<'a> ResultSetOpenContext<'a> {
         self.physical_column_map = Some(physical_column_map);
     }
 
-    /// 设置需要从逻辑 ResultSet 隐藏的 1-based 物理列。
+    /// 设置需要从逻辑 `ResultSet` 隐藏的 1-based 物理列。
     pub fn set_hidden_columns(&mut self, hidden_columns: Vec<i32>) {
         self.hidden_columns = Some(hidden_columns);
     }

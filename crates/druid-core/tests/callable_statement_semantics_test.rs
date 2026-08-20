@@ -1,4 +1,4 @@
-//! Java Druid CallableStatement 池化语义纵向契约。
+//! Java Druid `CallableStatement` 池化语义纵向契约。
 //!
 //! Java oracle：
 //! - `DruidPooledConnection#prepareCall(...)`
@@ -1016,12 +1016,11 @@ async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
         .callable_statement()
         .expect("动态平台对象必须保留 CallableStatement 身份")
         .is_same_statement(&callable));
-    assert!(
+    assert_eq!(
         statement_object
             .prepared_statement()
             .expect("CallableStatement 必须保留继承的 PreparedStatement 身份")
-            .key()
-            == &expected_key
+            .key(), &expected_key
     );
     assert!(statement_object
         .pooled_statement()

@@ -49,6 +49,6 @@ fn wall_deny_stat_reset_count_increments() {
 #[test]
 fn wall_deny_stat_debug() {
     let stat = WallDenyStat::default();
-    let dbg = format!("{:?}", stat);
+    let dbg = format!("{stat:?}");
     assert!(dbg.contains("WallDenyStat"));
 }

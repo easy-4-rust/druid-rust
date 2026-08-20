@@ -1,10 +1,10 @@
-//! DruidPooledCallableStatement coverage boost — Wrapper trait, Debug, id,
-//! is_closed, generated_keys, more_results, close paths, and named parameter
-//! getter/setter families via real Toasty SQLite.
+//! `DruidPooledCallableStatement` coverage boost — Wrapper trait, Debug, id,
+//! `is_closed`, `generated_keys`, `more_results`, close paths, and named parameter
+//! getter/setter families via real Toasty `SQLite`.
 
 extern crate druid_core as druid;
 use druid_core::core::{
-    CallableOutParameter, DruidPooledConnection, FilterAdapter, FilterChainImpl,
+    DruidPooledConnection, FilterAdapter, FilterChainImpl,
     PhysicalConnectionFactory, Value, Wrapper,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -51,21 +51,18 @@ async fn cs_prepare_call_basic() {
     // SQLite doesn't support CALL syntax, but prepare_call creates a
     // DruidPooledCallableStatement wrapper. We test the wrapper API.
     let cs_result = conn.prepare_call("SELECT 1").await;
-    match cs_result {
-        Ok(mut cs) => {
-            // id
-            assert!(cs.id() > 0);
-            // is_closed
-            assert!(!cs.is_closed());
-            // key
-            let _ = cs.key();
-            // close
-            cs.close_with_connection(&mut conn).unwrap();
-            assert!(cs.is_closed());
-        }
-        Err(_) => {
-            // SQLite may not support prepare_call; this is acceptable
-        }
+    if let Ok(mut cs) = cs_result {
+        // id
+        assert!(cs.id() > 0);
+        // is_closed
+        assert!(!cs.is_closed());
+        // key
+        let _ = cs.key();
+        // close
+        cs.close_with_connection(&mut conn).unwrap();
+        assert!(cs.is_closed());
+    } else {
+        // SQLite may not support prepare_call; this is acceptable
     }
 }
 

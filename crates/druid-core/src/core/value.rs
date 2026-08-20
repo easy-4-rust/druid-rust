@@ -6,7 +6,7 @@ use std::fmt;
 
 /// RDBC 通用标量值。
 ///
-/// 对应 Java：`java.sql.ResultSet#getObject`、PreparedStatement 参数和各驱动
+/// 对应 Java：`java.sql.ResultSet#getObject`、`PreparedStatement` 参数和各驱动
 /// 的标量结果。Decimal 与日期时间保持独立类型身份，不能先降级为字符串再由
 /// pooled wrapper 猜测类型。
 #[derive(Debug, Clone, PartialEq)]

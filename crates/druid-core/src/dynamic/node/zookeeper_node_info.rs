@@ -1,6 +1,6 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.node.ZookeeperNodeInfo`。
 
-/// 写入 ZooKeeper 临时节点的单个数据库端点信息。
+/// 写入 `ZooKeeper` 临时节点的单个数据库端点信息。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.ha.node.ZookeeperNodeInfo`。
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -60,7 +60,7 @@ impl ZookeeperNodeInfo {
         self.port
     }
 
-    /// 设置数据库名、Oracle ServiceName 或 SID。
+    /// 设置数据库名、Oracle `ServiceName` 或 SID。
     pub fn set_database(&mut self, database: Option<String>) {
         self.database = database;
     }

@@ -11,8 +11,8 @@ use std::time::Duration;
 
 /// RDBC SQL、参数和结果字符编码转换 Filter。
 ///
-/// 本对象实现 Java 的字符串/Reader 值转换以及 ResultSet around-chain。
-/// SQL prepare/execute 入参的生产接线由连接/Statement FilterChain 继续承接，
+/// 本对象实现 Java 的字符串/Reader 值转换以及 `ResultSet` around-chain。
+/// SQL prepare/execute 入参的生产接线由连接/Statement `FilterChain` 继续承接，
 /// 不能把此对象的存在误记为整个 `SEM-FLT-015` 已完成。
 #[derive(Debug)]
 pub struct EncodingConvertFilter {

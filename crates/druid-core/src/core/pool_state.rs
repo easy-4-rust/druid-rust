@@ -46,11 +46,11 @@ pub struct PoolState {
     pub keep_alive_check_count: u64,
     /// 空闲连接保活检查失败次数，对应 Java `keepAliveCheckErrorCount`。
     pub keep_alive_check_error_count: u64,
-    /// 创建物理 PreparedStatement 总数。
+    /// 创建物理 `PreparedStatement` 总数。
     pub prepared_statement_count: u64,
-    /// 关闭物理 PreparedStatement 总数。
+    /// 关闭物理 `PreparedStatement` 总数。
     pub closed_prepared_statement_count: u64,
-    /// 当前缓存 PreparedStatement 数。
+    /// 当前缓存 `PreparedStatement` 数。
     pub cached_prepared_statement_count: i64,
     /// 缓存删除次数。
     pub cached_prepared_statement_delete_count: u64,

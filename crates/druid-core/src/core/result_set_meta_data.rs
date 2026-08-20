@@ -39,7 +39,7 @@ impl ResultSetMetaData {
         }
     }
 
-    /// 启用 MySQL Connector/J 8.0.24 的 DATETIME 类名兼容。
+    /// 启用 `MySQL` Connector/J 8.0.24 的 DATETIME 类名兼容。
     ///
     /// 仅由 canonical `MySQL8DateTimeResultSetMetaData` 使用；其余 metadata
     /// 委托、物理 Wrapper 身份和列属性保持不变。
@@ -381,6 +381,7 @@ impl ResultSetMetaData {
     }
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl fmt::Debug for ResultSetMetaData {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.backend {

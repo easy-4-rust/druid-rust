@@ -1,11 +1,11 @@
-//! DuckDB 原生数据库元数据。
+//! `DuckDB` 原生数据库元数据。
 
 use druid_core::core::{DruidError, PhysicalDatabaseMetaData};
 use duckdb::Connection;
 use parking_lot::Mutex;
 use std::sync::Arc;
 
-/// DuckDB 原生连接的数据库元数据视图。
+/// `DuckDB` 原生连接的数据库元数据视图。
 ///
 /// 对应 Java: `java.sql.DatabaseMetaData`。仅报告 duckdb-rs 和当前物理连接
 /// 能够证明的字段，其余方法保留 trait 的明确不支持语义。
@@ -15,7 +15,7 @@ pub struct DuckDbDatabaseMetaData {
 }
 
 impl DuckDbDatabaseMetaData {
-    /// 创建绑定当前物理连接的 DuckDB 元数据对象。
+    /// 创建绑定当前物理连接的 `DuckDB` 元数据对象。
     pub(crate) fn new(connection: Arc<Mutex<Connection>>, url: impl Into<String>) -> Self {
         Self {
             connection,

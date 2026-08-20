@@ -746,7 +746,7 @@ fn sql_hint_traits() {
     let hint = SqlHint::Read;
     let cloned = hint.clone();
     assert_eq!(hint, cloned);
-    let debug = format!("{:?}", hint);
+    let debug = format!("{hint:?}");
     assert!(debug.contains("Read"));
 }
 

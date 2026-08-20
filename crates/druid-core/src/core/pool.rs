@@ -5,7 +5,7 @@ use super::error::DruidError;
 use super::pool_state::PoolState;
 use std::time::Duration;
 
-/// 连接池 trait，替代 DataSource。
+/// 连接池 trait，替代 `DataSource`。
 #[async_trait::async_trait]
 pub trait Pool: Send + Sync {
     async fn get(&self) -> Result<DruidPooledConnection, DruidError>;

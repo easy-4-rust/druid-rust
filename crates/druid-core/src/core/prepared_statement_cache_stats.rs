@@ -1,12 +1,12 @@
-//! PreparedStatement 缓存统计。
+//! `PreparedStatement` 缓存统计。
 //!
 //! 对应 Java：
-//! `com.alibaba.druid.pool.DruidAbstractDataSource` 中的 PreparedStatement
+//! `com.alibaba.druid.pool.DruidAbstractDataSource` 中的 `PreparedStatement`
 //! 计数字段和原子更新器。
 
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
 
-/// 数据源级 PreparedStatement 统计。
+/// 数据源级 `PreparedStatement` 统计。
 #[derive(Debug, Default)]
 pub struct PreparedStatementCacheStats {
     prepared_statement_count: AtomicU64,
@@ -33,13 +33,13 @@ impl PreparedStatementCacheStats {
             .store(0, Ordering::Release);
     }
 
-    /// 记录创建一个新的物理 PreparedStatement。
+    /// 记录创建一个新的物理 `PreparedStatement`。
     pub fn record_prepare(&self) {
         self.prepared_statement_count
             .fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 记录关闭一个物理 PreparedStatement。
+    /// 记录关闭一个物理 `PreparedStatement`。
     pub fn record_close(&self) {
         self.closed_prepared_statement_count
             .fetch_add(1, Ordering::Relaxed);
@@ -76,17 +76,17 @@ impl PreparedStatementCacheStats {
             .fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 返回物理 PreparedStatement 创建总数。
+    /// 返回物理 `PreparedStatement` 创建总数。
     pub fn prepared_statement_count(&self) -> u64 {
         self.prepared_statement_count.load(Ordering::Relaxed)
     }
 
-    /// 返回物理 PreparedStatement 关闭总数。
+    /// 返回物理 `PreparedStatement` 关闭总数。
     pub fn closed_prepared_statement_count(&self) -> u64 {
         self.closed_prepared_statement_count.load(Ordering::Relaxed)
     }
 
-    /// 返回当前缓存的物理 PreparedStatement 数。
+    /// 返回当前缓存的物理 `PreparedStatement` 数。
     pub fn cached_prepared_statement_count(&self) -> i64 {
         self.cached_prepared_statement_count.load(Ordering::Relaxed)
     }

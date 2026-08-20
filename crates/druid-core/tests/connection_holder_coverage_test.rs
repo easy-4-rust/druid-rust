@@ -1,6 +1,7 @@
-//! DruidConnectionHolder coverage boost -- variables, global_variables,
-//! create_duration, statement_event_listeners, prepared statement cache,
-//! Debug format with statement pool, and remove_connection_event_listener.
+#![allow(unused_comparisons)]
+//! `DruidConnectionHolder` coverage boost -- variables, `global_variables`,
+//! `create_duration`, `statement_event_listeners`, prepared statement cache,
+//! Debug format with statement pool, and `remove_connection_event_listener`.
 
 extern crate druid_core as druid;
 use druid_core::core::{

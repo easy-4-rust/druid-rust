@@ -12,14 +12,14 @@ fn test_pool_config_defaults_match_druid_java() {
     assert_eq!(c.max_open, 8);
     assert_eq!(c.min_idle, 0);
     assert_eq!(c.acquire_timeout, std::time::Duration::MAX);
-    assert_eq!(c.min_evictable_idle, std::time::Duration::from_secs(1800));
-    assert_eq!(c.eviction_interval, std::time::Duration::from_secs(60));
+    assert_eq!(c.min_evictable_idle, std::time::Duration::from_mins(30));
+    assert_eq!(c.eviction_interval, std::time::Duration::from_mins(1));
     assert!(!c.test_on_borrow);
     assert!(!c.test_on_return);
     assert!(!c.pool_prepared_statements);
     assert!(!c.keep_alive);
     assert!(!c.leak_detection);
-    assert_eq!(c.leak_threshold, std::time::Duration::from_secs(300));
+    assert_eq!(c.leak_threshold, std::time::Duration::from_mins(5));
     assert!(c.use_unfair_lock);
     assert!(!c.break_after_acquire_failure);
     assert_eq!(c.connection_error_retry_attempts, 1);
@@ -51,7 +51,7 @@ fn test_connection_holder_cas() {
 }
 #[test]
 fn test_connection_holder_is_alive() {
-    assert!(ConnectionHolder::new(1).is_alive(std::time::Duration::from_secs(60)));
+    assert!(ConnectionHolder::new(1).is_alive(std::time::Duration::from_mins(1)));
 }
 #[test]
 fn test_connection_holder_use_count() {
@@ -334,7 +334,7 @@ async fn test_driver_connect() {
     struct MockDriver;
     #[async_trait::async_trait]
     impl Driver for MockDriver {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "test-db"
         }
         async fn connect(&self, _url: &str) -> Result<Box<dyn Connection>, DruidError> {
@@ -377,7 +377,7 @@ async fn test_driver_connect_with_auth_default() {
     struct MockDriver;
     #[async_trait::async_trait]
     impl Driver for MockDriver {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "mock"
         }
         async fn connect(&self, url: &str) -> Result<Box<dyn Connection>, DruidError> {
@@ -516,15 +516,15 @@ fn test_pool_config_builder_every_field() {
         .min_idle(5)
         .initial_size(10)
         .acquire_timeout(std::time::Duration::from_secs(10))
-        .max_lifetime(std::time::Duration::from_secs(600))
+        .max_lifetime(std::time::Duration::from_mins(10))
         .eviction_interval(std::time::Duration::from_secs(30))
-        .min_evictable_idle(std::time::Duration::from_secs(60))
+        .min_evictable_idle(std::time::Duration::from_mins(1))
         .test_on_borrow(true)
         .test_on_return(true)
         .validation_query("SELECT 1")
         .keep_alive(true)
         .leak_detection(true)
-        .leak_threshold(std::time::Duration::from_secs(60))
+        .leak_threshold(std::time::Duration::from_mins(1))
         .pool_prepared_statements(true)
         .default_auto_commit(false)
         .break_after_acquire_failure(true)
@@ -704,7 +704,7 @@ async fn test_before_filter_all_default_hooks() {
     struct M;
     #[async_trait::async_trait]
     impl BeforeFilter for M {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "m"
         }
         async fn before(&self, _: &mut ExecContext<'_>) -> Result<(), DruidError> {
@@ -809,7 +809,7 @@ async fn test_after_filter_default() {
     struct M;
     #[async_trait::async_trait]
     impl AfterFilter for M {
-        fn name(&self) -> &str {
+        fn name(&self) -> &'static str {
             "m"
         }
         async fn after(
@@ -839,15 +839,15 @@ fn test_pool_config_builder_all_fields() {
         .min_idle(5)
         .initial_size(10)
         .acquire_timeout(std::time::Duration::from_secs(10))
-        .max_lifetime(std::time::Duration::from_secs(600))
+        .max_lifetime(std::time::Duration::from_mins(10))
         .eviction_interval(std::time::Duration::from_secs(30))
-        .min_evictable_idle(std::time::Duration::from_secs(60))
+        .min_evictable_idle(std::time::Duration::from_mins(1))
         .test_on_borrow(true)
         .test_on_return(true)
         .validation_query("SELECT 1")
         .keep_alive(true)
         .leak_detection(true)
-        .leak_threshold(std::time::Duration::from_secs(60))
+        .leak_threshold(std::time::Duration::from_mins(1))
         .pool_prepared_statements(true)
         .default_auto_commit(false)
         .break_after_acquire_failure(true)

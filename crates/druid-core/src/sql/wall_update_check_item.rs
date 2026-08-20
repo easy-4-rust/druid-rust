@@ -89,7 +89,7 @@ impl WallUpdateCheckItem {
         Some((set_value, deduplicate_values(filter_values)))
     }
 
-    /// 使用 PreparedStatement 的有序参数求值。
+    /// 使用 `PreparedStatement` 的有序参数求值。
     ///
     /// Java 参数下标从 1 开始；参数不存在时与 Java `parameterMap.get(index) ==
     /// null` 一致，返回 SQL NULL。表达式不是字面量或占位符时返回 `None`。

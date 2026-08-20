@@ -15,7 +15,7 @@ pub(crate) enum HttpSqlStatementExecutionError {
     Cancelled,
 }
 
-/// HTTP SQL 产品的物理 PreparedStatement 状态。
+/// HTTP SQL 产品的物理 `PreparedStatement` 状态。
 pub struct HttpSqlPreparedStatement {
     sql: String,
     closed: AtomicBool,

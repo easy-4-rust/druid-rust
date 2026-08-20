@@ -5,7 +5,7 @@ use super::{
     DruidError, PhysicalConnection, ValidConnectionChecker, ValidConnectionCheckerAdapter,
 };
 
-/// MySQL 连接校验器。
+/// `MySQL` 连接校验器。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.vendor.MySqlValidConnectionChecker`。
 #[derive(Clone, Copy, Debug)]
@@ -27,13 +27,13 @@ impl MySqlValidConnectionChecker {
         }
     }
 
-    /// 返回是否强制使用 MySQL ping SQL。
+    /// 返回是否强制使用 `MySQL` ping SQL。
     #[must_use]
     pub const fn is_use_ping_method(&self) -> bool {
         self.use_ping_method
     }
 
-    /// 设置是否强制使用 MySQL ping SQL。
+    /// 设置是否强制使用 `MySQL` ping SQL。
     pub fn set_use_ping_method(&mut self, use_ping_method: bool) {
         self.use_ping_method = use_ping_method;
     }

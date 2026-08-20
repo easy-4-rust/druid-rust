@@ -261,11 +261,11 @@ impl DruidPooledStatement {
         self.wrap_result_set(physical)
     }
 
-    /// 把驱动 ResultSet SPI 包装成池化结果集并加入 Statement trace。
+    /// 把驱动 `ResultSet` SPI 包装成池化结果集并加入 Statement trace。
     ///
     /// 对应 Java：`new DruidPooledResultSet(this, resultSet)` 以及
     /// `addResultSetTrace`。扩展 Adapter 必须通过该入口保留同 Statement 身份
-    /// 与级联关闭，不应直接暴露 raw ResultSet。
+    /// 与级联关闭，不应直接暴露 raw `ResultSet`。
     pub fn wrap_result_set(
         &self,
         physical: Arc<dyn PhysicalResultSet>,
@@ -363,10 +363,10 @@ impl DruidPooledStatement {
         .await
     }
 
-    /// 返回 generic execute 的当前 ResultSet。
+    /// 返回 generic execute 的当前 `ResultSet`。
     ///
-    /// 对应 Java：`DruidPooledStatement#getResultSet()`；当前不是 ResultSet 时
-    /// 返回 `None`，每次非空调用都创建池化 wrapper 并进入 ResultSet open hook。
+    /// 对应 Java：`DruidPooledStatement#getResultSet()`；当前不是 `ResultSet` 时
+    /// 返回 `None`，每次非空调用都创建池化 wrapper 并进入 `ResultSet` open hook。
     pub fn result_set(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -395,7 +395,7 @@ impl DruidPooledStatement {
         self.classify(connection, result).map(Some)
     }
 
-    /// 返回最近一次执行产生的生成键 ResultSet。
+    /// 返回最近一次执行产生的生成键 `ResultSet`。
     ///
     /// 对应 Java：`DruidPooledStatement#getGeneratedKeys()`。SQLite/xerial 即使
     /// 使用无参数 `execute(String)` 也会暴露最后插入 rowid；无键时返回空结果集。
@@ -425,7 +425,7 @@ impl DruidPooledStatement {
     /// 使用 RDBC current-result 常量推进到下一个结果。
     ///
     /// 对应 Java：`getMoreResults(int)`；只接受 1/2/3，非法值在推进和关闭旧
-    /// ResultSet 之前返回错误。
+    /// `ResultSet` 之前返回错误。
     pub fn more_results_with_current(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -724,7 +724,7 @@ impl DruidPooledStatement {
         self.classify(connection, result)
     }
 
-    /// 普通 Statement 不进入 PreparedStatement 缓存。
+    /// 普通 Statement 不进入 `PreparedStatement` 缓存。
     pub fn is_poolable(&self) -> bool {
         self.inner.statement.is_poolable()
     }
@@ -891,12 +891,12 @@ impl DruidPooledStatement {
         state.generated_keys.clear();
     }
 
-    /// 返回最近一次执行使用的 SQL，供 ResultSet 关闭时回写 SQL 统计。
+    /// 返回最近一次执行使用的 SQL，供 `ResultSet` 关闭时回写 SQL 统计。
     pub fn last_sql(&self) -> Option<String> {
         self.state().last_sql.clone()
     }
 
-    /// 返回最近一次执行耗时，供 ResultSet hold 统计组合。
+    /// 返回最近一次执行耗时，供 `ResultSet` hold 统计组合。
     pub fn last_execute_elapsed(&self) -> Option<Duration> {
         self.state().last_execute_elapsed
     }
@@ -915,7 +915,7 @@ impl DruidPooledStatement {
             .map(|started_at| started_at.elapsed())
     }
 
-    /// 返回最近一次 generic/query 执行的首结果是否为 ResultSet。
+    /// 返回最近一次 generic/query 执行的首结果是否为 `ResultSet`。
     #[must_use]
     pub fn is_first_result_set(&self) -> bool {
         self.state().first_result_set
@@ -1002,7 +1002,7 @@ impl DruidPooledStatement {
         state.generated_keys = Self::generated_key_rows(execution);
     }
 
-    /// 保存 PreparedStatement batch 的首结果状态。
+    /// 保存 `PreparedStatement` batch 的首结果状态。
     pub(crate) fn complete_external_batch(&self, update_counts: &[i32]) {
         let mut state = self.state_mut();
         state.first_result_set = false;

@@ -96,6 +96,6 @@ fn rdbc_parameter_string_clone_eq() {
 #[test]
 fn rdbc_parameter_string_debug() {
     let p = RdbcParameterString::new(Some("test".to_owned()));
-    let dbg = format!("{:?}", p);
+    let dbg = format!("{p:?}");
     assert!(dbg.contains("RdbcParameterString"));
 }

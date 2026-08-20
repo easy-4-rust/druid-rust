@@ -12,7 +12,7 @@ pub struct Savepoint {
 }
 
 impl Savepoint {
-    /// 返回匿名保存点 ID。命名保存点调用该方法返回 SQLException。
+    /// 返回匿名保存点 ID。命名保存点调用该方法返回 `SQLException`。
     pub fn get_savepoint_id(&self) -> Result<i32, crate::core::DruidError> {
         if self.name.is_some() {
             return Err(Self::access_error(
@@ -22,7 +22,7 @@ impl Savepoint {
         i32::try_from(self.id).map_err(|_| Self::access_error("savepoint id exceeds RDBC int"))
     }
 
-    /// 返回命名保存点名称。匿名保存点调用该方法返回 SQLException。
+    /// 返回命名保存点名称。匿名保存点调用该方法返回 `SQLException`。
     pub fn get_savepoint_name(&self) -> Result<&str, crate::core::DruidError> {
         self.name
             .as_deref()

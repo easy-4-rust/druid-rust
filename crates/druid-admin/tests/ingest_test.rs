@@ -1,6 +1,6 @@
 //! RED tests for gRPC ingest and repository.
 //!
-//! Task 3 Step 1: Tests for receiving MetricsBatch via gRPC,
+//! Task 3 Step 1: Tests for receiving `MetricsBatch` via gRPC,
 //! updating the in-memory repository, and deduplication.
 
 use std::collections::HashMap;

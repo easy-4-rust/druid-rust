@@ -155,7 +155,7 @@ impl DatabaseProfile {
     }
 }
 
-/// JDBC Agent 产品的默认 DriverManager 类名；用户导入的 bundle 仍可通过
+/// JDBC Agent 产品的默认 `DriverManager` 类名；用户导入的 bundle 仍可通过
 /// `META-INF/services/java.sql.Driver` 自注册。本表用于诊断、审计与旧驱动兼容。
 fn jdbc_driver_class(profile_id: &str) -> Option<&'static str> {
     Some(match profile_id {

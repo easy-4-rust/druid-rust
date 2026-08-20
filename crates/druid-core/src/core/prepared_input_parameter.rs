@@ -1,3 +1,4 @@
+#![allow(clippy::match_same_arms)]
 //! `PreparedStatement` 按索引绑定参数。
 //!
 //! 对应 Java 平台依赖：`java.sql.PreparedStatement` 的 `setXxx` 方法族。
@@ -24,7 +25,7 @@ pub enum PreparedTypeNameArgument {
     Specified(Option<String>),
 }
 
-/// PreparedStatement 参数及其精确 RDBC setter 语义。
+/// `PreparedStatement` 参数及其精确 RDBC setter 语义。
 ///
 /// 每个 variant 对应 Java 的一个 setter 家族。流和 LOB 保存资源句柄，不在
 /// 池化层提前读取；Calendar、长度和 SQL 类型元数据保持到物理 Adapter 边界。

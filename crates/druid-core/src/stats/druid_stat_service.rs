@@ -1,3 +1,4 @@
+#![allow(clippy::case_sensitive_file_extension_comparisons)]
 use super::DruidStatManagerFacade;
 use serde_json::{json, Value};
 use std::cmp::Ordering;

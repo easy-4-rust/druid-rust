@@ -1,4 +1,4 @@
-//! SQLx 数据库元数据 Adapter。
+//! `SQLx` 数据库元数据 Adapter。
 
 use druid_core::core::{
     DruidError, PhysicalDatabaseMetaData, PhysicalResultSet, Row, RowSetResultSet, Value,
@@ -28,7 +28,7 @@ const JDBC_IMPORTED_KEY_NO_ACTION: i32 = 3;
 const JDBC_IMPORTED_KEY_SET_DEFAULT: i32 = 4;
 const JDBC_IMPORTED_KEY_INITIALLY_DEFERRED: i32 = 5;
 
-/// SQLite `pragma_foreign_key_list` 的规范化单行。
+/// `SQLite` `pragma_foreign_key_list` 的规范化单行。
 struct SqliteForeignKey {
     sequence: i64,
     primary_table: String,
@@ -39,21 +39,21 @@ struct SqliteForeignKey {
     name: Option<String>,
 }
 
-/// SQLx metadata 对当前未池化连接的借用。
+/// `SQLx` metadata 对当前未池化连接的借用。
 pub(super) enum SqlxDatabaseMetaDataBackend<'connection> {
-    /// SQLx Any（MySQL/PostgreSQL 等）。
+    /// `SQLx` Any（MySQL/PostgreSQL 等）。
     Any(&'connection mut AnyConnection),
-    /// 原生 MySQL 协议连接。
+    /// 原生 `MySQL` 协议连接。
     MySql(&'connection mut MySqlConnection),
-    /// 原生 PostgreSQL 协议连接。
+    /// 原生 `PostgreSQL` 协议连接。
     PostgreSql(&'connection mut PgConnection),
-    /// 原生 SQLite。
+    /// 原生 `SQLite`。
     Sqlite(&'connection mut SqliteConnection),
 }
 
-/// SQLx 的物理数据库元数据实现。
+/// `SQLx` 的物理数据库元数据实现。
 ///
-/// 对应 Java 平台职责：JDBC driver 的 `DatabaseMetaData` 实现。只报告 SQLx
+/// 对应 Java 平台职责：JDBC driver 的 `DatabaseMetaData` 实现。只报告 `SQLx`
 /// 和真实后端能够证明的能力；未暴露的 JDBC 能力沿用 trait 的精确
 /// `UnsupportedOperation`，不会以默认 false/空字符串冒充驱动结果。
 pub struct SqlxDatabaseMetaData<'connection> {
@@ -62,7 +62,7 @@ pub struct SqlxDatabaseMetaData<'connection> {
 }
 
 impl<'connection> SqlxDatabaseMetaData<'connection> {
-    /// 创建 SQLx Any metadata。
+    /// 创建 `SQLx` Any metadata。
     pub(super) fn any(connection: &'connection mut AnyConnection, url: &'connection str) -> Self {
         Self {
             backend: SqlxDatabaseMetaDataBackend::Any(connection),
@@ -70,7 +70,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         }
     }
 
-    /// 创建 SQLite metadata。
+    /// 创建 `SQLite` metadata。
     pub(super) fn sqlite(
         connection: &'connection mut SqliteConnection,
         url: &'connection str,
@@ -81,7 +81,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         }
     }
 
-    /// 创建原生 MySQL metadata。
+    /// 创建原生 `MySQL` metadata。
     pub(super) fn mysql(
         connection: &'connection mut MySqlConnection,
         url: &'connection str,
@@ -92,7 +92,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         }
     }
 
-    /// 创建原生 PostgreSQL metadata。
+    /// 创建原生 `PostgreSQL` metadata。
     pub(super) fn postgresql(
         connection: &'connection mut PgConnection,
         url: &'connection str,

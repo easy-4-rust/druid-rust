@@ -6,7 +6,7 @@ struct MockDriver;
 
 #[async_trait::async_trait]
 impl Driver for MockDriver {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "mock"
     }
     async fn connect(&self, _url: &str) -> Result<Box<dyn PhysicalConnection>, DruidError> {
@@ -109,6 +109,6 @@ fn driver_property_clone_eq() {
 #[test]
 fn driver_property_debug() {
     let p = DriverProperty::new("port", Some("5432".to_owned()));
-    let dbg = format!("{:?}", p);
+    let dbg = format!("{p:?}");
     assert!(dbg.contains("DriverProperty"));
 }

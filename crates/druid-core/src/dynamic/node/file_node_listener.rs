@@ -94,7 +94,7 @@ impl FileNodeListener {
             let username_key = format!("{name}.username");
             let password_key = format!("{name}.password");
             let url = original.get(&url_key).cloned();
-            if url.as_deref().is_none_or(|url| url.is_empty()) {
+            if url.as_deref().is_none_or(str::is_empty) {
                 tracing::warn!(node = %name, "{url_key} 为空，忽略该节点");
                 continue;
             }

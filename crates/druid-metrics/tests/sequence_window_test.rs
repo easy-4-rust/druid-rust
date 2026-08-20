@@ -1,8 +1,11 @@
+#![allow(dead_code)]
 //! Tests for the client-side sequence/ACK window.
 //!
-//! The SequenceWindow tracks batches that have been sent but not yet
+//! The `SequenceWindow` tracks batches that have been sent but not yet
 //! acknowledged by the server. On reconnect only the pending (un-ACKed)
 //! batches are retransmitted in original sequence order.
+
+#![allow(unused_must_use)] // test helpers intentionally discard intermediate push results
 
 use druid_metrics::sequence_window::{PendingBatch, SequenceWindow};
 

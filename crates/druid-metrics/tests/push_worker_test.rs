@@ -1,7 +1,7 @@
-//! Tests for the client-side PushWorker.
+//! Tests for the client-side `PushWorker`.
 //!
-//! The PushWorker consumes batches from an mpsc channel, assigns sequence
-//! numbers via a SequenceWindow, and pushes them to the server through a
+//! The `PushWorker` consumes batches from an mpsc channel, assigns sequence
+//! numbers via a `SequenceWindow`, and pushes them to the server through a
 //! transport abstraction. It processes ACKs to free window slots.
 
 use std::time::Duration;

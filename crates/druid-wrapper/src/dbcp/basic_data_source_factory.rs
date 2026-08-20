@@ -27,9 +27,7 @@ impl BasicDataSourceFactory {
         let factory: Arc<dyn PhysicalConnectionFactory> =
             Arc::new(ToastyConnectionFactory::new(rust_url.as_ref()).await?);
         let driver_name = factory
-            .connection_url()
-            .map(str::to_owned)
-            .unwrap_or_else(|| "toasty".to_owned());
+            .connection_url().map_or_else(|| "toasty".to_owned(), str::to_owned);
         DruidDataSourceFactory::create_data_source_with_factory(&properties, factory, driver_name)
             .await
     }

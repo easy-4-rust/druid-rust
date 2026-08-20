@@ -1,6 +1,6 @@
 //! 对应 Java 类：com.alibaba.druid.pool.DruidAbstractDataSource（池配置）
 //!
-//! 池内部配置，从 PoolConfig 翻译而来。
+//! 池内部配置，从 `PoolConfig` 翻译而来。
 
 use crate::core::{
     AutoLoad, ConfigFilter, EncodingConvertFilter, ExceptionSorter, FilterChain, FilterManager,
@@ -100,9 +100,9 @@ pub struct PoolInnerConfig {
     pub default_catalog: Option<String>,
     /// Java `connectionInitSqls`，按配置顺序在 raw connection 上执行。
     pub connection_init_sqls: Vec<String>,
-    /// Java `initVariants`；仅 MySQL 协议族执行 `show variables`。
+    /// Java `initVariants`；仅 `MySQL` 协议族执行 `show variables`。
     pub init_variants: bool,
-    /// Java `initGlobalVariants`；仅 MySQL 协议族执行 `show global variables`。
+    /// Java `initGlobalVariants`；仅 `MySQL` 协议族执行 `show global variables`。
     pub init_global_variants: bool,
     pub pool_prepared_statements: bool,
     pub max_pool_prepared_statements_per_connection: usize,
@@ -169,7 +169,7 @@ impl Default for PoolInnerConfig {
     }
 }
 
-/// DruidPool Builder。
+/// `DruidPool` Builder。
 pub struct DruidPoolBuilder {
     name: String,
     driver_name: String,
@@ -370,7 +370,7 @@ impl DruidPoolBuilder {
     /// 替换 Wall 规则并重建默认 Filter 工厂注册。
     ///
     /// 对应 Java `WallFilter#configFromProperties` 在数据源初始化前应用规则。
-    /// 必须在 `set_filters` 前调用；已显式配置的 FilterChain 不回溯替换。
+    /// 必须在 `set_filters` 前调用；已显式配置的 `FilterChain` 不回溯替换。
     pub fn wall_config(mut self, wall_config: WallConfig) -> Self {
         self.wall_config_explicit = true;
         self.wall_provider = self
@@ -635,7 +635,7 @@ impl DruidPoolBuilder {
     /// 设置数据源局部登录超时秒数。
     ///
     /// Java 使用进程级 `DriverManager`；Rust 不创建全局 RDBC 状态，而把同一
-    /// 可观察配置收敛到数据源及其 PhysicalConnectionFactory 边界。
+    /// 可观察配置收敛到数据源及其 `PhysicalConnectionFactory` 边界。
     pub fn login_timeout(mut self, login_timeout: i32) -> Self {
         self.login_timeout = login_timeout;
         self
@@ -773,19 +773,19 @@ impl DruidPoolBuilder {
         self
     }
 
-    /// 设置是否采集 MySQL 会话变量。
+    /// 设置是否采集 `MySQL` 会话变量。
     pub fn init_variants(mut self, init_variants: bool) -> Self {
         self.init_variants = init_variants;
         self
     }
 
-    /// 设置是否采集 MySQL 全局变量。
+    /// 设置是否采集 `MySQL` 全局变量。
     pub fn init_global_variants(mut self, init_global_variants: bool) -> Self {
         self.init_global_variants = init_global_variants;
         self
     }
 
-    /// 启用单物理连接 PreparedStatement 缓存。
+    /// 启用单物理连接 `PreparedStatement` 缓存。
     ///
     /// 对应 Java：`DruidAbstractDataSource#setPoolPreparedStatements(boolean)`。
     pub fn pool_prepared_statements(mut self, pool_prepared_statements: bool) -> Self {
@@ -793,7 +793,7 @@ impl DruidPoolBuilder {
         self
     }
 
-    /// 设置每个物理连接的 PreparedStatement LRU 上限。
+    /// 设置每个物理连接的 `PreparedStatement` LRU 上限。
     ///
     /// 对应 Java：
     /// `setMaxPoolPreparedStatementPerConnectionSize(int)` /

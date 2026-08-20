@@ -15,7 +15,7 @@ pub(crate) enum LibSqlStatementExecutionError {
     Cancelled,
 }
 
-/// 单一 libSQL 物理连接所属的 PreparedStatement 状态。
+/// 单一 libSQL 物理连接所属的 `PreparedStatement` 状态。
 pub struct LibSqlPreparedStatement {
     sql: String,
     closed: AtomicBool,

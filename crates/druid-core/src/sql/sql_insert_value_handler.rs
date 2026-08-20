@@ -14,7 +14,7 @@ pub enum SqlInsertNumber {
     Integer(i32),
     /// Java Long。
     Long(i64),
-    /// Java BigInteger。
+    /// Java `BigInteger`。
     BigInteger(BigInt),
 }
 
@@ -25,7 +25,7 @@ pub enum SqlInsertFunctionValue {
     String(RdbcString),
     /// Java Number。
     Number(SqlInsertNumber),
-    /// Java BigDecimal。
+    /// Java `BigDecimal`。
     Decimal(BigDecimal),
     /// Java Boolean。
     Boolean(bool),
@@ -40,7 +40,7 @@ pub enum SqlInsertFunctionValue {
 /// 流式处理 INSERT VALUES 的调用方协议。
 ///
 /// 对应 Java：`com.alibaba.druid.sql.parser.SQLInsertValueHandler`。关联 `Row`
-/// 映射 Java Object 行身份；所有方法保持原 index、重载类型及 SQLException
+/// 映射 Java Object 行身份；所有方法保持原 index、重载类型及 `SQLException`
 /// 传播。字符串使用 UTF-16 `RdbcString`，不得因 Rust UTF-8 丢失 surrogate。
 pub trait SqlInsertValueHandler {
     /// 调用方拥有的单行对象。
@@ -105,7 +105,7 @@ pub trait SqlInsertValueHandler {
         value: RdbcString,
     ) -> Result<(), DruidError>;
 
-    /// 处理 BigDecimal。
+    /// 处理 `BigDecimal`。
     fn process_decimal(
         &mut self,
         row: &mut Self::Row,

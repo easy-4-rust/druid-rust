@@ -1,4 +1,5 @@
-//! Differential tests for `ToastyConnectionAdapter` via real SQLite.
+#![allow(clippy::approx_constant)]
+//! Differential tests for `ToastyConnectionAdapter` via real `SQLite`.
 //!
 //! The adapter constructor is `pub(crate)`, so we exercise it through
 //! `ToastyConnectionFactory::new("sqlite::memory:").create()`.

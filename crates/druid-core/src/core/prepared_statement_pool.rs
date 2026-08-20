@@ -1,4 +1,4 @@
-//! 单物理连接 PreparedStatement 缓存。
+//! 单物理连接 `PreparedStatement` 缓存。
 //!
 //! 对应 Java：`com.alibaba.druid.pool.PreparedStatementPool`。
 //! 来源文件：
@@ -8,7 +8,7 @@ use super::{PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatem
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
-/// 单物理连接的 access-order LRU PreparedStatement 缓存。
+/// 单物理连接的 access-order LRU `PreparedStatement` 缓存。
 pub struct PreparedStatementPool {
     map: HashMap<PreparedStatementKey, Arc<PreparedStatementHolder>>,
     access_order: VecDeque<PreparedStatementKey>,
@@ -18,6 +18,7 @@ pub struct PreparedStatementPool {
     stats: Arc<PreparedStatementCacheStats>,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for PreparedStatementPool {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -31,10 +32,10 @@ impl std::fmt::Debug for PreparedStatementPool {
 }
 
 impl PreparedStatementPool {
-    /// 创建 PreparedStatement 缓存。
+    /// 创建 `PreparedStatement` 缓存。
     ///
-    /// Java 在配置容量小于等于零时只把 HashMap 初始容量改为 16，实际 LRU
-    /// 上限仍使用配置值；Rust 无需暴露 HashMap 初始容量，但保留实际上限语义。
+    /// Java 在配置容量小于等于零时只把 `HashMap` 初始容量改为 16，实际 LRU
+    /// 上限仍使用配置值；Rust 无需暴露 `HashMap` 初始容量，但保留实际上限语义。
     pub fn new(
         max_size: usize,
         share_prepared_statements: bool,
@@ -58,23 +59,20 @@ impl PreparedStatementPool {
     /// 时增加 miss。
     pub fn get(&mut self, key: &PreparedStatementKey) -> Option<Arc<PreparedStatementHolder>> {
         let holder = self.map.get(key).cloned();
-        match holder {
-            Some(holder) => {
-                self.touch(key);
-                if holder.is_in_use() && !self.share_prepared_statements {
-                    return None;
-                }
-                holder.increment_hit_count();
-                self.stats.record_hit();
-                if holder.is_enter_oracle_implicit_cache() {
-                    holder.set_enter_oracle_implicit_cache(false);
-                }
-                Some(holder)
+        if let Some(holder) = holder {
+            self.touch(key);
+            if holder.is_in_use() && !self.share_prepared_statements {
+                return None;
             }
-            None => {
-                self.stats.record_miss();
-                None
+            holder.increment_hit_count();
+            self.stats.record_hit();
+            if holder.is_enter_oracle_implicit_cache() {
+                holder.set_enter_oracle_implicit_cache(false);
             }
+            Some(holder)
+        } else {
+            self.stats.record_miss();
+            None
         }
     }
 

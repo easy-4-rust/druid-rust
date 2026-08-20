@@ -1,7 +1,7 @@
-//! Java Druid core 主链的真实 SQLite 纵向契约。
+//! Java Druid core 主链的真实 `SQLite` 纵向契约。
 //!
-//! 本测试只验收 SQLite 真实支持的连接池、参数绑定、PreparedStatement、
-//! 事务和回收语义。SQLite 没有存储过程，因此 CallableStatement 必须明确报错。
+//! 本测试只验收 `SQLite` 真实支持的连接池、参数绑定、PreparedStatement、
+//! 事务和回收语义。SQLite 没有存储过程，因此 `CallableStatement` 必须明确报错。
 
 extern crate druid_core as druid;
 use druid_core::core::{DruidError, PhysicalConnection, Value};

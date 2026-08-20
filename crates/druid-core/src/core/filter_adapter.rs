@@ -15,13 +15,13 @@ use std::time::Duration;
 /// 不使用继承，因此以一个可组合、可直接注册的对象承载相同默认行为：
 ///
 /// - SQL before/after 默认放行；
-/// - 已迁移的 ResultSet hook 通过 [`ResultSetFilter`] 默认方法继续调用链；
+/// - 已迁移的 `ResultSet` hook 通过 [`ResultSetFilter`] 默认方法继续调用链；
 /// - Extended hook、生命周期和属性配置使用对应 trait 的默认空语义；
 /// - [`Wrapper`] 只识别并返回当前 `FilterAdapter` 对象。
 ///
 /// Java 尚未迁移的 CallableStatement、其他 Connection/Statement、Clob 与
-/// DataSource 精确 hook 仍由各自迁移账目跟踪；`Connection#getMetaData` 和
-/// ResultSet metadata 已进入真实 around-chain，但不能据此把全部 384 hook
+/// `DataSource` 精确 hook 仍由各自迁移账目跟踪；`Connection#getMetaData` 和
+/// `ResultSet` metadata 已进入真实 around-chain，但不能据此把全部 384 hook
 /// 视为完成。
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct FilterAdapter;

@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+#![allow(dead_code)]
 //! 统计单例与管理器差分测试（C9 覆盖率批次：stats/ 10 文件）。
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。

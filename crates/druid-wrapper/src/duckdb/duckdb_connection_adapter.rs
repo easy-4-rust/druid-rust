@@ -1,4 +1,4 @@
-//! DuckDB 原生物理连接适配器。
+//! `DuckDB` 原生物理连接适配器。
 
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
@@ -21,7 +21,7 @@ use std::time::Duration;
 
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
 
-/// DuckDB 原生物理连接适配器。
+/// `DuckDB` 原生物理连接适配器。
 ///
 /// 对应 Java 平台依赖：具体 JDBC driver 的 `java.sql.Connection`。本对象只
 /// 持有一个 duckdb-rs `Connection`，不持有外部连接池。所有同步 FFI 调用都在
@@ -36,7 +36,7 @@ pub struct DuckDbConnectionAdapter {
 }
 
 impl DuckDbConnectionAdapter {
-    /// 打开一个 DuckDB 原生未池化连接。
+    /// 打开一个 `DuckDB` 原生未池化连接。
     ///
     /// 参数 `url` 使用 `duckdb:` scheme；`duckdb::memory:` 创建独立内存库。
     pub async fn connect(url: &str) -> Result<Self, DruidError> {
@@ -314,9 +314,7 @@ impl DuckDbConnectionAdapter {
         let labels = (0..column_count)
             .map(|index| {
                 statement
-                    .column_name(index)
-                    .map(ToOwned::to_owned)
-                    .unwrap_or_else(|_| format!("column_{}", index + 1))
+                    .column_name(index).map_or_else(|_| format!("column_{}", index + 1), ToOwned::to_owned)
             })
             .collect();
         let mut result = statement.raw_query();

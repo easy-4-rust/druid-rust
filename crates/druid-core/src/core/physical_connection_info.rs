@@ -24,6 +24,7 @@ pub struct PhysicalConnectionInfo {
     create_task_id: u64,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl std::fmt::Debug for PhysicalConnectionInfo {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
