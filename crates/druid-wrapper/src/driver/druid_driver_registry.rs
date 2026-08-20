@@ -12,7 +12,7 @@ use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use crate::libsql::LibSqlConnectionFactory;
 use crate::sqlx::SqlxConnectionFactory;
 use druid::core::PhysicalConnectionFactory;
-use druid::rdbc::RdbcUrl;
+use druid::sql::RdbcUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -120,6 +120,8 @@ impl DruidDriverRegistry {
                 config.properties().clone(),
             )
         };
+        // Properties are consumed only by feature-gated native/JDBC factories.
+        let _ = &properties;
         match profile.runtime_mode() {
             DriverRuntimeMode::Sqlx => {
                 let driver_url = Self::normalize_sqlx_url(&profile, &driver_url)?;

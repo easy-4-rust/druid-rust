@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use druid::core::{Driver, DruidError, PhysicalConnection, SqlException, Value};
-use druid::rdbc::{
+use druid::sql::{
     Date, DriverManager, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString, RdbcType,
-    RdbcUrl, RdbcWriter, SqlExceptionKind, SqlInput, SqlOutput, SqlType, Time, Timestamp, Types,
+    RdbcUrl, RdbcWriter, SQLType, SqlExceptionKind, SqlInput, SqlOutput, Time, Timestamp, Types,
 };
 
 struct ProbeDriver;
@@ -119,10 +119,10 @@ fn rdbc_date_time_and_timestamp_follow_escape_formats_and_nanos() {
 
 #[test]
 fn savepoint_named_and_unnamed_access_rules_match_rdbc() {
-    let unnamed = druid::rdbc::Savepoint { id: 9, name: None };
+    let unnamed = druid::sql::Savepoint { id: 9, name: None };
     assert_eq!(unnamed.get_savepoint_id().expect("匿名保存点必须有 ID"), 9);
     assert!(unnamed.get_savepoint_name().is_err());
-    let named = druid::rdbc::Savepoint {
+    let named = druid::sql::Savepoint {
         id: 10,
         name: Some("before_update".to_owned()),
     };

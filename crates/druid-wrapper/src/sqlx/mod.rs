@@ -8,6 +8,7 @@ pub mod sqlx_connection_adapter;
 pub mod sqlx_connection_factory;
 pub mod sqlx_database_meta_data;
 pub mod sqlx_prepared_statement;
+pub(crate) mod sqlx_streaming_result_set;
 
 pub use sqlx_connection_adapter::SqlxConnectionAdapter;
 pub use sqlx_connection_factory::SqlxConnectionFactory;

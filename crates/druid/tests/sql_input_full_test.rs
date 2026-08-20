@@ -7,7 +7,7 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::Value;
-use druid::rdbc::SqlInput;
+use druid::sql::SqlInput;
 
 // ══════════════════════════════════════════════════════════════════
 // 1. new + read_value 基础路径

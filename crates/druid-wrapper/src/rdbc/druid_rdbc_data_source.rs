@@ -3,7 +3,7 @@ use std::any::Any;
 use async_trait::async_trait;
 use druid::core::{DruidError, DruidPooledConnection, SqlException, Wrapper};
 use druid::pool::DruidDataSource;
-use druid::rdbc::{CommonDataSource, DataSource};
+use druid::sql::{CommonDataSource, DataSource};
 
 use crate::driver::{DriverRegistryError, DruidDatabasePoolBuilder};
 

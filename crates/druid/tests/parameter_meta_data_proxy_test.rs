@@ -4,7 +4,7 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 use druid::core::{ProxyAttributeValue, ResultSetMetaData, ResultSetMetaDataProxyImpl};
-use druid::rdbc::{ParameterMetaData, ParameterMode, ParameterNullability, RdbcType};
+use druid::sql::{ParameterMetaData, ParameterMode, ParameterNullability, RdbcType};
 
 // ── ParameterMetaData（Java ParameterMetaData）─────────────────
 

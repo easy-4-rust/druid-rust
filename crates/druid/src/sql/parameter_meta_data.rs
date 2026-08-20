@@ -73,14 +73,14 @@ impl ParameterMetaData {
     #[must_use]
     pub fn get_parameter_type(&self, parameter: usize) -> Option<i32> {
         self.parameter_type(parameter)
-            .map(|value| super::SqlType::vendor_type_number(&value))
+            .map(|value| super::rdbc_sql_type::SqlType::vendor_type_number(&value))
     }
 
     /// Returns the database type name for a 1-based parameter.
     #[must_use]
     pub fn parameter_type_name(&self, parameter: usize) -> Option<&'static str> {
         self.parameter_type(parameter)
-            .map(|value| super::SqlType::name(&value))
+            .map(|value| super::rdbc_sql_type::SqlType::name(&value))
     }
     /// `snake_case` form of Java `getParameterTypeName`.
     #[must_use]
@@ -101,9 +101,9 @@ impl ParameterMetaData {
             RdbcType::Binary | RdbcType::VarBinary | RdbcType::LongVarBinary | RdbcType::Blob => {
                 "Vec<u8>"
             }
-            RdbcType::Date => "druid::rdbc::Date",
-            RdbcType::Time | RdbcType::TimeWithTimezone => "druid::rdbc::Time",
-            RdbcType::Timestamp | RdbcType::TimestampWithTimezone => "druid::rdbc::Timestamp",
+            RdbcType::Date => "druid::sql::Date",
+            RdbcType::Time | RdbcType::TimeWithTimezone => "druid::sql::Time",
+            RdbcType::Timestamp | RdbcType::TimestampWithTimezone => "druid::sql::Timestamp",
             _ => "String",
         })
     }

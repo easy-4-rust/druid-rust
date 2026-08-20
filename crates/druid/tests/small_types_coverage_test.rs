@@ -251,25 +251,25 @@ fn rdbc_parameter_timestamp_sql_type() {
     assert_eq!(RdbcParameterTimestamp::new(None).sql_type(), 93);
 }
 
-// ── Struct (druid::rdbc::Struct) ───────────────────────────────
+// ── Struct (druid::sql::Struct) ───────────────────────────────
 
 #[test]
 fn struct_new_and_getters() {
-    let s = druid::rdbc::Struct::new("ADDRESS", vec![Value::String("NY".to_owned())]);
+    let s = druid::sql::Struct::new("ADDRESS", vec![Value::String("NY".to_owned())]);
     assert_eq!(s.sql_type_name(), "ADDRESS");
     assert_eq!(s.attributes().len(), 1);
 }
 
 #[test]
 fn struct_clone_eq() {
-    let s1 = druid::rdbc::Struct::new("T", vec![]);
+    let s1 = druid::sql::Struct::new("T", vec![]);
     let s2 = s1.clone();
     assert_eq!(s1, s2);
 }
 
 #[test]
 fn struct_debug() {
-    let s = druid::rdbc::Struct::new("T", vec![]);
+    let s = druid::sql::Struct::new("T", vec![]);
     let dbg = format!("{:?}", s);
     assert!(dbg.contains("Struct"));
 }

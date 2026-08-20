@@ -1,7 +1,5 @@
-use std::any::Any;
-
 use super::CommonDataSource;
-use crate::core::{DruidError, DruidPooledConnection, Wrapper};
+use crate::core::{DruidError, DruidPooledConnection};
 
 /// Factory for connections to the physical data source represented by this object.
 ///
@@ -9,7 +7,7 @@ use crate::core::{DruidError, DruidPooledConnection, Wrapper};
 /// entry point and may participate transparently in pooling infrastructure. Implementations
 /// return Druid logical pooled connections and never create a second pool per call.
 #[async_trait::async_trait]
-pub trait DataSource: CommonDataSource + Wrapper + Sync {
+pub trait DataSource: CommonDataSource + Sync {
     /// Obtains a connection from this data source.
     ///
     /// Returns a usable Druid logical connection. Timeout, closed/disabled source, and driver
@@ -38,22 +36,10 @@ impl CommonDataSource for crate::pool::DruidDataSource {
     }
 }
 
-impl Wrapper for crate::pool::DruidDataSource {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
 #[async_trait::async_trait]
 impl DataSource for crate::pool::DruidDataSource {
     async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
         crate::pool::DruidDataSource::get_connection(self).await
-    }
-}
-
-impl Wrapper for crate::dynamic::DynamicDataSource {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 

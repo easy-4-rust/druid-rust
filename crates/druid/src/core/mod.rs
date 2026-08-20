@@ -134,7 +134,7 @@ pub mod wrapper;
 pub mod wrapper_adapter;
 pub mod xa;
 
-pub use crate::rdbc::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
+pub use crate::sql::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
 pub use abstract_oracle_exception_sorter::{
     AbstractOracleExceptionSorter, ORACLE_FATAL_ERROR_CODES_PROPERTY,
 };

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use druid::core::{DruidError, DruidPooledConnection, Pool, Wrapper};
 use druid::dynamic::{DataSourceGroup, DynamicDataSource, SqlHint};
-use druid::rdbc::{CommonDataSource, DataSource};
+use druid::sql::{CommonDataSource, DataSource};
 
 /// wrapper 层动态 RDBC 数据源，支持主从路由与数据源组热切换。
 ///

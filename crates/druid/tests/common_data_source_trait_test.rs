@@ -1,9 +1,9 @@
 use druid::core::{RdbcObject, RdbcParameter, RdbcParameterString, RdbcParameterValue};
-use druid::rdbc::CommonDataSource;
+use druid::sql::CommonDataSource;
 
 struct MinimalDataSource;
 
-impl druid::rdbc::CommonDataSource for MinimalDataSource {}
+impl druid::sql::CommonDataSource for MinimalDataSource {}
 
 // ── CommonDataSource default impls ─────────────────────────────
 

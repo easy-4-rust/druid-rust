@@ -3,7 +3,7 @@ use super::{
     RdbcResourceAccess, RdbcResourceContext, RdbcResourceKind, RdbcSqlXmlAccess,
 };
 use crate::core::DruidError;
-use crate::rdbc::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
+use crate::sql::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
 use std::sync::Arc;
 
 /// Creates public RDBC handles without exposing their driver access implementations.

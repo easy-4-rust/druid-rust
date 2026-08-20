@@ -52,6 +52,21 @@
 | 管理端 | [druid-admin-migration.md](plans/2026-08-12-druid-admin-migration.md) | A0-A9 管理端阶段 | IMPLEMENTED_UNVERIFIED |
 | 驱动封装 | [druid-wrapper-migration.md](plans/2026-08-12-druid-wrapper-migration.md) | W0-W9 驱动封装阶段 | 进行中 |
 
+### 2026-08-20 五 Crate 架构重构计划集
+
+> 以下文件是已批准目标的逐步实施计划，当前仅完成计划编写，不代表源码已经拆分。
+
+| 顺序 | plan 文件 | 交付物 | 状态 |
+|---:|---|---|---|
+| 00 | [five-crate-architecture-spec.md](plans/2026-08-20-five-crate-architecture-spec.md) | 五 Crate 规格、ADR 与文档一致性门禁 | 待执行 |
+| 01 | [druid-core-facade-split.md](plans/2026-08-20-druid-core-facade-split.md) | `druid-core` 编译边界、`druid` 门面、typed snapshot SPI | 待执行 |
+| 02 | [druid-wrapper-boundary.md](plans/2026-08-20-druid-wrapper-boundary.md) | Toasty/vendor/driver tooling 收敛到 Wrapper | 待执行 |
+| 03 | [druid-metrics-runtime.md](plans/2026-08-20-druid-metrics-runtime.md) | 非阻塞采样、聚合、timeline、Prometheus model | 待执行 |
+| 04 | [druid-metrics-grpc.md](plans/2026-08-20-druid-metrics-grpc.md) | gRPC bidi、sequence/ACK、重连与 reset | 待执行 |
+| 05 | [standalone-druid-admin.md](plans/2026-08-20-standalone-druid-admin.md) | 独立 Axum Admin、repository、兼容 UI/API | 待执行 |
+| 06 | [druid-facade-cutover.md](plans/2026-08-20-druid-facade-cutover.md) | Facade features、示例与迁移指南 | 待执行 |
+| 07 | [five-crate-verification.md](plans/2026-08-20-five-crate-verification.md) | 依赖、功能、可靠性、性能和发布门禁 | 待执行 |
+
 ### 按模块状态明细
 
 | 模块 | Rust 文件 | Java 对象 | 测试 | 状态 | 所属 plan |

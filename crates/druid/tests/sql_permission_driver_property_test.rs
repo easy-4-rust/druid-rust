@@ -1,5 +1,5 @@
 use druid::core::DriverProperty;
-use druid::rdbc::SqlPermission;
+use druid::sql::SqlPermission;
 
 // ── SqlPermission ──────────────────────────────────────────────
 

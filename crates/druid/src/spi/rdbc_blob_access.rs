@@ -1,6 +1,6 @@
 use super::RdbcResourceAccess;
 use crate::core::{DruidError, RdbcInputStream, RdbcOutputStream};
-use crate::rdbc::RdbcBlob;
+use crate::sql::RdbcBlob;
 
 /// Driver access contract for the operations defined by Java `java.sql.Blob`.
 #[async_trait::async_trait]

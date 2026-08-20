@@ -130,6 +130,19 @@ crates/druid-wrapper/
 
 `SqlxDatabaseMetaData` 借用当前 `SqliteConnection`，不创建第二连接。在 `PhysicalDatabaseMetaData` 的 173 个方法中显式覆盖 160 个。表/列/主键/索引/外键均从当前物理 SQLite 连接读取。13 项保持显式 `UnsupportedOperation`。
 
+### W2-R3：RDBC 高级能力三阶段路线图（2026-08-20 审计）
+
+> 本路线图延续 `connection-abstraction-design.md` 的 C7 目标接口，不把 API 声明、
+> 默认回退或测试 fixture 计作真实驱动完成。
+
+| 阶段 | 范围 | 当前证据 | 状态 | 退出门禁 |
+|---|---|---|---|---|
+| Phase 1 | Savepoint、read-only、LOB | SQLx/Toasty SQLite Savepoint 已执行真实控制语句；PostgreSQL/MySQL read-only 会生成各自的 session SQL；LOB/stream 参数可在物理 setter 边界物化，但 SQLx/Toasty 尚无生产 `RdbcBlobAccess/RdbcClobAccess/RdbcNClobAccess` | PARTIAL | PostgreSQL/MySQL 实库验证 Savepoint 与 read-only；每个宣称 LOB capability 的 Adapter 提供真实 Access、free/error/lifecycle 契约 |
+| Phase 2 | 流式 ResultSet | 当前 SQLx 实现保留原生 Row 类型，但查询仍调用 `fetch_all` 并持有 `Vec<...Row>`；同步 `PhysicalResultSet::next()` 无法在调用时 await 驱动流 | PLANNED | 先完成 C7 async cursor/borrowed lease/cancel/drop 设计，再证明大结果集内存有界、提前 drop 可回收或丢弃连接 |
+| Phase 3 | DatabaseMetaData 高频方法 | SQLx 的 tables/columns/primary keys/indexes/foreign keys 当前只在 SQLite 读取真实 catalog；Toasty 只暴露 URL、产品、driver 和少量 capability | PARTIAL | PostgreSQL/MySQL 分别实现并实库验证 `get_tables/get_columns/get_primary_keys/get_index_info`；未支持方法保持明确 capability error |
+
+2026-08-20 验证记录：`cargo test --workspace` 通过；`cargo check --workspace --all-targets --all-features` 通过。全 workspace `cargo clippy --workspace --lib --all-features -- -D warnings` 仍被既有 lint 基线阻断，不能标记 Clippy 门禁完成。
+
 ---
 
 ## Stage W3 — RBDC SQLite 真实 driver

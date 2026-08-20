@@ -1,4 +1,4 @@
-use druid::rdbc::RdbcUrl;
+use druid::sql::RdbcUrl;
 
 // ── Error paths ────────────────────────────────────────────────
 

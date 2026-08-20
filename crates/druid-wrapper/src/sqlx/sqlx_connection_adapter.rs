@@ -1,12 +1,13 @@
 //! SQLx 物理连接适配器。
 
 use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecutionError};
+use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
-    PreparedStatementKey, Row, RowSetResultSet, Savepoint, SqlWarning, StatementExecuteResult,
+    PreparedStatementKey, Row, Savepoint, SqlWarning, StatementExecuteResult,
     StatementGeneratedKeys, Value,
 };
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
@@ -31,6 +32,16 @@ fn any_bind_unsupported(value_type: &'static str) -> DruidError {
     }
 }
 
+fn read_only_session_sql(backend: &str, read_only: bool) -> Option<&'static str> {
+    match (backend, read_only) {
+        ("postgresql", true) => Some("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"),
+        ("postgresql", false) => Some("SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE"),
+        ("mysql", true) => Some("SET SESSION TRANSACTION READ ONLY"),
+        ("mysql", false) => Some("SET SESSION TRANSACTION READ WRITE"),
+        _ => None,
+    }
+}
+
 enum SqlxConnectionBackend {
     Any(AnyConnection),
     MySql(MySqlConnection),
@@ -49,6 +60,7 @@ pub struct SqlxConnectionAdapter {
     url: String,
     savepoint_sequence: u64,
     auto_commit: bool,
+    read_only: bool,
     discarded: bool,
 }
 
@@ -88,6 +100,7 @@ impl SqlxConnectionAdapter {
             url: url.to_owned(),
             savepoint_sequence: 0,
             auto_commit: true,
+            read_only: false,
             discarded: false,
         })
     }
@@ -829,8 +842,84 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         sql: &str,
         params: Vec<Value>,
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let (rows, labels) = self.fetch_rows_with_labels(sql, params).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let labels = statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.name().to_string())
+                    .collect();
+                let rows = Self::bind_any_prepared_values(&statement, params)?
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(Arc::new(SqlxStreamingResultSet::any(rows, labels)))
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let labels = statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.name().to_owned())
+                    .collect();
+                let rows = Self::bind_mysql_prepared_values(&statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(Arc::new(SqlxStreamingResultSet::mysql(rows, labels)))
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let labels = statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.name().to_owned())
+                    .collect();
+                let rows = Self::bind_postgresql_prepared_values(&statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(Arc::new(SqlxStreamingResultSet::postgresql(rows, labels)))
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let labels = statement
+                    .columns()
+                    .iter()
+                    .map(|column| column.name().to_string())
+                    .collect();
+                let rows = Self::bind_sqlite_prepared_values(&statement, params)
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(Arc::new(SqlxStreamingResultSet::sqlite(rows, labels)))
+            }
+        }
     }
 
     async fn prepare_physical_statement(
@@ -1189,8 +1278,70 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 )
             })?;
         let labels = sqlx_statement.column_labels();
-        let rows = self.fetch_prepared(statement, params).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
+        if sqlx_statement.is_closed() {
+            return Err(DruidError::ConnectionDiscarded);
+        }
+        if !sqlx_statement.matches_backend(self.backend_key()) {
+            return Err(DruidError::DriverError(
+                "SQLx prepared statement backend does not match connection".to_string(),
+            ));
+        }
+        let result = match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let backend_statement = sqlx_statement.any_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let query = Self::bind_any_prepared_values(backend_statement, params)?;
+                let rows = query
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Arc::new(SqlxStreamingResultSet::any(rows, labels)) as Arc<dyn PhysicalResultSet>
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let backend_statement = sqlx_statement.mysql_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let query = Self::bind_mysql_prepared_values(backend_statement, params);
+                let rows = query
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Arc::new(SqlxStreamingResultSet::mysql(rows, labels)) as Arc<dyn PhysicalResultSet>
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let backend_statement = sqlx_statement.postgresql_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let query = Self::bind_postgresql_prepared_values(backend_statement, params);
+                let rows = query
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Arc::new(SqlxStreamingResultSet::postgresql(rows, labels))
+                    as Arc<dyn PhysicalResultSet>
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let backend_statement = sqlx_statement.sqlite_statement().ok_or_else(|| {
+                    DruidError::DriverError(
+                        "SQLx prepared statement backend does not match connection".to_string(),
+                    )
+                })?;
+                let query = Self::bind_sqlite_prepared_values(backend_statement, params);
+                let rows = query
+                    .fetch_all(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Arc::new(SqlxStreamingResultSet::sqlite(rows, labels)) as Arc<dyn PhysicalResultSet>
+            }
+        };
+        Ok(result)
     }
 
     async fn fetch_prepared_parameters_result_set(
@@ -1381,7 +1532,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             transactions: true,
             savepoints: true,
             auto_commit: true,
-            read_only: false,
+            read_only: read_only_session_sql(self.backend_key(), true).is_some(),
             transaction_isolation: false,
             holdability: false,
             clear_warnings: true,
@@ -1428,6 +1579,36 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         }
     }
 
+    fn read_only(&self) -> bool {
+        self.read_only
+    }
+
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+        if !self.auto_commit {
+            return Err(DruidError::InvalidArgument(
+                "read_only cannot change while a transaction is active".to_string(),
+            ));
+        }
+        self.connection_mut()?;
+        let backend = self.backend_key();
+        let Some(sql) = read_only_session_sql(backend, read_only) else {
+            if read_only {
+                return Err(DruidError::UnsupportedOperation {
+                    operation: if backend == "sqlite" {
+                        "sqlx_sqlite_read_only_transaction"
+                    } else {
+                        "sqlx_driver_read_only_transaction"
+                    },
+                });
+            }
+            self.read_only = false;
+            return Ok(());
+        };
+        self.execute_control_statement(sql).await?;
+        self.read_only = read_only;
+        Ok(())
+    }
+
     /// 返回 SQLx 连接的 SQLWarning 链。
     ///
     /// 对应 Java：`java.sql.Connection#getWarnings()`。SQLx 的公开 Connection
@@ -1463,5 +1644,24 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             Some(SqlxConnectionBackend::Sqlite(_)) => "SQLite",
             None => "sqlx-closed",
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_only_session_sql;
+
+    #[test]
+    fn read_only_session_sql_is_backend_specific() {
+        assert_eq!(
+            read_only_session_sql("postgresql", true),
+            Some("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+        );
+        assert_eq!(
+            read_only_session_sql("mysql", false),
+            Some("SET SESSION TRANSACTION READ WRITE")
+        );
+        assert_eq!(read_only_session_sql("sqlite", true), None);
+        assert_eq!(read_only_session_sql("any", true), None);
     }
 }

@@ -7,7 +7,7 @@ use druid::core::{
     PgExceptionSorter, PgValidConnectionChecker, ValidConnectionChecker,
 };
 use druid::pool::{DruidDataSource, DruidPool, DruidPoolBuilder};
-use druid::rdbc::RdbcUrl;
+use druid::sql::RdbcUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 

@@ -29,6 +29,24 @@ fn parse_naive_datetime(value: &str) -> Result<Value, DruidError> {
         .map_err(|error| DruidError::DriverError(error.to_string()))
 }
 
+fn read_only_session_sql(driver_name: &str, read_only: bool) -> Option<&'static str> {
+    if driver_name.eq_ignore_ascii_case("postgresql") {
+        Some(if read_only {
+            "SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"
+        } else {
+            "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE"
+        })
+    } else if driver_name.eq_ignore_ascii_case("mysql") {
+        Some(if read_only {
+            "SET SESSION TRANSACTION READ ONLY"
+        } else {
+            "SET SESSION TRANSACTION READ WRITE"
+        })
+    } else {
+        None
+    }
+}
+
 /// 将一个未池化 Toasty driver connection 适配为 Druid 物理连接。
 ///
 /// 对应 Java 平台对象：RDBC driver 的 `java.sql.Connection` 实现。对象不持有
@@ -861,12 +879,11 @@ impl PhysicalConnection for ToastyConnectionAdapter {
     }
 
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        let sqlite = self.is_sqlite();
         PhysicalConnectionCapabilities {
             transactions: true,
             savepoints: true,
             auto_commit: true,
-            read_only: !sqlite,
+            read_only: read_only_session_sql(self.driver_name, true).is_some(),
             transaction_isolation: true,
             holdability: false,
             clear_warnings: true,
@@ -908,11 +925,22 @@ impl PhysicalConnection for ToastyConnectionAdapter {
                 "read_only cannot change while a transaction is active".to_string(),
             ));
         }
-        if self.is_sqlite() && read_only {
-            return Err(DruidError::UnsupportedOperation {
-                operation: "toasty_sqlite_read_only_transaction",
-            });
-        }
+        self.connection_mut()?;
+        let Some(sql) = read_only_session_sql(self.driver_name, read_only) else {
+            if read_only {
+                return Err(DruidError::UnsupportedOperation {
+                    operation: if self.is_sqlite() {
+                        "toasty_sqlite_read_only_transaction"
+                    } else {
+                        "toasty_driver_read_only_transaction"
+                    },
+                });
+            }
+            self.read_only = false;
+            return Ok(());
+        };
+        self.execute_operation(Self::raw_sql(sql, Vec::new(), RawSqlRet::None)?)
+            .await?;
         self.read_only = read_only;
         Ok(())
     }
@@ -976,5 +1004,24 @@ impl PhysicalConnection for ToastyConnectionAdapter {
 
     fn driver_name(&self) -> &str {
         self.driver_name
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_only_session_sql;
+
+    #[test]
+    fn read_only_session_sql_is_backend_specific() {
+        assert_eq!(
+            read_only_session_sql("postgresql", true),
+            Some("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY")
+        );
+        assert_eq!(
+            read_only_session_sql("mysql", false),
+            Some("SET SESSION TRANSACTION READ WRITE")
+        );
+        assert_eq!(read_only_session_sql("sqlite", true), None);
+        assert_eq!(read_only_session_sql("turso", true), None);
     }
 }

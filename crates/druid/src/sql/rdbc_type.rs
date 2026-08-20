@@ -1,4 +1,4 @@
-use super::SqlType;
+use super::rdbc_sql_type::SqlType;
 
 /// RDBC enum of standard SQL types defined by the Java 8 contract.
 ///

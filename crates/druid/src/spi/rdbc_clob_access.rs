@@ -2,7 +2,7 @@ use super::RdbcResourceAccess;
 use crate::core::{
     DruidError, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
-use crate::rdbc::RdbcClob;
+use crate::sql::RdbcClob;
 
 /// Driver access contract for the operations defined by Java `java.sql.Clob`.
 #[async_trait::async_trait]
