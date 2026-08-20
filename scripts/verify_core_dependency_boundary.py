@@ -30,7 +30,8 @@ FORBIDDEN = {
 # Pattern to extract package name from cargo tree output lines like:
 #   ├── toasty v0.9.0
 #   │   └── toasty-core v0.9.0
-TREE_LINE_RE = re.compile(r"[├└│ ]+ (\S+) v\S+")
+# Unicode box-drawing chars: ─ (U+2500), │ (U+2502), ├ (U+251C), └ (U+2514)
+TREE_LINE_RE = re.compile(r"[├└│\u2500\u2502 ]+ (\S+) v\S+")
 
 
 def main() -> int:
