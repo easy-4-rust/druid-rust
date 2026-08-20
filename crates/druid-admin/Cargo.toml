@@ -19,15 +19,21 @@ workspace = true
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false }
+druid-metrics = { version = "0.0.0-design", path = "../druid-metrics" }
 tokio         = { workspace = true }
+tokio-util    = { workspace = true }
 axum          = { workspace = true }
 axum-valid    = { workspace = true }
 chrono        = { workspace = true }
 tower         = { workspace = true }
+hyper         = { workspace = true }
 reqwest       = { workspace = true }
 tokio-metrics = { workspace = true }
 topcoat       = { workspace = true }
 prost         = { workspace = true }
+tonic         = "0.14"
+tonic-prost   = "0.14"
+tokio-stream  = "0.1"
 validator     = { workspace = true }
 uuid          = { workspace = true }
 kube          = { workspace = true }
@@ -39,4 +45,16 @@ sha2          = { workspace = true }
 thiserror     = { workspace = true }
 async-trait   = { workspace = true }
 parking_lot   = { workspace = true }
-tracing       = { workspace = true }
+tracing              = { workspace = true }
+tracing-subscriber   = { workspace = true }
+arc-swap      = { workspace = true }
+
+[build-dependencies]
+tonic-prost-build = "0.14"
+prost-build       = "0.14"
+
+[dev-dependencies]
+tokio         = { workspace = true, features = ["full", "test-util", "macros"] }
+reqwest       = { workspace = true, features = ["json"] }
+tonic         = { version = "0.14", features = ["transport"] }
+tokio-stream  = "0.1"

@@ -10,6 +10,11 @@ repository.workspace = true
 [lib]
 name = "druid_metrics"
 
+[features]
+default  = []
+client   = ["dep:tonic"]
+server   = ["dep:tonic"]
+
 [dependencies]
 druid-core   = { path = "../druid-core" }
 tokio        = { workspace = true, features = ["full", "sync"] }
@@ -20,6 +25,14 @@ thiserror    = { workspace = true }
 parking_lot  = { workspace = true }
 arc-swap     = { workspace = true }
 tokio-util   = { workspace = true }
+
+# gRPC / protobuf
+prost        = "0.13"
+tonic        = { version = "0.12", default-features = false, features = ["prost", "codegen"], optional = true }
+
+[build-dependencies]
+tonic-build            = "0.12"
+protoc-bin-vendored    = "3"
 
 [dev-dependencies]
 tokio        = { workspace = true, features = ["full", "test-util", "macros"] }

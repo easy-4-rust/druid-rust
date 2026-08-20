@@ -1,0 +1,155 @@
+syntax = "proto3";
+
+package druid_metrics.v1;
+
+option java_package = "io.druid.metrics.v1";
+
+// ────────────────────────────────────────────────────────────────────────────
+// Common header – present in every frame.
+// ────────────────────────────────────────────────────────────────────────────
+
+message FrameHeader {
+  uint32 protocol_version   = 1;
+  string service_name       = 2;
+  string instance_id        = 3;
+  string boot_id            = 4;
+  uint64 stream_epoch       = 5;
+  uint64 sequence           = 6;
+  uint64 emitted_at_unix_ms = 7;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Snapshot data types
+// ────────────────────────────────────────────────────────────────────────────
+
+message PoolSnapshotMsg {
+  uint32 active_count  = 1;
+  uint32 idle_count    = 2;
+  uint32 max_active    = 3;
+  uint32 max_idle      = 4;
+  uint32 waiting_count = 5;
+}
+
+message SqlStatMsg {
+  string fingerprint       = 1;
+  uint64 exec_count        = 2;
+  uint64 exec_time_millis  = 3;
+  uint64 fetch_row_count   = 4;
+  uint64 update_count      = 5;
+}
+
+message SnapshotEntry {
+  uint64 datasource_id     = 1;
+  string datasource_name   = 2;
+  optional string driver_name = 3;
+  PoolSnapshotMsg pool     = 4;
+  repeated SqlStatMsg sql_stats = 5;
+  uint64 wall_check_count     = 6;
+  uint64 wall_deny_count      = 7;
+  uint64 wall_violation_count = 8;
+  uint64 sampling_time_millis = 9;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Client → Server messages
+// ────────────────────────────────────────────────────────────────────────────
+
+message ClientHello {
+  FrameHeader header                      = 1;
+  uint32 supported_protocol_version       = 2;
+  bool   full_snapshot_requested          = 3;
+}
+
+message SnapshotBatch {
+  FrameHeader header                      = 1;
+  repeated SnapshotEntry entries          = 2;
+  bool is_full_snapshot                   = 3;
+}
+
+message ClientHeartbeat {
+  FrameHeader header                      = 1;
+  uint32 pending_ack_count                = 2;
+}
+
+message CommandAck {
+  FrameHeader header                      = 1;
+  string command_id                       = 2;
+  bool   success                          = 3;
+  string error_message                    = 4;
+}
+
+message ClientGoodbye {
+  FrameHeader header                      = 1;
+  string reason                           = 2;
+}
+
+message ClientFrame {
+  oneof payload {
+    ClientHello    hello          = 1;
+    SnapshotBatch  snapshot_batch = 2;
+    ClientHeartbeat heartbeat     = 3;
+    CommandAck     command_ack    = 4;
+    ClientGoodbye  goodbye        = 5;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Server → Client messages
+// ────────────────────────────────────────────────────────────────────────────
+
+message HelloAck {
+  FrameHeader header                      = 1;
+  uint32 server_protocol_version          = 2;
+  bool   require_full_snapshot            = 3;
+}
+
+message BatchAck {
+  FrameHeader header                      = 1;
+  uint64 accepted_sequence                = 2;
+}
+
+message ResyncRequired {
+  FrameHeader header                      = 1;
+  string reason                           = 2;
+  uint64 expected_sequence                = 3;
+}
+
+message ResetStatsCmd {
+  repeated uint64 target_datasource_ids   = 1;
+}
+
+message RequestFullSnapshotCmd {}
+
+message Command {
+  FrameHeader header                      = 1;
+  string command_id                       = 2;
+  oneof payload {
+    ResetStatsCmd           reset_stats           = 3;
+    RequestFullSnapshotCmd  request_full_snapshot  = 4;
+  }
+}
+
+message ServerError {
+  FrameHeader header                      = 1;
+  uint32 code                             = 2;
+  string message                          = 3;
+  bool   close_stream                     = 4;
+}
+
+message ServerFrame {
+  oneof payload {
+    HelloAck        hello_ack        = 1;
+    BatchAck        batch_ack        = 2;
+    ResyncRequired  resync_required  = 3;
+    Command         command          = 4;
+    ServerError     error            = 5;
+  }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// gRPC Service (bidirectional streaming)
+// ────────────────────────────────────────────────────────────────────────────
+
+service MetricsIngest {
+  rpc Connect (stream ClientFrame) returns (stream ServerFrame);
+}

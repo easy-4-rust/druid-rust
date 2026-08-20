@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package druid.admin.ingest;
+
+// Ingest service receives metrics snapshots from druid-metrics runtime.
+service MetricsIngest {
+  // Push a stream of metrics snapshots to the admin repository.
+  rpc PushSnapshots(stream MetricsSnapshot) returns (PushResponse);
+}
+
+// A single metrics snapshot for one datasource instance.
+message MetricsSnapshot {
+  // Service instance identifier (e.g. pod name or host:port).
+  string service_id = 1;
+  // Datasource identity (Java DataSource.getIdentity()).
+  int64 identity = 2;
+  // Sequence number for deduplication. Must be monotonically increasing.
+  uint64 sequence = 3;
+  // Timestamp of the snapshot (epoch millis).
+  int64 timestamp_ms = 4;
+  // Datasource pool statistics.
+  DataSourceStats datasource = 5;
+  // SQL statistics, keyed by SQL hash.
+  map<int64, SqlStats> sql_stats = 6;
+  // Wall (firewall) statistics.
+  WallStats wall = 7;
+}
+
+// Datasource pool statistics (subset of Java DataSource fields).
+message DataSourceStats {
+  int64 identity = 1;
+  string db_type = 2;
+  string url = 3;
+  string user_name = 4;
+  int64 active_count = 5;
+  int64 pooling_count = 6;
+  int64 execute_count = 7;
+  int64 error_count = 8;
+  int64 commit_count = 9;
+  int64 rollback_count = 10;
+  int64 fetch_row_count = 11;
+  int64 update_count = 12;
+}
+
+// SQL statistics for a single SQL statement.
+message SqlStats {
+  int64 id = 1;
+  string sql = 2;
+  int64 execute_count = 3;
+  int64 total_time = 4;
+  int64 max_timespan = 5;
+  int64 error_count = 6;
+  int64 running_count = 7;
+  int64 concurrent_max = 8;
+  int64 fetch_row_count = 9;
+  int64 effected_row_count = 10;
+  string db_type = 11;
+}
+
+// Wall (firewall) statistics.
+message WallStats {
+  int64 check_count = 1;
+  int64 hard_check_count = 2;
+  int64 violation_count = 3;
+  int64 syntax_error_count = 4;
+  int64 black_list_hit_count = 5;
+  int64 white_list_hit_count = 6;
+  int64 black_list_size = 7;
+  int64 white_list_size = 8;
+}
+
+// Response after pushing snapshots.
+message PushResponse {
+  // Number of snapshots accepted.
+  int32 accepted = 1;
+  // Number of snapshots rejected (stale/duplicate).
+  int32 rejected = 2;
+}

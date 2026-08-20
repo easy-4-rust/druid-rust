@@ -16,12 +16,16 @@
 pub mod aggregator;
 pub mod config;
 pub mod error;
+pub mod ingest_handler;
 pub mod prometheus;
+pub mod protocol;
+pub mod push_worker;
 pub mod registry;
 pub mod runtime;
 pub mod sampler;
 pub mod sanitizer;
 pub mod self_metrics;
+pub mod sequence_window;
 pub mod timeline;
 
 pub use config::{DruidMetricsConfig, DruidMetricsConfigBuilder, SqlTextPolicy};
