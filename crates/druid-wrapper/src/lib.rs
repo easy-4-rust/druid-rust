@@ -19,6 +19,9 @@ pub mod dbcp2;
 /// 以 Druid 物理连接 SPI 为核心的多数据库驱动目录与解析入口。
 #[cfg(feature = "driver-catalog")]
 pub mod driver;
+/// 显式 JDBC 驱动安装、内容校验和运行时诊断。
+#[cfg(feature = "managed-driver-install")]
+pub mod driver_admin;
 /// DuckDB 原生未池化物理连接 Adapter。
 #[cfg(feature = "duckdb-native")]
 pub mod duckdb;
@@ -42,6 +45,16 @@ pub mod rdbc;
 pub mod sqlx;
 /// 内置 Toasty 标准数据源实现。
 pub mod toasty;
+
+/// Ensure driver extension `inventory::submit!` registrations are linked.
+///
+/// Test binaries and downstream consumers should call this once at startup
+/// (or reference it) to prevent the linker from stripping the statics.
+#[cfg(feature = "driver-catalog")]
+pub fn init_driver_extensions() {
+    // Touch the module so the linker retains its statics.
+    driver::extensions::init();
+}
 
 pub use managed_wrapper_pool::ManagedWrapperPool;
 pub use proxool_config_key::ProxoolConfigKey;

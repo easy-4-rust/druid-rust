@@ -6,9 +6,7 @@
 
 extern crate druid_core as druid;
 
-use druid::stats::{
-    DataSourceIdentity, DruidTelemetrySnapshot, PoolSnapshot, SnapshotUnavailable,
-};
+use druid::stats::{DataSourceIdentity, DruidTelemetrySnapshot, PoolSnapshot, SnapshotUnavailable};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 

@@ -43,7 +43,9 @@ impl DataSourceMonitorable for MockMonitorable {
             driver_name: None,
         }
     }
-    fn try_snapshot(&self) -> Result<druid::stats::DruidTelemetrySnapshot, druid::stats::SnapshotUnavailable> {
+    fn try_snapshot(
+        &self,
+    ) -> Result<druid::stats::DruidTelemetrySnapshot, druid::stats::SnapshotUnavailable> {
         Err(druid::stats::SnapshotUnavailable::Busy)
     }
 }

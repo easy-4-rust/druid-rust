@@ -13,7 +13,9 @@ use druid::dynamic::selector::{
     DataSourceSelector, NamedDataSourceSelector, RandomDataSourceSelector,
     RandomDataSourceValidateFilter, StickyDataSourceHolder, StickyRandomDataSourceSelector,
 };
-use druid::dynamic::{DataSourceCreator, DynamicDataSource, HighAvailableDataSource, LoadBalancer, SqlHint};
+use druid::dynamic::{
+    DataSourceCreator, DynamicDataSource, HighAvailableDataSource, LoadBalancer, SqlHint,
+};
 use std::sync::Arc;
 use std::time::Duration;
 

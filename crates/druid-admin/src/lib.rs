@@ -6,9 +6,6 @@
 
 pub mod admin_state;
 pub mod config;
-/// 显式 JDBC 驱动安装、内容校验和运行时诊断。
-#[cfg(feature = "managed-driver-install")]
-pub mod driver;
 pub mod druid_admin_application;
 pub mod model;
 pub mod service;

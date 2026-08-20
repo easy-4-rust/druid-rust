@@ -2,8 +2,8 @@ use super::{
     DriverBundleInstallRequest, DriverInstallRequest, DriverInstallerError, InstalledDriver,
     JavaRuntimeInstallation,
 };
-use druid_wrapper::driver::{DatabaseProfileId, DriverRuntimeMode, DruidDriverRegistry};
-use druid_wrapper::jdbc_agent::JdbcAgentOptions;
+use crate::driver::{DatabaseProfileId, DriverRuntimeMode, DruidDriverRegistry};
+use crate::jdbc_agent::JdbcAgentOptions;
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};

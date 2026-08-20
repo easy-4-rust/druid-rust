@@ -112,7 +112,8 @@ fn selector_enum_names_and_parsing() {
 /// Java `DataSourceSelectorFactory`：三种名称装配对应选择器。
 #[test]
 fn selector_factory_builds_all_three() {
-    let data_source = HighAvailableDataSource::new("factory-test", DataSourceCreator::noop_for_test());
+    let data_source =
+        HighAvailableDataSource::new("factory-test", DataSourceCreator::noop_for_test());
 
     let by_name = DataSourceSelectorFactory::get_selector("byName", &data_source).unwrap();
     assert_eq!(by_name.name(), "byName");
@@ -131,7 +132,8 @@ fn selector_factory_builds_all_three() {
 /// Java `ThreadLocal` target 在 Rust 为执行上下文键：set→get→reset。
 #[tokio::test]
 async fn named_selector_target_lifecycle() {
-    let data_source = HighAvailableDataSource::new("named-test", DataSourceCreator::noop_for_test());
+    let data_source =
+        HighAvailableDataSource::new("named-test", DataSourceCreator::noop_for_test());
     data_source.insert_data_source("master", CountingPool::arc("master"));
     data_source.insert_data_source("standby", CountingPool::arc("standby"));
     let selector = NamedDataSourceSelector::new(&data_source);
@@ -211,7 +213,8 @@ fn ha_data_source_map_and_blacklist_management() {
 /// selector 安装与名称查询（Java setSelector 语义）。
 #[test]
 fn ha_data_source_selector_installation() {
-    let data_source = HighAvailableDataSource::new("ha-selector", DataSourceCreator::noop_for_test());
+    let data_source =
+        HighAvailableDataSource::new("ha-selector", DataSourceCreator::noop_for_test());
     assert!(data_source.selector_name().is_none());
 
     data_source.set_selector("byName");
@@ -250,7 +253,8 @@ fn sticky_holder_validity_and_accessors() {
 /// Java StickyRandomDataSourceSelector：粘性命中同一节点、过期时间配置。
 #[tokio::test]
 async fn sticky_random_selector_reuses_and_exposes_config() {
-    let data_source = HighAvailableDataSource::new("sticky-test", DataSourceCreator::noop_for_test());
+    let data_source =
+        HighAvailableDataSource::new("sticky-test", DataSourceCreator::noop_for_test());
     data_source.insert_data_source("node-a", CountingPool::arc("node-a"));
     data_source.insert_data_source("node-b", CountingPool::arc("node-b"));
 

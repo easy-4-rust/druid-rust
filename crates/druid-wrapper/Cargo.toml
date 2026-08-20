@@ -10,16 +10,21 @@ repository.workspace = true
 [features]
 default = ["driver-catalog", "sqlite"]
 driver-catalog = []
-sqlite = ["dep:toasty", "toasty/sqlite"]
-postgresql = ["dep:toasty", "toasty/postgresql"]
-mysql = ["dep:toasty", "toasty/mysql"]
-turso = ["dep:toasty", "toasty/turso"]
+sqlite = ["toasty/sqlite"]
+postgresql = ["toasty/postgresql"]
+mysql = ["toasty/mysql"]
+turso = ["toasty/turso"]
 duckdb-native = ["driver-catalog", "dep:duckdb"]
 http-sql = ["driver-catalog", "dep:reqwest"]
 libsql-native = ["driver-catalog", "dep:libsql"]
 jdbc-agent = ["driver-catalog"]
-managed-driver-install = ["driver-catalog"]
+managed-driver-install = ["jdbc-agent", "dep:fs2", "dep:reqwest", "dep:uuid"]
 all-databases = ["driver-catalog", "duckdb-native", "http-sql", "libsql-native", "jdbc-agent", "managed-driver-install"]
+
+[[bin]]
+name = "druid-driver"
+path = "src/bin/druid-driver.rs"
+required-features = ["managed-driver-install"]
 
 [dependencies]
 async-trait.workspace = true
@@ -30,6 +35,7 @@ chrono.workspace = true
 deadpool.workspace = true
 druid = { version = "0.0.0-design", path = "../druid" }
 duckdb = { workspace = true, optional = true }
+fs2 = { workspace = true, optional = true }
 futures.workspace = true
 inventory.workspace = true
 jiff.workspace = true
@@ -43,10 +49,11 @@ serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
-toasty = { workspace = true, optional = true }
+toasty.workspace = true
 toasty-core.workspace = true
 tokio.workspace = true
 url.workspace = true
+uuid = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio.workspace = true

@@ -66,7 +66,9 @@ impl DataSourceMonitorable for FakeDataSource {
             driver_name: None,
         }
     }
-    fn try_snapshot(&self) -> Result<druid::stats::DruidTelemetrySnapshot, druid::stats::SnapshotUnavailable> {
+    fn try_snapshot(
+        &self,
+    ) -> Result<druid::stats::DruidTelemetrySnapshot, druid::stats::SnapshotUnavailable> {
         Err(druid::stats::SnapshotUnavailable::Busy)
     }
 }
@@ -477,7 +479,10 @@ fn stat_manager_facade_singleton_and_basic_ops() {
 fn pool_updater_config_setters() {
     use druid::dynamic::node::PoolUpdater;
     // 通过 HighAvailableDataSource 创建更新器。
-    let ha = druid::dynamic::HighAvailableDataSource::new("updater-test", DataSourceCreator::noop_for_test());
+    let ha = druid::dynamic::HighAvailableDataSource::new(
+        "updater-test",
+        DataSourceCreator::noop_for_test(),
+    );
     ha.insert_data_source("node-a", CountingPool::arc("node-a"));
 
     // 更新器通过 HA init 内部创建；此处直接测试配置常量。

@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use druid_metrics::prometheus::{PrometheusMetric, PrometheusSnapshot, MetricValue, ALLOWED_LABELS};
+use druid_metrics::prometheus::{
+    MetricValue, PrometheusMetric, PrometheusSnapshot, ALLOWED_LABELS,
+};
 
 #[test]
 fn allowed_labels_contain_only_expected_keys() {

@@ -170,14 +170,16 @@ impl PoolUpdater {
             self.cancel_blacklist_node(&data_source, node_name);
             return;
         }
-        match self.data_source_creator.create(
-            node_name,
-            event.url(),
-            event.username(),
-            event.password(),
-            &data_source,
-        )
-        .await
+        match self
+            .data_source_creator
+            .create(
+                node_name,
+                event.url(),
+                event.username(),
+                event.password(),
+                &data_source,
+            )
+            .await
         {
             Ok(pool) => {
                 data_source.data_sources.insert(node_name.to_owned(), pool);

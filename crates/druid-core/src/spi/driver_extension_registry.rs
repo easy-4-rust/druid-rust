@@ -6,7 +6,6 @@
 
 use super::driver_extension_descriptor::DriverExtensionDescriptor;
 use crate::core::DruidError;
-use std::sync::Arc;
 
 inventory::collect!(DriverExtensionDescriptor);
 

@@ -1,5 +1,5 @@
 use super::DriverEvidenceError;
-use druid_wrapper::driver::{DriverRuntimeMode, DriverVerificationEvidence};
+use crate::driver::{DriverRuntimeMode, DriverVerificationEvidence};
 use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::path::Path;

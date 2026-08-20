@@ -5,7 +5,6 @@
 //! stat_value_and_reset, publish_stats, close_for_removal_if_idle, is_full,
 //! try_get_connection, fill_to, restart, notify_credentials_changed.
 
-extern crate druid_core as druid;
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Pool, Row, Value,
 };

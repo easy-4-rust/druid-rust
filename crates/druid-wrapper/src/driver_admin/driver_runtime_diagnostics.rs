@@ -1,6 +1,6 @@
 use super::{DriverInstaller, DriverInstallerError, DriverRuntimeReport};
-use druid_wrapper::driver::{DatabaseProfileId, DruidDriverRegistry};
-use druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics;
+use crate::driver::{DatabaseProfileId, DruidDriverRegistry};
+use crate::jdbc_agent::JdbcAgentRuntimeMetrics;
 use std::ffi::OsString;
 use std::process::Stdio;
 use std::time::Duration;

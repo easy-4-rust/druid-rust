@@ -4,13 +4,7 @@ use std::collections::BTreeMap;
 ///
 /// SQL text, fingerprints, request IDs, and bind values must NEVER appear
 /// as label values to prevent cardinality explosion and data leakage.
-pub const ALLOWED_LABELS: &[&str] = &[
-    "service",
-    "instance",
-    "datasource",
-    "db_type",
-    "driver",
-];
+pub const ALLOWED_LABELS: &[&str] = &["service", "instance", "datasource", "db_type", "driver"];
 
 /// Prometheus-style metric family.
 #[derive(Debug, Clone)]

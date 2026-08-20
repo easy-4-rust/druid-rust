@@ -6,8 +6,8 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
 };
-use wrapper::toasty::ToastyConnectionFactory;
 use std::str::FromStr;
+use wrapper::toasty::ToastyConnectionFactory;
 
 async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")

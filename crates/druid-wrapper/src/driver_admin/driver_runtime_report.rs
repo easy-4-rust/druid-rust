@@ -1,4 +1,4 @@
-use druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot;
+use crate::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot;
 use serde::Serialize;
 
 /// 单个数据库产品的 JDBC Agent 就绪度诊断报告。

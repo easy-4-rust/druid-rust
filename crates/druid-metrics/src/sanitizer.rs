@@ -5,11 +5,7 @@ use crate::error::MetricsError;
 
 /// Genuinely sensitive field names that must NEVER appear in any export.
 /// These are always rejected regardless of policy.
-const ALWAYS_SENSITIVE_FIELDS: &[&str] = &[
-    "password",
-    "token",
-    "secret",
-];
+const ALWAYS_SENSITIVE_FIELDS: &[&str] = &["password", "token", "secret"];
 
 /// Bind-value field names that policies strip (not reject).
 const BIND_VALUE_FIELDS: &[&str] = &[
@@ -27,10 +23,7 @@ const BIND_VALUE_FIELDS: &[&str] = &[
 /// 2. Removes bind-value fields for policies that don't include them.
 /// 3. Returns `Err(MetricsError::SensitiveField)` if passwords, tokens,
 ///    or secrets are detected.
-pub fn sanitize_payload(
-    value: &Value,
-    policy: SqlTextPolicy,
-) -> Result<Value, MetricsError> {
+pub fn sanitize_payload(value: &Value, policy: SqlTextPolicy) -> Result<Value, MetricsError> {
     match policy {
         SqlTextPolicy::Disabled => sanitize_disabled(value),
         SqlTextPolicy::FingerprintOnly => sanitize_fingerprint_only(value),
@@ -135,9 +128,7 @@ fn check_always_sensitive(value: &Value) -> Result<(), MetricsError> {
             let lower = key.to_lowercase();
             for sensitive in ALWAYS_SENSITIVE_FIELDS {
                 if lower == *sensitive {
-                    return Err(MetricsError::SensitiveField {
-                        field: key.clone(),
-                    });
+                    return Err(MetricsError::SensitiveField { field: key.clone() });
                 }
             }
         }

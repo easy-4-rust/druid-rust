@@ -13,16 +13,16 @@
 //! SQL hot-path methods never call `send().await`, network, or disk.
 //! All metric collection is driven by the background sampler.
 
+pub mod aggregator;
 pub mod config;
 pub mod error;
+pub mod prometheus;
 pub mod registry;
 pub mod runtime;
 pub mod sampler;
-pub mod aggregator;
+pub mod sanitizer;
 pub mod self_metrics;
 pub mod timeline;
-pub mod prometheus;
-pub mod sanitizer;
 
 pub use config::{DruidMetricsConfig, DruidMetricsConfigBuilder, SqlTextPolicy};
 pub use error::{MetricsConfigError, MetricsError};

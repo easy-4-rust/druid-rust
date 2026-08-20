@@ -1618,7 +1618,6 @@ dependencies = [
  "chrono",
  "druid",
  "druid-wrapper",
- "fs2",
  "k8s-openapi",
  "kube",
  "parking_lot",
@@ -1702,6 +1701,7 @@ dependencies = [
  "deadpool 0.12.3",
  "druid",
  "duckdb",
+ "fs2",
  "futures",
  "inventory",
  "jiff",
@@ -1719,6 +1719,7 @@ dependencies = [
  "toasty-core",
  "tokio",
  "url",
+ "uuid",
 ]
 
 [[package]]

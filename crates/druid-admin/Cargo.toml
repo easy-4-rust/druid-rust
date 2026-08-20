@@ -11,13 +11,7 @@ publish      = false
 default = []
 driver-catalog = ["druid-wrapper/driver-catalog"]
 jdbc-agent = ["driver-catalog", "druid-wrapper/jdbc-agent"]
-managed-driver-install = ["jdbc-agent", "druid-wrapper/managed-driver-install"]
-all-databases = ["managed-driver-install", "druid-wrapper/all-databases"]
-
-[[bin]]
-name = "druid-driver"
-path = "src/bin/druid-driver.rs"
-required-features = ["managed-driver-install"]
+all-databases = ["jdbc-agent", "druid-wrapper/all-databases"]
 
 [lints]
 workspace = true
@@ -25,7 +19,6 @@ workspace = true
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false }
-fs2           = { workspace = true }
 tokio         = { workspace = true }
 axum          = { workspace = true }
 axum-valid    = { workspace = true }

@@ -30,12 +30,8 @@ impl BasicDataSourceFactory {
             .connection_url()
             .map(str::to_owned)
             .unwrap_or_else(|| "toasty".to_owned());
-        DruidDataSourceFactory::create_data_source_with_factory(
-            &properties,
-            factory,
-            driver_name,
-        )
-        .await
+        DruidDataSourceFactory::create_data_source_with_factory(&properties, factory, driver_name)
+            .await
     }
 
     /// 使用扩展物理连接 factory 创建数据源。

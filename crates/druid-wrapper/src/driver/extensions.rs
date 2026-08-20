@@ -10,8 +10,20 @@ use druid::core::{
     PhysicalConnectionFactory,
 };
 use druid::spi::driver_extension_descriptor::DriverExtensionDescriptor;
+use std::sync::Arc;
 
 use crate::toasty::ToastyConnectionFactory;
+
+/// Initializes the driver extension registry.
+///
+/// This function exists to ensure the linker retains the `inventory::submit!`
+/// statics in this module. Call `druid_wrapper::init_driver_extensions()` or
+/// reference this function to guarantee the registrations are available.
+pub fn init() {
+    // The function body is intentionally empty; its purpose is to create
+    // a code reference from lib.rs that prevents the linker from stripping
+    // the inventory statics defined in this module.
+}
 
 // ---------------------------------------------------------------------------
 // Factory helpers
@@ -21,8 +33,7 @@ fn toasty_factory(url: &str) -> Result<Arc<dyn PhysicalConnectionFactory>, Druid
     // Block on the async ToastyConnectionFactory::new.
     // This is acceptable because inventory items are resolved lazily and
     // the factory is typically called once at pool initialization.
-    let factory = tokio::runtime::Handle::current()
-        .block_on(ToastyConnectionFactory::new(url))?;
+    let factory = tokio::runtime::Handle::current().block_on(ToastyConnectionFactory::new(url))?;
     Ok(Arc::new(factory))
 }
 

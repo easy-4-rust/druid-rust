@@ -2,9 +2,9 @@
 #[derive(Debug, thiserror::Error)]
 pub enum DriverInstallerError {
     #[error(transparent)]
-    Registry(#[from] druid_wrapper::driver::DriverRegistryError),
+    Registry(#[from] crate::driver::DriverRegistryError),
     #[error(transparent)]
-    ProfileId(#[from] druid_wrapper::driver::DatabaseProfileIdError),
+    ProfileId(#[from] crate::driver::DatabaseProfileIdError),
     #[error("profile '{0}' is not a JDBC Agent profile")]
     NotJdbcProfile(String),
     #[error("driver artifact must be a regular .jar file: {0}")]

@@ -7,7 +7,6 @@
 //! stat_value_and_reset、login_timeout、db_type_name、url、raw_url、
 //! connect_properties、filter_class_names、wall_provider 等路径。
 
-extern crate druid_core as druid;
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
 };

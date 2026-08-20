@@ -5,7 +5,6 @@
 //! - `PSCacheTest3#test_pscache`
 //! - `DruidDataSourceTest_clearCache#test_clearStatementCache`
 
-extern crate druid_core as druid;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
@@ -19,7 +18,7 @@ use druid::core::{
     StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
 use druid::pool::DruidPool;
-use druid::toasty::{ToastyConnectionFactory, ToastyPreparedStatement};
+use druid_wrapper::toasty::{ToastyConnectionFactory, ToastyPreparedStatement};
 use std::any::TypeId;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

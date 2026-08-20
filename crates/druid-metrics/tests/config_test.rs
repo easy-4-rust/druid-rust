@@ -10,23 +10,25 @@ fn default_config_has_expected_values() {
     assert_eq!(cfg.batch_size, 64);
     assert_eq!(cfg.coalesce_window, Duration::from_millis(500));
     assert_eq!(cfg.max_sql_statements, 256);
-    assert!(matches!(cfg.sql_text_policy, SqlTextPolicy::FingerprintOnly));
+    assert!(matches!(
+        cfg.sql_text_policy,
+        SqlTextPolicy::FingerprintOnly
+    ));
     assert_eq!(cfg.shutdown_timeout, Duration::from_secs(5));
 }
 
 #[test]
 fn zero_queue_capacity_is_rejected() {
-    let result = DruidMetricsConfig::builder()
-        .queue_capacity(0)
-        .build();
-    assert!(matches!(result, Err(MetricsConfigError::InvalidQueueCapacity)));
+    let result = DruidMetricsConfig::builder().queue_capacity(0).build();
+    assert!(matches!(
+        result,
+        Err(MetricsConfigError::InvalidQueueCapacity)
+    ));
 }
 
 #[test]
 fn zero_batch_size_is_rejected() {
-    let result = DruidMetricsConfig::builder()
-        .batch_size(0)
-        .build();
+    let result = DruidMetricsConfig::builder().batch_size(0).build();
     assert!(matches!(result, Err(MetricsConfigError::InvalidBatchSize)));
 }
 
@@ -35,7 +37,10 @@ fn zero_coalesce_window_is_rejected() {
     let result = DruidMetricsConfig::builder()
         .coalesce_window(Duration::ZERO)
         .build();
-    assert!(matches!(result, Err(MetricsConfigError::InvalidCoalesceWindow)));
+    assert!(matches!(
+        result,
+        Err(MetricsConfigError::InvalidCoalesceWindow)
+    ));
 }
 
 #[test]
@@ -43,7 +48,10 @@ fn zero_sample_interval_is_rejected() {
     let result = DruidMetricsConfig::builder()
         .sample_interval(Duration::ZERO)
         .build();
-    assert!(matches!(result, Err(MetricsConfigError::InvalidSampleInterval)));
+    assert!(matches!(
+        result,
+        Err(MetricsConfigError::InvalidSampleInterval)
+    ));
 }
 
 #[test]
@@ -52,7 +60,10 @@ fn zero_flush_interval_is_rejected() {
     let result = DruidMetricsConfig::builder()
         .shutdown_timeout(Duration::ZERO)
         .build();
-    assert!(matches!(result, Err(MetricsConfigError::InvalidShutdownTimeout)));
+    assert!(matches!(
+        result,
+        Err(MetricsConfigError::InvalidShutdownTimeout)
+    ));
 }
 
 #[test]
