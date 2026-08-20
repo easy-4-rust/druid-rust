@@ -16,6 +16,7 @@ sqlite = []
 postgresql = []
 mysql = []
 turso = []
+config-http = ["dep:reqwest"]
 
 [dependencies]
 arc-swap.workspace = true
@@ -34,7 +35,7 @@ inventory.workspace = true
 indexmap.workspace = true
 parking_lot.workspace = true
 quick-xml.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, optional = true }
 rsa.workspace = true
 serde.workspace = true
 serde_json.workspace = true

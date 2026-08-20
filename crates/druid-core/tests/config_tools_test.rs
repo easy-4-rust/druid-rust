@@ -1,3 +1,5 @@
+#![cfg(feature = "config-http")]
+
 extern crate druid_core as druid;
 use druid_core::core::ConfigTools;
 

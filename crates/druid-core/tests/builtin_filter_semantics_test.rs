@@ -1,3 +1,5 @@
+#![cfg(feature = "config-http")]
+
 //! 内置 Filter 语义差分测试（C9 覆盖率批次：core/filter 7 文件）。
 //!
 //! `ConfigTools`/`CharsetParameter` 在生产代码中标 deprecated 是正确防线；
@@ -118,7 +120,7 @@ async fn config_filter_load_classpath_resource() {
     std::fs::create_dir_all(dir.join("conf")).unwrap();
     std::fs::write(dir.join("conf").join("app.properties"), "key=cp-value\n").unwrap();
 
-    let filter = ConfigFilter::with_runtime(reqwest::Client::new(), [dir.clone()]);
+    let filter = ConfigFilter::with_http_client(reqwest::Client::new(), [dir.clone()]);
     let loaded = filter
         .load_config("classpath:conf/app.properties")
         .await
@@ -159,7 +161,7 @@ async fn config_filter_config_file_overrides_properties() {
     let file_path = dir.join("override.properties");
     std::fs::write(&file_path, "password=overridden\nmaxActive=20\n").unwrap();
 
-    let filter = ConfigFilter::with_runtime(reqwest::Client::new(), [dir.clone()]);
+    let filter = ConfigFilter::with_http_client(reqwest::Client::new(), [dir.clone()]);
     let source = props(&[
         (
             "connectionProperties",

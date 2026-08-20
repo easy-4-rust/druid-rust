@@ -25,6 +25,7 @@ const CONFIG_FILTER_CLASS: &str = "com.alibaba.druid.filter.config.ConfigFilter"
 /// `reqwest`，不会引入第二套数据库或连接池。
 #[derive(Debug, Clone)]
 pub struct ConfigFilter {
+    #[cfg(feature = "config-http")]
     http_client: reqwest::Client,
     classpath_roots: Vec<PathBuf>,
 }
@@ -57,16 +58,30 @@ impl ConfigFilter {
     pub fn new() -> Self {
         let classpath_roots = std::env::current_dir().into_iter().collect();
         Self {
+            #[cfg(feature = "config-http")]
             http_client: reqwest::Client::new(),
             classpath_roots,
+        }
+    }
+
+    /// 使用调用方提供的资源根创建 Filter。
+    ///
+    /// 该入口用于宿主注入确定性的 classpath 替代目录。
+    #[must_use]
+    pub fn with_runtime(classpath_roots: impl IntoIterator<Item = PathBuf>) -> Self {
+        Self {
+            #[cfg(feature = "config-http")]
+            http_client: reqwest::Client::new(),
+            classpath_roots: classpath_roots.into_iter().collect(),
         }
     }
 
     /// 使用调用方提供的 HTTP client 和资源根创建 Filter。
     ///
     /// 该入口用于宿主注入超时、代理、证书和确定性的 classpath 替代目录。
+    #[cfg(feature = "config-http")]
     #[must_use]
-    pub fn with_runtime(
+    pub fn with_http_client(
         http_client: reqwest::Client,
         classpath_roots: impl IntoIterator<Item = PathBuf>,
     ) -> Self {
@@ -208,23 +223,32 @@ impl ConfigFilter {
                 path.ends_with(".xml"),
             )
         } else if file_path.starts_with("http://") || file_path.starts_with("https://") {
-            let xml = reqwest::Url::parse(file_path)
-                .map_err(|error| DruidError::Other(error.to_string()))?
-                .path()
-                .ends_with(".xml");
-            let response = self
-                .http_client
-                .get(file_path)
-                .send()
-                .await
-                .and_then(reqwest::Response::error_for_status)
-                .map_err(|error| DruidError::Other(error.to_string()))?;
-            let bytes = response
-                .bytes()
-                .await
-                .map_err(|error| DruidError::Other(error.to_string()))?
-                .to_vec();
-            (bytes, xml)
+            #[cfg(not(feature = "config-http"))]
+            {
+                return Err(DruidError::UnsupportedOperation {
+                    operation: "config_http_requires_config_http_feature",
+                });
+            }
+            #[cfg(feature = "config-http")]
+            {
+                let xml = url::Url::parse(file_path)
+                    .map_err(|error| DruidError::Other(error.to_string()))?
+                    .path()
+                    .ends_with(".xml");
+                let response = self
+                    .http_client
+                    .get(file_path)
+                    .send()
+                    .await
+                    .and_then(reqwest::Response::error_for_status)
+                    .map_err(|error| DruidError::Other(error.to_string()))?;
+                let bytes = response
+                    .bytes()
+                    .await
+                    .map_err(|error| DruidError::Other(error.to_string()))?
+                    .to_vec();
+                (bytes, xml)
+            }
         } else if let Some(resource_path) = file_path.strip_prefix("classpath:") {
             (
                 read_classpath(Path::new(resource_path), &self.classpath_roots).await?,

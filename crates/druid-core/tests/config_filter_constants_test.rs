@@ -1,3 +1,5 @@
+#![cfg(feature = "config-http")]
+
 extern crate druid_core as druid;
 use druid_core::core::ConfigFilter;
 
@@ -28,6 +30,6 @@ fn config_filter_new() {
 #[test]
 fn config_filter_with_runtime() {
     let client = reqwest::Client::new();
-    let f = ConfigFilter::with_runtime(client, vec![]);
+    let f = ConfigFilter::with_http_client(client, vec![]);
     let _ = f;
 }
