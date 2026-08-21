@@ -18,7 +18,6 @@ tokio         = { workspace = true }
 futures       = "0.3"
 
 [dev-dependencies]
-druid         = { path = "../druid" }
 druid-wrapper = { path = "../druid-wrapper", default-features = false, features = ["sqlite"] }
 
 [features]
