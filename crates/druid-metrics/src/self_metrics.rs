@@ -1,4 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
+
+use crate::pipeline_ownership::PipelineOwnership;
 
 /// Internal runtime self-metrics (counters for the metrics pipeline itself).
 #[derive(Debug)]
@@ -7,28 +10,29 @@ pub struct RuntimeSelfMetrics {
     snapshot_busy_total: AtomicU64,
     /// Number of snapshots dropped due to queue saturation (coalesced away).
     coalesced_total: AtomicU64,
-    /// Number of snapshots currently pending in the aggregator.
-    pending_snapshots: AtomicU64,
     /// Whether the owned unregister listener task is still running.
     unregister_listener_active: AtomicBool,
     /// Drop 通知因有界队列已满而合并的次数。
     unregister_coalesced_total: AtomicU64,
     /// 当前仍 active 的 datasource registrations。
     registered_datasources: AtomicUsize,
-    /// 已由 aggregator 发送、仍由 exporter channel/task 持有的批次数。
-    pending_export_batches: AtomicUsize,
+    /// aggregator/exporter/client/command 的互斥 ownership ledger。
+    ownership: Arc<PipelineOwnership>,
 }
 
 impl RuntimeSelfMetrics {
     pub fn new() -> Self {
+        Self::with_ownership(Arc::new(PipelineOwnership::new()))
+    }
+
+    pub(crate) fn with_ownership(ownership: Arc<PipelineOwnership>) -> Self {
         Self {
             snapshot_busy_total: AtomicU64::new(0),
             coalesced_total: AtomicU64::new(0),
-            pending_snapshots: AtomicU64::new(0),
             unregister_listener_active: AtomicBool::new(false),
             unregister_coalesced_total: AtomicU64::new(0),
             registered_datasources: AtomicUsize::new(0),
-            pending_export_batches: AtomicUsize::new(0),
+            ownership,
         }
     }
 
@@ -49,11 +53,11 @@ impl RuntimeSelfMetrics {
     }
 
     pub fn pending_snapshots(&self) -> usize {
-        self.pending_snapshots.load(Ordering::Relaxed) as usize
+        self.ownership.aggregator_snapshots()
     }
 
     pub fn set_pending_snapshots(&self, n: usize) {
-        self.pending_snapshots.store(n as u64, Ordering::Relaxed);
+        self.ownership.set_aggregator_snapshots(n);
     }
 
     /// 返回注销监听任务是否仍在运行，用于关闭期可观测性。
@@ -87,21 +91,36 @@ impl RuntimeSelfMetrics {
 
     /// 返回 exporter channel/task 当前持有的批次数。
     pub fn pending_export_batches(&self) -> usize {
-        self.pending_export_batches.load(Ordering::Acquire)
+        self.ownership.exporter_batches()
     }
 
     /// 在一个 batch 成功进入 exporter channel 后增加 backlog。
     pub fn increment_pending_export_batches(&self) {
-        self.pending_export_batches.fetch_add(1, Ordering::AcqRel);
+        self.ownership.transfer_aggregator_to_exporter(0);
     }
 
     pub(crate) fn decrement_pending_export_batches(&self) {
-        let result = self.pending_export_batches.fetch_update(
-            Ordering::AcqRel,
-            Ordering::Acquire,
-            |pending| pending.checked_sub(1),
-        );
-        debug_assert!(result.is_ok(), "pending export batch counter underflow");
+        self.ownership.finish_exporter_batch();
+    }
+
+    /// 原子把指定 aggregator snapshot 数转成一个 exporter batch owner。
+    pub fn transfer_aggregator_to_exporter(&self, snapshots: usize) {
+        self.ownership.transfer_aggregator_to_exporter(snapshots);
+    }
+
+    /// exporter channel 关闭时原子把 batch ownership 还原为 snapshot owner。
+    pub fn restore_exporter_to_aggregator(&self, snapshots: usize) {
+        self.ownership.restore_exporter_to_aggregator(snapshots);
+    }
+
+    pub(crate) fn total_unflushed(&self) -> usize {
+        self.ownership.total_unflushed()
+    }
+
+    /// 返回 aggregator、exporter、client 与 command 的精确互斥未刷新总数。
+    #[must_use]
+    pub fn unflushed_work(&self) -> usize {
+        self.total_unflushed()
     }
 }
 

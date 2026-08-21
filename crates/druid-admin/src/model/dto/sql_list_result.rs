@@ -19,6 +19,12 @@ pub struct SqlListResult {
 pub struct SqlListContent {
     #[serde(rename = "serviceId", skip_serializing_if = "Option::is_none")]
     pub service_id: Option<String>,
+    #[serde(rename = "serviceName", skip_serializing_if = "Option::is_none")]
+    pub service_name: Option<String>,
+    #[serde(rename = "instanceId", skip_serializing_if = "Option::is_none")]
+    pub instance_id: Option<String>,
+    #[serde(rename = "bootId", skip_serializing_if = "Option::is_none")]
+    pub boot_id: Option<String>,
     #[serde(rename = "address", skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
     #[serde(rename = "port", skip_serializing_if = "Option::is_none")]

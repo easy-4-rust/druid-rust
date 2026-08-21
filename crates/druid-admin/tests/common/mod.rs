@@ -12,6 +12,11 @@ use std::time::Duration;
 use druid_admin::ingest::IngestService;
 use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
 use druid_admin::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
+use druid_metrics::ServiceIdentity;
+
+fn test_service_identity() -> ServiceIdentity {
+    ServiceIdentity::new("svc-1", "test-instance", "test-boot")
+}
 
 /// Time to wait for servers to become ready.
 const READY_DELAY: Duration = Duration::from_millis(50);
@@ -105,7 +110,7 @@ pub fn make_datasource_entry(
     sequence: u64,
 ) -> (DataSourceId, DataSourceEntry) {
     let id = DataSourceId {
-        service_id: "svc-1".to_owned(),
+        service_identity: test_service_identity(),
         identity,
     };
     let entry = DataSourceEntry {
@@ -142,7 +147,7 @@ pub fn make_datasource_entry_with_sql(
         },
     );
     let id = DataSourceId {
-        service_id: "svc-1".to_owned(),
+        service_identity: test_service_identity(),
         identity,
     };
     let entry = DataSourceEntry {
@@ -169,7 +174,7 @@ pub fn make_datasource_entry_with_wall(
     let mut wall = WallResult::default();
     wall.content.check_count = check_count;
     let id = DataSourceId {
-        service_id: "svc-1".to_owned(),
+        service_identity: test_service_identity(),
         identity,
     };
     let entry = DataSourceEntry {

@@ -5,15 +5,15 @@
 //! frame；调用方重连后通过 [`PushEvent::Resend`] 恢复并发送完全相同的字节。
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::aggregator::AggregatedBatch;
 use crate::command_journal::CommandJournal;
 use crate::command_payload::canonical_command_payload;
+use crate::pipeline_ownership::PipelineOwnership;
 use crate::protocol::{
     client_frame, decode_client_frame, encode_client_frame, ClientFrame, FrameHeader, ServerFrame,
     SnapshotBatch, SnapshotTransaction,
@@ -200,93 +200,99 @@ impl PushWorkerExit {
 /// 跨 transport 会话共享的真实 queued/pending 进度。
 #[derive(Clone)]
 pub struct PushProgress {
-    queued_batches: Arc<AtomicUsize>,
-    pending_frames: Arc<AtomicUsize>,
-    pending_commands: Arc<AtomicUsize>,
-    changed: Arc<Notify>,
+    ownership: Arc<PipelineOwnership>,
 }
 
 impl PushProgress {
     /// 创建空进度计数器。
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            queued_batches: Arc::new(AtomicUsize::new(0)),
-            pending_frames: Arc::new(AtomicUsize::new(0)),
-            pending_commands: Arc::new(AtomicUsize::new(0)),
-            changed: Arc::new(Notify::new()),
-        }
+        Self::with_ownership(Arc::new(PipelineOwnership::new()))
+    }
+
+    pub(crate) fn with_ownership(ownership: Arc<PipelineOwnership>) -> Self {
+        Self { ownership }
     }
 
     /// 返回尚未被 worker 消费的批次数。
     #[must_use]
     pub fn queued_batches(&self) -> usize {
-        self.queued_batches.load(Ordering::Acquire)
+        self.ownership.client_queued_batches()
     }
 
     /// 返回已编码发送但尚未 ACK 的 frame 数。
     #[must_use]
     pub fn pending_frames(&self) -> usize {
-        self.pending_frames.load(Ordering::Acquire)
+        self.ownership.pending_frames()
     }
 
     /// 返回当前真实未刷新总数。
     #[must_use]
     pub fn unflushed(&self) -> usize {
-        self.queued_batches()
-            .saturating_add(self.pending_frames())
-            .saturating_add(self.pending_commands())
+        self.ownership.client_unflushed()
     }
 
     /// 等待进度发生变化。
     pub async fn changed(&self) {
-        self.changed.notified().await;
+        self.ownership.changed().await;
     }
 
     /// 在批次进入有界客户端队列前记账。
     pub fn queue_batch(&self) {
-        self.queued_batches.fetch_add(1, Ordering::AcqRel);
-        self.changed.notify_waiters();
+        self.ownership.queue_client_batch();
     }
 
     /// 撤销一次未成功入队的批次记账。
     pub fn undo_queue_batch(&self) {
-        self.consume_queued_batch();
+        self.ownership.undo_client_batch();
     }
 
-    fn consume_queued_batch(&self) {
-        let result =
-            self.queued_batches
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |queued| {
-                    queued.checked_sub(1)
-                });
-        debug_assert!(result.is_ok(), "queued batch progress underflow");
-        self.changed.notify_waiters();
+    fn transfer_queued_batch_to_pending_frames(&self, pending: usize) {
+        self.ownership.transfer_client_to_pending_frames(pending);
     }
 
     pub(crate) fn set_pending_frames(&self, pending: usize) {
-        self.pending_frames.store(pending, Ordering::Release);
-        self.changed.notify_waiters();
+        self.ownership.set_pending_frames(pending);
     }
 
-    /// 返回尚未完成确认的远程命令数。
+    /// 返回已进入处理或 durable confirmation、尚未完成的远程命令数。
     #[must_use]
     pub fn pending_commands(&self) -> usize {
-        self.pending_commands.load(Ordering::Acquire)
+        self.ownership.processing_commands()
+    }
+
+    /// 返回已经验证并进入 transport queue、尚未开始处理的命令数。
+    #[must_use]
+    pub fn transport_queued_commands(&self) -> usize {
+        self.ownership.transport_commands()
     }
 
     fn begin_command(&self) {
-        self.pending_commands.fetch_add(1, Ordering::AcqRel);
-        self.changed.notify_waiters();
+        self.ownership.transfer_transport_command_to_processing();
     }
 
     pub(crate) fn finish_command_if_pending(&self) {
-        let _ =
-            self.pending_commands
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
-                    pending.checked_sub(1)
-                });
-        self.changed.notify_waiters();
+        self.ownership.finish_processing_command();
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn queue_transport_command(&self) {
+        self.ownership.queue_transport_command();
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn drop_transport_command(&self) {
+        self.ownership.drop_transport_command();
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn transfer_exporter_batch_to_client(&self) {
+        self.ownership.transfer_exporter_to_client();
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn restore_client_batch_to_exporter(&self) {
+        self.ownership.restore_client_to_exporter();
     }
 }
 
@@ -568,7 +574,12 @@ impl PushWorker {
                     break;
                 }
                 Event::Batch(Some(event)) => {
+                    let retry_event = event.clone();
+                    let pending_before = self.window.len();
                     if let Err(error) = self.process_push_event(event).await {
+                        if self.window.len() == pending_before {
+                            self.preserved_live_events.push_front(retry_event);
+                        }
                         tracing::error!(%error, "failed to push metrics frame");
                         break;
                     }
@@ -610,9 +621,6 @@ impl PushWorker {
     async fn process_push_event(&mut self, event: PushEvent) -> Result<(), PushWorkerError> {
         match event {
             PushEvent::Batch(mut batch) | PushEvent::BatchAt { mut batch, .. } => {
-                if let Some(progress) = &self.progress {
-                    progress.consume_queued_batch();
-                }
                 if self.force_first_batch_full_snapshot {
                     batch.is_full_snapshot = true;
                     self.force_first_batch_full_snapshot = false;
@@ -664,6 +672,9 @@ impl PushWorker {
                 })
             })
             .map_err(PushWorkerError::Window)?;
+        if let Some(progress) = &self.progress {
+            progress.transfer_queued_batch_to_pending_frames(self.window.len());
+        }
         if is_full_snapshot {
             let Some((_, chunk_index, chunk_count)) = self.snapshot_transaction.as_mut() else {
                 return Err(PushWorkerError::InvalidSnapshotTransaction(
@@ -675,7 +686,6 @@ impl PushWorker {
                 self.snapshot_transaction = None;
             }
         }
-        self.update_pending_progress();
         self.send_encoded_frame(&pending.encoded_frame).await
     }
 
@@ -768,11 +778,20 @@ impl PushWorker {
                     ) =>
             {
                 if self.window.capacity() == 0 {
+                    if let Some(progress) = &self.progress {
+                        progress.begin_command();
+                    }
                     let reply = self.make_command_ack(
                         command.command_id,
                         Err("ACK window capacity is zero".to_owned()),
                     );
-                    return self.send_outbound(reply).await.is_ok();
+                    let sent = self.send_outbound(reply).await.is_ok();
+                    if sent {
+                        if let Some(progress) = &self.progress {
+                            progress.finish_command_if_pending();
+                        }
+                    }
+                    return sent;
                 }
                 if self.deferred_server_frames.is_empty() {
                     self.deferred_server_frames.push_back(ServerFrame {
@@ -780,11 +799,20 @@ impl PushWorker {
                     });
                     true
                 } else {
+                    if let Some(progress) = &self.progress {
+                        progress.begin_command();
+                    }
                     let reply = self.make_command_ack(
                         command.command_id,
                         Err("another full snapshot command is waiting for ACK capacity".to_owned()),
                     );
-                    self.send_outbound(reply).await.is_ok()
+                    let sent = self.send_outbound(reply).await.is_ok();
+                    if sent {
+                        if let Some(progress) = &self.progress {
+                            progress.finish_command_if_pending();
+                        }
+                    }
+                    sent
                 }
             }
             Some(Payload::Command(command))
@@ -793,9 +821,15 @@ impl PushWorker {
                     Some(crate::protocol::command::Payload::RequestFullSnapshot(_))
                 ) =>
             {
+                if let Some(progress) = &self.progress {
+                    progress.begin_command();
+                }
                 self.handle_full_snapshot_command(command).await
             }
             Some(Payload::Command(command)) => {
+                if let Some(progress) = &self.progress {
+                    progress.begin_command();
+                }
                 let reply = self.handle_command(command);
                 let sent = self.send_outbound(reply).await.is_ok();
                 if sent {
@@ -826,15 +860,19 @@ impl PushWorker {
         use crate::protocol::command::Payload;
 
         let command_id = command.command_id;
+        let mut coalesced_replay = false;
         let canonical = canonical_command_payload(&command.payload).map_err(str::to_owned);
         let result = canonical.and_then(|canonical| {
             match self.command_journal.begin(&command_id, canonical)? {
-                (false, Some(result)) => result,
-                (false, None) => Err("command is already executing".to_owned()),
+                (false, Some(result)) => {
+                    coalesced_replay = true;
+                    result
+                }
+                (false, None) => {
+                    coalesced_replay = true;
+                    Err("command is already executing".to_owned())
+                }
                 (true, None) => {
-                    if let Some(progress) = &self.progress {
-                        progress.begin_command();
-                    }
                     let result = match command.payload {
                         Some(Payload::ResetStats(reset)) => self
                             .command_executor
@@ -856,6 +894,12 @@ impl PushWorker {
                 (true, Some(_)) => Err("new command unexpectedly had a result".to_owned()),
             }
         });
+        if coalesced_replay {
+            // transport 重投只借用既有 durable lifecycle，不形成第二个 processing owner。
+            if let Some(progress) = &self.progress {
+                progress.finish_command_if_pending();
+            }
+        }
 
         self.make_command_ack(command_id, result)
     }
@@ -866,23 +910,34 @@ impl PushWorker {
             Ok(canonical) => canonical,
             Err(error) => {
                 let reply = self.make_command_ack(command_id, Err(error.to_owned()));
-                return self.send_outbound(reply).await.is_ok();
+                let sent = self.send_outbound(reply).await.is_ok();
+                if sent {
+                    if let Some(progress) = &self.progress {
+                        progress.finish_command_if_pending();
+                    }
+                }
+                return sent;
             }
         };
         let (execute, existing_result) = match self.command_journal.begin(&command_id, canonical) {
             Ok(journal) => journal,
             Err(error) => {
                 let reply = self.make_command_ack(command_id, Err(error));
-                return self.send_outbound(reply).await.is_ok();
+                let sent = self.send_outbound(reply).await.is_ok();
+                if sent {
+                    if let Some(progress) = &self.progress {
+                        progress.finish_command_if_pending();
+                    }
+                }
+                return sent;
             }
         };
-        if execute {
-            if let Some(progress) = &self.progress {
-                progress.begin_command();
-            }
-        }
         if let Some(pending) = self.full_snapshot_command.as_ref() {
             if pending.command_id() == command_id {
+                // 同一 durable lifecycle 的重投帧只合并，不得再占一个 processing owner。
+                if let Some(progress) = &self.progress {
+                    progress.finish_command_if_pending();
+                }
                 return match pending {
                     FullSnapshotCommandState::ReplyReady { .. } => {
                         let reply = self.make_command_ack(command_id, Ok(()));
@@ -901,7 +956,13 @@ impl PushWorker {
                     pending.command_id()
                 )),
             );
-            return self.send_outbound(reply).await.is_ok();
+            let sent = self.send_outbound(reply).await.is_ok();
+            if sent {
+                if let Some(progress) = &self.progress {
+                    progress.finish_command_if_pending();
+                }
+            }
+            return sent;
         }
         if !execute {
             let result = existing_result
@@ -1014,17 +1075,11 @@ impl PushWorker {
                 .initial_batches
                 .pop_front()
                 .expect("authoritative batch queue was checked as non-empty");
-            if let Some(progress) = &self.progress {
-                progress.consume_queued_batch();
-            }
             let retry_batch = batch.clone();
             let pending_before = self.window.len();
             if let Err(error) = self.push_new_batch(batch).await {
                 if self.window.len() == pending_before {
                     self.initial_batches.push_front(retry_batch);
-                    if let Some(progress) = &self.progress {
-                        progress.queue_batch();
-                    }
                 }
                 return Err(error);
             }
@@ -1068,9 +1123,6 @@ impl PushWorker {
             if let Err(error) = self.process_push_event(event).await {
                 if self.window.len() == pending_before {
                     self.preserved_live_events.push_front(retry_event);
-                    if let Some(progress) = &self.progress {
-                        progress.queue_batch();
-                    }
                 }
                 return Err(error);
             }
@@ -1102,11 +1154,17 @@ impl PushWorker {
                         return Err(PushWorkerError::ServerInterrupted(error.message));
                     }
                     Some(Payload::Command(command)) => {
+                        if let Some(progress) = &self.progress {
+                            progress.begin_command();
+                        }
                         let reply = self.make_command_ack(
                             command.command_id,
                             Err("authoritative full snapshot is waiting for ACKs".to_owned()),
                         );
                         self.send_outbound(reply).await?;
+                        if let Some(progress) = &self.progress {
+                            progress.finish_command_if_pending();
+                        }
                     }
                     Some(Payload::HelloAck(_) | Payload::Error(_)) | None => {}
                 }
@@ -1131,11 +1189,17 @@ impl PushWorker {
                         .map_err(PushWorkerError::Window)?;
                 }
                 Some(Payload::Command(command)) => {
+                    if let Some(progress) = &self.progress {
+                        progress.begin_command();
+                    }
                     let reply = self.make_command_ack(
                         command.command_id,
                         Err("full snapshot command is waiting for ACK capacity".to_owned()),
                     );
                     self.send_outbound(reply).await?;
+                    if let Some(progress) = &self.progress {
+                        progress.finish_command_if_pending();
+                    }
                 }
                 Some(Payload::Error(error)) if error.close_stream => {
                     return Err(PushWorkerError::ServerInterrupted(error.message));

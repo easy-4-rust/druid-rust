@@ -10,10 +10,15 @@ use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
 use druid_admin::repository::{
     DataSourceEntry, DataSourceId, MetricsRepository, MetricsRepositoryConfig,
 };
+use druid_metrics::ServiceIdentity;
+
+fn service_identity(service_name: &str) -> ServiceIdentity {
+    ServiceIdentity::new(service_name, "test-instance", "test-boot")
+}
 
 fn make_entry(identity: i64, db_type: &str, sequence: u64) -> (DataSourceId, DataSourceEntry) {
     let id = DataSourceId {
-        service_id: "svc-1".to_owned(),
+        service_identity: service_identity("svc-1"),
         identity,
     };
     let entry = DataSourceEntry {
@@ -106,11 +111,11 @@ fn repository_isolates_different_services() {
     let repo = MetricsRepository::new();
 
     let id1 = DataSourceId {
-        service_id: "svc-a".to_owned(),
+        service_identity: service_identity("svc-a"),
         identity: 1,
     };
     let id2 = DataSourceId {
-        service_id: "svc-b".to_owned(),
+        service_identity: service_identity("svc-b"),
         identity: 1,
     };
 
@@ -159,7 +164,7 @@ fn repository_aggregates_sql_stats() {
     );
 
     let id = DataSourceId {
-        service_id: "svc-1".to_owned(),
+        service_identity: service_identity("svc-1"),
         identity: 1,
     };
     let entry = DataSourceEntry {
@@ -185,7 +190,7 @@ fn repository_aggregates_wall_stats() {
     wall.content.check_count = 100;
 
     let id = DataSourceId {
-        service_id: "svc-1".to_owned(),
+        service_identity: service_identity("svc-1"),
         identity: 1,
     };
     let entry = DataSourceEntry {
@@ -267,7 +272,7 @@ fn repository_caps_and_ttl_are_configured_bounded_and_observable() {
     let (second_id, second) = make_entry(2, "postgresql", 1);
     assert!(repo.upsert_datasource(second_id, second));
     let mut other_service_id = DataSourceId {
-        service_id: "svc-2".to_owned(),
+        service_identity: service_identity("svc-2"),
         identity: 3,
     };
     let (_, other_service) = make_entry(3, "sqlite", 1);
@@ -282,7 +287,7 @@ fn repository_caps_and_ttl_are_configured_bounded_and_observable() {
     );
     assert_eq!(repo.limit_counters(), (2, 2, 0));
 
-    other_service_id.service_id = "svc-1".to_owned();
+    other_service_id.service_identity = service_identity("svc-1");
     let (_, replacement) = make_entry(3, "sqlite", 2);
     assert!(repo.upsert_datasource(other_service_id, replacement));
 }

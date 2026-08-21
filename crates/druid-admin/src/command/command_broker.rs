@@ -7,9 +7,9 @@ use druid_metrics::protocol::{
     command, server_frame, Command, CommandAck, FrameHeader, RequestFullSnapshotCmd, ResetStatsCmd,
     ServerFrame,
 };
+use druid_metrics::ServiceIdentity;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
-use tonic::Status;
 
 use super::command_broker_inner::{CommandBrokerInner, CommandKey};
 
@@ -33,6 +33,22 @@ impl CommandBroker {
             capacity: capacity.max(1),
             result_timeout: result_timeout.max(Duration::from_millis(1)),
         }
+    }
+
+    /// 返回当前已附着的 live stream 数量。
+    #[must_use]
+    pub fn live_stream_count(&self) -> usize {
+        self.inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .streams
+            .len()
+    }
+
+    /// 返回每个 live stream 独立命令 admission queue 的容量。
+    #[must_use]
+    pub const fn capacity(&self) -> usize {
+        self.capacity
     }
 
     /// 把 ResetStats 投递给当前 live stream 并等待 durable result。
@@ -78,60 +94,54 @@ impl CommandBroker {
     pub(crate) fn attach_stream(
         &self,
         header: &FrameHeader,
-        sender: mpsc::Sender<Result<ServerFrame, Status>>,
+        sender: mpsc::Sender<ServerFrame>,
         cancellation: CancellationToken,
     ) -> Result<(), String> {
-        let selector = stream_selector(header);
-        let pending = {
-            let mut inner = self
-                .inner
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            if !inner.streams.contains_key(&selector) && inner.streams.len() >= self.capacity {
-                return Err(format!(
-                    "live stream broker full: capacity {}",
-                    self.capacity
-                ));
-            }
-            inner.streams.insert(
-                selector.clone(),
-                (header.clone(), sender.clone(), cancellation),
-            );
-            inner
-                .order
-                .iter()
-                .filter_map(|key| {
-                    (key.0 == selector)
-                        .then(|| {
-                            inner
-                                .commands
-                                .get(key)
-                                .map(|record| (key.1.clone(), record))
-                        })
-                        .flatten()
-                })
-                .filter(|(_, record)| record.2.is_none())
-                .map(|(command_id, record)| command_frame(header, command_id, record.1.clone()))
-                .collect::<Vec<_>>()
-        };
-        for frame in pending {
-            sender.try_send(Ok(frame)).map_err(|_| {
-                format!(
-                    "live stream command queue full: capacity {}",
-                    sender.max_capacity()
-                )
-            })?;
+        let selector = service_identity(header);
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if !inner.streams.contains_key(&selector) && inner.streams.len() >= self.capacity {
+            return Err(format!(
+                "live stream broker full: capacity {}",
+                self.capacity
+            ));
         }
+        let pending = inner
+            .order
+            .iter()
+            .filter_map(|key| {
+                (key.0 == selector)
+                    .then(|| {
+                        inner
+                            .commands
+                            .get(key)
+                            .map(|record| (key.1.clone(), record))
+                    })
+                    .flatten()
+            })
+            .filter(|(_, record)| record.2.is_none())
+            .map(|(command_id, record)| command_frame(header, command_id, record.1.clone()))
+            .collect::<Vec<_>>();
+        let permits = sender.try_reserve_many(pending.len()).map_err(|_| {
+            format!(
+                "live stream command queue full: capacity {}",
+                sender.max_capacity()
+            )
+        })?;
+        for (permit, frame) in permits.zip(pending) {
+            permit.send(frame);
+        }
+        inner
+            .streams
+            .insert(selector, (header.clone(), sender.clone(), cancellation));
         Ok(())
     }
 
     /// 只在 sender 仍是当前连接时注销 live stream。
-    pub(crate) fn detach_stream(
-        &self,
-        header: &FrameHeader,
-        sender: &mpsc::Sender<Result<ServerFrame, Status>>,
-    ) {
-        let selector = stream_selector(header);
+    pub(crate) fn detach_stream(&self, header: &FrameHeader, sender: &mpsc::Sender<ServerFrame>) {
+        let selector = service_identity(header);
         let mut inner = self
             .inner
             .lock()
@@ -149,7 +159,7 @@ impl CommandBroker {
     ///
     /// 命令 journal 与稳定结果不会被删除。
     pub fn cancel_stream(&self, service_name: &str, instance_id: &str, boot_id: &str) -> bool {
-        let selector = stream_selector_parts(service_name, instance_id, boot_id);
+        let selector = ServiceIdentity::new(service_name, instance_id, boot_id);
         let stream = self
             .inner
             .lock()
@@ -170,12 +180,12 @@ impl CommandBroker {
         header: &FrameHeader,
         acknowledgement: &CommandAck,
     ) -> Result<(), String> {
-        let key = (stream_selector(header), acknowledgement.command_id.clone());
+        let key = (service_identity(header), acknowledgement.command_id.clone());
         let mut inner = self
             .inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let selector = stream_selector(header);
+        let selector = service_identity(header);
         let current_header = inner
             .streams
             .get(&selector)
@@ -206,7 +216,7 @@ impl CommandBroker {
         if command_id.trim().is_empty() {
             return Err("command ID must be non-empty".to_owned());
         }
-        let selector = stream_selector_parts(service_name, instance_id, boot_id);
+        let selector = ServiceIdentity::new(service_name, instance_id, boot_id);
         let key: CommandKey = (selector.clone(), command_id.to_owned());
         let canonical = canonical_command_payload(&Some(payload.clone())).map_err(str::to_owned)?;
         let (sender, frame, mut result_rx, inserted) = {
@@ -253,7 +263,7 @@ impl CommandBroker {
             }
         };
 
-        if sender.try_send(Ok(frame)).is_err() {
+        if sender.try_send(frame).is_err() {
             if inserted {
                 let mut inner = self
                     .inner
@@ -320,16 +330,11 @@ fn command_frame(
     }
 }
 
-fn stream_selector(header: &FrameHeader) -> String {
-    stream_selector_parts(&header.service_name, &header.instance_id, &header.boot_id)
-}
-
-fn stream_selector_parts(service_name: &str, instance_id: &str, boot_id: &str) -> String {
-    format!(
-        "{}:{service_name}{}:{instance_id}{}:{boot_id}",
-        service_name.len(),
-        instance_id.len(),
-        boot_id.len()
+fn service_identity(header: &FrameHeader) -> ServiceIdentity {
+    ServiceIdentity::new(
+        header.service_name.clone(),
+        header.instance_id.clone(),
+        header.boot_id.clone(),
     )
 }
 

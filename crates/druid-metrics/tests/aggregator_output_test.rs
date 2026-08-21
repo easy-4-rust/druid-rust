@@ -361,7 +361,13 @@ async fn full_output_channel_backpressures_without_dropping_the_next_batch() {
     snapshot_tx.send(snapshot(2, 2)).await.unwrap();
     tokio::task::yield_now().await;
 
-    assert_eq!(metrics.pending_snapshots(), 1);
+    assert_eq!(metrics.pending_snapshots(), 0);
+    assert_eq!(metrics.pending_export_batches(), 2);
+    assert_eq!(
+        metrics.unflushed_work(),
+        2,
+        "both batches are exporter-owned while the second channel send is pending"
+    );
     let first = batch_rx.recv().await.expect("first batch fills output");
     let second = batch_rx
         .recv()

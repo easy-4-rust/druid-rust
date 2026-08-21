@@ -718,9 +718,12 @@ async fn health_and_metrics_remain_truthful_after_grpc_ingest() {
     let metrics = metrics.text().await.expect("metrics text");
     assert!(metrics.contains("druid_admin_datasource_count 1"));
     assert!(metrics.contains("druid_admin_ingest_total 1"));
-    assert!(metrics.contains(
-        "druid_admin_datasource_active_count{service=\"orders\",datasource=\"42\",db_type=\"postgresql\"} 7"
-    ));
+    let service_id =
+        druid_metrics::ServiceIdentity::new("orders-runtime", "instance-health", "boot-health")
+            .service_id();
+    assert!(metrics.contains(&format!(
+        "druid_admin_datasource_active_count{{service_id=\"{service_id}\",service_name=\"orders-runtime\",instance_id=\"instance-health\",boot_id=\"boot-health\",datasource=\"42\",datasource_name=\"orders\",db_type=\"postgresql\"}} 7"
+    )));
 
     drop(stream.tx);
     fixture.shutdown().await;
@@ -852,7 +855,7 @@ async fn prometheus_escapes_client_controlled_label_values() {
         .text()
         .await
         .expect("metrics text");
-    assert!(metrics.contains("service=\"orders\\\"\\\\\\nmalicious_metric 1\""));
+    assert!(metrics.contains("datasource_name=\"orders\\\"\\\\\\nmalicious_metric 1\""));
     assert!(metrics.contains("db_type=\"post\\\"\\\\\\ngresql\""));
     assert!(
         !metrics.lines().any(|line| line == "malicious_metric 1"),
@@ -3698,6 +3701,7 @@ fn reply_header(header: &FrameHeader) -> FrameHeader {
 }
 
 struct RuntimeProbe {
+    id: u64,
     samples: AtomicUsize,
     sampled: Notify,
 }
@@ -3715,7 +3719,7 @@ impl DataSourceMonitorable for RuntimeProbe {
 
     fn identity(&self) -> DataSourceIdentity {
         DataSourceIdentity {
-            id: 84,
+            id: self.id,
             name: "runtime-orders".to_owned(),
             driver_name: Some("postgresql".to_owned()),
         }
@@ -3754,6 +3758,7 @@ async fn runtime_shutdown_flushes_last_aggregated_batch_over_grpc() {
     .await
     .expect("network runtime starts");
     let source = Arc::new(RuntimeProbe {
+        id: 84,
         samples: AtomicUsize::new(0),
         sampled: Notify::new(),
     });
@@ -3784,7 +3789,7 @@ async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushe
         start_probe_server(AckThenHoldProbe { ack_limit: 0 }).await;
     let runtime = DruidMetricsRuntime::start_with_grpc(
         DruidMetricsConfig::builder()
-            .sample_interval(Duration::from_millis(1))
+            .sample_interval(Duration::from_secs(3_600))
             .coalesce_window(Duration::from_millis(1))
             .shutdown_timeout(Duration::from_secs(5))
             .build()
@@ -3794,6 +3799,7 @@ async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushe
     .await
     .expect("runtime connects before Admin withholds ACKs");
     let source = Arc::new(RuntimeProbe {
+        id: 84,
         samples: AtomicUsize::new(0),
         sampled: Notify::new(),
     });
@@ -3810,15 +3816,83 @@ async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushe
     .expect("snapshot leaves the aggregator and becomes exporter/client-owned");
 
     let result = runtime.shutdown(Duration::from_millis(100)).await;
-    assert!(matches!(
-        result,
-        Err(druid_metrics::MetricsError::ShutdownTimeout { unflushed }) if unflushed > 0
-    ));
+    assert!(
+        matches!(
+            result,
+            Err(druid_metrics::MetricsError::ShutdownTimeout { unflushed: 1 })
+        ),
+        "one batch must have exactly one owner during exporter-to-client handoff: {result:?}"
+    );
     shutdown.cancel();
     server_handle
         .await
         .expect("unavailable Admin probe joins")
         .expect("unavailable Admin probe stops");
+}
+
+#[tokio::test]
+async fn blocked_exporter_to_client_handoff_counts_each_batch_exactly_once() {
+    let (endpoint, shutdown, server_handle) =
+        start_probe_server(AckThenHoldProbe { ack_limit: 0 }).await;
+    let mut client_config = grpc_config(&endpoint, "blocked-handoff-exact");
+    client_config.ack_window_capacity = 1;
+    let runtime = DruidMetricsRuntime::start_with_grpc(
+        DruidMetricsConfig::builder()
+            .queue_capacity(4)
+            .batch_size(1)
+            .sample_interval(Duration::from_millis(50))
+            .coalesce_window(Duration::from_millis(1))
+            .shutdown_timeout(Duration::from_secs(5))
+            .build()
+            .expect("valid blocked handoff runtime config"),
+        client_config,
+    )
+    .await
+    .expect("blocked handoff runtime connects");
+    let sources = (84..87)
+        .map(|id| {
+            Arc::new(RuntimeProbe {
+                id,
+                samples: AtomicUsize::new(0),
+                sampled: Notify::new(),
+            })
+        })
+        .collect::<Vec<_>>();
+    let guards = sources
+        .iter()
+        .map(|source| runtime.register(source.clone()))
+        .collect::<Vec<_>>();
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while sources
+            .iter()
+            .any(|source| source.samples.load(Ordering::Acquire) == 0)
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("all three datasources produce one batch");
+    drop(guards);
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while runtime.self_metrics().pending_snapshots() != 0
+            || runtime.self_metrics().unflushed_work() != 3
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("third batch blocks in exporter-to-client handoff");
+
+    let result = runtime.shutdown(Duration::from_millis(100)).await;
+    assert!(matches!(
+        result,
+        Err(druid_metrics::MetricsError::ShutdownTimeout { unflushed: 3 })
+    ), "three batches across window, client queue and blocked handoff need three disjoint owners: {result:?}");
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("blocked handoff probe joins")
+        .expect("blocked handoff probe stops");
 }
 
 #[tokio::test]
@@ -3853,6 +3927,319 @@ async fn admin_shutdown_cancels_and_joins_every_owned_ingest_stream() {
         .await
         .expect("owned stream server joins")
         .expect("owned stream server stops");
+}
+
+#[tokio::test]
+async fn dropping_tonic_response_detaches_exact_broker_sender_and_reuses_capacity() {
+    let broker = CommandBroker::new(1, Duration::from_millis(100));
+    let service = IngestService::new(MetricsRepository::new()).with_command_broker(broker.clone());
+    let observer = service.clone();
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve response-drop address");
+    let address = reservation.local_addr().expect("response-drop address");
+    drop(reservation);
+    let (shutdown, server_handle) = start_production_server_at(address, service).await;
+    let first_identity = StreamIdentity::new("response-drop-first", 91_101);
+    let first_stream = open_generated_stream(&format!("http://{address}"), &first_identity).await;
+    assert_eq!(broker.live_stream_count(), 1);
+    assert_eq!(observer.active_streams(), 1);
+
+    drop(first_stream.inbound);
+    drop(first_stream.tx);
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while broker.live_stream_count() != 0 || observer.active_streams() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("response Drop detaches broker and aborts processing task");
+    assert!(
+        broker
+            .issue_full_snapshot(
+                &first_identity.service_name,
+                &first_identity.instance_id,
+                &first_identity.boot_id,
+                "stale-response-drop",
+            )
+            .await
+            .is_err(),
+        "the detached identity cannot receive another command"
+    );
+
+    let second_identity = StreamIdentity::new("response-drop-second", 91_102);
+    let second_stream = open_generated_stream(&format!("http://{address}"), &second_identity).await;
+    assert_eq!(
+        broker.live_stream_count(),
+        1,
+        "capacity one is reusable by a successor identity"
+    );
+    drop(second_stream.inbound);
+    drop(second_stream.tx);
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("response-drop server joins")
+        .expect("response-drop server stops");
+}
+
+#[tokio::test]
+async fn full_capacity_command_journal_reconnects_after_hello_ack_without_partial_replay() {
+    const CAPACITY: usize = 64;
+
+    let broker = CommandBroker::new(CAPACITY, Duration::from_secs(30));
+    let service = IngestService::new(MetricsRepository::new()).with_command_broker(broker.clone());
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve saturated replay address");
+    let address = reservation.local_addr().expect("saturated replay address");
+    drop(reservation);
+    let (shutdown, server_handle) = start_production_server_at(address, service).await;
+    let endpoint = format!("http://{address}");
+    let first_identity = StreamIdentity::new("saturated-replay", 91_201);
+    let mut first = open_generated_stream(&endpoint, &first_identity).await;
+    let mut waiters = Vec::with_capacity(CAPACITY);
+
+    for index in 0..CAPACITY {
+        let issue_broker = broker.clone();
+        let command_id = format!("replay-{index:02}");
+        let service_name = first_identity.service_name.clone();
+        let instance_id = first_identity.instance_id.clone();
+        let boot_id = first_identity.boot_id.clone();
+        waiters.push(tokio::spawn(async move {
+            issue_broker
+                .issue_full_snapshot(&service_name, &instance_id, &boot_id, &command_id)
+                .await
+        }));
+        let delivered = next_server_frame(&mut first.inbound).await;
+        let Some(server_frame::Payload::Command(command)) = delivered.payload else {
+            panic!("expected first-session command {index}, got {delivered:?}");
+        };
+        assert_eq!(command.command_id, format!("replay-{index:02}"));
+    }
+    let overflow = broker
+        .issue_full_snapshot(
+            &first_identity.service_name,
+            &first_identity.instance_id,
+            &first_identity.boot_id,
+            "replay-overflow",
+        )
+        .await
+        .expect_err("N+1 journal admission must fail before replay");
+    assert!(overflow.contains("broker full"), "{overflow}");
+
+    drop(first.tx);
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while broker.live_stream_count() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("first saturated stream half-closes and detaches");
+    drop(first.inbound);
+
+    let mut second_identity = first_identity.clone();
+    second_identity.stream_epoch += 1;
+    let mut second = open_generated_stream(&endpoint, &second_identity).await;
+    for index in 0..CAPACITY {
+        let delivered = next_server_frame(&mut second.inbound).await;
+        let Some(server_frame::Payload::Command(command)) = delivered.payload else {
+            panic!("expected replayed command {index}, got {delivered:?}");
+        };
+        assert_eq!(
+            command.command_id,
+            format!("replay-{index:02}"),
+            "full-boundary replay order must be deterministic"
+        );
+    }
+
+    for waiter in waiters {
+        waiter.abort();
+    }
+    drop(second.tx);
+    drop(second.inbound);
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("saturated replay server joins")
+        .expect("saturated replay server stops");
+}
+
+#[tokio::test]
+async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_and_prometheus() {
+    let repository = MetricsRepository::new();
+    let broker = CommandBroker::new(8, TEST_TIMEOUT);
+    let grpc_addr = reserve_loopback_addr().await;
+    let service = IngestService::new(repository.clone()).with_command_broker(broker.clone());
+    let (grpc_shutdown, grpc_handle) = start_production_server_at(grpc_addr, service).await;
+    let (http_addr, http_shutdown, http_handle) = start_http_with_repo(repository.clone()).await;
+    let endpoint = format!("http://{grpc_addr}");
+    let first_identity = StreamIdentity {
+        service_name: "a/b".to_owned(),
+        instance_id: "c".to_owned(),
+        boot_id: "boot-碰撞".to_owned(),
+        stream_epoch: 91_301,
+    };
+    let second_identity = StreamIdentity {
+        service_name: "a".to_owned(),
+        instance_id: "b/c".to_owned(),
+        boot_id: "boot-碰撞".to_owned(),
+        stream_epoch: 91_301,
+    };
+    let first_service_id = druid_metrics::ServiceIdentity::new(
+        &first_identity.service_name,
+        &first_identity.instance_id,
+        &first_identity.boot_id,
+    )
+    .service_id();
+    let second_service_id = druid_metrics::ServiceIdentity::new(
+        &second_identity.service_name,
+        &second_identity.instance_id,
+        &second_identity.boot_id,
+    )
+    .service_id();
+    assert_ne!(first_service_id, second_service_id);
+
+    let mut first = open_generated_stream(&endpoint, &first_identity).await;
+    let mut second = open_generated_stream(&endpoint, &second_identity).await;
+    assert_eq!(broker.live_stream_count(), 2);
+    assert_eq!(
+        send_batch_and_expect_ack(&mut first, &first_identity, 1, orders_entry(7, 15), true,).await,
+        1
+    );
+    let mut second_entry = orders_entry(9, 13);
+    second_entry.sql_stats[0].fingerprint = "fp:collision-second".to_owned();
+    assert_eq!(
+        send_batch_and_expect_ack(&mut second, &second_identity, 1, second_entry, true,).await,
+        1
+    );
+
+    let entries = repository.all_datasources();
+    assert_eq!(
+        entries.len(),
+        2,
+        "authoritative replacement must key the typed identity, not old slash text"
+    );
+    let exposed_ids = entries
+        .iter()
+        .filter_map(|entry| entry.datasource.service_id.clone())
+        .collect::<std::collections::HashSet<_>>();
+    assert_eq!(
+        exposed_ids,
+        std::collections::HashSet::from([first_service_id.clone(), second_service_id.clone()])
+    );
+
+    for (stream, identity, command_id) in [
+        (&mut first, &first_identity, "route-first"),
+        (&mut second, &second_identity, "route-second"),
+    ] {
+        let issue_broker = broker.clone();
+        let service_name = identity.service_name.clone();
+        let instance_id = identity.instance_id.clone();
+        let boot_id = identity.boot_id.clone();
+        let command_id_owned = command_id.to_owned();
+        let issue = tokio::spawn(async move {
+            issue_broker
+                .issue_full_snapshot(&service_name, &instance_id, &boot_id, &command_id_owned)
+                .await
+        });
+        let delivered = next_server_frame(&mut stream.inbound).await;
+        let Some(server_frame::Payload::Command(command)) = delivered.payload else {
+            panic!("expected typed-identity routed command, got {delivered:?}");
+        };
+        assert_eq!(command.command_id, command_id);
+        stream
+            .tx
+            .send(ClientFrame {
+                payload: Some(client_frame::Payload::CommandAck(
+                    druid_metrics::protocol::CommandAck {
+                        header: Some(identity.header(0)),
+                        command_id: command_id.to_owned(),
+                        success: true,
+                        error_message: String::new(),
+                    },
+                )),
+            })
+            .await
+            .expect("send typed-identity command acknowledgement");
+        assert!(issue.await.expect("typed command issue joins").is_ok());
+    }
+
+    let first_datasource: Value = reqwest::get(format!(
+        "http://{http_addr}/druid/api/datasources/42?serviceId={first_service_id}"
+    ))
+    .await
+    .expect("first collision datasource detail")
+    .error_for_status()
+    .expect("first collision datasource found")
+    .json()
+    .await
+    .expect("first collision datasource JSON");
+    let second_datasource: Value = reqwest::get(format!(
+        "http://{http_addr}/druid/api/datasources/42?serviceId={second_service_id}"
+    ))
+    .await
+    .expect("second collision datasource detail")
+    .error_for_status()
+    .expect("second collision datasource found")
+    .json()
+    .await
+    .expect("second collision datasource JSON");
+    assert_eq!(first_datasource["Content"][0]["ActiveCount"], 7);
+    assert_eq!(first_datasource["Content"][0]["serviceName"], "a/b");
+    assert_eq!(second_datasource["Content"][0]["ActiveCount"], 9);
+    assert_eq!(second_datasource["Content"][0]["instanceId"], "b/c");
+
+    let first_sql: Value = reqwest::get(format!(
+        "http://{http_addr}/druid/api/sql/1?serviceId={first_service_id}&dataSourceId=42"
+    ))
+    .await
+    .expect("first collision SQL detail")
+    .error_for_status()
+    .expect("first collision SQL found")
+    .json()
+    .await
+    .expect("first collision SQL JSON");
+    let second_sql: Value = reqwest::get(format!(
+        "http://{http_addr}/druid/api/sql/1?serviceId={second_service_id}&dataSourceId=42"
+    ))
+    .await
+    .expect("second collision SQL detail")
+    .error_for_status()
+    .expect("second collision SQL found")
+    .json()
+    .await
+    .expect("second collision SQL JSON");
+    assert_eq!(first_sql["SQL"], "fp:orders-by-id");
+    assert_eq!(second_sql["SQL"], "fp:collision-second");
+
+    let metrics = reqwest::get(format!("http://{http_addr}/metrics"))
+        .await
+        .expect("collision Prometheus response")
+        .error_for_status()
+        .expect("collision Prometheus is available")
+        .text()
+        .await
+        .expect("collision Prometheus text");
+    assert!(metrics.contains(&format!("service_id=\"{first_service_id}\"")));
+    assert!(metrics.contains(&format!("service_id=\"{second_service_id}\"")));
+    assert!(metrics.contains("service_name=\"a/b\""));
+    assert!(metrics.contains("instance_id=\"b/c\""));
+
+    drop(first.tx);
+    drop(first.inbound);
+    drop(second.tx);
+    drop(second.inbound);
+    grpc_shutdown.cancel();
+    grpc_handle
+        .await
+        .expect("collision gRPC joins")
+        .expect("collision gRPC stops");
+    http_shutdown.cancel();
+    http_handle
+        .await
+        .expect("collision HTTP joins")
+        .expect("collision HTTP stops");
 }
 
 #[tokio::test]
@@ -4107,7 +4494,7 @@ async fn production_command_entry_is_authenticated_and_fails_closed_without_a_li
         .send()
         .await
         .expect("unauthenticated command request returns");
-    assert_eq!(denied.status(), reqwest::StatusCode::FOUND);
+    assert_eq!(denied.status(), reqwest::StatusCode::UNAUTHORIZED);
     let unavailable = client
         .post(format!("http://{address}/druid/api/commands"))
         .basic_auth("admin", Some("secret"))
@@ -4125,6 +4512,141 @@ async fn production_command_entry_is_authenticated_and_fails_closed_without_a_li
         .await
         .expect("command HTTP server joins")
         .expect("command HTTP server stops");
+}
+
+#[tokio::test]
+async fn command_route_requires_explicit_basic_even_when_admin_auth_is_disabled_or_session_exists()
+{
+    async fn start_command_http(
+        auth: AdminAuthMode,
+    ) -> (
+        SocketAddr,
+        CancellationToken,
+        tokio::task::JoinHandle<Result<(), std::io::Error>>,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind command auth matrix listener");
+        let address = listener.local_addr().expect("command auth matrix address");
+        let config = AdminServerConfig::try_new(
+            address,
+            SocketAddr::from(([127, 0, 0, 1], 9090)),
+            None,
+            auth,
+        )
+        .expect("valid loopback command auth matrix config");
+        let app = production_router_with_command_broker(
+            MetricsRepository::new(),
+            &config,
+            CommandBroker::new(8, Duration::from_millis(200)),
+        );
+        let shutdown = CancellationToken::new();
+        let server_shutdown = shutdown.clone();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(server_shutdown.cancelled_owned())
+                .await
+        });
+        (address, shutdown, server)
+    }
+
+    let body = json!({
+        "serviceName": "orders-runtime",
+        "instanceId": "instance-command-auth-matrix",
+        "bootId": "boot-command-auth-matrix",
+        "commandId": "reset-auth-matrix",
+        "type": "resetStats",
+        "targetDatasourceIds": [84]
+    });
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("command auth matrix HTTP client");
+
+    let (disabled_address, disabled_shutdown, disabled_server) =
+        start_command_http(AdminAuthMode::Disabled).await;
+    for authorization in [None, Some("Basic YWRtaW46YXJiaXRyYXJ5")] {
+        let mut request = client
+            .post(format!("http://{disabled_address}/druid/api/commands"))
+            .json(&body);
+        if let Some(authorization) = authorization {
+            request = request.header(reqwest::header::AUTHORIZATION, authorization);
+        }
+        let response = request
+            .send()
+            .await
+            .expect("disabled command request returns");
+        assert_eq!(
+            response.status(),
+            reqwest::StatusCode::FORBIDDEN,
+            "Disabled has no credential truth and must reject before broker side effects"
+        );
+    }
+    disabled_shutdown.cancel();
+    disabled_server
+        .await
+        .expect("disabled command server joins")
+        .expect("disabled command server stops");
+
+    let (basic_address, basic_shutdown, basic_server) =
+        start_command_http(AdminAuthMode::basic("admin", "secret")).await;
+    let login = client
+        .post(format!("http://{basic_address}/druid/submitLogin"))
+        .form(&[("loginUsername", "admin"), ("loginPassword", "secret")])
+        .send()
+        .await
+        .expect("command auth matrix login returns");
+    assert_eq!(login.status(), reqwest::StatusCode::OK);
+    let session_cookie = login
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .find_map(|cookie| cookie.split(';').next())
+        .expect("login returns druid session cookie")
+        .to_owned();
+
+    let missing = client
+        .post(format!("http://{basic_address}/druid/api/commands"))
+        .json(&body)
+        .send()
+        .await
+        .expect("missing Basic command request returns");
+    assert_eq!(missing.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let session_only = client
+        .post(format!("http://{basic_address}/druid/api/commands"))
+        .header(reqwest::header::COOKIE, session_cookie)
+        .json(&body)
+        .send()
+        .await
+        .expect("session-only command request returns");
+    assert_eq!(session_only.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let invalid = client
+        .post(format!("http://{basic_address}/druid/api/commands"))
+        .basic_auth("admin", Some("wrong"))
+        .json(&body)
+        .send()
+        .await
+        .expect("invalid Basic command request returns");
+    assert_eq!(invalid.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let valid = client
+        .post(format!("http://{basic_address}/druid/api/commands"))
+        .basic_auth("admin", Some("secret"))
+        .json(&body)
+        .send()
+        .await
+        .expect("valid Basic command request returns");
+    assert_eq!(
+        valid.status(),
+        reqwest::StatusCode::SERVICE_UNAVAILABLE,
+        "valid explicit Basic must reach the empty live-stream broker"
+    );
+
+    basic_shutdown.cancel();
+    basic_server
+        .await
+        .expect("Basic command server joins")
+        .expect("Basic command server stops");
 }
 
 struct BrokerCommandProbe {
@@ -4469,6 +4991,9 @@ async fn reset_result_survives_real_tonic_half_close_and_reconnect_without_reexe
         1,
         "the durable client result must replay without repeating ResetStats"
     );
+    let progress = client.progress();
+    assert_eq!(progress.transport_queued_commands(), 0);
+    assert_eq!(progress.pending_commands(), 0);
 
     client
         .shutdown(TEST_TIMEOUT)

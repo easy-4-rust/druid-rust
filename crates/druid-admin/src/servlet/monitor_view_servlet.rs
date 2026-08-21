@@ -13,6 +13,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use axum_valid::Valid;
+use druid_metrics::ServiceIdentity;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
 use tokio_metrics::TaskMonitor;
@@ -205,6 +206,10 @@ impl MonitorViewServlet {
     }
 
     async fn authorize(State(state): State<Self>, request: Request, next: Next) -> Response {
+        if is_command_path(request.uri().path(), state.context_path.as_str()) {
+            // 命令端点必须由 handler 校验显式 Basic，不能被 Disabled 或 session 放行。
+            return next.run(request).await;
+        }
         if !state.auth.is_enabled() {
             return next.run(request).await;
         }
@@ -229,7 +234,13 @@ impl MonitorViewServlet {
         let authorization = headers
             .get(header::AUTHORIZATION)
             .and_then(|value| value.to_str().ok());
-        if state.auth.is_enabled() && !state.auth.authorizes_header(authorization) {
+        if !state.auth.is_enabled() {
+            return command_error_response(
+                StatusCode::FORBIDDEN,
+                "command entry is unavailable without configured Basic credentials",
+            );
+        }
+        if !state.auth.authorizes_header(authorization) {
             return command_error_response(
                 StatusCode::UNAUTHORIZED,
                 "command entry requires explicit Authorization",
@@ -464,9 +475,12 @@ impl MonitorViewServlet {
         match &state.backend {
             MonitorBackend::Remote(_) => Self::data_sources(State(state)).await,
             MonitorBackend::Repository(repository) => {
+                let Some(service_identity) = ServiceIdentity::from_service_id(&service_id) else {
+                    return invalid_service_id();
+                };
                 let content = repository
                     .get_datasource(&DataSourceId {
-                        service_id,
+                        service_identity,
                         identity: id,
                     })
                     .map(|entry| entry.datasource);
@@ -898,9 +912,12 @@ async fn connection_response(state: MonitorViewServlet, id: i64, service_id: Str
                 .await
         }
         MonitorBackend::Repository(repository) => repository
-            .get_datasource(&DataSourceId {
-                service_id,
-                identity: id,
+            .get_datasource(&match ServiceIdentity::from_service_id(&service_id) {
+                Some(service_identity) => DataSourceId {
+                    service_identity,
+                    identity: id,
+                },
+                None => return invalid_service_id(),
             })
             .map_or_else(
                 || StatusCode::NOT_FOUND.into_response(),
@@ -966,11 +983,20 @@ fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
     ));
     for entry in repository.all_datasources() {
         let datasource = &entry.datasource;
-        let service = prometheus_label_value(datasource.name.as_deref().unwrap_or("unknown"));
+        let service_id =
+            prometheus_label_value(datasource.service_id.as_deref().unwrap_or("unknown"));
+        let service_name =
+            prometheus_label_value(datasource.service_name.as_deref().unwrap_or("unknown"));
+        let instance_id =
+            prometheus_label_value(datasource.instance_id.as_deref().unwrap_or("unknown"));
+        let boot_id = prometheus_label_value(datasource.boot_id.as_deref().unwrap_or("unknown"));
+        let datasource_name =
+            prometheus_label_value(datasource.name.as_deref().unwrap_or("unknown"));
         let db_type = prometheus_label_value(datasource.db_type.as_deref().unwrap_or("unknown"));
         let identity = prometheus_label_value(&datasource.identity.to_string());
-        let labels =
-            format!("service=\"{service}\",datasource=\"{identity}\",db_type=\"{db_type}\"");
+        let labels = format!(
+            "service_id=\"{service_id}\",service_name=\"{service_name}\",instance_id=\"{instance_id}\",boot_id=\"{boot_id}\",datasource=\"{identity}\",datasource_name=\"{datasource_name}\",db_type=\"{db_type}\""
+        );
         let _ = writeln!(
             body,
             "druid_admin_datasource_active_count{{{labels}}} {}",
@@ -1026,6 +1052,14 @@ fn missing_parameter(name: &str) -> Response {
         .into_response()
 }
 
+fn invalid_service_id() -> Response {
+    (
+        StatusCode::UNPROCESSABLE_ENTITY,
+        Json(json!({"ResultCode": -1, "Content": "invalid canonical serviceId"})),
+    )
+        .into_response()
+}
+
 fn error_response(error: impl std::fmt::Display) -> Response {
     let error_msg = error.to_string();
     // Map well-known error patterns to appropriate HTTP status codes.
@@ -1056,6 +1090,10 @@ fn is_public_path(path: &str, context_path: &str) -> bool {
         "/login.html" | "/nopermit.html" | "/submitLogin"
     ) || relative_path.starts_with("/css/")
         || relative_path.starts_with("/js/")
+}
+
+fn is_command_path(path: &str, context_path: &str) -> bool {
+    path.strip_prefix(context_path) == Some("/api/commands")
 }
 
 /// Check whether the request carries a valid (non-expired) session token.

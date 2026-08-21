@@ -31,13 +31,12 @@ use crate::protocol::{
     ResetStatsCmd, ResyncRequired, ServerError, ServerFrame, SnapshotEntry, SnapshotTransaction,
 };
 use crate::snapshot_transaction_state::SnapshotTransactionState;
+use crate::ServiceIdentity;
 
 /// Stream identity key.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct StreamKey {
-    service_name: String,
-    instance_id: String,
-    boot_id: String,
+    service_identity: ServiceIdentity,
     stream_epoch: u64,
 }
 
@@ -273,9 +272,11 @@ impl IngestHandler {
 
     fn stream_key(&self, hdr: &FrameHeader) -> StreamKey {
         StreamKey {
-            service_name: hdr.service_name.clone(),
-            instance_id: hdr.instance_id.clone(),
-            boot_id: hdr.boot_id.clone(),
+            service_identity: ServiceIdentity::new(
+                hdr.service_name.clone(),
+                hdr.instance_id.clone(),
+                hdr.boot_id.clone(),
+            ),
             stream_epoch: hdr.stream_epoch,
         }
     }
@@ -423,13 +424,12 @@ impl IngestHandler {
         instance: &str,
         boot: &str,
     ) -> Vec<SnapshotEntry> {
+        let service_identity = ServiceIdentity::new(service, instance, boot);
         let state = self.state.lock().expect("ingest lock poisoned");
         state
             .streams
             .iter()
-            .filter(|(k, _)| {
-                k.service_name == service && k.instance_id == instance && k.boot_id == boot
-            })
+            .filter(|(key, _)| key.service_identity == service_identity)
             .flat_map(|(_, v)| v.snapshots.values().cloned())
             .collect()
     }

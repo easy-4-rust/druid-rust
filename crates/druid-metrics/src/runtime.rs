@@ -10,8 +10,6 @@ use tokio_util::sync::CancellationToken;
 
 use crate::config::DruidMetricsConfig;
 use crate::error::MetricsError;
-#[cfg(feature = "client")]
-use crate::push_worker::PushProgress;
 use crate::registry::{RegistrationGuard, RegistryEntry};
 use crate::self_metrics::RuntimeSelfMetrics;
 #[cfg(feature = "client")]
@@ -35,8 +33,6 @@ pub struct DruidMetricsRuntime {
     aggregator_cancel_token: CancellationToken,
     unregister_cancel_token: CancellationToken,
     self_metrics: Arc<RuntimeSelfMetrics>,
-    #[cfg(feature = "client")]
-    client_progress: Option<PushProgress>,
 }
 
 impl DruidMetricsRuntime {
@@ -63,7 +59,8 @@ impl DruidMetricsRuntime {
         let sampler_cancel_token = CancellationToken::new();
         let aggregator_cancel_token = CancellationToken::new();
         let unregister_cancel_token = CancellationToken::new();
-        let self_metrics = Arc::new(RuntimeSelfMetrics::new());
+        let ownership = Arc::new(crate::pipeline_ownership::PipelineOwnership::new());
+        let self_metrics = Arc::new(RuntimeSelfMetrics::with_ownership(Arc::clone(&ownership)));
         let (snapshot_tx, snapshot_rx) = mpsc::channel(config.queue_capacity);
         let (batch_tx, mut batch_rx) = mpsc::channel(config.queue_capacity);
         let (_aggregator_command_tx, aggregator_command_rx) = mpsc::channel(config.queue_capacity);
@@ -72,8 +69,6 @@ impl DruidMetricsRuntime {
         // Single shared registry: runtime::register() writes, sampler reads + cleans
         let registry: Arc<RwLock<Vec<RegistryEntry>>> = Arc::new(RwLock::new(Vec::new()));
 
-        #[cfg(feature = "client")]
-        let mut client_progress = None;
         let exporter = match exporter_config {
             RuntimeExporterConfig::Drain => RuntimeExporter::Drain,
             #[cfg(feature = "client")]
@@ -84,12 +79,12 @@ impl DruidMetricsRuntime {
                     config.max_sql_statements,
                     config.sql_text_policy,
                 );
-                let client = GrpcMetricsClient::connect_with_command_executor(
+                let client = GrpcMetricsClient::connect_with_command_executor_and_ownership(
                     *grpc_config,
                     Some(command_executor),
+                    ownership,
                 )
                 .await?;
-                client_progress = Some(client.progress());
                 RuntimeExporter::Grpc(client)
             }
         };
@@ -142,8 +137,7 @@ impl DruidMetricsRuntime {
                 #[cfg(feature = "client")]
                 RuntimeExporter::Grpc(client) => {
                     while let Some(batch) = batch_rx.recv().await {
-                        client.send_batch(batch).await?;
-                        exporter_self_metrics.decrement_pending_export_batches();
+                        client.send_batch_from_exporter(batch).await?;
                     }
                     client.shutdown(exporter_shutdown_timeout).await
                 }
@@ -186,8 +180,6 @@ impl DruidMetricsRuntime {
             aggregator_cancel_token,
             unregister_cancel_token,
             self_metrics,
-            #[cfg(feature = "client")]
-            client_progress,
         })
     }
 
@@ -240,8 +232,6 @@ impl DruidMetricsRuntime {
         let mut exporter_handle = self.exporter_handle.take();
         let mut unregister_handle = self.unregister_handle.take();
         let self_metrics = Arc::clone(&self.self_metrics);
-        #[cfg(feature = "client")]
-        let client_progress = self.client_progress.clone();
 
         // Join tasks with one shared deadline. The drain-only exporter exits after
         // the aggregator flushes and closes the bounded batch channel.
@@ -291,11 +281,7 @@ impl DruidMetricsRuntime {
                 }
             }
 
-            let unflushed = pipeline_unflushed(
-                &self_metrics,
-                #[cfg(feature = "client")]
-                client_progress.as_ref(),
-            );
+            let unflushed = pipeline_unflushed(&self_metrics);
             if unflushed != 0 && first_error.is_none() {
                 first_error = Some(MetricsError::UnflushedSnapshots { unflushed });
             }
@@ -312,11 +298,7 @@ impl DruidMetricsRuntime {
             abort_if_running(aggregator_handle.as_mut()).await;
             abort_if_running(exporter_handle.as_mut()).await;
             abort_if_running(unregister_handle.as_mut()).await;
-            let unflushed = pipeline_unflushed(
-                &self.self_metrics,
-                #[cfg(feature = "client")]
-                self.client_progress.as_ref(),
-            );
+            let unflushed = pipeline_unflushed(&self.self_metrics);
             Err(MetricsError::ShutdownTimeout { unflushed })
         }
     }
@@ -361,14 +343,6 @@ async fn abort_if_running<T>(handle: Option<&mut JoinHandle<T>>) {
     }
 }
 
-fn pipeline_unflushed(
-    self_metrics: &RuntimeSelfMetrics,
-    #[cfg(feature = "client")] client_progress: Option<&PushProgress>,
-) -> usize {
-    let pending = self_metrics
-        .pending_snapshots()
-        .saturating_add(self_metrics.pending_export_batches());
-    #[cfg(feature = "client")]
-    let pending = pending.saturating_add(client_progress.map_or(0, PushProgress::unflushed));
-    pending
+fn pipeline_unflushed(self_metrics: &RuntimeSelfMetrics) -> usize {
+    self_metrics.total_unflushed()
 }

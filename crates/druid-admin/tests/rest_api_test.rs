@@ -137,12 +137,13 @@ async fn datasource_json_content_type() {
 async fn datasource_json_returns_populated_content() {
     use druid_admin::model::dto::DataSourceContent;
     use druid_admin::repository::{DataSourceEntry, DataSourceId};
+    use druid_metrics::ServiceIdentity;
 
     let repo = druid_admin::repository::MetricsRepository::new();
 
     // Insert a test datasource entry
     let id = DataSourceId {
-        service_id: "test-service".to_owned(),
+        service_identity: ServiceIdentity::new("test-service", "test-instance", "test-boot"),
         identity: 1,
     };
     let entry = DataSourceEntry {
@@ -194,18 +195,24 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
 
     use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
     use druid_admin::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
+    use druid_metrics::ServiceIdentity;
 
     let repository = MetricsRepository::new();
-    for (service_id, datasource_id, db_type, sql) in [
+    for (service_name, datasource_id, db_type, sql) in [
         ("svc-a", 1, "mysql", "svc-a-ds-1"),
         ("svc-a", 2, "postgresql", "svc-a-ds-2"),
         ("svc-b", 1, "sqlite", "svc-b-ds-1"),
     ] {
+        let service_identity = ServiceIdentity::new(service_name, "detail-instance", "detail-boot");
+        let service_id = service_identity.service_id();
         let mut sql_stats = HashMap::new();
         sql_stats.insert(
             101,
             SqlListContent {
-                service_id: Some(service_id.to_owned()),
+                service_id: Some(service_id.clone()),
+                service_name: Some(service_name.to_owned()),
+                instance_id: Some("detail-instance".to_owned()),
+                boot_id: Some("detail-boot".to_owned()),
                 id: 1,
                 hash: 101,
                 sql: Some(sql.to_owned()),
@@ -215,12 +222,15 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
         );
         assert!(repository.upsert_datasource(
             DataSourceId {
-                service_id: service_id.to_owned(),
+                service_identity,
                 identity: datasource_id,
             },
             DataSourceEntry {
                 datasource: DataSourceContent {
-                    service_id: Some(service_id.to_owned()),
+                    service_id: Some(service_id.clone()),
+                    service_name: Some(service_name.to_owned()),
+                    instance_id: Some("detail-instance".to_owned()),
+                    boot_id: Some("detail-boot".to_owned()),
                     identity: datasource_id,
                     db_type: Some(db_type.to_owned()),
                     ..Default::default()
@@ -239,8 +249,11 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
     let address = listener.local_addr().expect("composite detail address");
     let handle = tokio::spawn(async move { axum::serve(listener, app).await });
 
+    let service_a = ServiceIdentity::new("svc-a", "detail-instance", "detail-boot").service_id();
+    let service_b = ServiceIdentity::new("svc-b", "detail-instance", "detail-boot").service_id();
+
     let datasource: Value = reqwest::get(format!(
-        "http://{address}/druid/api/datasources/1?serviceId=svc-b"
+        "http://{address}/druid/api/datasources/1?serviceId={service_b}"
     ))
     .await
     .expect("GET composite datasource")
@@ -249,11 +262,11 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
     .json()
     .await
     .expect("composite datasource JSON");
-    assert_eq!(datasource["Content"][0]["serviceId"], "svc-b");
+    assert_eq!(datasource["Content"][0]["serviceId"], service_b);
     assert_eq!(datasource["Content"][0]["DbType"], "sqlite");
 
     let sql: Value = reqwest::get(format!(
-        "http://{address}/druid/api/sql/1?serviceId=svc-a&dataSourceId=2"
+        "http://{address}/druid/api/sql/1?serviceId={service_a}&dataSourceId=2"
     ))
     .await
     .expect("GET composite SQL")
@@ -262,14 +275,15 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
     .json()
     .await
     .expect("composite SQL JSON");
-    assert_eq!(sql["serviceId"], "svc-a");
+    assert_eq!(sql["serviceId"], service_a);
     assert_eq!(sql["DataSource"], 2);
     assert_eq!(sql["SQL"], "svc-a-ds-2");
 
-    let missing_datasource =
-        reqwest::get(format!("http://{address}/druid/api/sql/1?serviceId=svc-a"))
-            .await
-            .expect("GET SQL without datasource identity");
+    let missing_datasource = reqwest::get(format!(
+        "http://{address}/druid/api/sql/1?serviceId={service_a}"
+    ))
+    .await
+    .expect("GET SQL without datasource identity");
     assert_eq!(
         missing_datasource.status(),
         reqwest::StatusCode::UNPROCESSABLE_ENTITY

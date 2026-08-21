@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Instant;
 
+use druid_metrics::ServiceIdentity;
 use parking_lot::RwLock;
 
 use crate::model::dto::{DataSourceContent, SqlListContent, WallResult};
@@ -13,8 +14,8 @@ use super::{MetricsRepositoryConfig, StoredDataSourceEntry};
 /// Admin repository 内 datasource 的复合标识。
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct DataSourceId {
-    /// 协议 stream service identity。
-    pub service_id: String,
+    /// 协议 stream 的类型化 service identity。
+    pub service_identity: ServiceIdentity,
     /// service 内 datasource identity。
     pub identity: i64,
 }
@@ -109,7 +110,7 @@ impl MetricsRepository {
     /// 原子替换一个协议 stream 的全部 datasource；空集合表示权威清空。
     pub fn replace_stream(
         &self,
-        service_id: &str,
+        service_identity: &ServiceIdentity,
         entries: Vec<(DataSourceId, DataSourceEntry)>,
     ) -> bool {
         let mut inner = self.inner.write();
@@ -118,17 +119,19 @@ impl MetricsRepository {
         let mut seen = HashSet::with_capacity(entries.len());
         let invalid = entries
             .iter()
-            .any(|(id, _)| id.service_id != service_id || !seen.insert(id.clone()));
+            .any(|(id, _)| &id.service_identity != service_identity || !seen.insert(id.clone()));
         if invalid {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             return false;
         }
-        if self.exceeds_limits(&inner, &entries, Some(service_id)) {
+        if self.exceeds_limits(&inner, &entries, Some(service_identity)) {
             inner.rejected_count = inner.rejected_count.saturating_add(1);
             inner.capacity_rejected_count = inner.capacity_rejected_count.saturating_add(1);
             return false;
         }
-        inner.entries.retain(|id, _| id.service_id != service_id);
+        inner
+            .entries
+            .retain(|id, _| &id.service_identity != service_identity);
         for (id, entry) in entries {
             inner.entries.insert(id, StoredDataSourceEntry::new(entry));
         }
@@ -160,8 +163,9 @@ impl MetricsRepository {
         datasource_identity: i64,
         sql_identity: i64,
     ) -> Option<SqlListContent> {
+        let service_identity = ServiceIdentity::from_service_id(service_id)?;
         self.get_datasource(&DataSourceId {
-            service_id: service_id.to_owned(),
+            service_identity,
             identity: datasource_identity,
         })
         .and_then(|entry| {
@@ -270,7 +274,7 @@ impl MetricsRepository {
         &self,
         inner: &MetricsRepositoryInner,
         incoming: &[(DataSourceId, DataSourceEntry)],
-        replaced_service: Option<&str>,
+        replaced_service: Option<&ServiceIdentity>,
     ) -> bool {
         if incoming
             .iter()
@@ -281,21 +285,21 @@ impl MetricsRepository {
         let mut identities = inner
             .entries
             .keys()
-            .filter(|id| replaced_service != Some(id.service_id.as_str()))
+            .filter(|id| replaced_service != Some(&id.service_identity))
             .cloned()
             .collect::<HashSet<_>>();
         identities.extend(incoming.iter().map(|(id, _)| id.clone()));
         let services = identities
             .iter()
-            .map(|id| id.service_id.as_str())
+            .map(|id| &id.service_identity)
             .collect::<HashSet<_>>();
         if services.len() > self.config.max_services() {
             return true;
         }
-        services.into_iter().any(|service_id| {
+        services.into_iter().any(|service_identity| {
             identities
                 .iter()
-                .filter(|id| id.service_id.as_str() == service_id)
+                .filter(|id| &id.service_identity == service_identity)
                 .count()
                 > self.config.max_datasources_per_service()
         })

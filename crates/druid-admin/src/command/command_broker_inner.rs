@@ -1,26 +1,22 @@
 use std::collections::{HashMap, VecDeque};
 
 use druid_metrics::protocol::{command, CommandAck, FrameHeader, ServerFrame};
+use druid_metrics::ServiceIdentity;
 use tokio::sync::{mpsc, watch};
 use tokio_util::sync::CancellationToken;
-use tonic::Status;
 
-pub(crate) type CommandKey = (String, String);
+pub(crate) type CommandKey = (ServiceIdentity, String);
 pub(crate) type CommandRecord = (
     Vec<u8>,
     command::Payload,
     Option<CommandAck>,
     watch::Sender<Option<CommandAck>>,
 );
-pub(crate) type LiveStream = (
-    FrameHeader,
-    mpsc::Sender<Result<ServerFrame, Status>>,
-    CancellationToken,
-);
+pub(crate) type LiveStream = (FrameHeader, mpsc::Sender<ServerFrame>, CancellationToken);
 
 /// [`super::CommandBroker`] 的锁内有界状态。
 pub(crate) struct CommandBrokerInner {
-    pub(crate) streams: HashMap<String, LiveStream>,
+    pub(crate) streams: HashMap<ServiceIdentity, LiveStream>,
     pub(crate) commands: HashMap<CommandKey, CommandRecord>,
     pub(crate) order: VecDeque<CommandKey>,
 }

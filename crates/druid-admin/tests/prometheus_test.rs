@@ -9,6 +9,7 @@ use druid_admin::model::dto::{DataSourceContent, WallResult};
 use druid_admin::repository::{
     DataSourceEntry, DataSourceId, MetricsRepository, MetricsRepositoryConfig,
 };
+use druid_metrics::ServiceIdentity;
 
 /// Helper: start the standalone HTTP server with data in the repository.
 async fn start_server_with_data() -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
@@ -21,14 +22,21 @@ async fn start_server_with_datasource_count(
     let repo = MetricsRepository::new();
 
     for identity in 1..=datasource_count {
+        let service_name = format!("svc-{identity}");
+        let service_identity =
+            ServiceIdentity::new(service_name.clone(), "metrics-instance", "metrics-boot");
         let id = DataSourceId {
-            service_id: format!("svc-{identity}"),
+            service_identity: service_identity.clone(),
             identity,
         };
         let entry = DataSourceEntry {
             datasource: DataSourceContent {
                 identity,
                 name: Some(format!("service-{identity}")),
+                service_id: Some(service_identity.service_id()),
+                service_name: Some(service_name),
+                instance_id: Some("metrics-instance".to_owned()),
+                boot_id: Some("metrics-boot".to_owned()),
                 db_type: Some("mysql".to_owned()),
                 active_count: 5 + identity,
                 pooling_count: 10 + identity,
@@ -278,14 +286,20 @@ async fn metrics_output_over_budget_is_rejected_and_counted_without_silent_trunc
     let config = MetricsRepositoryConfig::try_new(4, 4, 4, Duration::from_secs(60), 256)
         .expect("valid metrics output budget");
     let repository = MetricsRepository::with_config(config);
+    let service_identity =
+        ServiceIdentity::new("bounded-service", "metrics-instance", "metrics-boot");
     let id = DataSourceId {
-        service_id: "bounded-service".to_owned(),
+        service_identity: service_identity.clone(),
         identity: 1,
     };
     let entry = DataSourceEntry {
         datasource: DataSourceContent {
             identity: 1,
             name: Some("bounded-service".to_owned()),
+            service_id: Some(service_identity.service_id()),
+            service_name: Some("bounded-service".to_owned()),
+            instance_id: Some("metrics-instance".to_owned()),
+            boot_id: Some("metrics-boot".to_owned()),
             db_type: Some("postgresql".to_owned()),
             active_count: 7,
             ..Default::default()

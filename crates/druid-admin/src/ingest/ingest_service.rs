@@ -11,6 +11,7 @@ use druid_metrics::protocol::{
     client_frame, server_frame, ClientFrame, FrameHeader, ServerError, ServerFrame, SnapshotBatch,
     SnapshotEntry,
 };
+use druid_metrics::ServiceIdentity as CanonicalServiceIdentity;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status, Streaming};
@@ -19,7 +20,7 @@ use crate::model::dto::{DataSourceContent, SqlListContent, WallResult};
 use crate::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
 use crate::CommandBroker;
 
-use super::{ActiveIngestStreamGuard, OwnedConnectStream};
+use super::{ActiveIngestStreamGuard, BrokerAttachment, BrokerAttachmentSlot, OwnedConnectStream};
 
 const RESPONSE_CAPACITY: usize = 64;
 const PROTOCOL_VERSION: u32 = 1;
@@ -98,14 +99,17 @@ impl MetricsIngest for IngestService {
         let repository = self.repo.clone();
         let shutdown = self.shutdown.clone();
         let command_broker = self.command_broker.clone();
+        let (command_tx, command_rx) = mpsc::channel(command_broker.capacity());
         let connection_cancel = CancellationToken::new();
         let stream_cancel = connection_cancel.clone();
         let active_streams = Arc::clone(&self.active_streams);
+        let attachment: BrokerAttachmentSlot = Arc::new(std::sync::Mutex::new(None));
+        let task_attachment = Arc::clone(&attachment);
 
         let task = tokio::spawn(async move {
             let _active_guard = ActiveIngestStreamGuard::new(active_streams);
             let mut stream_identity = None;
-            let mut attached_header = None;
+            let mut attachment_guard = None;
             loop {
                 let inbound_frame = tokio::select! {
                     biased;
@@ -278,7 +282,7 @@ impl MetricsIngest for IngestService {
                     }
                 }
                 let response = if is_snapshot {
-                    let service_id = stream_service_id(&header);
+                    let service_id = canonical_service_identity(&header);
                     handler
                         .handle_frame_with_snapshot_commit(&frame, |entries, replace| {
                             let Ok(prepared) = prepare_entries(&header, entries) else {
@@ -307,52 +311,55 @@ impl MetricsIngest for IngestService {
                     frame.payload.as_ref(),
                     Some(client_frame::Payload::Hello(_))
                 ) {
-                    if let Err(error) = command_broker.attach_stream(
-                        &header,
-                        response_tx.clone(),
+                    match BrokerAttachment::attach(
+                        command_broker.clone(),
+                        header.clone(),
+                        command_tx.clone(),
                         connection_cancel.clone(),
+                        &task_attachment,
                     ) {
-                        let _ = send_protocol_error(
-                            &response_tx,
-                            Some(&header),
-                            503,
-                            &error,
-                            true,
-                            &shutdown,
-                            &stream_cancel,
-                        )
-                        .await;
-                        break;
+                        Ok(guard) => attachment_guard = Some(guard),
+                        Err(error) => {
+                            let _ = send_protocol_error(
+                                &response_tx,
+                                Some(&header),
+                                503,
+                                &error,
+                                true,
+                                &shutdown,
+                                &stream_cancel,
+                            )
+                            .await;
+                            break;
+                        }
                     }
-                    attached_header = Some(header.clone());
                 }
                 if is_goodbye || close_after_response {
                     break;
                 }
             }
-            if let Some(header) = attached_header.as_ref() {
-                command_broker.detach_stream(header, &response_tx);
-            }
+            drop(attachment_guard);
         });
 
-        Ok(Response::new(OwnedConnectStream::new(response_rx, task)))
+        Ok(Response::new(OwnedConnectStream::new(
+            response_rx,
+            command_rx,
+            task,
+            attachment,
+        )))
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct StreamIdentity {
-    service_name: String,
-    instance_id: String,
-    boot_id: String,
+    service_identity: CanonicalServiceIdentity,
     stream_epoch: u64,
 }
 
 impl From<&FrameHeader> for StreamIdentity {
     fn from(header: &FrameHeader) -> Self {
         Self {
-            service_name: header.service_name.clone(),
-            instance_id: header.instance_id.clone(),
-            boot_id: header.boot_id.clone(),
+            service_identity: canonical_service_identity(header),
             stream_epoch: header.stream_epoch,
         }
     }
@@ -394,7 +401,8 @@ fn prepare_entry(
         .pool
         .as_ref()
         .ok_or_else(|| format!("datasource {} is missing pool metrics", entry.datasource_id))?;
-    let service_id = stream_service_id(header);
+    let service_identity = canonical_service_identity(header);
+    let service_id = service_identity.service_id();
     let db_type = entry.driver_name.clone();
     let mut sql_stats = HashMap::with_capacity(entry.sql_stats.len());
     for (index, stat) in entry.sql_stats.iter().enumerate() {
@@ -405,6 +413,9 @@ fn prepare_entry(
             hash,
             SqlListContent {
                 service_id: Some(service_id.clone()),
+                service_name: Some(header.service_name.clone()),
+                instance_id: Some(header.instance_id.clone()),
+                boot_id: Some(header.boot_id.clone()),
                 id: checked_i64(index as u64 + 1, "sql_index")?,
                 sql: Some(stat.fingerprint.clone()),
                 hash,
@@ -435,6 +446,9 @@ fn prepare_entry(
     wall.content.violation_count = checked_i64(entry.wall_violation_count, "wall.violation_count")?;
     let datasource = DataSourceContent {
         service_id: Some(service_id.clone()),
+        service_name: Some(header.service_name.clone()),
+        instance_id: Some(header.instance_id.clone()),
+        boot_id: Some(header.boot_id.clone()),
         identity,
         name: Some(entry.datasource_name.clone()),
         db_type: db_type.clone(),
@@ -448,7 +462,7 @@ fn prepare_entry(
     };
     Ok((
         DataSourceId {
-            service_id,
+            service_identity,
             identity,
         },
         DataSourceEntry {
@@ -461,10 +475,11 @@ fn prepare_entry(
     ))
 }
 
-fn stream_service_id(header: &FrameHeader) -> String {
-    format!(
-        "{}/{}/{}/{}",
-        header.service_name, header.instance_id, header.boot_id, header.stream_epoch
+fn canonical_service_identity(header: &FrameHeader) -> CanonicalServiceIdentity {
+    CanonicalServiceIdentity::new(
+        header.service_name.clone(),
+        header.instance_id.clone(),
+        header.boot_id.clone(),
     )
 }
 

@@ -15,6 +15,7 @@ use tonic::transport::{Channel, Endpoint};
 use crate::aggregator::AggregatedBatch;
 use crate::command_journal::CommandJournal;
 use crate::error::MetricsError;
+use crate::pipeline_ownership::PipelineOwnership;
 use crate::protocol::metrics_ingest_client::MetricsIngestClient;
 use crate::protocol::{
     client_frame, server_frame, ClientFrame, ClientGoodbye, ClientHello, FrameHeader, ServerFrame,
@@ -109,6 +110,22 @@ impl GrpcMetricsClient {
         config: GrpcClientConfig,
         command_executor: Option<RegistryCommandExecutor>,
     ) -> Result<Self, MetricsError> {
+        Self::connect_inner(config, command_executor, Arc::new(PipelineOwnership::new())).await
+    }
+
+    pub(crate) async fn connect_with_command_executor_and_ownership(
+        config: GrpcClientConfig,
+        command_executor: Option<RegistryCommandExecutor>,
+        ownership: Arc<PipelineOwnership>,
+    ) -> Result<Self, MetricsError> {
+        Self::connect_inner(config, command_executor, ownership).await
+    }
+
+    async fn connect_inner(
+        config: GrpcClientConfig,
+        command_executor: Option<RegistryCommandExecutor>,
+        ownership: Arc<PipelineOwnership>,
+    ) -> Result<Self, MetricsError> {
         validate_config(&config)?;
         let stream_epoch = next_stream_epoch();
         let initial_transport = connect_transport(&config, stream_epoch, None, 0).await?;
@@ -116,7 +133,7 @@ impl GrpcMetricsClient {
         let cancellation = CancellationToken::new();
         let supervisor_cancel = cancellation.clone();
         let supervisor_config = config.clone();
-        let progress = PushProgress::new();
+        let progress = PushProgress::with_ownership(ownership);
         let generation = Arc::new(AtomicU64::new(0));
         let supervisor_progress = progress.clone();
         let supervisor_generation = Arc::clone(&generation);
@@ -160,6 +177,30 @@ impl GrpcMetricsClient {
             .is_err()
         {
             self.progress.undo_queue_batch();
+            return Err(MetricsError::ChannelSend(
+                "gRPC push worker stopped".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// 从 runtime exporter 原子接管一个 batch，并提交给有界客户端队列。
+    pub(crate) async fn send_batch_from_exporter(
+        &self,
+        batch: AggregatedBatch,
+    ) -> Result<(), MetricsError> {
+        let batch_tx = self
+            .batch_tx
+            .as_ref()
+            .ok_or_else(|| MetricsError::ChannelSend("gRPC client is shutting down".to_owned()))?;
+        self.progress.transfer_exporter_batch_to_client();
+        let generation = self.generation.load(Ordering::Acquire);
+        if batch_tx
+            .send(PushEvent::BatchAt { generation, batch })
+            .await
+            .is_err()
+        {
+            self.progress.restore_client_batch_to_exporter();
             return Err(MetricsError::ChannelSend(
                 "gRPC push worker stopped".to_owned(),
             ));
@@ -394,6 +435,7 @@ async fn run_connected_session(
     let reader_cancellation = CancellationToken::new();
     let reader_task_cancellation = reader_cancellation.clone();
     let reader_config = config.clone();
+    let reader_progress = progress.clone();
     let mut reader_handle = AbortOnDrop::new(tokio::spawn(async move {
         loop {
             let message = tokio::select! {
@@ -404,12 +446,22 @@ async fn run_connected_session(
             match message {
                 Ok(Some(frame)) => {
                     validate_server_frame(&frame, &reader_config, stream_epoch)?;
+                    let is_command = matches!(
+                        frame.payload.as_ref(),
+                        Some(server_frame::Payload::Command(_))
+                    );
+                    if is_command {
+                        reader_progress.queue_transport_command();
+                    }
                     let permit = tokio::select! {
                         biased;
                         () = reader_task_cancellation.cancelled() => return Ok(Some(frame)),
                         result = server_tx.reserve() => result,
                     };
                     let Ok(permit) = permit else {
+                        if is_command {
+                            reader_progress.drop_transport_command();
+                        }
                         return Ok(None);
                     };
                     permit.send(frame);
@@ -487,6 +539,7 @@ async fn run_connected_session(
         &mut reader_handle,
         &reader_cancellation,
         &mut exit,
+        &session_progress,
         config.shutdown_timeout,
         config.ack_window_capacity.saturating_mul(2).max(1),
     )
@@ -518,6 +571,7 @@ fn collect_successor_command(
     exit: &mut PushWorkerExit,
     frame: ServerFrame,
     capacity: usize,
+    progress: &PushProgress,
 ) -> Result<(), MetricsError> {
     let Some(server_frame::Payload::Command(command)) = frame.payload.as_ref() else {
         return Ok(());
@@ -530,13 +584,16 @@ fn collect_successor_command(
         (existing_command.command_id == command.command_id).then_some(existing_command)
     }) {
         if existing_command.payload == command.payload {
+            progress.drop_transport_command();
             return Ok(());
         }
+        progress.drop_transport_command();
         return Err(MetricsError::ChannelSend(
             "successor command ID has a conflicting payload".to_owned(),
         ));
     }
     if exit.successor_commands.len() >= capacity {
+        progress.drop_transport_command();
         return Err(MetricsError::ChannelSend(format!(
             "successor command queue full: capacity {capacity}"
         )));
@@ -664,12 +721,13 @@ async fn join_reader_and_collect_successor_commands(
     reader_task: &mut AbortOnDrop,
     reader_cancellation: &CancellationToken,
     exit: &mut PushWorkerExit,
+    progress: &PushProgress,
     timeout: Duration,
     capacity: usize,
 ) -> Result<Result<(), MetricsError>, MetricsError> {
     let Some(mut reader_handle) = reader_task.take() else {
         while let Ok(frame) = exit.transport_rx.try_recv() {
-            collect_successor_command(exit, frame, capacity)?;
+            collect_successor_command(exit, frame, capacity, progress)?;
         }
         return Ok(Ok(()));
     };
@@ -681,17 +739,17 @@ async fn join_reader_and_collect_successor_commands(
             biased;
             frame = exit.transport_rx.recv(), if receiver_open => {
                 match frame {
-                    Some(frame) => collect_successor_command(exit, frame, capacity)?,
+                    Some(frame) => collect_successor_command(exit, frame, capacity, progress)?,
                     None => receiver_open = false,
                 }
             }
             result = &mut reader_handle => {
                 let reader_result = flatten_reader_join(result);
                 if let Ok(Some(frame)) = reader_result.as_ref() {
-                    collect_successor_command(exit, frame.clone(), capacity)?;
+                    collect_successor_command(exit, frame.clone(), capacity, progress)?;
                 }
                 while let Ok(frame) = exit.transport_rx.try_recv() {
-                    collect_successor_command(exit, frame, capacity)?;
+                    collect_successor_command(exit, frame, capacity, progress)?;
                 }
                 return Ok(reader_result.map(|_| ()));
             }
@@ -699,10 +757,10 @@ async fn join_reader_and_collect_successor_commands(
                 reader_cancellation.cancel();
                 let reader_result = flatten_reader_join(reader_handle.await);
                 if let Ok(Some(frame)) = reader_result.as_ref() {
-                    collect_successor_command(exit, frame.clone(), capacity)?;
+                    collect_successor_command(exit, frame.clone(), capacity, progress)?;
                 }
                 while let Ok(frame) = exit.transport_rx.try_recv() {
-                    collect_successor_command(exit, frame, capacity)?;
+                    collect_successor_command(exit, frame, capacity, progress)?;
                 }
                 return Ok(Err(MetricsError::ShutdownTimeout { unflushed: 0 }));
             }
