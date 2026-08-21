@@ -10,16 +10,17 @@
 幂等 close/reacquire、结构化错误、fatal discard、显式 close rollback 与 dirty Drop
 均由同一真实 SQLite 合同覆盖。
 
-外部池仍直接实现 `Pool` 并持有 `PhysicalConnectionLease`；没有把 bb8/deadpool
-嵌套为 `DruidPool` 的物理连接工厂。
+外部池仍直接实现 `Pool` 并持有 `PhysicalConnectionLease`；
+`adapter_boundary_test` 使用 `static_assertions` 编译期证明 bb8/deadpool 不实现
+`PhysicalConnectionFactory`，因此没有把外部池嵌套为 `DruidPool` 的物理连接工厂。
 
 ## 适配器矩阵
 
 | 入口 | Prepared / Metadata / close-reacquire | Invalid SQL | dirty transaction explicit close | dirty transaction Drop | release / no nested pool | 结果 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| direct SQLx via `DruidPool` | `item` prepared insert、SQLite metadata、重复 close 与重新查询通过 | `select * from definitely_missing_table` 返回 `DruidError::SqlException`；SQLite sorter 触发即时 discard，重取连接可 `select 1` | 未提交 insert 在 close 后重取为 0 行、auto-commit | 重取新的 logical lease、auto-commit，且 `sqlite_master` 不再有脏表 | direct factory 路径；外部池 boundary tests 共同守住 factory 边界 | VERIFIED（configured SQLite） |
-| bb8 | 同上 | 同上 | 同上 | 同上；`sqlite_master` 无脏表；既有专测断言 `recycle_count=0`、`discard_count=1`、重建后 `create_count=2` | `bb8_adapter_is_not_direct_factory` 通过 | VERIFIED（configured SQLite） |
-| deadpool | 同上 | 同上 | 同上 | 同上；`sqlite_master` 无脏表；既有专测断言 `recycle_count=0`、`discard_count=1`、重建后 `create_count=2` | `deadpool_adapter_is_not_direct_factory` 通过 | VERIFIED（configured SQLite） |
+| direct SQLx via `DruidPool` | `item` prepared insert、SQLite metadata、重复 close 与重新查询通过 | fatal 前创建仅属于当前 `sqlite::memory:` physical lease 的 `fatal_error_marker`；invalid SQL 返回 `DruidError::SqlException`，重取后 marker 不存在且 `select 1` 通过 | 未提交 insert 在 close 后重取为 0 行、auto-commit | 重取新的 logical lease、auto-commit，且 `sqlite_master` 不再有脏表 | direct SQLx adapter/factory 的编译期正向断言 | VERIFIED（configured SQLite） |
+| bb8 | 同上；marker 在 fatal 后不存在 | 同上 | 同上 | 同上；`sqlite_master` 无脏表；既有专测断言 `recycle_count=0`、`discard_count=1`、重建后 `create_count=2` | `Pool` 正向、`PhysicalConnectionFactory` 负向编译期断言 | VERIFIED（configured SQLite） |
+| deadpool | 同上；marker 在 fatal 后不存在 | 同上 | 同上 | 同上；`sqlite_master` 无脏表；既有专测断言 `recycle_count=0`、`discard_count=1`、重建后 `create_count=2` | `Pool` 正向、`PhysicalConnectionFactory` 负向编译期断言 | VERIFIED（configured SQLite） |
 
 `sqlite_wrapper_semantics_test` 还直接观察了 SQLx SQLite fatal 路径：回收回调只收到
 一次 `Discard { recycle_error: None }`，fatal 后两次 close 均不产生第二次回收，且可
@@ -29,7 +30,7 @@
 
 1. invalid SQL 必须保留 `sql_exception()`，不会被扁平化为普通字符串错误。
 2. SQLite database error 被显式 fatal sorter 命中后，当前 holder 必须立刻消失；
-   两次 close 均幂等，随后获取的 lease 仍能执行 SQL。
+   两次 close 均幂等，随后获取的 lease 不含旧 physical `fatal_error_marker`，并可执行 SQL。
 3. 显式 close 在 non-auto-commit 事务中先 rollback；重新获取时没有未提交行。
 4. dirty Drop 必须 discard/replacement，而非把租约复用：下一租约是 auto-commit，且
    `sqlite_master` 不再含脏表。
@@ -40,6 +41,7 @@
 | :--- | :---: | :--- |
 | `cargo fmt --check` | 0 | 格式通过 |
 | `git diff --check` | 0 | 无 whitespace error |
+| `cargo test -p druid-wrapper --test adapter_boundary_test` | 0 | 2 passed；direct SQLx 正向 trait 与 bb8/deadpool Pool-only 负向 trait 门禁 |
 | `cargo test -p druid-wrapper --test sqlx_connection_adapter_test rdbc_connection_contract` | 0 | 1 passed（direct SQLx） |
 | `cargo test -p druid-wrapper --test sqlx_bb8_pool_test rdbc_connection_contract` | 0 | 1 passed（bb8） |
 | `cargo test -p druid-wrapper --test sqlx_deadpool_pool_test rdbc_connection_contract` | 0 | 1 passed（deadpool） |

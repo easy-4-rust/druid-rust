@@ -78,6 +78,21 @@ where
 {
     let mut connection = acquire().await?;
     connection.set_exception_sorter(Arc::new(SqliteDatabaseErrorSorter));
+    connection
+        .exec(
+            "create table fatal_error_marker(id integer primary key, value text not null)",
+            vec![],
+        )
+        .await?;
+    connection
+        .exec(
+            "insert into fatal_error_marker(id, value) values (?, ?)",
+            vec![
+                Value::Int(1),
+                Value::String("physical_lease_only".to_owned()),
+            ],
+        )
+        .await?;
     let error = connection
         .exec("select * from definitely_missing_table", vec![])
         .await
@@ -93,6 +108,16 @@ where
 
     let mut reacquired = acquire().await?;
     assert!(reacquired.auto_commit());
+    let markers = reacquired
+        .fetch(
+            "select name from sqlite_master where type = 'table' and name = 'fatal_error_marker'",
+            vec![],
+        )
+        .await?;
+    assert!(
+        markers.is_empty(),
+        "fatal SQLite error must discard the physical lease instead of reusing its marker state"
+    );
     let rows = reacquired.fetch("select 1", vec![]).await?;
     assert_eq!(rows.len(), 1, "reacquired lease must remain executable");
     reacquired.close().await?;
