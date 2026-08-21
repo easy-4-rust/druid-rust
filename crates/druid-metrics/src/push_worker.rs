@@ -329,16 +329,16 @@ impl PushWorker {
                             .map_err(|error| error.to_string())
                     }),
                 Some(Payload::RequestFullSnapshot(_)) => {
-                    let batch = self
+                    let batches = self
                         .command_executor
                         .as_ref()
                         .ok_or_else(|| "datasource registry is not configured".to_owned())
                         .and_then(|executor| {
                             executor.full_snapshot().map_err(|error| error.to_string())
                         });
-                    match batch {
-                        Ok(batch) => self
-                            .push_new_batch(batch)
+                    match batches {
+                        Ok(batches) => self
+                            .push_full_snapshot_batches(batches)
                             .await
                             .map_err(|error| error.to_string()),
                         Err(error) => Err(error),
@@ -362,6 +362,55 @@ impl PushWorker {
                 },
             )),
         }
+    }
+
+    async fn push_full_snapshot_batches(
+        &mut self,
+        batches: Vec<AggregatedBatch>,
+    ) -> Result<(), PushWorkerError> {
+        for batch in batches {
+            self.wait_for_window_capacity().await?;
+            self.push_new_batch(batch).await?;
+        }
+        Ok(())
+    }
+
+    async fn wait_for_window_capacity(&mut self) -> Result<(), PushWorkerError> {
+        use crate::protocol::server_frame::Payload;
+
+        while self.window.is_full() {
+            let frame = tokio::select! {
+                biased;
+                () = self.cancellation.cancelled() => return Err(PushWorkerError::Cancelled),
+                frame = self.transport_rx.recv() => frame.ok_or(PushWorkerError::TransportClosed)?,
+            };
+
+            match frame.payload {
+                Some(Payload::BatchAck(ack)) => {
+                    self.window
+                        .ack(ack.accepted_sequence)
+                        .map_err(PushWorkerError::Window)?;
+                }
+                Some(Payload::Command(command)) => {
+                    let reply = self.make_command_ack(
+                        command.command_id,
+                        Err("full snapshot command is waiting for ACK capacity".to_owned()),
+                    );
+                    self.transport_tx
+                        .send(reply)
+                        .await
+                        .map_err(|_| PushWorkerError::TransportClosed)?;
+                }
+                Some(Payload::Error(error)) if error.close_stream => {
+                    return Err(PushWorkerError::ServerInterrupted(error.message));
+                }
+                Some(Payload::ResyncRequired(resync)) => {
+                    return Err(PushWorkerError::ServerInterrupted(resync.reason));
+                }
+                Some(Payload::HelloAck(_) | Payload::Error(_)) | None => {}
+            }
+        }
+        Ok(())
     }
 
     fn make_header(&self, sequence: u64) -> FrameHeader {
@@ -402,6 +451,12 @@ pub enum PushWorkerError {
     /// 当前 transport 已关闭。
     #[error("transport channel closed")]
     TransportClosed,
+    /// Worker 在等待 ACK 容量时被 supervisor 取消。
+    #[error("push worker cancelled")]
+    Cancelled,
+    /// 服务端在全量快照分块过程中中断当前发送序列。
+    #[error("server interrupted full snapshot: {0}")]
+    ServerInterrupted(String),
 }
 
 fn now_unix_ms() -> u64 {

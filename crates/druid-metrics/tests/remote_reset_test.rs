@@ -107,6 +107,7 @@ fn executor_for(probe: &Arc<ResetProbe>) -> RegistryCommandExecutor {
             weak_ref: Arc::downgrade(&source),
         }])),
         100,
+        100,
         SqlTextPolicy::FingerprintOnly,
     )
 }
@@ -127,6 +128,26 @@ fn executor_with_expired_unrelated_entry(probe: &Arc<ResetProbe>) -> RegistryCom
                 weak_ref: expired_weak,
             },
         ])),
+        100,
+        100,
+        SqlTextPolicy::FingerprintOnly,
+    )
+}
+
+fn executor_for_probes(probes: &[Arc<ResetProbe>], batch_size: usize) -> RegistryCommandExecutor {
+    let entries = probes
+        .iter()
+        .map(|probe| {
+            let source: Arc<dyn DataSourceMonitorable> = probe.clone();
+            RegistryEntry {
+                datasource_id: probe.identity.id,
+                weak_ref: Arc::downgrade(&source),
+            }
+        })
+        .collect();
+    RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(entries)),
+        batch_size,
         100,
         SqlTextPolicy::FingerprintOnly,
     )
@@ -350,4 +371,65 @@ async fn server_resolves_a_pending_reset_after_failed_ack() {
         .await;
 
     assert!(!handler.has_pending_command(&command_id));
+}
+
+#[tokio::test]
+async fn full_snapshot_respects_batch_size_and_waits_for_ack_capacity_between_chunks() {
+    let probes = vec![
+        Arc::new(ResetProbe::new(81)),
+        Arc::new(ResetProbe::new(82)),
+        Arc::new(ResetProbe::new(83)),
+    ];
+    let pair = TransportPair::new(8);
+    let (_batch_tx, batch_rx) = mpsc::channel::<PushEvent>(4);
+    let (mut client_rx, server_tx, worker) = pair.into_worker(batch_rx, 1);
+    let worker = worker.with_command_executor(executor_for_probes(&probes, 2));
+    let handle = tokio::spawn(worker.run());
+
+    server_tx
+        .send(command_frame(
+            "full-chunked",
+            Some(command::Payload::RequestFullSnapshot(
+                RequestFullSnapshotCmd {},
+            )),
+        ))
+        .await
+        .unwrap();
+
+    let first = client_rx.recv().await.unwrap();
+    let first_batch = match first.payload.as_ref() {
+        Some(client_frame::Payload::SnapshotBatch(batch)) => batch,
+        other => panic!("expected first full batch, got {other:?}"),
+    };
+    assert!(first_batch.is_full_snapshot);
+    assert_eq!(first_batch.entries.len(), 2);
+    assert!(client_rx.try_recv().is_err(), "second chunk waits for ACK");
+
+    let first_sequence = first_batch.header.as_ref().unwrap().sequence;
+    server_tx
+        .send(ServerFrame {
+            payload: Some(server_frame::Payload::BatchAck(
+                druid_metrics::protocol::BatchAck {
+                    header: None,
+                    accepted_sequence: first_sequence,
+                },
+            )),
+        })
+        .await
+        .unwrap();
+
+    let second = client_rx.recv().await.unwrap();
+    let second_batch = match second.payload.as_ref() {
+        Some(client_frame::Payload::SnapshotBatch(batch)) => batch,
+        other => panic!("expected second full batch, got {other:?}"),
+    };
+    assert!(second_batch.is_full_snapshot);
+    assert_eq!(second_batch.entries.len(), 1);
+
+    let ack = client_rx.recv().await.unwrap();
+    assert!(command_ack(&ack).success);
+    assert_eq!(command_ack(&ack).command_id, "full-chunked");
+
+    drop(server_tx);
+    let _ = handle.await.unwrap();
 }

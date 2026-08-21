@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::sync::{Arc, Weak};
 
 use druid::stats::DataSourceMonitorable;
@@ -77,6 +77,10 @@ pub enum RegistryCommandError {
     /// registry 中没有可用于全量快照的数据源。
     #[error("no registered datasource is available for a full snapshot")]
     EmptyRegistry,
+
+    /// 全量快照批次上限无效。
+    #[error("full snapshot batch size must be greater than zero")]
+    InvalidBatchSize,
 }
 
 /// 为 PushWorker 提供真实 datasource reset 与全量快照的 registry 命令边界。
@@ -85,6 +89,7 @@ pub enum RegistryCommandError {
 #[derive(Clone)]
 pub struct RegistryCommandExecutor {
     registry: Arc<RwLock<Vec<RegistryEntry>>>,
+    batch_size: usize,
     max_sql_statements: usize,
     sql_text_policy: SqlTextPolicy,
 }
@@ -94,11 +99,13 @@ impl RegistryCommandExecutor {
     #[must_use]
     pub fn new(
         registry: Arc<RwLock<Vec<RegistryEntry>>>,
+        batch_size: usize,
         max_sql_statements: usize,
         sql_text_policy: SqlTextPolicy,
     ) -> Self {
         Self {
             registry,
+            batch_size,
             max_sql_statements,
             sql_text_policy,
         }
@@ -154,16 +161,19 @@ impl RegistryCommandExecutor {
         Ok(())
     }
 
-    /// 从当前全部已注册 datasource 生成一个真实、非空的全量聚合批次。
+    /// 从当前全部已注册 datasource 生成真实、非空且受 batch_size 限制的全量批次。
     ///
     /// 快照沿用 Task 2 的数量限制和 SQL 隐私编码，不包含原始 SQL 或 bind 值。
-    pub fn full_snapshot(&self) -> Result<AggregatedBatch, RegistryCommandError> {
+    pub fn full_snapshot(&self) -> Result<Vec<AggregatedBatch>, RegistryCommandError> {
+        if self.batch_size == 0 {
+            return Err(RegistryCommandError::InvalidBatchSize);
+        }
         let registered = self.live_datasources_by_id()?;
         if registered.is_empty() {
             return Err(RegistryCommandError::EmptyRegistry);
         }
 
-        let mut entries = Vec::with_capacity(registered.len());
+        let mut entries = VecDeque::with_capacity(registered.len());
         for (datasource_id, source) in registered {
             let snapshot = source.try_snapshot().map_err(|error| {
                 RegistryCommandError::DatasourceUnavailable {
@@ -171,17 +181,22 @@ impl RegistryCommandExecutor {
                     reason: format!("{error:?}"),
                 }
             })?;
-            entries.push(encode_snapshot(
+            entries.push_back(encode_snapshot(
                 snapshot,
                 self.max_sql_statements,
                 self.sql_text_policy,
             ));
         }
 
-        Ok(AggregatedBatch {
-            entries,
-            is_full_snapshot: true,
-        })
+        let mut batches = Vec::new();
+        while !entries.is_empty() {
+            let take = self.batch_size.min(entries.len());
+            batches.push(AggregatedBatch {
+                entries: entries.drain(..take).collect(),
+                is_full_snapshot: true,
+            });
+        }
+        Ok(batches)
     }
 
     fn live_datasources_by_id(
