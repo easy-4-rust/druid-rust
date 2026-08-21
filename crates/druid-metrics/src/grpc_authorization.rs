@@ -19,8 +19,9 @@ impl GrpcAuthorization {
             base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"));
         let header = format!("Basic {encoded}");
         // `Basic ` 与 STANDARD base64 仅产生合法 ASCII metadata 字节。
-        let value = MetadataValue::try_from(header)
+        let mut value = MetadataValue::try_from(header)
             .expect("Basic plus standard base64 is valid ASCII metadata");
+        value.set_sensitive(true);
         Self { value }
     }
 
@@ -38,5 +39,32 @@ impl fmt::Debug for GrpcAuthorization {
             .debug_struct("GrpcAuthorization")
             .field("value", &"[REDACTED]")
             .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::GrpcAuthorization;
+
+    #[test]
+    fn applied_authorization_metadata_is_sensitive_and_debug_redacted() {
+        const CANONICAL_AUTHORIZATION: &str = "Basic c2Vuc2l0aXZlLXVzZXI6c2Vuc2l0aXZlLXBhc3N3b3Jk";
+        let authorization = GrpcAuthorization::basic("sensitive-user", "sensitive-password");
+
+        for provider in [authorization.clone(), authorization] {
+            let mut request = tonic::Request::new(());
+            provider.apply(&mut request);
+            let metadata = request
+                .metadata()
+                .get("authorization")
+                .expect("authorization metadata is applied");
+            assert!(
+                metadata.is_sensitive(),
+                "Authorization must use HPACK never-index and redacted Debug"
+            );
+            let debug = format!("request={request:?} metadata={:?}", request.metadata());
+            assert!(!debug.contains(CANONICAL_AUTHORIZATION), "{debug}");
+            assert!(!debug.contains("sensitive-password"), "{debug}");
+        }
     }
 }
