@@ -1,6 +1,7 @@
 //! Tonic 指标客户端与有界重连 supervisor。
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
@@ -15,7 +16,9 @@ use crate::protocol::metrics_ingest_client::MetricsIngestClient;
 use crate::protocol::{
     client_frame, server_frame, ClientFrame, ClientGoodbye, ClientHello, FrameHeader, ServerFrame,
 };
-use crate::push_worker::{PushEvent, PushProgress, PushWorker, PushWorkerExit};
+use crate::push_worker::{
+    FullSnapshotCommandState, PushEvent, PushProgress, PushWorker, PushWorkerExit,
+};
 use crate::registry::RegistryCommandExecutor;
 use crate::sequence_window::PendingFrame;
 
@@ -45,6 +48,7 @@ pub struct GrpcMetricsClient {
     cancellation: CancellationToken,
     supervisor_handle: Option<JoinHandle<Result<(), MetricsError>>>,
     progress: PushProgress,
+    generation: Arc<AtomicU64>,
     shutdown_timeout: Duration,
 }
 
@@ -73,7 +77,9 @@ impl GrpcMetricsClient {
         let supervisor_cancel = cancellation.clone();
         let supervisor_config = config.clone();
         let progress = PushProgress::new();
+        let generation = Arc::new(AtomicU64::new(0));
         let supervisor_progress = progress.clone();
+        let supervisor_generation = Arc::clone(&generation);
         let supervisor_handle = tokio::spawn(async move {
             run_supervisor(
                 supervisor_config,
@@ -83,6 +89,7 @@ impl GrpcMetricsClient {
                 command_executor,
                 supervisor_cancel,
                 supervisor_progress,
+                supervisor_generation,
             )
             .await
         });
@@ -92,6 +99,7 @@ impl GrpcMetricsClient {
             cancellation,
             supervisor_handle: Some(supervisor_handle),
             progress,
+            generation,
             shutdown_timeout: config.shutdown_timeout,
         })
     }
@@ -103,7 +111,12 @@ impl GrpcMetricsClient {
             .as_ref()
             .ok_or_else(|| MetricsError::ChannelSend("gRPC client is shutting down".to_owned()))?;
         self.progress.queue_batch();
-        if batch_tx.send(PushEvent::Batch(batch)).await.is_err() {
+        let generation = self.generation.load(Ordering::Acquire);
+        if batch_tx
+            .send(PushEvent::BatchAt { generation, batch })
+            .await
+            .is_err()
+        {
             self.progress.undo_queue_batch();
             return Err(MetricsError::ChannelSend(
                 "gRPC push worker stopped".to_owned(),
@@ -175,6 +188,7 @@ async fn run_supervisor(
     command_executor: Option<RegistryCommandExecutor>,
     cancellation: CancellationToken,
     progress: PushProgress,
+    generation: Arc<AtomicU64>,
 ) -> Result<(), MetricsError> {
     let mut pending_frames = Vec::new();
     let mut next_sequence = Some(1);
@@ -182,10 +196,20 @@ async fn run_supervisor(
     let mut completed_session = false;
     let mut authoritative_batches = Vec::new();
     let mut resync_required = false;
-    let mut pending_full_snapshot_command_id = None;
+    let mut full_snapshot_command = None;
+    let mut completed_full_snapshot_commands = Vec::new();
+    let mut preserved_live_events = Vec::new();
 
     loop {
         if (transport.require_full_snapshot && completed_session) || resync_required {
+            let cutoff_generation = generation
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                    current.checked_add(1)
+                })
+                .map_err(|_| {
+                    MetricsError::ChannelSend("resync generation space exhausted".to_owned())
+                })?
+                + 1;
             let executor = command_executor.as_ref().ok_or_else(|| {
                 MetricsError::ChannelSend(
                     "server requires a registry-derived full snapshot, but no registry is configured"
@@ -195,12 +219,21 @@ async fn run_supervisor(
             for _ in authoritative_batches.drain(..) {
                 progress.undo_queue_batch();
             }
+            for _ in preserved_live_events.drain(..) {
+                progress.undo_queue_batch();
+            }
             authoritative_batches = executor.full_snapshot().map_err(other_error)?;
             pending_frames.clear();
             progress.set_pending_frames(0);
             while let Ok(event) = batch_rx.try_recv() {
-                if matches!(event, PushEvent::Batch(_)) {
-                    progress.undo_queue_batch();
+                match event {
+                    PushEvent::BatchAt { generation, batch } if generation >= cutoff_generation => {
+                        preserved_live_events.push(PushEvent::BatchAt { generation, batch });
+                    }
+                    PushEvent::Batch(_) | PushEvent::BatchAt { .. } => {
+                        progress.undo_queue_batch();
+                    }
+                    PushEvent::Resend(_) => {}
                 }
             }
             for _ in &authoritative_batches {
@@ -218,7 +251,9 @@ async fn run_supervisor(
             cancellation.clone(),
             progress.clone(),
             authoritative_batches,
-            pending_full_snapshot_command_id,
+            full_snapshot_command,
+            completed_full_snapshot_commands,
+            preserved_live_events,
         )
         .await?;
         batch_rx = exit.batch_rx;
@@ -226,7 +261,9 @@ async fn run_supervisor(
         next_sequence = exit.next_sequence;
         authoritative_batches = exit.authoritative_batches;
         resync_required = exit.resync_required;
-        pending_full_snapshot_command_id = exit.pending_full_snapshot_command_id;
+        full_snapshot_command = exit.full_snapshot_command;
+        completed_full_snapshot_commands = exit.completed_full_snapshot_commands;
+        preserved_live_events = exit.preserved_live_events;
         completed_session = true;
 
         if batch_rx.is_closed()
@@ -234,7 +271,8 @@ async fn run_supervisor(
             && pending_frames.is_empty()
             && authoritative_batches.is_empty()
             && !resync_required
-            && pending_full_snapshot_command_id.is_none()
+            && full_snapshot_command.is_none()
+            && preserved_live_events.is_empty()
         {
             return Ok(());
         }
@@ -278,7 +316,9 @@ async fn run_connected_session(
     cancellation: CancellationToken,
     progress: PushProgress,
     authoritative_batches: Vec<AggregatedBatch>,
-    pending_full_snapshot_command_id: Option<String>,
+    full_snapshot_command: Option<FullSnapshotCommandState>,
+    completed_full_snapshot_commands: Vec<String>,
+    preserved_live_events: Vec<PushEvent>,
 ) -> Result<PushWorkerExit, MetricsError> {
     let ConnectedTransport {
         outbound_tx,
@@ -323,16 +363,29 @@ async fn run_connected_session(
     .with_progress(progress)
     .with_initial_batches(authoritative_batches)
     .with_first_batch_full_snapshot(force_first_full)
-    .with_pending_full_snapshot_command(pending_full_snapshot_command_id);
+    .with_full_snapshot_command_state(full_snapshot_command, completed_full_snapshot_commands);
+    worker = worker.with_preserved_live_events(preserved_live_events);
     if let Some(executor) = command_executor {
         worker = worker.with_command_executor(executor);
     }
-    let exit = worker.run_session().await;
+    let mut exit = worker.run_session().await;
 
-    let clean_shutdown =
-        exit.pending_frames.is_empty() && exit.batch_rx.is_closed() && exit.batch_rx.is_empty();
-    let reader_closed_before_goodbye = clean_shutdown && reader_handle.is_finished();
-    let goodbye_result = if clean_shutdown {
+    let data_clean = exit.pending_frames.is_empty()
+        && exit.batch_rx.is_closed()
+        && exit.batch_rx.is_empty()
+        && exit.authoritative_batches.is_empty()
+        && exit.preserved_live_events.is_empty()
+        && !exit.resync_required;
+    let reply_confirmation = data_clean
+        && exit.reply_sent_this_session
+        && matches!(
+            exit.full_snapshot_command,
+            Some(FullSnapshotCommandState::ReplyReady { .. })
+        );
+    let clean_shutdown = data_clean && exit.full_snapshot_command.is_none();
+    let goodbye_required = clean_shutdown || reply_confirmation;
+    let reader_closed_before_goodbye = goodbye_required && reader_handle.is_finished();
+    let goodbye_result = if goodbye_required && !reader_closed_before_goodbye {
         goodbye_tx
             .send(ClientFrame {
                 payload: Some(client_frame::Payload::Goodbye(ClientGoodbye {
@@ -347,7 +400,15 @@ async fn run_connected_session(
     };
     drop(goodbye_tx);
     let reader_result = join_reader(&mut reader_handle, config.shutdown_timeout).await;
-    if clean_shutdown {
+    if reply_confirmation {
+        if reader_closed_before_goodbye || goodbye_result.is_err() || reader_result.is_err() {
+            tracing::warn!(
+                "command reply was not confirmed by an ordered ClientGoodbye response close"
+            );
+            return Ok(exit);
+        }
+        exit.confirm_full_snapshot_command_reply(config.ack_window_capacity);
+    } else if clean_shutdown {
         if reader_closed_before_goodbye {
             return Err(MetricsError::ChannelSend(
                 "server response stream closed before ClientGoodbye".to_owned(),

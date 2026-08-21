@@ -2,7 +2,7 @@
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use druid::stats::{
@@ -1043,6 +1043,248 @@ async fn resync_required_supersedes_pending_with_monotonic_registry_full_snapsho
         .expect("probe stops");
 }
 
+struct CutoffBarrierSource {
+    active: AtomicU32,
+    snapshot_sampled: Notify,
+    release: (Mutex<bool>, Condvar),
+}
+
+impl CutoffBarrierSource {
+    fn new(active: u32) -> Self {
+        Self {
+            active: AtomicU32::new(active),
+            snapshot_sampled: Notify::new(),
+            release: (Mutex::new(false), Condvar::new()),
+        }
+    }
+
+    fn set_active(&self, active: u32) {
+        self.active.store(active, Ordering::Release);
+    }
+
+    fn release_snapshot(&self) {
+        let (lock, condition) = &self.release;
+        *lock.lock().expect("cutoff gate lock") = true;
+        condition.notify_all();
+    }
+}
+
+impl DataSourceMonitorable for CutoffBarrierSource {
+    fn name(&self) -> &str {
+        "cutoff-orders"
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {}
+
+    fn identity(&self) -> DataSourceIdentity {
+        DataSourceIdentity {
+            id: 42,
+            name: "orders".to_owned(),
+            driver_name: Some("postgresql".to_owned()),
+        }
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        let sampled_active = self.active.load(Ordering::Acquire);
+        self.snapshot_sampled.notify_waiters();
+        let (lock, condition) = &self.release;
+        let mut released = lock.lock().expect("cutoff gate lock");
+        while !*released {
+            released = condition.wait(released).expect("cutoff gate wait");
+        }
+        Ok(DruidTelemetrySnapshot {
+            identity: self.identity(),
+            pool_snapshot: PoolSnapshot {
+                active_count: sampled_active,
+                idle_count: 0,
+                max_active: 32,
+                max_idle: 24,
+                waiting_count: 0,
+            },
+            sql_stats: Vec::new(),
+            wall_snapshot: None,
+            sampling_time_millis: 1_755_734_400_000,
+        })
+    }
+}
+
+#[derive(Clone)]
+struct ResyncCutoffProbe {
+    connections: Arc<AtomicUsize>,
+    observed: mpsc::UnboundedSender<Vec<(u64, u32, bool)>>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for ResyncCutoffProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let observed = self.observed.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: connection == 0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(first) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let first_sequence = frame_header(&first).expect("first header").sequence;
+            if connection == 0 {
+                let _ = tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::ResyncRequired(ResyncRequired {
+                            header: Some(reply_header(&header)),
+                            reason: "cutoff_test".to_owned(),
+                            expected_sequence: first_sequence,
+                        })),
+                    }))
+                    .await;
+                while inbound.message().await.ok().flatten().is_some() {}
+                return;
+            }
+
+            let first_observation = snapshot_observation(&first);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: first_observation.0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(second) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let second_observation = snapshot_observation(&second);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: second_observation.0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let _ = observed.send(vec![first_observation, second_observation]);
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+fn snapshot_observation(frame: &ClientFrame) -> (u64, u32, bool) {
+    let batch = match frame.payload.as_ref() {
+        Some(client_frame::Payload::SnapshotBatch(batch)) => batch,
+        other => panic!("expected SnapshotBatch, got {other:?}"),
+    };
+    (
+        batch.header.as_ref().expect("snapshot header").sequence,
+        batch
+            .entries
+            .first()
+            .and_then(|entry| entry.pool.as_ref())
+            .map_or(0, |pool| pool.active_count),
+        batch.is_full_snapshot,
+    )
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn resync_cutoff_preserves_live_update_queued_after_snapshot_sampling() {
+    let source = Arc::new(CutoffBarrierSource::new(9));
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry {
+            datasource_id: 42,
+            weak_ref: Arc::downgrade(&monitorable),
+        }])),
+        8,
+        32,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let (observed_tx, mut observed_rx) = mpsc::unbounded_channel();
+    let service = ResyncCutoffProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        observed: observed_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&endpoint, "resync-cutoff"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    let snapshot_sampled = source.snapshot_sampled.notified();
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(1, 2)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("queue pre-cutoff frame");
+    tokio::time::timeout(TEST_TIMEOUT, snapshot_sampled)
+        .await
+        .expect("authoritative snapshot sampled before queue drain");
+    source.set_active(11);
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(11, 12)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("queue post-cutoff live update");
+    source.release_snapshot();
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("authoritative replacement and post-cutoff live update flush");
+    assert_eq!(
+        tokio::time::timeout(TEST_TIMEOUT, observed_rx.recv())
+            .await
+            .expect("server observed replacement and live update")
+            .expect("observation result"),
+        vec![(2, 9, true), (3, 11, false)]
+    );
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
 #[derive(Clone)]
 struct FullCommandDisconnectProbe {
     connections: Arc<AtomicUsize>,
@@ -1266,6 +1508,161 @@ async fn remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect()
         "three registry entries arrive without omission; only the unacked chunk is replayed"
     );
     assert!(command_success, "success ACK follows every full chunk ACK");
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
+#[derive(Clone)]
+struct CommandReplyReconnectProbe {
+    connections: Arc<AtomicUsize>,
+    final_chunk_acked: Arc<Notify>,
+    observed: mpsc::UnboundedSender<(bool, bool)>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for CommandReplyReconnectProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let final_chunk_acked = Arc::clone(&self.final_chunk_acked);
+        let observed = self.observed.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: false,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            if connection == 0 {
+                if tx
+                    .send(Ok(full_snapshot_command(&header, "reply-reconnect")))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(chunk) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (sequence, _) = full_chunk_identity(&chunk);
+                let _ = tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence,
+                        })),
+                    }))
+                    .await;
+                final_chunk_acked.notify_waiters();
+                // Deliberately close the response without reading the first CommandAck.
+                return;
+            }
+
+            if tx
+                .send(Ok(full_snapshot_command(&header, "reply-reconnect")))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(replayed_reply) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let replayed_success = successful_command_ack(&replayed_reply, "reply-reconnect");
+            let Some(idempotent_reply) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let idempotent_success = successful_command_ack(&idempotent_reply, "reply-reconnect");
+            let _ = observed.send((replayed_success, idempotent_success));
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+fn full_snapshot_command(header: &FrameHeader, command_id: &str) -> ServerFrame {
+    ServerFrame {
+        payload: Some(server_frame::Payload::Command(Command {
+            header: Some(reply_header(header)),
+            command_id: command_id.to_owned(),
+            payload: Some(command::Payload::RequestFullSnapshot(
+                RequestFullSnapshotCmd {},
+            )),
+        })),
+    }
+}
+
+fn successful_command_ack(frame: &ClientFrame, command_id: &str) -> bool {
+    matches!(
+        frame.payload.as_ref(),
+        Some(client_frame::Payload::CommandAck(ack))
+            if ack.command_id == command_id && ack.success
+    )
+}
+
+#[tokio::test]
+async fn final_command_reply_replays_after_half_close_and_duplicate_id_is_idempotent() {
+    let source = Arc::new(CommandSource::new(52));
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry {
+            datasource_id: 52,
+            weak_ref: Arc::downgrade(&monitorable),
+        }])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let final_chunk_acked = Arc::new(Notify::new());
+    let (observed_tx, mut observed_rx) = mpsc::unbounded_channel();
+    let service = CommandReplyReconnectProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        final_chunk_acked: Arc::clone(&final_chunk_acked),
+        observed: observed_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&endpoint, "reply-reconnect"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    tokio::time::timeout(TEST_TIMEOUT, final_chunk_acked.notified())
+        .await
+        .expect("server ACKs final chunk before half-close");
+    let observed = tokio::time::timeout(TEST_TIMEOUT, observed_rx.recv())
+        .await
+        .expect("server observes replay and idempotent duplicate reply")
+        .expect("command reply result");
+    assert_eq!(observed, (true, true));
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("durable command reply is confirmed after reconnect");
     shutdown.cancel();
     server_handle
         .await
