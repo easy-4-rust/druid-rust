@@ -400,13 +400,13 @@ async fn metrics_handler(
     // Per-datasource metrics
     for entry in repo.all_datasources() {
         let ds = &entry.datasource;
-        let service = entry.datasource.name.as_deref().unwrap_or("unknown");
-        let db_type = entry.datasource.db_type.as_deref().unwrap_or("unknown");
+        let service = prometheus_label_value(entry.datasource.name.as_deref().unwrap_or("unknown"));
+        let db_type =
+            prometheus_label_value(entry.datasource.db_type.as_deref().unwrap_or("unknown"));
+        let datasource = prometheus_label_value(&ds.identity.to_string());
 
-        let labels = format!(
-            "service=\"{service}\",datasource=\"{identity}\",db_type=\"{db_type}\"",
-            identity = ds.identity
-        );
+        let labels =
+            format!("service=\"{service}\",datasource=\"{datasource}\",db_type=\"{db_type}\"");
 
         output.push_str("# HELP druid_admin_datasource_active_count Active connection count.\n");
         output.push_str("# TYPE druid_admin_datasource_active_count gauge\n");
@@ -465,4 +465,18 @@ async fn metrics_handler(
         )],
         output,
     )
+}
+
+fn prometheus_label_value(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
 }

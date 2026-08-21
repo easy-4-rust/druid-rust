@@ -209,3 +209,39 @@ fn repository_clear_removes_all() {
     repo.clear();
     assert!(repo.is_empty());
 }
+
+#[test]
+fn repository_apply_batch_is_atomic_and_counts_batch_units() {
+    let repo = MetricsRepository::new();
+    let (first_id, first_entry) = make_entry(1, "mysql", 1);
+    let (second_id, second_entry) = make_entry(2, "postgresql", 1);
+    assert!(repo.apply_batch(vec![
+        (first_id.clone(), first_entry),
+        (second_id.clone(), second_entry),
+    ]));
+    assert_eq!(repo.counters(), (1, 0));
+
+    let (_, newer_first) = make_entry(1, "sqlite", 2);
+    let (_, stale_second) = make_entry(2, "sqlite", 1);
+    assert!(
+        !repo.apply_batch(vec![
+            (first_id.clone(), newer_first),
+            (second_id.clone(), stale_second),
+        ]),
+        "one stale member rejects the entire batch"
+    );
+    assert_eq!(repo.counters(), (2, 1));
+    assert_eq!(
+        repo.get_datasource(&first_id)
+            .expect("first entry remains")
+            .sequence,
+        1,
+        "newer first entry must not become partially visible"
+    );
+    assert_eq!(
+        repo.get_datasource(&second_id)
+            .expect("second entry remains")
+            .sequence,
+        1
+    );
+}

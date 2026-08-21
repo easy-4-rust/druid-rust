@@ -12,6 +12,7 @@ use druid_metrics::protocol::{
 };
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status, Streaming};
 
 use crate::model::dto::{DataSourceContent, SqlListContent, WallResult};
@@ -25,6 +26,7 @@ const PROTOCOL_VERSION: u32 = 1;
 pub struct IngestService {
     repo: MetricsRepository,
     handler: Arc<IngestHandler>,
+    shutdown: CancellationToken,
 }
 
 impl IngestService {
@@ -34,7 +36,15 @@ impl IngestService {
         Self {
             repo,
             handler: Arc::new(IngestHandler::new()),
+            shutdown: CancellationToken::new(),
         }
+    }
+
+    /// 注入 Admin server supervisor 的连接级关闭令牌。
+    #[must_use]
+    pub fn with_shutdown_token(mut self, shutdown: CancellationToken) -> Self {
+        self.shutdown = shutdown;
+        self
     }
 
     /// 返回底层指标仓库引用。
@@ -61,11 +71,17 @@ impl MetricsIngest for IngestService {
         let (response_tx, response_rx) = mpsc::channel(RESPONSE_CAPACITY);
         let handler = Arc::clone(&self.handler);
         let repository = self.repo.clone();
+        let shutdown = self.shutdown.clone();
 
         tokio::spawn(async move {
             let mut stream_identity = None;
             loop {
-                let frame = match inbound.message().await {
+                let inbound_frame = tokio::select! {
+                    biased;
+                    () = shutdown.cancelled() => break,
+                    frame = inbound.message() => frame,
+                };
+                let frame = match inbound_frame {
                     Ok(Some(frame)) => frame,
                     Ok(None) => break,
                     Err(error) => {
@@ -183,14 +199,16 @@ impl MetricsIngest for IngestService {
                     Some(client_frame::Payload::Goodbye(_))
                 );
                 let response = handler.handle_frame(&frame).await;
+                let close_after_response = matches!(
+                    response.as_ref().and_then(|frame| frame.payload.as_ref()),
+                    Some(server_frame::Payload::Error(error)) if error.close_stream
+                );
                 if matches!(
                     response.as_ref().and_then(|frame| frame.payload.as_ref()),
                     Some(server_frame::Payload::BatchAck(_))
                 ) {
                     if let Some(prepared) = prepared {
-                        for (id, entry) in prepared {
-                            repository.upsert_datasource(id, entry);
-                        }
+                        repository.apply_batch(prepared);
                     }
                 }
                 if let Some(response) = response {
@@ -198,7 +216,7 @@ impl MetricsIngest for IngestService {
                         break;
                     }
                 }
-                if is_goodbye {
+                if is_goodbye || close_after_response {
                     break;
                 }
             }

@@ -5,8 +5,10 @@
 //! frame；调用方重连后通过 [`PushEvent::Resend`] 恢复并发送完全相同的字节。
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tokio_util::sync::CancellationToken;
 
 use crate::aggregator::AggregatedBatch;
@@ -76,6 +78,8 @@ impl TransportPair {
             deferred_server_capacity,
             replay_frames: VecDeque::new(),
             force_first_batch_full_snapshot: false,
+            initial_batches: VecDeque::new(),
+            progress: None,
         };
         (self.client_rx, self.server_tx, worker)
     }
@@ -99,6 +103,8 @@ pub struct PushWorker {
     deferred_server_capacity: usize,
     replay_frames: VecDeque<PendingFrame>,
     force_first_batch_full_snapshot: bool,
+    initial_batches: VecDeque<AggregatedBatch>,
+    progress: Option<PushProgress>,
 }
 
 /// 一次 transport 会话退出后交还给重连 supervisor 的全部状态。
@@ -107,6 +113,85 @@ pub struct PushWorkerExit {
     pub pending_frames: Vec<PendingFrame>,
     /// 尚未消费的聚合批次接收端；重连后继续由同一单写者状态机消费。
     pub batch_rx: mpsc::Receiver<PushEvent>,
+    /// 下一网络会话必须继续使用的 sequence 分配位置。
+    pub next_sequence: Option<u64>,
+    /// 当前连接尚未来得及发送的权威全量批次。
+    pub authoritative_batches: Vec<AggregatedBatch>,
+}
+
+/// 跨 transport 会话共享的真实 queued/pending 进度。
+#[derive(Clone)]
+pub struct PushProgress {
+    queued_batches: Arc<AtomicUsize>,
+    pending_frames: Arc<AtomicUsize>,
+    changed: Arc<Notify>,
+}
+
+impl PushProgress {
+    /// 创建空进度计数器。
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            queued_batches: Arc::new(AtomicUsize::new(0)),
+            pending_frames: Arc::new(AtomicUsize::new(0)),
+            changed: Arc::new(Notify::new()),
+        }
+    }
+
+    /// 返回尚未被 worker 消费的批次数。
+    #[must_use]
+    pub fn queued_batches(&self) -> usize {
+        self.queued_batches.load(Ordering::Acquire)
+    }
+
+    /// 返回已编码发送但尚未 ACK 的 frame 数。
+    #[must_use]
+    pub fn pending_frames(&self) -> usize {
+        self.pending_frames.load(Ordering::Acquire)
+    }
+
+    /// 返回当前真实未刷新总数。
+    #[must_use]
+    pub fn unflushed(&self) -> usize {
+        self.queued_batches().saturating_add(self.pending_frames())
+    }
+
+    /// 等待进度发生变化。
+    pub async fn changed(&self) {
+        self.changed.notified().await;
+    }
+
+    /// 在批次进入有界客户端队列前记账。
+    pub fn queue_batch(&self) {
+        self.queued_batches.fetch_add(1, Ordering::AcqRel);
+        self.changed.notify_waiters();
+    }
+
+    /// 撤销一次未成功入队的批次记账。
+    pub fn undo_queue_batch(&self) {
+        self.consume_queued_batch();
+    }
+
+    fn consume_queued_batch(&self) {
+        let result =
+            self.queued_batches
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |queued| {
+                    queued.checked_sub(1)
+                });
+        debug_assert!(result.is_ok(), "queued batch progress underflow");
+        self.changed.notify_waiters();
+    }
+
+    pub(crate) fn set_pending_frames(&self, pending: usize) {
+        self.pending_frames.store(pending, Ordering::Release);
+        self.changed.notify_waiters();
+    }
+}
+
+impl Default for PushProgress {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PushWorker {
@@ -138,6 +223,8 @@ impl PushWorker {
             deferred_server_capacity,
             replay_frames: VecDeque::new(),
             force_first_batch_full_snapshot: false,
+            initial_batches: VecDeque::new(),
+            progress: None,
         }
     }
 
@@ -183,6 +270,28 @@ impl PushWorker {
         self
     }
 
+    /// 恢复 supervisor 保存的下一个 sequence，即使当前没有 pending frame。
+    #[must_use]
+    pub fn with_next_sequence(mut self, next_sequence: Option<u64>) -> Self {
+        self.window = SequenceWindow::with_next_sequence(self.window.capacity(), next_sequence);
+        self
+    }
+
+    /// 在恢复普通队列前发送权威 registry 全量快照批次。
+    #[must_use]
+    pub fn with_initial_batches(mut self, batches: Vec<AggregatedBatch>) -> Self {
+        self.initial_batches = batches.into();
+        self
+    }
+
+    /// 注入跨连接共享的真实进度计数器。
+    #[must_use]
+    pub fn with_progress(mut self, progress: PushProgress) -> Self {
+        progress.set_pending_frames(self.window.len());
+        self.progress = Some(progress);
+        self
+    }
+
     /// 运行 worker，直到取消、输入关闭或 transport 断开。
     ///
     /// 返回仍未 ACK 的完整 frame，供下一连接按原 sequence、原字节恢复。
@@ -196,6 +305,31 @@ impl PushWorker {
         while let Some(pending) = self.replay_frames.pop_front() {
             if let Err(error) = self.send_encoded_frame(&pending.encoded_frame).await {
                 tracing::warn!(%error, "failed to replay pending metrics frame");
+                return self.into_exit();
+            }
+        }
+        while !self.initial_batches.is_empty() {
+            if let Err(error) = self.wait_for_window_capacity().await {
+                tracing::warn!(%error, "failed waiting to send authoritative full snapshot");
+                return self.into_exit();
+            }
+            let batch = self
+                .initial_batches
+                .pop_front()
+                .expect("authoritative batch queue was checked as non-empty");
+            if let Some(progress) = &self.progress {
+                progress.consume_queued_batch();
+            }
+            let retry_batch = batch.clone();
+            let pending_before = self.window.len();
+            if let Err(error) = self.push_new_batch(batch).await {
+                if self.window.len() == pending_before {
+                    self.initial_batches.push_front(retry_batch);
+                    if let Some(progress) = &self.progress {
+                        progress.queue_batch();
+                    }
+                }
+                tracing::warn!(%error, "failed to send authoritative full snapshot");
                 return self.into_exit();
             }
         }
@@ -254,12 +388,17 @@ impl PushWorker {
         PushWorkerExit {
             pending_frames: self.window.pending_frames(),
             batch_rx: self.batch_rx,
+            next_sequence: self.window.next_sequence(),
+            authoritative_batches: self.initial_batches.into(),
         }
     }
 
     async fn process_push_event(&mut self, event: PushEvent) -> Result<(), PushWorkerError> {
         match event {
             PushEvent::Batch(mut batch) => {
+                if let Some(progress) = &self.progress {
+                    progress.consume_queued_batch();
+                }
                 if self.force_first_batch_full_snapshot {
                     batch.is_full_snapshot = true;
                     self.force_first_batch_full_snapshot = false;
@@ -295,6 +434,7 @@ impl PushWorker {
                 })
             })
             .map_err(PushWorkerError::Window)?;
+        self.update_pending_progress();
         self.send_encoded_frame(&pending.encoded_frame).await
     }
 
@@ -303,6 +443,7 @@ impl PushWorker {
         self.window
             .restore(pending)
             .map_err(PushWorkerError::Window)?;
+        self.update_pending_progress();
         self.send_outbound(frame).await
     }
 
@@ -354,7 +495,7 @@ impl PushWorker {
         use crate::protocol::server_frame::Payload;
 
         if let Some(Payload::BatchAck(ack)) = frame.payload.as_ref() {
-            if let Err(error) = self.window.ack(ack.accepted_sequence) {
+            if let Err(error) = self.acknowledge(ack.accepted_sequence) {
                 tracing::warn!(sequence = ack.accepted_sequence, %error, "unexpected ACK");
             }
             return Ok(());
@@ -373,7 +514,7 @@ impl PushWorker {
 
         match frame.payload {
             Some(Payload::BatchAck(ack)) => {
-                if let Err(error) = self.window.ack(ack.accepted_sequence) {
+                if let Err(error) = self.acknowledge(ack.accepted_sequence) {
                     tracing::warn!(sequence = ack.accepted_sequence, %error, "unexpected ACK");
                 }
                 true
@@ -501,8 +642,7 @@ impl PushWorker {
 
             match frame.payload {
                 Some(Payload::BatchAck(ack)) => {
-                    self.window
-                        .ack(ack.accepted_sequence)
+                    self.acknowledge(ack.accepted_sequence)
                         .map_err(PushWorkerError::Window)?;
                 }
                 Some(Payload::Command(command)) => {
@@ -533,6 +673,18 @@ impl PushWorker {
             stream_epoch: self.stream_epoch,
             sequence,
             emitted_at_unix_ms: now_unix_ms(),
+        }
+    }
+
+    fn acknowledge(&mut self, sequence: u64) -> Result<(), SequenceWindowError> {
+        self.window.ack(sequence)?;
+        self.update_pending_progress();
+        Ok(())
+    }
+
+    fn update_pending_progress(&self) {
+        if let Some(progress) = &self.progress {
+            progress.set_pending_frames(self.window.len());
         }
     }
 }

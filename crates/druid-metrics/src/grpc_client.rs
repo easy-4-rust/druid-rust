@@ -1,7 +1,6 @@
 //! Tonic 指标客户端与有界重连 supervisor。
 
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
@@ -16,7 +15,7 @@ use crate::protocol::metrics_ingest_client::MetricsIngestClient;
 use crate::protocol::{
     client_frame, server_frame, ClientFrame, ClientGoodbye, ClientHello, FrameHeader, ServerFrame,
 };
-use crate::push_worker::{PushEvent, PushWorker, PushWorkerExit};
+use crate::push_worker::{PushEvent, PushProgress, PushWorker, PushWorkerExit};
 use crate::registry::RegistryCommandExecutor;
 use crate::sequence_window::PendingFrame;
 
@@ -45,7 +44,7 @@ pub struct GrpcMetricsClient {
     batch_tx: Option<mpsc::Sender<PushEvent>>,
     cancellation: CancellationToken,
     supervisor_handle: Option<JoinHandle<Result<(), MetricsError>>>,
-    unresolved_batches: Arc<AtomicUsize>,
+    progress: PushProgress,
     shutdown_timeout: Duration,
 }
 
@@ -73,29 +72,26 @@ impl GrpcMetricsClient {
         let cancellation = CancellationToken::new();
         let supervisor_cancel = cancellation.clone();
         let supervisor_config = config.clone();
-        let unresolved_batches = Arc::new(AtomicUsize::new(0));
-        let supervisor_unresolved = Arc::clone(&unresolved_batches);
+        let progress = PushProgress::new();
+        let supervisor_progress = progress.clone();
         let supervisor_handle = tokio::spawn(async move {
-            let result = run_supervisor(
+            run_supervisor(
                 supervisor_config,
                 stream_epoch,
                 batch_rx,
                 initial_transport,
                 command_executor,
                 supervisor_cancel,
+                supervisor_progress,
             )
-            .await;
-            if result.is_ok() {
-                supervisor_unresolved.store(0, Ordering::Release);
-            }
-            result
+            .await
         });
 
         Ok(Self {
             batch_tx: Some(batch_tx),
             cancellation,
             supervisor_handle: Some(supervisor_handle),
-            unresolved_batches,
+            progress,
             shutdown_timeout: config.shutdown_timeout,
         })
     }
@@ -106,12 +102,34 @@ impl GrpcMetricsClient {
             .batch_tx
             .as_ref()
             .ok_or_else(|| MetricsError::ChannelSend("gRPC client is shutting down".to_owned()))?;
-        batch_tx
-            .send(PushEvent::Batch(batch))
-            .await
-            .map_err(|_| MetricsError::ChannelSend("gRPC push worker stopped".to_owned()))?;
-        self.unresolved_batches.fetch_add(1, Ordering::AcqRel);
+        self.progress.queue_batch();
+        if batch_tx.send(PushEvent::Batch(batch)).await.is_err() {
+            self.progress.undo_queue_batch();
+            return Err(MetricsError::ChannelSend(
+                "gRPC push worker stopped".to_owned(),
+            ));
+        }
         Ok(())
+    }
+
+    /// 等待当前已排队批次全部编码并获得服务端 ACK。
+    pub async fn flush(&self, deadline: Duration) -> Result<(), MetricsError> {
+        let deadline = tokio::time::Instant::now() + deadline;
+        loop {
+            let unflushed = self.progress.unflushed();
+            if unflushed == 0 {
+                return Ok(());
+            }
+            let changed = self.progress.changed();
+            if self.progress.unflushed() == 0 {
+                return Ok(());
+            }
+            if tokio::time::timeout_at(deadline, changed).await.is_err() {
+                return Err(MetricsError::ShutdownTimeout {
+                    unflushed: self.progress.unflushed(),
+                });
+            }
+        }
     }
 
     /// 停止接收新批次，等待所有已发送 frame 获得 ACK，并 join 全部自有任务。
@@ -125,7 +143,7 @@ impl GrpcMetricsClient {
             flatten_join(result)
         } else {
             self.cancellation.cancel();
-            let unflushed = self.unresolved_batches.load(Ordering::Acquire);
+            let unflushed = self.progress.unflushed();
             supervisor_handle.abort();
             let _ = supervisor_handle.await;
             Err(MetricsError::ShutdownTimeout { unflushed })
@@ -156,23 +174,55 @@ async fn run_supervisor(
     mut transport: ConnectedTransport,
     command_executor: Option<RegistryCommandExecutor>,
     cancellation: CancellationToken,
+    progress: PushProgress,
 ) -> Result<(), MetricsError> {
     let mut pending_frames = Vec::new();
+    let mut next_sequence = Some(1);
     let mut backoff = INITIAL_BACKOFF;
+    let mut completed_session = false;
+    let mut authoritative_batches = Vec::new();
 
     loop {
+        if transport.require_full_snapshot && completed_session {
+            let executor = command_executor.as_ref().ok_or_else(|| {
+                MetricsError::ChannelSend(
+                    "server requires a registry-derived full snapshot, but no registry is configured"
+                        .to_owned(),
+                )
+            })?;
+            for _ in authoritative_batches.drain(..) {
+                progress.undo_queue_batch();
+            }
+            authoritative_batches = executor.full_snapshot().map_err(other_error)?;
+            pending_frames.clear();
+            progress.set_pending_frames(0);
+            while let Ok(event) = batch_rx.try_recv() {
+                if matches!(event, PushEvent::Batch(_)) {
+                    progress.undo_queue_batch();
+                }
+            }
+            for _ in &authoritative_batches {
+                progress.queue_batch();
+            }
+        }
         let exit = run_connected_session(
             &config,
             stream_epoch,
             batch_rx,
             pending_frames,
+            next_sequence,
             transport,
             command_executor.clone(),
             cancellation.clone(),
+            progress.clone(),
+            authoritative_batches,
         )
         .await?;
         batch_rx = exit.batch_rx;
         pending_frames = exit.pending_frames;
+        next_sequence = exit.next_sequence;
+        authoritative_batches = exit.authoritative_batches;
+        completed_session = true;
 
         if batch_rx.is_closed() && batch_rx.is_empty() && pending_frames.is_empty() {
             return Ok(());
@@ -211,9 +261,12 @@ async fn run_connected_session(
     stream_epoch: u64,
     batch_rx: mpsc::Receiver<PushEvent>,
     pending_frames: Vec<PendingFrame>,
+    next_sequence: Option<u64>,
     transport: ConnectedTransport,
     command_executor: Option<RegistryCommandExecutor>,
     cancellation: CancellationToken,
+    progress: PushProgress,
+    authoritative_batches: Vec<AggregatedBatch>,
 ) -> Result<PushWorkerExit, MetricsError> {
     let ConnectedTransport {
         outbound_tx,
@@ -222,23 +275,25 @@ async fn run_connected_session(
     } = transport;
     let goodbye_tx = outbound_tx.clone();
     let (server_tx, server_rx) = mpsc::channel(config.ack_window_capacity);
+    let reader_config = config.clone();
     let mut reader_handle = AbortOnDrop::new(tokio::spawn(async move {
         loop {
             match inbound.message().await {
                 Ok(Some(frame)) => {
+                    validate_server_frame(&frame, &reader_config, stream_epoch)?;
                     if server_tx.send(frame).await.is_err() {
-                        break;
+                        return Ok(());
                     }
                 }
-                Ok(None) => break,
+                Ok(None) => return Ok(()),
                 Err(error) => {
-                    tracing::warn!(%error, "gRPC metrics response stream closed");
-                    break;
+                    return Err(other_error(error));
                 }
             }
         }
     }));
 
+    let force_first_full = require_full_snapshot && authoritative_batches.is_empty();
     let mut worker = PushWorker::with_identity(
         batch_rx,
         outbound_tx,
@@ -250,26 +305,46 @@ async fn run_connected_session(
         stream_epoch,
     )
     .with_cancellation_token(cancellation)
-    .with_first_batch_full_snapshot(require_full_snapshot)
+    .with_next_sequence(next_sequence)
     .with_pending_frames(pending_frames)
-    .map_err(other_error)?;
+    .map_err(other_error)?
+    .with_progress(progress)
+    .with_initial_batches(authoritative_batches)
+    .with_first_batch_full_snapshot(force_first_full);
     if let Some(executor) = command_executor {
         worker = worker.with_command_executor(executor);
     }
     let exit = worker.run_session().await;
 
-    if exit.pending_frames.is_empty() && exit.batch_rx.is_closed() && exit.batch_rx.is_empty() {
-        let _ = goodbye_tx
+    let clean_shutdown =
+        exit.pending_frames.is_empty() && exit.batch_rx.is_closed() && exit.batch_rx.is_empty();
+    let reader_closed_before_goodbye = clean_shutdown && reader_handle.is_finished();
+    let goodbye_result = if clean_shutdown {
+        goodbye_tx
             .send(ClientFrame {
                 payload: Some(client_frame::Payload::Goodbye(ClientGoodbye {
                     header: Some(make_header(config, stream_epoch, 0)),
                     reason: "client_shutdown".to_owned(),
                 })),
             })
-            .await;
-    }
+            .await
+            .map_err(|_| MetricsError::ChannelSend("failed to send ClientGoodbye".to_owned()))
+    } else {
+        Ok(())
+    };
     drop(goodbye_tx);
-    join_reader(&mut reader_handle, config.shutdown_timeout).await;
+    let reader_result = join_reader(&mut reader_handle, config.shutdown_timeout).await;
+    if clean_shutdown {
+        if reader_closed_before_goodbye {
+            return Err(MetricsError::ChannelSend(
+                "server response stream closed before ClientGoodbye".to_owned(),
+            ));
+        }
+        goodbye_result?;
+        reader_result?;
+    } else if let Err(error) = reader_result {
+        tracing::warn!(%error, "gRPC metrics transport replaced after reader failure");
+    }
     Ok(exit)
 }
 
@@ -306,7 +381,8 @@ async fn open_transport(
             let response_header = ack.header.as_ref().ok_or_else(|| {
                 MetricsError::ChannelSend("HelloAck is missing its header".to_owned())
             })?;
-            if response_header.protocol_version != 1
+            if ack.server_protocol_version != 1
+                || response_header.protocol_version != 1
                 || !same_stream_identity(&hello_header, response_header)
             {
                 return Err(MetricsError::ChannelSend(
@@ -329,15 +405,19 @@ async fn open_transport(
     })
 }
 
-struct AbortOnDrop(Option<JoinHandle<()>>);
+struct AbortOnDrop(Option<JoinHandle<Result<(), MetricsError>>>);
 
 impl AbortOnDrop {
-    fn new(handle: JoinHandle<()>) -> Self {
+    fn new(handle: JoinHandle<Result<(), MetricsError>>) -> Self {
         Self(Some(handle))
     }
 
-    fn take(&mut self) -> Option<JoinHandle<()>> {
+    fn take(&mut self) -> Option<JoinHandle<Result<(), MetricsError>>> {
         self.0.take()
+    }
+
+    fn is_finished(&self) -> bool {
+        self.0.as_ref().is_none_or(JoinHandle::is_finished)
     }
 }
 
@@ -349,16 +429,18 @@ impl Drop for AbortOnDrop {
     }
 }
 
-async fn join_reader(reader_task: &mut AbortOnDrop, timeout: Duration) {
+async fn join_reader(reader_task: &mut AbortOnDrop, timeout: Duration) -> Result<(), MetricsError> {
     let Some(mut reader_handle) = reader_task.take() else {
-        return;
+        return Ok(());
     };
-    if tokio::time::timeout(timeout, &mut reader_handle)
-        .await
-        .is_err()
-    {
-        reader_handle.abort();
-        let _ = reader_handle.await;
+    match tokio::time::timeout(timeout, &mut reader_handle).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => Err(MetricsError::Join(error)),
+        Err(_) => {
+            reader_handle.abort();
+            let _ = reader_handle.await;
+            Err(MetricsError::ShutdownTimeout { unflushed: 0 })
+        }
     }
 }
 
@@ -420,6 +502,41 @@ fn same_stream_identity(expected: &FrameHeader, actual: &FrameHeader) -> bool {
         && expected.instance_id == actual.instance_id
         && expected.boot_id == actual.boot_id
         && expected.stream_epoch == actual.stream_epoch
+}
+
+fn validate_server_frame(
+    frame: &ServerFrame,
+    config: &GrpcClientConfig,
+    stream_epoch: u64,
+) -> Result<(), MetricsError> {
+    let payload = frame
+        .payload
+        .as_ref()
+        .ok_or_else(|| MetricsError::ChannelSend("server frame payload is missing".to_owned()))?;
+    let header = match payload {
+        server_frame::Payload::HelloAck(value) => {
+            if value.server_protocol_version != 1 {
+                return Err(MetricsError::ChannelSend(format!(
+                    "unsupported server protocol version {}",
+                    value.server_protocol_version
+                )));
+            }
+            value.header.as_ref()
+        }
+        server_frame::Payload::BatchAck(value) => value.header.as_ref(),
+        server_frame::Payload::ResyncRequired(value) => value.header.as_ref(),
+        server_frame::Payload::Command(value) => value.header.as_ref(),
+        server_frame::Payload::Error(value) => value.header.as_ref(),
+    }
+    .ok_or_else(|| MetricsError::ChannelSend("server frame header is missing".to_owned()))?;
+    let expected = make_header(config, stream_epoch, 0);
+    if header.protocol_version != 1 || !same_stream_identity(&expected, header) {
+        return Err(MetricsError::ChannelSend(
+            "server frame protocol version or stream identity does not match the client stream"
+                .to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn next_stream_epoch() -> u64 {

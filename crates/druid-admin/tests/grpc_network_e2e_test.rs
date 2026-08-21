@@ -1,7 +1,7 @@
 //! Real TCP boundary tests for the shared `druid_metrics.v1` bidi protocol.
 
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -19,7 +19,9 @@ use druid_metrics::protocol::{
     client_frame, server_frame, BatchAck, ClientFrame, ClientGoodbye, ClientHeartbeat, ClientHello,
     FrameHeader, HelloAck, PoolSnapshotMsg, ServerFrame, SnapshotBatch, SnapshotEntry, SqlStatMsg,
 };
+use druid_metrics::registry::{RegistryCommandExecutor, RegistryEntry};
 use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
+use parking_lot::RwLock;
 use prost::Message;
 use serde_json::{json, Value};
 use tokio::sync::{mpsc, Notify};
@@ -395,6 +397,80 @@ async fn health_and_metrics_remain_truthful_after_grpc_ingest() {
 }
 
 #[tokio::test]
+async fn grpc_multi_entry_batch_is_atomically_visible_and_counted_once() {
+    let fixture = AdminFixture::start().await;
+    let identity = StreamIdentity::new("atomic-batch", 25);
+    let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let mut second = orders_entry(4, 5);
+    second.datasource_id = 43;
+    second.datasource_name = "inventory".to_owned();
+    stream
+        .tx
+        .send(ClientFrame {
+            payload: Some(client_frame::Payload::SnapshotBatch(SnapshotBatch {
+                header: Some(identity.header(1)),
+                entries: vec![orders_entry(7, 15), second],
+                is_full_snapshot: true,
+            })),
+        })
+        .await
+        .expect("send multi-entry batch");
+    let before_ack = datasource_content(fixture.http_addr).await;
+    assert!(
+        before_ack.is_empty() || before_ack.len() == 2,
+        "HTTP must never expose a partially applied batch"
+    );
+    let ack = next_server_frame(&mut stream.inbound).await;
+    assert!(matches!(
+        ack.payload,
+        Some(server_frame::Payload::BatchAck(BatchAck {
+            accepted_sequence: 1,
+            ..
+        }))
+    ));
+    let after_ack = datasource_content(fixture.http_addr).await;
+    assert_eq!(after_ack.len(), 2);
+    let metrics = reqwest::get(format!("http://{}/metrics", fixture.http_addr))
+        .await
+        .expect("GET /metrics")
+        .text()
+        .await
+        .expect("metrics text");
+    assert!(metrics.contains("druid_admin_ingest_total 1"));
+    assert!(metrics.contains("druid_admin_datasource_count 2"));
+    drop(stream.tx);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn prometheus_escapes_client_controlled_label_values() {
+    let fixture = AdminFixture::start().await;
+    let identity = StreamIdentity::new("prometheus-escape", 26);
+    let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let mut entry = orders_entry(7, 15);
+    entry.datasource_name = "orders\"\\\nmalicious_metric 1".to_owned();
+    entry.driver_name = Some("post\"\\\ngresql".to_owned());
+    assert_eq!(
+        send_batch_and_expect_ack(&mut stream, &identity, 1, entry, true).await,
+        1
+    );
+    let metrics = reqwest::get(format!("http://{}/metrics", fixture.http_addr))
+        .await
+        .expect("GET /metrics")
+        .text()
+        .await
+        .expect("metrics text");
+    assert!(metrics.contains("service=\"orders\\\"\\\\\\nmalicious_metric 1\""));
+    assert!(metrics.contains("db_type=\"post\\\"\\\\\\ngresql\""));
+    assert!(
+        !metrics.lines().any(|line| line == "malicious_metric 1"),
+        "a label newline must not inject a new Prometheus sample"
+    );
+    drop(stream.tx);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames() {
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("protocol-guards", 30);
@@ -493,6 +569,48 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
     fixture.shutdown().await;
 }
 
+#[tokio::test]
+async fn grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams() {
+    let fixture = AdminFixture::start().await;
+    for (suffix, sequence) in [("zero-sequence", 0), ("max-sequence", u64::MAX)] {
+        let identity = StreamIdentity::new(suffix, sequence);
+        let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+        stream
+            .tx
+            .send(ClientFrame {
+                payload: Some(client_frame::Payload::SnapshotBatch(SnapshotBatch {
+                    header: Some(identity.header(sequence)),
+                    entries: vec![orders_entry(99, 99)],
+                    is_full_snapshot: true,
+                })),
+            })
+            .await
+            .expect("send invalid sequence");
+        let response = next_server_frame(&mut stream.inbound).await;
+        assert!(matches!(
+            response.payload,
+            Some(server_frame::Payload::Error(ref error)) if error.close_stream
+        ));
+    }
+
+    let healthy_identity = StreamIdentity::new("after-overflow", 44);
+    let mut healthy_stream = open_generated_stream(&fixture.grpc_endpoint, &healthy_identity).await;
+    assert_eq!(
+        send_batch_and_expect_ack(
+            &mut healthy_stream,
+            &healthy_identity,
+            1,
+            orders_entry(7, 15),
+            true,
+        )
+        .await,
+        1
+    );
+    wait_for_active_count(fixture.http_addr, 7).await;
+    drop(healthy_stream.tx);
+    fixture.shutdown().await;
+}
+
 #[derive(Clone)]
 struct ReconnectProbe {
     connections: Arc<AtomicUsize>,
@@ -554,6 +672,11 @@ impl MetricsIngest for ReconnectProbe {
                     })),
                 }))
                 .await;
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
         });
         Ok(Response::new(ReceiverStream::new(rx)))
     }
@@ -596,10 +719,301 @@ async fn grpc_client_reconnects_and_resends_only_pending_frame_bytes() {
         .expect("probe server stops cleanly");
 }
 
+#[derive(Debug, Clone, Copy)]
+enum InvalidAckKind {
+    MissingHeader,
+    WrongIdentity,
+    WrongProtocol,
+}
+
+#[derive(Clone)]
+struct InvalidAckProbe {
+    kind: InvalidAckKind,
+    connections: Arc<AtomicUsize>,
+    first_frame: Arc<Mutex<Option<Vec<u8>>>>,
+    replay_results: mpsc::UnboundedSender<bool>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for InvalidAckProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        let kind = self.kind;
+        let first_frame = Arc::clone(&self.first_frame);
+        let replay_results = self.replay_results.clone();
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let hello_header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&hello_header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: connection == 0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(frame) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let encoded = frame.encode_to_vec();
+            let sequence = frame_header(&frame).expect("batch header").sequence;
+            if connection == 0 {
+                *first_frame.lock().expect("first-frame lock") = Some(encoded);
+                let header = match kind {
+                    InvalidAckKind::MissingHeader => None,
+                    InvalidAckKind::WrongIdentity => {
+                        let mut header = reply_header(&hello_header);
+                        header.boot_id.push_str("-wrong");
+                        Some(header)
+                    }
+                    InvalidAckKind::WrongProtocol => {
+                        let mut header = reply_header(&hello_header);
+                        header.protocol_version = 2;
+                        Some(header)
+                    }
+                };
+                let _ = tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header,
+                            accepted_sequence: sequence,
+                        })),
+                    }))
+                    .await;
+                return;
+            }
+            let same = first_frame
+                .lock()
+                .expect("first-frame lock")
+                .as_ref()
+                .is_some_and(|first| first == &encoded);
+            let _ = replay_results.send(same);
+            let _ = tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&hello_header)),
+                        accepted_sequence: sequence,
+                    })),
+                }))
+                .await;
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn invalid_ack_headers_close_transport_and_preserve_pending_frame() {
+    for kind in [
+        InvalidAckKind::MissingHeader,
+        InvalidAckKind::WrongIdentity,
+        InvalidAckKind::WrongProtocol,
+    ] {
+        let (replay_tx, mut replay_rx) = mpsc::unbounded_channel();
+        let service = InvalidAckProbe {
+            kind,
+            connections: Arc::new(AtomicUsize::new(0)),
+            first_frame: Arc::new(Mutex::new(None)),
+            replay_results: replay_tx,
+        };
+        let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+        let client =
+            GrpcMetricsClient::connect(grpc_config(&endpoint, &format!("invalid-ack-{kind:?}")))
+                .await
+                .expect("client initially connects");
+        client
+            .send_batch(AggregatedBatch {
+                entries: vec![orders_entry(7, 15)],
+                is_full_snapshot: true,
+            })
+            .await
+            .expect("queue snapshot");
+        client
+            .shutdown(TEST_TIMEOUT)
+            .await
+            .expect("valid reconnect ACK completes shutdown");
+        assert!(
+            tokio::time::timeout(TEST_TIMEOUT, replay_rx.recv())
+                .await
+                .expect("replay observed")
+                .expect("replay result"),
+            "{kind:?} must preserve exact pending bytes across transport replacement"
+        );
+        shutdown.cancel();
+        server_handle
+            .await
+            .expect("probe joins")
+            .expect("probe stops");
+    }
+}
+
+#[derive(Clone)]
+struct WrongHelloVersionProbe;
+
+#[tonic::async_trait]
+impl MetricsIngest for WrongHelloVersionProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(1);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header");
+            let _ = tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(header)),
+                        server_protocol_version: 2,
+                        require_full_snapshot: true,
+                    })),
+                }))
+                .await;
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn hello_ack_server_protocol_version_must_match() {
+    let (endpoint, shutdown, server_handle) = start_probe_server(WrongHelloVersionProbe).await;
+    let result = GrpcMetricsClient::connect(grpc_config(&endpoint, "wrong-hello-version")).await;
+    assert!(
+        result.is_err(),
+        "server protocol version 2 must be rejected"
+    );
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
+#[derive(Clone)]
+struct AckThenHoldProbe {
+    ack_limit: usize,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for AckThenHoldProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(8);
+        let ack_limit = self.ack_limit;
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: true,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let mut received = 0;
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if !matches!(frame.payload, Some(client_frame::Payload::SnapshotBatch(_))) {
+                    continue;
+                }
+                received += 1;
+                if received <= ack_limit {
+                    let sequence = frame_header(&frame).expect("batch header").sequence;
+                    if tx
+                        .send(Ok(ServerFrame {
+                            payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                                header: Some(reply_header(&header)),
+                                accepted_sequence: sequence,
+                            })),
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn shutdown_timeout_reports_only_actual_pending_and_queued_work() {
+    let service = AckThenHoldProbe { ack_limit: 5 };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let client = GrpcMetricsClient::connect(grpc_config(&endpoint, "unflushed-count"))
+        .await
+        .expect("client connects");
+    for active in 1..=5 {
+        client
+            .send_batch(AggregatedBatch {
+                entries: vec![orders_entry(active, active + 1)],
+                is_full_snapshot: active == 1,
+            })
+            .await
+            .expect("queue historically ACKed batch");
+        client.flush(TEST_TIMEOUT).await.expect("historical ACK");
+    }
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(6, 7)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("queue final unacked batch");
+    let result = client.shutdown(Duration::from_millis(100)).await;
+    assert!(matches!(
+        result,
+        Err(druid_metrics::MetricsError::ShutdownTimeout { unflushed: 1 })
+    ));
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
 #[derive(Clone)]
 struct CleanupProbe {
     active_streams: Arc<AtomicUsize>,
     idle: Arc<Notify>,
+    goodbyes: Arc<AtomicUsize>,
 }
 
 struct ActiveStreamGuard {
@@ -629,6 +1043,7 @@ impl MetricsIngest for CleanupProbe {
         };
         let mut inbound = request.into_inner();
         let (tx, rx) = mpsc::channel(2);
+        let goodbyes = Arc::clone(&self.goodbyes);
         tokio::spawn(async move {
             let _guard = guard;
             let Some(hello) = inbound.message().await.ok().flatten() else {
@@ -648,7 +1063,12 @@ impl MetricsIngest for CleanupProbe {
             {
                 return;
             }
-            while inbound.message().await.ok().flatten().is_some() {}
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    goodbyes.fetch_add(1, Ordering::AcqRel);
+                    break;
+                }
+            }
         });
         Ok(Response::new(ReceiverStream::new(rx)))
     }
@@ -658,9 +1078,11 @@ impl MetricsIngest for CleanupProbe {
 async fn grpc_client_shutdown_joins_transport_and_leaves_no_active_stream() {
     let active_streams = Arc::new(AtomicUsize::new(0));
     let idle = Arc::new(Notify::new());
+    let goodbyes = Arc::new(AtomicUsize::new(0));
     let service = CleanupProbe {
         active_streams: Arc::clone(&active_streams),
         idle: Arc::clone(&idle),
+        goodbyes: Arc::clone(&goodbyes),
     };
     let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
     let client = GrpcMetricsClient::connect(grpc_config(&endpoint, "cleanup"))
@@ -679,6 +1101,11 @@ async fn grpc_client_shutdown_joins_transport_and_leaves_no_active_stream() {
     })
     .await
     .expect("server observes client stream cleanup");
+    assert_eq!(
+        goodbyes.load(Ordering::Acquire),
+        1,
+        "normal shutdown is confirmed by a server-observed ClientGoodbye"
+    );
 
     shutdown.cancel();
     server_handle
@@ -713,6 +1140,427 @@ where
             .await
     });
     (format!("http://{addr}"), shutdown, handle)
+}
+
+async fn start_probe_server_at<S>(
+    addr: SocketAddr,
+    service: S,
+) -> (
+    CancellationToken,
+    tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
+)
+where
+    S: MetricsIngest + Clone + Send + Sync + 'static,
+{
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .expect("bind fixed probe server address");
+    let shutdown = CancellationToken::new();
+    let server_shutdown = shutdown.clone();
+    let handle = tokio::spawn(async move {
+        Server::builder()
+            .add_service(MetricsIngestServer::new(service))
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                server_shutdown.cancelled_owned(),
+            )
+            .await
+    });
+    (shutdown, handle)
+}
+
+async fn start_production_server_at(
+    addr: SocketAddr,
+    service: IngestService,
+) -> (
+    CancellationToken,
+    tokio::task::JoinHandle<Result<(), tonic::transport::Error>>,
+) {
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .expect("bind fixed production server address");
+    let shutdown = CancellationToken::new();
+    let server_shutdown = shutdown.clone();
+    let service = service.with_shutdown_token(shutdown.clone());
+    let handle = tokio::spawn(async move {
+        Server::builder()
+            .add_service(service.into_server())
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                server_shutdown.cancelled_owned(),
+            )
+            .await
+    });
+    (shutdown, handle)
+}
+
+async fn reserve_loopback_addr() -> SocketAddr {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve loopback address");
+    listener.local_addr().expect("reserved address")
+}
+
+async fn start_http_with_repo(
+    repository: MetricsRepository,
+) -> (
+    SocketAddr,
+    CancellationToken,
+    tokio::task::JoinHandle<Result<(), std::io::Error>>,
+) {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind HTTP projection server");
+    let addr = listener.local_addr().expect("HTTP projection address");
+    let shutdown = CancellationToken::new();
+    let server_shutdown = shutdown.clone();
+    let app = druid_admin::standalone_router(repository);
+    let handle = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(server_shutdown.cancelled_owned())
+            .await
+    });
+    (addr, shutdown, handle)
+}
+
+async fn wait_for_active_count(http_addr: SocketAddr, expected: i64) {
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        loop {
+            if let Ok(response) =
+                reqwest::get(format!("http://{http_addr}/druid/datasource.json")).await
+            {
+                if let Ok(body) = response.json::<Value>().await {
+                    if body["Content"].as_array().is_some_and(|entries| {
+                        entries.len() == 1 && entries[0]["ActiveCount"] == expected
+                    }) {
+                        return;
+                    }
+                }
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("expected datasource state becomes visible");
+}
+
+struct MutableSource {
+    active: AtomicU32,
+    idle: AtomicU32,
+}
+
+impl MutableSource {
+    fn new(active: u32, idle: u32) -> Self {
+        Self {
+            active: AtomicU32::new(active),
+            idle: AtomicU32::new(idle),
+        }
+    }
+
+    fn set_pool(&self, active: u32, idle: u32) {
+        self.active.store(active, Ordering::Release);
+        self.idle.store(idle, Ordering::Release);
+    }
+}
+
+impl DataSourceMonitorable for MutableSource {
+    fn name(&self) -> &str {
+        "orders"
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {}
+
+    fn identity(&self) -> DataSourceIdentity {
+        DataSourceIdentity {
+            id: 42,
+            name: "orders".to_owned(),
+            driver_name: Some("postgresql".to_owned()),
+        }
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        Ok(DruidTelemetrySnapshot {
+            identity: self.identity(),
+            pool_snapshot: PoolSnapshot {
+                active_count: self.active.load(Ordering::Acquire),
+                idle_count: self.idle.load(Ordering::Acquire),
+                max_active: 32,
+                max_idle: 24,
+                waiting_count: 0,
+            },
+            sql_stats: Vec::new(),
+            wall_snapshot: None,
+            sampling_time_millis: 1_755_734_400_000,
+        })
+    }
+}
+
+fn registry_executor(
+    source: &Arc<MutableSource>,
+) -> (Arc<RwLock<Vec<RegistryEntry>>>, RegistryCommandExecutor) {
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let registry = Arc::new(RwLock::new(vec![RegistryEntry {
+        datasource_id: 42,
+        weak_ref: Arc::downgrade(&monitorable),
+    }]));
+    let executor = RegistryCommandExecutor::new(
+        Arc::clone(&registry),
+        8,
+        32,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    (registry, executor)
+}
+
+#[tokio::test]
+async fn grpc_reconnect_after_fully_acked_batch_keeps_next_sequence_and_updates_rest() {
+    let repository = MetricsRepository::new();
+    let service = IngestService::new(repository.clone());
+    let grpc_addr = reserve_loopback_addr().await;
+    let (http_addr, http_shutdown, http_handle) = start_http_with_repo(repository).await;
+    let (grpc_shutdown, grpc_handle) = start_production_server_at(grpc_addr, service.clone()).await;
+    let client = GrpcMetricsClient::connect(grpc_config(
+        &format!("http://{grpc_addr}"),
+        "sequence-continuity",
+    ))
+    .await
+    .expect("client connects");
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(1, 2)],
+            is_full_snapshot: true,
+        })
+        .await
+        .expect("queue sequence one");
+    client
+        .flush(TEST_TIMEOUT)
+        .await
+        .expect("sequence one ACKed");
+    wait_for_active_count(http_addr, 1).await;
+
+    grpc_shutdown.cancel();
+    grpc_handle
+        .await
+        .expect("first gRPC joins")
+        .expect("first gRPC stops");
+    let (grpc_shutdown, grpc_handle) = start_production_server_at(grpc_addr, service).await;
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(2, 3)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("queue post-reconnect batch");
+    client
+        .flush(TEST_TIMEOUT)
+        .await
+        .expect("post-reconnect sequence is ACKed");
+    wait_for_active_count(http_addr, 2).await;
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("client shutdown");
+
+    grpc_shutdown.cancel();
+    grpc_handle.await.expect("gRPC joins").expect("gRPC stops");
+    http_shutdown.cancel();
+    http_handle.await.expect("HTTP joins").expect("HTTP stops");
+}
+
+#[tokio::test]
+async fn admin_restart_without_pending_triggers_registry_full_snapshot() {
+    let source = Arc::new(MutableSource::new(3, 4));
+    let (_registry, executor) = registry_executor(&source);
+    let grpc_addr = reserve_loopback_addr().await;
+    let first_repository = MetricsRepository::new();
+    let first_service = IngestService::new(first_repository.clone());
+    let (first_http_addr, first_http_shutdown, first_http_handle) =
+        start_http_with_repo(first_repository).await;
+    let (first_grpc_shutdown, first_grpc_handle) =
+        start_production_server_at(grpc_addr, first_service).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&format!("http://{grpc_addr}"), "restart-no-pending"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(3, 4)],
+            is_full_snapshot: true,
+        })
+        .await
+        .expect("initial full snapshot");
+    client.flush(TEST_TIMEOUT).await.expect("initial ACK");
+    wait_for_active_count(first_http_addr, 3).await;
+
+    first_grpc_shutdown.cancel();
+    first_grpc_handle
+        .await
+        .expect("first gRPC joins")
+        .expect("first gRPC stops");
+    first_http_shutdown.cancel();
+    first_http_handle
+        .await
+        .expect("first HTTP joins")
+        .expect("first HTTP stops");
+    source.set_pool(7, 8);
+    let restarted_repository = MetricsRepository::new();
+    let restarted_service = IngestService::new(restarted_repository.clone());
+    let (restarted_http_addr, restarted_http_shutdown, restarted_http_handle) =
+        start_http_with_repo(restarted_repository).await;
+    let (restarted_grpc_shutdown, restarted_grpc_handle) =
+        start_production_server_at(grpc_addr, restarted_service).await;
+
+    wait_for_active_count(restarted_http_addr, 7).await;
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("client converges and shuts down");
+    restarted_grpc_shutdown.cancel();
+    restarted_grpc_handle
+        .await
+        .expect("restarted gRPC joins")
+        .expect("restarted gRPC stops");
+    restarted_http_shutdown.cancel();
+    restarted_http_handle
+        .await
+        .expect("restarted HTTP joins")
+        .expect("restarted HTTP stops");
+}
+
+#[derive(Clone)]
+struct HoldSecondAckProbe {
+    second_received: Arc<Notify>,
+    disconnect: CancellationToken,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for HoldSecondAckProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        let second_received = Arc::clone(&self.second_received);
+        let disconnect = self.disconnect.clone();
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let hello_header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&hello_header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: true,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(first) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let first_sequence = frame_header(&first).expect("first batch header").sequence;
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&hello_header)),
+                        accepted_sequence: first_sequence,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(_second) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            second_received.notify_waiters();
+            disconnect.cancelled().await;
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn admin_restart_with_pending_incremental_supersedes_it_with_monotonic_full_snapshot() {
+    let source = Arc::new(MutableSource::new(2, 3));
+    let (_registry, executor) = registry_executor(&source);
+    let grpc_addr = reserve_loopback_addr().await;
+    let second_received = Arc::new(Notify::new());
+    let disconnect = CancellationToken::new();
+    let probe = HoldSecondAckProbe {
+        second_received: Arc::clone(&second_received),
+        disconnect: disconnect.clone(),
+    };
+    let (probe_shutdown, probe_handle) = start_probe_server_at(grpc_addr, probe).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&format!("http://{grpc_addr}"), "restart-with-pending"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(2, 3)],
+            is_full_snapshot: true,
+        })
+        .await
+        .expect("initial full snapshot");
+    client.flush(TEST_TIMEOUT).await.expect("first frame ACKed");
+    source.set_pool(9, 10);
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(8, 8)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("incremental enters pending window");
+    tokio::time::timeout(TEST_TIMEOUT, second_received.notified())
+        .await
+        .expect("old server receives incremental before restart");
+    disconnect.cancel();
+    probe_shutdown.cancel();
+    probe_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+
+    let restarted_repository = MetricsRepository::new();
+    let restarted_service = IngestService::new(restarted_repository.clone());
+    let (http_addr, http_shutdown, http_handle) =
+        start_http_with_repo(restarted_repository.clone()).await;
+    let (grpc_shutdown, grpc_handle) =
+        start_production_server_at(grpc_addr, restarted_service).await;
+    wait_for_active_count(http_addr, 9).await;
+    let entries = restarted_repository.all_datasources();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+        entries[0].sequence, 3,
+        "authoritative full snapshot preserves monotonic sequence after superseding sequence 2"
+    );
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("resynced client shuts down without timeout");
+
+    grpc_shutdown.cancel();
+    grpc_handle.await.expect("gRPC joins").expect("gRPC stops");
+    http_shutdown.cancel();
+    http_handle.await.expect("HTTP joins").expect("HTTP stops");
 }
 
 fn frame_header(frame: &ClientFrame) -> Option<&FrameHeader> {

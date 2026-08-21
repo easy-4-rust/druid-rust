@@ -28,7 +28,7 @@ use std::sync::Mutex;
 
 use crate::protocol::{
     client_frame, server_frame, BatchAck, ClientFrame, Command, CommandAck, FrameHeader, HelloAck,
-    ResetStatsCmd, ResyncRequired, ServerFrame, SnapshotEntry,
+    ResetStatsCmd, ResyncRequired, ServerError, ServerFrame, SnapshotEntry,
 };
 
 /// Stream identity key.
@@ -124,6 +124,9 @@ impl IngestHandler {
         let hdr = batch.header.as_ref()?;
         let key = self.stream_key(hdr);
         let seq = hdr.sequence;
+        let Some(next_sequence) = seq.checked_add(1).filter(|_| seq != 0) else {
+            return Some(self.make_sequence_error(hdr));
+        };
 
         let mut state = self.state.lock().expect("ingest lock poisoned");
         let stream = state
@@ -136,7 +139,7 @@ impl IngestHandler {
             if batch.is_full_snapshot {
                 // Accept the full snapshot.
                 stream.initialized = true;
-                stream.expected_seq = seq + 1;
+                stream.expected_seq = next_sequence;
                 self.store_snapshots(stream, &batch.entries);
                 self.ingest_count.fetch_add(1, Ordering::Relaxed);
                 return Some(self.make_batch_ack(hdr, seq));
@@ -156,7 +159,7 @@ impl IngestHandler {
         }
 
         // ── Expected sequence: ingest normally ──
-        stream.expected_seq = seq + 1;
+        stream.expected_seq = next_sequence;
         self.store_snapshots(stream, &batch.entries);
         self.ingest_count.fetch_add(1, Ordering::Relaxed);
         Some(self.make_batch_ack(hdr, seq))
@@ -203,6 +206,17 @@ impl IngestHandler {
                 header: Some(self.reply_header(hdr)),
                 reason: "sequence_gap".into(),
                 expected_sequence: expected,
+            })),
+        }
+    }
+
+    fn make_sequence_error(&self, hdr: &FrameHeader) -> ServerFrame {
+        ServerFrame {
+            payload: Some(server_frame::Payload::Error(ServerError {
+                header: Some(self.reply_header(hdr)),
+                code: 400,
+                message: "snapshot sequence must be between 1 and u64::MAX - 1".to_owned(),
+                close_stream: true,
             })),
         }
     }

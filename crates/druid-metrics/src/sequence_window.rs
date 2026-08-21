@@ -66,10 +66,16 @@ impl SequenceWindow {
     /// 创建指定容量的空窗口；第一个新 frame 的 sequence 为 1。
     #[must_use]
     pub fn new(capacity: usize) -> Self {
+        Self::with_next_sequence(capacity, Some(1))
+    }
+
+    /// 使用 supervisor 保存的下一个 sequence 创建空窗口。
+    #[must_use]
+    pub fn with_next_sequence(capacity: usize, next_sequence: Option<u64>) -> Self {
         Self {
             pending: BTreeMap::new(),
             capacity,
-            next_sequence: Some(1),
+            next_sequence,
         }
     }
 
@@ -162,6 +168,12 @@ impl SequenceWindow {
     #[must_use]
     pub fn capacity(&self) -> usize {
         self.capacity
+    }
+
+    /// 返回下一个可分配 sequence；`None` 表示 sequence 空间已经耗尽。
+    #[must_use]
+    pub fn next_sequence(&self) -> Option<u64> {
+        self.next_sequence
     }
 
     fn ensure_capacity(&self) -> Result<(), SequenceWindowError> {

@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
     let http_shutdown = shutdown_token.clone();
 
-    let http_handle = tokio::spawn(async move {
+    let mut http_handle = tokio::spawn(async move {
         axum::serve(http_listener, http_app)
             .with_graceful_shutdown(async move {
                 http_shutdown.cancelled().await;
@@ -56,25 +56,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Build gRPC server
-    let ingest_service = druid_admin::ingest::IngestService::new(repo.clone());
     let grpc_shutdown = shutdown_token.clone();
+    let ingest_service = druid_admin::ingest::IngestService::new(repo.clone())
+        .with_shutdown_token(grpc_shutdown.clone());
 
-    let grpc_handle = tokio::spawn(async move {
+    let mut grpc_handle = tokio::spawn(async move {
         tonic::transport::Server::builder()
             .add_service(ingest_service.into_server())
             .serve_with_shutdown(grpc_addr, grpc_shutdown.cancelled_owned())
             .await
     });
 
-    // Graceful shutdown on SIGTERM/SIGINT
-    shutdown_signal().await;
-    tracing::info!("shutdown signal received, stopping servers");
-    shutdown_token.cancel();
+    enum FirstExit {
+        Signal,
+        Http(Result<Result<(), std::io::Error>, tokio::task::JoinError>),
+        Grpc(Result<Result<(), tonic::transport::Error>, tokio::task::JoinError>),
+    }
 
-    // Join both graceful server shutdown paths before returning from main.
-    let (http_result, grpc_result) = tokio::join!(http_handle, grpc_handle);
-    http_result??;
-    grpc_result??;
+    let first_exit = tokio::select! {
+        biased;
+        result = &mut http_handle => FirstExit::Http(result),
+        result = &mut grpc_handle => FirstExit::Grpc(result),
+        () = shutdown_signal() => FirstExit::Signal,
+    };
+    shutdown_token.cancel();
+    match first_exit {
+        FirstExit::Signal => {
+            tracing::info!("shutdown signal received, stopping servers");
+            let (http_result, grpc_result) = tokio::join!(http_handle, grpc_handle);
+            http_result??;
+            grpc_result??;
+        }
+        FirstExit::Http(http_result) => {
+            let grpc_result = grpc_handle.await;
+            http_result??;
+            grpc_result??;
+            return Err("HTTP server exited before a shutdown signal".into());
+        }
+        FirstExit::Grpc(grpc_result) => {
+            let http_result = http_handle.await;
+            http_result??;
+            grpc_result??;
+            return Err("gRPC server exited before a shutdown signal".into());
+        }
+    }
 
     tracing::info!("druid-admin stopped");
     Ok(())

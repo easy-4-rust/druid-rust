@@ -4,7 +4,7 @@
 //! `(service_id, datasource_identity)`. Long-term history is delegated
 //! to Prometheus; this repository only holds the most recent state.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -70,17 +70,31 @@ impl MetricsRepository {
     ///
     /// Returns `true` if the entry was accepted, `false` if rejected as stale.
     pub fn upsert_datasource(&self, id: DataSourceId, entry: DataSourceEntry) -> bool {
+        self.apply_batch(vec![(id, entry)])
+    }
+
+    /// 在一个写锁事务中校验并应用完整协议批次。
+    ///
+    /// 只要存在重复 datasource ID 或任一 stale/duplicate sequence，整个批次都会被拒绝，
+    /// HTTP 读取方不会观察到部分更新。接收与拒绝计数都按批次而不是条目计数。
+    pub fn apply_batch(&self, entries: Vec<(DataSourceId, DataSourceEntry)>) -> bool {
         let mut inner = self.inner.write();
         inner.ingest_count += 1;
-
-        if let Some(existing) = inner.entries.get(&id) {
-            if entry.sequence <= existing.sequence {
-                inner.rejected_count += 1;
-                return false;
-            }
+        let mut seen = HashSet::with_capacity(entries.len());
+        let rejected = entries.iter().any(|(id, entry)| {
+            !seen.insert(id.clone())
+                || inner
+                    .entries
+                    .get(id)
+                    .is_some_and(|existing| entry.sequence <= existing.sequence)
+        });
+        if rejected {
+            inner.rejected_count += 1;
+            return false;
         }
-
-        inner.entries.insert(id, entry);
+        for (id, entry) in entries {
+            inner.entries.insert(id, entry);
+        }
         true
     }
 

@@ -124,3 +124,43 @@ async fn health_content_type_is_json() {
 
     handle.abort();
 }
+
+#[tokio::test]
+async fn grpc_bind_failure_cancels_http_sibling_and_exits_immediately() {
+    let grpc_conflict = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve conflicting gRPC address");
+    let grpc_addr = grpc_conflict.local_addr().expect("gRPC conflict address");
+    let http_reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve HTTP address");
+    let http_addr = http_reservation.local_addr().expect("HTTP address");
+    drop(http_reservation);
+
+    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_druid-admin"))
+        .env("DRUID_ADMIN_HTTP_ADDR", http_addr.to_string())
+        .env("DRUID_ADMIN_GRPC_ADDR", grpc_addr.to_string())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn admin binary");
+    let status =
+        if let Ok(result) = tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
+            result.expect("wait for admin binary")
+        } else {
+            child.kill().await.expect("kill stuck admin binary");
+            let output = child
+                .wait_with_output()
+                .await
+                .expect("collect stuck admin output");
+            panic!(
+                "gRPC bind failure must not leave the HTTP sibling running: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+    assert!(!status.success(), "bind failure must be returned by main");
+    tokio::net::TcpListener::bind(http_addr)
+        .await
+        .expect("HTTP sibling released its listener before process exit");
+}
