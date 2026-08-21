@@ -2,12 +2,96 @@
 
 use druid::core::{
     ConnectionDefaults, DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalConnectionLease, PhysicalPreparedStatement, Row, Savepoint, SqlTextPreparedStatement,
-    SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
+    PhysicalConnectionLease, PhysicalDatabaseMetaData, PhysicalPreparedStatement,
+    PhysicalStatement, PhysicalStatementOptions, PreparedStatementKey, PreparedStatementMethodType,
+    RdbcBlob, RdbcClob, RdbcNClob, RdbcString, Row, Savepoint, SqlTextPreparedStatement,
+    SqlTextStatement, SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
+};
+use druid::spi::{
+    RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
+    RdbcResourceFactory,
 };
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+
+#[derive(Default)]
+struct DelegationCounts {
+    create_physical_statement: AtomicUsize,
+    prepare_physical_statement: AtomicUsize,
+    prepare_physical_call: AtomicUsize,
+    exec_batch: AtomicUsize,
+    exec_prepared: AtomicUsize,
+    fetch_prepared: AtomicUsize,
+    database_meta_data: AtomicUsize,
+    create_blob: AtomicUsize,
+    create_clob: AtomicUsize,
+    create_n_clob: AtomicUsize,
+}
+
+struct DelegationResources {
+    statement: Arc<dyn PhysicalStatement>,
+    prepared_statement: Arc<dyn PhysicalPreparedStatement>,
+    callable_statement: Arc<dyn PhysicalPreparedStatement>,
+    blob: RdbcBlob,
+    clob: RdbcClob,
+    n_clob: RdbcNClob,
+}
+
+#[derive(Debug)]
+struct LeaseBlobAccess;
+
+#[async_trait::async_trait]
+impl RdbcResourceAccess for LeaseBlobAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::blob()
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcBlobAccess for LeaseBlobAccess {
+    async fn length(&self) -> Result<i64, DruidError> {
+        Ok(4)
+    }
+
+    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
+        assert_eq!((position, length), (1, 4));
+        Ok(vec![1, 2, 3, 4])
+    }
+}
+
+#[derive(Debug)]
+struct LeaseClobAccess;
+
+#[async_trait::async_trait]
+impl RdbcResourceAccess for LeaseClobAccess {
+    fn capabilities(&self) -> RdbcResourceCapabilities {
+        RdbcResourceCapabilities::clob()
+    }
+}
+
+#[async_trait::async_trait]
+impl RdbcClobAccess for LeaseClobAccess {
+    async fn length(&self) -> Result<i64, DruidError> {
+        Ok(4)
+    }
+
+    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
+        assert_eq!((position, length), (1, 4));
+        Ok(RdbcString::from("clob"))
+    }
+}
+
+impl RdbcNClobAccess for LeaseClobAccess {}
+
+struct LeaseMetaData;
+
+#[async_trait::async_trait]
+impl PhysicalDatabaseMetaData for LeaseMetaData {
+    async fn get_database_product_name(&mut self) -> Result<Option<String>, DruidError> {
+        Ok(Some("lease-metadata".to_string()))
+    }
+}
 
 struct ContractConnection {
     closed: bool,
@@ -18,10 +102,23 @@ struct ContractConnection {
     discarded: bool,
     catalog: String,
     schema: String,
+    delegation_counts: Arc<DelegationCounts>,
+    delegation_resources: Arc<DelegationResources>,
 }
 
 #[async_trait::async_trait]
 impl PhysicalConnection for ContractConnection {
+    async fn create_physical_statement(
+        &mut self,
+        options: PhysicalStatementOptions,
+    ) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
+        assert_eq!(options, PhysicalStatementOptions::default());
+        self.delegation_counts
+            .create_physical_statement
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(Arc::clone(&self.delegation_resources.statement))
+    }
+
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         assert_eq!(sql, "UPDATE contract");
         assert_eq!(params, vec![Value::Int(7)]);
@@ -52,6 +149,76 @@ impl PhysicalConnection for ContractConnection {
         assert_eq!(sql, "SELECT contract");
         assert_eq!(params, vec![Value::String("value".to_string())]);
         Ok(vec![Row::new(vec![Value::Bool(true)])])
+    }
+
+    async fn exec_batch(
+        &mut self,
+        batch: Vec<(String, Vec<Value>)>,
+    ) -> Result<Vec<i32>, DruidError> {
+        assert_eq!(
+            batch,
+            vec![("UPDATE delegated batch".to_string(), vec![Value::Int(11)])]
+        );
+        self.delegation_counts
+            .exec_batch
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(vec![11])
+    }
+
+    async fn prepare_physical_statement(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        assert_eq!(key.sql(), "UPDATE delegated prepared");
+        self.delegation_counts
+            .prepare_physical_statement
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(Arc::clone(&self.delegation_resources.prepared_statement))
+    }
+
+    async fn prepare_physical_call(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        assert_eq!(key.sql(), "CALL delegated");
+        self.delegation_counts
+            .prepare_physical_call
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(Arc::clone(&self.delegation_resources.callable_statement))
+    }
+
+    async fn exec_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, DruidError> {
+        if statement.sql() != "UPDATE delegated prepared" {
+            return self.exec(statement.sql(), params).await;
+        }
+        assert_eq!(params, vec![Value::Int(12)]);
+        self.delegation_counts
+            .exec_prepared
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(ExecResult {
+            rows_affected: 12,
+            last_insert_id: None,
+            row_count: None,
+        })
+    }
+
+    async fn fetch_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, DruidError> {
+        if statement.sql() != "UPDATE delegated prepared" {
+            return self.fetch(statement.sql(), params).await;
+        }
+        assert_eq!(params, vec![Value::Int(13)]);
+        self.delegation_counts
+            .fetch_prepared
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(vec![Row::new(vec![Value::Int(13)])])
     }
 
     async fn begin(&mut self) -> Result<(), DruidError> {
@@ -120,6 +287,34 @@ impl PhysicalConnection for ContractConnection {
             catalog: true,
             schema: true,
         }
+    }
+
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        self.delegation_counts
+            .database_meta_data
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(Box::new(LeaseMetaData))
+    }
+
+    async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
+        self.delegation_counts
+            .create_blob
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(self.delegation_resources.blob.clone())
+    }
+
+    async fn create_clob(&mut self) -> Result<RdbcClob, DruidError> {
+        self.delegation_counts
+            .create_clob
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(self.delegation_resources.clob.clone())
+    }
+
+    async fn create_n_clob(&mut self) -> Result<RdbcNClob, DruidError> {
+        self.delegation_counts
+            .create_n_clob
+            .fetch_add(1, Ordering::Relaxed);
+        Ok(self.delegation_resources.n_clob.clone())
     }
 
     fn auto_commit(&self) -> bool {
@@ -226,7 +421,30 @@ impl Drop for ContractLease {
     }
 }
 
+fn delegation_resources() -> Arc<DelegationResources> {
+    Arc::new(DelegationResources {
+        statement: Arc::new(SqlTextStatement::new(PhysicalStatementOptions::default())),
+        prepared_statement: Arc::new(SqlTextPreparedStatement::new("UPDATE delegated prepared")),
+        callable_statement: Arc::new(SqlTextPreparedStatement::new("CALL delegated")),
+        blob: RdbcResourceFactory::blob(Arc::new(LeaseBlobAccess)),
+        clob: RdbcResourceFactory::clob(Arc::new(LeaseClobAccess)),
+        n_clob: RdbcResourceFactory::n_clob(Arc::new(LeaseClobAccess)),
+    })
+}
+
 fn connection_lease(drop_count: Arc<AtomicUsize>) -> PhysicalConnectionLease<ContractLease> {
+    connection_lease_with_delegation(
+        drop_count,
+        Arc::new(DelegationCounts::default()),
+        delegation_resources(),
+    )
+}
+
+fn connection_lease_with_delegation(
+    drop_count: Arc<AtomicUsize>,
+    delegation_counts: Arc<DelegationCounts>,
+    delegation_resources: Arc<DelegationResources>,
+) -> PhysicalConnectionLease<ContractLease> {
     PhysicalConnectionLease::new(ContractLease {
         connection: Box::new(ContractConnection {
             closed: false,
@@ -237,15 +455,137 @@ fn connection_lease(drop_count: Arc<AtomicUsize>) -> PhysicalConnectionLease<Con
             discarded: false,
             catalog: "catalog_a".to_string(),
             schema: "schema_a".to_string(),
+            delegation_counts,
+            delegation_resources,
         }),
         drop_count,
     })
 }
 
 #[tokio::test]
-async fn physical_connection_lease_delegates_complete_spi() {
+async fn lease_delegates_complete_spi() {
     let drop_count = Arc::new(AtomicUsize::new(0));
-    let mut connection = connection_lease(drop_count.clone());
+    let delegation_counts = Arc::new(DelegationCounts::default());
+    let delegation_resources = delegation_resources();
+    let mut connection = connection_lease_with_delegation(
+        drop_count.clone(),
+        Arc::clone(&delegation_counts),
+        Arc::clone(&delegation_resources),
+    );
+
+    let statement = connection
+        .create_physical_statement(PhysicalStatementOptions::default())
+        .await
+        .expect("physical statement must delegate");
+    assert!(Arc::ptr_eq(&statement, &delegation_resources.statement));
+    let prepared_key = PreparedStatementKey::new(
+        Some("UPDATE delegated prepared".to_string()),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("prepared key must build");
+    let delegated_prepared = connection
+        .prepare_physical_statement(&prepared_key)
+        .await
+        .expect("physical prepare must delegate");
+    assert!(Arc::ptr_eq(
+        &delegated_prepared,
+        &delegation_resources.prepared_statement
+    ));
+    let call_key = PreparedStatementKey::new(
+        Some("CALL delegated".to_string()),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("call key must build");
+    let callable = connection
+        .prepare_physical_call(&call_key)
+        .await
+        .expect("physical call must delegate");
+    assert!(Arc::ptr_eq(
+        &callable,
+        &delegation_resources.callable_statement
+    ));
+    assert_eq!(
+        connection
+            .exec_batch(vec![(
+                "UPDATE delegated batch".to_string(),
+                vec![Value::Int(11)]
+            )])
+            .await
+            .expect("batch must delegate"),
+        vec![11]
+    );
+    assert_eq!(
+        connection
+            .exec_prepared(delegated_prepared.as_ref(), vec![Value::Int(12)])
+            .await
+            .expect("prepared exec must delegate")
+            .rows_affected,
+        12
+    );
+    assert_eq!(
+        connection
+            .fetch_prepared(delegated_prepared.as_ref(), vec![Value::Int(13)])
+            .await
+            .expect("prepared fetch must delegate")[0]
+            .values,
+        vec![Value::Int(13)]
+    );
+    let mut metadata = connection
+        .database_meta_data()
+        .expect("metadata must delegate");
+    assert_eq!(
+        metadata
+            .get_database_product_name()
+            .await
+            .expect("metadata value must delegate"),
+        Some("lease-metadata".to_string())
+    );
+    drop(metadata);
+    assert_eq!(
+        connection.create_blob().await.expect("blob must delegate"),
+        delegation_resources.blob
+    );
+    assert_eq!(
+        connection.create_clob().await.expect("clob must delegate"),
+        delegation_resources.clob
+    );
+    assert_eq!(
+        connection
+            .create_n_clob()
+            .await
+            .expect("nclob must delegate"),
+        delegation_resources.n_clob
+    );
+    assert_eq!(
+        delegation_counts
+            .create_physical_statement
+            .load(Ordering::Relaxed),
+        1
+    );
+    assert_eq!(
+        delegation_counts
+            .prepare_physical_statement
+            .load(Ordering::Relaxed),
+        1
+    );
+    assert_eq!(
+        delegation_counts
+            .prepare_physical_call
+            .load(Ordering::Relaxed),
+        1
+    );
+    assert_eq!(delegation_counts.exec_batch.load(Ordering::Relaxed), 1);
+    assert_eq!(delegation_counts.exec_prepared.load(Ordering::Relaxed), 1);
+    assert_eq!(delegation_counts.fetch_prepared.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        delegation_counts.database_meta_data.load(Ordering::Relaxed),
+        1
+    );
+    assert_eq!(delegation_counts.create_blob.load(Ordering::Relaxed), 1);
+    assert_eq!(delegation_counts.create_clob.load(Ordering::Relaxed), 1);
+    assert_eq!(delegation_counts.create_n_clob.load(Ordering::Relaxed), 1);
 
     let exec_result = connection
         .exec("UPDATE contract", vec![Value::Int(7)])

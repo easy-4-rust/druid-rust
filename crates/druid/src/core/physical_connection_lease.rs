@@ -2,8 +2,9 @@
 
 use super::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, Row, Savepoint,
-    SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
+    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement,
+    PhysicalStatementOptions, PreparedInputParameter, PreparedStatementKey, RdbcBlob, RdbcClob,
+    RdbcNClob, Row, Savepoint, SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -53,6 +54,15 @@ where
         + Send
         + 'static,
 {
+    async fn create_physical_statement(
+        &mut self,
+        options: PhysicalStatementOptions,
+    ) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
+        self.physical_connection_mut()
+            .create_physical_statement(options)
+            .await
+    }
+
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
         self.physical_connection_mut().exec(sql, params).await
     }
@@ -72,6 +82,13 @@ where
         self.physical_connection_mut().fetch(sql, params).await
     }
 
+    async fn exec_batch(
+        &mut self,
+        batch: Vec<(String, Vec<Value>)>,
+    ) -> Result<Vec<i32>, DruidError> {
+        self.physical_connection_mut().exec_batch(batch).await
+    }
+
     async fn fetch_result_set(
         &mut self,
         sql: &str,
@@ -79,6 +96,34 @@ where
     ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
         self.physical_connection_mut()
             .fetch_result_set(sql, params)
+            .await
+    }
+
+    async fn prepare_physical_statement(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        self.physical_connection_mut()
+            .prepare_physical_statement(key)
+            .await
+    }
+
+    async fn prepare_physical_call(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+        self.physical_connection_mut()
+            .prepare_physical_call(key)
+            .await
+    }
+
+    async fn exec_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, DruidError> {
+        self.physical_connection_mut()
+            .exec_prepared(statement, params)
             .await
     }
 
@@ -144,6 +189,16 @@ where
             .await
     }
 
+    async fn fetch_prepared(
+        &mut self,
+        statement: &dyn PhysicalPreparedStatement,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, DruidError> {
+        self.physical_connection_mut()
+            .fetch_prepared(statement, params)
+            .await
+    }
+
     async fn fetch_prepared_result_set(
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
@@ -205,6 +260,18 @@ where
             .await
     }
 
+    async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
+        self.physical_connection_mut().create_blob().await
+    }
+
+    async fn create_clob(&mut self) -> Result<RdbcClob, DruidError> {
+        self.physical_connection_mut().create_clob().await
+    }
+
+    async fn create_n_clob(&mut self) -> Result<RdbcNClob, DruidError> {
+        self.physical_connection_mut().create_n_clob().await
+    }
+
     async fn abort(&mut self) -> Result<(), DruidError> {
         self.physical_connection_mut().abort().await
     }
@@ -223,6 +290,10 @@ where
 
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
         self.physical_connection().capabilities()
+    }
+
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+        self.physical_connection_mut().database_meta_data()
     }
 
     fn auto_commit(&self) -> bool {
