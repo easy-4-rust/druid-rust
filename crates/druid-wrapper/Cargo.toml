@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 description  = "Druid database driver and external-pool wrapper integrations"
 repository.workspace = true
+publish      = false
 
 [features]
 default = ["driver-catalog", "sqlite"]

@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 description  = "Non-blocking local metrics runtime for Druid datasource observability"
 repository.workspace = true
+publish      = false
 
 [lib]
 name = "druid_metrics"

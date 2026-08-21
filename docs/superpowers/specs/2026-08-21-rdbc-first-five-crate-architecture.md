@@ -129,7 +129,17 @@ Dynamic、XA、Druid lifecycle。它依赖 `druid-rdbc`，并继续把公共兼�
 
 ```rust
 pub mod sql {
-    pub use druid_rdbc::sql::*;
+    pub use druid_rdbc::{
+        error::{SqlException, SqlWarning},
+        types::{
+            Date, RdbcString, RdbcType, RdbcUrl, Row, Savepoint, SqlType, Time, Timestamp,
+            Types, Value,
+        },
+    };
+    pub use druid_rdbc::error::{
+        SqlException as SQLException,
+        SqlWarning as SQLWarning,
+    };
     pub use crate::core::{
         DruidPooledCallableStatement as CallableStatement,
         DruidPooledConnection as Connection,

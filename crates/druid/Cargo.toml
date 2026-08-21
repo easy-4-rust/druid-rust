@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 description  = "Druid 1.2.28 core semantic migration with built-in Toasty integration"
 repository.workspace = true
+publish      = false
 
 [lib]
 name = "druid"

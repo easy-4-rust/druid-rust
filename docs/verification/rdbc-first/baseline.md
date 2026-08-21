@@ -51,3 +51,7 @@ Try
 未作为 API 快照保留，因此 SHA-256 为 `NOT_AVAILABLE`。在明确提供/授权所需
 nightly 后，必须重新运行上述三条 public API/SHA-256 命令并更新本基线，再开始
 任何依赖 API baseline 的结构迁移。
+
+因此，在获得非空的 `api/druid-public-api.rdbc-first.before.txt` 及其新鲜 SHA-256
+之前，`druid-rdbc-extraction` 明确处于 `BLOCKED_BY_P01_AND_API_BASELINE`；不得将
+缺失的 API 证据视为已完成或由后续测试替代。
