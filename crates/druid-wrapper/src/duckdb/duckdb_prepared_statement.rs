@@ -1,6 +1,6 @@
 //! `DuckDB` 原生预编译语句句柄。
 
-use druid_core::core::{
+use druid::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, SqlTextPreparedStatement,
 };
 use duckdb::InterruptHandle;

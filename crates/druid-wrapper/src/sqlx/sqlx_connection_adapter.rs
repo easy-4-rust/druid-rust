@@ -4,7 +4,7 @@ use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecuti
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_core::core::{
+use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
     PreparedStatementKey, Row, Savepoint, SqlWarning, StatementExecuteResult,
@@ -133,7 +133,7 @@ impl SqlxConnectionAdapter {
                     .and_then(|code| code.parse::<i32>().ok())
                     .unwrap_or_default();
                 DruidError::SqlException(Box::new(
-                    druid_core::core::SqlException::new(
+                    druid::core::SqlException::new(
                         error_code,
                         sql_state,
                         Some(database_error.message().to_string()),
@@ -142,7 +142,7 @@ impl SqlxConnectionAdapter {
                 ))
             }
             sqlx::Error::Io(error) => DruidError::SqlException(Box::new(
-                druid_core::core::SqlException::new(
+                druid::core::SqlException::new(
                     0,
                     Some("08006".to_owned()),
                     Some(error.to_string()),
@@ -151,7 +151,7 @@ impl SqlxConnectionAdapter {
                 .recoverable(),
             )),
             sqlx::Error::Tls(error) => DruidError::SqlException(Box::new(
-                druid_core::core::SqlException::new(
+                druid::core::SqlException::new(
                     0,
                     Some("08006".to_owned()),
                     Some(error.to_string()),
@@ -160,14 +160,14 @@ impl SqlxConnectionAdapter {
                 .recoverable(),
             )),
             sqlx::Error::Protocol(message) => DruidError::SqlException(Box::new(
-                druid_core::core::SqlException::new(0, Some("08006".to_owned()), Some(message))
+                druid::core::SqlException::new(0, Some("08006".to_owned()), Some(message))
                     .with_class_name("sqlx::error::ProtocolError")
                     .recoverable(),
             )),
             error @ (sqlx::Error::PoolTimedOut
             | sqlx::Error::PoolClosed
             | sqlx::Error::WorkerCrashed) => DruidError::SqlException(Box::new(
-                druid_core::core::SqlException::new(
+                druid::core::SqlException::new(
                     0,
                     Some("08006".to_owned()),
                     Some(error.to_string()),
@@ -190,7 +190,7 @@ impl SqlxConnectionAdapter {
                 self.discarded = true;
                 self.connection.take();
                 Err(DruidError::SqlException(Box::new(
-                    druid_core::core::SqlException::new(
+                    druid::core::SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
                         Some("SQLx prepared statement query timed out".to_owned()),
@@ -202,7 +202,7 @@ impl SqlxConnectionAdapter {
                 self.discarded = true;
                 self.connection.take();
                 Err(DruidError::SqlException(Box::new(
-                    druid_core::core::SqlException::new(
+                    druid::core::SqlException::new(
                         0,
                         Some("HY008".to_owned()),
                         Some("SQLx prepared statement execution was cancelled".to_owned()),
@@ -520,7 +520,7 @@ impl SqlxConnectionAdapter {
                 }
                 unsupported => {
                     return Err(DruidError::DriverError(format!(
-                        "MySQL type {unsupported} is not represented by druid_core::core::Value"
+                        "MySQL type {unsupported} is not represented by druid::core::Value"
                     )));
                 }
             };
@@ -568,7 +568,7 @@ impl SqlxConnectionAdapter {
                 }
                 unsupported => {
                     return Err(DruidError::DriverError(format!(
-                        "PostgreSQL type {unsupported} is not represented by druid_core::core::Value"
+                        "PostgreSQL type {unsupported} is not represented by druid::core::Value"
                     )));
                 }
             };
@@ -636,7 +636,7 @@ impl SqlxConnectionAdapter {
                 "NULL" => Value::Null,
                 unsupported => {
                     return Err(DruidError::DriverError(format!(
-                        "SQLite type {unsupported} is not represented by druid_core::core::Value"
+                        "SQLite type {unsupported} is not represented by druid::core::Value"
                     )));
                 }
             };

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use druid_core::stats::{
+use druid::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
     SnapshotUnavailable,
 };
@@ -241,7 +241,7 @@ async fn busy_datasource_increments_snapshot_busy_total() {
                                 Ok(_) => {
                                     // Shouldn't happen for BusyDataSource
                                 }
-                                Err(druid_core::stats::SnapshotUnavailable::Busy) => {
+                                Err(druid::stats::SnapshotUnavailable::Busy) => {
                                     sampler_metrics.increment_snapshot_busy_total();
                                 }
                                 Err(_) => {}

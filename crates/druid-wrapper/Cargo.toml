@@ -33,7 +33,7 @@ bb8.workspace = true
 bigdecimal.workspace = true
 chrono.workspace = true
 deadpool.workspace = true
-druid-core = { version = "0.0.0-design", path = "../druid-core" }
+druid = { version = "0.0.0-design", path = "../druid" }
 duckdb = { workspace = true, optional = true }
 fs2 = { workspace = true, optional = true }
 futures.workspace = true

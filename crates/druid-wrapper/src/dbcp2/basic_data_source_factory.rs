@@ -1,7 +1,7 @@
 use crate::toasty::ToastyConnectionFactory;
-use druid_core::core::{DruidError, PhysicalConnectionFactory};
-use druid_core::pool::{DruidDataSource, DruidDataSourceFactory};
-use druid_core::sql::RdbcUtils;
+use druid::core::{DruidError, PhysicalConnectionFactory};
+use druid::pool::{DruidDataSource, DruidDataSourceFactory};
+use druid::sql::RdbcUtils;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -26,7 +26,8 @@ impl BasicDataSourceFactory {
         let factory: Arc<dyn PhysicalConnectionFactory> =
             Arc::new(ToastyConnectionFactory::new(rust_url.as_ref()).await?);
         let driver_name = factory
-            .connection_url().map_or_else(|| "toasty".to_owned(), str::to_owned);
+            .connection_url()
+            .map_or_else(|| "toasty".to_owned(), str::to_owned);
         DruidDataSourceFactory::create_data_source_with_factory(&properties, factory, driver_name)
             .await
     }

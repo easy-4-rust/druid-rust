@@ -1,5 +1,5 @@
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid_core::core::{
+use druid::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions,
     PreparedInputParameter, SqlTextStatement, Value,
 };

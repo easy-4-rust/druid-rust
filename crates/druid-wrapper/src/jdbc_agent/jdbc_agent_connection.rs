@@ -2,7 +2,7 @@ use super::{
     AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions,
     JdbcAgentPreparedStatement,
 };
-use druid_core::core::{
+use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
     Row, RowSetResultSet, Savepoint, StatementExecuteResult, StatementGeneratedKeys, Value,
@@ -293,7 +293,7 @@ impl JdbcAgentConnection {
 
     fn protocol_error(message: impl Into<String>) -> DruidError {
         DruidError::SqlException(Box::new(
-            druid_core::core::SqlException::new(
+            druid::core::SqlException::new(
                 0,
                 Some("08006".to_owned()),
                 Some(format!("invalid JDBC Agent response: {}", message.into())),

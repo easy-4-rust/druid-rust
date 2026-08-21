@@ -1,5 +1,5 @@
 use super::HttpSqlProvider;
-use druid_core::core::{DruidError, PhysicalDatabaseMetaData};
+use druid::core::{DruidError, PhysicalDatabaseMetaData};
 
 /// HTTP SQL 连接公开的可证明数据库元数据。
 pub struct HttpSqlDatabaseMetaData {

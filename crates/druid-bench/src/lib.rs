@@ -4,8 +4,7 @@
 
 use std::time::Duration;
 
-use druid_core::core::DruidPooledConnection;
-use druid_core::pool::{DruidDataSource, DruidDataSourceFactory, DruidPool};
+use druid::pool::{DruidDataSource, DruidPool};
 
 /// Build a minimal SQLite-backed Druid pool for benchmarking.
 pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
@@ -16,7 +15,10 @@ pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
     props.insert("initialSize".to_owned(), "8".to_owned());
     props.insert("maxActive".to_owned(), "8".to_owned());
     props.insert("minIdle".to_owned(), "8".to_owned());
-    props.insert("maxWait".to_owned(), Duration::from_secs(5).as_millis().to_string());
+    props.insert(
+        "maxWait".to_owned(),
+        Duration::from_secs(5).as_millis().to_string(),
+    );
     props.insert("driverClassName".to_owned(), "sqlite".to_owned());
     let factory = std::sync::Arc::new(
         tokio::runtime::Runtime::new()
@@ -28,9 +30,11 @@ pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
     );
     tokio::runtime::Runtime::new()
         .unwrap()
-        .block_on(druid_core::pool::DruidDataSourceFactory::create_data_source_with_factory(
-            &props, factory, "sqlite",
-        ))
+        .block_on(
+            druid::pool::DruidDataSourceFactory::create_data_source_with_factory(
+                &props, factory, "sqlite",
+            ),
+        )
         .expect("bench pool must build")
 }
 

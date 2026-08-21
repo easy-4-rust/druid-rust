@@ -11,8 +11,8 @@ use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 #[cfg(feature = "libsql-native")]
 use crate::libsql::LibSqlConnectionFactory;
 use crate::sqlx::SqlxConnectionFactory;
-use druid_core::core::PhysicalConnectionFactory;
-use druid_core::sql::RdbcUrl;
+use druid::core::PhysicalConnectionFactory;
+use druid::sql::RdbcUrl;
 use std::collections::HashMap;
 use std::sync::Arc;
 

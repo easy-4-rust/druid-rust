@@ -1,4 +1,4 @@
-use druid_core::core::Pool;
+use druid::core::Pool;
 
 /// c3p0 池化数据源兼容契约。
 ///

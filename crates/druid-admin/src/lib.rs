@@ -374,10 +374,7 @@ async fn metrics_handler(
 
     output.push_str("# HELP druid_admin_ingest_rejected_total Total number of rejected (stale/duplicate) ingest batches.\n");
     output.push_str("# TYPE druid_admin_ingest_rejected_total counter\n");
-    let _ = writeln!(
-        output,
-        "druid_admin_ingest_rejected_total {rejected_total}"
-    );
+    let _ = writeln!(output, "druid_admin_ingest_rejected_total {rejected_total}");
 
     output
         .push_str("# HELP druid_admin_datasource_count Number of tracked datasource instances.\n");

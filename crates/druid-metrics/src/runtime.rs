@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::Weak;
 use std::time::Duration;
 
-use druid_core::stats::DataSourceMonitorable;
+use druid::stats::DataSourceMonitorable;
 use parking_lot::RwLock;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -156,7 +156,9 @@ impl DruidMetricsRuntime {
             }
         };
 
-        if let Ok(()) = tokio::time::timeout(deadline, join_all).await { Ok(()) } else {
+        if let Ok(()) = tokio::time::timeout(deadline, join_all).await {
+            Ok(())
+        } else {
             let unflushed = self.self_metrics.pending_snapshots();
             Err(MetricsError::ShutdownTimeout { unflushed })
         }

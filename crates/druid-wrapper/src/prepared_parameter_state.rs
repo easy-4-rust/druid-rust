@@ -1,7 +1,7 @@
 //! 扩展 Adapter 的物理 Prepared 参数槽。
 
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
-use druid_core::core::{DruidError, PreparedInputParameter, Value};
+use druid::core::{DruidError, PreparedInputParameter, Value};
 use std::sync::Mutex;
 
 #[derive(Clone)]
@@ -176,7 +176,7 @@ impl PreparedParameterState {
 #[cfg(test)]
 mod tests {
     use super::PreparedParameterState;
-    use druid_core::core::{PreparedInputParameter, Value};
+    use druid::core::{PreparedInputParameter, Value};
 
     #[tokio::test]
     async fn preserves_one_based_slots_batch_snapshots_and_mismatch_errors() {

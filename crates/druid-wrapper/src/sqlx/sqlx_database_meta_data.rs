@@ -1,6 +1,6 @@
 //! `SQLx` 数据库元数据 Adapter。
 
-use druid_core::core::{
+use druid::core::{
     DruidError, PhysicalDatabaseMetaData, PhysicalResultSet, Row, RowSetResultSet, Value,
 };
 use sqlx::{

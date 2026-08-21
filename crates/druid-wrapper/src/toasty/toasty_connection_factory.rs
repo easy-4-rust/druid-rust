@@ -1,7 +1,7 @@
 //! Toasty 未池化物理连接工厂。
 
 use super::ToastyConnectionAdapter;
-use druid_core::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, SqlException};
+use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, SqlException};
 use std::sync::Arc;
 use toasty::db::Connect;
 use toasty_core::{

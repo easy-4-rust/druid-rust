@@ -3,7 +3,6 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 use druid_bench::build_sqlite_pool;
 use futures::future::join_all;
-use std::hint::black_box;
 use std::sync::Arc;
 
 fn bench_pool(c: &mut Criterion) {
@@ -25,7 +24,9 @@ fn bench_pool(c: &mut Criterion) {
             rt.block_on(async {
                 let futs = (0..16).map(|_| {
                     let p = pool.clone();
-                    async move { let _ = p.get_connection().await.unwrap(); }
+                    async move {
+                        let _ = p.get_connection().await.unwrap();
+                    }
                 });
                 join_all(futs).await;
             });
@@ -38,7 +39,9 @@ fn bench_pool(c: &mut Criterion) {
             rt.block_on(async {
                 let futs = (0..64).map(|_| {
                     let p = pool.clone();
-                    async move { let _ = p.get_connection().await.unwrap(); }
+                    async move {
+                        let _ = p.get_connection().await.unwrap();
+                    }
                 });
                 join_all(futs).await;
             });

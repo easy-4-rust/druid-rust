@@ -1,7 +1,7 @@
 //! RBDC 物理预编译语句。
 
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid_core::core::{
+use druid::core::{
     DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
     SqlTextPreparedStatement, SqlWarning, Value,
 };
@@ -162,7 +162,7 @@ impl PhysicalPreparedStatement for RbdcPreparedStatement {
 #[cfg(test)]
 mod tests {
     use super::RbdcPreparedStatement;
-    use druid_core::core::{PhysicalPreparedStatement, PreparedInputParameter, Value};
+    use druid::core::{PhysicalPreparedStatement, PreparedInputParameter, Value};
 
     #[tokio::test]
     async fn delegates_statement_state_and_owns_parameter_lifecycle() {

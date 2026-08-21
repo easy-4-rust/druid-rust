@@ -2,8 +2,7 @@
 resolver = "2"
 members = [
     "crates/druid",
-    "crates/druid-core",
-    "crates/druid-admin",
+        "crates/druid-admin",
     "crates/druid-wrapper",
     "crates/druid-metrics",
     "crates/druid-bench",

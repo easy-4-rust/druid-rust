@@ -1699,9 +1699,37 @@ checksum = "117240f60069e65410b3ae1bb213295bd828f707b5bec6596a1afc8793ce0cbc"
 name = "druid"
 version = "0.0.0-design"
 dependencies = [
- "druid-core",
- "druid-metrics",
+ "arc-swap",
+ "async-trait",
+ "base64 0.22.1",
+ "bigdecimal",
+ "bitflags 2.13.1",
+ "chrono",
+ "dashmap",
  "druid-wrapper",
+ "encoding_rs",
+ "fastrand",
+ "indexmap",
+ "inventory",
+ "java-properties",
+ "jiff",
+ "moka",
+ "num-bigint",
+ "parking_lot",
+ "quick-xml",
+ "reqwest",
+ "rsa",
+ "serde",
+ "serde_json",
+ "sqlparser",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
+ "x509-cert",
+ "xxhash-rust",
+ "zookeeper-client",
 ]
 
 [[package]]
@@ -1749,47 +1777,9 @@ version = "0.0.0-design"
 dependencies = [
  "criterion",
  "druid",
- "druid-core",
  "druid-wrapper",
  "futures",
  "tokio",
-]
-
-[[package]]
-name = "druid-core"
-version = "0.0.0-design"
-dependencies = [
- "arc-swap",
- "async-trait",
- "base64 0.22.1",
- "bigdecimal",
- "bitflags 2.13.1",
- "chrono",
- "dashmap",
- "druid-wrapper",
- "encoding_rs",
- "fastrand",
- "indexmap",
- "inventory",
- "java-properties",
- "jiff",
- "moka",
- "num-bigint",
- "parking_lot",
- "quick-xml",
- "reqwest",
- "rsa",
- "serde",
- "serde_json",
- "sqlparser",
- "thiserror 1.0.69",
- "tokio",
- "tracing",
- "url",
- "uuid",
- "x509-cert",
- "xxhash-rust",
- "zookeeper-client",
 ]
 
 [[package]]
@@ -1797,7 +1787,7 @@ name = "druid-metrics"
 version = "0.0.0-design"
 dependencies = [
  "arc-swap",
- "druid-core",
+ "druid",
  "parking_lot",
  "prost 0.13.5",
  "protoc-bin-vendored",
@@ -1821,7 +1811,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "deadpool 0.12.3",
- "druid-core",
+ "druid",
  "duckdb",
  "fs2",
  "futures",

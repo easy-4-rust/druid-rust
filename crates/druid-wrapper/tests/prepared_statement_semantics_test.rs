@@ -7,7 +7,7 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_core::core::{
+use druid::core::{
     AfterFilter, BatchExecContext, BeforeFilter, DruidError, DruidPooledConnection,
     DruidPooledPreparedStatement, DruidPooledPreparedStatementHandle, ExecContext, ExecOperation,
     ExecResult, FilterChain, PhysicalConnection, PhysicalConnectionFactory,
@@ -17,7 +17,7 @@ use druid_core::core::{
     ResultSetStatement, Row, SqlTextPreparedStatement, StatementExecuteResult,
     StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
-use druid_core::pool::DruidPool;
+use druid::pool::DruidPool;
 use druid_wrapper::toasty::{ToastyConnectionFactory, ToastyPreparedStatement};
 use std::any::TypeId;
 use std::str::FromStr;
@@ -236,7 +236,7 @@ struct PreparedFactory {
 }
 
 #[async_trait::async_trait]
-impl druid_core::core::PhysicalConnectionFactory for PreparedFactory {
+impl druid::core::PhysicalConnectionFactory for PreparedFactory {
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         Ok(Box::new(PreparedConnection {
             prepare_count: self.prepare_count.clone(),
@@ -1130,7 +1130,7 @@ struct CleanupFailingStatement {
 impl CleanupFailingStatement {
     fn fatal_error() -> DruidError {
         DruidError::SqlException(Box::new(
-            druid_core::core::SqlException::driver(1040, "too many connections").with_class_name(
+            druid::core::SqlException::driver(1040, "too many connections").with_class_name(
                 "com.mysql.cj.rdbc.exceptions.MySQLNonTransientConnectionException",
             ),
         ))
@@ -1298,7 +1298,7 @@ struct CleanupFailingFactory {
 }
 
 #[async_trait::async_trait]
-impl druid_core::core::PhysicalConnectionFactory for CleanupFailingFactory {
+impl druid::core::PhysicalConnectionFactory for CleanupFailingFactory {
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
         Ok(Box::new(CleanupFailingConnection {
             failure: self.failure,

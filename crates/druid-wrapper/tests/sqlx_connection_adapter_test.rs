@@ -1,11 +1,11 @@
 //! `SQLx` Adapter 真实 `SQLite` 驱动合同测试。
 
-use druid_core::core::{
+use druid::core::{
     BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, PhysicalConnection,
     PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, RdbcCharacterLength,
     RdbcInputStream, RdbcReader, RdbcRowId, RdbcStreamLength, RdbcUrl, Row, Value,
 };
-use druid_core::pool::DruidPool;
+use druid::pool::DruidPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
 use std::sync::{Arc, Mutex};
 

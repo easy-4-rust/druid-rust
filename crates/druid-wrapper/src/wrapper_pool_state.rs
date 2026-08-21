@@ -1,4 +1,4 @@
-use druid_core::core::PoolState;
+use druid::core::PoolState;
 use serde::Serialize;
 
 /// Wrapper 数据源的管理快照。

@@ -1,6 +1,6 @@
 use std::sync::Weak;
 
-use druid_core::stats::DataSourceMonitorable;
+use druid::stats::DataSourceMonitorable;
 
 /// Guard that keeps a datasource registered in the metrics runtime.
 ///

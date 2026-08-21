@@ -1,6 +1,6 @@
 //! `DuckDB` 原生数据库元数据。
 
-use druid_core::core::{DruidError, PhysicalDatabaseMetaData};
+use druid::core::{DruidError, PhysicalDatabaseMetaData};
 use duckdb::Connection;
 use parking_lot::Mutex;
 use std::sync::Arc;

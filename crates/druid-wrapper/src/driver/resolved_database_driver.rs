@@ -1,5 +1,5 @@
 use super::DatabaseProfile;
-use druid_core::core::PhysicalConnectionFactory;
+use druid::core::PhysicalConnectionFactory;
 use std::fmt;
 use std::sync::Arc;
 

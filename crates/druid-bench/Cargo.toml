@@ -12,14 +12,13 @@ workspace = true
 
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
-druid-core    = { version = "0.0.0-design", path = "../druid-core" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, optional = true }
 criterion     = { version = "0.5", features = ["html_reports"] }
 tokio         = { workspace = true }
 futures       = "0.3"
 
 [dev-dependencies]
-druid-core    = { path = "../druid-core" }
+druid         = { path = "../druid" }
 druid-wrapper = { path = "../druid-wrapper", default-features = false, features = ["sqlite"] }
 
 [features]

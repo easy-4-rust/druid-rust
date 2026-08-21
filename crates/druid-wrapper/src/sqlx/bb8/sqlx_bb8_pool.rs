@@ -1,7 +1,7 @@
 //! bb8 外部连接池桥接。
 
 use super::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager;
-use druid_core::core::{
+use druid::core::{
     ConnectionRecycleDisposition, DruidError, DruidPooledConnection, FilterChain,
     PhysicalConnectionLease, Pool, PoolState,
 };

@@ -1,5 +1,5 @@
 use super::{AgentRequestHandle, AgentRuntimeLease, JdbcAgentOptions};
-use druid_core::core::DruidError;
+use druid::core::DruidError;
 use serde_json::{json, Value as JsonValue};
 
 /// 共享 JDBC Agent 运行时中的单个数据库 session 客户端。

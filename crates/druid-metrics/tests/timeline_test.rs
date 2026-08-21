@@ -1,4 +1,3 @@
-
 use druid_metrics::timeline::{TimelineBucket, TimelineRingBuffer, TimelineSnapshot};
 
 #[test]

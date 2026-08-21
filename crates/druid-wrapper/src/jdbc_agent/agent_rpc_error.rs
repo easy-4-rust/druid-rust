@@ -1,5 +1,5 @@
 use super::AgentError;
-use druid_core::core::DruidError;
+use druid::core::DruidError;
 use serde::Deserialize;
 
 /// JDBC Agent JSON-RPC 2.0 结构化错误。

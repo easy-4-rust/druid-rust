@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use druid_core::stats::DruidTelemetrySnapshot;
+use druid::stats::DruidTelemetrySnapshot;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 

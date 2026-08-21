@@ -1,4 +1,4 @@
-use druid_core::core::PhysicalConnection;
+use druid::core::PhysicalConnection;
 use druid_wrapper::driver::{
     DatabaseConnectionConfig, DatabaseProfileId, DriverManifest, DriverRegistryError,
     DriverSupportStatus, DruidDatabasePoolBuilder, DruidDriverRegistry,

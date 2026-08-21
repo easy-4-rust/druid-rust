@@ -1,11 +1,11 @@
 //! Wall visitor throughput.
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use druid_core::sql::WallConfig;
+use druid::sql::WallConfig;
 use std::sync::Arc;
 
 fn bench_wall(c: &mut Criterion) {
-    let provider = Arc::new(druid_core::sql::WallProvider::new(WallConfig::default()));
+    let provider = Arc::new(druid::sql::WallProvider::new(WallConfig::default()));
 
     let cases: Vec<&str> = vec![
         "SELECT id, name FROM users WHERE id = ?",

@@ -3,7 +3,7 @@
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_core::core::{
+use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
     Row, RowSetResultSet, SqlException, SqlWarning, StatementExecuteResult, StatementGeneratedKeys,
@@ -314,7 +314,8 @@ impl DuckDbConnectionAdapter {
         let labels = (0..column_count)
             .map(|index| {
                 statement
-                    .column_name(index).map_or_else(|_| format!("column_{}", index + 1), ToOwned::to_owned)
+                    .column_name(index)
+                    .map_or_else(|_| format!("column_{}", index + 1), ToOwned::to_owned)
             })
             .collect();
         let mut result = statement.raw_query();

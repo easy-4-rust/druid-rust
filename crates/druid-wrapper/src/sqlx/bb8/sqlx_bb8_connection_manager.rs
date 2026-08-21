@@ -1,7 +1,7 @@
 //! `SQLx` 物理连接的 bb8 管理器。
 
 use crate::sqlx::SqlxConnectionFactory;
-use druid_core::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
 
 /// `SQLx` 物理连接的 bb8 管理器。
 ///

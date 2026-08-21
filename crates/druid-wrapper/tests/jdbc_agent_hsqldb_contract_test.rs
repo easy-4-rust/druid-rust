@@ -1,6 +1,6 @@
 #![cfg(feature = "jdbc-agent")]
 
-use druid_core::core::{
+use druid::core::{
     DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
 };
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};

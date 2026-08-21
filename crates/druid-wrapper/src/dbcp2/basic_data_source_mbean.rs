@@ -1,4 +1,4 @@
-use druid_core::pool::ManagedDataSource;
+use druid::pool::ManagedDataSource;
 
 /// Apache DBCP 2 管理契约。
 ///

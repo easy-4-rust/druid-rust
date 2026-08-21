@@ -4,11 +4,11 @@
 //! `druid_data_source_factory.rs`, `connection_create_worker.rs`,
 //! `connection_close_worker.rs`, and spi/ modules.
 
-use druid_core::core::{
+use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, SqlException, Value,
 };
-use druid_core::pool::{DruidDataSourceFactory, DruidPool, DruidPoolBuilder};
-use druid_core::spi::{
+use druid::pool::{DruidDataSourceFactory, DruidPool, DruidPoolBuilder};
+use druid::spi::{
     RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
     RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceFactory,
     RdbcResourceId, RdbcResourceKind, RdbcResourceOwner, RdbcResourceState, RdbcSqlXmlAccess,
@@ -22,7 +22,7 @@ use std::time::Duration;
 /// Helper: create a Toasty `SQLite` data source using the factory path.
 async fn create_toasty_data_source(
     properties: &HashMap<String, String>,
-) -> Result<druid_core::pool::DruidDataSource, DruidError> {
+) -> Result<druid::pool::DruidDataSource, DruidError> {
     let url = properties
         .get("url")
         .map_or("sqlite::memory:", String::as_str);
@@ -286,7 +286,7 @@ async fn on_fatal_error_detected_by_exception_sorter() {
 // 3. pool_inner: validate_connection branches
 // ===========================================================================
 
-use druid_core::core::ValidConnectionChecker;
+use druid::core::ValidConnectionChecker;
 
 struct AlwaysFailChecker;
 
@@ -1454,7 +1454,7 @@ impl RdbcArrayAccess for StubArrayAccess {
     async fn base_type(&self) -> Result<i32, DruidError> {
         Ok(12)
     }
-    async fn values(&self) -> Result<Vec<druid_core::core::RdbcObject>, DruidError> {
+    async fn values(&self) -> Result<Vec<druid::core::RdbcObject>, DruidError> {
         Ok(Vec::new())
     }
 }
@@ -1508,7 +1508,7 @@ impl RdbcClobAccess for StubClobAccess {
         &self,
         _position: i64,
         _length: i32,
-    ) -> Result<druid_core::core::RdbcString, DruidError> {
+    ) -> Result<druid::core::RdbcString, DruidError> {
         Ok("".into())
     }
 }
@@ -1537,7 +1537,7 @@ impl RdbcClobAccess for StubNClobAccess {
         &self,
         _position: i64,
         _length: i32,
-    ) -> Result<druid_core::core::RdbcString, DruidError> {
+    ) -> Result<druid::core::RdbcString, DruidError> {
         Ok("".into())
     }
 }
@@ -1564,10 +1564,8 @@ impl RdbcRefAccess for StubRefAccess {
     async fn base_type_name(&self) -> Result<String, DruidError> {
         Ok("REF".to_owned())
     }
-    async fn object(&self) -> Result<druid_core::core::RdbcObject, DruidError> {
-        Ok(druid_core::core::RdbcObject::Scalar(
-            druid_core::core::Value::Null,
-        ))
+    async fn object(&self) -> Result<druid::core::RdbcObject, DruidError> {
+        Ok(druid::core::RdbcObject::Scalar(druid::core::Value::Null))
     }
 }
 
@@ -1588,7 +1586,7 @@ impl RdbcResourceAccess for StubSqlXmlAccess {
 
 #[async_trait::async_trait]
 impl RdbcSqlXmlAccess for StubSqlXmlAccess {
-    async fn string(&self) -> Result<druid_core::core::RdbcString, DruidError> {
+    async fn string(&self) -> Result<druid::core::RdbcString, DruidError> {
         Ok("<root/>".into())
     }
 }
@@ -1737,7 +1735,7 @@ async fn spi_clob_access_default_methods_return_not_supported() {
     let access = StubClobAccess;
     assert!(access.get_character_stream().await.is_err());
     assert!(access.get_ascii_stream().await.is_err());
-    let test_str: druid_core::core::RdbcString = "test".into();
+    let test_str: druid::core::RdbcString = "test".into();
     assert!(access.position_string(&test_str, 0).await.is_err());
     assert!(access.set_string(0, &test_str).await.is_err());
     assert!(access.set_string_range(0, &test_str, 0, 4).await.is_err());
@@ -1759,9 +1757,7 @@ async fn spi_ref_access_default_methods_return_not_supported() {
         .await
         .is_err());
     assert!(access
-        .set_object(druid_core::core::RdbcObject::Scalar(
-            druid_core::core::Value::Null
-        ))
+        .set_object(druid::core::RdbcObject::Scalar(druid::core::Value::Null))
         .await
         .is_err());
 }
@@ -1777,7 +1773,7 @@ async fn spi_sql_xml_access_default_methods_return_not_supported() {
     assert!(access.set_binary_stream().await.is_err());
     assert!(access.character_stream().await.is_err());
     assert!(access.set_character_stream().await.is_err());
-    let test_str: druid_core::core::RdbcString = "test".into();
+    let test_str: druid::core::RdbcString = "test".into();
     assert!(access.set_string(&test_str).await.is_err());
 }
 

@@ -70,10 +70,10 @@ async fn sample_all(
                     Err(mpsc::error::TrySendError::Closed(_)) => break,
                 }
             }
-            Err(druid_core::stats::SnapshotUnavailable::Busy) => {
+            Err(druid::stats::SnapshotUnavailable::Busy) => {
                 self_metrics.increment_snapshot_busy_total();
             }
-            Err(druid_core::stats::SnapshotUnavailable::Closed) => {
+            Err(druid::stats::SnapshotUnavailable::Closed) => {
                 dead_ids.push(entry.datasource_id);
             }
         }

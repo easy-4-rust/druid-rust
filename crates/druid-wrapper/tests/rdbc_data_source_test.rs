@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use druid_core::core::{DruidError, PhysicalConnection, Pool};
-use druid_core::dynamic::{DataSourceGroup, RoundRobinBalancer, SqlHint};
-use druid_core::sql::DataSource;
+use druid::core::{DruidError, PhysicalConnection, Pool};
+use druid::dynamic::{DataSourceGroup, RoundRobinBalancer, SqlHint};
+use druid::sql::DataSource;
 use druid_wrapper::driver::DruidDatabasePoolBuilder;
 use druid_wrapper::rdbc::{DruidRdbcDataSource, DynamicRdbcDataSource};
 
