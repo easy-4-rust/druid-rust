@@ -202,3 +202,91 @@ async fn resend_rejects_a_pending_sequence_that_disagrees_with_the_encoded_heade
         "invalid resend is not stored"
     );
 }
+
+#[tokio::test]
+async fn resend_rejects_malformed_and_non_snapshot_frames_without_storing_them() {
+    let non_snapshot = ClientFrame {
+        payload: Some(client_frame::Payload::CommandAck(
+            druid_metrics::protocol::CommandAck {
+                header: None,
+                command_id: "not-a-snapshot".to_owned(),
+                success: true,
+                error_message: String::new(),
+            },
+        )),
+    }
+    .encode_to_vec();
+
+    for encoded_frame in [vec![0xff], non_snapshot] {
+        let pair = TransportPair::new(1);
+        let (batch_tx, batch_rx) = mpsc::channel(1);
+        let (mut client_rx, _server_tx, worker) = pair.into_worker(batch_rx, 2);
+        let handle = tokio::spawn(worker.run());
+        batch_tx
+            .send(PushEvent::Resend(PendingFrame {
+                sequence: 1,
+                encoded_frame,
+            }))
+            .await
+            .unwrap();
+
+        assert!(
+            client_rx.recv().await.is_none(),
+            "invalid frame is not sent"
+        );
+        assert!(
+            handle.await.unwrap().is_empty(),
+            "invalid frame is not stored"
+        );
+    }
+}
+
+#[tokio::test]
+async fn saturated_outbound_processes_the_oldest_ack_before_cancellation() {
+    let pair = TransportPair::new(1);
+    let (batch_tx, batch_rx) = mpsc::channel(4);
+    let cancellation = CancellationToken::new();
+    let (client_rx, server_tx, worker) = pair.into_worker(batch_rx, 4);
+    let worker = worker.with_cancellation_token(cancellation.clone());
+    let handle = tokio::spawn(worker.run());
+
+    batch_tx.send(PushEvent::Batch(batch(101))).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while client_rx.len() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("first frame fills the outbound transport");
+
+    batch_tx.send(PushEvent::Batch(batch(102))).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while batch_tx.capacity() != 4 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("worker consumes and stores the second frame before blocking on send");
+
+    server_tx.send(make_ack(1)).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while server_tx.capacity() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("worker processes ACK while the outbound send is blocked");
+
+    cancellation.cancel();
+    let pending = tokio::time::timeout(Duration::from_secs(1), handle)
+        .await
+        .expect("cancellation stops the saturated worker")
+        .unwrap();
+    assert_eq!(
+        pending
+            .into_iter()
+            .map(|frame| frame.sequence)
+            .collect::<Vec<_>>(),
+        vec![2]
+    );
+}

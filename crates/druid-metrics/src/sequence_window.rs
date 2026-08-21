@@ -30,6 +30,19 @@ pub enum SequenceWindowError {
     /// 相同 sequence 已经存在，拒绝用另一份字节覆盖。
     #[error("duplicate sequence: {0}")]
     DuplicateSequence(u64),
+
+    /// ACK 跳过了更早的未确认 frame。
+    #[error("out-of-order ACK: expected {expected}, received {received}")]
+    OutOfOrderAck {
+        /// 当前唯一允许 ACK 的最早 sequence。
+        expected: u64,
+        /// 实际收到的 sequence。
+        received: u64,
+    },
+
+    /// sequence 已经使用到 `u64::MAX`，不能再分配新值。
+    #[error("sequence space exhausted")]
+    SequenceExhausted,
 }
 
 /// 已发送但尚未 ACK 的完整、不可变客户端 frame。
@@ -46,7 +59,7 @@ pub struct PendingFrame {
 pub struct SequenceWindow {
     pending: BTreeMap<u64, PendingFrame>,
     capacity: usize,
-    next_sequence: u64,
+    next_sequence: Option<u64>,
 }
 
 impl SequenceWindow {
@@ -56,7 +69,7 @@ impl SequenceWindow {
         Self {
             pending: BTreeMap::new(),
             capacity,
-            next_sequence: 1,
+            next_sequence: Some(1),
         }
     }
 
@@ -68,14 +81,16 @@ impl SequenceWindow {
         encode_frame: impl FnOnce(u64) -> Vec<u8>,
     ) -> Result<PendingFrame, SequenceWindowError> {
         self.ensure_capacity()?;
-        let sequence = self.next_sequence;
+        let sequence = self
+            .next_sequence
+            .ok_or(SequenceWindowError::SequenceExhausted)?;
         let encoded_frame = encode_frame(sequence);
         let pending = PendingFrame {
             sequence,
             encoded_frame,
         };
         self.pending.insert(sequence, pending.clone());
-        self.next_sequence = self.next_sequence.saturating_add(1);
+        self.next_sequence = sequence.checked_add(1);
         Ok(pending)
     }
 
@@ -88,13 +103,31 @@ impl SequenceWindow {
             return Err(SequenceWindowError::DuplicateSequence(pending.sequence));
         }
         self.ensure_capacity()?;
-        self.next_sequence = self.next_sequence.max(pending.sequence.saturating_add(1));
+        if self
+            .next_sequence
+            .is_some_and(|next_sequence| pending.sequence >= next_sequence)
+        {
+            self.next_sequence = pending.sequence.checked_add(1);
+        }
         self.pending.insert(pending.sequence, pending);
         Ok(())
     }
 
     /// ACK 一个已发送 frame 并释放窗口容量。
     pub fn ack(&mut self, sequence: u64) -> Result<(), SequenceWindowError> {
+        let Some((&expected, _)) = self.pending.first_key_value() else {
+            return Err(SequenceWindowError::UnknownSequence(sequence));
+        };
+        if sequence != expected {
+            return if self.pending.contains_key(&sequence) {
+                Err(SequenceWindowError::OutOfOrderAck {
+                    expected,
+                    received: sequence,
+                })
+            } else {
+                Err(SequenceWindowError::UnknownSequence(sequence))
+            };
+        }
         self.pending
             .remove(&sequence)
             .map(|_| ())

@@ -1,6 +1,6 @@
 //! Tests for the immutable client-side sequence/ACK frame window.
 
-use druid_metrics::sequence_window::{PendingFrame, SequenceWindow};
+use druid_metrics::sequence_window::{PendingFrame, SequenceWindow, SequenceWindowError};
 
 #[test]
 fn push_encodes_once_and_retains_exact_frame_bytes() {
@@ -88,4 +88,49 @@ fn unknown_and_duplicate_ack_are_errors() {
     window.ack(1).unwrap();
     assert!(window.ack(1).is_err());
     assert!(window.is_empty());
+}
+
+#[test]
+fn out_of_order_ack_retains_the_entire_gap() {
+    let mut window = SequenceWindow::new(2);
+    window.push_with(|_| b"frame-1".to_vec()).unwrap();
+    window.push_with(|_| b"frame-2".to_vec()).unwrap();
+
+    let error = window
+        .ack(2)
+        .expect_err("ACK must advance from the oldest frame");
+
+    assert_eq!(
+        error,
+        SequenceWindowError::OutOfOrderAck {
+            expected: 1,
+            received: 2,
+        }
+    );
+    assert_eq!(window.len(), 2);
+    assert_eq!(
+        window
+            .pending_frames()
+            .into_iter()
+            .map(|frame| frame.sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
+#[test]
+fn restoring_max_sequence_exhausts_future_pushes_without_mutating_pending_bytes() {
+    let mut window = SequenceWindow::new(2);
+    let max_frame = PendingFrame {
+        sequence: u64::MAX,
+        encoded_frame: b"max-sequence-frame".to_vec(),
+    };
+    window.restore(max_frame.clone()).unwrap();
+
+    let error = window
+        .push_with(|_| b"must-not-be-encoded".to_vec())
+        .expect_err("sequence space is exhausted after u64::MAX");
+
+    assert_eq!(error, SequenceWindowError::SequenceExhausted);
+    assert_eq!(window.pending_frames(), vec![max_frame]);
 }

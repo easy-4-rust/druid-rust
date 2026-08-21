@@ -60,6 +60,7 @@ impl TransportPair {
         mpsc::Sender<ServerFrame>,
         PushWorker,
     ) {
+        let deferred_server_capacity = self.server_rx.max_capacity().max(1);
         let worker = PushWorker {
             batch_rx,
             transport_tx: self.client_tx,
@@ -72,6 +73,7 @@ impl TransportPair {
             cancellation: CancellationToken::new(),
             command_executor: None,
             deferred_server_frames: VecDeque::new(),
+            deferred_server_capacity,
         };
         (self.client_rx, self.server_tx, worker)
     }
@@ -92,6 +94,7 @@ pub struct PushWorker {
     cancellation: CancellationToken,
     command_executor: Option<RegistryCommandExecutor>,
     deferred_server_frames: VecDeque<ServerFrame>,
+    deferred_server_capacity: usize,
 }
 
 impl PushWorker {
@@ -107,6 +110,7 @@ impl PushWorker {
         boot_id: String,
         stream_epoch: u64,
     ) -> Self {
+        let deferred_server_capacity = transport_rx.max_capacity().max(1);
         Self {
             batch_rx,
             transport_tx,
@@ -119,6 +123,7 @@ impl PushWorker {
             cancellation: CancellationToken::new(),
             command_executor: None,
             deferred_server_frames: VecDeque::new(),
+            deferred_server_capacity,
         }
     }
 
@@ -240,18 +245,50 @@ impl PushWorker {
         self.window
             .restore(pending)
             .map_err(PushWorkerError::Window)?;
-        self.transport_tx
-            .send(frame)
-            .await
-            .map_err(|_| PushWorkerError::TransportClosed)
+        self.send_outbound(frame).await
     }
 
-    async fn send_encoded_frame(&self, encoded_frame: &[u8]) -> Result<(), PushWorkerError> {
+    async fn send_encoded_frame(&mut self, encoded_frame: &[u8]) -> Result<(), PushWorkerError> {
         let frame = decode_client_frame(encoded_frame).map_err(PushWorkerError::Decode)?;
-        self.transport_tx
-            .send(frame)
-            .await
-            .map_err(|_| PushWorkerError::TransportClosed)
+        self.send_outbound(frame).await
+    }
+
+    async fn send_outbound(&mut self, frame: ClientFrame) -> Result<(), PushWorkerError> {
+        let transport_tx = self.transport_tx.clone();
+        let send = transport_tx.send(frame);
+        tokio::pin!(send);
+
+        loop {
+            tokio::select! {
+                biased;
+                () = self.cancellation.cancelled() => return Err(PushWorkerError::Cancelled),
+                result = &mut send => {
+                    return result.map_err(|_| PushWorkerError::TransportClosed);
+                }
+                server_frame = self.transport_rx.recv() => {
+                    let frame = server_frame.ok_or(PushWorkerError::TransportClosed)?;
+                    self.process_server_while_sending(frame)?;
+                }
+            }
+        }
+    }
+
+    fn process_server_while_sending(&mut self, frame: ServerFrame) -> Result<(), PushWorkerError> {
+        use crate::protocol::server_frame::Payload;
+
+        if let Some(Payload::BatchAck(ack)) = frame.payload.as_ref() {
+            if let Err(error) = self.window.ack(ack.accepted_sequence) {
+                tracing::warn!(sequence = ack.accepted_sequence, %error, "unexpected ACK");
+            }
+            return Ok(());
+        }
+        if self.deferred_server_frames.len() >= self.deferred_server_capacity {
+            return Err(PushWorkerError::ServerInboundOverload {
+                capacity: self.deferred_server_capacity,
+            });
+        }
+        self.deferred_server_frames.push_back(frame);
+        Ok(())
     }
 
     async fn process_server_frame(&mut self, frame: ServerFrame) -> bool {
@@ -276,7 +313,7 @@ impl PushWorker {
                         command.command_id,
                         Err("ACK window capacity is zero".to_owned()),
                     );
-                    return self.transport_tx.send(reply).await.is_ok();
+                    return self.send_outbound(reply).await.is_ok();
                 }
                 if self.deferred_server_frames.is_empty() {
                     self.deferred_server_frames.push_back(ServerFrame {
@@ -288,12 +325,12 @@ impl PushWorker {
                         command.command_id,
                         Err("another full snapshot command is waiting for ACK capacity".to_owned()),
                     );
-                    self.transport_tx.send(reply).await.is_ok()
+                    self.send_outbound(reply).await.is_ok()
                 }
             }
             Some(Payload::Command(command)) => {
                 let reply = self.handle_command(command).await;
-                self.transport_tx.send(reply).await.is_ok()
+                self.send_outbound(reply).await.is_ok()
             }
             Some(Payload::HelloAck(_)) | None => true,
             Some(Payload::ResyncRequired(resync)) => {
@@ -396,10 +433,7 @@ impl PushWorker {
                         command.command_id,
                         Err("full snapshot command is waiting for ACK capacity".to_owned()),
                     );
-                    self.transport_tx
-                        .send(reply)
-                        .await
-                        .map_err(|_| PushWorkerError::TransportClosed)?;
+                    self.send_outbound(reply).await?;
                 }
                 Some(Payload::Error(error)) if error.close_stream => {
                     return Err(PushWorkerError::ServerInterrupted(error.message));
@@ -457,6 +491,12 @@ pub enum PushWorkerError {
     /// 服务端在全量快照分块过程中中断当前发送序列。
     #[error("server interrupted full snapshot: {0}")]
     ServerInterrupted(String),
+    /// transport 饱和期间服务端继续灌入非 ACK frame，超过了有界延迟槽。
+    #[error("server inbound deferred queue full: capacity {capacity}")]
+    ServerInboundOverload {
+        /// 最多延迟处理的服务端 frame 数。
+        capacity: usize,
+    },
 }
 
 fn now_unix_ms() -> u64 {

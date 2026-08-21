@@ -11,17 +11,21 @@ use druid_metrics::config::SqlTextPolicy;
 use druid_metrics::ingest_handler::IngestHandler;
 use druid_metrics::protocol::{
     client_frame, command, server_frame, ClientFrame, Command, CommandAck, FrameHeader,
-    RequestFullSnapshotCmd, ResetStatsCmd, ServerFrame, SnapshotBatch,
+    RequestFullSnapshotCmd, ResetStatsCmd, ServerFrame, SnapshotBatch, SnapshotEntry,
 };
 use druid_metrics::push_worker::{PushEvent, TransportPair};
 use druid_metrics::registry::{RegistryCommandExecutor, RegistryEntry};
 use parking_lot::RwLock;
 use serde_json::Value;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
+use tokio_util::sync::CancellationToken;
 
 struct ResetProbe {
     identity: DataSourceIdentity,
     reset_count: AtomicUsize,
+    snapshot_count: AtomicUsize,
+    reset_observed: Notify,
+    snapshot_observed: Notify,
     snapshot_result: Result<(), SnapshotUnavailable>,
 }
 
@@ -34,6 +38,9 @@ impl ResetProbe {
                 driver_name: Some("probe-driver".to_owned()),
             },
             reset_count: AtomicUsize::new(0),
+            snapshot_count: AtomicUsize::new(0),
+            reset_observed: Notify::new(),
+            snapshot_observed: Notify::new(),
             snapshot_result: Ok(()),
         }
     }
@@ -57,6 +64,7 @@ impl DataSourceMonitorable for ResetProbe {
 
     fn reset_stat(&self) {
         self.reset_count.fetch_add(1, Ordering::SeqCst);
+        self.reset_observed.notify_one();
     }
 
     fn identity(&self) -> DataSourceIdentity {
@@ -65,6 +73,8 @@ impl DataSourceMonitorable for ResetProbe {
 
     fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
         self.snapshot_result.clone()?;
+        self.snapshot_count.fetch_add(1, Ordering::SeqCst);
+        self.snapshot_observed.notify_one();
         Ok(DruidTelemetrySnapshot {
             identity: self.identity.clone(),
             pool_snapshot: PoolSnapshot {
@@ -96,6 +106,23 @@ fn command_frame(command_id: &str, payload: Option<command::Payload>) -> ServerF
             command_id: command_id.to_owned(),
             payload,
         })),
+    }
+}
+
+fn outbound_batch(datasource_id: u64) -> druid_metrics::aggregator::AggregatedBatch {
+    druid_metrics::aggregator::AggregatedBatch {
+        entries: vec![SnapshotEntry {
+            datasource_id,
+            datasource_name: format!("outbound-{datasource_id}"),
+            driver_name: Some("test-driver".to_owned()),
+            pool: None,
+            sql_stats: Vec::new(),
+            wall_check_count: 0,
+            wall_deny_count: 0,
+            wall_violation_count: 0,
+            sampling_time_millis: 1,
+        }],
+        is_full_snapshot: false,
     }
 }
 
@@ -432,4 +459,127 @@ async fn full_snapshot_respects_batch_size_and_waits_for_ack_capacity_between_ch
 
     drop(server_tx);
     let _ = handle.await.unwrap();
+}
+
+#[test]
+fn mixed_unknown_or_expired_reset_targets_have_no_partial_side_effects() {
+    let live = Arc::new(ResetProbe::new(91));
+    let live_executor = executor_for(&live);
+    assert!(live_executor.reset_stats(&[91, 999]).is_err());
+    assert_eq!(live.reset_count.load(Ordering::SeqCst), 0);
+
+    let expired_executor = executor_with_expired_unrelated_entry(&live);
+    assert!(expired_executor.reset_stats(&[91, 999]).is_err());
+    assert_eq!(live.reset_count.load(Ordering::SeqCst), 0);
+}
+
+async fn wait_until_outbound_is_full(client_rx: &mpsc::Receiver<ClientFrame>) {
+    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+        while client_rx.len() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("initial frame fills the capacity-1 outbound channel");
+}
+
+async fn join_after_cancel(
+    handle: &mut tokio::task::JoinHandle<Vec<druid_metrics::sequence_window::PendingFrame>>,
+) -> Vec<druid_metrics::sequence_window::PendingFrame> {
+    if let Ok(result) = tokio::time::timeout(std::time::Duration::from_secs(1), &mut *handle).await
+    {
+        result.expect("worker task does not panic")
+    } else {
+        handle.abort();
+        let _ = handle.await;
+        panic!("cancellation must terminate a transport-saturated worker");
+    }
+}
+
+#[tokio::test]
+async fn saturated_reset_ack_is_cancellation_aware_and_does_not_repeat_reset() {
+    let probe = Arc::new(ResetProbe::new(92));
+    let pair = TransportPair::new(1);
+    let (batch_tx, batch_rx) = mpsc::channel(2);
+    let cancellation = CancellationToken::new();
+    let (mut client_rx, server_tx, worker) = pair.into_worker(batch_rx, 4);
+    let worker = worker
+        .with_command_executor(executor_for(&probe))
+        .with_cancellation_token(cancellation.clone());
+    let mut handle = tokio::spawn(worker.run());
+
+    batch_tx
+        .send(PushEvent::Batch(outbound_batch(920)))
+        .await
+        .unwrap();
+    wait_until_outbound_is_full(&client_rx).await;
+    let reset_observed = probe.reset_observed.notified();
+    server_tx
+        .send(command_frame(
+            "saturated-reset",
+            Some(command::Payload::ResetStats(ResetStatsCmd {
+                target_datasource_ids: vec![92],
+            })),
+        ))
+        .await
+        .unwrap();
+    reset_observed.await;
+
+    cancellation.cancel();
+    let pending = join_after_cancel(&mut handle).await;
+    assert_eq!(
+        pending.len(),
+        1,
+        "original unsent-ACK frame remains replayable"
+    );
+    assert_eq!(probe.reset_count.load(Ordering::SeqCst), 1);
+    let _initial = client_rx.recv().await.unwrap();
+    assert!(
+        client_rx.recv().await.is_none(),
+        "success ACK was never falsely delivered"
+    );
+}
+
+#[tokio::test]
+async fn saturated_full_snapshot_send_is_cancellation_aware_and_preserves_both_frames() {
+    let probe = Arc::new(ResetProbe::new(93));
+    let pair = TransportPair::new(1);
+    let (batch_tx, batch_rx) = mpsc::channel(2);
+    let cancellation = CancellationToken::new();
+    let (mut client_rx, server_tx, worker) = pair.into_worker(batch_rx, 4);
+    let worker = worker
+        .with_command_executor(executor_for(&probe))
+        .with_cancellation_token(cancellation.clone());
+    let mut handle = tokio::spawn(worker.run());
+
+    batch_tx
+        .send(PushEvent::Batch(outbound_batch(930)))
+        .await
+        .unwrap();
+    wait_until_outbound_is_full(&client_rx).await;
+    let snapshot_observed = probe.snapshot_observed.notified();
+    server_tx
+        .send(command_frame(
+            "saturated-full",
+            Some(command::Payload::RequestFullSnapshot(
+                RequestFullSnapshotCmd {},
+            )),
+        ))
+        .await
+        .unwrap();
+    snapshot_observed.await;
+
+    cancellation.cancel();
+    let pending = join_after_cancel(&mut handle).await;
+    assert_eq!(
+        pending.len(),
+        2,
+        "initial and full snapshot frames remain replayable"
+    );
+    assert_eq!(probe.snapshot_count.load(Ordering::SeqCst), 1);
+    let _initial = client_rx.recv().await.unwrap();
+    assert!(
+        client_rx.recv().await.is_none(),
+        "blocked full snapshot was not delivered"
+    );
 }
