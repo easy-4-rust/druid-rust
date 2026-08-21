@@ -69,7 +69,7 @@ impl TransportPair {
         mpsc::Sender<ServerFrame>,
         PushWorker,
     ) {
-        let deferred_server_capacity = self.server_rx.max_capacity().max(1);
+        let deferred_server_capacity = self.server_rx.max_capacity().saturating_mul(2).max(1);
         let worker = PushWorker {
             batch_rx,
             transport_tx: self.client_tx,
@@ -144,6 +144,10 @@ pub struct PushWorkerExit {
     pub reply_sent_this_session: bool,
     /// cutoff 后入队、必须在权威替换后继续发送的 live events。
     pub preserved_live_events: Vec<PushEvent>,
+    /// 旧 transport 尚未被 worker 消费的有界服务端帧接收端。
+    pub transport_rx: mpsc::Receiver<ServerFrame>,
+    /// 已校验且允许跨连接迁移的远程命令帧。
+    pub successor_commands: Vec<ServerFrame>,
 }
 
 /// 远程全量快照命令跨连接耐久生命周期。
@@ -272,7 +276,7 @@ impl PushWorker {
         boot_id: String,
         stream_epoch: u64,
     ) -> Self {
-        let deferred_server_capacity = transport_rx.max_capacity().max(1);
+        let deferred_server_capacity = transport_rx.max_capacity().saturating_mul(2).max(1);
         Self {
             batch_rx,
             transport_tx,
@@ -381,6 +385,28 @@ impl PushWorker {
         self
     }
 
+    /// 恢复旧连接 teardown 前已经接收并校验的远程命令。
+    pub fn with_successor_commands(
+        mut self,
+        commands: Vec<ServerFrame>,
+    ) -> Result<Self, PushWorkerError> {
+        if commands.len() > self.deferred_server_capacity {
+            return Err(PushWorkerError::SuccessorCommandOverflow {
+                capacity: self.deferred_server_capacity,
+            });
+        }
+        if commands.iter().any(|frame| {
+            !matches!(
+                frame.payload.as_ref(),
+                Some(crate::protocol::server_frame::Payload::Command(_))
+            )
+        }) {
+            return Err(PushWorkerError::InvalidSuccessorFrame);
+        }
+        self.deferred_server_frames.extend(commands);
+        Ok(self)
+    }
+
     /// 运行 worker，直到取消、输入关闭或 transport 断开。
     ///
     /// 返回仍未 ACK 的完整 frame，供下一连接按原 sequence、原字节恢复。
@@ -479,6 +505,16 @@ impl PushWorker {
     }
 
     fn into_exit(self) -> PushWorkerExit {
+        let successor_commands = self
+            .deferred_server_frames
+            .into_iter()
+            .filter(|frame| {
+                matches!(
+                    frame.payload.as_ref(),
+                    Some(crate::protocol::server_frame::Payload::Command(_))
+                )
+            })
+            .collect();
         PushWorkerExit {
             pending_frames: self.window.pending_frames(),
             batch_rx: self.batch_rx,
@@ -489,6 +525,8 @@ impl PushWorker {
             completed_full_snapshot_commands: self.completed_full_snapshot_commands.into(),
             reply_sent_this_session: self.reply_sent_this_session,
             preserved_live_events: self.preserved_live_events.into(),
+            transport_rx: self.transport_rx,
+            successor_commands,
         }
     }
 
@@ -987,6 +1025,15 @@ pub enum PushWorkerError {
         /// 最多延迟处理的服务端 frame 数。
         capacity: usize,
     },
+    /// 跨连接命令队列超过当前有界 transport 容量。
+    #[error("successor command queue full: capacity {capacity}")]
+    SuccessorCommandOverflow {
+        /// 允许迁移的最大命令数。
+        capacity: usize,
+    },
+    /// successor 队列只允许已经校验的远程 Command frame。
+    #[error("successor queue contains a non-command server frame")]
+    InvalidSuccessorFrame,
 }
 
 fn now_unix_ms() -> u64 {

@@ -199,6 +199,7 @@ async fn run_supervisor(
     let mut full_snapshot_command = None;
     let mut completed_full_snapshot_commands = Vec::new();
     let mut preserved_live_events = Vec::new();
+    let mut successor_commands = Vec::new();
 
     loop {
         if (transport.require_full_snapshot && completed_session) || resync_required {
@@ -254,6 +255,7 @@ async fn run_supervisor(
             full_snapshot_command,
             completed_full_snapshot_commands,
             preserved_live_events,
+            successor_commands,
         )
         .await?;
         batch_rx = exit.batch_rx;
@@ -264,6 +266,7 @@ async fn run_supervisor(
         full_snapshot_command = exit.full_snapshot_command;
         completed_full_snapshot_commands = exit.completed_full_snapshot_commands;
         preserved_live_events = exit.preserved_live_events;
+        successor_commands = exit.successor_commands;
         completed_session = true;
 
         if batch_rx.is_closed()
@@ -273,6 +276,7 @@ async fn run_supervisor(
             && !resync_required
             && full_snapshot_command.is_none()
             && preserved_live_events.is_empty()
+            && successor_commands.is_empty()
         {
             return Ok(());
         }
@@ -319,6 +323,7 @@ async fn run_connected_session(
     full_snapshot_command: Option<FullSnapshotCommandState>,
     completed_full_snapshot_commands: Vec<String>,
     preserved_live_events: Vec<PushEvent>,
+    successor_commands: Vec<ServerFrame>,
 ) -> Result<PushWorkerExit, MetricsError> {
     let ConnectedTransport {
         outbound_tx,
@@ -365,6 +370,9 @@ async fn run_connected_session(
     .with_first_batch_full_snapshot(force_first_full)
     .with_full_snapshot_command_state(full_snapshot_command, completed_full_snapshot_commands);
     worker = worker.with_preserved_live_events(preserved_live_events);
+    worker = worker
+        .with_successor_commands(successor_commands)
+        .map_err(other_error)?;
     if let Some(executor) = command_executor {
         worker = worker.with_command_executor(executor);
     }
@@ -401,6 +409,10 @@ async fn run_connected_session(
     };
     drop(goodbye_tx);
     let reader_result = join_reader(&mut reader_handle, config.shutdown_timeout).await;
+    collect_successor_commands(
+        &mut exit,
+        config.ack_window_capacity.saturating_mul(2).max(1),
+    )?;
     if reply_confirmation {
         if reader_closed_before_goodbye || goodbye_result.is_err() || reader_result.is_err() {
             tracing::warn!(
@@ -421,6 +433,34 @@ async fn run_connected_session(
         tracing::warn!(%error, "gRPC metrics transport replaced after reader failure");
     }
     Ok(exit)
+}
+
+fn collect_successor_commands(
+    exit: &mut PushWorkerExit,
+    capacity: usize,
+) -> Result<(), MetricsError> {
+    while let Ok(frame) = exit.transport_rx.try_recv() {
+        let Some(server_frame::Payload::Command(command)) = frame.payload.as_ref() else {
+            continue;
+        };
+        let duplicate = exit.successor_commands.iter().any(|existing| {
+            matches!(
+                existing.payload.as_ref(),
+                Some(server_frame::Payload::Command(existing_command))
+                    if existing_command.command_id == command.command_id
+            )
+        });
+        if duplicate {
+            continue;
+        }
+        if exit.successor_commands.len() >= capacity {
+            return Err(MetricsError::ChannelSend(format!(
+                "successor command queue full: capacity {capacity}"
+            )));
+        }
+        exit.successor_commands.push(frame);
+    }
+    Ok(())
 }
 
 async fn open_transport(

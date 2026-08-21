@@ -1865,6 +1865,259 @@ async fn live_client_completes_two_different_commands_then_resumes_batches() {
         .expect("probe stops");
 }
 
+#[derive(Clone)]
+struct InterleavedCommandProbe {
+    connections: Arc<AtomicUsize>,
+    command_b_sent: Arc<Notify>,
+    command_b_result: mpsc::UnboundedSender<bool>,
+    live_observed: mpsc::UnboundedSender<u64>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for InterleavedCommandProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let command_b_sent = Arc::clone(&self.command_b_sent);
+        let command_b_result = self.command_b_result.clone();
+        let live_observed = self.live_observed.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: false,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            if connection == 0 {
+                if tx
+                    .send(Ok(full_snapshot_command(&header, "interleaved-a")))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(chunk_a) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (sequence_a, _) = full_chunk_identity(&chunk_a);
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence_a,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(reply_a) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(successful_command_ack(&reply_a, "interleaved-a"));
+                if tx
+                    .send(Ok(full_snapshot_command(&header, "interleaved-b")))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                command_b_sent.notify_waiters();
+                let Some(goodbye) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(matches!(
+                    goodbye.payload,
+                    Some(client_frame::Payload::Goodbye(_))
+                ));
+                return;
+            }
+            if connection == 1 {
+                let Some(chunk_b) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (sequence_b, _) = full_chunk_identity(&chunk_b);
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence_b,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(reply_b) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let _ = command_b_result.send(successful_command_ack(&reply_b, "interleaved-b"));
+                let Some(goodbye) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(matches!(
+                    goodbye.payload,
+                    Some(client_frame::Payload::Goodbye(_))
+                ));
+                return;
+            }
+
+            let Some(live) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let sequence = frame_header(&live).expect("live header").sequence;
+            let _ = live_observed.send(sequence);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: sequence,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+struct CountingCommandSource {
+    snapshots: AtomicUsize,
+}
+
+impl DataSourceMonitorable for CountingCommandSource {
+    fn name(&self) -> &str {
+        "counting-command-source"
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {}
+
+    fn identity(&self) -> DataSourceIdentity {
+        DataSourceIdentity {
+            id: 71,
+            name: "counting-command-source".to_owned(),
+            driver_name: Some("postgresql".to_owned()),
+        }
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        self.snapshots.fetch_add(1, Ordering::AcqRel);
+        Ok(DruidTelemetrySnapshot {
+            identity: self.identity(),
+            pool_snapshot: PoolSnapshot {
+                active_count: 7,
+                idle_count: 1,
+                max_active: 16,
+                max_idle: 8,
+                waiting_count: 0,
+            },
+            sql_stats: Vec::new(),
+            wall_snapshot: None,
+            sampling_time_millis: 1_755_734_400_000,
+        })
+    }
+}
+
+#[tokio::test]
+async fn command_received_before_rotation_goodbye_survives_into_successor_session() {
+    let source = Arc::new(CountingCommandSource {
+        snapshots: AtomicUsize::new(0),
+    });
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry {
+            datasource_id: 71,
+            weak_ref: Arc::downgrade(&monitorable),
+        }])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let command_b_sent = Arc::new(Notify::new());
+    let (command_b_tx, mut command_b_rx) = mpsc::unbounded_channel();
+    let (live_tx, mut live_rx) = mpsc::unbounded_channel();
+    let service = InterleavedCommandProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        command_b_sent: Arc::clone(&command_b_sent),
+        command_b_result: command_b_tx,
+        live_observed: live_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&endpoint, "interleaved-command"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    tokio::time::timeout(TEST_TIMEOUT, command_b_sent.notified())
+        .await
+        .expect("command B is sent before old-stream Goodbye");
+    assert!(tokio::time::timeout(TEST_TIMEOUT, command_b_rx.recv())
+        .await
+        .expect("successor executes preserved command B")
+        .expect("command B result"));
+    assert_eq!(
+        source.snapshots.load(Ordering::Acquire),
+        2,
+        "commands A and B each sample the registry exactly once"
+    );
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(7, 15)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("live batch remains queued across both rotations");
+    client.flush(TEST_TIMEOUT).await.expect("live batch ACKed");
+    assert_eq!(
+        tokio::time::timeout(TEST_TIMEOUT, live_rx.recv())
+            .await
+            .expect("live traffic resumes")
+            .expect("live sequence"),
+        3
+    );
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("client shutdown");
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
 struct CommandSource {
     id: u64,
 }
