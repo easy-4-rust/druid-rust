@@ -6,6 +6,7 @@ members = [
     "crates/druid-admin",
     "crates/druid-wrapper",
     "crates/druid-metrics",
+    "crates/druid-bench",
 ]
 exclude = ["vendor/toasty-driver-sqlite"]
 

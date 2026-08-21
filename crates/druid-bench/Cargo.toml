@@ -1,0 +1,44 @@
+[package]
+name         = "druid-bench"
+version      = "0.0.0-design"
+edition      = "2021"
+rust-version = "1.95"
+license      = "Apache-2.0"
+description  = "druid-rust performance benchmarks"
+publish      = false
+
+[lints]
+workspace = true
+
+[dependencies]
+druid         = { version = "0.0.0-design", path = "../druid" }
+druid-core    = { version = "0.0.0-design", path = "../druid-core" }
+druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, optional = true }
+criterion     = { version = "0.5", features = ["html_reports"] }
+tokio         = { workspace = true }
+futures       = "0.3"
+
+[dev-dependencies]
+druid-core    = { path = "../druid-core" }
+druid-wrapper = { path = "../druid-wrapper", default-features = false, features = ["sqlite"] }
+
+[features]
+default = ["wrapper"]
+wrapper = ["dep:druid-wrapper"]
+
+[[bench]]
+name = "pool"
+harness = false
+
+[[bench]]
+name = "filter_chain"
+harness = false
+
+[[bench]]
+name = "wall"
+harness = false
+
+[[bench]]
+name = "adapter"
+harness = false
+required-features = ["wrapper"]
