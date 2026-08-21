@@ -30,28 +30,19 @@ SQLite WAL 后端。
 ## 测试与 public API
 
 - `cargo test --workspace`：退出码 0；workspace、集成测试和 doctest 均通过。
-- public API 快照：`NOT_CAPTURED`。
-- 原始命令：`cargo public-api -p druid -sss --all-features > api/druid-public-api.rdbc-first.before.txt`
-- 原始失败（退出码 1）：
+- public API 快照：`api/druid-public-api.rdbc-first.before.txt`，非空，共 31,634 行，
+  首行是 `pub mod druid`，不是错误捕获。
+- 工具链：`nightly-2026-08-07`，`rustc 1.99.0-nightly (84b36a78a 2026-08-06)`；
+  `cargo-public-api 0.52.0`。
+- 原始成功命令：
 
-```text
-error: toolchain 'nightly-aarch64-apple-darwin' is not installed
-help: run `rustup toolchain install nightly-aarch64-apple-darwin` to install it
-Error: `"Cargo.toml"` is a virtual manifest.
-
-Listing or diffing the public API of an entire workspace is not supported.
-
-Try
-
-    cargo public-api -p specific-crate
+```bash
+RUSTUP_TOOLCHAIN=nightly-2026-08-07 cargo public-api -p druid -sss --all-features > api/druid-public-api.rdbc-first.before.txt
 ```
 
-本机安装状态为 `cargo-public-api 0.52.0`、`cargo 1.97.1`，活跃工具链为
-`1.97.1-aarch64-apple-darwin`；没有安装 nightly。失败命令产生的 0 字节文件
-未作为 API 快照保留，因此 SHA-256 为 `NOT_AVAILABLE`。在明确提供/授权所需
-nightly 后，必须重新运行上述三条 public API/SHA-256 命令并更新本基线，再开始
-任何依赖 API baseline 的结构迁移。
+- `shasum -a 256 api/druid-public-api.rdbc-first.before.txt`：
+  `bf88754fefc9c57ae1519e93f70f0db7118747dc3a1334156ec93778beac94b6`。
 
-因此，在获得非空的 `api/druid-public-api.rdbc-first.before.txt` 及其新鲜 SHA-256
-之前，`druid-rdbc-extraction` 明确处于 `BLOCKED_BY_P01_AND_API_BASELINE`；不得将
-缺失的 API 证据视为已完成或由后续测试替代。
+早期未安装 nightly 时的 `cargo public-api` 尝试曾以退出码 1 失败；在 controller
+明确授权并安装指定 nightly 后，上述命令以退出码 0 完成。API baseline gate 已满足；
+`druid-rdbc-extraction` 仍只等待 P01 证据。
