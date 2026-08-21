@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -6,7 +6,7 @@ use druid::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
     SnapshotUnavailable,
 };
-use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
+use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime, MetricsError};
 use serde_json::Value;
 
 /// Mock datasource for shutdown tests.
@@ -96,6 +96,32 @@ impl DataSourceMonitorable for SlowDataSource {
         self.call_count.fetch_add(1, Ordering::Relaxed);
         // Simulate a datasource that's always busy
         Err(SnapshotUnavailable::Busy)
+    }
+}
+
+struct PanicDataSource {
+    identity: DataSourceIdentity,
+    entered: Arc<AtomicBool>,
+}
+
+impl DataSourceMonitorable for PanicDataSource {
+    fn name(&self) -> &str {
+        &self.identity.name
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Object(serde_json::Map::new())
+    }
+
+    fn reset_stat(&self) {}
+
+    fn identity(&self) -> DataSourceIdentity {
+        self.identity.clone()
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        self.entered.store(true, Ordering::Release);
+        panic!("intentional sampler task failure")
     }
 }
 
@@ -202,4 +228,50 @@ fn config_shutdown_timeout_is_respected() {
         .build()
         .unwrap();
     assert_eq!(config.shutdown_timeout, Duration::from_secs(7));
+}
+
+#[tokio::test]
+async fn shutdown_reports_sampler_task_panic_instead_of_false_success() {
+    let runtime = DruidMetricsRuntime::start(
+        DruidMetricsConfig::builder()
+            .sample_interval(Duration::from_millis(1))
+            .build()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let entered = Arc::new(AtomicBool::new(false));
+    let source = Arc::new(PanicDataSource {
+        identity: DataSourceIdentity {
+            id: 77,
+            name: "panic-source".to_owned(),
+            driver_name: Some("test-driver".to_owned()),
+        },
+        entered: Arc::clone(&entered),
+    });
+    let _guard = runtime.register(source.clone());
+    while !entered.load(Ordering::Acquire) {
+        tokio::task::yield_now().await;
+    }
+    tokio::task::yield_now().await;
+
+    let result = runtime.shutdown(Duration::from_secs(1)).await;
+
+    assert!(matches!(result, Err(MetricsError::Join(_))));
+}
+
+#[tokio::test]
+async fn shutdown_joins_unregister_listener_even_when_guard_outlives_runtime() {
+    let runtime = DruidMetricsRuntime::start(DruidMetricsConfig::default())
+        .await
+        .unwrap();
+    let metrics = runtime.self_metrics().clone();
+    let source = Arc::new(MockDataSource::new(78, "guard-outlives-runtime"));
+    let guard = runtime.register(source);
+    assert!(metrics.unregister_listener_active());
+
+    runtime.shutdown(Duration::from_secs(1)).await.unwrap();
+
+    assert!(!metrics.unregister_listener_active());
+    drop(guard);
 }

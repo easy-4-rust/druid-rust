@@ -1,4 +1,5 @@
 use druid::stats::{DruidTelemetrySnapshot, SqlStatSnapshot};
+use sha2::{Digest, Sha256};
 
 use crate::config::SqlTextPolicy;
 use crate::protocol::{PoolSnapshotMsg, SnapshotEntry, SqlStatMsg};
@@ -6,8 +7,8 @@ use crate::protocol::{PoolSnapshotMsg, SnapshotEntry, SqlStatMsg};
 /// 将 Druid 遥测快照编码为共享协议的强类型快照条目。
 ///
 /// `max_sql_statements` 限制单个数据源进入协议的 SQL 统计数量；SQL
-/// 快照只提供参数化指纹，不包含绑定参数或原始 SQL，因此
-/// `RawWithoutParameters` 在此边界安全降级为同一参数化指纹。
+/// 快照字段名虽为 `fingerprint`，但上游关闭 `merge_sql` 时可能保存原始 SQL；
+/// 因此所有允许 SQL 身份的策略都在此边界重新生成 SHA-256 不透明标识。
 #[must_use]
 pub(crate) fn encode_snapshot(
     snapshot: DruidTelemetrySnapshot,
@@ -54,7 +55,9 @@ pub(crate) fn encode_snapshot(
 fn encode_sql_stat(stat: SqlStatSnapshot, sql_text_policy: SqlTextPolicy) -> SqlStatMsg {
     let fingerprint = match sql_text_policy {
         SqlTextPolicy::Disabled => String::new(),
-        SqlTextPolicy::FingerprintOnly | SqlTextPolicy::RawWithoutParameters => stat.fingerprint,
+        SqlTextPolicy::FingerprintOnly | SqlTextPolicy::RawWithoutParameters => {
+            format!("sha256:{:x}", Sha256::digest(stat.fingerprint.as_bytes()))
+        }
     };
 
     SqlStatMsg {

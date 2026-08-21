@@ -3,11 +3,12 @@ use std::future;
 use std::sync::Arc;
 
 use druid::stats::DruidTelemetrySnapshot;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 use crate::config::DruidMetricsConfig;
+use crate::error::MetricsError;
 use crate::protocol;
 use crate::self_metrics::RuntimeSelfMetrics;
 use crate::snapshot_encoder::encode_snapshot;
@@ -22,8 +23,11 @@ pub struct PendingSnapshot {
 /// Commands sent to the aggregator.
 #[derive(Debug)]
 pub enum AggregatorCommand {
-    /// Flush all pending snapshots now.
-    Flush,
+    /// 立即刷新所有已经接受的快照。
+    Flush {
+        /// 仅当所有已接受快照成功进入 `batch_tx` 后返回成功。
+        completion: oneshot::Sender<Result<(), MetricsError>>,
+    },
 }
 
 /// 等待下游处理的有界聚合快照批次。
@@ -47,12 +51,18 @@ pub(crate) async fn run_aggregator(
     cancel: CancellationToken,
     config: DruidMetricsConfig,
     self_metrics: Arc<RuntimeSelfMetrics>,
-) {
+) -> Result<(), MetricsError> {
     let mut pending = BTreeMap::<u64, PendingSnapshot>::new();
     let mut flush_deadline = None;
     let mut command_channel_open = true;
 
     loop {
+        if flush_deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await?;
+            flush_deadline = None;
+            continue;
+        }
+
         let next_deadline = flush_deadline;
         let window_elapsed = async move {
             if let Some(deadline) = next_deadline {
@@ -73,9 +83,9 @@ pub(crate) async fn run_aggregator(
         let event = tokio::select! {
             biased;
             () = cancel.cancelled() => Event::Cancelled,
+            () = &mut window_elapsed => Event::WindowElapsed,
             command = command_rx.recv(), if command_channel_open => Event::Command(command),
             snapshot = snapshot_rx.recv() => Event::Snapshot(snapshot),
-            () = &mut window_elapsed => Event::WindowElapsed,
         };
 
         match event {
@@ -83,13 +93,25 @@ pub(crate) async fn run_aggregator(
                 while let Ok(snapshot) = snapshot_rx.try_recv() {
                     insert_snapshot(&mut pending, snapshot, &self_metrics);
                 }
-                let _ = flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await;
-                break;
+                flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await?;
+                return Ok(());
             }
-            Event::Command(Some(AggregatorCommand::Flush)) | Event::WindowElapsed => {
-                if !flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await {
-                    break;
+            Event::Command(Some(AggregatorCommand::Flush { completion })) => {
+                while let Ok(snapshot) = snapshot_rx.try_recv() {
+                    insert_snapshot(&mut pending, snapshot, &self_metrics);
                 }
+                if let Err(error) =
+                    flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await
+                {
+                    let _ =
+                        completion.send(Err(output_closed_error(self_metrics.pending_snapshots())));
+                    return Err(error);
+                }
+                let _ = completion.send(Ok(()));
+                flush_deadline = None;
+            }
+            Event::WindowElapsed => {
+                flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await?;
                 flush_deadline = None;
             }
             Event::Command(None) => {
@@ -102,15 +124,13 @@ pub(crate) async fn run_aggregator(
                     flush_deadline = Some(Instant::now() + config.coalesce_window);
                 }
                 if pending.len() >= config.batch_size {
-                    if !flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await {
-                        break;
-                    }
+                    flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await?;
                     flush_deadline = None;
                 }
             }
             Event::Snapshot(None) => {
-                let _ = flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await;
-                break;
+                flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await?;
+                return Ok(());
             }
         }
     }
@@ -132,7 +152,7 @@ async fn flush_pending(
     batch_tx: &mpsc::Sender<AggregatedBatch>,
     config: &DruidMetricsConfig,
     self_metrics: &RuntimeSelfMetrics,
-) -> bool {
+) -> Result<(), MetricsError> {
     let mut entries = std::mem::take(pending)
         .into_values()
         .map(|pending| {
@@ -152,11 +172,18 @@ async fn flush_pending(
             is_full_snapshot: false,
         };
         if let Err(error) = batch_tx.send(batch).await {
-            self_metrics.set_pending_snapshots(error.0.entries.len() + entries.len());
-            return false;
+            let unflushed = error.0.entries.len() + entries.len();
+            self_metrics.set_pending_snapshots(unflushed);
+            return Err(output_closed_error(unflushed));
         }
     }
 
     self_metrics.set_pending_snapshots(0);
-    true
+    Ok(())
+}
+
+fn output_closed_error(unflushed: usize) -> MetricsError {
+    MetricsError::ChannelSend(format!(
+        "aggregated batch output closed with {unflushed} unflushed entries"
+    ))
 }

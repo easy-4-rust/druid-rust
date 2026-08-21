@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 /// Internal runtime self-metrics (counters for the metrics pipeline itself).
 #[derive(Debug)]
@@ -9,6 +9,8 @@ pub struct RuntimeSelfMetrics {
     coalesced_total: AtomicU64,
     /// Number of snapshots currently pending in the aggregator.
     pending_snapshots: AtomicU64,
+    /// Whether the owned unregister listener task is still running.
+    unregister_listener_active: AtomicBool,
 }
 
 impl RuntimeSelfMetrics {
@@ -17,6 +19,7 @@ impl RuntimeSelfMetrics {
             snapshot_busy_total: AtomicU64::new(0),
             coalesced_total: AtomicU64::new(0),
             pending_snapshots: AtomicU64::new(0),
+            unregister_listener_active: AtomicBool::new(false),
         }
     }
 
@@ -42,6 +45,16 @@ impl RuntimeSelfMetrics {
 
     pub fn set_pending_snapshots(&self, n: usize) {
         self.pending_snapshots.store(n as u64, Ordering::Relaxed);
+    }
+
+    /// 返回注销监听任务是否仍在运行，用于关闭期可观测性。
+    pub fn unregister_listener_active(&self) -> bool {
+        self.unregister_listener_active.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn set_unregister_listener_active(&self, active: bool) {
+        self.unregister_listener_active
+            .store(active, Ordering::Release);
     }
 }
 

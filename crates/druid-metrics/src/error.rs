@@ -26,6 +26,8 @@ pub enum MetricsError {
     SensitiveField { field: String },
     #[error("shutdown timed out, {unflushed} snapshots not flushed")]
     ShutdownTimeout { unflushed: usize },
+    #[error("shutdown completed with {unflushed} unresolved snapshots")]
+    UnflushedSnapshots { unflushed: usize },
     #[error("join error: {0}")]
     Join(#[from] tokio::task::JoinError),
     #[error("channel send error: {0}")]
