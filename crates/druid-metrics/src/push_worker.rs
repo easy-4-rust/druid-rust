@@ -404,6 +404,9 @@ impl PushWorker {
         if !self.advance_full_snapshot_command().await {
             return self.into_exit();
         }
+        if self.reply_confirmation_ready() {
+            return self.into_exit();
+        }
         if let Err(error) = self.drain_preserved_live_events().await {
             tracing::warn!(%error, "failed to replay post-cutoff live events");
             return self.into_exit();
@@ -719,10 +722,8 @@ impl PushWorker {
                         let reply = self.make_command_ack(command_id, Ok(()));
                         if self.send_outbound(reply).await.is_ok() {
                             self.reply_sent_this_session = true;
-                            true
-                        } else {
-                            false
                         }
+                        false
                     }
                     FullSnapshotCommandState::PendingChunks { .. } => true,
                 };
@@ -757,7 +758,8 @@ impl PushWorker {
             }
         }
         self.initial_batches.extend(batches);
-        self.advance_full_snapshot_command().await
+        let advanced = self.advance_full_snapshot_command().await;
+        advanced && !self.reply_confirmation_ready()
     }
 
     async fn advance_full_snapshot_command(&mut self) -> bool {
@@ -781,6 +783,14 @@ impl PushWorker {
         }
         self.reply_sent_this_session = true;
         true
+    }
+
+    fn reply_confirmation_ready(&self) -> bool {
+        self.reply_sent_this_session
+            && matches!(
+                self.full_snapshot_command,
+                Some(FullSnapshotCommandState::ReplyReady { .. })
+            )
     }
 
     fn make_command_ack(&self, command_id: String, result: Result<(), String>) -> ClientFrame {

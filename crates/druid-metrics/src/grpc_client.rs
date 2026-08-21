@@ -370,19 +370,20 @@ async fn run_connected_session(
     }
     let mut exit = worker.run_session().await;
 
-    let data_clean = exit.pending_frames.is_empty()
-        && exit.batch_rx.is_closed()
-        && exit.batch_rx.is_empty()
+    let transport_clean = exit.pending_frames.is_empty()
         && exit.authoritative_batches.is_empty()
         && exit.preserved_live_events.is_empty()
         && !exit.resync_required;
-    let reply_confirmation = data_clean
+    let reply_confirmation = transport_clean
         && exit.reply_sent_this_session
         && matches!(
             exit.full_snapshot_command,
             Some(FullSnapshotCommandState::ReplyReady { .. })
         );
-    let clean_shutdown = data_clean && exit.full_snapshot_command.is_none();
+    let clean_shutdown = transport_clean
+        && exit.batch_rx.is_closed()
+        && exit.batch_rx.is_empty()
+        && exit.full_snapshot_command.is_none();
     let goodbye_required = clean_shutdown || reply_confirmation;
     let reader_closed_before_goodbye = goodbye_required && reader_handle.is_finished();
     let goodbye_result = if goodbye_required && !reader_closed_before_goodbye {

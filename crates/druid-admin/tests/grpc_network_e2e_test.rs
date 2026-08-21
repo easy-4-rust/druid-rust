@@ -1520,6 +1520,7 @@ struct CommandReplyReconnectProbe {
     connections: Arc<AtomicUsize>,
     final_chunk_acked: Arc<Notify>,
     observed: mpsc::UnboundedSender<(bool, bool)>,
+    replayed_success: Arc<std::sync::atomic::AtomicBool>,
 }
 
 #[tonic::async_trait]
@@ -1533,6 +1534,7 @@ impl MetricsIngest for CommandReplyReconnectProbe {
         let connection = self.connections.fetch_add(1, Ordering::AcqRel);
         let final_chunk_acked = Arc::clone(&self.final_chunk_acked);
         let observed = self.observed.clone();
+        let replayed_success = Arc::clone(&self.replayed_success);
         let mut inbound = request.into_inner();
         let (tx, rx) = mpsc::channel(4);
         tokio::spawn(async move {
@@ -1578,6 +1580,24 @@ impl MetricsIngest for CommandReplyReconnectProbe {
                 return;
             }
 
+            if connection == 1 {
+                let Some(replayed_reply) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                replayed_success.store(
+                    successful_command_ack(&replayed_reply, "reply-reconnect"),
+                    Ordering::Release,
+                );
+                let Some(goodbye) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(matches!(
+                    goodbye.payload,
+                    Some(client_frame::Payload::Goodbye(_))
+                ));
+                return;
+            }
+
             if tx
                 .send(Ok(full_snapshot_command(&header, "reply-reconnect")))
                 .await
@@ -1585,15 +1605,11 @@ impl MetricsIngest for CommandReplyReconnectProbe {
             {
                 return;
             }
-            let Some(replayed_reply) = inbound.message().await.ok().flatten() else {
-                return;
-            };
-            let replayed_success = successful_command_ack(&replayed_reply, "reply-reconnect");
             let Some(idempotent_reply) = inbound.message().await.ok().flatten() else {
                 return;
             };
             let idempotent_success = successful_command_ack(&idempotent_reply, "reply-reconnect");
-            let _ = observed.send((replayed_success, idempotent_success));
+            let _ = observed.send((replayed_success.load(Ordering::Acquire), idempotent_success));
             while let Some(frame) = inbound.message().await.ok().flatten() {
                 if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
                     break;
@@ -1643,6 +1659,7 @@ async fn final_command_reply_replays_after_half_close_and_duplicate_id_is_idempo
         connections: Arc::new(AtomicUsize::new(0)),
         final_chunk_acked: Arc::clone(&final_chunk_acked),
         observed: observed_tx,
+        replayed_success: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
     let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
     let client = GrpcMetricsClient::connect_with_command_executor(
@@ -1663,6 +1680,184 @@ async fn final_command_reply_replays_after_half_close_and_duplicate_id_is_idempo
         .shutdown(TEST_TIMEOUT)
         .await
         .expect("durable command reply is confirmed after reconnect");
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
+#[derive(Clone)]
+struct SequentialCommandsProbe {
+    connections: Arc<AtomicUsize>,
+    command_results: mpsc::UnboundedSender<(String, bool)>,
+    live_observed: mpsc::UnboundedSender<u64>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for SequentialCommandsProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let command_results = self.command_results.clone();
+        let live_observed = self.live_observed.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: false,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            if connection < 2 {
+                let command_id = format!("sequential-command-{}", connection + 1);
+                if tx
+                    .send(Ok(full_snapshot_command(&header, &command_id)))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(chunk) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (sequence, _) = full_chunk_identity(&chunk);
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(reply) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let success = successful_command_ack(&reply, &command_id);
+                if connection == 0 {
+                    let _ = command_results.send((command_id, success));
+                    // The peer consumed CommandAck but half-closes before reading Goodbye.
+                    return;
+                }
+                let Some(goodbye) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(matches!(
+                    goodbye.payload,
+                    Some(client_frame::Payload::Goodbye(_))
+                ));
+                let _ = command_results.send((command_id, success));
+                return;
+            }
+
+            let Some(live) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let sequence = frame_header(&live).expect("live header").sequence;
+            let _ = live_observed.send(sequence);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: sequence,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn live_client_completes_two_different_commands_then_resumes_batches() {
+    let source = Arc::new(CommandSource::new(61));
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry {
+            datasource_id: 61,
+            weak_ref: Arc::downgrade(&monitorable),
+        }])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let (command_tx, mut command_rx) = mpsc::unbounded_channel();
+    let (live_tx, mut live_rx) = mpsc::unbounded_channel();
+    let service = SequentialCommandsProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        command_results: command_tx,
+        live_observed: live_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&endpoint, "sequential-commands"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    let first = tokio::time::timeout(TEST_TIMEOUT, command_rx.recv())
+        .await
+        .expect("first command completes while producer stays open")
+        .expect("first command result");
+    let second = tokio::time::timeout(TEST_TIMEOUT, command_rx.recv())
+        .await
+        .expect("second command is not blocked by the first")
+        .expect("second command result");
+    assert_eq!(
+        [first, second],
+        [
+            ("sequential-command-1".to_owned(), true),
+            ("sequential-command-2".to_owned(), true),
+        ]
+    );
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(7, 15)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("live producer remains open after both commands");
+    client.flush(TEST_TIMEOUT).await.expect("live batch ACKed");
+    assert_eq!(
+        tokio::time::timeout(TEST_TIMEOUT, live_rx.recv())
+            .await
+            .expect("live traffic resumes after command barriers")
+            .expect("live sequence"),
+        3
+    );
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("client shutdown");
     shutdown.cancel();
     server_handle
         .await
