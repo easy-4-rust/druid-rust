@@ -16,7 +16,7 @@ impl MetricsIngest for TestService {
         &self,
         _request: Request<Streaming<ClientFrame>>,
     ) -> Result<Response<Self::ConnectStream>, Status> {
-        Ok(Response::new(tokio_stream::empty()))
+        Err(Status::unimplemented("compile contract only"))
     }
 }
 

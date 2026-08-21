@@ -283,9 +283,42 @@ impl GrpcMetricsClient {
 
 - [ ] **Step 1: 写真实网络 RED E2E**
 
-Bind Admin gRPC on `127.0.0.1:0`, start a Metrics client, push a snapshot, then query the shared
-repository and assert the datasource/SQL/wall values. No direct invocation of service methods is
-allowed in this test.
+Create `grpc_network_e2e_test.rs` with real loopback gRPC and HTTP servers bound to
+`127.0.0.1:0`. Every frame must use `druid_metrics::protocol::{ClientFrame, ServerFrame}` and the
+generated `druid_metrics.v1` bidi `Connect`; the test must never invoke `IngestService::connect`,
+an ingest handler, or repository mutation methods directly.
+
+The E2E file must contain all of these independently observable contracts:
+
+1. `grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest` starts the production Metrics
+   client, sends one full `SnapshotBatch`, then queries `/druid/datasource.json`, `/druid/sql.json`,
+   and `/druid/wall.json`. Use a fixture with datasource id `42`, datasource name `orders`, driver
+   `postgresql`, active `7`, idle `15`, SQL fingerprint `fp:orders-by-id` with execute count `50`,
+   wall check count `5000`, and wall violation count `10`. Assert the REST fields `Identity`,
+   `DbType`, `ActiveCount`, `PoolingCount`, `SQL`, `ExecuteCount`, `checkCount`, and
+   `violationCount` match those literals.
+   The SQL view must expose the fingerprint, never raw SQL or bind parameters.
+2. `grpc_newer_sequence_updates_rest_state` sends sequence `1` and then sequence `2` for the same
+   `(service_name, instance_id, boot_id, stream_epoch, datasource_id)`. After each server ACK,
+   query `/druid/datasource.json`; the final response must contain sequence `2` values rather than
+   sequence `1` values.
+3. `grpc_duplicate_and_increasing_sequences_are_handled_over_network` sends sequence `10`, a
+   duplicate sequence `10` carrying different values, and sequence `11` through the generated
+   network client. Read `ServerFrame`s from the response stream and require ACK progress through
+   `11`. After the first sequence `10` ACK, query REST and record its values; after the duplicate
+   response but before sending sequence `11`, query REST again and require one datasource with the
+   original sequence `10` values. Then send sequence `11`, wait for its ACK, and require its values
+   to become visible. This proves the duplicate neither creates nor overwrites while an increasing
+   sequence remains accepted on the same bidi stream.
+4. `health_and_metrics_remain_truthful_after_grpc_ingest` ingests one accepted snapshot, then
+   requires `/health` to return HTTP 200 with `{"status":"ok"}` and `/metrics` to return HTTP 200
+   containing `druid_admin_datasource_count 1`, `druid_admin_ingest_total 1`, and a datasource
+   sample `druid_admin_datasource_active_count{service="orders",datasource="42",db_type="postgresql"} 7`.
+   These assertions must occur after the gRPC ACK.
+
+Each test owns and joins or cancels every server/client task it starts. Directly pre-populating the
+repository, substituting an in-process service call, asserting only HTTP/gRPC status, or keeping a
+second test-only proto does not satisfy this step.
 
 - [ ] **Step 2: Run RED test**
 
@@ -318,6 +351,10 @@ cargo test -p druid-metrics --test shutdown_test
 ```
 
 Expected: all PASS, including reconnect and shutdown flush cases.
+`grpc_network_e2e_test` may pass only when all four named contracts above pass over the real
+`druid_metrics.v1` network boundary: datasource/SQL/wall REST projection, newer-sequence update,
+duplicate/increasing sequence handling, and post-ingest health/Prometheus truthfulness. A passing
+repository-only assertion or direct service invocation is insufficient.
 
 - [ ] **Step 5: Commit**
 
