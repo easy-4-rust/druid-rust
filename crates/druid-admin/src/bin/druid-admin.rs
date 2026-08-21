@@ -13,6 +13,7 @@
 //! - `DRUID_ADMIN_TLS_CERT_PATH` / `DRUID_ADMIN_TLS_KEY_PATH` - shared PEM material
 //! - `DRUID_ADMIN_AUTH_MODE` - `disabled` (loopback only) or `basic`
 //! - `DRUID_ADMIN_LOGIN_USERNAME` / `DRUID_ADMIN_LOGIN_PASSWORD` - Basic credentials
+//! - `DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS` - bounded server join deadline (default: `10000`)
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,6 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tls_material = config.load_tls_material()?;
     let http_addr = config.http_addr();
     let grpc_addr = config.grpc_addr();
+    let shutdown_timeout = config.shutdown_timeout();
 
     tracing::info!(%http_addr, %grpc_addr, "starting druid-admin");
 
@@ -51,8 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shutdown_token = CancellationToken::new();
 
     // Build HTTP router
-    let http_app =
-        druid_admin::production_router(repo.clone(), config.auth().clone(), tls_material.is_some());
+    let http_app = druid_admin::production_router(repo.clone(), &config);
     let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
     let http_shutdown = shutdown_token.clone();
     let http_tls = tls_material.clone();
@@ -113,19 +114,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     match first_exit {
         FirstExit::Signal => {
             tracing::info!("shutdown signal received, stopping servers");
-            let (http_result, grpc_result) = tokio::join!(http_handle, grpc_handle);
-            http_result??;
-            grpc_result??;
+            let (http_result, grpc_result) = tokio::join!(
+                join_handle_with_deadline(http_handle, shutdown_timeout),
+                join_handle_with_deadline(grpc_handle, shutdown_timeout),
+            );
+            http_result???;
+            grpc_result???;
         }
         FirstExit::Http(http_result) => {
-            let grpc_result = grpc_handle.await;
+            let grpc_result = join_handle_with_deadline(grpc_handle, shutdown_timeout).await;
             http_result??;
-            grpc_result??;
+            grpc_result???;
             return Err("HTTP server exited before a shutdown signal".into());
         }
         FirstExit::Grpc(grpc_result) => {
-            let http_result = http_handle.await;
-            http_result??;
+            let http_result = join_handle_with_deadline(http_handle, shutdown_timeout).await;
+            http_result???;
             grpc_result??;
             return Err("gRPC server exited before a shutdown signal".into());
         }
@@ -133,6 +137,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("druid-admin stopped");
     Ok(())
+}
+
+async fn join_handle_with_deadline<T>(
+    mut handle: tokio::task::JoinHandle<T>,
+    deadline: Duration,
+) -> std::io::Result<Result<T, tokio::task::JoinError>> {
+    if let Ok(result) = tokio::time::timeout(deadline, &mut handle).await {
+        Ok(result)
+    } else {
+        handle.abort();
+        let _ = handle.await;
+        Err(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!(
+                "admin server shutdown deadline exceeded after {} ms",
+                deadline.as_millis()
+            ),
+        ))
+    }
 }
 
 struct TlsListener {

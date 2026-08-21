@@ -293,10 +293,10 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Form(login)): Valid<Form<LoginRequest>>,
     ) -> Response {
-        let Some((username, password)) = state.auth.credentials() else {
-            return (StatusCode::OK, "error").into_response();
-        };
-        if login.login_username != username || login.login_password != password {
+        if !state
+            .auth
+            .authorizes_credentials(&login.login_username, &login.login_password)
+        {
             return (StatusCode::OK, "error").into_response();
         }
         let token = uuid::Uuid::new_v4().simple().to_string();
@@ -631,12 +631,16 @@ impl MonitorViewServlet {
         #[allow(unused_mut)]
         let mut body = format!(
             concat!(
+                "# HELP druid_admin_tasks_instrumented_total Total instrumented admin tasks.\n",
                 "# TYPE druid_admin_tasks_instrumented_total counter\n",
                 "druid_admin_tasks_instrumented_total {}\n",
+                "# HELP druid_admin_tasks_completed_total Total completed admin tasks.\n",
                 "# TYPE druid_admin_tasks_completed_total counter\n",
                 "druid_admin_tasks_completed_total {}\n",
+                "# HELP druid_admin_task_polls_total Total admin task polls.\n",
                 "# TYPE druid_admin_task_polls_total counter\n",
                 "druid_admin_task_polls_total {}\n",
+                "# HELP druid_admin_task_slow_polls_total Total slow admin task polls.\n",
                 "# TYPE druid_admin_task_slow_polls_total counter\n",
                 "druid_admin_task_slow_polls_total {}\n"
             ),
@@ -654,26 +658,37 @@ impl MonitorViewServlet {
             write!(
                 &mut body,
                 concat!(
+                    "# HELP druid_jdbc_agent_processes Current JDBC agent process count.\n",
                     "# TYPE druid_jdbc_agent_processes gauge\n",
                     "druid_jdbc_agent_processes {}\n",
+                    "# HELP druid_jdbc_agent_active_sessions Current JDBC agent active sessions.\n",
                     "# TYPE druid_jdbc_agent_active_sessions gauge\n",
                     "druid_jdbc_agent_active_sessions {}\n",
+                    "# HELP druid_jdbc_agent_starts_total Total JDBC agent starts.\n",
                     "# TYPE druid_jdbc_agent_starts_total counter\n",
                     "druid_jdbc_agent_starts_total {}\n",
+                    "# HELP druid_jdbc_agent_crashes_total Total JDBC agent crashes.\n",
                     "# TYPE druid_jdbc_agent_crashes_total counter\n",
                     "druid_jdbc_agent_crashes_total {}\n",
+                    "# HELP druid_jdbc_agent_rpc_total Total JDBC agent RPC calls.\n",
                     "# TYPE druid_jdbc_agent_rpc_total counter\n",
                     "druid_jdbc_agent_rpc_total {}\n",
+                    "# HELP druid_jdbc_agent_rpc_errors_total Total JDBC agent RPC errors.\n",
                     "# TYPE druid_jdbc_agent_rpc_errors_total counter\n",
                     "druid_jdbc_agent_rpc_errors_total {}\n",
+                    "# HELP druid_jdbc_agent_rpc_latency_microseconds_total Total JDBC agent RPC latency in microseconds.\n",
                     "# TYPE druid_jdbc_agent_rpc_latency_microseconds_total counter\n",
                     "druid_jdbc_agent_rpc_latency_microseconds_total {}\n",
+                    "# HELP druid_jdbc_agent_rpc_latency_microseconds_max Maximum JDBC agent RPC latency in microseconds.\n",
                     "# TYPE druid_jdbc_agent_rpc_latency_microseconds_max gauge\n",
                     "druid_jdbc_agent_rpc_latency_microseconds_max {}\n",
+                    "# HELP druid_jdbc_agent_timeouts_total Total JDBC agent RPC timeouts.\n",
                     "# TYPE druid_jdbc_agent_timeouts_total counter\n",
                     "druid_jdbc_agent_timeouts_total {}\n",
+                    "# HELP druid_jdbc_agent_cancellations_total Total JDBC agent RPC cancellations.\n",
                     "# TYPE druid_jdbc_agent_cancellations_total counter\n",
                     "druid_jdbc_agent_cancellations_total {}\n",
+                    "# HELP druid_jdbc_agent_protocol_errors_total Total JDBC agent protocol errors.\n",
                     "# TYPE druid_jdbc_agent_protocol_errors_total counter\n",
                     "druid_jdbc_agent_protocol_errors_total {}\n"
                 ),
@@ -750,6 +765,20 @@ fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
         body,
         "# HELP druid_admin_datasource_count Number of tracked datasource instances.\n# TYPE druid_admin_datasource_count gauge\ndruid_admin_datasource_count {datasource_count}"
     );
+    body.push_str(concat!(
+        "# HELP druid_admin_datasource_active_count Active connection count.\n",
+        "# TYPE druid_admin_datasource_active_count gauge\n",
+        "# HELP druid_admin_datasource_pooling_count Pooled connection count.\n",
+        "# TYPE druid_admin_datasource_pooling_count gauge\n",
+        "# HELP druid_admin_datasource_execute_count Total execute count.\n",
+        "# TYPE druid_admin_datasource_execute_count counter\n",
+        "# HELP druid_admin_datasource_error_count Total error count.\n",
+        "# TYPE druid_admin_datasource_error_count counter\n",
+        "# HELP druid_admin_datasource_commit_count Total commit count.\n",
+        "# TYPE druid_admin_datasource_commit_count counter\n",
+        "# HELP druid_admin_datasource_rollback_count Total rollback count.\n",
+        "# TYPE druid_admin_datasource_rollback_count counter\n",
+    ));
     for entry in repository.all_datasources() {
         let datasource = &entry.datasource;
         let service = prometheus_label_value(datasource.name.as_deref().unwrap_or("unknown"));
@@ -759,32 +788,32 @@ fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
             format!("service=\"{service}\",datasource=\"{identity}\",db_type=\"{db_type}\"");
         let _ = writeln!(
             body,
-            "# TYPE druid_admin_datasource_active_count gauge\ndruid_admin_datasource_active_count{{{labels}}} {}",
+            "druid_admin_datasource_active_count{{{labels}}} {}",
             datasource.active_count
         );
         let _ = writeln!(
             body,
-            "# TYPE druid_admin_datasource_pooling_count gauge\ndruid_admin_datasource_pooling_count{{{labels}}} {}",
+            "druid_admin_datasource_pooling_count{{{labels}}} {}",
             datasource.pooling_count
         );
         let _ = writeln!(
             body,
-            "# TYPE druid_admin_datasource_execute_count counter\ndruid_admin_datasource_execute_count{{{labels}}} {}",
+            "druid_admin_datasource_execute_count{{{labels}}} {}",
             datasource.execute_count
         );
         let _ = writeln!(
             body,
-            "# TYPE druid_admin_datasource_error_count counter\ndruid_admin_datasource_error_count{{{labels}}} {}",
+            "druid_admin_datasource_error_count{{{labels}}} {}",
             datasource.error_count
         );
         let _ = writeln!(
             body,
-            "# TYPE druid_admin_datasource_commit_count counter\ndruid_admin_datasource_commit_count{{{labels}}} {}",
+            "druid_admin_datasource_commit_count{{{labels}}} {}",
             datasource.commit_count
         );
         let _ = writeln!(
             body,
-            "# TYPE druid_admin_datasource_rollback_count counter\ndruid_admin_datasource_rollback_count{{{labels}}} {}",
+            "druid_admin_datasource_rollback_count{{{labels}}} {}",
             datasource.rollback_count
         );
     }

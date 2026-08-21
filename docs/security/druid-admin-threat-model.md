@@ -36,16 +36,20 @@ flowchart LR
 - gRPC interceptor 在调用 `MetricsIngest::connect` 前验证标准
   `authorization` metadata。`ClientHello` 的 service/instance/boot/epoch 只用于协议
   身份与序列校验，绝不是认证凭据。
+- 生产 `GrpcMetricsClient` 由 redacted `GrpcAuthorization` provider 在初连和每次重连
+  的 generated Tonic Request boundary 注入同一 metadata；凭据不进入 protobuf frame。
 
 ## 3. 资产、威胁者、入口与控制
 
 | 资产 | 威胁者 / 能力 | 入口 | 主要风险 | 控制 | 验证证据 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | datasource、SQL fingerprint、Wall 与运行指标 | 未认证远程客户端 | 管理 HTML/JSON、`/metrics` | 监控信息披露、服务枚举 | remote TLS + Basic/session；默认 deny；未认证 302 到 login | `admin_binary_test::remote_http_and_grpc_use_tls_and_require_authentication`、`servlet_test::auth_metrics_requires_login` |
-| ingest repository 与 sequence/ACK 真值 | 伪造 metrics client | gRPC `Connect` | 注入伪造统计、推动 ACK、触发运维命令 | TLS；gRPC authorization interceptor；之后再校验 Hello/每帧 identity 与 protocol | binary TLS/auth 测试的 missing/invalid/valid metadata；`grpc_network_e2e_test` |
-| 管理用户名、密码、session cookie | 日志读取者、错误观察者、同主机用户 | env、login form、Authorization/Cookie | secret 泄露、session 劫持 | password/auth/TLS material 自定义 Debug 脱敏；错误不回显值；TraceLayer 不记录 body/header；cookie `Secure; HttpOnly; SameSite=Lax` | `monitor_properties_debug_redacts_password`、strict Clippy 与安全自审 |
+| ingest repository 与 sequence/ACK 真值 | 伪造 metrics client | gRPC `Connect` | 注入伪造统计、推动 ACK、触发运维命令 | TLS；生产 client request metadata provider；gRPC interceptor；之后再校验 Hello/每帧 identity 与 protocol | binary TLS `GrpcMetricsClient` missing/invalid/valid；reconnect metadata E2E |
+| 管理用户名、密码、session cookie | 日志读取者、错误观察者、同主机用户 | env、login form、Authorization/Cookie | secret 泄露、session 劫持 | 只保存 canonical credential SHA-256 digest并做 fixed-length ct_eq；Debug 脱敏；TraceLayer 只记录 URI path，不记录 query/header/body | LoginRequest/config/client Debug 与 tracing capture 测试；Basic/form malformed/长度矩阵 |
 | TLS 私钥 | 文件系统读取者、镜像读取者 | PEM 私钥文件 | listener 身份冒用 | 外部 secret provisioning；启动时只读取，不生成；要求最小文件权限和独立挂载 | invalid PEM 启动失败测试；部署权限检查属于环境门禁 |
-| 可用性与 bounded command migration | 恶意/异常服务端、慢 consumer | bidi response stream | teardown 背压丢命令、任务卡死 | W channel + 2W validated-command migration cap；并发 drain/reader EOF；溢出 fail-closed | `validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes` |
+| 可用性与 bounded command migration | 恶意/异常服务端、慢 consumer | bidi response stream | teardown 背压丢命令、冲突 command 静默去重 | W channel + 2W cap；相同 ID 仅在 payload 相同才幂等；冲突/2W+1 fail-closed | W+1、2W+1、same-ID/different-payload 真实 Tonic tests |
+| 进程终止与 listener 所有权 | 慢/半开客户端 | HTTP/gRPC connection | SIGTERM 后无限等待 in-flight connection | validated process deadline；超时 abort/join owned handles并返回 TimedOut | held partial HTTP + SIGTERM binary test，退出后两 listener 可重绑 |
+| Prometheus scrape 合同 | 高 service churn / 多 datasource | `GET /metrics` | 重复 TYPE/缺失 HELP 导致 scrape 无效 | 每个 family 的 HELP/TYPE 在 sample loop 外只输出一次 | 双 datasource default/all-features declaration/sample count test |
 
 ## 4. Public / protected route 矩阵
 
@@ -73,6 +77,7 @@ log、浏览器历史和 proxy 记录。HTTP Basic header 与现有 login/sessio
 | `DRUID_ADMIN_AUTH_MODE` | `disabled` / `basic` | 未设置为 disabled；remote 禁止 disabled |
 | `DRUID_ADMIN_LOGIN_USERNAME` | Basic/login 用户名 | basic 必填且非空 |
 | `DRUID_ADMIN_LOGIN_PASSWORD` | Basic/login 密码 | basic 必填且非空；不得打印或写入 metrics |
+| `DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS` | SIGTERM 后 owned handle join deadline | 默认 `10000`；必须为非零毫秒 |
 
 生产环境应由 secret manager 或只读 volume provision PEM 与凭据。私钥文件应由运行用户
 独占读取（Unix 推荐 `0600` 文件、`0700` 父目录）；证书可读权限按部署需要收紧。环境
@@ -94,5 +99,7 @@ loopback 明文兼容模式省略 `Secure` 以免浏览器永远不发送；两�
 - Basic 凭据必须通过 TLS；本进程不负责密码轮换、锁定、MFA 或集中 IdP。
 - certificate expiry、轮换和 reload 由部署系统管理；当前变更要求重启加载新材料。
 - 外部 proxy 模式没有显式 trust configuration，因此不能关闭应用内 remote TLS/auth。
+- `standalone_router` 只定义 loopback compatibility router；remote production 启动必须由
+  已验证 `AdminServerConfig` 驱动本进程 TLS listener 和 bounded shutdown。
 - repository TTL、容量与 service churn 上限仍按既有 P06 ruling 处理；本任务没有扩展该范围。
 - 发布前应继续运行 cargo-deny/audit 和实际部署文件权限、证书链、DNS/SAN、轮换演练。

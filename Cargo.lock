@@ -1790,6 +1790,7 @@ name = "druid-metrics"
 version = "0.0.0-design"
 dependencies = [
  "arc-swap",
+ "base64 0.22.1",
  "druid",
  "parking_lot",
  "prost 0.14.4",

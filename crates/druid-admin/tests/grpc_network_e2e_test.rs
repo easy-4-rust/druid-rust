@@ -12,13 +12,13 @@ use druid::stats::{
 use druid_admin::ingest::IngestService;
 use druid_admin::MetricsRepository;
 use druid_metrics::aggregator::AggregatedBatch;
-use druid_metrics::grpc_client::{GrpcClientConfig, GrpcMetricsClient};
+use druid_metrics::grpc_client::{GrpcAuthorization, GrpcClientConfig, GrpcMetricsClient};
 use druid_metrics::protocol::metrics_ingest_client::MetricsIngestClient;
 use druid_metrics::protocol::metrics_ingest_server::{MetricsIngest, MetricsIngestServer};
 use druid_metrics::protocol::{
     client_frame, command, server_frame, BatchAck, ClientFrame, ClientGoodbye, ClientHeartbeat,
     ClientHello, Command, FrameHeader, HelloAck, PoolSnapshotMsg, RequestFullSnapshotCmd,
-    ResyncRequired, ServerFrame, SnapshotBatch, SnapshotEntry, SqlStatMsg,
+    ResetStatsCmd, ResyncRequired, ServerFrame, SnapshotBatch, SnapshotEntry, SqlStatMsg,
 };
 use druid_metrics::registry::{RegistryCommandExecutor, RegistryEntry};
 use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
@@ -236,6 +236,7 @@ fn grpc_config(endpoint: &str, suffix: &str) -> GrpcClientConfig {
         boot_id: format!("boot-{suffix}"),
         ack_window_capacity: 8,
         shutdown_timeout: TEST_TIMEOUT,
+        authorization: None,
     }
 }
 
@@ -667,6 +668,7 @@ struct ReconnectProbe {
     connections: Arc<AtomicUsize>,
     first_frame: Arc<Mutex<Option<Vec<u8>>>>,
     replay_results: mpsc::UnboundedSender<bool>,
+    authorization_results: mpsc::UnboundedSender<(usize, bool)>,
 }
 
 #[tonic::async_trait]
@@ -678,6 +680,12 @@ impl MetricsIngest for ReconnectProbe {
         request: Request<Streaming<ClientFrame>>,
     ) -> Result<Response<Self::ConnectStream>, Status> {
         let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let authenticated = request
+            .metadata()
+            .get("authorization")
+            .and_then(|value| value.to_str().ok())
+            == Some("Basic YWRtaW46c2VjcmV0");
+        let _ = self.authorization_results.send((connection, authenticated));
         let mut inbound = request.into_inner();
         let (tx, rx) = mpsc::channel(4);
         let first_frame = Arc::clone(&self.first_frame);
@@ -736,13 +744,17 @@ impl MetricsIngest for ReconnectProbe {
 #[tokio::test]
 async fn grpc_client_reconnects_and_resends_only_pending_frame_bytes() {
     let (replay_tx, mut replay_rx) = mpsc::unbounded_channel();
+    let (authorization_tx, mut authorization_rx) = mpsc::unbounded_channel();
     let service = ReconnectProbe {
         connections: Arc::new(AtomicUsize::new(0)),
         first_frame: Arc::new(Mutex::new(None)),
         replay_results: replay_tx,
+        authorization_results: authorization_tx,
     };
     let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
-    let client = GrpcMetricsClient::connect(grpc_config(&endpoint, "reconnect"))
+    let mut config = grpc_config(&endpoint, "reconnect");
+    config.authorization = Some(GrpcAuthorization::basic("admin", "secret"));
+    let client = GrpcMetricsClient::connect(config)
         .await
         .expect("client initially connects");
     client
@@ -762,6 +774,20 @@ async fn grpc_client_reconnects_and_resends_only_pending_frame_bytes() {
             .expect("replay observed before timeout")
             .expect("replay result exists"),
         "reconnect must resend the exact immutable pending frame"
+    );
+    assert_eq!(
+        [
+            tokio::time::timeout(TEST_TIMEOUT, authorization_rx.recv())
+                .await
+                .expect("initial authorization observed")
+                .expect("initial authorization result"),
+            tokio::time::timeout(TEST_TIMEOUT, authorization_rx.recv())
+                .await
+                .expect("reconnect authorization observed")
+                .expect("reconnect authorization result"),
+        ],
+        [(0, true), (1, true)],
+        "initial and reconnect requests carry the same production credential"
     );
     shutdown.cancel();
     server_handle
@@ -2080,6 +2106,233 @@ async fn validated_w_plus_one_commands_survive_teardown_backpressure_and_live_tr
         .expect("probe stops");
 }
 
+#[derive(Clone, Copy)]
+enum MigrationViolation {
+    Overflow,
+    ConflictingPayload,
+}
+
+#[derive(Clone)]
+struct MigrationViolationProbe {
+    connections: Arc<AtomicUsize>,
+    violation: MigrationViolation,
+    violation_sent: mpsc::UnboundedSender<()>,
+    successor_executed: mpsc::UnboundedSender<()>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for MigrationViolationProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let violation = self.violation;
+        let violation_sent = self.violation_sent.clone();
+        let successor_executed = self.successor_executed.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(8);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: false,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            if connection == 0 {
+                if tx
+                    .send(Ok(full_snapshot_command(&header, "migration-trigger")))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(chunk) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (sequence, _) = full_chunk_identity(&chunk);
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(command_ack) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(successful_command_ack(&command_ack, "migration-trigger"));
+                match violation {
+                    MigrationViolation::Overflow => {
+                        for index in 0..=SUCCESSOR_COMMAND_WINDOW.saturating_mul(2) {
+                            if tx
+                                .send(Ok(full_snapshot_command(
+                                    &header,
+                                    &format!("overflow-command-{index}"),
+                                )))
+                                .await
+                                .is_err()
+                            {
+                                return;
+                            }
+                        }
+                    }
+                    MigrationViolation::ConflictingPayload => {
+                        if tx
+                            .send(Ok(full_snapshot_command(&header, "conflicting-command")))
+                            .await
+                            .is_err()
+                            || tx
+                                .send(Ok(reset_stats_command(&header, "conflicting-command")))
+                                .await
+                                .is_err()
+                        {
+                            return;
+                        }
+                    }
+                }
+                let _ = violation_sent.send(());
+                while let Some(frame) = inbound.message().await.ok().flatten() {
+                    if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                        break;
+                    }
+                }
+                return;
+            }
+
+            let Some(successor) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            if matches!(
+                successor.payload,
+                Some(client_frame::Payload::SnapshotBatch(_))
+            ) {
+                let _ = successor_executed.send(());
+                let sequence = frame_header(&successor).expect("successor header").sequence;
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+            }
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+fn reset_stats_command(header: &FrameHeader, command_id: &str) -> ServerFrame {
+    ServerFrame {
+        payload: Some(server_frame::Payload::Command(Command {
+            header: Some(reply_header(header)),
+            command_id: command_id.to_owned(),
+            payload: Some(command::Payload::ResetStats(ResetStatsCmd {
+                target_datasource_ids: Vec::new(),
+            })),
+        })),
+    }
+}
+
+async fn assert_migration_violation_fails_closed(
+    violation: MigrationViolation,
+    expected_error: &str,
+) {
+    let source = Arc::new(CountingCommandSource {
+        snapshots: AtomicUsize::new(0),
+    });
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry {
+            datasource_id: 71,
+            weak_ref: Arc::downgrade(&monitorable),
+        }])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let (sent_tx, mut sent_rx) = mpsc::unbounded_channel();
+    let (executed_tx, mut executed_rx) = mpsc::unbounded_channel();
+    let service = MigrationViolationProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        violation,
+        violation_sent: sent_tx,
+        successor_executed: executed_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let mut config = grpc_config(&endpoint, "migration-violation");
+    config.ack_window_capacity = SUCCESSOR_COMMAND_WINDOW;
+    let client = GrpcMetricsClient::connect_with_command_executor(config, Some(executor))
+        .await
+        .expect("client connects");
+    tokio::time::timeout(TEST_TIMEOUT, sent_rx.recv())
+        .await
+        .expect("server sends migration violation")
+        .expect("migration violation signal");
+    let error = client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect_err("migration violation must fail closed");
+    assert!(error.to_string().contains(expected_error), "{error}");
+    assert_eq!(
+        source.snapshots.load(Ordering::Acquire),
+        1,
+        "only the trigger command executes before fail-closed teardown"
+    );
+    assert!(
+        executed_rx.try_recv().is_err(),
+        "no successor command executes after migration failure"
+    );
+    shutdown.cancel();
+    tokio::time::timeout(TEST_TIMEOUT, server_handle)
+        .await
+        .expect("server has no residual task")
+        .expect("server joins")
+        .expect("server stops");
+}
+
+#[tokio::test]
+async fn two_w_plus_one_unique_commands_fail_closed_without_successor_execution() {
+    assert_migration_violation_fails_closed(MigrationViolation::Overflow, "queue full").await;
+}
+
+#[tokio::test]
+async fn same_command_id_with_different_payload_fails_closed() {
+    assert_migration_violation_fails_closed(
+        MigrationViolation::ConflictingPayload,
+        "conflicting payload",
+    )
+    .await;
+}
+
 #[derive(Clone)]
 struct InterleavedCommandProbe {
     connections: Arc<AtomicUsize>,
@@ -2148,12 +2401,11 @@ impl MetricsIngest for InterleavedCommandProbe {
                     return;
                 };
                 assert!(successful_command_ack(&reply_a, "interleaved-a"));
-                if tx
-                    .send(Ok(full_snapshot_command(&header, "interleaved-b")))
-                    .await
-                    .is_err()
-                {
-                    return;
+                let duplicate_b = full_snapshot_command(&header, "interleaved-b");
+                for frame in [duplicate_b.clone(), duplicate_b] {
+                    if tx.send(Ok(frame)).await.is_err() {
+                        return;
+                    }
                 }
                 command_b_sent.notify_waiters();
                 let Some(goodbye) = inbound.message().await.ok().flatten() else {

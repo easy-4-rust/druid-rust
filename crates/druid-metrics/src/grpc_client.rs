@@ -1,5 +1,6 @@
 //! Tonic 指标客户端与有界重连 supervisor。
 
+use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -22,11 +23,13 @@ use crate::push_worker::{
 use crate::registry::RegistryCommandExecutor;
 use crate::sequence_window::PendingFrame;
 
+pub use crate::grpc_authorization::GrpcAuthorization;
+
 const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
 /// 真实 Tonic 客户端配置。
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GrpcClientConfig {
     /// Admin gRPC endpoint。
     pub endpoint: Endpoint,
@@ -40,6 +43,23 @@ pub struct GrpcClientConfig {
     pub ack_window_capacity: usize,
     /// 握手、transport 清理与默认关闭期限。
     pub shutdown_timeout: Duration,
+    /// 初连与每次重连都必须注入的 Authorization metadata。
+    pub authorization: Option<GrpcAuthorization>,
+}
+
+impl fmt::Debug for GrpcClientConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("GrpcClientConfig")
+            .field("endpoint", &"[CONFIGURED]")
+            .field("service_name", &self.service_name)
+            .field("instance_id", &self.instance_id)
+            .field("boot_id", &self.boot_id)
+            .field("ack_window_capacity", &self.ack_window_capacity)
+            .field("shutdown_timeout", &self.shutdown_timeout)
+            .field("authorization", &self.authorization)
+            .finish()
+    }
 }
 
 /// 持有推送、transport、重连和取消生命周期的真实 gRPC 指标客户端。
@@ -459,15 +479,19 @@ fn collect_successor_command(
     let Some(server_frame::Payload::Command(command)) = frame.payload.as_ref() else {
         return Ok(());
     };
-    let duplicate = exit.successor_commands.iter().any(|existing| {
-        matches!(
-            existing.payload.as_ref(),
-            Some(server_frame::Payload::Command(existing_command))
-                if existing_command.command_id == command.command_id
-        )
-    });
-    if duplicate {
-        return Ok(());
+    if let Some(existing_command) = exit.successor_commands.iter().find_map(|existing| {
+        let Some(server_frame::Payload::Command(existing_command)) = existing.payload.as_ref()
+        else {
+            return None;
+        };
+        (existing_command.command_id == command.command_id).then_some(existing_command)
+    }) {
+        if existing_command.payload == command.payload {
+            return Ok(());
+        }
+        return Err(MetricsError::ChannelSend(
+            "successor command ID has a conflicting payload".to_owned(),
+        ));
     }
     if exit.successor_commands.len() >= capacity {
         return Err(MetricsError::ChannelSend(format!(
@@ -485,10 +509,11 @@ async fn open_transport(
 ) -> Result<ConnectedTransport, MetricsError> {
     let mut client = MetricsIngestClient::new(channel);
     let (outbound_tx, outbound_rx) = mpsc::channel(config.ack_window_capacity);
-    let response = client
-        .connect(ReceiverStream::new(outbound_rx))
-        .await
-        .map_err(other_error)?;
+    let mut request = tonic::Request::new(ReceiverStream::new(outbound_rx));
+    if let Some(authorization) = &config.authorization {
+        authorization.apply(&mut request);
+    }
+    let response = client.connect(request).await.map_err(other_error)?;
     let mut inbound = response.into_inner();
     let hello_header = make_header(config, stream_epoch, 0);
     outbound_tx

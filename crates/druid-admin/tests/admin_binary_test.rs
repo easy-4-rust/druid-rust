@@ -3,12 +3,17 @@
 //! Task 1 Step 1: Tests for dual-port binding (HTTP 8080, gRPC 9090),
 //! /health route, and graceful shutdown.
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use druid_metrics::protocol::metrics_ingest_client::MetricsIngestClient;
-use druid_metrics::protocol::{ClientFrame, ServerFrame};
-use tokio_stream::wrappers::ReceiverStream;
+use axum::body::Body;
+use axum::http::Request;
+use druid_metrics::aggregator::AggregatedBatch;
+use druid_metrics::grpc_client::{GrpcAuthorization, GrpcClientConfig, GrpcMetricsClient};
+use druid_metrics::protocol::{PoolSnapshotMsg, SnapshotEntry};
+use tokio::io::AsyncWriteExt as _;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
+use tower::ServiceExt as _;
 
 const SECURITY_ENV_VARS: &[&str] = &[
     "DRUID_ADMIN_HTTP_ADDR",
@@ -18,6 +23,7 @@ const SECURITY_ENV_VARS: &[&str] = &[
     "DRUID_ADMIN_AUTH_MODE",
     "DRUID_ADMIN_LOGIN_USERNAME",
     "DRUID_ADMIN_LOGIN_PASSWORD",
+    "DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS",
 ];
 
 fn admin_command() -> tokio::process::Command {
@@ -26,6 +32,114 @@ fn admin_command() -> tokio::process::Command {
         command.env_remove(variable);
     }
     command
+}
+
+#[derive(Clone, Default)]
+struct CapturedLogs(Arc<Mutex<Vec<u8>>>);
+
+struct CapturedLogWriter(Arc<Mutex<Vec<u8>>>);
+
+impl std::io::Write for CapturedLogWriter {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        std::io::Write::write(&mut *self.0.lock().expect("capture lock"), buffer)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'writer> tracing_subscriber::fmt::MakeWriter<'writer> for CapturedLogs {
+    type Writer = CapturedLogWriter;
+
+    fn make_writer(&'writer self) -> Self::Writer {
+        CapturedLogWriter(Arc::clone(&self.0))
+    }
+}
+
+impl CapturedLogs {
+    fn text(&self) -> String {
+        String::from_utf8(self.0.lock().expect("capture lock").clone())
+            .expect("tracing output is UTF-8")
+    }
+}
+
+#[test]
+fn login_request_debug_redacts_password() {
+    let login = druid_admin::servlet::LoginRequest {
+        login_username: "admin".to_owned(),
+        login_password: "debug-login-password-must-stay-secret".to_owned(),
+    };
+    let debug = format!("{login:?}");
+    assert!(!debug.contains("debug-login-password-must-stay-secret"));
+    assert!(debug.contains("[REDACTED]"));
+}
+
+#[test]
+fn basic_authorization_scheme_is_ascii_case_insensitive() {
+    let auth = druid_admin::config::AdminAuthMode::basic("admin", "secret");
+    assert!(auth.authorizes_header(Some("basic YWRtaW46c2VjcmV0")));
+    assert!(auth.authorizes_header(Some("BASIC YWRtaW46c2VjcmV0")));
+    assert!(auth.authorizes_credentials("admin", "secret"));
+    for malformed in [
+        None,
+        Some("Bearer YWRtaW46c2VjcmV0"),
+        Some("Basic"),
+        Some("Basic !!!"),
+        Some("Basic /w=="),
+        Some("Basic YWRtaW4="),
+        Some("Basic YWRtaW46"),
+        Some("Basic  YWRtaW46c2VjcmV0"),
+    ] {
+        assert!(!auth.authorizes_header(malformed), "{malformed:?}");
+    }
+    for (username, password) in [
+        ("admin", "x"),
+        ("admin", "secret-with-a-different-length"),
+        ("administrator", "secret"),
+        ("admin:other", "secret"),
+        ("", "secret"),
+        ("admin", ""),
+    ] {
+        assert!(!auth.authorizes_credentials(username, password));
+    }
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn production_trace_logs_path_without_query_credentials() {
+    let logs = CapturedLogs::default();
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::DEBUG)
+        .without_time()
+        .with_writer(logs.clone())
+        .finish();
+    let _subscriber_guard = tracing::subscriber::set_default(subscriber);
+    let app = druid_admin::standalone_router(druid_admin::MetricsRepository::new());
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(
+                    "/druid/datasource.json?loginPassword=trace-password-secret&token=trace-token-secret",
+                )
+                .body(Body::empty())
+                .expect("valid request"),
+        )
+        .await
+        .expect("router response");
+    assert_eq!(response.status(), axum::http::StatusCode::OK);
+    let output = logs.text();
+    assert!(output.contains("/druid/datasource.json"), "{output}");
+    for secret in [
+        "trace-password-secret",
+        "trace-token-secret",
+        "loginPassword",
+        "token=",
+    ] {
+        assert!(
+            !output.contains(secret),
+            "tracing leaked {secret}: {output}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -78,12 +192,13 @@ fn monitor_properties_debug_redacts_password() {
     assert!(!debug.contains("debug-must-not-leak-this-password"));
     assert!(debug.contains("[REDACTED]"));
 
-    let config = druid_admin::config::AdminServerConfig::new(
+    let config = druid_admin::config::AdminServerConfig::try_new(
         "127.0.0.1:8080".parse().unwrap(),
         "127.0.0.1:9090".parse().unwrap(),
         None,
         druid_admin::config::AdminAuthMode::basic("admin", "debug-must-not-leak-this-password"),
-    );
+    )
+    .expect("loopback config");
     let config_debug = format!("{config:?}");
     assert!(!config_debug.contains("debug-must-not-leak-this-password"));
     assert!(config_debug.contains("[REDACTED]"));
@@ -102,37 +217,48 @@ fn every_non_loopback_bind_requires_tls_and_auth() {
     ];
     for remote in remote_addresses {
         let no_security =
-            AdminServerConfig::new(remote, loopback_grpc, None, AdminAuthMode::Disabled);
-        assert!(no_security.validate().is_err(), "remote address {remote}");
+            AdminServerConfig::try_new(remote, loopback_grpc, None, AdminAuthMode::Disabled);
+        assert!(no_security.is_err(), "remote address {remote}");
 
-        let missing_auth = AdminServerConfig::new(
+        let missing_auth = AdminServerConfig::try_new(
             remote,
             loopback_grpc,
             Some(AdminTlsFiles::new("certificate.pem", "private-key.pem")),
             AdminAuthMode::Disabled,
         );
-        assert!(missing_auth.validate().is_err(), "remote address {remote}");
+        assert!(missing_auth.is_err(), "remote address {remote}");
 
-        let missing_tls = AdminServerConfig::new(
+        let missing_tls = AdminServerConfig::try_new(
             remote,
             loopback_grpc,
             None,
             AdminAuthMode::basic("admin", "secret"),
         );
-        assert!(missing_tls.validate().is_err(), "remote address {remote}");
+        assert!(missing_tls.is_err(), "remote address {remote}");
 
-        let secured = AdminServerConfig::new(
+        let secured = AdminServerConfig::try_new(
             remote,
             loopback_grpc,
             Some(AdminTlsFiles::new("certificate.pem", "private-key.pem")),
             AdminAuthMode::basic("admin", "secret"),
         );
-        assert!(secured.validate().is_ok(), "remote address {remote}");
+        assert!(secured.is_ok(), "remote address {remote}");
     }
 
-    let loopback =
-        AdminServerConfig::new(loopback_http, loopback_grpc, None, AdminAuthMode::Disabled);
-    assert!(loopback.validate().is_ok());
+    assert!(AdminServerConfig::try_new(
+        loopback_http,
+        loopback_grpc,
+        None,
+        AdminAuthMode::Disabled,
+    )
+    .is_ok());
+    assert!(AdminServerConfig::try_new(
+        loopback_http,
+        "[::]:9090".parse().unwrap(),
+        None,
+        AdminAuthMode::Disabled,
+    )
+    .is_err());
 }
 
 #[tokio::test]
@@ -173,32 +299,25 @@ async fn invalid_tls_material_fails_before_listening() {
     assert!(!status.success());
 }
 
-async fn grpc_connect_with_authorization(
-    port: u16,
-    authorization: Option<&str>,
-) -> Result<tonic::Response<tonic::Streaming<ServerFrame>>, tonic::Status> {
+fn secure_grpc_config(port: u16, authorization: Option<GrpcAuthorization>) -> GrpcClientConfig {
     let tls = ClientTlsConfig::new()
         .ca_certificate(Certificate::from_pem(include_bytes!(
             "fixtures/admin-test-cert.pem"
         )))
         .domain_name("localhost");
-    let channel = Endpoint::from_shared(format!("https://127.0.0.1:{port}"))
+    let endpoint = Endpoint::from_shared(format!("https://127.0.0.1:{port}"))
         .expect("valid secure gRPC endpoint")
         .tls_config(tls)
-        .expect("valid client TLS config")
-        .connect()
-        .await
-        .expect("connect to TLS gRPC listener");
-    let mut client = MetricsIngestClient::new(channel);
-    let (_tx, rx) = tokio::sync::mpsc::channel::<ClientFrame>(1);
-    let mut request = tonic::Request::new(ReceiverStream::new(rx));
-    if let Some(authorization) = authorization {
-        request.metadata_mut().insert(
-            "authorization",
-            authorization.parse().expect("valid authorization metadata"),
-        );
+        .expect("valid client TLS config");
+    GrpcClientConfig {
+        endpoint,
+        service_name: "secure-orders-runtime".to_owned(),
+        instance_id: "secure-instance".to_owned(),
+        boot_id: "secure-boot".to_owned(),
+        ack_window_capacity: 8,
+        shutdown_timeout: Duration::from_secs(3),
+        authorization,
     }
-    client.connect(request).await
 }
 
 #[tokio::test]
@@ -326,20 +445,147 @@ async fn remote_http_and_grpc_use_tls_and_require_authentication() {
         reqwest::StatusCode::OK
     );
 
-    let missing = grpc_connect_with_authorization(grpc_port, None)
+    let missing = GrpcMetricsClient::connect(secure_grpc_config(grpc_port, None)).await;
+    assert!(
+        missing.is_err(),
+        "missing production credential is rejected"
+    );
+    let invalid = GrpcMetricsClient::connect(secure_grpc_config(
+        grpc_port,
+        Some(GrpcAuthorization::basic("admin", "wrong-secret")),
+    ))
+    .await;
+    assert!(
+        invalid.is_err(),
+        "invalid production credential is rejected"
+    );
+
+    let authenticated_config =
+        secure_grpc_config(grpc_port, Some(GrpcAuthorization::basic("admin", "secret")));
+    let config_debug = format!("{authenticated_config:?}");
+    assert!(!config_debug.contains("secret"));
+    assert!(!config_debug.contains("YWRtaW46c2VjcmV0"));
+    assert!(config_debug.contains("[REDACTED]"));
+    let metrics_client = GrpcMetricsClient::connect(authenticated_config)
         .await
-        .expect_err("missing gRPC authorization must be rejected");
-    assert_eq!(missing.code(), tonic::Code::Unauthenticated);
-    let invalid = grpc_connect_with_authorization(grpc_port, Some("Basic aW52YWxpZA=="))
+        .expect("production metrics client authenticates over TLS");
+    metrics_client
+        .send_batch(AggregatedBatch {
+            entries: vec![SnapshotEntry {
+                datasource_id: 901,
+                datasource_name: "secure-orders".to_owned(),
+                driver_name: Some("postgresql".to_owned()),
+                pool: Some(PoolSnapshotMsg {
+                    active_count: 7,
+                    idle_count: 3,
+                    max_active: 16,
+                    max_idle: 8,
+                    waiting_count: 0,
+                }),
+                sql_stats: Vec::new(),
+                wall_check_count: 0,
+                wall_deny_count: 0,
+                wall_violation_count: 0,
+                sampling_time_millis: 1_755_734_400_000,
+            }],
+            is_full_snapshot: true,
+        })
         .await
-        .expect_err("invalid gRPC authorization must be rejected");
-    assert_eq!(invalid.code(), tonic::Code::Unauthenticated);
-    grpc_connect_with_authorization(grpc_port, Some("Basic YWRtaW46c2VjcmV0"))
+        .expect("authenticated batch queued");
+    metrics_client
+        .shutdown(Duration::from_secs(3))
         .await
-        .expect("valid gRPC authorization crosses the interceptor");
+        .expect("authenticated batch ACKed and client joined");
+    let projected: serde_json::Value = client
+        .get(format!("{base_url}/druid/datasource.json"))
+        .header("authorization", "Basic YWRtaW46c2VjcmV0")
+        .send()
+        .await
+        .expect("authenticated projection request")
+        .json()
+        .await
+        .expect("projection JSON");
+    assert_eq!(projected["Content"][0]["Identity"], 901);
 
     child.kill().await.expect("stop secure admin child");
     let _ = child.wait().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn sigterm_forces_held_connection_exit_before_shutdown_deadline() {
+    let http_addr = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve HTTP address")
+        .local_addr()
+        .expect("HTTP address");
+    let grpc_addr = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve gRPC address")
+        .local_addr()
+        .expect("gRPC address");
+    let mut child = admin_command()
+        .env("DRUID_ADMIN_HTTP_ADDR", http_addr.to_string())
+        .env("DRUID_ADMIN_GRPC_ADDR", grpc_addr.to_string())
+        .env("DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS", "200")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .expect("spawn admin for shutdown deadline");
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    loop {
+        if tokio::net::TcpStream::connect(http_addr).await.is_ok() {
+            break;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "admin did not start before shutdown test deadline"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    let mut held = tokio::net::TcpStream::connect(http_addr)
+        .await
+        .expect("open held HTTP connection");
+    held.write_all(
+        b"POST /druid/submitLogin HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 100000\r\n\r\nloginUsername=admin&",
+    )
+    .await
+    .expect("write partial request body");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), held.readable())
+            .await
+            .is_err(),
+        "partial request remains in flight before SIGTERM"
+    );
+
+    let pid = child.id().expect("child process ID");
+    let kill_status = tokio::process::Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .status()
+        .await
+        .expect("send SIGTERM");
+    assert!(kill_status.success(), "SIGTERM command succeeds");
+    let status =
+        if let Ok(result) = tokio::time::timeout(Duration::from_secs(2), child.wait()).await {
+            result.expect("wait for shutdown-deadline child")
+        } else {
+            child.kill().await.expect("kill hung admin child");
+            let _ = child.wait().await;
+            panic!("SIGTERM must not wait indefinitely for a held HTTP connection");
+        };
+    assert!(
+        !status.success(),
+        "deadline abort must return an explicit process failure"
+    );
+    drop(held);
+    tokio::net::TcpListener::bind(http_addr)
+        .await
+        .expect("HTTP listener is released after forced shutdown");
+    tokio::net::TcpListener::bind(grpc_addr)
+        .await
+        .expect("gRPC listener is released after forced shutdown");
 }
 
 /// The standalone admin binary must expose a /health endpoint on the HTTP port

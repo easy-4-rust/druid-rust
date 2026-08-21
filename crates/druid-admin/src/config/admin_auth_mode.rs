@@ -1,7 +1,6 @@
 use std::fmt;
 
-use base64::Engine as _;
-use subtle::ConstantTimeEq as _;
+use super::BasicCredentialVerifier;
 
 /// Admin 应用层认证模式。
 ///
@@ -13,17 +12,16 @@ pub enum AdminAuthMode {
     /// 仅允许 loopback 部署使用的无认证模式。
     Disabled,
     /// 复用 Java MonitorViewServlet 用户名/密码和 session 语义。
-    Basic { username: String, password: String },
+    Basic(BasicCredentialVerifier),
 }
 
 impl AdminAuthMode {
     /// 创建用户名/密码认证模式。
     #[must_use]
     pub fn basic(username: impl Into<String>, password: impl Into<String>) -> Self {
-        Self::Basic {
-            username: username.into(),
-            password: password.into(),
-        }
+        let username = username.into();
+        let password = password.into();
+        Self::Basic(BasicCredentialVerifier::new(&username, &password))
     }
 
     /// 返回是否启用应用层认证。
@@ -32,24 +30,32 @@ impl AdminAuthMode {
         !matches!(self, Self::Disabled)
     }
 
-    /// 返回 Servlet login 表单校验使用的 credentials；禁用时返回 None。
-    pub(crate) fn credentials(&self) -> Option<(&str, &str)> {
+    /// 返回 auth 配置是否能形成可验证的 canonical credential。
+    pub(crate) fn is_configuration_valid(&self) -> bool {
         match self {
-            Self::Disabled => None,
-            Self::Basic { username, password } => Some((username, password)),
+            Self::Disabled => true,
+            Self::Basic(verifier) => verifier.is_configuration_valid(),
+        }
+    }
+
+    /// 使用与 Basic header 相同的 digest truth 校验 Servlet login form。
+    #[must_use]
+    pub fn authorizes_credentials(&self, username: &str, password: &str) -> bool {
+        match self {
+            Self::Disabled => false,
+            Self::Basic(verifier) => verifier.authorizes_credentials(username, password),
         }
     }
 
     /// 校验 HTTP `Authorization` header；认证关闭时仅供 loopback 模式放行。
     #[must_use]
     pub fn authorizes_header(&self, authorization: Option<&str>) -> bool {
-        let Self::Basic { username, password } = self else {
-            return true;
-        };
-        let encoded =
-            base64::engine::general_purpose::STANDARD.encode(format!("{username}:{password}"));
-        let expected = format!("Basic {encoded}");
-        authorization.is_some_and(|actual| bool::from(actual.as_bytes().ct_eq(expected.as_bytes())))
+        match self {
+            Self::Disabled => true,
+            Self::Basic(verifier) => {
+                authorization.is_some_and(|value| verifier.authorizes_header(value))
+            }
+        }
     }
 
     /// 在 Tonic transport/service 边界校验标准 `authorization` metadata。
@@ -73,9 +79,9 @@ impl fmt::Debug for AdminAuthMode {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Disabled => formatter.write_str("Disabled"),
-            Self::Basic { username, .. } => formatter
+            Self::Basic(_) => formatter
                 .debug_struct("Basic")
-                .field("username", username)
+                .field("username", &"[REDACTED]")
                 .field("password", &"[REDACTED]")
                 .finish(),
         }

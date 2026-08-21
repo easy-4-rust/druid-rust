@@ -26,34 +26,40 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::json;
+use tower_http::trace::TraceLayer;
 
-use crate::config::AdminAuthMode;
+use crate::config::AdminServerConfig;
 
 /// Standalone Admin 的最大 HTTP request body（1 MiB）。
 const MAX_BODY_SIZE: usize = 1 << 20;
 
 /// 构建生产 HTTP 应用：health public，其余管理端点由同一个 Servlet 认证边界保护。
 #[must_use]
-pub fn production_router(
-    repository: MetricsRepository,
-    auth: AdminAuthMode,
-    secure_cookies: bool,
-) -> Router {
+pub fn production_router(repository: MetricsRepository, config: &AdminServerConfig) -> Router {
     let management = MonitorViewServlet::from_repository(repository)
-        .with_auth_mode(auth)
-        .with_secure_cookies(secure_cookies)
+        .with_auth_mode(config.auth().clone())
+        .with_secure_cookies(config.tls().is_some())
         .router();
     Router::new()
         .route("/health", get(health_handler))
         .merge(management)
         .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_SIZE))
-        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http().make_span_with(
+            |request: &axum::http::Request<axum::body::Body>| {
+                tracing::debug_span!(
+                    "request",
+                    method = %request.method(),
+                    path = request.uri().path(),
+                    version = ?request.version(),
+                )
+            },
+        ))
 }
 
 /// 构建 loopback 兼容 facade；路由与 repository 投影仍委托生产装配路径。
 #[must_use]
 pub fn standalone_router(repository: MetricsRepository) -> Router {
-    production_router(repository, AdminAuthMode::Disabled, false)
+    production_router(repository, &AdminServerConfig::default())
 }
 
 async fn health_handler() -> impl IntoResponse {

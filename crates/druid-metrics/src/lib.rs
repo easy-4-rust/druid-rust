@@ -17,6 +17,8 @@ pub mod aggregator;
 pub mod config;
 pub mod error;
 #[cfg(feature = "client")]
+mod grpc_authorization;
+#[cfg(feature = "client")]
 pub mod grpc_client;
 pub mod ingest_handler;
 pub mod prometheus;

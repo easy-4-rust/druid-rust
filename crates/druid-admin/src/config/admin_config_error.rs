@@ -19,6 +19,12 @@ pub enum AdminConfigError {
     /// basic 模式缺少用户名或密码。
     #[error("basic admin authentication requires non-empty username and password")]
     MissingBasicCredentials,
+    /// Basic credentials 不能形成严格 canonical 值。
+    #[error("basic admin authentication credentials are invalid")]
+    InvalidBasicCredentials,
+    /// Shutdown deadline 必须是非零毫秒数。
+    #[error("admin shutdown timeout must be a non-zero millisecond value")]
+    InvalidShutdownTimeout,
     /// 非 loopback 暴露缺少 TLS 或应用层认证。
     #[error("non-loopback admin listeners require both TLS and authentication")]
     InsecureRemoteBind,

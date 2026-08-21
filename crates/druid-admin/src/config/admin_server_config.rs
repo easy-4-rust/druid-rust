@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use super::{AdminAuthMode, AdminConfigError, AdminTlsFiles, AdminTlsMaterial};
 
@@ -11,23 +12,24 @@ pub struct AdminServerConfig {
     grpc_addr: SocketAddr,
     tls: Option<AdminTlsFiles>,
     auth: AdminAuthMode,
+    shutdown_timeout: Duration,
 }
 
 impl AdminServerConfig {
-    /// 使用显式地址和共享安全策略创建配置。
-    #[must_use]
-    pub const fn new(
+    /// 使用显式地址和共享安全策略创建并验证配置。
+    pub fn try_new(
         http_addr: SocketAddr,
         grpc_addr: SocketAddr,
         tls: Option<AdminTlsFiles>,
         auth: AdminAuthMode,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, AdminConfigError> {
+        Self::try_new_with_shutdown_timeout(
             http_addr,
             grpc_addr,
             tls,
             auth,
-        }
+            default_shutdown_timeout(),
+        )
     }
 
     /// 从 standalone binary 环境变量读取并校验配置。
@@ -51,13 +53,18 @@ impl AdminServerConfig {
             ),
             Some(_) => return Err(AdminConfigError::UnsupportedAuthMode),
         };
-        let config = Self::new(http_addr, grpc_addr, tls, auth);
-        config.validate()?;
-        Ok(config)
+        let shutdown_timeout = parse_shutdown_timeout()?;
+        Self::try_new_with_shutdown_timeout(http_addr, grpc_addr, tls, auth, shutdown_timeout)
     }
 
     /// 校验监听暴露面与安全配置是否匹配。
-    pub fn validate(&self) -> Result<(), AdminConfigError> {
+    fn validate(&self) -> Result<(), AdminConfigError> {
+        if self.shutdown_timeout.is_zero() {
+            return Err(AdminConfigError::InvalidShutdownTimeout);
+        }
+        if !self.auth.is_configuration_valid() {
+            return Err(AdminConfigError::InvalidBasicCredentials);
+        }
         if self.requires_remote_security() && (self.tls.is_none() || !self.auth.is_enabled()) {
             return Err(AdminConfigError::InsecureRemoteBind);
         }
@@ -93,6 +100,12 @@ impl AdminServerConfig {
         &self.auth
     }
 
+    /// 返回进程收到终止信号后等待 owned server handles 的总期限。
+    #[must_use]
+    pub const fn shutdown_timeout(&self) -> Duration {
+        self.shutdown_timeout
+    }
+
     fn requires_remote_security(&self) -> bool {
         !self.http_addr.ip().is_loopback() || !self.grpc_addr.ip().is_loopback()
     }
@@ -100,12 +113,33 @@ impl AdminServerConfig {
 
 impl Default for AdminServerConfig {
     fn default() -> Self {
-        Self::new(
-            SocketAddr::from(([127, 0, 0, 1], 8080)),
-            SocketAddr::from(([127, 0, 0, 1], 9090)),
-            None,
-            AdminAuthMode::Disabled,
-        )
+        Self {
+            http_addr: SocketAddr::from(([127, 0, 0, 1], 8080)),
+            grpc_addr: SocketAddr::from(([127, 0, 0, 1], 9090)),
+            tls: None,
+            auth: AdminAuthMode::Disabled,
+            shutdown_timeout: default_shutdown_timeout(),
+        }
+    }
+}
+
+impl AdminServerConfig {
+    fn try_new_with_shutdown_timeout(
+        http_addr: SocketAddr,
+        grpc_addr: SocketAddr,
+        tls: Option<AdminTlsFiles>,
+        auth: AdminAuthMode,
+        shutdown_timeout: Duration,
+    ) -> Result<Self, AdminConfigError> {
+        let config = Self {
+            http_addr,
+            grpc_addr,
+            tls,
+            auth,
+            shutdown_timeout,
+        };
+        config.validate()?;
+        Ok(config)
     }
 }
 
@@ -119,6 +153,24 @@ fn parse_address(name: &str, default: &str) -> Result<SocketAddr, AdminConfigErr
 
 fn required_env(name: &str) -> Result<String, AdminConfigError> {
     optional_env(name)?.ok_or(AdminConfigError::MissingBasicCredentials)
+}
+
+fn parse_shutdown_timeout() -> Result<Duration, AdminConfigError> {
+    let Some(value) = optional_env("DRUID_ADMIN_SHUTDOWN_TIMEOUT_MS")? else {
+        return Ok(default_shutdown_timeout());
+    };
+    let milliseconds = value
+        .parse::<u64>()
+        .map_err(|_| AdminConfigError::InvalidShutdownTimeout)?;
+    let timeout = Duration::from_millis(milliseconds);
+    if timeout.is_zero() {
+        return Err(AdminConfigError::InvalidShutdownTimeout);
+    }
+    Ok(timeout)
+}
+
+const fn default_shutdown_timeout() -> Duration {
+    Duration::from_secs(10)
 }
 
 fn optional_env(name: &str) -> Result<Option<String>, AdminConfigError> {
