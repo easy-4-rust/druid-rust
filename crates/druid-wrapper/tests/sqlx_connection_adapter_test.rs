@@ -1,5 +1,7 @@
 //! `SQLx` Adapter 真实 `SQLite` 驱动合同测试。
 
+mod common;
+
 use druid::core::{
     BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, PhysicalConnection,
     PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, RdbcCharacterLength,
@@ -52,6 +54,14 @@ async fn sqlite_pool() -> DruidPool {
         .build()
         .await
         .expect("SQLite pool must build")
+}
+
+#[tokio::test]
+async fn rdbc_connection_contract() {
+    let pool = sqlite_pool().await;
+    common::physical_connection_contract::assert_rdbc_connection_contract(|| pool.get())
+        .await
+        .expect("direct SQLx must satisfy the RDBC connection contract");
 }
 
 #[tokio::test]

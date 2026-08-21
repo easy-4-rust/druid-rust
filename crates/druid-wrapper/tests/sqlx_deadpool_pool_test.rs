@@ -1,8 +1,26 @@
 //! `SQLx` + deadpool 外部池桥接契约测试。
 
+mod common;
+
 use druid::core::{DruidError, PhysicalConnection, Pool, Value};
 use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;
 use std::time::Duration;
+
+#[tokio::test]
+async fn rdbc_connection_contract() {
+    let pool = SqlxDeadpoolPool::connect(
+        "deadpool-rdbc-contract",
+        "sqlite::memory:",
+        1,
+        Duration::from_secs(1),
+        None,
+    )
+    .expect("deadpool must build");
+
+    common::physical_connection_contract::assert_rdbc_connection_contract(|| pool.get())
+        .await
+        .expect("deadpool lease must satisfy the RDBC connection contract");
+}
 
 #[tokio::test]
 async fn deadpool_returns_canonical_druid_connection_and_recycles_once() {

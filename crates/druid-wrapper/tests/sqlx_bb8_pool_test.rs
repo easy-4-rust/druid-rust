@@ -1,8 +1,27 @@
 //! `SQLx` + bb8 外部池桥接契约测试。
 
+mod common;
+
 use druid::core::{PhysicalConnection, Pool, Value};
 use druid_wrapper::sqlx::bb8::SqlxBb8Pool;
 use std::time::Duration;
+
+#[tokio::test]
+async fn rdbc_connection_contract() {
+    let pool = SqlxBb8Pool::connect(
+        "bb8-rdbc-contract",
+        "sqlite::memory:",
+        1,
+        Duration::from_secs(1),
+        None,
+    )
+    .await
+    .expect("bb8 pool must build");
+
+    common::physical_connection_contract::assert_rdbc_connection_contract(|| pool.get())
+        .await
+        .expect("bb8 lease must satisfy the RDBC connection contract");
+}
 
 #[tokio::test]
 async fn bb8_pool_returns_canonical_druid_connection_and_recycles_once() {
