@@ -26,6 +26,7 @@ pub mod sampler;
 pub mod sanitizer;
 pub mod self_metrics;
 pub mod sequence_window;
+pub(crate) mod snapshot_encoder;
 pub mod timeline;
 
 pub use config::{DruidMetricsConfig, DruidMetricsConfigBuilder, SqlTextPolicy};

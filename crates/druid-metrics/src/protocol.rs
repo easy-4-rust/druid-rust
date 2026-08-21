@@ -2,6 +2,8 @@
 //!
 //! 所有类型由唯一的 `proto/druid_metrics_v1.proto` 生成。Cargo 的 `client`
 //! 与 `server` feature 分别启用对应 Tonic stub；未启用任一 feature 时仍生成消息类型。
+//! 本地遥测快照通过 `snapshot_encoder` 转换为这里的 [`SnapshotEntry`]，
+//! 聚合阶段不再使用无类型 JSON payload。
 
 // 包含生成的 protobuf 与 gRPC 代码。
 // tonic-prost-build 将 package `druid_metrics.v1` 输出到 OUT_DIR/druid_metrics.v1.rs。

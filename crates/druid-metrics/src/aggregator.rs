@@ -1,10 +1,16 @@
+use std::collections::{BTreeMap, VecDeque};
+use std::future;
 use std::sync::Arc;
 
 use druid::stats::DruidTelemetrySnapshot;
 use tokio::sync::mpsc;
+use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
+use crate::config::DruidMetricsConfig;
+use crate::protocol;
 use crate::self_metrics::RuntimeSelfMetrics;
+use crate::snapshot_encoder::encode_snapshot;
 
 /// A pending snapshot waiting to be aggregated.
 #[derive(Debug, Clone)]
@@ -20,49 +26,137 @@ pub enum AggregatorCommand {
     Flush,
 }
 
-/// Run the aggregator task.
+/// 等待下游处理的有界聚合快照批次。
+#[derive(Debug, Clone, PartialEq)]
+pub struct AggregatedBatch {
+    /// 已完成隐私处理与数量限制的协议条目。
+    pub entries: Vec<protocol::SnapshotEntry>,
+    /// 是否为远端请求的全量快照；普通窗口、flush 与 shutdown 均为 `false`。
+    pub is_full_snapshot: bool,
+}
+
+/// 运行聚合任务。
 ///
-/// Receives snapshots from the sampler and coalesces them by datasource ID
-/// within a time window, then forwards batches to the exporter.
+/// 在合并窗口内按数据源 ID 保留最新快照，并通过有界通道向下游发送批次。
+/// 通道已满时等待下游形成背压；通道关闭时停止聚合并保留未刷新数量。
+/// 显式 flush、输入关闭和取消都会先发送当前待处理快照。
 pub(crate) async fn run_aggregator(
     mut snapshot_rx: mpsc::Receiver<PendingSnapshot>,
-    mut cmd_rx: mpsc::UnboundedReceiver<AggregatorCommand>,
+    batch_tx: mpsc::Sender<AggregatedBatch>,
+    mut command_rx: mpsc::Receiver<AggregatorCommand>,
     cancel: CancellationToken,
+    config: DruidMetricsConfig,
     self_metrics: Arc<RuntimeSelfMetrics>,
 ) {
-    let mut pending: std::collections::HashMap<u64, PendingSnapshot> =
-        std::collections::HashMap::new();
+    let mut pending = BTreeMap::<u64, PendingSnapshot>::new();
+    let mut flush_deadline = None;
+    let mut command_channel_open = true;
 
     loop {
-        tokio::select! {
+        let next_deadline = flush_deadline;
+        let window_elapsed = async move {
+            if let Some(deadline) = next_deadline {
+                tokio::time::sleep_until(deadline).await;
+            } else {
+                future::pending::<()>().await;
+            }
+        };
+        tokio::pin!(window_elapsed);
+
+        enum Event {
+            Cancelled,
+            Command(Option<AggregatorCommand>),
+            Snapshot(Option<PendingSnapshot>),
+            WindowElapsed,
+        }
+
+        let event = tokio::select! {
             biased;
-            () = cancel.cancelled() => {
-                // Drain remaining snapshots before exit
-                while let Ok(snap) = snapshot_rx.try_recv() {
-                    pending.insert(snap.datasource_id, snap);
+            () = cancel.cancelled() => Event::Cancelled,
+            command = command_rx.recv(), if command_channel_open => Event::Command(command),
+            snapshot = snapshot_rx.recv() => Event::Snapshot(snapshot),
+            () = &mut window_elapsed => Event::WindowElapsed,
+        };
+
+        match event {
+            Event::Cancelled => {
+                while let Ok(snapshot) = snapshot_rx.try_recv() {
+                    insert_snapshot(&mut pending, snapshot, &self_metrics);
                 }
-                self_metrics.set_pending_snapshots(pending.len());
+                let _ = flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await;
                 break;
             }
-            cmd = cmd_rx.recv() => {
-                match cmd {
-                    Some(AggregatorCommand::Flush) => {
-                        pending.clear();
-                        self_metrics.set_pending_snapshots(0);
+            Event::Command(Some(AggregatorCommand::Flush)) | Event::WindowElapsed => {
+                if !flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await {
+                    break;
+                }
+                flush_deadline = None;
+            }
+            Event::Command(None) => {
+                command_channel_open = false;
+            }
+            Event::Snapshot(Some(snapshot)) => {
+                let was_empty = pending.is_empty();
+                insert_snapshot(&mut pending, snapshot, &self_metrics);
+                if was_empty {
+                    flush_deadline = Some(Instant::now() + config.coalesce_window);
+                }
+                if pending.len() >= config.batch_size {
+                    if !flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await {
+                        break;
                     }
-                    None => break,
+                    flush_deadline = None;
                 }
             }
-            snap = snapshot_rx.recv() => {
-                match snap {
-                    Some(s) => {
-                        // Coalesce: overwrite existing pending snapshot for same datasource
-                        pending.insert(s.datasource_id, s);
-                        self_metrics.set_pending_snapshots(pending.len());
-                    }
-                    None => break, // channel closed
-                }
+            Event::Snapshot(None) => {
+                let _ = flush_pending(&mut pending, &batch_tx, &config, &self_metrics).await;
+                break;
             }
         }
     }
+}
+
+fn insert_snapshot(
+    pending: &mut BTreeMap<u64, PendingSnapshot>,
+    snapshot: PendingSnapshot,
+    self_metrics: &RuntimeSelfMetrics,
+) {
+    if pending.insert(snapshot.datasource_id, snapshot).is_some() {
+        self_metrics.increment_coalesced_total();
+    }
+    self_metrics.set_pending_snapshots(pending.len());
+}
+
+async fn flush_pending(
+    pending: &mut BTreeMap<u64, PendingSnapshot>,
+    batch_tx: &mpsc::Sender<AggregatedBatch>,
+    config: &DruidMetricsConfig,
+    self_metrics: &RuntimeSelfMetrics,
+) -> bool {
+    let mut entries = std::mem::take(pending)
+        .into_values()
+        .map(|pending| {
+            encode_snapshot(
+                pending.snapshot,
+                config.max_sql_statements,
+                config.sql_text_policy,
+            )
+        })
+        .collect::<VecDeque<_>>();
+
+    while !entries.is_empty() {
+        let take = config.batch_size.min(entries.len());
+        let batch_entries = entries.drain(..take).collect();
+        let batch = AggregatedBatch {
+            entries: batch_entries,
+            is_full_snapshot: false,
+        };
+        if let Err(error) = batch_tx.send(batch).await {
+            self_metrics.set_pending_snapshots(error.0.entries.len() + entries.len());
+            return false;
+        }
+    }
+
+    self_metrics.set_pending_snapshots(0);
+    true
 }
