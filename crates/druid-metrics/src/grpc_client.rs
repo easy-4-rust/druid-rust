@@ -181,9 +181,11 @@ async fn run_supervisor(
     let mut backoff = INITIAL_BACKOFF;
     let mut completed_session = false;
     let mut authoritative_batches = Vec::new();
+    let mut resync_required = false;
+    let mut pending_full_snapshot_command_id = None;
 
     loop {
-        if transport.require_full_snapshot && completed_session {
+        if (transport.require_full_snapshot && completed_session) || resync_required {
             let executor = command_executor.as_ref().ok_or_else(|| {
                 MetricsError::ChannelSend(
                     "server requires a registry-derived full snapshot, but no registry is configured"
@@ -216,15 +218,24 @@ async fn run_supervisor(
             cancellation.clone(),
             progress.clone(),
             authoritative_batches,
+            pending_full_snapshot_command_id,
         )
         .await?;
         batch_rx = exit.batch_rx;
         pending_frames = exit.pending_frames;
         next_sequence = exit.next_sequence;
         authoritative_batches = exit.authoritative_batches;
+        resync_required = exit.resync_required;
+        pending_full_snapshot_command_id = exit.pending_full_snapshot_command_id;
         completed_session = true;
 
-        if batch_rx.is_closed() && batch_rx.is_empty() && pending_frames.is_empty() {
+        if batch_rx.is_closed()
+            && batch_rx.is_empty()
+            && pending_frames.is_empty()
+            && authoritative_batches.is_empty()
+            && !resync_required
+            && pending_full_snapshot_command_id.is_none()
+        {
             return Ok(());
         }
         if cancellation.is_cancelled() {
@@ -267,6 +278,7 @@ async fn run_connected_session(
     cancellation: CancellationToken,
     progress: PushProgress,
     authoritative_batches: Vec<AggregatedBatch>,
+    pending_full_snapshot_command_id: Option<String>,
 ) -> Result<PushWorkerExit, MetricsError> {
     let ConnectedTransport {
         outbound_tx,
@@ -310,7 +322,8 @@ async fn run_connected_session(
     .map_err(other_error)?
     .with_progress(progress)
     .with_initial_batches(authoritative_batches)
-    .with_first_batch_full_snapshot(force_first_full);
+    .with_first_batch_full_snapshot(force_first_full)
+    .with_pending_full_snapshot_command(pending_full_snapshot_command_id);
     if let Some(executor) = command_executor {
         worker = worker.with_command_executor(executor);
     }

@@ -16,8 +16,9 @@ use druid_metrics::grpc_client::{GrpcClientConfig, GrpcMetricsClient};
 use druid_metrics::protocol::metrics_ingest_client::MetricsIngestClient;
 use druid_metrics::protocol::metrics_ingest_server::{MetricsIngest, MetricsIngestServer};
 use druid_metrics::protocol::{
-    client_frame, server_frame, BatchAck, ClientFrame, ClientGoodbye, ClientHeartbeat, ClientHello,
-    FrameHeader, HelloAck, PoolSnapshotMsg, ServerFrame, SnapshotBatch, SnapshotEntry, SqlStatMsg,
+    client_frame, command, server_frame, BatchAck, ClientFrame, ClientGoodbye, ClientHeartbeat,
+    ClientHello, Command, FrameHeader, HelloAck, PoolSnapshotMsg, RequestFullSnapshotCmd,
+    ResyncRequired, ServerFrame, SnapshotBatch, SnapshotEntry, SqlStatMsg,
 };
 use druid_metrics::registry::{RegistryCommandExecutor, RegistryEntry};
 use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
@@ -443,6 +444,56 @@ async fn grpc_multi_entry_batch_is_atomically_visible_and_counted_once() {
 }
 
 #[tokio::test]
+async fn repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retry() {
+    let fixture = AdminFixture::start().await;
+    let identity = StreamIdentity::new("atomic-rejection", 27);
+    let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let first = orders_entry(1, 2);
+    let mut duplicate = orders_entry(99, 99);
+    duplicate.datasource_name = "duplicate-orders".to_owned();
+    stream
+        .tx
+        .send(ClientFrame {
+            payload: Some(client_frame::Payload::SnapshotBatch(SnapshotBatch {
+                header: Some(identity.header(1)),
+                entries: vec![first, duplicate],
+                is_full_snapshot: true,
+            })),
+        })
+        .await
+        .expect("send atomically rejected batch");
+    let rejected = next_server_frame(&mut stream.inbound).await;
+    assert!(matches!(
+        rejected.payload,
+        Some(server_frame::Payload::ResyncRequired(ResyncRequired {
+            expected_sequence: 1,
+            ..
+        }))
+    ));
+    assert!(
+        datasource_content(fixture.http_addr).await.is_empty(),
+        "rejected batch must not become partially visible"
+    );
+
+    assert_eq!(
+        send_batch_and_expect_ack(&mut stream, &identity, 1, orders_entry(7, 15), true,).await,
+        1,
+        "corrected retry uses the unchanged expected sequence"
+    );
+    wait_for_active_count(fixture.http_addr, 7).await;
+    let metrics = reqwest::get(format!("http://{}/metrics", fixture.http_addr))
+        .await
+        .expect("GET /metrics")
+        .text()
+        .await
+        .expect("metrics text");
+    assert!(metrics.contains("druid_admin_ingest_total 2"));
+    assert!(metrics.contains("druid_admin_ingest_rejected_total 1"));
+    drop(stream.tx);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
 async fn prometheus_escapes_client_controlled_label_values() {
     let fixture = AdminFixture::start().await;
     let identity = StreamIdentity::new("prometheus-escape", 26);
@@ -862,6 +913,409 @@ async fn invalid_ack_headers_close_transport_and_preserve_pending_frame() {
             .await
             .expect("probe joins")
             .expect("probe stops");
+    }
+}
+
+#[derive(Clone)]
+struct ResyncThenAckProbe {
+    connections: Arc<AtomicUsize>,
+    replacement: mpsc::UnboundedSender<(u64, u32, bool)>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for ResyncThenAckProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let replacement = self.replacement.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: connection == 0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(frame) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let sequence = frame_header(&frame).expect("snapshot header").sequence;
+            if connection == 0 {
+                let _ = tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::ResyncRequired(ResyncRequired {
+                            header: Some(reply_header(&header)),
+                            reason: "test_gap".to_owned(),
+                            expected_sequence: sequence,
+                        })),
+                    }))
+                    .await;
+                while inbound.message().await.ok().flatten().is_some() {}
+                return;
+            }
+            let batch = match frame.payload.as_ref() {
+                Some(client_frame::Payload::SnapshotBatch(batch)) => batch,
+                other => panic!("expected authoritative SnapshotBatch, got {other:?}"),
+            };
+            let active = batch
+                .entries
+                .first()
+                .and_then(|entry| entry.pool.as_ref())
+                .map_or(0, |pool| pool.active_count);
+            let _ = replacement.send((sequence, active, batch.is_full_snapshot));
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: sequence,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn resync_required_supersedes_pending_with_monotonic_registry_full_snapshot() {
+    let source = Arc::new(MutableSource::new(9, 10));
+    let (_registry, executor) = registry_executor(&source);
+    let (replacement_tx, mut replacement_rx) = mpsc::unbounded_channel();
+    let service = ResyncThenAckProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        replacement: replacement_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&endpoint, "resync-required"),
+        Some(executor),
+    )
+    .await
+    .expect("client connects");
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(1, 2)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("queue gap frame");
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("resync replacement is ACKed before shutdown");
+    assert_eq!(
+        tokio::time::timeout(TEST_TIMEOUT, replacement_rx.recv())
+            .await
+            .expect("replacement observed")
+            .expect("replacement result"),
+        (2, 9, true),
+        "registry full snapshot supersedes sequence 1 and keeps monotonic sequence 2"
+    );
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
+#[derive(Clone)]
+struct FullCommandDisconnectProbe {
+    connections: Arc<AtomicUsize>,
+    first_chunks: Arc<Mutex<Vec<(u64, u64)>>>,
+    completed: mpsc::UnboundedSender<(Vec<(u64, u64)>, bool)>,
+    disconnected_after_second: Arc<Notify>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for FullCommandDisconnectProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let first_chunks = Arc::clone(&self.first_chunks);
+        let completed = self.completed.clone();
+        let disconnected_after_second = Arc::clone(&self.disconnected_after_second);
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: false,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            if connection == 0 {
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::Command(Command {
+                            header: Some(reply_header(&header)),
+                            command_id: "durable-full-command".to_owned(),
+                            payload: Some(command::Payload::RequestFullSnapshot(
+                                RequestFullSnapshotCmd {},
+                            )),
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(first) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (first_sequence, first_id) = full_chunk_identity(&first);
+                first_chunks
+                    .lock()
+                    .expect("chunk lock")
+                    .push((first_sequence, first_id));
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: first_sequence,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(second) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                first_chunks
+                    .lock()
+                    .expect("chunk lock")
+                    .push(full_chunk_identity(&second));
+                disconnected_after_second.notify_waiters();
+                return;
+            }
+
+            let Some(replayed_second) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let replayed = full_chunk_identity(&replayed_second);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: replayed.0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(third) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let third = full_chunk_identity(&third);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: third.0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(command_ack) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let command_success = matches!(
+                command_ack.payload,
+                Some(client_frame::Payload::CommandAck(ref ack))
+                    if ack.command_id == "durable-full-command" && ack.success
+            );
+            let mut chunks = first_chunks.lock().expect("chunk lock").clone();
+            chunks.push(replayed);
+            chunks.push(third);
+            let _ = completed.send((chunks, command_success));
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+fn full_chunk_identity(frame: &ClientFrame) -> (u64, u64) {
+    let batch = match frame.payload.as_ref() {
+        Some(client_frame::Payload::SnapshotBatch(batch)) if batch.is_full_snapshot => batch,
+        other => panic!("expected full SnapshotBatch, got {other:?}"),
+    };
+    (
+        batch.header.as_ref().expect("full batch header").sequence,
+        batch
+            .entries
+            .first()
+            .expect("one entry per full chunk")
+            .datasource_id,
+    )
+}
+
+#[tokio::test]
+async fn remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect() {
+    let sources = [
+        Arc::new(CommandSource::new(41)),
+        Arc::new(CommandSource::new(42)),
+        Arc::new(CommandSource::new(43)),
+    ];
+    let monitorables = sources
+        .iter()
+        .cloned()
+        .map(|source| source as Arc<dyn DataSourceMonitorable>)
+        .collect::<Vec<_>>();
+    let registry = Arc::new(RwLock::new(
+        monitorables
+            .iter()
+            .enumerate()
+            .map(|(index, source)| RegistryEntry {
+                datasource_id: 41 + index as u64,
+                weak_ref: Arc::downgrade(source),
+            })
+            .collect(),
+    ));
+    let executor = RegistryCommandExecutor::new(
+        registry,
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let (completed_tx, mut completed_rx) = mpsc::unbounded_channel();
+    let disconnected_after_second = Arc::new(Notify::new());
+    let service = FullCommandDisconnectProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        first_chunks: Arc::new(Mutex::new(Vec::new())),
+        completed: completed_tx,
+        disconnected_after_second: Arc::clone(&disconnected_after_second),
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let mut config = grpc_config(&endpoint, "durable-full-command");
+    config.ack_window_capacity = 1;
+    let client = GrpcMetricsClient::connect_with_command_executor(config, Some(executor))
+        .await
+        .expect("client connects");
+    tokio::time::timeout(TEST_TIMEOUT, disconnected_after_second.notified())
+        .await
+        .expect("first connection drops after receiving the second chunk");
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("all full chunks and command ACK survive reconnect");
+    let (chunks, command_success) = tokio::time::timeout(TEST_TIMEOUT, completed_rx.recv())
+        .await
+        .expect("full command completion observed")
+        .expect("full command result");
+    assert_eq!(
+        chunks
+            .iter()
+            .map(|(sequence, _)| *sequence)
+            .collect::<Vec<_>>(),
+        vec![1, 2, 2, 3],
+        "sequence 2 is replayed exactly and the remaining chunk keeps sequence 3"
+    );
+    assert_eq!(
+        chunks.iter().map(|(_, id)| *id).collect::<Vec<_>>(),
+        vec![41, 42, 42, 43],
+        "three registry entries arrive without omission; only the unacked chunk is replayed"
+    );
+    assert!(command_success, "success ACK follows every full chunk ACK");
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
+struct CommandSource {
+    id: u64,
+}
+
+impl CommandSource {
+    fn new(id: u64) -> Self {
+        Self { id }
+    }
+}
+
+impl DataSourceMonitorable for CommandSource {
+    fn name(&self) -> &str {
+        "command-source"
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {}
+
+    fn identity(&self) -> DataSourceIdentity {
+        DataSourceIdentity {
+            id: self.id,
+            name: format!("command-source-{}", self.id),
+            driver_name: Some("postgresql".to_owned()),
+        }
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        Ok(DruidTelemetrySnapshot {
+            identity: self.identity(),
+            pool_snapshot: PoolSnapshot {
+                active_count: self.id as u32,
+                idle_count: 0,
+                max_active: 64,
+                max_idle: 0,
+                waiting_count: 0,
+            },
+            sql_stats: Vec::new(),
+            wall_snapshot: None,
+            sampling_time_millis: 1_755_734_400_000,
+        })
     }
 }
 

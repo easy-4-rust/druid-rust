@@ -80,6 +80,8 @@ impl TransportPair {
             force_first_batch_full_snapshot: false,
             initial_batches: VecDeque::new(),
             progress: None,
+            resync_required: false,
+            pending_full_snapshot_command_id: None,
         };
         (self.client_rx, self.server_tx, worker)
     }
@@ -105,6 +107,8 @@ pub struct PushWorker {
     force_first_batch_full_snapshot: bool,
     initial_batches: VecDeque<AggregatedBatch>,
     progress: Option<PushProgress>,
+    resync_required: bool,
+    pending_full_snapshot_command_id: Option<String>,
 }
 
 /// 一次 transport 会话退出后交还给重连 supervisor 的全部状态。
@@ -117,6 +121,10 @@ pub struct PushWorkerExit {
     pub next_sequence: Option<u64>,
     /// 当前连接尚未来得及发送的权威全量批次。
     pub authoritative_batches: Vec<AggregatedBatch>,
+    /// 服务端是否要求 supervisor 生成 registry 权威全量替换。
+    pub resync_required: bool,
+    /// 尚未在全部全量 chunk ACK 后成功回复的远程命令 ID。
+    pub pending_full_snapshot_command_id: Option<String>,
 }
 
 /// 跨 transport 会话共享的真实 queued/pending 进度。
@@ -225,6 +233,8 @@ impl PushWorker {
             force_first_batch_full_snapshot: false,
             initial_batches: VecDeque::new(),
             progress: None,
+            resync_required: false,
+            pending_full_snapshot_command_id: None,
         }
     }
 
@@ -292,6 +302,13 @@ impl PushWorker {
         self
     }
 
+    /// 恢复跨 transport 会话仍待完成的远程全量快照命令。
+    #[must_use]
+    pub fn with_pending_full_snapshot_command(mut self, command_id: Option<String>) -> Self {
+        self.pending_full_snapshot_command_id = command_id;
+        self
+    }
+
     /// 运行 worker，直到取消、输入关闭或 transport 断开。
     ///
     /// 返回仍未 ACK 的完整 frame，供下一连接按原 sequence、原字节恢复。
@@ -308,38 +325,45 @@ impl PushWorker {
                 return self.into_exit();
             }
         }
-        while !self.initial_batches.is_empty() {
-            if let Err(error) = self.wait_for_window_capacity().await {
-                tracing::warn!(%error, "failed waiting to send authoritative full snapshot");
+        if let Err(error) = self.drain_authoritative_batches().await {
+            tracing::warn!(%error, "failed to send authoritative full snapshot");
+            return self.into_exit();
+        }
+        if let Some(command_id) = self.pending_full_snapshot_command_id.clone() {
+            if let Err(error) = self.wait_for_pending_frames_empty().await {
+                tracing::warn!(%error, "failed waiting for authoritative full snapshot ACKs");
                 return self.into_exit();
             }
-            let batch = self
-                .initial_batches
-                .pop_front()
-                .expect("authoritative batch queue was checked as non-empty");
-            if let Some(progress) = &self.progress {
-                progress.consume_queued_batch();
-            }
-            let retry_batch = batch.clone();
-            let pending_before = self.window.len();
-            if let Err(error) = self.push_new_batch(batch).await {
-                if self.window.len() == pending_before {
-                    self.initial_batches.push_front(retry_batch);
-                    if let Some(progress) = &self.progress {
-                        progress.queue_batch();
-                    }
-                }
-                tracing::warn!(%error, "failed to send authoritative full snapshot");
+            let reply = self.make_command_ack(command_id, Ok(()));
+            if let Err(error) = self.send_outbound(reply).await {
+                tracing::warn!(%error, "failed to acknowledge durable full snapshot command");
                 return self.into_exit();
             }
+            self.pending_full_snapshot_command_id = None;
         }
 
         loop {
             if batch_input_closed && self.window.is_empty() {
                 break;
             }
-            if !self.window.is_full() {
-                if let Some(frame) = self.deferred_server_frames.pop_front() {
+            let deferred_index = if self.window.is_full() {
+                self.deferred_server_frames.iter().position(|frame| {
+                    matches!(
+                        frame.payload.as_ref(),
+                        Some(crate::protocol::server_frame::Payload::ResyncRequired(_))
+                            | Some(crate::protocol::server_frame::Payload::Error(
+                                crate::protocol::ServerError {
+                                    close_stream: true,
+                                    ..
+                                }
+                            ))
+                    )
+                })
+            } else {
+                (!self.deferred_server_frames.is_empty()).then_some(0)
+            };
+            if let Some(index) = deferred_index {
+                if let Some(frame) = self.deferred_server_frames.remove(index) {
                     if !self.process_server_frame(frame).await {
                         break;
                     }
@@ -390,6 +414,8 @@ impl PushWorker {
             batch_rx: self.batch_rx,
             next_sequence: self.window.next_sequence(),
             authoritative_batches: self.initial_batches.into(),
+            resync_required: self.resync_required,
+            pending_full_snapshot_command_id: self.pending_full_snapshot_command_id,
         }
     }
 
@@ -546,8 +572,16 @@ impl PushWorker {
                     self.send_outbound(reply).await.is_ok()
                 }
             }
+            Some(Payload::Command(command))
+                if matches!(
+                    command.payload.as_ref(),
+                    Some(crate::protocol::command::Payload::RequestFullSnapshot(_))
+                ) =>
+            {
+                self.handle_full_snapshot_command(command).await
+            }
             Some(Payload::Command(command)) => {
-                let reply = self.handle_command(command).await;
+                let reply = self.handle_command(command);
                 self.send_outbound(reply).await.is_ok()
             }
             Some(Payload::HelloAck(_)) | None => true,
@@ -557,7 +591,8 @@ impl PushWorker {
                     expected = resync.expected_sequence,
                     "server requested resync"
                 );
-                true
+                self.resync_required = true;
+                false
             }
             Some(Payload::Error(error)) => {
                 tracing::error!(code = error.code, message = error.message, "server error");
@@ -566,7 +601,7 @@ impl PushWorker {
         }
     }
 
-    async fn handle_command(&mut self, command: crate::protocol::Command) -> ClientFrame {
+    fn handle_command(&mut self, command: crate::protocol::Command) -> ClientFrame {
         use crate::protocol::command::Payload;
 
         let command_id = command.command_id;
@@ -584,26 +619,58 @@ impl PushWorker {
                             .map_err(|error| error.to_string())
                     }),
                 Some(Payload::RequestFullSnapshot(_)) => {
-                    let batches = self
-                        .command_executor
-                        .as_ref()
-                        .ok_or_else(|| "datasource registry is not configured".to_owned())
-                        .and_then(|executor| {
-                            executor.full_snapshot().map_err(|error| error.to_string())
-                        });
-                    match batches {
-                        Ok(batches) => self
-                            .push_full_snapshot_batches(batches)
-                            .await
-                            .map_err(|error| error.to_string()),
-                        Err(error) => Err(error),
-                    }
+                    Err("full snapshot command must use the durable path".to_owned())
                 }
                 None => Err("empty command payload".to_owned()),
             }
         };
 
         self.make_command_ack(command_id, result)
+    }
+
+    async fn handle_full_snapshot_command(&mut self, command: crate::protocol::Command) -> bool {
+        let command_id = command.command_id;
+        if command_id.trim().is_empty() {
+            let reply = self.make_command_ack(command_id, Err("empty command ID".to_owned()));
+            return self.send_outbound(reply).await.is_ok();
+        }
+        if let Some(pending) = self.pending_full_snapshot_command_id.as_ref() {
+            let reply = self.make_command_ack(
+                command_id,
+                Err(format!("full snapshot command {pending} is still pending")),
+            );
+            return self.send_outbound(reply).await.is_ok();
+        }
+        let batches = self
+            .command_executor
+            .as_ref()
+            .ok_or_else(|| "datasource registry is not configured".to_owned())
+            .and_then(|executor| executor.full_snapshot().map_err(|error| error.to_string()));
+        let batches = match batches {
+            Ok(batches) => batches,
+            Err(error) => {
+                let reply = self.make_command_ack(command_id, Err(error));
+                return self.send_outbound(reply).await.is_ok();
+            }
+        };
+        self.pending_full_snapshot_command_id = Some(command_id.clone());
+        for _ in &batches {
+            if let Some(progress) = &self.progress {
+                progress.queue_batch();
+            }
+        }
+        self.initial_batches.extend(batches);
+        if self.drain_authoritative_batches().await.is_err()
+            || self.wait_for_pending_frames_empty().await.is_err()
+        {
+            return false;
+        }
+        let reply = self.make_command_ack(command_id, Ok(()));
+        if self.send_outbound(reply).await.is_err() {
+            return false;
+        }
+        self.pending_full_snapshot_command_id = None;
+        true
     }
 
     fn make_command_ack(&self, command_id: String, result: Result<(), String>) -> ClientFrame {
@@ -619,13 +686,64 @@ impl PushWorker {
         }
     }
 
-    async fn push_full_snapshot_batches(
-        &mut self,
-        batches: Vec<AggregatedBatch>,
-    ) -> Result<(), PushWorkerError> {
-        for batch in batches {
+    async fn drain_authoritative_batches(&mut self) -> Result<(), PushWorkerError> {
+        while !self.initial_batches.is_empty() {
             self.wait_for_window_capacity().await?;
-            self.push_new_batch(batch).await?;
+            let batch = self
+                .initial_batches
+                .pop_front()
+                .expect("authoritative batch queue was checked as non-empty");
+            if let Some(progress) = &self.progress {
+                progress.consume_queued_batch();
+            }
+            let retry_batch = batch.clone();
+            let pending_before = self.window.len();
+            if let Err(error) = self.push_new_batch(batch).await {
+                if self.window.len() == pending_before {
+                    self.initial_batches.push_front(retry_batch);
+                    if let Some(progress) = &self.progress {
+                        progress.queue_batch();
+                    }
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    async fn wait_for_pending_frames_empty(&mut self) -> Result<(), PushWorkerError> {
+        use crate::protocol::server_frame::Payload;
+
+        while !self.window.is_empty() {
+            self.wait_for_window_capacity().await?;
+            if !self.window.is_empty() {
+                let frame = tokio::select! {
+                    biased;
+                    () = self.cancellation.cancelled() => return Err(PushWorkerError::Cancelled),
+                    frame = self.transport_rx.recv() => frame.ok_or(PushWorkerError::TransportClosed)?,
+                };
+                match frame.payload {
+                    Some(Payload::BatchAck(ack)) => {
+                        self.acknowledge(ack.accepted_sequence)
+                            .map_err(PushWorkerError::Window)?;
+                    }
+                    Some(Payload::ResyncRequired(resync)) => {
+                        self.resync_required = true;
+                        return Err(PushWorkerError::ServerInterrupted(resync.reason));
+                    }
+                    Some(Payload::Error(error)) if error.close_stream => {
+                        return Err(PushWorkerError::ServerInterrupted(error.message));
+                    }
+                    Some(Payload::Command(command)) => {
+                        let reply = self.make_command_ack(
+                            command.command_id,
+                            Err("authoritative full snapshot is waiting for ACKs".to_owned()),
+                        );
+                        self.send_outbound(reply).await?;
+                    }
+                    Some(Payload::HelloAck(_) | Payload::Error(_)) | None => {}
+                }
+            }
         }
         Ok(())
     }
@@ -656,6 +774,7 @@ impl PushWorker {
                     return Err(PushWorkerError::ServerInterrupted(error.message));
                 }
                 Some(Payload::ResyncRequired(resync)) => {
+                    self.resync_required = true;
                     return Err(PushWorkerError::ServerInterrupted(resync.reason));
                 }
                 Some(Payload::HelloAck(_) | Payload::Error(_)) | None => {}

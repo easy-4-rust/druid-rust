@@ -198,19 +198,19 @@ impl MetricsIngest for IngestService {
                     frame.payload.as_ref(),
                     Some(client_frame::Payload::Goodbye(_))
                 );
-                let response = handler.handle_frame(&frame).await;
+                let response = if let Some(prepared) = prepared {
+                    handler
+                        .handle_frame_with_snapshot_commit(&frame, || {
+                            repository.apply_batch(prepared)
+                        })
+                        .await
+                } else {
+                    handler.handle_frame(&frame).await
+                };
                 let close_after_response = matches!(
                     response.as_ref().and_then(|frame| frame.payload.as_ref()),
                     Some(server_frame::Payload::Error(error)) if error.close_stream
                 );
-                if matches!(
-                    response.as_ref().and_then(|frame| frame.payload.as_ref()),
-                    Some(server_frame::Payload::BatchAck(_))
-                ) {
-                    if let Some(prepared) = prepared {
-                        repository.apply_batch(prepared);
-                    }
-                }
                 if let Some(response) = response {
                     if response_tx.send(Ok(response)).await.is_err() {
                         break;

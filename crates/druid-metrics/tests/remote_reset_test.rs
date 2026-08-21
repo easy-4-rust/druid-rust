@@ -109,6 +109,17 @@ fn command_frame(command_id: &str, payload: Option<command::Payload>) -> ServerF
     }
 }
 
+fn make_ack(sequence: u64) -> ServerFrame {
+    ServerFrame {
+        payload: Some(server_frame::Payload::BatchAck(
+            druid_metrics::protocol::BatchAck {
+                header: None,
+                accepted_sequence: sequence,
+            },
+        )),
+    }
+}
+
 fn outbound_batch(datasource_id: u64) -> druid_metrics::aggregator::AggregatedBatch {
     druid_metrics::aggregator::AggregatedBatch {
         entries: vec![SnapshotEntry {
@@ -281,6 +292,16 @@ async fn full_snapshot_frame_precedes_its_success_ack() {
     assert!(full_batch.is_full_snapshot);
     assert_eq!(full_batch.entries.len(), 1);
     assert_eq!(full_batch.entries[0].datasource_id, 52);
+    assert!(
+        client_rx.try_recv().is_err(),
+        "command success waits for the full snapshot ACK"
+    );
+    server_tx
+        .send(make_ack(
+            full_batch.header.as_ref().expect("full header").sequence,
+        ))
+        .await
+        .unwrap();
 
     let ack = client_rx.recv().await.unwrap();
     assert!(command_ack(&ack).success);
@@ -452,6 +473,20 @@ async fn full_snapshot_respects_batch_size_and_waits_for_ack_capacity_between_ch
     };
     assert!(second_batch.is_full_snapshot);
     assert_eq!(second_batch.entries.len(), 1);
+    assert!(
+        client_rx.try_recv().is_err(),
+        "command success waits for the final chunk ACK"
+    );
+    server_tx
+        .send(make_ack(
+            second_batch
+                .header
+                .as_ref()
+                .expect("second full header")
+                .sequence,
+        ))
+        .await
+        .unwrap();
 
     let ack = client_rx.recv().await.unwrap();
     assert!(command_ack(&ack).success);

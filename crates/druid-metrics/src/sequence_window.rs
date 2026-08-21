@@ -90,6 +90,9 @@ impl SequenceWindow {
         let sequence = self
             .next_sequence
             .ok_or(SequenceWindowError::SequenceExhausted)?;
+        if sequence == u64::MAX {
+            return Err(SequenceWindowError::SequenceExhausted);
+        }
         let encoded_frame = encode_frame(sequence);
         let pending = PendingFrame {
             sequence,
@@ -102,7 +105,7 @@ impl SequenceWindow {
 
     /// 恢复重连前保存的完整 frame，并保证后续新 sequence 大于已恢复 sequence。
     pub fn restore(&mut self, pending: PendingFrame) -> Result<(), SequenceWindowError> {
-        if pending.sequence == 0 {
+        if pending.sequence == 0 || pending.sequence == u64::MAX {
             return Err(SequenceWindowError::InvalidSequence(pending.sequence));
         }
         if self.pending.contains_key(&pending.sequence) {

@@ -94,9 +94,21 @@ impl IngestHandler {
     /// Returns `None` for frames that don't require a response (e.g.
     /// Heartbeat).
     pub async fn handle_frame(&self, frame: &ClientFrame) -> Option<ServerFrame> {
+        self.handle_frame_with_snapshot_commit(frame, || true).await
+    }
+
+    /// 在外部 snapshot 存储提交成功后，原子推进协议 sequence 并产生 ACK。
+    ///
+    /// `commit` 只会对协议上可接受的新批次调用一次；返回 `false` 时保持 stream 状态不变，
+    /// 返回相同 expected sequence 的 `ResyncRequired`，允许调用方修正并重试。
+    pub async fn handle_frame_with_snapshot_commit(
+        &self,
+        frame: &ClientFrame,
+        commit: impl FnOnce() -> bool,
+    ) -> Option<ServerFrame> {
         match &frame.payload {
             Some(client_frame::Payload::SnapshotBatch(batch)) => {
-                self.handle_snapshot_batch(batch).await
+                self.handle_snapshot_batch(batch, commit).await
             }
             Some(client_frame::Payload::Hello(hello)) => {
                 let hdr = hello.header.as_ref()?;
@@ -120,6 +132,7 @@ impl IngestHandler {
     async fn handle_snapshot_batch(
         &self,
         batch: &crate::protocol::SnapshotBatch,
+        commit: impl FnOnce() -> bool,
     ) -> Option<ServerFrame> {
         let hdr = batch.header.as_ref()?;
         let key = self.stream_key(hdr);
@@ -137,7 +150,9 @@ impl IngestHandler {
         // ── New stream: require full snapshot ──
         if !stream.initialized {
             if batch.is_full_snapshot {
-                // Accept the full snapshot.
+                if !commit() {
+                    return Some(self.make_repository_rejected(hdr, stream.expected_seq));
+                }
                 stream.initialized = true;
                 stream.expected_seq = next_sequence;
                 self.store_snapshots(stream, &batch.entries);
@@ -153,12 +168,15 @@ impl IngestHandler {
             return Some(self.make_batch_ack(hdr, seq));
         }
 
-        // ── Gap: missing sequences ──
-        if seq > stream.expected_seq {
+        // ── Gap: missing sequences; a full snapshot is the authoritative reset. ──
+        if seq > stream.expected_seq && !batch.is_full_snapshot {
             return Some(self.make_resync_required(hdr, stream.expected_seq));
         }
 
-        // ── Expected sequence: ingest normally ──
+        // ── Expected sequence or authoritative full reset: commit before advancing. ──
+        if !commit() {
+            return Some(self.make_repository_rejected(hdr, stream.expected_seq));
+        }
         stream.expected_seq = next_sequence;
         self.store_snapshots(stream, &batch.entries);
         self.ingest_count.fetch_add(1, Ordering::Relaxed);
@@ -205,6 +223,16 @@ impl IngestHandler {
             payload: Some(server_frame::Payload::ResyncRequired(ResyncRequired {
                 header: Some(self.reply_header(hdr)),
                 reason: "sequence_gap".into(),
+                expected_sequence: expected,
+            })),
+        }
+    }
+
+    fn make_repository_rejected(&self, hdr: &FrameHeader, expected: u64) -> ServerFrame {
+        ServerFrame {
+            payload: Some(server_frame::Payload::ResyncRequired(ResyncRequired {
+                header: Some(self.reply_header(hdr)),
+                reason: "repository_rejected".to_owned(),
                 expected_sequence: expected,
             })),
         }

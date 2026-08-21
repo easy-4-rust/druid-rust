@@ -119,18 +119,35 @@ fn out_of_order_ack_retains_the_entire_gap() {
 }
 
 #[test]
-fn restoring_max_sequence_exhausts_future_pushes_without_mutating_pending_bytes() {
-    let mut window = SequenceWindow::new(2);
-    let max_frame = PendingFrame {
-        sequence: u64::MAX,
-        encoded_frame: b"max-sequence-frame".to_vec(),
-    };
-    window.restore(max_frame.clone()).unwrap();
-
-    let error = window
+fn client_never_allocates_or_restores_server_rejected_max_sequence() {
+    let mut at_boundary = SequenceWindow::with_next_sequence(2, Some(u64::MAX));
+    let error = at_boundary
         .push_with(|_| b"must-not-be-encoded".to_vec())
-        .expect_err("sequence space is exhausted after u64::MAX");
-
+        .expect_err("u64::MAX is reserved because the server rejects it");
     assert_eq!(error, SequenceWindowError::SequenceExhausted);
-    assert_eq!(window.pending_frames(), vec![max_frame]);
+    assert!(at_boundary.is_empty());
+
+    let mut restore = SequenceWindow::new(2);
+    assert_eq!(
+        restore
+            .restore(PendingFrame {
+                sequence: u64::MAX,
+                encoded_frame: b"server-rejected-max".to_vec(),
+            })
+            .expect_err("server-rejected max sequence cannot be replayed"),
+        SequenceWindowError::InvalidSequence(u64::MAX)
+    );
+
+    let last_valid = PendingFrame {
+        sequence: u64::MAX - 1,
+        encoded_frame: b"last-valid-sequence".to_vec(),
+    };
+    restore.restore(last_valid.clone()).unwrap();
+    assert_eq!(
+        restore
+            .push_with(|_| b"must-not-be-encoded".to_vec())
+            .expect_err("no client sequence follows u64::MAX - 1"),
+        SequenceWindowError::SequenceExhausted
+    );
+    assert_eq!(restore.pending_frames(), vec![last_valid]);
 }
