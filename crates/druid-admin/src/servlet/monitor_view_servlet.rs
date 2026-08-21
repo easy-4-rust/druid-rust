@@ -2,6 +2,7 @@
 #![allow(clippy::unused_async)] // axum handlers require async signature even when no .await
 
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,10 +15,11 @@ use axum::{Json, Router};
 use axum_valid::Valid;
 use parking_lot::RwLock;
 use serde_json::{json, Value};
-#[cfg(feature = "jdbc-agent")]
-use std::fmt::Write;
 use tokio_metrics::TaskMonitor;
 
+use crate::config::AdminAuthMode;
+use crate::model::dto::DataSourceResult;
+use crate::repository::MetricsRepository;
 use crate::service::{MonitorStatService, StatQuery};
 
 use super::LoginRequest;
@@ -33,12 +35,19 @@ const SESSION_TTL: Duration = Duration::from_secs(7200);
 /// [`SESSION_TTL`] to prevent unbounded memory growth.
 #[derive(Clone)]
 pub struct MonitorViewServlet {
-    monitor_stat_service: Arc<MonitorStatService>,
+    backend: MonitorBackend,
     task_monitor: TaskMonitor,
-    credentials: Option<Arc<(String, String)>>,
+    auth: AdminAuthMode,
     /// Session token -> creation instant. Expired entries are pruned on access.
     sessions: Arc<RwLock<HashMap<String, Instant>>>,
     context_path: Arc<String>,
+    secure_cookies: bool,
+}
+
+#[derive(Clone)]
+enum MonitorBackend {
+    Remote(Arc<MonitorStatService>),
+    Repository(MetricsRepository),
 }
 
 /// 返回稳定端点清单；保留早期 `druid-admin` 门面 API。
@@ -52,11 +61,25 @@ impl MonitorViewServlet {
     #[must_use]
     pub fn new(monitor_stat_service: Arc<MonitorStatService>) -> Self {
         Self {
-            monitor_stat_service,
+            backend: MonitorBackend::Remote(monitor_stat_service),
             task_monitor: TaskMonitor::new(),
-            credentials: None,
+            auth: AdminAuthMode::Disabled,
             sessions: Arc::new(RwLock::new(HashMap::new())),
             context_path: Arc::new("/druid".to_owned()),
+            secure_cookies: false,
+        }
+    }
+
+    /// 使用 Metrics gRPC ingest 的本地 repository 创建 standalone 管理路由。
+    #[must_use]
+    pub fn from_repository(repository: MetricsRepository) -> Self {
+        Self {
+            backend: MonitorBackend::Repository(repository),
+            task_monitor: TaskMonitor::new(),
+            auth: AdminAuthMode::Disabled,
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            context_path: Arc::new("/druid".to_owned()),
+            secure_cookies: false,
         }
     }
 
@@ -67,8 +90,23 @@ impl MonitorViewServlet {
         login_username: Option<String>,
         login_password: Option<String>,
     ) -> Self {
-        self.credentials =
-            login_username.map(|username| Arc::new((username, login_password.unwrap_or_default())));
+        self.auth = login_username.map_or(AdminAuthMode::Disabled, |username| {
+            AdminAuthMode::basic(username, login_password.unwrap_or_default())
+        });
+        self
+    }
+
+    /// 配置 HTTP 与 gRPC 共用的应用层认证模式。
+    #[must_use]
+    pub fn with_auth_mode(mut self, auth: AdminAuthMode) -> Self {
+        self.auth = auth;
+        self
+    }
+
+    /// 指定 session cookie 是否仅允许通过 TLS 发送。
+    #[must_use]
+    pub fn with_secure_cookies(mut self, secure_cookies: bool) -> Self {
+        self.secure_cookies = secure_cookies;
         self
     }
 
@@ -115,6 +153,7 @@ impl MonitorViewServlet {
             .route("/datasource.json", get(Self::data_sources))
             .route("/sql.json", get(Self::sql_list))
             .route("/wall.json", get(Self::wall))
+            .route("/api.json", get(Self::api_description))
             .route("/weburi.json", get(Self::web_uri_list))
             .route("/webapp.json", get(Self::web_app_list))
             .route("/websession.json", get(Self::web_session_list))
@@ -154,12 +193,16 @@ impl MonitorViewServlet {
     }
 
     async fn authorize(State(state): State<Self>, request: Request, next: Next) -> Response {
-        let Some(credentials) = state.credentials.as_ref() else {
+        if !state.auth.is_enabled() {
             return next.run(request).await;
-        };
+        }
+        let authorization = request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok());
         if is_public_path(request.uri().path(), state.context_path.as_str())
             || request_has_session(&request, &state.sessions)
-            || request_has_credentials(&request, credentials)
+            || state.auth.authorizes_header(authorization)
         {
             return next.run(request).await;
         }
@@ -250,19 +293,20 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Form(login)): Valid<Form<LoginRequest>>,
     ) -> Response {
-        let Some(credentials) = state.credentials.as_ref() else {
+        let Some((username, password)) = state.auth.credentials() else {
             return (StatusCode::OK, "error").into_response();
         };
-        if login.login_username != credentials.0 || login.login_password != credentials.1 {
+        if login.login_username != username || login.login_password != password {
             return (StatusCode::OK, "error").into_response();
         }
         let token = uuid::Uuid::new_v4().simple().to_string();
         state.sessions.write().insert(token.clone(), Instant::now());
+        let secure = if state.secure_cookies { "; Secure" } else { "" };
         (
             StatusCode::OK,
             [(
                 header::SET_COOKIE,
-                format!("druid-session={token}; Path=/; HttpOnly; SameSite=Lax"),
+                format!("druid-session={token}; Path=/{secure}; HttpOnly; SameSite=Lax"),
             )],
             "success",
         )
@@ -270,63 +314,130 @@ impl MonitorViewServlet {
     }
 
     async fn service_list(State(state): State<Self>) -> Json<Vec<String>> {
-        Json(state.monitor_stat_service.applications().to_vec())
+        match &state.backend {
+            MonitorBackend::Remote(service) => Json(service.applications().to_vec()),
+            MonitorBackend::Repository(_) => Json(Vec::new()),
+        }
     }
 
     async fn data_sources(State(state): State<Self>) -> Response {
-        let service = Arc::clone(&state.monitor_stat_service);
-        state
-            .task_monitor
-            .instrument(async move {
-                match service.get_data_source_stat_data().await {
-                    Ok(result) => Json(result).into_response(),
-                    Err(error) => error_response(error),
-                }
+        match &state.backend {
+            MonitorBackend::Remote(service) => {
+                let service = Arc::clone(service);
+                state
+                    .task_monitor
+                    .instrument(async move {
+                        match service.get_data_source_stat_data().await {
+                            Ok(result) => Json(result).into_response(),
+                            Err(error) => error_response(error),
+                        }
+                    })
+                    .await
+            }
+            MonitorBackend::Repository(repository) => Json(DataSourceResult {
+                result_code: MonitorStatService::RESULT_CODE_SUCCESS,
+                content: Some(
+                    repository
+                        .all_datasources()
+                        .into_iter()
+                        .map(|entry| entry.datasource)
+                        .collect(),
+                ),
             })
-            .await
+            .into_response(),
+        }
     }
 
-    async fn data_source(State(state): State<Self>, Path(_id): Path<i64>) -> Response {
-        Self::data_sources(State(state)).await
+    async fn data_source(State(state): State<Self>, Path(id): Path<i64>) -> Response {
+        match &state.backend {
+            MonitorBackend::Remote(_) => Self::data_sources(State(state)).await,
+            MonitorBackend::Repository(repository) => {
+                let content = repository
+                    .all_datasources()
+                    .into_iter()
+                    .find(|entry| entry.datasource.identity == id)
+                    .map(|entry| entry.datasource);
+                match content {
+                    Some(content) => Json(DataSourceResult {
+                        result_code: MonitorStatService::RESULT_CODE_SUCCESS,
+                        content: Some(vec![content]),
+                    })
+                    .into_response(),
+                    None => StatusCode::NOT_FOUND.into_response(),
+                }
+            }
+        }
     }
 
     async fn sql_list(
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Response {
-        let service = Arc::clone(&state.monitor_stat_service);
-        state
-            .task_monitor
-            .instrument(async move {
-                match service.get_sql_stat_data_list(&query).await {
-                    Ok(result) => Json(result).into_response(),
-                    Err(error) => error_response(error),
-                }
-            })
-            .await
+        match &state.backend {
+            MonitorBackend::Remote(service) => {
+                let service = Arc::clone(service);
+                state
+                    .task_monitor
+                    .instrument(async move {
+                        match service.get_sql_stat_data_list(&query).await {
+                            Ok(result) => Json(result).into_response(),
+                            Err(error) => error_response(error),
+                        }
+                    })
+                    .await
+            }
+            MonitorBackend::Repository(repository) => Json(json!({
+                "ResultCode": MonitorStatService::RESULT_CODE_SUCCESS,
+                "Content": repository.all_sql_stats(),
+            }))
+            .into_response(),
+        }
     }
 
     async fn wall(
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Response {
-        let service = Arc::clone(&state.monitor_stat_service);
-        state
-            .task_monitor
-            .instrument(async move {
-                match service.get_wall_stat_map(&query).await {
-                    Ok(result) => Json(result).into_response(),
-                    Err(error) => error_response(error),
-                }
-            })
-            .await
+        match &state.backend {
+            MonitorBackend::Remote(service) => {
+                let service = Arc::clone(service);
+                state
+                    .task_monitor
+                    .instrument(async move {
+                        match service.get_wall_stat_map(&query).await {
+                            Ok(result) => Json(result).into_response(),
+                            Err(error) => error_response(error),
+                        }
+                    })
+                    .await
+            }
+            MonitorBackend::Repository(repository) => {
+                let mut wall = repository.aggregated_wall();
+                wall.result_code = MonitorStatService::RESULT_CODE_SUCCESS;
+                Json(wall).into_response()
+            }
+        }
+    }
+
+    async fn api_description() -> Json<Value> {
+        Json(json!({
+            "ResultCode": MonitorStatService::RESULT_CODE_SUCCESS,
+            "Content": {
+                "endpoints": serde_json::from_str::<Value>(Self::endpoint_list())
+                    .unwrap_or_else(|_| json!([])),
+                "version": "standalone-v1",
+            }
+        }))
     }
 
     async fn web_uri_list(
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Response {
-        let service = Arc::clone(&state.monitor_stat_service);
+        let MonitorBackend::Remote(service) = &state.backend else {
+            return Json(empty_success()).into_response();
+        };
+        let service = Arc::clone(service);
         state
             .task_monitor
             .instrument(async move {
@@ -339,9 +450,13 @@ impl MonitorViewServlet {
     }
 
     async fn web_uri_detail(State(state): State<Self>, Path(uri): Path<String>) -> Json<Value> {
+        let content = match &state.backend {
+            MonitorBackend::Remote(service) => service.get_web_uri_stat_data(&uri),
+            MonitorBackend::Repository(_) => None,
+        };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
-            state.monitor_stat_service.get_web_uri_stat_data(&uri),
+            content,
         ))
     }
 
@@ -349,11 +464,13 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Json<Value> {
+        let content = match &state.backend {
+            MonitorBackend::Remote(service) => service.get_web_app_stat_data_list(&query),
+            MonitorBackend::Repository(_) => Vec::new(),
+        };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
-            state
-                .monitor_stat_service
-                .get_web_app_stat_data_list(&query),
+            content,
         ))
     }
 
@@ -361,18 +478,24 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Json<Value> {
+        let content = match &state.backend {
+            MonitorBackend::Remote(service) => service.get_web_session_stat_data_list(&query),
+            MonitorBackend::Repository(_) => Vec::new(),
+        };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
-            state
-                .monitor_stat_service
-                .get_web_session_stat_data_list(&query),
+            content,
         ))
     }
 
     async fn web_session_detail(State(state): State<Self>, Path(id): Path<String>) -> Json<Value> {
+        let content = match &state.backend {
+            MonitorBackend::Remote(service) => service.get_web_session_stat_data(&id),
+            MonitorBackend::Repository(_) => None,
+        };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
-            state.monitor_stat_service.get_web_session_stat_data(&id),
+            content,
         ))
     }
 
@@ -380,9 +503,13 @@ impl MonitorViewServlet {
         State(state): State<Self>,
         Valid(Query(query)): Valid<Query<StatQuery>>,
     ) -> Json<Value> {
+        let content = match &state.backend {
+            MonitorBackend::Remote(service) => service.get_spring_stat_data_list(&query),
+            MonitorBackend::Repository(_) => Vec::new(),
+        };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
-            state.monitor_stat_service.get_spring_stat_data_list(&query),
+            content,
         ))
     }
 
@@ -396,11 +523,13 @@ impl MonitorViewServlet {
         let Some(method) = parameters.get("method") else {
             return missing_parameter("method");
         };
+        let content = match &state.backend {
+            MonitorBackend::Remote(service) => service.get_spring_method_stat_data(class, method),
+            MonitorBackend::Repository(_) => None,
+        };
         Json(MonitorStatService::return_json_result(
             MonitorStatService::RESULT_CODE_SUCCESS,
-            state
-                .monitor_stat_service
-                .get_spring_method_stat_data(class, method),
+            content,
         ))
         .into_response()
     }
@@ -413,16 +542,28 @@ impl MonitorViewServlet {
         let Some(service_id) = parameters.get("serviceId").cloned() else {
             return missing_parameter("serviceId");
         };
-        let service = Arc::clone(&state.monitor_stat_service);
-        state
-            .task_monitor
-            .instrument(async move {
-                match service.get_sql_stat(id, &service_id).await {
-                    Ok(result) => Json(result).into_response(),
-                    Err(error) => error_response(error),
-                }
-            })
-            .await
+        match &state.backend {
+            MonitorBackend::Remote(service) => {
+                let service = Arc::clone(service);
+                state
+                    .task_monitor
+                    .instrument(async move {
+                        match service.get_sql_stat(id, &service_id).await {
+                            Ok(result) => Json(result).into_response(),
+                            Err(error) => error_response(error),
+                        }
+                    })
+                    .await
+            }
+            MonitorBackend::Repository(repository) => repository
+                .all_sql_stats()
+                .into_iter()
+                .find(|stat| stat.id == id)
+                .map_or_else(
+                    || StatusCode::NOT_FOUND.into_response(),
+                    |stat| Json(stat).into_response(),
+                ),
+        }
     }
 
     async fn connection_info(
@@ -467,14 +608,21 @@ impl MonitorViewServlet {
         if !service_url.contains(".json") {
             return StatusCode::NOT_FOUND.into_response();
         }
-        match state.monitor_stat_service.service(service_url).await {
-            Ok(body) => (
-                StatusCode::OK,
-                [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
-                body,
-            )
-                .into_response(),
-            Err(error) => error_response(error),
+        match &state.backend {
+            MonitorBackend::Remote(service) => match service.service(service_url).await {
+                Ok(body) => (
+                    StatusCode::OK,
+                    [(header::CONTENT_TYPE, "application/json;charset=utf-8")],
+                    body,
+                )
+                    .into_response(),
+                Err(error) => error_response(error),
+            },
+            MonitorBackend::Repository(_) => Json(json!({
+                "ResultCode": MonitorStatService::RESULT_CODE_ERROR,
+                "Content": "Do not support this request, please contact with administrator.",
+            }))
+            .into_response(),
         }
     }
 
@@ -497,6 +645,9 @@ impl MonitorViewServlet {
             metrics.total_poll_count,
             metrics.total_slow_poll_count
         );
+        if let MonitorBackend::Repository(repository) = &state.backend {
+            write_repository_metrics(&mut body, repository);
+        }
         #[cfg(feature = "jdbc-agent")]
         {
             let agent = druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics::snapshot();
@@ -550,19 +701,107 @@ impl MonitorViewServlet {
 }
 
 async fn connection_response(state: MonitorViewServlet, id: i64, service_id: String) -> Response {
-    let service = Arc::clone(&state.monitor_stat_service);
-    state
-        .task_monitor
-        .instrument(async move {
-            match service
-                .get_pooling_connection_info_by_data_source_id(id, &service_id)
+    match &state.backend {
+        MonitorBackend::Remote(service) => {
+            let service = Arc::clone(service);
+            state
+                .task_monitor
+                .instrument(async move {
+                    match service
+                        .get_pooling_connection_info_by_data_source_id(id, &service_id)
+                        .await
+                    {
+                        Ok(result) => Json(result).into_response(),
+                        Err(error) => error_response(error),
+                    }
+                })
                 .await
-            {
-                Ok(result) => Json(result).into_response(),
-                Err(error) => error_response(error),
-            }
-        })
-        .await
+        }
+        MonitorBackend::Repository(repository) => repository
+            .all_datasources()
+            .into_iter()
+            .find(|entry| entry.datasource.identity == id)
+            .map_or_else(
+                || StatusCode::NOT_FOUND.into_response(),
+                |entry| Json(entry.datasource).into_response(),
+            ),
+    }
+}
+
+fn empty_success() -> Value {
+    json!({
+        "ResultCode": MonitorStatService::RESULT_CODE_SUCCESS,
+        "Content": [],
+    })
+}
+
+fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
+    let (ingest_total, rejected_total) = repository.counters();
+    let datasource_count = repository.len();
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_ingest_total Total number of ingest batches received.\n# TYPE druid_admin_ingest_total counter\ndruid_admin_ingest_total {ingest_total}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_ingest_rejected_total Total number of rejected ingest batches.\n# TYPE druid_admin_ingest_rejected_total counter\ndruid_admin_ingest_rejected_total {rejected_total}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_datasource_count Number of tracked datasource instances.\n# TYPE druid_admin_datasource_count gauge\ndruid_admin_datasource_count {datasource_count}"
+    );
+    for entry in repository.all_datasources() {
+        let datasource = &entry.datasource;
+        let service = prometheus_label_value(datasource.name.as_deref().unwrap_or("unknown"));
+        let db_type = prometheus_label_value(datasource.db_type.as_deref().unwrap_or("unknown"));
+        let identity = prometheus_label_value(&datasource.identity.to_string());
+        let labels =
+            format!("service=\"{service}\",datasource=\"{identity}\",db_type=\"{db_type}\"");
+        let _ = writeln!(
+            body,
+            "# TYPE druid_admin_datasource_active_count gauge\ndruid_admin_datasource_active_count{{{labels}}} {}",
+            datasource.active_count
+        );
+        let _ = writeln!(
+            body,
+            "# TYPE druid_admin_datasource_pooling_count gauge\ndruid_admin_datasource_pooling_count{{{labels}}} {}",
+            datasource.pooling_count
+        );
+        let _ = writeln!(
+            body,
+            "# TYPE druid_admin_datasource_execute_count counter\ndruid_admin_datasource_execute_count{{{labels}}} {}",
+            datasource.execute_count
+        );
+        let _ = writeln!(
+            body,
+            "# TYPE druid_admin_datasource_error_count counter\ndruid_admin_datasource_error_count{{{labels}}} {}",
+            datasource.error_count
+        );
+        let _ = writeln!(
+            body,
+            "# TYPE druid_admin_datasource_commit_count counter\ndruid_admin_datasource_commit_count{{{labels}}} {}",
+            datasource.commit_count
+        );
+        let _ = writeln!(
+            body,
+            "# TYPE druid_admin_datasource_rollback_count counter\ndruid_admin_datasource_rollback_count{{{labels}}} {}",
+            datasource.rollback_count
+        );
+    }
+}
+
+fn prometheus_label_value(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            other => escaped.push(other),
+        }
+    }
+    escaped
 }
 
 fn missing_parameter(name: &str) -> Response {
@@ -630,18 +869,6 @@ fn request_has_session(request: &Request, sessions: &RwLock<HashMap<String, Inst
     guard
         .get(&token)
         .is_some_and(|created| now.duration_since(*created) < SESSION_TTL)
-}
-
-fn request_has_credentials(request: &Request, credentials: &(String, String)) -> bool {
-    let parameters: HashMap<_, _> = request
-        .uri()
-        .query()
-        .unwrap_or_default()
-        .split('&')
-        .filter_map(|parameter| parameter.split_once('='))
-        .collect();
-    parameters.get("loginUsername") == Some(&credentials.0.as_str())
-        && parameters.get("loginPassword") == Some(&credentials.1.as_str())
 }
 
 fn static_resource_response(resource: &str) -> Response {

@@ -32,8 +32,11 @@ reqwest       = { workspace = true }
 tokio-metrics = { workspace = true }
 topcoat       = { workspace = true }
 prost         = { workspace = true }
-tonic         = { workspace = true, features = ["transport"] }
+tonic         = { workspace = true, features = ["transport", "tls-ring"] }
 tokio-stream  = { workspace = true }
+tokio-rustls  = { workspace = true }
+rustls        = { workspace = true }
+rustls-pki-types = { workspace = true }
 validator     = { workspace = true }
 uuid          = { workspace = true }
 kube          = { workspace = true }
@@ -48,6 +51,8 @@ parking_lot   = { workspace = true }
 tracing              = { workspace = true }
 tracing-subscriber   = { workspace = true }
 arc-swap      = { workspace = true }
+base64        = { workspace = true }
+subtle        = { workspace = true }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "test-util", "macros"] }

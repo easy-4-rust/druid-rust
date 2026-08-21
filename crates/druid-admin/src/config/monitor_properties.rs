@@ -1,9 +1,11 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 /// 管理端监控配置。
 ///
 /// 对应 Java: `com.alibaba.druid.admin.config.MonitorProperties`。
-#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitorProperties {
     /// 需要采集的应用名称。
@@ -19,6 +21,23 @@ pub struct MonitorProperties {
     pub kube_config_file_path: Option<String>,
     /// Kubernetes 命名空间。
     pub k8s_namespace: Option<String>,
+}
+
+impl fmt::Debug for MonitorProperties {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("MonitorProperties")
+            .field("applications", &self.applications)
+            .field("login_username", &self.login_username)
+            .field(
+                "login_password",
+                &self.login_password.as_ref().map(|_| "[REDACTED]"),
+            )
+            .field("context_path", &self.context_path)
+            .field("kube_config_file_path", &self.kube_config_file_path)
+            .field("k8s_namespace", &self.k8s_namespace)
+            .finish()
+    }
 }
 
 impl MonitorProperties {

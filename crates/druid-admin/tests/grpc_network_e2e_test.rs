@@ -1865,6 +1865,221 @@ async fn live_client_completes_two_different_commands_then_resumes_batches() {
         .expect("probe stops");
 }
 
+const SUCCESSOR_COMMAND_WINDOW: usize = 2;
+const SUCCESSOR_COMMAND_BURST: usize = SUCCESSOR_COMMAND_WINDOW + 1;
+
+#[derive(Clone)]
+struct SuccessorBackpressureProbe {
+    connections: Arc<AtomicUsize>,
+    successors_sent: Arc<Notify>,
+    command_results: mpsc::UnboundedSender<(String, bool)>,
+    live_observed: mpsc::UnboundedSender<u64>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for SuccessorBackpressureProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        let successors_sent = Arc::clone(&self.successors_sent);
+        let command_results = self.command_results.clone();
+        let live_observed = self.live_observed.clone();
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(SUCCESSOR_COMMAND_BURST + 2);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: false,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+
+            if connection == 0
+                && tx
+                    .send(Ok(full_snapshot_command(&header, "backpressure-command-0")))
+                    .await
+                    .is_err()
+            {
+                return;
+            }
+
+            if connection <= SUCCESSOR_COMMAND_BURST {
+                let command_id = format!("backpressure-command-{connection}");
+                let Some(chunk) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let (sequence, _) = full_chunk_identity(&chunk);
+                if tx
+                    .send(Ok(ServerFrame {
+                        payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                            header: Some(reply_header(&header)),
+                            accepted_sequence: sequence,
+                        })),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                let Some(reply) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                let success = successful_command_ack(&reply, &command_id);
+                let _ = command_results.send((command_id, success));
+
+                if connection == 0 {
+                    for successor in 1..=SUCCESSOR_COMMAND_BURST {
+                        if tx
+                            .send(Ok(full_snapshot_command(
+                                &header,
+                                &format!("backpressure-command-{successor}"),
+                            )))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                    successors_sent.notify_waiters();
+                }
+
+                let Some(goodbye) = inbound.message().await.ok().flatten() else {
+                    return;
+                };
+                assert!(matches!(
+                    goodbye.payload,
+                    Some(client_frame::Payload::Goodbye(_))
+                ));
+                return;
+            }
+
+            let Some(live) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let sequence = frame_header(&live).expect("live header").sequence;
+            let _ = live_observed.send(sequence);
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: sequence,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn validated_w_plus_one_commands_survive_teardown_backpressure_and_live_traffic_resumes() {
+    let source = Arc::new(CountingCommandSource {
+        snapshots: AtomicUsize::new(0),
+    });
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry {
+            datasource_id: 71,
+            weak_ref: Arc::downgrade(&monitorable),
+        }])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let successors_sent = Arc::new(Notify::new());
+    let (command_tx, mut command_rx) = mpsc::unbounded_channel();
+    let (live_tx, mut live_rx) = mpsc::unbounded_channel();
+    let service = SuccessorBackpressureProbe {
+        connections: Arc::new(AtomicUsize::new(0)),
+        successors_sent: Arc::clone(&successors_sent),
+        command_results: command_tx,
+        live_observed: live_tx,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let mut config = grpc_config(&endpoint, "successor-backpressure");
+    config.ack_window_capacity = SUCCESSOR_COMMAND_WINDOW;
+    let client = GrpcMetricsClient::connect_with_command_executor(config, Some(executor))
+        .await
+        .expect("client connects");
+
+    tokio::time::timeout(TEST_TIMEOUT, successors_sent.notified())
+        .await
+        .expect("server queues W+1 commands before reading old-stream Goodbye");
+    let mut results = Vec::new();
+    for _ in 0..=SUCCESSOR_COMMAND_BURST {
+        results.push(
+            tokio::time::timeout(TEST_TIMEOUT, command_rx.recv())
+                .await
+                .expect("every validated command reaches a successor session")
+                .expect("command result"),
+        );
+    }
+    assert_eq!(
+        results,
+        vec![
+            ("backpressure-command-0".to_owned(), true),
+            ("backpressure-command-1".to_owned(), true),
+            ("backpressure-command-2".to_owned(), true),
+            ("backpressure-command-3".to_owned(), true),
+        ],
+        "the W-capacity receiver plus its reader-held frame migrate in order"
+    );
+    assert_eq!(
+        source.snapshots.load(Ordering::Acquire),
+        SUCCESSOR_COMMAND_BURST + 1,
+        "each accepted command executes exactly once"
+    );
+
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(7, 15)],
+            is_full_snapshot: false,
+        })
+        .await
+        .expect("live producer remains usable after W+1 command rotations");
+    client.flush(TEST_TIMEOUT).await.expect("live batch ACKed");
+    assert_eq!(
+        tokio::time::timeout(TEST_TIMEOUT, live_rx.recv())
+            .await
+            .expect("live traffic resumes")
+            .expect("live sequence"),
+        5
+    );
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("client shutdown");
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("probe joins")
+        .expect("probe stops");
+}
+
 #[derive(Clone)]
 struct InterleavedCommandProbe {
     connections: Arc<AtomicUsize>,

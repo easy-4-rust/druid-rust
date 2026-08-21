@@ -328,6 +328,10 @@ async fn submit_login_success_sets_session_cookie() {
         cookies.iter().any(|c| c.contains("druid-session")),
         "must set druid-session cookie"
     );
+    assert!(
+        cookies.iter().all(|cookie| !cookie.contains("; Secure")),
+        "plain loopback HTTP must not issue an unusable Secure-only session cookie"
+    );
     handle.abort();
 }
 
@@ -348,20 +352,57 @@ async fn submit_login_wrong_password_returns_error() {
     handle.abort();
 }
 
-/// Accessing a protected page with valid query-param credentials must succeed.
+/// Credentials in a URL must not bypass authentication because URLs are commonly logged.
 #[tokio::test]
-async fn auth_query_param_credentials_grant_access() {
+async fn auth_query_param_credentials_do_not_bypass_login() {
     let (addr, handle) = start_servlet_server_with_auth("admin", "secret").await;
-    let resp = reqwest::get(format!(
-        "http://{addr}/druid/datasource.json?loginUsername=admin&loginPassword=secret"
-    ))
-    .await
-    .unwrap();
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = client
+        .get(format!(
+            "http://{addr}/druid/datasource.json?loginUsername=admin&loginPassword=secret"
+        ))
+        .send()
+        .await
+        .unwrap();
     assert_eq!(
         resp.status(),
-        200,
-        "query-param credentials must grant access"
+        302,
+        "query-param credentials must not bypass login"
     );
+    handle.abort();
+}
+
+/// Standard HTTP Basic credentials may reuse the configured servlet credentials.
+#[tokio::test]
+async fn auth_basic_header_grants_access() {
+    let (addr, handle) = start_servlet_server_with_auth("admin", "secret").await;
+    let resp = reqwest::Client::new()
+        .get(format!("http://{addr}/druid/datasource.json"))
+        .header("authorization", "Basic YWRtaW46c2VjcmV0")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 200, "valid Basic credentials grant access");
+    handle.abort();
+}
+
+/// Prometheus output is management data and must share the protected route boundary.
+#[tokio::test]
+async fn auth_metrics_requires_login() {
+    let (addr, handle) = start_servlet_server_with_auth("admin", "secret").await;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let resp = client
+        .get(format!("http://{addr}/metrics"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), 302, "metrics must redirect to login");
     handle.abort();
 }
 

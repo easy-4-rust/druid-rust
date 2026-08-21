@@ -8,16 +8,26 @@
 //!
 //! # Environment Variables
 //!
-//! - `DRUID_ADMIN_HTTP_ADDR` - HTTP bind address (default: `0.0.0.0:8080`)
-//! - `DRUID_ADMIN_GRPC_ADDR` - gRPC bind address (default: `0.0.0.0:9090`)
+//! - `DRUID_ADMIN_HTTP_ADDR` - HTTP bind address (default: `127.0.0.1:8080`)
+//! - `DRUID_ADMIN_GRPC_ADDR` - gRPC bind address (default: `127.0.0.1:9090`)
+//! - `DRUID_ADMIN_TLS_CERT_PATH` / `DRUID_ADMIN_TLS_KEY_PATH` - shared PEM material
+//! - `DRUID_ADMIN_AUTH_MODE` - `disabled` (loopback only) or `basic`
+//! - `DRUID_ADMIN_LOGIN_USERNAME` / `DRUID_ADMIN_LOGIN_PASSWORD` - Basic credentials
 
-use std::net::SocketAddr;
+use std::sync::Arc;
+use std::time::Duration;
 
+use axum::serve::Listener;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
+use tonic::transport::{Server, ServerTlsConfig};
 use tracing_subscriber::EnvFilter;
 
+use druid_admin::config::AdminServerConfig;
 use druid_admin::repository::MetricsRepository;
+use druid_metrics::protocol::metrics_ingest_server::MetricsIngestServer;
+
+const TLS_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,12 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     // Configuration from environment
-    let http_addr: SocketAddr = std::env::var("DRUID_ADMIN_HTTP_ADDR")
-        .unwrap_or_else(|_| "0.0.0.0:8080".to_owned())
-        .parse()?;
-    let grpc_addr: SocketAddr = std::env::var("DRUID_ADMIN_GRPC_ADDR")
-        .unwrap_or_else(|_| "0.0.0.0:9090".to_owned())
-        .parse()?;
+    let config = AdminServerConfig::from_env()?;
+    let tls_material = config.load_tls_material()?;
+    let http_addr = config.http_addr();
+    let grpc_addr = config.grpc_addr();
 
     tracing::info!(%http_addr, %grpc_addr, "starting druid-admin");
 
@@ -43,26 +51,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let shutdown_token = CancellationToken::new();
 
     // Build HTTP router
-    let http_app = druid_admin::standalone_router(repo.clone());
+    let http_app =
+        druid_admin::production_router(repo.clone(), config.auth().clone(), tls_material.is_some());
     let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
     let http_shutdown = shutdown_token.clone();
+    let http_tls = tls_material.clone();
 
     let mut http_handle = tokio::spawn(async move {
-        axum::serve(http_listener, http_app)
-            .with_graceful_shutdown(async move {
-                http_shutdown.cancelled().await;
-            })
-            .await
+        if let Some(tls) = http_tls {
+            let listener = TlsListener::new(http_listener, tls.http_server_config());
+            axum::serve(listener, http_app)
+                .with_graceful_shutdown(http_shutdown.cancelled_owned())
+                .await
+        } else {
+            axum::serve(http_listener, http_app)
+                .with_graceful_shutdown(http_shutdown.cancelled_owned())
+                .await
+        }
     });
 
     // Build gRPC server
     let grpc_shutdown = shutdown_token.clone();
     let ingest_service = druid_admin::ingest::IngestService::new(repo.clone())
         .with_shutdown_token(grpc_shutdown.clone());
+    let grpc_auth = config.auth().clone();
+    let grpc_identity = tls_material
+        .as_ref()
+        .map(druid_admin::config::AdminTlsMaterial::grpc_identity);
 
     let mut grpc_handle = tokio::spawn(async move {
-        tonic::transport::Server::builder()
-            .add_service(ingest_service.into_server())
+        let service = MetricsIngestServer::with_interceptor(ingest_service, move |request| {
+            grpc_auth.authorize_grpc_request(request)
+        });
+        let mut server = Server::builder();
+        if let Some(identity) = grpc_identity {
+            server = server.tls_config(
+                ServerTlsConfig::new()
+                    .identity(identity)
+                    .timeout(TLS_HANDSHAKE_TIMEOUT),
+            )?;
+        }
+        server
+            .add_service(service)
             .serve_with_shutdown(grpc_addr, grpc_shutdown.cancelled_owned())
             .await
     });
@@ -103,6 +133,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("druid-admin stopped");
     Ok(())
+}
+
+struct TlsListener {
+    listener: tokio::net::TcpListener,
+    acceptor: tokio_rustls::TlsAcceptor,
+}
+
+impl TlsListener {
+    fn new(listener: tokio::net::TcpListener, config: Arc<rustls::ServerConfig>) -> Self {
+        Self {
+            listener,
+            acceptor: tokio_rustls::TlsAcceptor::from(config),
+        }
+    }
+}
+
+impl Listener for TlsListener {
+    type Io = tokio_rustls::server::TlsStream<tokio::net::TcpStream>;
+    type Addr = std::net::SocketAddr;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        loop {
+            let (stream, address) = match self.listener.accept().await {
+                Ok(connection) => connection,
+                Err(error) => {
+                    tracing::error!(%error, "HTTP TLS listener accept failed");
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue;
+                }
+            };
+            match tokio::time::timeout(TLS_HANDSHAKE_TIMEOUT, self.acceptor.accept(stream)).await {
+                Ok(Ok(stream)) => return (stream, address),
+                Ok(Err(error)) => {
+                    tracing::warn!(%error, "HTTP TLS handshake rejected");
+                }
+                Err(_) => tracing::warn!("HTTP TLS handshake timed out"),
+            }
+        }
+    }
+
+    fn local_addr(&self) -> std::io::Result<Self::Addr> {
+        self.listener.local_addr()
+    }
 }
 
 async fn shutdown_signal() {

@@ -332,17 +332,30 @@ async fn run_connected_session(
     } = transport;
     let goodbye_tx = outbound_tx.clone();
     let (server_tx, server_rx) = mpsc::channel(config.ack_window_capacity);
+    let reader_cancellation = CancellationToken::new();
+    let reader_task_cancellation = reader_cancellation.clone();
     let reader_config = config.clone();
     let mut reader_handle = AbortOnDrop::new(tokio::spawn(async move {
         loop {
-            match inbound.message().await {
+            let message = tokio::select! {
+                biased;
+                () = reader_task_cancellation.cancelled() => return Ok(None),
+                result = inbound.message() => result,
+            };
+            match message {
                 Ok(Some(frame)) => {
                     validate_server_frame(&frame, &reader_config, stream_epoch)?;
-                    if server_tx.send(frame).await.is_err() {
-                        return Ok(());
-                    }
+                    let permit = tokio::select! {
+                        biased;
+                        () = reader_task_cancellation.cancelled() => return Ok(Some(frame)),
+                        result = server_tx.reserve() => result,
+                    };
+                    let Ok(permit) = permit else {
+                        return Ok(None);
+                    };
+                    permit.send(frame);
                 }
-                Ok(None) => return Ok(()),
+                Ok(None) => return Ok(None),
                 Err(error) => {
                     return Err(other_error(error));
                 }
@@ -408,11 +421,14 @@ async fn run_connected_session(
         Ok(())
     };
     drop(goodbye_tx);
-    let reader_result = join_reader(&mut reader_handle, config.shutdown_timeout).await;
-    collect_successor_commands(
+    let reader_result = join_reader_and_collect_successor_commands(
+        &mut reader_handle,
+        &reader_cancellation,
         &mut exit,
+        config.shutdown_timeout,
         config.ack_window_capacity.saturating_mul(2).max(1),
-    )?;
+    )
+    .await?;
     if reply_confirmation {
         if reader_closed_before_goodbye || goodbye_result.is_err() || reader_result.is_err() {
             tracing::warn!(
@@ -435,31 +451,30 @@ async fn run_connected_session(
     Ok(exit)
 }
 
-fn collect_successor_commands(
+fn collect_successor_command(
     exit: &mut PushWorkerExit,
+    frame: ServerFrame,
     capacity: usize,
 ) -> Result<(), MetricsError> {
-    while let Ok(frame) = exit.transport_rx.try_recv() {
-        let Some(server_frame::Payload::Command(command)) = frame.payload.as_ref() else {
-            continue;
-        };
-        let duplicate = exit.successor_commands.iter().any(|existing| {
-            matches!(
-                existing.payload.as_ref(),
-                Some(server_frame::Payload::Command(existing_command))
-                    if existing_command.command_id == command.command_id
-            )
-        });
-        if duplicate {
-            continue;
-        }
-        if exit.successor_commands.len() >= capacity {
-            return Err(MetricsError::ChannelSend(format!(
-                "successor command queue full: capacity {capacity}"
-            )));
-        }
-        exit.successor_commands.push(frame);
+    let Some(server_frame::Payload::Command(command)) = frame.payload.as_ref() else {
+        return Ok(());
+    };
+    let duplicate = exit.successor_commands.iter().any(|existing| {
+        matches!(
+            existing.payload.as_ref(),
+            Some(server_frame::Payload::Command(existing_command))
+                if existing_command.command_id == command.command_id
+        )
+    });
+    if duplicate {
+        return Ok(());
     }
+    if exit.successor_commands.len() >= capacity {
+        return Err(MetricsError::ChannelSend(format!(
+            "successor command queue full: capacity {capacity}"
+        )));
+    }
+    exit.successor_commands.push(frame);
     Ok(())
 }
 
@@ -520,14 +535,14 @@ async fn open_transport(
     })
 }
 
-struct AbortOnDrop(Option<JoinHandle<Result<(), MetricsError>>>);
+struct AbortOnDrop(Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>>);
 
 impl AbortOnDrop {
-    fn new(handle: JoinHandle<Result<(), MetricsError>>) -> Self {
+    fn new(handle: JoinHandle<Result<Option<ServerFrame>, MetricsError>>) -> Self {
         Self(Some(handle))
     }
 
-    fn take(&mut self) -> Option<JoinHandle<Result<(), MetricsError>>> {
+    fn take(&mut self) -> Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>> {
         self.0.take()
     }
 
@@ -544,18 +559,62 @@ impl Drop for AbortOnDrop {
     }
 }
 
-async fn join_reader(reader_task: &mut AbortOnDrop, timeout: Duration) -> Result<(), MetricsError> {
+async fn join_reader_and_collect_successor_commands(
+    reader_task: &mut AbortOnDrop,
+    reader_cancellation: &CancellationToken,
+    exit: &mut PushWorkerExit,
+    timeout: Duration,
+    capacity: usize,
+) -> Result<Result<(), MetricsError>, MetricsError> {
     let Some(mut reader_handle) = reader_task.take() else {
-        return Ok(());
-    };
-    match tokio::time::timeout(timeout, &mut reader_handle).await {
-        Ok(Ok(result)) => result,
-        Ok(Err(error)) => Err(MetricsError::Join(error)),
-        Err(_) => {
-            reader_handle.abort();
-            let _ = reader_handle.await;
-            Err(MetricsError::ShutdownTimeout { unflushed: 0 })
+        while let Ok(frame) = exit.transport_rx.try_recv() {
+            collect_successor_command(exit, frame, capacity)?;
         }
+        return Ok(Ok(()));
+    };
+
+    let deadline = tokio::time::Instant::now() + timeout;
+    let mut receiver_open = true;
+    loop {
+        tokio::select! {
+            biased;
+            frame = exit.transport_rx.recv(), if receiver_open => {
+                match frame {
+                    Some(frame) => collect_successor_command(exit, frame, capacity)?,
+                    None => receiver_open = false,
+                }
+            }
+            result = &mut reader_handle => {
+                let reader_result = flatten_reader_join(result);
+                if let Ok(Some(frame)) = reader_result.as_ref() {
+                    collect_successor_command(exit, frame.clone(), capacity)?;
+                }
+                while let Ok(frame) = exit.transport_rx.try_recv() {
+                    collect_successor_command(exit, frame, capacity)?;
+                }
+                return Ok(reader_result.map(|_| ()));
+            }
+            () = tokio::time::sleep_until(deadline) => {
+                reader_cancellation.cancel();
+                let reader_result = flatten_reader_join(reader_handle.await);
+                if let Ok(Some(frame)) = reader_result.as_ref() {
+                    collect_successor_command(exit, frame.clone(), capacity)?;
+                }
+                while let Ok(frame) = exit.transport_rx.try_recv() {
+                    collect_successor_command(exit, frame, capacity)?;
+                }
+                return Ok(Err(MetricsError::ShutdownTimeout { unflushed: 0 }));
+            }
+        }
+    }
+}
+
+fn flatten_reader_join(
+    result: Result<Result<Option<ServerFrame>, MetricsError>, tokio::task::JoinError>,
+) -> Result<Option<ServerFrame>, MetricsError> {
+    match result {
+        Ok(result) => result,
+        Err(error) => Err(MetricsError::Join(error)),
     }
 }
 
