@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 
 use druid::stats::DataSourceMonitorable;
@@ -7,6 +8,7 @@ use thiserror::Error;
 
 use crate::aggregator::AggregatedBatch;
 use crate::config::SqlTextPolicy;
+use crate::self_metrics::RuntimeSelfMetrics;
 use crate::snapshot_encoder::encode_snapshot;
 
 /// Guard that keeps a datasource registered in the metrics runtime.
@@ -16,19 +18,25 @@ use crate::snapshot_encoder::encode_snapshot;
 pub struct RegistrationGuard {
     datasource_id: u64,
     _weak_ref: Weak<dyn DataSourceMonitorable>,
-    unregister_tx: Option<tokio::sync::mpsc::UnboundedSender<u64>>,
+    unregister_tx: Option<tokio::sync::mpsc::Sender<u64>>,
+    active: Arc<AtomicBool>,
+    self_metrics: Arc<RuntimeSelfMetrics>,
 }
 
 impl RegistrationGuard {
     pub fn new(
         datasource_id: u64,
         weak_ref: Weak<dyn DataSourceMonitorable>,
-        unregister_tx: tokio::sync::mpsc::UnboundedSender<u64>,
+        unregister_tx: tokio::sync::mpsc::Sender<u64>,
+        active: Arc<AtomicBool>,
+        self_metrics: Arc<RuntimeSelfMetrics>,
     ) -> Self {
         Self {
             datasource_id,
             _weak_ref: weak_ref,
             unregister_tx: Some(unregister_tx),
+            active,
+            self_metrics,
         }
     }
 
@@ -41,8 +49,14 @@ impl RegistrationGuard {
 impl Drop for RegistrationGuard {
     fn drop(&mut self) {
         if let Some(tx) = self.unregister_tx.take() {
-            // Best-effort unregister; receiver may be gone if runtime shut down.
-            let _ = tx.send(self.datasource_id);
+            self.active.store(false, Ordering::Release);
+            if matches!(
+                tx.try_send(self.datasource_id),
+                Err(tokio::sync::mpsc::error::TrySendError::Full(_))
+            ) {
+                // 队列内已有 wake；listener 收到任一 ID 都会合并清理全部 inactive entry。
+                self.self_metrics.increment_unregister_coalesced_total();
+            }
         }
     }
 }
@@ -52,6 +66,30 @@ impl Drop for RegistrationGuard {
 pub struct RegistryEntry {
     pub datasource_id: u64,
     pub weak_ref: Weak<dyn DataSourceMonitorable>,
+    active: Arc<AtomicBool>,
+}
+
+impl RegistryEntry {
+    /// 创建一个 active registry entry。
+    #[must_use]
+    pub fn new(datasource_id: u64, weak_ref: Weak<dyn DataSourceMonitorable>) -> Self {
+        Self {
+            datasource_id,
+            weak_ref,
+            active: Arc::new(AtomicBool::new(true)),
+        }
+    }
+
+    /// 返回 registration guard 与 sampler 共用的 active token。
+    pub(crate) fn active_token(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.active)
+    }
+
+    /// 返回 registration 是否仍接受采样/命令。
+    #[must_use]
+    pub fn is_active(&self) -> bool {
+        self.active.load(Ordering::Acquire)
+    }
 }
 
 /// 远程管理命令访问 datasource registry 时产生的错误。
@@ -129,7 +167,7 @@ impl RegistryCommandExecutor {
             .filter(|datasource_id| {
                 !registry
                     .iter()
-                    .any(|entry| entry.datasource_id == **datasource_id)
+                    .any(|entry| entry.datasource_id == **datasource_id && entry.is_active())
             })
             .copied()
             .collect::<Vec<_>>();
@@ -141,7 +179,7 @@ impl RegistryCommandExecutor {
         for datasource_id in &target_ids {
             let entry = registry
                 .iter()
-                .find(|entry| entry.datasource_id == *datasource_id)
+                .find(|entry| entry.datasource_id == *datasource_id && entry.is_active())
                 .expect("target registration was validated");
             let source = entry.weak_ref.upgrade().ok_or_else(|| {
                 RegistryCommandError::DatasourceUnavailable {
@@ -161,18 +199,15 @@ impl RegistryCommandExecutor {
         Ok(())
     }
 
-    /// 从当前全部已注册 datasource 生成真实、非空且受 batch_size 限制的全量批次。
+    /// 从当前全部已注册 datasource 生成真实且受 batch_size 限制的全量批次。
     ///
-    /// 快照沿用 Task 2 的数量限制和 SQL 隐私编码，不包含原始 SQL 或 bind 值。
+    /// 空 registry 仍返回一个空权威批次，用于原子清空远端 stream。快照沿用
+    /// Task 2 的数量限制和 SQL 隐私编码，不包含原始 SQL 或 bind 值。
     pub fn full_snapshot(&self) -> Result<Vec<AggregatedBatch>, RegistryCommandError> {
         if self.batch_size == 0 {
             return Err(RegistryCommandError::InvalidBatchSize);
         }
         let registered = self.live_datasources_by_id()?;
-        if registered.is_empty() {
-            return Err(RegistryCommandError::EmptyRegistry);
-        }
-
         let mut entries = VecDeque::with_capacity(registered.len());
         for (datasource_id, source) in registered {
             let snapshot = source.try_snapshot().map_err(|error| {
@@ -189,6 +224,13 @@ impl RegistryCommandExecutor {
         }
 
         let mut batches = Vec::new();
+        if entries.is_empty() {
+            batches.push(AggregatedBatch {
+                entries: Vec::new(),
+                is_full_snapshot: true,
+            });
+            return Ok(batches);
+        }
         while !entries.is_empty() {
             let take = self.batch_size.min(entries.len());
             batches.push(AggregatedBatch {
@@ -205,6 +247,9 @@ impl RegistryCommandExecutor {
         let registry = self.registry.read().clone();
         let mut live = BTreeMap::new();
         for entry in registry {
+            if !entry.is_active() {
+                continue;
+            }
             if live.contains_key(&entry.datasource_id) {
                 continue;
             }

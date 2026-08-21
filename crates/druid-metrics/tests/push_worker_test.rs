@@ -177,6 +177,7 @@ async fn resend_rejects_a_pending_sequence_that_disagrees_with_the_encoded_heade
             }),
             entries: batch(9).entries,
             is_full_snapshot: false,
+            snapshot_transaction: None,
         })),
     }
     .encode_to_vec();

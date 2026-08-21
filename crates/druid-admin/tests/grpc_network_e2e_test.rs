@@ -9,16 +9,19 @@ use druid::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
     SnapshotUnavailable,
 };
+use druid_admin::config::{AdminAuthMode, AdminServerConfig};
 use druid_admin::ingest::IngestService;
-use druid_admin::MetricsRepository;
+use druid_admin::{production_router_with_command_broker, CommandBroker, MetricsRepository};
 use druid_metrics::aggregator::AggregatedBatch;
+use druid_metrics::grpc_client::DEFAULT_ACK_WINDOW_CAPACITY;
 use druid_metrics::grpc_client::{GrpcAuthorization, GrpcClientConfig, GrpcMetricsClient};
 use druid_metrics::protocol::metrics_ingest_client::MetricsIngestClient;
 use druid_metrics::protocol::metrics_ingest_server::{MetricsIngest, MetricsIngestServer};
 use druid_metrics::protocol::{
     client_frame, command, server_frame, BatchAck, ClientFrame, ClientGoodbye, ClientHeartbeat,
     ClientHello, Command, FrameHeader, HelloAck, PoolSnapshotMsg, RequestFullSnapshotCmd,
-    ResetStatsCmd, ResyncRequired, ServerFrame, SnapshotBatch, SnapshotEntry, SqlStatMsg,
+    ResetStatsCmd, ResyncRequired, ServerFrame, SnapshotBatch, SnapshotEntry, SnapshotTransaction,
+    SqlStatMsg,
 };
 use druid_metrics::registry::{RegistryCommandExecutor, RegistryEntry};
 use druid_metrics::{DruidMetricsConfig, DruidMetricsRuntime};
@@ -32,6 +35,30 @@ use tonic::transport::{Endpoint, Server};
 use tonic::{Request, Response, Status, Streaming};
 
 const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[test]
+fn grpc_client_builder_defaults_ack_window_to_256_and_rejects_zero() {
+    let endpoint = Endpoint::from_static("http://127.0.0.1:9090");
+    let config = GrpcClientConfig::builder(
+        endpoint.clone(),
+        "orders-runtime",
+        "instance-default-window",
+        "boot-default-window",
+    )
+    .build()
+    .expect("default loopback gRPC config is valid");
+    assert_eq!(DEFAULT_ACK_WINDOW_CAPACITY, 256);
+    assert_eq!(config.ack_window_capacity, DEFAULT_ACK_WINDOW_CAPACITY);
+    let invalid = GrpcClientConfig::builder(
+        endpoint,
+        "orders-runtime",
+        "instance-zero-window",
+        "boot-zero-window",
+    )
+    .ack_window_capacity(0)
+    .build();
+    assert!(invalid.is_err());
+}
 
 #[derive(Clone)]
 struct StreamIdentity {
@@ -192,6 +219,12 @@ async fn send_batch_and_expect_ack(
                 header: Some(identity.header(sequence)),
                 entries: vec![entry],
                 is_full_snapshot,
+                snapshot_transaction: is_full_snapshot.then(|| SnapshotTransaction {
+                    transaction_id: format!("single-{sequence}"),
+                    chunk_index: 0,
+                    chunk_count: 1,
+                    end: true,
+                }),
             })),
         })
         .await
@@ -200,6 +233,37 @@ async fn send_batch_and_expect_ack(
         Some(server_frame::Payload::BatchAck(ack)) => ack.accepted_sequence,
         other => panic!("expected BatchAck, got {other:?}"),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn send_snapshot_transaction_chunk(
+    stream: &mut NetworkStream,
+    identity: &StreamIdentity,
+    sequence: u64,
+    transaction_id: &str,
+    chunk_index: u32,
+    chunk_count: u32,
+    end: bool,
+    entries: Vec<SnapshotEntry>,
+) -> ServerFrame {
+    stream
+        .tx
+        .send(ClientFrame {
+            payload: Some(client_frame::Payload::SnapshotBatch(SnapshotBatch {
+                header: Some(identity.header(sequence)),
+                entries,
+                is_full_snapshot: true,
+                snapshot_transaction: Some(SnapshotTransaction {
+                    transaction_id: transaction_id.to_owned(),
+                    chunk_index,
+                    chunk_count,
+                    end,
+                }),
+            })),
+        })
+        .await
+        .expect("send authoritative snapshot transaction chunk");
+    next_server_frame(&mut stream.inbound).await
 }
 
 fn orders_entry(active: u32, idle: u32) -> SnapshotEntry {
@@ -299,6 +363,270 @@ async fn grpc_snapshot_is_visible_through_datasource_sql_and_wall_rest() {
     assert_eq!(wall["Content"]["violationCount"], 10);
 
     fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn authoritative_snapshot_replaces_only_after_end_and_empty_snapshot_clears_stream() {
+    let fixture = AdminFixture::start().await;
+    let identity = StreamIdentity::new("authoritative-replace", 12_001);
+    let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let mut second = orders_entry(8, 14);
+    second.datasource_id = 43;
+    second.datasource_name = "legacy".to_owned();
+    let initial = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        1,
+        "initial-transaction",
+        0,
+        1,
+        true,
+        vec![orders_entry(7, 15), second],
+    )
+    .await;
+    assert!(matches!(
+        initial.payload,
+        Some(server_frame::Payload::BatchAck(BatchAck {
+            accepted_sequence: 1,
+            ..
+        }))
+    ));
+    assert_eq!(datasource_content(fixture.http_addr).await.len(), 2);
+
+    let first_chunk = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        2,
+        "replacement-transaction",
+        0,
+        2,
+        false,
+        vec![orders_entry(9, 13)],
+    )
+    .await;
+    assert!(matches!(
+        first_chunk.payload,
+        Some(server_frame::Payload::BatchAck(BatchAck {
+            accepted_sequence: 2,
+            ..
+        }))
+    ));
+    let visible_before_end = datasource_content(fixture.http_addr).await;
+    assert_eq!(visible_before_end.len(), 2);
+    assert!(visible_before_end.iter().any(|item| item["Identity"] == 43));
+    assert!(visible_before_end
+        .iter()
+        .any(|item| item["Identity"] == 42 && item["ActiveCount"] == 7));
+
+    let mut replacement_second = orders_entry(4, 20);
+    replacement_second.datasource_id = 44;
+    replacement_second.datasource_name = "replacement".to_owned();
+    let end = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        3,
+        "replacement-transaction",
+        1,
+        2,
+        true,
+        vec![replacement_second],
+    )
+    .await;
+    assert!(matches!(
+        end.payload,
+        Some(server_frame::Payload::BatchAck(BatchAck {
+            accepted_sequence: 3,
+            ..
+        }))
+    ));
+    let replaced = datasource_content(fixture.http_addr).await;
+    assert_eq!(replaced.len(), 2);
+    assert!(replaced
+        .iter()
+        .any(|item| item["Identity"] == 42 && item["ActiveCount"] == 9));
+    assert!(replaced.iter().any(|item| item["Identity"] == 44));
+    assert!(!replaced.iter().any(|item| item["Identity"] == 43));
+
+    let empty = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        4,
+        "empty-transaction",
+        0,
+        1,
+        true,
+        Vec::new(),
+    )
+    .await;
+    assert!(matches!(
+        empty.payload,
+        Some(server_frame::Payload::BatchAck(BatchAck {
+            accepted_sequence: 4,
+            ..
+        }))
+    ));
+    assert!(datasource_content(fixture.http_addr).await.is_empty());
+
+    drop(stream.tx);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn incomplete_snapshot_survives_disconnect_without_partial_visibility() {
+    let fixture = AdminFixture::start().await;
+    let identity = StreamIdentity::new("authoritative-resume", 12_002);
+    let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let initial = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        1,
+        "resume-initial",
+        0,
+        1,
+        true,
+        vec![orders_entry(7, 15)],
+    )
+    .await;
+    assert!(matches!(
+        initial.payload,
+        Some(server_frame::Payload::BatchAck(_))
+    ));
+
+    let first = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        2,
+        "resume-replacement",
+        0,
+        2,
+        false,
+        vec![orders_entry(11, 10)],
+    )
+    .await;
+    assert!(matches!(
+        first.payload,
+        Some(server_frame::Payload::BatchAck(_))
+    ));
+    assert!(datasource_content(fixture.http_addr)
+        .await
+        .iter()
+        .any(|item| item["ActiveCount"] == 7));
+    drop(stream.tx);
+    drop(stream.inbound);
+
+    let mut resumed = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let mut second = orders_entry(3, 21);
+    second.datasource_id = 44;
+    let end = send_snapshot_transaction_chunk(
+        &mut resumed,
+        &identity,
+        3,
+        "resume-replacement",
+        1,
+        2,
+        true,
+        vec![second],
+    )
+    .await;
+    assert!(matches!(
+        end.payload,
+        Some(server_frame::Payload::BatchAck(_))
+    ));
+    let visible = datasource_content(fixture.http_addr).await;
+    assert_eq!(visible.len(), 2);
+    assert!(visible.iter().any(|item| item["ActiveCount"] == 11));
+    assert!(visible.iter().any(|item| item["Identity"] == 44));
+
+    drop(resumed.tx);
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn out_of_order_snapshot_chunk_fails_closed_without_replacing_visible_state() {
+    let fixture = AdminFixture::start().await;
+    let identity = StreamIdentity::new("authoritative-order", 12_003);
+    let mut stream = open_generated_stream(&fixture.grpc_endpoint, &identity).await;
+    let initial = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        1,
+        "order-initial",
+        0,
+        1,
+        true,
+        vec![orders_entry(7, 15)],
+    )
+    .await;
+    assert!(matches!(
+        initial.payload,
+        Some(server_frame::Payload::BatchAck(_))
+    ));
+
+    let invalid = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        2,
+        "order-invalid",
+        1,
+        2,
+        true,
+        vec![orders_entry(99, 0)],
+    )
+    .await;
+    assert!(matches!(
+        invalid.payload,
+        Some(server_frame::Payload::Error(ref error)) if error.close_stream
+    ));
+    let visible = datasource_content(fixture.http_addr).await;
+    assert_eq!(visible.len(), 1);
+    assert_eq!(visible[0]["ActiveCount"], 7);
+
+    fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn snapshot_transaction_capacity_is_enforced_before_staging() {
+    let repository = MetricsRepository::with_config(
+        druid_admin::repository::MetricsRepositoryConfig::try_new(
+            4,
+            2,
+            1,
+            Duration::from_secs(60),
+            4 * 1024,
+        )
+        .expect("valid tiny ingest limits"),
+    );
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve bounded ingest address");
+    let address = reservation.local_addr().expect("bounded ingest address");
+    drop(reservation);
+    let (shutdown, server_handle) =
+        start_production_server_at(address, IngestService::new(repository.clone())).await;
+    let identity = StreamIdentity::new("bounded-transaction", 12_004);
+    let mut stream = open_generated_stream(&format!("http://{address}"), &identity).await;
+    let response = send_snapshot_transaction_chunk(
+        &mut stream,
+        &identity,
+        1,
+        "too-many-chunks",
+        0,
+        3,
+        false,
+        vec![orders_entry(1, 1)],
+    )
+    .await;
+    assert!(matches!(
+        response.payload,
+        Some(server_frame::Payload::Error(ref error)) if error.close_stream
+    ));
+    assert!(repository.is_empty());
+    shutdown.cancel();
+    drop(stream.tx);
+    server_handle
+        .await
+        .expect("bounded ingest server joins")
+        .expect("bounded ingest server stops");
 }
 
 #[tokio::test]
@@ -413,6 +741,12 @@ async fn grpc_multi_entry_batch_is_atomically_visible_and_counted_once() {
                 header: Some(identity.header(1)),
                 entries: vec![orders_entry(7, 15), second],
                 is_full_snapshot: true,
+                snapshot_transaction: Some(SnapshotTransaction {
+                    transaction_id: "atomic-batch".to_owned(),
+                    chunk_index: 0,
+                    chunk_count: 1,
+                    end: true,
+                }),
             })),
         })
         .await
@@ -459,6 +793,12 @@ async fn repository_rejection_does_not_ack_or_advance_and_same_sequence_can_retr
                 header: Some(identity.header(1)),
                 entries: vec![first, duplicate],
                 is_full_snapshot: true,
+                snapshot_transaction: Some(SnapshotTransaction {
+                    transaction_id: "atomic-rejection".to_owned(),
+                    chunk_index: 0,
+                    chunk_count: 1,
+                    end: true,
+                }),
             })),
         })
         .await
@@ -544,6 +884,7 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
                 header: Some(identity.header(1)),
                 entries: vec![orders_entry(1, 2)],
                 is_full_snapshot: false,
+                snapshot_transaction: None,
             })),
         })
         .await
@@ -568,6 +909,7 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
                 header: Some(identity.header(7)),
                 entries: vec![orders_entry(7, 8)],
                 is_full_snapshot: false,
+                snapshot_transaction: None,
             })),
         })
         .await
@@ -587,6 +929,7 @@ async fn grpc_stream_enforces_identity_full_snapshot_resync_and_control_frames()
                 header: Some(changed_identity.header(6)),
                 entries: vec![orders_entry(99, 99)],
                 is_full_snapshot: false,
+                snapshot_transaction: None,
             })),
         })
         .await
@@ -634,6 +977,12 @@ async fn grpc_rejects_zero_and_max_sequences_without_poisoning_other_streams() {
                     header: Some(identity.header(sequence)),
                     entries: vec![orders_entry(99, 99)],
                     is_full_snapshot: true,
+                    snapshot_transaction: Some(SnapshotTransaction {
+                        transaction_id: format!("invalid-sequence-{sequence}"),
+                        chunk_index: 0,
+                        chunk_count: 1,
+                        end: true,
+                    }),
                 })),
             })
             .await
@@ -1253,10 +1602,10 @@ async fn resync_cutoff_preserves_live_update_queued_after_snapshot_sampling() {
     let source = Arc::new(CutoffBarrierSource::new(9));
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: 42,
-            weak_ref: Arc::downgrade(&monitorable),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            42,
+            Arc::downgrade(&monitorable),
+        )])),
         8,
         32,
         druid_metrics::SqlTextPolicy::FingerprintOnly,
@@ -1483,10 +1832,7 @@ async fn remote_full_snapshot_chunks_and_command_survive_mid_stream_disconnect()
         monitorables
             .iter()
             .enumerate()
-            .map(|(index, source)| RegistryEntry {
-                datasource_id: 41 + index as u64,
-                weak_ref: Arc::downgrade(source),
-            })
+            .map(|(index, source)| RegistryEntry::new(41 + index as u64, Arc::downgrade(source)))
             .collect(),
     ));
     let executor = RegistryCommandExecutor::new(
@@ -1671,10 +2017,10 @@ async fn final_command_reply_replays_after_half_close_and_duplicate_id_is_idempo
     let source = Arc::new(CommandSource::new(52));
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: 52,
-            weak_ref: Arc::downgrade(&monitorable),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            52,
+            Arc::downgrade(&monitorable),
+        )])),
         1,
         8,
         druid_metrics::SqlTextPolicy::FingerprintOnly,
@@ -1828,10 +2174,10 @@ async fn live_client_completes_two_different_commands_then_resumes_batches() {
     let source = Arc::new(CommandSource::new(61));
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: 61,
-            weak_ref: Arc::downgrade(&monitorable),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            61,
+            Arc::downgrade(&monitorable),
+        )])),
         1,
         8,
         druid_metrics::SqlTextPolicy::FingerprintOnly,
@@ -2028,10 +2374,10 @@ async fn validated_w_plus_one_commands_survive_teardown_backpressure_and_live_tr
     });
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: 71,
-            weak_ref: Arc::downgrade(&monitorable),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            71,
+            Arc::downgrade(&monitorable),
+        )])),
         1,
         8,
         druid_metrics::SqlTextPolicy::FingerprintOnly,
@@ -2271,10 +2617,10 @@ async fn assert_migration_violation_fails_closed(
     });
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: 71,
-            weak_ref: Arc::downgrade(&monitorable),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            71,
+            Arc::downgrade(&monitorable),
+        )])),
         1,
         8,
         druid_metrics::SqlTextPolicy::FingerprintOnly,
@@ -2523,10 +2869,10 @@ async fn command_received_before_rotation_goodbye_survives_into_successor_sessio
     });
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
     let executor = RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: 71,
-            weak_ref: Arc::downgrade(&monitorable),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            71,
+            Arc::downgrade(&monitorable),
+        )])),
         1,
         8,
         druid_metrics::SqlTextPolicy::FingerprintOnly,
@@ -3069,10 +3415,10 @@ fn registry_executor(
     source: &Arc<MutableSource>,
 ) -> (Arc<RwLock<Vec<RegistryEntry>>>, RegistryCommandExecutor) {
     let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
-    let registry = Arc::new(RwLock::new(vec![RegistryEntry {
-        datasource_id: 42,
-        weak_ref: Arc::downgrade(&monitorable),
-    }]));
+    let registry = Arc::new(RwLock::new(vec![RegistryEntry::new(
+        42,
+        Arc::downgrade(&monitorable),
+    )]));
     let executor = RegistryCommandExecutor::new(
         Arc::clone(&registry),
         8,
@@ -3430,4 +3776,712 @@ async fn runtime_shutdown_flushes_last_aggregated_batch_over_grpc() {
     assert_eq!(content[0]["ActiveCount"], 4);
 
     fixture.shutdown().await;
+}
+
+#[tokio::test]
+async fn unavailable_admin_shutdown_reports_exporter_and_client_work_as_unflushed() {
+    let (endpoint, shutdown, server_handle) =
+        start_probe_server(AckThenHoldProbe { ack_limit: 0 }).await;
+    let runtime = DruidMetricsRuntime::start_with_grpc(
+        DruidMetricsConfig::builder()
+            .sample_interval(Duration::from_millis(1))
+            .coalesce_window(Duration::from_millis(1))
+            .shutdown_timeout(Duration::from_secs(5))
+            .build()
+            .expect("valid unavailable Admin runtime config"),
+        grpc_config(&endpoint, "runtime-unavailable"),
+    )
+    .await
+    .expect("runtime connects before Admin withholds ACKs");
+    let source = Arc::new(RuntimeProbe {
+        samples: AtomicUsize::new(0),
+        sampled: Notify::new(),
+    });
+    let _guard = runtime.register(source.clone());
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while source.samples.load(Ordering::Acquire) == 0 {
+            source.sampled.notified().await;
+        }
+        while runtime.self_metrics().pending_snapshots() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("snapshot leaves the aggregator and becomes exporter/client-owned");
+
+    let result = runtime.shutdown(Duration::from_millis(100)).await;
+    assert!(matches!(
+        result,
+        Err(druid_metrics::MetricsError::ShutdownTimeout { unflushed }) if unflushed > 0
+    ));
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("unavailable Admin probe joins")
+        .expect("unavailable Admin probe stops");
+}
+
+#[tokio::test]
+async fn admin_shutdown_cancels_and_joins_every_owned_ingest_stream() {
+    let service = IngestService::new(MetricsRepository::new());
+    let observer = service.clone();
+    let reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve owned stream address");
+    let address = reservation.local_addr().expect("owned stream address");
+    drop(reservation);
+    let (shutdown, server_handle) = start_production_server_at(address, service).await;
+    let identity = StreamIdentity::new("owned-shutdown", 91_001);
+    let mut stream = open_generated_stream(&format!("http://{address}"), &identity).await;
+    assert_eq!(observer.active_streams(), 1);
+
+    shutdown.cancel();
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while observer.active_streams() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("shutdown cancellation releases the owned processing task");
+    let response_end = tokio::time::timeout(TEST_TIMEOUT, stream.inbound.message())
+        .await
+        .expect("response stream ends on shutdown")
+        .expect("response shutdown has no transport status error");
+    assert!(response_end.is_none());
+    drop(stream.tx);
+    server_handle
+        .await
+        .expect("owned stream server joins")
+        .expect("owned stream server stops");
+}
+
+#[tokio::test]
+async fn remote_plaintext_authorization_fails_before_the_probe_observes_a_connection() {
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:0")
+        .await
+        .expect("bind remote plaintext probe");
+    let port = listener
+        .local_addr()
+        .expect("plaintext probe address")
+        .port();
+    let accept_task = tokio::spawn(async move { listener.accept().await });
+    let mut config = grpc_config(&format!("http://0.0.0.0:{port}"), "plaintext-secret");
+    config.shutdown_timeout = Duration::from_millis(100);
+    config.authorization = Some(GrpcAuthorization::basic("admin", "never-send-over-h2c"));
+
+    let result = tokio::time::timeout(
+        Duration::from_millis(250),
+        GrpcMetricsClient::connect(config),
+    )
+    .await;
+    let probe_observed_connection = tokio::time::timeout(Duration::from_millis(50), accept_task)
+        .await
+        .is_ok();
+
+    assert!(
+        matches!(result, Ok(Err(_))),
+        "configuration validation must reject remote h2c before attempting transport setup"
+    );
+    assert!(
+        !probe_observed_connection,
+        "the plaintext probe must not observe a connection carrying or preceding Authorization"
+    );
+}
+
+#[derive(Clone)]
+struct DelayedNeverHelloProbe {
+    entered: Arc<Notify>,
+    release_rpc: Arc<Notify>,
+    response_senders: HeldResponseSenders,
+}
+
+type HeldResponseSenders = Arc<Mutex<Vec<mpsc::Sender<Result<ServerFrame, Status>>>>>;
+
+#[tonic::async_trait]
+impl MetricsIngest for DelayedNeverHelloProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        _request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        self.entered.notify_waiters();
+        self.release_rpc.notified().await;
+        let (tx, rx) = mpsc::channel(1);
+        self.response_senders
+            .lock()
+            .expect("response sender lock")
+            .push(tx);
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn initial_connect_rpc_and_hello_ack_share_one_configured_deadline() {
+    let entered = Arc::new(Notify::new());
+    let release_rpc = Arc::new(Notify::new());
+    let response_senders = Arc::new(Mutex::new(Vec::new()));
+    let service = DelayedNeverHelloProbe {
+        entered: Arc::clone(&entered),
+        release_rpc: Arc::clone(&release_rpc),
+        response_senders,
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let mut config = grpc_config(&endpoint, "one-initial-deadline");
+    config.shutdown_timeout = Duration::from_millis(200);
+    let mut client_task = tokio::spawn(GrpcMetricsClient::connect(config));
+
+    tokio::time::timeout(TEST_TIMEOUT, entered.notified())
+        .await
+        .expect("Connect RPC reaches the deterministic probe");
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    release_rpc.notify_waiters();
+    let result = tokio::time::timeout(Duration::from_millis(125), &mut client_task).await;
+
+    if result.is_err() {
+        client_task.abort();
+        let _ = client_task.await;
+    }
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("deadline probe server joins")
+        .expect("deadline probe server stops");
+
+    assert!(
+        matches!(result, Ok(Ok(Err(_)))),
+        "endpoint connect, Connect RPC setup, and HelloAck must consume one 200ms budget"
+    );
+}
+
+#[derive(Clone)]
+struct ReconnectDeadlineProbe {
+    connections: Arc<AtomicUsize>,
+    changed: Arc<Notify>,
+}
+
+#[tonic::async_trait]
+impl MetricsIngest for ReconnectDeadlineProbe {
+    type ConnectStream = ReceiverStream<Result<ServerFrame, Status>>;
+
+    async fn connect(
+        &self,
+        request: Request<Streaming<ClientFrame>>,
+    ) -> Result<Response<Self::ConnectStream>, Status> {
+        let connection = self.connections.fetch_add(1, Ordering::AcqRel);
+        self.changed.notify_waiters();
+        if connection == 1 {
+            std::future::pending::<()>().await;
+            unreachable!("the stalled reconnect RPC is cancelled by its deadline");
+        }
+
+        let mut inbound = request.into_inner();
+        let (tx, rx) = mpsc::channel(4);
+        tokio::spawn(async move {
+            let Some(hello) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            let header = frame_header(&hello).expect("hello header").clone();
+            if tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::HelloAck(HelloAck {
+                        header: Some(reply_header(&header)),
+                        server_protocol_version: 1,
+                        require_full_snapshot: connection == 0,
+                    })),
+                }))
+                .await
+                .is_err()
+            {
+                return;
+            }
+            let Some(batch) = inbound.message().await.ok().flatten() else {
+                return;
+            };
+            if connection == 0 {
+                return;
+            }
+            let sequence = frame_header(&batch).expect("batch header").sequence;
+            let _ = tx
+                .send(Ok(ServerFrame {
+                    payload: Some(server_frame::Payload::BatchAck(BatchAck {
+                        header: Some(reply_header(&header)),
+                        accepted_sequence: sequence,
+                    })),
+                }))
+                .await;
+            while let Some(frame) = inbound.message().await.ok().flatten() {
+                if matches!(frame.payload, Some(client_frame::Payload::Goodbye(_))) {
+                    break;
+                }
+            }
+        });
+        Ok(Response::new(ReceiverStream::new(rx)))
+    }
+}
+
+#[tokio::test]
+async fn reconnect_rpc_setup_deadline_expires_and_the_supervisor_retries() {
+    let connections = Arc::new(AtomicUsize::new(0));
+    let changed = Arc::new(Notify::new());
+    let service = ReconnectDeadlineProbe {
+        connections: Arc::clone(&connections),
+        changed: Arc::clone(&changed),
+    };
+    let (endpoint, shutdown, server_handle) = start_probe_server(service).await;
+    let mut config = grpc_config(&endpoint, "reconnect-deadline");
+    config.shutdown_timeout = Duration::from_millis(100);
+    let client = GrpcMetricsClient::connect(config)
+        .await
+        .expect("initial transport connects");
+    client
+        .send_batch(AggregatedBatch {
+            entries: vec![orders_entry(7, 15)],
+            is_full_snapshot: true,
+        })
+        .await
+        .expect("queue one replayable batch");
+
+    let retried_after_stall = tokio::time::timeout(Duration::from_secs(2), async {
+        while connections.load(Ordering::Acquire) < 3 {
+            changed.notified().await;
+        }
+    })
+    .await
+    .is_ok();
+    let shutdown_result = client.shutdown(TEST_TIMEOUT).await;
+    shutdown.cancel();
+    server_handle
+        .await
+        .expect("reconnect probe joins")
+        .expect("reconnect probe stops");
+
+    assert!(
+        retried_after_stall,
+        "a stalled reconnect Connect RPC must expire so a successor attempt can start"
+    );
+    assert!(
+        shutdown_result.is_ok(),
+        "the successor transport must ACK replayed work and shut down cleanly: {shutdown_result:?}"
+    );
+}
+
+#[tokio::test]
+async fn production_command_entry_is_authenticated_and_fails_closed_without_a_live_stream() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind command HTTP listener");
+    let address = listener.local_addr().expect("command HTTP address");
+    let config = AdminServerConfig::try_new(
+        address,
+        SocketAddr::from(([127, 0, 0, 1], 9090)),
+        None,
+        AdminAuthMode::basic("admin", "secret"),
+    )
+    .expect("valid loopback command config");
+    let broker = CommandBroker::new(8, Duration::from_millis(200));
+    let app = production_router_with_command_broker(MetricsRepository::new(), &config, broker);
+    let shutdown = CancellationToken::new();
+    let server_shutdown = shutdown.clone();
+    let server = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(server_shutdown.cancelled_owned())
+            .await
+    });
+    let body = json!({
+        "serviceName": "orders-runtime",
+        "instanceId": "instance-command",
+        "bootId": "boot-command",
+        "commandId": "reset-auth",
+        "type": "resetStats",
+        "targetDatasourceIds": [84]
+    });
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("command HTTP client");
+
+    let denied = client
+        .post(format!("http://{address}/druid/api/commands"))
+        .json(&body)
+        .send()
+        .await
+        .expect("unauthenticated command request returns");
+    assert_eq!(denied.status(), reqwest::StatusCode::FOUND);
+    let unavailable = client
+        .post(format!("http://{address}/druid/api/commands"))
+        .basic_auth("admin", Some("secret"))
+        .json(&body)
+        .send()
+        .await
+        .expect("authenticated command request returns");
+    assert_eq!(
+        unavailable.status(),
+        reqwest::StatusCode::SERVICE_UNAVAILABLE
+    );
+
+    shutdown.cancel();
+    server
+        .await
+        .expect("command HTTP server joins")
+        .expect("command HTTP server stops");
+}
+
+struct BrokerCommandProbe {
+    reset_count: AtomicUsize,
+    snapshot_count: AtomicUsize,
+}
+
+impl DataSourceMonitorable for BrokerCommandProbe {
+    fn name(&self) -> &str {
+        "broker-command-orders"
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {
+        self.reset_count.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn identity(&self) -> DataSourceIdentity {
+        DataSourceIdentity {
+            id: 84,
+            name: "broker-command-orders".to_owned(),
+            driver_name: Some("postgresql".to_owned()),
+        }
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        self.snapshot_count.fetch_add(1, Ordering::AcqRel);
+        Ok(DruidTelemetrySnapshot {
+            identity: self.identity(),
+            pool_snapshot: PoolSnapshot {
+                active_count: 9,
+                idle_count: 7,
+                max_active: 32,
+                max_idle: 16,
+                waiting_count: 0,
+            },
+            sql_stats: Vec::new(),
+            wall_snapshot: None,
+            sampling_time_millis: 1_755_734_400_000,
+        })
+    }
+}
+
+#[tokio::test]
+async fn authenticated_broker_executes_reset_and_full_snapshot_through_real_ingest_service() {
+    let repository = MetricsRepository::new();
+    let broker = CommandBroker::new(16, TEST_TIMEOUT);
+    let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind command HTTP");
+    let grpc_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind command gRPC");
+    let http_addr = http_listener.local_addr().expect("command HTTP address");
+    let grpc_addr = grpc_listener.local_addr().expect("command gRPC address");
+    let config = AdminServerConfig::try_new(
+        http_addr,
+        grpc_addr,
+        None,
+        AdminAuthMode::basic("admin", "secret"),
+    )
+    .expect("valid command server config");
+    let app = production_router_with_command_broker(repository.clone(), &config, broker.clone());
+    let shutdown = CancellationToken::new();
+    let http_shutdown = shutdown.clone();
+    let grpc_shutdown = shutdown.clone();
+    let http_handle = tokio::spawn(async move {
+        axum::serve(http_listener, app)
+            .with_graceful_shutdown(http_shutdown.cancelled_owned())
+            .await
+    });
+    let ingest = IngestService::new(repository.clone())
+        .with_command_broker(broker)
+        .with_shutdown_token(grpc_shutdown.clone());
+    let grpc_handle = tokio::spawn(async move {
+        Server::builder()
+            .add_service(ingest.into_server())
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(grpc_listener),
+                grpc_shutdown.cancelled_owned(),
+            )
+            .await
+    });
+
+    let source = Arc::new(BrokerCommandProbe {
+        reset_count: AtomicUsize::new(0),
+        snapshot_count: AtomicUsize::new(0),
+    });
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            84,
+            Arc::downgrade(&monitorable),
+        )])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let client = GrpcMetricsClient::connect_with_command_executor(
+        grpc_config(&format!("http://{grpc_addr}"), "command"),
+        Some(executor),
+    )
+    .await
+    .expect("production client connects to real IngestService");
+    let http = reqwest::Client::new();
+    let reset_body = json!({
+        "serviceName": "orders-runtime",
+        "instanceId": "instance-command",
+        "bootId": "boot-command",
+        "commandId": "reset-once",
+        "type": "resetStats",
+        "targetDatasourceIds": [84]
+    });
+    let reset = post_authenticated_command_until_live(&http, http_addr, &reset_body).await;
+    assert_eq!(reset.status(), reqwest::StatusCode::OK);
+    assert_eq!(source.reset_count.load(Ordering::Acquire), 1);
+
+    let duplicate = post_authenticated_command_until_live(&http, http_addr, &reset_body).await;
+    assert_eq!(duplicate.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        source.reset_count.load(Ordering::Acquire),
+        1,
+        "same ID and canonical payload must replay the stable result"
+    );
+    let conflict_body = json!({
+        "serviceName": "orders-runtime",
+        "instanceId": "instance-command",
+        "bootId": "boot-command",
+        "commandId": "reset-once",
+        "type": "requestFullSnapshot"
+    });
+    let conflict = post_authenticated_command_until_live(&http, http_addr, &conflict_body).await;
+    assert_eq!(conflict.status(), reqwest::StatusCode::CONFLICT);
+    assert_eq!(source.reset_count.load(Ordering::Acquire), 1);
+
+    let full_body = json!({
+        "serviceName": "orders-runtime",
+        "instanceId": "instance-command",
+        "bootId": "boot-command",
+        "commandId": "full-once",
+        "type": "requestFullSnapshot"
+    });
+    let full = post_authenticated_command_until_live(&http, http_addr, &full_body).await;
+    assert_eq!(full.status(), reqwest::StatusCode::OK);
+    assert_eq!(source.snapshot_count.load(Ordering::Acquire), 1);
+    let entries = repository.all_datasources();
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].datasource.identity, 84);
+    assert_eq!(entries[0].datasource.active_count, 9);
+
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("command client shuts down cleanly");
+    shutdown.cancel();
+    http_handle
+        .await
+        .expect("command HTTP joins")
+        .expect("command HTTP stops");
+    grpc_handle
+        .await
+        .expect("command gRPC joins")
+        .expect("command gRPC stops");
+}
+
+async fn post_authenticated_command_until_live(
+    client: &reqwest::Client,
+    http_addr: SocketAddr,
+    body: &Value,
+) -> reqwest::Response {
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        loop {
+            let response = client
+                .post(format!("http://{http_addr}/druid/api/commands"))
+                .basic_auth("admin", Some("secret"))
+                .json(body)
+                .send()
+                .await
+                .expect("authenticated command request");
+            if response.status() != reqwest::StatusCode::SERVICE_UNAVAILABLE {
+                return response;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("live stream appears before command deadline")
+}
+
+struct BlockingResetCommandProbe {
+    reset_count: AtomicUsize,
+    reset_started: AtomicUsize,
+    started: Notify,
+    blocked: Mutex<bool>,
+    release: Condvar,
+}
+
+impl BlockingResetCommandProbe {
+    fn release_reset(&self) {
+        *self.blocked.lock().expect("reset block lock") = false;
+        self.release.notify_all();
+    }
+}
+
+impl DataSourceMonitorable for BlockingResetCommandProbe {
+    fn name(&self) -> &str {
+        "blocking-reset-command"
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {
+        self.reset_count.fetch_add(1, Ordering::AcqRel);
+        self.reset_started.store(1, Ordering::Release);
+        self.started.notify_waiters();
+        let mut blocked = self.blocked.lock().expect("reset block lock");
+        while *blocked {
+            blocked = self.release.wait(blocked).expect("reset block wait");
+        }
+    }
+
+    fn identity(&self) -> DataSourceIdentity {
+        DataSourceIdentity {
+            id: 85,
+            name: "blocking-reset-command".to_owned(),
+            driver_name: Some("postgresql".to_owned()),
+        }
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        Ok(DruidTelemetrySnapshot {
+            identity: self.identity(),
+            pool_snapshot: PoolSnapshot {
+                active_count: 1,
+                idle_count: 1,
+                max_active: 4,
+                max_idle: 2,
+                waiting_count: 0,
+            },
+            sql_stats: Vec::new(),
+            wall_snapshot: None,
+            sampling_time_millis: 1_755_734_400_000,
+        })
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn reset_result_survives_real_tonic_half_close_and_reconnect_without_reexecution() {
+    let repository = MetricsRepository::new();
+    let broker = CommandBroker::new(16, TEST_TIMEOUT);
+    let http_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind durable command HTTP");
+    let http_addr = http_listener.local_addr().expect("durable HTTP address");
+    let grpc_reservation = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("reserve durable gRPC address");
+    let grpc_addr = grpc_reservation.local_addr().expect("durable gRPC address");
+    drop(grpc_reservation);
+    let config = AdminServerConfig::try_new(
+        http_addr,
+        grpc_addr,
+        None,
+        AdminAuthMode::basic("admin", "secret"),
+    )
+    .expect("valid durable command config");
+    let app = production_router_with_command_broker(repository.clone(), &config, broker.clone());
+    let http_shutdown = CancellationToken::new();
+    let http_server_shutdown = http_shutdown.clone();
+    let http_handle = tokio::spawn(async move {
+        axum::serve(http_listener, app)
+            .with_graceful_shutdown(http_server_shutdown.cancelled_owned())
+            .await
+    });
+    let service = IngestService::new(repository.clone()).with_command_broker(broker.clone());
+    let (grpc_shutdown, grpc_handle) = start_production_server_at(grpc_addr, service).await;
+
+    let source = Arc::new(BlockingResetCommandProbe {
+        reset_count: AtomicUsize::new(0),
+        reset_started: AtomicUsize::new(0),
+        started: Notify::new(),
+        blocked: Mutex::new(true),
+        release: Condvar::new(),
+    });
+    let monitorable: Arc<dyn DataSourceMonitorable> = source.clone();
+    let executor = RegistryCommandExecutor::new(
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            85,
+            Arc::downgrade(&monitorable),
+        )])),
+        1,
+        8,
+        druid_metrics::SqlTextPolicy::FingerprintOnly,
+    );
+    let mut client_config = grpc_config(&format!("http://{grpc_addr}"), "durable-reset");
+    client_config.shutdown_timeout = Duration::from_millis(200);
+    let client = GrpcMetricsClient::connect_with_command_executor(client_config, Some(executor))
+        .await
+        .expect("durable reset client connects");
+    let command_http = reqwest::Client::new();
+    let body = json!({
+        "serviceName": "orders-runtime",
+        "instanceId": "instance-durable-reset",
+        "bootId": "boot-durable-reset",
+        "commandId": "durable-reset-once",
+        "type": "resetStats",
+        "targetDatasourceIds": [85]
+    });
+    let command_task = tokio::spawn(async move {
+        post_authenticated_command_until_live(&command_http, http_addr, &body).await
+    });
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while source.reset_started.load(Ordering::Acquire) == 0 {
+            source.started.notified().await;
+        }
+    })
+    .await
+    .expect("reset side effect starts before the response stream closes");
+
+    assert!(
+        broker.cancel_stream(
+            "orders-runtime",
+            "instance-durable-reset",
+            "boot-durable-reset"
+        ),
+        "the broker owns the live stream selected by the authenticated command"
+    );
+    source.release_reset();
+
+    let response = tokio::time::timeout(TEST_TIMEOUT, command_task)
+        .await
+        .expect("command completes after reconnect")
+        .expect("command HTTP task joins");
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    assert_eq!(
+        source.reset_count.load(Ordering::Acquire),
+        1,
+        "the durable client result must replay without repeating ResetStats"
+    );
+
+    client
+        .shutdown(TEST_TIMEOUT)
+        .await
+        .expect("durable reset client shuts down");
+    grpc_shutdown.cancel();
+    grpc_handle
+        .await
+        .expect("durable gRPC joins")
+        .expect("durable gRPC stops");
+    http_shutdown.cancel();
+    http_handle
+        .await
+        .expect("durable HTTP joins")
+        .expect("durable HTTP stops");
 }

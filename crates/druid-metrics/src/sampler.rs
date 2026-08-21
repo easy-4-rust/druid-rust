@@ -48,6 +48,10 @@ async fn sample_all(
     let mut dead_ids: Vec<u64> = Vec::new();
 
     for entry in &entries {
+        if !entry.is_active() {
+            dead_ids.push(entry.datasource_id);
+            continue;
+        }
         let Some(source) = entry.weak_ref.upgrade() else {
             dead_ids.push(entry.datasource_id);
             continue;
@@ -83,5 +87,6 @@ async fn sample_all(
     if !dead_ids.is_empty() {
         let mut guard = registry.write();
         guard.retain(|e| !dead_ids.contains(&e.datasource_id));
+        self_metrics.set_registered_datasources(guard.len());
     }
 }

@@ -4,9 +4,12 @@
 //! updating the in-memory repository, and deduplication.
 
 use std::collections::HashMap;
+use std::time::Duration;
 
 use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
-use druid_admin::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
+use druid_admin::repository::{
+    DataSourceEntry, DataSourceId, MetricsRepository, MetricsRepositoryConfig,
+};
 
 fn make_entry(identity: i64, db_type: &str, sequence: u64) -> (DataSourceId, DataSourceEntry) {
     let id = DataSourceId {
@@ -244,4 +247,42 @@ fn repository_apply_batch_is_atomic_and_counts_batch_units() {
             .sequence,
         1
     );
+}
+
+#[test]
+fn repository_caps_and_ttl_are_configured_bounded_and_observable() {
+    let config = MetricsRepositoryConfig::try_new(1, 2, 1, Duration::from_millis(20), 4 * 1024)
+        .expect("valid tiny repository limits");
+    let repo = MetricsRepository::with_config(config);
+
+    let (first_id, mut first) = make_entry(1, "mysql", 1);
+    first.sql_stats.insert(1, SqlListContent::default());
+    first.sql_stats.insert(2, SqlListContent::default());
+    assert!(!repo.upsert_datasource(first_id.clone(), first));
+    assert_eq!(repo.limit_counters(), (1, 0, 0));
+
+    let (_, mut corrected) = make_entry(1, "mysql", 1);
+    corrected.sql_stats.insert(1, SqlListContent::default());
+    assert!(repo.upsert_datasource(first_id, corrected));
+    let (second_id, second) = make_entry(2, "postgresql", 1);
+    assert!(repo.upsert_datasource(second_id, second));
+    let mut other_service_id = DataSourceId {
+        service_id: "svc-2".to_owned(),
+        identity: 3,
+    };
+    let (_, other_service) = make_entry(3, "sqlite", 1);
+    assert!(!repo.upsert_datasource(other_service_id.clone(), other_service));
+    assert_eq!(repo.limit_counters(), (2, 0, 0));
+
+    std::thread::sleep(Duration::from_millis(40));
+    assert_eq!(
+        repo.len(),
+        0,
+        "expired entries are pruned on observable reads"
+    );
+    assert_eq!(repo.limit_counters(), (2, 2, 0));
+
+    other_service_id.service_id = "svc-1".to_owned();
+    let (_, replacement) = make_entry(3, "sqlite", 2);
+    assert!(repo.upsert_datasource(other_service_id, replacement));
 }

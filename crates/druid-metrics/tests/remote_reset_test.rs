@@ -140,10 +140,10 @@ fn outbound_batch(datasource_id: u64) -> druid_metrics::aggregator::AggregatedBa
 fn executor_for(probe: &Arc<ResetProbe>) -> RegistryCommandExecutor {
     let source: Arc<dyn DataSourceMonitorable> = probe.clone();
     RegistryCommandExecutor::new(
-        Arc::new(RwLock::new(vec![RegistryEntry {
-            datasource_id: probe.identity.id,
-            weak_ref: Arc::downgrade(&source),
-        }])),
+        Arc::new(RwLock::new(vec![RegistryEntry::new(
+            probe.identity.id,
+            Arc::downgrade(&source),
+        )])),
         100,
         100,
         SqlTextPolicy::FingerprintOnly,
@@ -157,14 +157,8 @@ fn executor_with_expired_unrelated_entry(probe: &Arc<ResetProbe>) -> RegistryCom
     drop(expired);
     RegistryCommandExecutor::new(
         Arc::new(RwLock::new(vec![
-            RegistryEntry {
-                datasource_id: probe.identity.id,
-                weak_ref: Arc::downgrade(&live),
-            },
-            RegistryEntry {
-                datasource_id: 999,
-                weak_ref: expired_weak,
-            },
+            RegistryEntry::new(probe.identity.id, Arc::downgrade(&live)),
+            RegistryEntry::new(999, expired_weak),
         ])),
         100,
         100,
@@ -177,10 +171,7 @@ fn executor_for_probes(probes: &[Arc<ResetProbe>], batch_size: usize) -> Registr
         .iter()
         .map(|probe| {
             let source: Arc<dyn DataSourceMonitorable> = probe.clone();
-            RegistryEntry {
-                datasource_id: probe.identity.id,
-                weak_ref: Arc::downgrade(&source),
-            }
+            RegistryEntry::new(probe.identity.id, Arc::downgrade(&source))
         })
         .collect();
     RegistryCommandExecutor::new(
@@ -214,6 +205,12 @@ fn server_full_snapshot_frame(sequence: u64) -> ClientFrame {
             }),
             entries: Vec::new(),
             is_full_snapshot: true,
+            snapshot_transaction: Some(druid_metrics::protocol::SnapshotTransaction {
+                transaction_id: format!("server-full-{sequence}"),
+                chunk_index: 0,
+                chunk_count: 1,
+                end: true,
+            }),
         })),
     }
 }
@@ -451,6 +448,13 @@ async fn full_snapshot_respects_batch_size_and_waits_for_ack_capacity_between_ch
     };
     assert!(first_batch.is_full_snapshot);
     assert_eq!(first_batch.entries.len(), 2);
+    let first_transaction = first_batch
+        .snapshot_transaction
+        .as_ref()
+        .expect("first authoritative chunk transaction");
+    assert_eq!(first_transaction.chunk_index, 0);
+    assert_eq!(first_transaction.chunk_count, 2);
+    assert!(!first_transaction.end);
     assert!(client_rx.try_recv().is_err(), "second chunk waits for ACK");
 
     let first_sequence = first_batch.header.as_ref().unwrap().sequence;
@@ -473,6 +477,17 @@ async fn full_snapshot_respects_batch_size_and_waits_for_ack_capacity_between_ch
     };
     assert!(second_batch.is_full_snapshot);
     assert_eq!(second_batch.entries.len(), 1);
+    let second_transaction = second_batch
+        .snapshot_transaction
+        .as_ref()
+        .expect("second authoritative chunk transaction");
+    assert_eq!(
+        second_transaction.transaction_id,
+        first_transaction.transaction_id
+    );
+    assert_eq!(second_transaction.chunk_index, 1);
+    assert_eq!(second_transaction.chunk_count, 2);
+    assert!(second_transaction.end);
     assert!(
         client_rx.try_recv().is_err(),
         "command success waits for the final chunk ACK"

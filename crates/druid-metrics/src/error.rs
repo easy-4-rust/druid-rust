@@ -24,6 +24,9 @@ pub enum MetricsError {
     NotStarted,
     #[error("sensitive field detected in payload: {field}")]
     SensitiveField { field: String },
+    /// gRPC endpoint、Connect RPC 与 HelloAck 未在同一配置期限内完成。
+    #[error("gRPC transport setup timed out after {timeout_millis}ms")]
+    GrpcTransportSetupTimeout { timeout_millis: u64 },
     #[error("shutdown timed out, {unflushed} snapshots not flushed")]
     ShutdownTimeout { unflushed: usize },
     #[error("shutdown completed with {unflushed} unresolved snapshots")]

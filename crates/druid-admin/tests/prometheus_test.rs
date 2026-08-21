@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use druid_admin::model::dto::{DataSourceContent, WallResult};
-use druid_admin::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
+use druid_admin::repository::{
+    DataSourceEntry, DataSourceId, MetricsRepository, MetricsRepositoryConfig,
+};
 
 /// Helper: start the standalone HTTP server with data in the repository.
 async fn start_server_with_data() -> (std::net::SocketAddr, tokio::task::JoinHandle<()>) {
@@ -269,4 +271,52 @@ fn help_text(family: &str) -> &'static str {
         "druid_jdbc_agent_protocol_errors_total" => "Total JDBC agent protocol errors.",
         _ => "",
     }
+}
+
+#[tokio::test]
+async fn metrics_output_over_budget_is_rejected_and_counted_without_silent_truncation() {
+    let config = MetricsRepositoryConfig::try_new(4, 4, 4, Duration::from_secs(60), 256)
+        .expect("valid metrics output budget");
+    let repository = MetricsRepository::with_config(config);
+    let id = DataSourceId {
+        service_id: "bounded-service".to_owned(),
+        identity: 1,
+    };
+    let entry = DataSourceEntry {
+        datasource: DataSourceContent {
+            identity: 1,
+            name: Some("bounded-service".to_owned()),
+            db_type: Some("postgresql".to_owned()),
+            active_count: 7,
+            ..Default::default()
+        },
+        sql_stats: HashMap::new(),
+        wall: WallResult::default(),
+        last_updated_ms: 0,
+        sequence: 1,
+    };
+    assert!(repository.upsert_datasource(id, entry));
+    let app = druid_admin::standalone_router(repository.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind bounded metrics HTTP");
+    let address = listener.local_addr().expect("bounded metrics address");
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await });
+
+    let response = reqwest::get(format!("http://{address}/metrics"))
+        .await
+        .expect("GET bounded metrics");
+    assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+    let body = response
+        .text()
+        .await
+        .expect("bounded metrics response body");
+    assert!(body.contains("druid_admin_metrics_output_rejected_total 1"));
+    assert!(body.contains("druid_admin_metrics_output_limit_bytes 256"));
+    assert!(
+        !body.contains("druid_admin_datasource_active_count"),
+        "over-budget exposition is rejected explicitly, never silently truncated"
+    );
+    assert_eq!(repository.limit_counters(), (0, 0, 1));
+    handle.abort();
 }

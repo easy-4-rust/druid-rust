@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::extract::{Form, OriginalUri, Path, Query, Request, State};
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
@@ -19,8 +19,9 @@ use tokio_metrics::TaskMonitor;
 
 use crate::config::AdminAuthMode;
 use crate::model::dto::DataSourceResult;
-use crate::repository::MetricsRepository;
+use crate::repository::{DataSourceId, MetricsRepository};
 use crate::service::{MonitorStatService, StatQuery};
+use crate::CommandBroker;
 
 use super::LoginRequest;
 
@@ -42,6 +43,7 @@ pub struct MonitorViewServlet {
     sessions: Arc<RwLock<HashMap<String, Instant>>>,
     context_path: Arc<String>,
     secure_cookies: bool,
+    command_broker: Option<CommandBroker>,
 }
 
 #[derive(Clone)]
@@ -67,6 +69,7 @@ impl MonitorViewServlet {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             context_path: Arc::new("/druid".to_owned()),
             secure_cookies: false,
+            command_broker: None,
         }
     }
 
@@ -80,6 +83,7 @@ impl MonitorViewServlet {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             context_path: Arc::new("/druid".to_owned()),
             secure_cookies: false,
+            command_broker: None,
         }
     }
 
@@ -107,6 +111,13 @@ impl MonitorViewServlet {
     #[must_use]
     pub fn with_secure_cookies(mut self, secure_cookies: bool) -> Self {
         self.secure_cookies = secure_cookies;
+        self
+    }
+
+    /// 注入与生产 gRPC IngestService 共用的有界命令 broker。
+    #[must_use]
+    pub fn with_command_broker(mut self, command_broker: CommandBroker) -> Self {
+        self.command_broker = Some(command_broker);
         self
     }
 
@@ -169,6 +180,7 @@ impl MonitorViewServlet {
             .route("/api/websessions/{id}", get(Self::web_session_detail))
             .route("/api/connections/{id}", get(Self::connection_info))
             .route("/api/active", get(Self::active))
+            .route("/api/commands", post(Self::issue_command))
             .fallback(Self::legacy_dispatch);
         // Merge admin routes into a single router that also handles the
         // bare context-path (e.g. /druid and /druid/) by redirecting to
@@ -207,6 +219,99 @@ impl MonitorViewServlet {
             return next.run(request).await;
         }
         redirect_found(format!("{}/login.html", state.context_path))
+    }
+
+    async fn issue_command(
+        State(state): State<Self>,
+        headers: HeaderMap,
+        Json(body): Json<Value>,
+    ) -> Response {
+        let authorization = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok());
+        if state.auth.is_enabled() && !state.auth.authorizes_header(authorization) {
+            return command_error_response(
+                StatusCode::UNAUTHORIZED,
+                "command entry requires explicit Authorization",
+            );
+        }
+        let Some(broker) = state.command_broker.as_ref() else {
+            return command_error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "command broker is unavailable",
+            );
+        };
+        let parsed = (|| {
+            let service_name = required_json_string(&body, "serviceName")?;
+            let instance_id = required_json_string(&body, "instanceId")?;
+            let boot_id = required_json_string(&body, "bootId")?;
+            let command_id = required_json_string(&body, "commandId")?;
+            let command_type = required_json_string(&body, "type")?;
+            Ok::<_, String>((service_name, instance_id, boot_id, command_id, command_type))
+        })();
+        let (service_name, instance_id, boot_id, command_id, command_type) = match parsed {
+            Ok(parsed) => parsed,
+            Err(error) => return command_error_response(StatusCode::BAD_REQUEST, &error),
+        };
+        let result = match command_type {
+            "resetStats" => {
+                let Some(ids) = body.get("targetDatasourceIds").and_then(Value::as_array) else {
+                    return command_error_response(
+                        StatusCode::BAD_REQUEST,
+                        "targetDatasourceIds must be an array",
+                    );
+                };
+                let ids = ids
+                    .iter()
+                    .map(|value| {
+                        value.as_u64().ok_or_else(|| {
+                            "targetDatasourceIds must contain unsigned integers".to_owned()
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>();
+                let ids = match ids {
+                    Ok(ids) if !ids.is_empty() => ids,
+                    Ok(_) => {
+                        return command_error_response(
+                            StatusCode::BAD_REQUEST,
+                            "targetDatasourceIds must not be empty",
+                        );
+                    }
+                    Err(error) => return command_error_response(StatusCode::BAD_REQUEST, &error),
+                };
+                broker
+                    .issue_reset(service_name, instance_id, boot_id, command_id, ids)
+                    .await
+            }
+            "requestFullSnapshot" => {
+                broker
+                    .issue_full_snapshot(service_name, instance_id, boot_id, command_id)
+                    .await
+            }
+            _ => {
+                return command_error_response(StatusCode::BAD_REQUEST, "unsupported command type");
+            }
+        };
+        match result {
+            Ok(acknowledgement) if acknowledgement.success => (
+                StatusCode::OK,
+                Json(json!({
+                    "commandId": acknowledgement.command_id,
+                    "success": true
+                })),
+            )
+                .into_response(),
+            Ok(acknowledgement) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({
+                    "commandId": acknowledgement.command_id,
+                    "success": false,
+                    "error": acknowledgement.error_message
+                })),
+            )
+                .into_response(),
+            Err(error) => command_error_response(command_error_status(&error), &error),
+        }
     }
 
     async fn root(State(state): State<Self>) -> Response {
@@ -348,14 +453,22 @@ impl MonitorViewServlet {
         }
     }
 
-    async fn data_source(State(state): State<Self>, Path(id): Path<i64>) -> Response {
+    async fn data_source(
+        State(state): State<Self>,
+        Path(id): Path<i64>,
+        Query(parameters): Query<HashMap<String, String>>,
+    ) -> Response {
+        let Some(service_id) = parameters.get("serviceId").cloned() else {
+            return missing_parameter("serviceId");
+        };
         match &state.backend {
             MonitorBackend::Remote(_) => Self::data_sources(State(state)).await,
             MonitorBackend::Repository(repository) => {
                 let content = repository
-                    .all_datasources()
-                    .into_iter()
-                    .find(|entry| entry.datasource.identity == id)
+                    .get_datasource(&DataSourceId {
+                        service_id,
+                        identity: id,
+                    })
                     .map(|entry| entry.datasource);
                 match content {
                     Some(content) => Json(DataSourceResult {
@@ -542,6 +655,12 @@ impl MonitorViewServlet {
         let Some(service_id) = parameters.get("serviceId").cloned() else {
             return missing_parameter("serviceId");
         };
+        let Some(datasource_id) = parameters
+            .get("dataSourceId")
+            .and_then(|value| value.parse::<i64>().ok())
+        else {
+            return missing_parameter("dataSourceId");
+        };
         match &state.backend {
             MonitorBackend::Remote(service) => {
                 let service = Arc::clone(service);
@@ -556,9 +675,7 @@ impl MonitorViewServlet {
                     .await
             }
             MonitorBackend::Repository(repository) => repository
-                .all_sql_stats()
-                .into_iter()
-                .find(|stat| stat.id == id)
+                .get_sql_stat(&service_id, datasource_id, id)
                 .map_or_else(
                     || StatusCode::NOT_FOUND.into_response(),
                     |stat| Json(stat).into_response(),
@@ -706,6 +823,29 @@ impl MonitorViewServlet {
             )
             .expect("writing metrics into String cannot fail");
         }
+        if let MonitorBackend::Repository(repository) = &state.backend {
+            if !repository.accept_metrics_output_size(body.len()) {
+                let (_, _, output_rejected_total) = repository.limit_counters();
+                let rejected = format!(
+                    concat!(
+                        "# HELP druid_admin_metrics_output_rejected_total Total metrics expositions rejected for exceeding the byte budget.\n",
+                        "# TYPE druid_admin_metrics_output_rejected_total counter\n",
+                        "druid_admin_metrics_output_rejected_total {}\n",
+                        "# HELP druid_admin_metrics_output_limit_bytes Configured maximum metrics exposition bytes.\n",
+                        "# TYPE druid_admin_metrics_output_limit_bytes gauge\n",
+                        "druid_admin_metrics_output_limit_bytes {}\n"
+                    ),
+                    output_rejected_total,
+                    repository.max_metrics_output_bytes()
+                );
+                return (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+                    rejected,
+                )
+                    .into_response();
+            }
+        }
         (
             StatusCode::OK,
             [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
@@ -713,6 +853,31 @@ impl MonitorViewServlet {
         )
             .into_response()
     }
+}
+
+fn required_json_string<'a>(body: &'a Value, field: &str) -> Result<&'a str, String> {
+    body.get(field)
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| format!("{field} must be a non-empty string"))
+}
+
+fn command_error_status(error: &str) -> StatusCode {
+    if error.contains("conflicting canonical payload") {
+        StatusCode::CONFLICT
+    } else if error.contains("queue full") || error.contains("broker full") {
+        StatusCode::TOO_MANY_REQUESTS
+    } else if error.contains("deadline exceeded") {
+        StatusCode::GATEWAY_TIMEOUT
+    } else if error.contains("no live stream") {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+fn command_error_response(status: StatusCode, error: &str) -> Response {
+    (status, Json(json!({"success": false, "error": error}))).into_response()
 }
 
 async fn connection_response(state: MonitorViewServlet, id: i64, service_id: String) -> Response {
@@ -733,9 +898,10 @@ async fn connection_response(state: MonitorViewServlet, id: i64, service_id: Str
                 .await
         }
         MonitorBackend::Repository(repository) => repository
-            .all_datasources()
-            .into_iter()
-            .find(|entry| entry.datasource.identity == id)
+            .get_datasource(&DataSourceId {
+                service_id,
+                identity: id,
+            })
             .map_or_else(
                 || StatusCode::NOT_FOUND.into_response(),
                 |entry| Json(entry.datasource).into_response(),
@@ -752,10 +918,29 @@ fn empty_success() -> Value {
 
 fn write_repository_metrics(body: &mut String, repository: &MetricsRepository) {
     let (ingest_total, rejected_total) = repository.counters();
+    let (capacity_rejected_total, ttl_evicted_total, output_rejected_total) =
+        repository.limit_counters();
     let datasource_count = repository.len();
     let _ = writeln!(
         body,
         "# HELP druid_admin_ingest_total Total number of ingest batches received.\n# TYPE druid_admin_ingest_total counter\ndruid_admin_ingest_total {ingest_total}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_capacity_rejected_total Total repository transactions rejected by configured capacity.\n# TYPE druid_admin_capacity_rejected_total counter\ndruid_admin_capacity_rejected_total {capacity_rejected_total}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_ttl_evicted_total Total datasource entries evicted after TTL.\n# TYPE druid_admin_ttl_evicted_total counter\ndruid_admin_ttl_evicted_total {ttl_evicted_total}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_metrics_output_rejected_total Total metrics expositions rejected for exceeding the byte budget.\n# TYPE druid_admin_metrics_output_rejected_total counter\ndruid_admin_metrics_output_rejected_total {output_rejected_total}"
+    );
+    let _ = writeln!(
+        body,
+        "# HELP druid_admin_metrics_output_limit_bytes Configured maximum metrics exposition bytes.\n# TYPE druid_admin_metrics_output_limit_bytes gauge\ndruid_admin_metrics_output_limit_bytes {}",
+        repository.max_metrics_output_bytes()
     );
     let _ = writeln!(
         body,

@@ -176,6 +176,7 @@ async fn flush_pending(
             self_metrics.set_pending_snapshots(unflushed);
             return Err(output_closed_error(unflushed));
         }
+        self_metrics.increment_pending_export_batches();
     }
 
     self_metrics.set_pending_snapshots(0);

@@ -48,6 +48,7 @@ fn make_batch_frame(
                 sampling_time_millis: 1_700_000_000_000,
             }],
             is_full_snapshot: false,
+            snapshot_transaction: None,
         })),
     }
 }
@@ -80,6 +81,12 @@ fn make_full_snapshot_frame(
                 sampling_time_millis: 1_700_000_000_000,
             }],
             is_full_snapshot: true,
+            snapshot_transaction: Some(SnapshotTransaction {
+                transaction_id: format!("test-transaction-{seq}"),
+                chunk_index: 0,
+                chunk_count: 1,
+                end: true,
+            }),
         })),
     }
 }

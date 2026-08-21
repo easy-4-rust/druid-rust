@@ -14,12 +14,16 @@
 //! All metric collection is driven by the background sampler.
 
 pub mod aggregator;
+pub(crate) mod command_journal;
+pub mod command_payload;
 pub mod config;
 pub mod error;
 #[cfg(feature = "client")]
 mod grpc_authorization;
 #[cfg(feature = "client")]
 pub mod grpc_client;
+#[cfg(feature = "client")]
+pub mod grpc_client_config_builder;
 pub mod ingest_handler;
 pub mod prometheus;
 pub mod protocol;
@@ -31,6 +35,7 @@ pub mod sanitizer;
 pub mod self_metrics;
 pub mod sequence_window;
 pub(crate) mod snapshot_encoder;
+pub(crate) mod snapshot_transaction_state;
 pub mod timeline;
 
 pub use config::{DruidMetricsConfig, DruidMetricsConfigBuilder, SqlTextPolicy};

@@ -89,6 +89,12 @@ fn client_snapshot_batch_roundtrip() {
         header: Some(sample_header()),
         entries: vec![sample_snapshot_entry(), sample_snapshot_entry()],
         is_full_snapshot: true,
+        snapshot_transaction: Some(SnapshotTransaction {
+            transaction_id: "roundtrip-snapshot".to_owned(),
+            chunk_index: 0,
+            chunk_count: 1,
+            end: true,
+        }),
     };
     let frame = ClientFrame {
         payload: Some(client_frame::Payload::SnapshotBatch(msg)),
@@ -101,6 +107,14 @@ fn client_snapshot_batch_roundtrip() {
         Some(client_frame::Payload::SnapshotBatch(batch)) => {
             assert_eq!(batch.entries.len(), 2);
             assert!(batch.is_full_snapshot);
+            assert_eq!(
+                batch
+                    .snapshot_transaction
+                    .as_ref()
+                    .expect("full snapshot transaction")
+                    .transaction_id,
+                "roundtrip-snapshot"
+            );
             assert_eq!(batch.entries[0].datasource_name, "orders-db");
             assert_eq!(batch.entries[0].sql_stats.len(), 1);
             assert_eq!(

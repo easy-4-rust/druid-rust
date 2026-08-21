@@ -1,6 +1,7 @@
 //! Tonic 指标客户端与有界重连 supervisor。
 
 use std::fmt;
+use std::net::IpAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -12,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 use tonic::transport::{Channel, Endpoint};
 
 use crate::aggregator::AggregatedBatch;
+use crate::command_journal::CommandJournal;
 use crate::error::MetricsError;
 use crate::protocol::metrics_ingest_client::MetricsIngestClient;
 use crate::protocol::{
@@ -27,6 +29,8 @@ pub use crate::grpc_authorization::GrpcAuthorization;
 
 const INITIAL_BACKOFF: Duration = Duration::from_millis(250);
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
+/// ACK window 与内部 transport channel 的生产默认容量。
+pub const DEFAULT_ACK_WINDOW_CAPACITY: usize = 256;
 
 /// 真实 Tonic 客户端配置。
 #[derive(Clone)]
@@ -62,6 +66,28 @@ impl fmt::Debug for GrpcClientConfig {
     }
 }
 
+impl GrpcClientConfig {
+    /// 创建默认 ACK window 为 256 的验证 builder。
+    pub fn builder(
+        endpoint: Endpoint,
+        service_name: impl Into<String>,
+        instance_id: impl Into<String>,
+        boot_id: impl Into<String>,
+    ) -> crate::grpc_client_config_builder::GrpcClientConfigBuilder {
+        crate::grpc_client_config_builder::GrpcClientConfigBuilder::new(
+            endpoint,
+            service_name,
+            instance_id,
+            boot_id,
+        )
+    }
+
+    /// 在任何 endpoint connect 或 Authorization 注入前校验安全与容量边界。
+    pub fn validate(&self) -> Result<(), MetricsError> {
+        validate_config(self)
+    }
+}
+
 /// 持有推送、transport、重连和取消生命周期的真实 gRPC 指标客户端。
 pub struct GrpcMetricsClient {
     batch_tx: Option<mpsc::Sender<PushEvent>>,
@@ -85,13 +111,7 @@ impl GrpcMetricsClient {
     ) -> Result<Self, MetricsError> {
         validate_config(&config)?;
         let stream_epoch = next_stream_epoch();
-        let initial_channel = config
-            .endpoint
-            .clone()
-            .connect()
-            .await
-            .map_err(other_error)?;
-        let initial_transport = open_transport(initial_channel, &config, stream_epoch).await?;
+        let initial_transport = connect_transport(&config, stream_epoch, None, 0).await?;
         let (batch_tx, batch_rx) = mpsc::channel(config.ack_window_capacity);
         let cancellation = CancellationToken::new();
         let supervisor_cancel = cancellation.clone();
@@ -100,6 +120,7 @@ impl GrpcMetricsClient {
         let generation = Arc::new(AtomicU64::new(0));
         let supervisor_progress = progress.clone();
         let supervisor_generation = Arc::clone(&generation);
+        let command_journal = Arc::new(CommandJournal::new(config.ack_window_capacity));
         let supervisor_handle = tokio::spawn(async move {
             run_supervisor(
                 supervisor_config,
@@ -110,6 +131,7 @@ impl GrpcMetricsClient {
                 supervisor_cancel,
                 supervisor_progress,
                 supervisor_generation,
+                command_journal,
             )
             .await
         });
@@ -165,6 +187,12 @@ impl GrpcMetricsClient {
         }
     }
 
+    /// 返回 runtime shutdown 汇总使用的共享推送进度。
+    #[must_use]
+    pub fn progress(&self) -> PushProgress {
+        self.progress.clone()
+    }
+
     /// 停止接收新批次，等待所有已发送 frame 获得 ACK，并 join 全部自有任务。
     pub async fn shutdown(mut self, deadline: Duration) -> Result<(), MetricsError> {
         self.batch_tx.take();
@@ -209,6 +237,7 @@ async fn run_supervisor(
     cancellation: CancellationToken,
     progress: PushProgress,
     generation: Arc<AtomicU64>,
+    command_journal: Arc<CommandJournal>,
 ) -> Result<(), MetricsError> {
     let mut pending_frames = Vec::new();
     let mut next_sequence = Some(1);
@@ -220,6 +249,7 @@ async fn run_supervisor(
     let mut completed_full_snapshot_commands = Vec::new();
     let mut preserved_live_events = Vec::new();
     let mut successor_commands = Vec::new();
+    let mut snapshot_transaction = None;
 
     loop {
         if (transport.require_full_snapshot && completed_session) || resync_required {
@@ -244,6 +274,7 @@ async fn run_supervisor(
                 progress.undo_queue_batch();
             }
             authoritative_batches = executor.full_snapshot().map_err(other_error)?;
+            snapshot_transaction = None;
             pending_frames.clear();
             progress.set_pending_frames(0);
             while let Ok(event) = batch_rx.try_recv() {
@@ -276,6 +307,8 @@ async fn run_supervisor(
             completed_full_snapshot_commands,
             preserved_live_events,
             successor_commands,
+            snapshot_transaction,
+            Arc::clone(&command_journal),
         )
         .await?;
         batch_rx = exit.batch_rx;
@@ -287,6 +320,7 @@ async fn run_supervisor(
         completed_full_snapshot_commands = exit.completed_full_snapshot_commands;
         preserved_live_events = exit.preserved_live_events;
         successor_commands = exit.successor_commands;
+        snapshot_transaction = exit.snapshot_transaction;
         completed_session = true;
 
         if batch_rx.is_closed()
@@ -308,19 +342,22 @@ async fn run_supervisor(
 
         loop {
             wait_for_reconnect(backoff, &cancellation).await?;
-            match config.endpoint.clone().connect().await {
-                Ok(channel) => match open_transport(channel, &config, stream_epoch).await {
-                    Ok(next_transport) => {
-                        transport = next_transport;
-                        backoff = INITIAL_BACKOFF;
-                        break;
-                    }
-                    Err(error) => {
-                        tracing::warn!(%error, "gRPC metrics handshake failed; retrying");
-                    }
-                },
+            match connect_transport(
+                &config,
+                stream_epoch,
+                Some(&cancellation),
+                progress.unflushed(),
+            )
+            .await
+            {
+                Ok(next_transport) => {
+                    transport = next_transport;
+                    backoff = INITIAL_BACKOFF;
+                    break;
+                }
+                Err(error) if cancellation.is_cancelled() => return Err(error),
                 Err(error) => {
-                    tracing::warn!(%error, "gRPC metrics reconnect failed; retrying");
+                    tracing::warn!(%error, "gRPC metrics transport setup failed; retrying");
                 }
             }
             backoff = next_backoff(backoff);
@@ -344,6 +381,8 @@ async fn run_connected_session(
     completed_full_snapshot_commands: Vec<String>,
     preserved_live_events: Vec<PushEvent>,
     successor_commands: Vec<ServerFrame>,
+    snapshot_transaction: Option<(String, u32, u32)>,
+    command_journal: Arc<CommandJournal>,
 ) -> Result<PushWorkerExit, MetricsError> {
     let ConnectedTransport {
         outbound_tx,
@@ -384,6 +423,7 @@ async fn run_connected_session(
     }));
 
     let force_first_full = require_full_snapshot && authoritative_batches.is_empty();
+    let session_progress = progress.clone();
     let mut worker = PushWorker::with_identity(
         batch_rx,
         outbound_tx,
@@ -400,6 +440,8 @@ async fn run_connected_session(
     .map_err(other_error)?
     .with_progress(progress)
     .with_initial_batches(authoritative_batches)
+    .with_snapshot_transaction(snapshot_transaction)
+    .with_command_journal(command_journal)
     .with_first_batch_full_snapshot(force_first_full)
     .with_full_snapshot_command_state(full_snapshot_command, completed_full_snapshot_commands);
     worker = worker.with_preserved_live_events(preserved_live_events);
@@ -457,6 +499,7 @@ async fn run_connected_session(
             return Ok(exit);
         }
         exit.confirm_full_snapshot_command_reply(config.ack_window_capacity);
+        session_progress.finish_command_if_pending();
     } else if clean_shutdown {
         if reader_closed_before_goodbye {
             return Err(MetricsError::ChannelSend(
@@ -526,9 +569,9 @@ async fn open_transport(
         })
         .await
         .map_err(|_| MetricsError::ChannelSend("gRPC hello transport closed".to_owned()))?;
-    let hello = tokio::time::timeout(config.shutdown_timeout, inbound.message())
+    let hello = inbound
+        .message()
         .await
-        .map_err(|_| MetricsError::ShutdownTimeout { unflushed: 0 })?
         .map_err(other_error)?
         .ok_or_else(|| MetricsError::ChannelSend("gRPC hello response stream closed".to_owned()))?;
     let require_full_snapshot = match hello.payload {
@@ -558,6 +601,39 @@ async fn open_transport(
         inbound,
         require_full_snapshot,
     })
+}
+
+async fn connect_transport(
+    config: &GrpcClientConfig,
+    stream_epoch: u64,
+    cancellation: Option<&CancellationToken>,
+    unflushed: usize,
+) -> Result<ConnectedTransport, MetricsError> {
+    let setup = async {
+        let channel = config
+            .endpoint
+            .clone()
+            .connect()
+            .await
+            .map_err(other_error)?;
+        open_transport(channel, config, stream_epoch).await
+    };
+    let bounded = async {
+        tokio::time::timeout(config.shutdown_timeout, setup)
+            .await
+            .map_err(|_| MetricsError::GrpcTransportSetupTimeout {
+                timeout_millis: config.shutdown_timeout.as_millis() as u64,
+            })?
+    };
+    if let Some(cancellation) = cancellation {
+        tokio::select! {
+            biased;
+            () = cancellation.cancelled() => Err(MetricsError::ShutdownTimeout { unflushed }),
+            result = bounded => result,
+        }
+    } else {
+        bounded.await
+    }
 }
 
 struct AbortOnDrop(Option<JoinHandle<Result<Option<ServerFrame>, MetricsError>>>);
@@ -670,6 +746,20 @@ fn validate_config(config: &GrpcClientConfig) -> Result<(), MetricsError> {
     {
         return Err(MetricsError::ChannelSend(
             "gRPC stream identity fields must be non-empty".to_owned(),
+        ));
+    }
+    let uri = config.endpoint.uri();
+    let host = uri
+        .host()
+        .ok_or_else(|| MetricsError::ChannelSend("gRPC endpoint must contain a host".to_owned()))?;
+    let normalized_host = host.trim_matches(['[', ']']);
+    let is_loopback = normalized_host.eq_ignore_ascii_case("localhost")
+        || normalized_host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| address.is_loopback());
+    if !is_loopback && (uri.scheme_str() != Some("https") || config.authorization.is_none()) {
+        return Err(MetricsError::ChannelSend(
+            "remote gRPC endpoints require HTTPS and authentication".to_owned(),
         ));
     }
     Ok(())

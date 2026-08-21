@@ -181,3 +181,43 @@ async fn shutdown_within_deadline_succeeds() {
     let result = runtime.shutdown(Duration::from_secs(5)).await;
     assert!(result.is_ok(), "shutdown should succeed within deadline");
 }
+
+#[tokio::test]
+async fn saturated_unregister_queue_coalesces_and_eventually_cleans_live_sources() {
+    let runtime = DruidMetricsRuntime::start(
+        DruidMetricsConfig::builder()
+            .queue_capacity(1)
+            .sample_interval(Duration::from_secs(60))
+            .build()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let metrics = runtime.self_metrics().clone();
+    let mut sources = Vec::new();
+    let mut guards = Vec::new();
+    for id in 100..228 {
+        let source = Arc::new(MockDataSource::new(id, &format!("churn-{id}")));
+        guards.push(runtime.register(source.clone()));
+        sources.push(source);
+    }
+    assert_eq!(metrics.registered_datasources(), 128);
+
+    for guard in guards {
+        drop(guard);
+    }
+    assert!(
+        metrics.unregister_coalesced_total() > 0,
+        "Drop uses bounded try_send and observes queue saturation"
+    );
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while metrics.registered_datasources() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("one queued wake drains every atomically inactive registration");
+
+    runtime.shutdown(Duration::from_secs(1)).await.unwrap();
+    drop(sources);
+}

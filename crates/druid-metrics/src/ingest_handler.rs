@@ -28,8 +28,9 @@ use std::sync::Mutex;
 
 use crate::protocol::{
     client_frame, server_frame, BatchAck, ClientFrame, Command, CommandAck, FrameHeader, HelloAck,
-    ResetStatsCmd, ResyncRequired, ServerError, ServerFrame, SnapshotEntry,
+    ResetStatsCmd, ResyncRequired, ServerError, ServerFrame, SnapshotEntry, SnapshotTransaction,
 };
+use crate::snapshot_transaction_state::SnapshotTransactionState;
 
 /// Stream identity key.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -49,6 +50,8 @@ struct StreamState {
     initialized: bool,
     /// Latest snapshot entries, keyed by `datasource_id`.
     snapshots: HashMap<u64, SnapshotEntry>,
+    /// 尚未完整到达、不能对 repository 可见的权威快照事务。
+    snapshot_transaction: Option<SnapshotTransactionState>,
 }
 
 impl StreamState {
@@ -57,6 +60,7 @@ impl StreamState {
             expected_seq: 1,
             initialized: false,
             snapshots: HashMap::new(),
+            snapshot_transaction: None,
         }
     }
 }
@@ -68,6 +72,8 @@ pub struct IngestHandler {
     state: Mutex<IngestState>,
     ingest_count: AtomicU64,
     command_counter: AtomicU64,
+    max_streams: usize,
+    max_snapshot_entries: usize,
 }
 
 struct IngestState {
@@ -86,7 +92,17 @@ impl IngestHandler {
             }),
             ingest_count: AtomicU64::new(0),
             command_counter: AtomicU64::new(0),
+            max_streams: 1_024,
+            max_snapshot_entries: 256,
         }
+    }
+
+    /// 设置服务端 stream state 与单个 authoritative transaction 的硬上限。
+    #[must_use]
+    pub fn with_limits(mut self, max_streams: usize, max_snapshot_entries: usize) -> Self {
+        self.max_streams = max_streams.max(1);
+        self.max_snapshot_entries = max_snapshot_entries.max(1);
+        self
     }
 
     /// Handle a single client frame, returning an optional server response.
@@ -94,7 +110,8 @@ impl IngestHandler {
     /// Returns `None` for frames that don't require a response (e.g.
     /// Heartbeat).
     pub async fn handle_frame(&self, frame: &ClientFrame) -> Option<ServerFrame> {
-        self.handle_frame_with_snapshot_commit(frame, || true).await
+        self.handle_frame_with_snapshot_commit(frame, |_, _| true)
+            .await
     }
 
     /// 在外部 snapshot 存储提交成功后，原子推进协议 sequence 并产生 ACK。
@@ -104,7 +121,7 @@ impl IngestHandler {
     pub async fn handle_frame_with_snapshot_commit(
         &self,
         frame: &ClientFrame,
-        commit: impl FnOnce() -> bool,
+        commit: impl FnOnce(&[SnapshotEntry], bool) -> bool,
     ) -> Option<ServerFrame> {
         match &frame.payload {
             Some(client_frame::Payload::SnapshotBatch(batch)) => {
@@ -114,6 +131,12 @@ impl IngestHandler {
                 let hdr = hello.header.as_ref()?;
                 let key = self.stream_key(hdr);
                 let mut state = self.state.lock().expect("ingest lock poisoned");
+                if !state.streams.contains_key(&key) && state.streams.len() >= self.max_streams {
+                    return Some(self.make_snapshot_transaction_error(
+                        hdr,
+                        "ingest stream capacity is exhausted",
+                    ));
+                }
                 let stream = state.streams.entry(key).or_insert_with(StreamState::new);
                 Some(self.make_hello_ack(hdr, !stream.initialized))
             }
@@ -132,9 +155,13 @@ impl IngestHandler {
     async fn handle_snapshot_batch(
         &self,
         batch: &crate::protocol::SnapshotBatch,
-        commit: impl FnOnce() -> bool,
+        commit: impl FnOnce(&[SnapshotEntry], bool) -> bool,
     ) -> Option<ServerFrame> {
         let hdr = batch.header.as_ref()?;
+        let transaction = match validate_snapshot_transaction(batch) {
+            Ok(transaction) => transaction,
+            Err(message) => return Some(self.make_snapshot_transaction_error(hdr, message)),
+        };
         let key = self.stream_key(hdr);
         let seq = hdr.sequence;
         let Some(next_sequence) = seq.checked_add(1).filter(|_| seq != 0) else {
@@ -142,39 +169,93 @@ impl IngestHandler {
         };
 
         let mut state = self.state.lock().expect("ingest lock poisoned");
+        if !state.streams.contains_key(&key) && state.streams.len() >= self.max_streams {
+            return Some(
+                self.make_snapshot_transaction_error(hdr, "ingest stream capacity is exhausted"),
+            );
+        }
         let stream = state
             .streams
             .entry(key.clone())
             .or_insert_with(StreamState::new);
-
-        // ── New stream: require full snapshot ──
-        if !stream.initialized {
-            if batch.is_full_snapshot {
-                if !commit() {
-                    return Some(self.make_repository_rejected(hdr, stream.expected_seq));
-                }
-                stream.initialized = true;
-                stream.expected_seq = next_sequence;
-                self.store_snapshots(stream, &batch.entries);
-                self.ingest_count.fetch_add(1, Ordering::Relaxed);
-                return Some(self.make_batch_ack(hdr, seq));
-            }
-            // Not a full snapshot -- require one.
-            return Some(self.make_hello_ack(hdr, true));
-        }
 
         // ── Duplicate: already ingested this sequence ──
         if seq < stream.expected_seq {
             return Some(self.make_batch_ack(hdr, seq));
         }
 
-        // ── Gap: missing sequences; a full snapshot is the authoritative reset. ──
-        if seq > stream.expected_seq && !batch.is_full_snapshot {
+        // ── Gap: only a new authoritative transaction at index 0 may reset it. ──
+        if seq > stream.expected_seq
+            && transaction.is_none_or(|transaction| transaction.chunk_index != 0)
+        {
             return Some(self.make_resync_required(hdr, stream.expected_seq));
         }
 
-        // ── Expected sequence or authoritative full reset: commit before advancing. ──
-        if !commit() {
+        if let Some(transaction) = transaction {
+            if transaction.chunk_count as usize > self.max_snapshot_entries {
+                return Some(self.make_snapshot_transaction_error(
+                    hdr,
+                    "snapshot transaction chunk count exceeds the configured capacity",
+                ));
+            }
+            if transaction.chunk_index == 0 {
+                stream.snapshot_transaction = Some(SnapshotTransactionState::new(
+                    transaction.transaction_id.clone(),
+                    transaction.chunk_count,
+                ));
+            }
+            let Some(staged) = stream.snapshot_transaction.as_mut() else {
+                return Some(self.make_snapshot_transaction_error(
+                    hdr,
+                    "full snapshot transaction must start at chunk index 0",
+                ));
+            };
+            if !staged.accepts(
+                &transaction.transaction_id,
+                transaction.chunk_index,
+                transaction.chunk_count,
+            ) {
+                return Some(self.make_snapshot_transaction_error(
+                    hdr,
+                    "full snapshot transaction chunk is out of order or conflicts with the active transaction",
+                ));
+            }
+            if staged.entry_count().saturating_add(batch.entries.len()) > self.max_snapshot_entries
+            {
+                return Some(self.make_snapshot_transaction_error(
+                    hdr,
+                    "snapshot transaction entries exceed the configured capacity",
+                ));
+            }
+            if transaction.end {
+                let candidate = staged.complete_candidate(&batch.entries);
+                if !commit(&candidate, true) {
+                    return Some(self.make_repository_rejected(hdr, stream.expected_seq));
+                }
+                stream.snapshots = candidate
+                    .into_iter()
+                    .map(|entry| (entry.datasource_id, entry))
+                    .collect();
+                stream.snapshot_transaction = None;
+                stream.initialized = true;
+            } else {
+                staged.stage(&batch.entries);
+            }
+            stream.expected_seq = next_sequence;
+            self.ingest_count.fetch_add(1, Ordering::Relaxed);
+            return Some(self.make_batch_ack(hdr, seq));
+        }
+
+        if stream.snapshot_transaction.is_some() {
+            return Some(self.make_snapshot_transaction_error(
+                hdr,
+                "incremental snapshot cannot interleave with an incomplete full snapshot transaction",
+            ));
+        }
+        if !stream.initialized {
+            return Some(self.make_hello_ack(hdr, true));
+        }
+        if !commit(&batch.entries, false) {
             return Some(self.make_repository_rejected(hdr, stream.expected_seq));
         }
         stream.expected_seq = next_sequence;
@@ -244,6 +325,17 @@ impl IngestHandler {
                 header: Some(self.reply_header(hdr)),
                 code: 400,
                 message: "snapshot sequence must be between 1 and u64::MAX - 1".to_owned(),
+                close_stream: true,
+            })),
+        }
+    }
+
+    fn make_snapshot_transaction_error(&self, hdr: &FrameHeader, message: &str) -> ServerFrame {
+        ServerFrame {
+            payload: Some(server_frame::Payload::Error(ServerError {
+                header: Some(self.reply_header(hdr)),
+                code: 400,
+                message: message.to_owned(),
                 close_stream: true,
             })),
         }
@@ -341,6 +433,36 @@ impl IngestHandler {
             .flat_map(|(_, v)| v.snapshots.values().cloned())
             .collect()
     }
+}
+
+fn validate_snapshot_transaction(
+    batch: &crate::protocol::SnapshotBatch,
+) -> Result<Option<&SnapshotTransaction>, &'static str> {
+    if !batch.is_full_snapshot {
+        return if batch.snapshot_transaction.is_none() {
+            Ok(None)
+        } else {
+            Err("incremental snapshot must not contain a snapshot transaction")
+        };
+    }
+    let transaction = batch
+        .snapshot_transaction
+        .as_ref()
+        .ok_or("full snapshot requires a snapshot transaction")?;
+    if transaction.transaction_id.trim().is_empty() {
+        return Err("snapshot transaction ID must be non-empty");
+    }
+    let is_last = transaction
+        .chunk_index
+        .checked_add(1)
+        .is_some_and(|next| next == transaction.chunk_count);
+    if transaction.chunk_count == 0
+        || transaction.chunk_index >= transaction.chunk_count
+        || transaction.end != is_last
+    {
+        return Err("snapshot transaction chunk index/count/end combination is invalid");
+    }
+    Ok(Some(transaction))
 }
 
 impl Default for IngestHandler {

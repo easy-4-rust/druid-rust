@@ -117,10 +117,10 @@ async fn saturated_metrics_queue_never_blocks_datasource_operations() {
     let mut sources = Vec::new();
     for i in 0..5 {
         let source = Arc::new(MockDataSource::new(i, &format!("ds_{i}")));
-        let entry = druid_metrics::registry::RegistryEntry {
-            datasource_id: i,
-            weak_ref: Arc::downgrade(&source) as std::sync::Weak<dyn DataSourceMonitorable>,
-        };
+        let entry = druid_metrics::registry::RegistryEntry::new(
+            i,
+            Arc::downgrade(&source) as std::sync::Weak<dyn DataSourceMonitorable>,
+        );
         registry.write().push(entry);
         sources.push(source);
     }
@@ -206,10 +206,10 @@ async fn busy_datasource_increments_snapshot_busy_total() {
         Arc::new(RwLock::new(Vec::new()));
 
     let busy_source = Arc::new(BusyDataSource::new(100, "busy_ds"));
-    let entry = druid_metrics::registry::RegistryEntry {
-        datasource_id: 100,
-        weak_ref: Arc::downgrade(&busy_source) as std::sync::Weak<dyn DataSourceMonitorable>,
-    };
+    let entry = druid_metrics::registry::RegistryEntry::new(
+        100,
+        Arc::downgrade(&busy_source) as std::sync::Weak<dyn DataSourceMonitorable>,
+    );
     registry.write().push(entry);
 
     // Create a large-capacity channel (not the bottleneck)

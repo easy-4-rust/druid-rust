@@ -12,9 +12,11 @@ use tokio::sync::{mpsc, Notify};
 use tokio_util::sync::CancellationToken;
 
 use crate::aggregator::AggregatedBatch;
+use crate::command_journal::CommandJournal;
+use crate::command_payload::canonical_command_payload;
 use crate::protocol::{
     client_frame, decode_client_frame, encode_client_frame, ClientFrame, FrameHeader, ServerFrame,
-    SnapshotBatch,
+    SnapshotBatch, SnapshotTransaction,
 };
 use crate::registry::RegistryCommandExecutor;
 use crate::sequence_window::{PendingFrame, SequenceWindow, SequenceWindowError};
@@ -92,6 +94,8 @@ impl TransportPair {
             completed_full_snapshot_commands: VecDeque::new(),
             reply_sent_this_session: false,
             preserved_live_events: VecDeque::new(),
+            snapshot_transaction: None,
+            command_journal: Arc::new(CommandJournal::new(window_capacity)),
         };
         (self.client_rx, self.server_tx, worker)
     }
@@ -122,6 +126,8 @@ pub struct PushWorker {
     completed_full_snapshot_commands: VecDeque<String>,
     reply_sent_this_session: bool,
     preserved_live_events: VecDeque<PushEvent>,
+    snapshot_transaction: Option<(String, u32, u32)>,
+    command_journal: Arc<CommandJournal>,
 }
 
 /// 一次 transport 会话退出后交还给重连 supervisor 的全部状态。
@@ -148,6 +154,9 @@ pub struct PushWorkerExit {
     pub transport_rx: mpsc::Receiver<ServerFrame>,
     /// 已校验且允许跨连接迁移的远程命令帧。
     pub successor_commands: Vec<ServerFrame>,
+    /// 当前尚未完成的 `(transaction_id, next_chunk_index, chunk_count)`。
+    #[cfg(feature = "client")]
+    pub(crate) snapshot_transaction: Option<(String, u32, u32)>,
 }
 
 /// 远程全量快照命令跨连接耐久生命周期。
@@ -193,6 +202,7 @@ impl PushWorkerExit {
 pub struct PushProgress {
     queued_batches: Arc<AtomicUsize>,
     pending_frames: Arc<AtomicUsize>,
+    pending_commands: Arc<AtomicUsize>,
     changed: Arc<Notify>,
 }
 
@@ -203,6 +213,7 @@ impl PushProgress {
         Self {
             queued_batches: Arc::new(AtomicUsize::new(0)),
             pending_frames: Arc::new(AtomicUsize::new(0)),
+            pending_commands: Arc::new(AtomicUsize::new(0)),
             changed: Arc::new(Notify::new()),
         }
     }
@@ -222,7 +233,9 @@ impl PushProgress {
     /// 返回当前真实未刷新总数。
     #[must_use]
     pub fn unflushed(&self) -> usize {
-        self.queued_batches().saturating_add(self.pending_frames())
+        self.queued_batches()
+            .saturating_add(self.pending_frames())
+            .saturating_add(self.pending_commands())
     }
 
     /// 等待进度发生变化。
@@ -253,6 +266,26 @@ impl PushProgress {
 
     pub(crate) fn set_pending_frames(&self, pending: usize) {
         self.pending_frames.store(pending, Ordering::Release);
+        self.changed.notify_waiters();
+    }
+
+    /// 返回尚未完成确认的远程命令数。
+    #[must_use]
+    pub fn pending_commands(&self) -> usize {
+        self.pending_commands.load(Ordering::Acquire)
+    }
+
+    fn begin_command(&self) {
+        self.pending_commands.fetch_add(1, Ordering::AcqRel);
+        self.changed.notify_waiters();
+    }
+
+    pub(crate) fn finish_command_if_pending(&self) {
+        let _ =
+            self.pending_commands
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+                    pending.checked_sub(1)
+                });
         self.changed.notify_waiters();
     }
 }
@@ -299,6 +332,8 @@ impl PushWorker {
             completed_full_snapshot_commands: VecDeque::new(),
             reply_sent_this_session: false,
             preserved_live_events: VecDeque::new(),
+            snapshot_transaction: None,
+            command_journal: Arc::new(CommandJournal::new(window_capacity)),
         }
     }
 
@@ -316,6 +351,14 @@ impl PushWorker {
         self
     }
 
+    /// 注入由 gRPC supervisor 跨连接共享的有界命令日志。
+    #[must_use]
+    #[cfg(feature = "client")]
+    pub(crate) fn with_command_journal(mut self, command_journal: Arc<CommandJournal>) -> Self {
+        self.command_journal = command_journal;
+        self
+    }
+
     /// 恢复上一次网络会话留下的完整未 ACK frame。
     ///
     /// 所有 frame 会在任何网络发送前完成解码、sequence 一致性和窗口容量校验。
@@ -325,7 +368,26 @@ impl PushWorker {
     ) -> Result<Self, PushWorkerError> {
         let mut validated = VecDeque::with_capacity(pending_frames.len());
         for pending in pending_frames {
-            Self::decode_pending_frame(&pending)?;
+            let frame = Self::decode_pending_frame(&pending)?;
+            if let Some(client_frame::Payload::SnapshotBatch(batch)) = frame.payload.as_ref() {
+                if batch.is_full_snapshot {
+                    let transaction = batch.snapshot_transaction.as_ref().ok_or_else(|| {
+                        PushWorkerError::InvalidSnapshotTransaction(
+                            "stored full snapshot is missing transaction metadata".to_owned(),
+                        )
+                    })?;
+                    validate_snapshot_transaction(transaction)?;
+                    self.snapshot_transaction = if transaction.end {
+                        None
+                    } else {
+                        Some((
+                            transaction.transaction_id.clone(),
+                            transaction.chunk_index.saturating_add(1),
+                            transaction.chunk_count,
+                        ))
+                    };
+                }
+            }
             validated.push_back(pending);
         }
         for pending in &validated {
@@ -355,6 +417,19 @@ impl PushWorker {
     #[must_use]
     pub fn with_initial_batches(mut self, batches: Vec<AggregatedBatch>) -> Self {
         self.initial_batches = batches.into();
+        self
+    }
+
+    /// 恢复尚未编码完的权威快照 transaction 进度。
+    #[must_use]
+    #[cfg(feature = "client")]
+    pub(crate) fn with_snapshot_transaction(
+        mut self,
+        transaction: Option<(String, u32, u32)>,
+    ) -> Self {
+        if transaction.is_some() {
+            self.snapshot_transaction = transaction;
+        }
         self
     }
 
@@ -527,6 +602,8 @@ impl PushWorker {
             preserved_live_events: self.preserved_live_events.into(),
             transport_rx: self.transport_rx,
             successor_commands,
+            #[cfg(feature = "client")]
+            snapshot_transaction: self.snapshot_transaction,
         }
     }
 
@@ -547,6 +624,21 @@ impl PushWorker {
     }
 
     async fn push_new_batch(&mut self, batch: AggregatedBatch) -> Result<(), PushWorkerError> {
+        let is_full_snapshot = batch.is_full_snapshot;
+        if is_full_snapshot && self.snapshot_transaction.is_none() {
+            self.start_snapshot_transaction(1)?;
+        }
+        let snapshot_transaction =
+            self.snapshot_transaction
+                .as_ref()
+                .map(
+                    |(transaction_id, chunk_index, chunk_count)| SnapshotTransaction {
+                        transaction_id: transaction_id.clone(),
+                        chunk_index: *chunk_index,
+                        chunk_count: *chunk_count,
+                        end: chunk_index.saturating_add(1) == *chunk_count,
+                    },
+                );
         let service_name = self.service_name.clone();
         let instance_id = self.instance_id.clone();
         let boot_id = self.boot_id.clone();
@@ -566,11 +658,23 @@ impl PushWorker {
                             emitted_at_unix_ms: now_unix_ms(),
                         }),
                         entries: batch.entries,
-                        is_full_snapshot: batch.is_full_snapshot,
+                        is_full_snapshot,
+                        snapshot_transaction,
                     })),
                 })
             })
             .map_err(PushWorkerError::Window)?;
+        if is_full_snapshot {
+            let Some((_, chunk_index, chunk_count)) = self.snapshot_transaction.as_mut() else {
+                return Err(PushWorkerError::InvalidSnapshotTransaction(
+                    "full snapshot transaction progress disappeared".to_owned(),
+                ));
+            };
+            *chunk_index = chunk_index.saturating_add(1);
+            if *chunk_index == *chunk_count {
+                self.snapshot_transaction = None;
+            }
+        }
         self.update_pending_progress();
         self.send_encoded_frame(&pending.encoded_frame).await
     }
@@ -693,7 +797,13 @@ impl PushWorker {
             }
             Some(Payload::Command(command)) => {
                 let reply = self.handle_command(command);
-                self.send_outbound(reply).await.is_ok()
+                let sent = self.send_outbound(reply).await.is_ok();
+                if sent {
+                    if let Some(progress) = &self.progress {
+                        progress.finish_command_if_pending();
+                    }
+                }
+                sent
             }
             Some(Payload::HelloAck(_)) | None => true,
             Some(Payload::ResyncRequired(resync)) => {
@@ -716,42 +826,60 @@ impl PushWorker {
         use crate::protocol::command::Payload;
 
         let command_id = command.command_id;
-        let result = if command_id.trim().is_empty() {
-            Err("empty command ID".to_owned())
-        } else {
-            match command.payload {
-                Some(Payload::ResetStats(reset)) => self
-                    .command_executor
-                    .as_ref()
-                    .ok_or_else(|| "datasource registry is not configured".to_owned())
-                    .and_then(|executor| {
-                        executor
-                            .reset_stats(&reset.target_datasource_ids)
-                            .map_err(|error| error.to_string())
-                    }),
-                Some(Payload::RequestFullSnapshot(_)) => {
-                    Err("full snapshot command must use the durable path".to_owned())
+        let canonical = canonical_command_payload(&command.payload).map_err(str::to_owned);
+        let result = canonical.and_then(|canonical| {
+            match self.command_journal.begin(&command_id, canonical)? {
+                (false, Some(result)) => result,
+                (false, None) => Err("command is already executing".to_owned()),
+                (true, None) => {
+                    if let Some(progress) = &self.progress {
+                        progress.begin_command();
+                    }
+                    let result = match command.payload {
+                        Some(Payload::ResetStats(reset)) => self
+                            .command_executor
+                            .as_ref()
+                            .ok_or_else(|| "datasource registry is not configured".to_owned())
+                            .and_then(|executor| {
+                                executor
+                                    .reset_stats(&reset.target_datasource_ids)
+                                    .map_err(|error| error.to_string())
+                            }),
+                        Some(Payload::RequestFullSnapshot(_)) => {
+                            Err("full snapshot command must use the durable path".to_owned())
+                        }
+                        None => Err("empty command payload".to_owned()),
+                    };
+                    self.command_journal.complete(&command_id, result.clone());
+                    result
                 }
-                None => Err("empty command payload".to_owned()),
+                (true, Some(_)) => Err("new command unexpectedly had a result".to_owned()),
             }
-        };
+        });
 
         self.make_command_ack(command_id, result)
     }
 
     async fn handle_full_snapshot_command(&mut self, command: crate::protocol::Command) -> bool {
         let command_id = command.command_id;
-        if command_id.trim().is_empty() {
-            let reply = self.make_command_ack(command_id, Err("empty command ID".to_owned()));
-            return self.send_outbound(reply).await.is_ok();
-        }
-        if self
-            .completed_full_snapshot_commands
-            .iter()
-            .any(|completed| completed == &command_id)
-        {
-            let reply = self.make_command_ack(command_id, Ok(()));
-            return self.send_outbound(reply).await.is_ok();
+        let canonical = match canonical_command_payload(&command.payload) {
+            Ok(canonical) => canonical,
+            Err(error) => {
+                let reply = self.make_command_ack(command_id, Err(error.to_owned()));
+                return self.send_outbound(reply).await.is_ok();
+            }
+        };
+        let (execute, existing_result) = match self.command_journal.begin(&command_id, canonical) {
+            Ok(journal) => journal,
+            Err(error) => {
+                let reply = self.make_command_ack(command_id, Err(error));
+                return self.send_outbound(reply).await.is_ok();
+            }
+        };
+        if execute {
+            if let Some(progress) = &self.progress {
+                progress.begin_command();
+            }
         }
         if let Some(pending) = self.full_snapshot_command.as_ref() {
             if pending.command_id() == command_id {
@@ -775,6 +903,18 @@ impl PushWorker {
             );
             return self.send_outbound(reply).await.is_ok();
         }
+        if !execute {
+            let result = existing_result
+                .unwrap_or_else(|| Err("full snapshot command is already executing".to_owned()));
+            let reply = self.make_command_ack(command_id, result);
+            let sent = self.send_outbound(reply).await.is_ok();
+            if sent {
+                if let Some(progress) = &self.progress {
+                    progress.finish_command_if_pending();
+                }
+            }
+            return sent;
+        }
         let batches = self
             .command_executor
             .as_ref()
@@ -783,8 +923,16 @@ impl PushWorker {
         let batches = match batches {
             Ok(batches) => batches,
             Err(error) => {
-                let reply = self.make_command_ack(command_id, Err(error));
-                return self.send_outbound(reply).await.is_ok();
+                let result = Err(error);
+                self.command_journal.complete(&command_id, result.clone());
+                let reply = self.make_command_ack(command_id, result);
+                let sent = self.send_outbound(reply).await.is_ok();
+                if sent {
+                    if let Some(progress) = &self.progress {
+                        progress.finish_command_if_pending();
+                    }
+                }
+                return sent;
             }
         };
         self.full_snapshot_command = Some(FullSnapshotCommandState::PendingChunks {
@@ -814,6 +962,7 @@ impl PushWorker {
             self.full_snapshot_command = Some(FullSnapshotCommandState::ReplyReady {
                 command_id: command_id.clone(),
             });
+            self.command_journal.complete(&command_id, Ok(()));
         }
         let reply = self.make_command_ack(command_id, Ok(()));
         if self.send_outbound(reply).await.is_err() {
@@ -845,6 +994,20 @@ impl PushWorker {
     }
 
     async fn drain_authoritative_batches(&mut self) -> Result<(), PushWorkerError> {
+        if !self.initial_batches.is_empty() {
+            let remaining = self.initial_batches.len();
+            if self.snapshot_transaction.is_none() {
+                self.start_snapshot_transaction(remaining)?;
+            } else if self.snapshot_transaction.as_ref().is_some_and(
+                |(_, next_chunk_index, chunk_count)| {
+                    chunk_count.saturating_sub(*next_chunk_index) as usize != remaining
+                },
+            ) {
+                return Err(PushWorkerError::InvalidSnapshotTransaction(
+                    "restored snapshot transaction does not match remaining chunks".to_owned(),
+                ));
+            }
+        }
         while !self.initial_batches.is_empty() {
             self.wait_for_window_capacity().await?;
             let batch = self
@@ -866,6 +1029,30 @@ impl PushWorker {
                 return Err(error);
             }
         }
+        Ok(())
+    }
+
+    fn start_snapshot_transaction(&mut self, chunk_count: usize) -> Result<(), PushWorkerError> {
+        let chunk_count = u32::try_from(chunk_count).map_err(|_| {
+            PushWorkerError::InvalidSnapshotTransaction(
+                "snapshot transaction has too many chunks".to_owned(),
+            )
+        })?;
+        if chunk_count == 0 {
+            return Err(PushWorkerError::InvalidSnapshotTransaction(
+                "snapshot transaction must have at least one chunk".to_owned(),
+            ));
+        }
+        let first_sequence = self.window.next_sequence().ok_or_else(|| {
+            PushWorkerError::InvalidSnapshotTransaction(
+                "snapshot transaction cannot allocate a sequence".to_owned(),
+            )
+        })?;
+        self.snapshot_transaction = Some((
+            format!("{}-{first_sequence}", self.stream_epoch),
+            0,
+            chunk_count,
+        ));
         Ok(())
     }
 
@@ -1034,6 +1221,26 @@ pub enum PushWorkerError {
     /// successor 队列只允许已经校验的远程 Command frame。
     #[error("successor queue contains a non-command server frame")]
     InvalidSuccessorFrame,
+    /// 权威快照 transaction 元数据缺失、冲突或无法恢复。
+    #[error("invalid snapshot transaction: {0}")]
+    InvalidSnapshotTransaction(String),
+}
+
+fn validate_snapshot_transaction(transaction: &SnapshotTransaction) -> Result<(), PushWorkerError> {
+    let is_last = transaction
+        .chunk_index
+        .checked_add(1)
+        .is_some_and(|next| next == transaction.chunk_count);
+    if transaction.transaction_id.trim().is_empty()
+        || transaction.chunk_count == 0
+        || transaction.chunk_index >= transaction.chunk_count
+        || transaction.end != is_last
+    {
+        return Err(PushWorkerError::InvalidSnapshotTransaction(
+            "transaction ID/index/count/end combination is invalid".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn now_unix_ms() -> u64 {

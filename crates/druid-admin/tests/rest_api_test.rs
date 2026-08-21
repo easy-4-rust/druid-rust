@@ -187,3 +187,92 @@ async fn datasource_json_returns_populated_content() {
 
     handle.abort();
 }
+
+#[tokio::test]
+async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
+    use std::collections::HashMap;
+
+    use druid_admin::model::dto::{DataSourceContent, SqlListContent, WallResult};
+    use druid_admin::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
+
+    let repository = MetricsRepository::new();
+    for (service_id, datasource_id, db_type, sql) in [
+        ("svc-a", 1, "mysql", "svc-a-ds-1"),
+        ("svc-a", 2, "postgresql", "svc-a-ds-2"),
+        ("svc-b", 1, "sqlite", "svc-b-ds-1"),
+    ] {
+        let mut sql_stats = HashMap::new();
+        sql_stats.insert(
+            101,
+            SqlListContent {
+                service_id: Some(service_id.to_owned()),
+                id: 1,
+                hash: 101,
+                sql: Some(sql.to_owned()),
+                data_source: serde_json::json!(datasource_id),
+                ..Default::default()
+            },
+        );
+        assert!(repository.upsert_datasource(
+            DataSourceId {
+                service_id: service_id.to_owned(),
+                identity: datasource_id,
+            },
+            DataSourceEntry {
+                datasource: DataSourceContent {
+                    service_id: Some(service_id.to_owned()),
+                    identity: datasource_id,
+                    db_type: Some(db_type.to_owned()),
+                    ..Default::default()
+                },
+                sql_stats,
+                wall: WallResult::default(),
+                last_updated_ms: 0,
+                sequence: 1,
+            },
+        ));
+    }
+    let app = druid_admin::standalone_router(repository);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind composite detail HTTP");
+    let address = listener.local_addr().expect("composite detail address");
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await });
+
+    let datasource: Value = reqwest::get(format!(
+        "http://{address}/druid/api/datasources/1?serviceId=svc-b"
+    ))
+    .await
+    .expect("GET composite datasource")
+    .error_for_status()
+    .expect("composite datasource found")
+    .json()
+    .await
+    .expect("composite datasource JSON");
+    assert_eq!(datasource["Content"][0]["serviceId"], "svc-b");
+    assert_eq!(datasource["Content"][0]["DbType"], "sqlite");
+
+    let sql: Value = reqwest::get(format!(
+        "http://{address}/druid/api/sql/1?serviceId=svc-a&dataSourceId=2"
+    ))
+    .await
+    .expect("GET composite SQL")
+    .error_for_status()
+    .expect("composite SQL found")
+    .json()
+    .await
+    .expect("composite SQL JSON");
+    assert_eq!(sql["serviceId"], "svc-a");
+    assert_eq!(sql["DataSource"], 2);
+    assert_eq!(sql["SQL"], "svc-a-ds-2");
+
+    let missing_datasource =
+        reqwest::get(format!("http://{address}/druid/api/sql/1?serviceId=svc-a"))
+            .await
+            .expect("GET SQL without datasource identity");
+    assert_eq!(
+        missing_datasource.status(),
+        reqwest::StatusCode::UNPROCESSABLE_ENTITY
+    );
+    handle.abort();
+}

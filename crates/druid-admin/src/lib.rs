@@ -6,6 +6,7 @@
 //! [`MonitorViewServlet`] 应用装配路径。
 
 pub mod admin_state;
+pub mod command;
 pub mod config;
 pub mod druid_admin_application;
 pub mod ingest;
@@ -16,6 +17,7 @@ pub mod servlet;
 pub mod util;
 
 pub use admin_state::AdminState;
+pub use command::CommandBroker;
 pub use druid_admin_application::DruidAdminApplication;
 pub use repository::MetricsRepository;
 pub use servlet::monitor_view_servlet::{endpoint_list, MonitorViewServlet};
@@ -36,9 +38,24 @@ const MAX_BODY_SIZE: usize = 1 << 20;
 /// 构建生产 HTTP 应用：health public，其余管理端点由同一个 Servlet 认证边界保护。
 #[must_use]
 pub fn production_router(repository: MetricsRepository, config: &AdminServerConfig) -> Router {
+    production_router_with_command_broker(
+        repository,
+        config,
+        CommandBroker::new(64, config.shutdown_timeout()),
+    )
+}
+
+/// 构建与真实 IngestService 共享命令 broker 的生产 HTTP 应用。
+#[must_use]
+pub fn production_router_with_command_broker(
+    repository: MetricsRepository,
+    config: &AdminServerConfig,
+    command_broker: CommandBroker,
+) -> Router {
     let management = MonitorViewServlet::from_repository(repository)
         .with_auth_mode(config.auth().clone())
         .with_secure_cookies(config.tls().is_some())
+        .with_command_broker(command_broker)
         .router();
     Router::new()
         .route("/health", get(health_handler))

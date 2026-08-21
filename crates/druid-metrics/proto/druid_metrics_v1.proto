@@ -50,6 +50,13 @@ message SnapshotEntry {
   uint64 sampling_time_millis = 9;
 }
 
+message SnapshotTransaction {
+  string transaction_id = 1;
+  uint32 chunk_index    = 2;
+  uint32 chunk_count    = 3;
+  bool end              = 4;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Client → Server messages
 // ────────────────────────────────────────────────────────────────────────────
@@ -64,6 +71,7 @@ message SnapshotBatch {
   FrameHeader header                      = 1;
   repeated SnapshotEntry entries          = 2;
   bool is_full_snapshot                   = 3;
+  SnapshotTransaction snapshot_transaction = 4;
 }
 
 message ClientHeartbeat {

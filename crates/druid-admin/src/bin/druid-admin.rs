@@ -51,9 +51,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Shared repository
     let repo = MetricsRepository::new();
     let shutdown_token = CancellationToken::new();
+    let command_broker = druid_admin::CommandBroker::new(64, shutdown_timeout);
 
     // Build HTTP router
-    let http_app = druid_admin::production_router(repo.clone(), &config);
+    let http_app = druid_admin::production_router_with_command_broker(
+        repo.clone(),
+        &config,
+        command_broker.clone(),
+    );
     let http_listener = tokio::net::TcpListener::bind(http_addr).await?;
     let http_shutdown = shutdown_token.clone();
     let http_tls = tls_material.clone();
@@ -74,7 +79,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build gRPC server
     let grpc_shutdown = shutdown_token.clone();
     let ingest_service = druid_admin::ingest::IngestService::new(repo.clone())
-        .with_shutdown_token(grpc_shutdown.clone());
+        .with_shutdown_token(grpc_shutdown.clone())
+        .with_command_broker(command_broker);
     let grpc_auth = config.auth().clone();
     let grpc_identity = tls_material
         .as_ref()

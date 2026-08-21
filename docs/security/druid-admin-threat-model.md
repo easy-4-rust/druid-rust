@@ -23,6 +23,8 @@ flowchart LR
     GRPC --> AUTH
     AUTH --> SERVLET["MonitorViewServlet 单一管理路由"]
     AUTH --> INGEST["MetricsIngest Connect interceptor"]
+    SERVLET --> BROKER["Bounded command broker + durable result journal"]
+    BROKER --> INGEST
     SERVLET --> REPO["MetricsRepository"]
     INGEST --> REPO
 
@@ -50,6 +52,8 @@ flowchart LR
 | 可用性与 bounded command migration | 恶意/异常服务端、慢 consumer | bidi response stream | teardown 背压丢命令、冲突 command 静默去重 | W channel + 2W cap；相同 ID 仅在 payload 相同才幂等；冲突/2W+1 fail-closed | W+1、2W+1、same-ID/different-payload 真实 Tonic tests |
 | 进程终止与 listener 所有权 | 慢/半开客户端 | HTTP/gRPC connection | SIGTERM 后无限等待 in-flight connection | validated process deadline；超时 abort/join owned handles并返回 TimedOut | held partial HTTP + SIGTERM binary test，退出后两 listener 可重绑 |
 | Prometheus scrape 合同 | 高 service churn / 多 datasource | `GET /metrics` | 重复 TYPE/缺失 HELP 导致 scrape 无效 | 每个 family 的 HELP/TYPE 在 sample loop 外只输出一次 | 双 datasource default/all-features declaration/sample count test |
+| Repository/输出预算 | 已认证但异常的 metrics client | snapshot transaction、`GET /metrics` | service/SQL cardinality 或输出内存耗尽 | services 1024、datasource/service 256、SQL/datasource 1024、TTL 15 分钟、exposition 1 MiB；超限原子拒绝并计数 | repository cap/TTL 与 over-budget exposition tests |
+| Reset/full snapshot 副作用 | ACK 丢失、半关闭或 buggy operator | `POST /druid/api/commands` + bidi Command | 重复 reset、冲突 payload、命令丢失 | Basic header；live identity header；bounded broker；canonical payload journal；stable result replay | real IngestService reset/full/conflict and half-close reconnect tests |
 
 ## 4. Public / protected route 矩阵
 
@@ -61,6 +65,7 @@ flowchart LR
 | `{context}/css/*`、`{context}/js/*`、`nopermit.html` | 是 | `200/404` | 登录所需静态资源 |
 | 管理 HTML、Java 兼容 JSON、Rust REST aliases | 否 | `302 Location: {context}/login.html` | Basic 或有效 session 才放行 |
 | `GET /metrics` | 否 | `302` | Prometheus 输出包含运行与 repository 指标 |
+| `POST {context}/api/commands` | 否 | `302/401` | 必须显式 Basic Authorization；session cookie 单独不能执行状态修改 |
 | gRPC `Connect` | 否（remote） | gRPC `UNAUTHENTICATED` | loopback 且 auth disabled 时允许；remote 配置不允许 disabled |
 
 URL query 中的 `loginUsername/loginPassword` 不再构成认证旁路，因为 URL 常被 access
@@ -91,7 +96,8 @@ secret 展示权限。测试目录中的证书/私钥只用于本地回归，不
 loopback 明文兼容模式省略 `Secure` 以免浏览器永远不发送；两者都设置 `HttpOnly`、
 `SameSite=Lax` 和最小 `Path=/`。当前受保护管理接口以读取为主，`submitLogin` 是 cookie 建立动作；若后续
 加入使用 cookie 的状态修改 POST/PUT/DELETE，必须在该变更中加入同步 CSRF token 或等价
-防护，不能只依赖 SameSite。GET/HEAD 不得执行状态修改。
+防护，不能只依赖 SameSite。当前 command POST 明确要求 Basic Authorization header，不接受
+session-only 请求，因此不把 session cookie 当作 CSRF 授权。GET/HEAD 不得执行状态修改。
 
 ## 7. 剩余风险与运维门禁
 
@@ -101,5 +107,6 @@ loopback 明文兼容模式省略 `Secure` 以免浏览器永远不发送；两�
 - 外部 proxy 模式没有显式 trust configuration，因此不能关闭应用内 remote TLS/auth。
 - `standalone_router` 只定义 loopback compatibility router；remote production 启动必须由
   已验证 `AdminServerConfig` 驱动本进程 TLS listener 和 bounded shutdown。
-- repository TTL、容量与 service churn 上限仍按既有 P06 ruling 处理；本任务没有扩展该范围。
+- repository 与 `/metrics` 预算已经前移闭合；生产若调整默认值，必须保留非零验证、原子拒绝、
+  TTL eviction 与 observable counters，不能改成无界或静默截断。
 - 发布前应继续运行 cargo-deny/audit 和实际部署文件权限、证书链、DNS/SAN、轮换演练。
