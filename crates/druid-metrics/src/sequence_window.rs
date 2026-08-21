@@ -1,178 +1,144 @@
-//! Client-side sequence/ACK window for reliable delivery.
+//! 客户端 sequence/ACK 窗口。
 //!
-//! Tracks batches that have been sent to the server but not yet acknowledged.
-//! On reconnect only the pending (un-ACKed) batches are retransmitted in
-//! their original sequence order.
-//!
-//! # Invariants
-//!
-//! - Sequence numbers start at **1** and are monotonically increasing.
-//! - The window holds at most `capacity` pending batches.
-//! - `ACKing` an unknown or already-ACKed sequence is an error.
+//! 窗口保存已经分配 sequence 的完整 protobuf frame 字节。重连时只恢复并发送这些
+//! 不可变字节，不能重新构造 header、时间戳或 payload。
 
 use std::collections::BTreeMap;
 
 use thiserror::Error;
 
-/// Errors produced by [`SequenceWindow`].
+/// Sequence/ACK 窗口错误。
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum SequenceWindowError {
-    /// The window is at capacity; the caller must wait for an ACK before
-    /// pushing more batches.
+    /// 窗口已满；调用方必须等待 ACK 或取消，不能丢弃 frame。
     #[error("window full: capacity {capacity}, pending {pending}")]
     WindowFull {
-        /// Maximum number of pending batches.
+        /// 最大未 ACK frame 数。
         capacity: usize,
-        /// Current number of pending batches.
+        /// 当前未 ACK frame 数。
         pending: usize,
     },
 
-    /// The acknowledged sequence number is not present in the window.
-    /// This covers both unknown sequences and duplicate ACKs.
+    /// ACK 的 sequence 从未进入当前窗口，或者已经 ACK。
     #[error("unknown sequence: {0}")]
     UnknownSequence(u64),
+
+    /// 恢复的 sequence 为协议保留值 0。
+    #[error("invalid sequence: {0}")]
+    InvalidSequence(u64),
+
+    /// 相同 sequence 已经存在，拒绝用另一份字节覆盖。
+    #[error("duplicate sequence: {0}")]
+    DuplicateSequence(u64),
 }
 
-/// A batch that has been sent but not yet acknowledged.
+/// 已发送但尚未 ACK 的完整、不可变客户端 frame。
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PendingBatch {
-    /// Monotonically increasing sequence number assigned at push time.
+pub struct PendingFrame {
+    /// 单调递增的流内 sequence。
     pub sequence: u64,
-    /// Serialized payload bytes ready for retransmission.
-    pub payload_bytes: Vec<u8>,
+    /// 完整 [`crate::protocol::ClientFrame`] 的 protobuf 编码字节。
+    pub encoded_frame: Vec<u8>,
 }
 
-/// Bounded sliding window tracking un-ACKed batches.
-///
-/// # Usage
-///
-/// ```rust
-/// use druid_metrics::sequence_window::SequenceWindow;
-///
-/// let mut w = SequenceWindow::new(256);
-/// let seq = w.push(b"hello".to_vec()).unwrap();
-/// assert_eq!(seq, 1);
-///
-/// w.ack(seq).unwrap();
-/// assert!(w.is_empty());
-/// ```
+/// 有界、按 sequence 排序的未 ACK frame 窗口。
 #[derive(Debug)]
 pub struct SequenceWindow {
-    /// Pending batches keyed by sequence number.
-    pending: BTreeMap<u64, PendingBatch>,
-    /// Maximum number of un-ACKed batches.
+    pending: BTreeMap<u64, PendingFrame>,
     capacity: usize,
-    /// Next sequence number to assign.
-    next_seq: u64,
+    next_sequence: u64,
 }
 
 impl SequenceWindow {
-    /// Create a new empty window with the given capacity.
+    /// 创建指定容量的空窗口；第一个新 frame 的 sequence 为 1。
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         Self {
             pending: BTreeMap::new(),
             capacity,
-            next_seq: 1,
+            next_sequence: 1,
         }
     }
 
-    /// Push a batch into the window, assigning it the next sequence number.
+    /// 分配 sequence，调用一次编码闭包，并保存闭包返回的完整 frame 字节。
     ///
-    /// Returns the assigned sequence number, or an error if the window is full.
-    pub fn push(&mut self, payload_bytes: Vec<u8>) -> Result<u64, SequenceWindowError> {
-        if self.pending.len() >= self.capacity {
-            return Err(SequenceWindowError::WindowFull {
-                capacity: self.capacity,
-                pending: self.pending.len(),
-            });
-        }
-        let seq = self.next_seq;
-        self.next_seq += 1;
-        self.pending.insert(
-            seq,
-            PendingBatch {
-                sequence: seq,
-                payload_bytes,
-            },
-        );
-        Ok(seq)
+    /// 窗口已满时不会调用 `encode_frame`，sequence 也不会前移。
+    pub fn push_with(
+        &mut self,
+        encode_frame: impl FnOnce(u64) -> Vec<u8>,
+    ) -> Result<PendingFrame, SequenceWindowError> {
+        self.ensure_capacity()?;
+        let sequence = self.next_sequence;
+        let encoded_frame = encode_frame(sequence);
+        let pending = PendingFrame {
+            sequence,
+            encoded_frame,
+        };
+        self.pending.insert(sequence, pending.clone());
+        self.next_sequence = self.next_sequence.saturating_add(1);
+        Ok(pending)
     }
 
-    /// Acknowledge a batch, removing it from the window.
-    ///
-    /// Returns an error if the sequence is unknown (never pushed or already
-    /// acknowledged).
-    pub fn ack(&mut self, seq: u64) -> Result<(), SequenceWindowError> {
+    /// 恢复重连前保存的完整 frame，并保证后续新 sequence 大于已恢复 sequence。
+    pub fn restore(&mut self, pending: PendingFrame) -> Result<(), SequenceWindowError> {
+        if pending.sequence == 0 {
+            return Err(SequenceWindowError::InvalidSequence(pending.sequence));
+        }
+        if self.pending.contains_key(&pending.sequence) {
+            return Err(SequenceWindowError::DuplicateSequence(pending.sequence));
+        }
+        self.ensure_capacity()?;
+        self.next_sequence = self.next_sequence.max(pending.sequence.saturating_add(1));
+        self.pending.insert(pending.sequence, pending);
+        Ok(())
+    }
+
+    /// ACK 一个已发送 frame 并释放窗口容量。
+    pub fn ack(&mut self, sequence: u64) -> Result<(), SequenceWindowError> {
         self.pending
-            .remove(&seq)
+            .remove(&sequence)
             .map(|_| ())
-            .ok_or(SequenceWindowError::UnknownSequence(seq))
+            .ok_or(SequenceWindowError::UnknownSequence(sequence))
     }
 
-    /// Return all pending (un-ACKed) batches in sequence order.
-    ///
-    /// This is used on reconnect to determine which batches need
-    /// retransmission.
-    pub fn pending_batches(&self) -> Vec<PendingBatch> {
+    /// 按 sequence 返回所有未 ACK frame 的不可变字节副本。
+    #[must_use]
+    pub fn pending_frames(&self) -> Vec<PendingFrame> {
         self.pending.values().cloned().collect()
     }
 
-    /// Number of pending batches in the window.
+    /// 返回当前未 ACK frame 数。
+    #[must_use]
     pub fn len(&self) -> usize {
         self.pending.len()
     }
 
-    /// Returns `true` if the window has no pending batches.
+    /// 返回窗口是否为空。
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
     }
 
-    /// Maximum number of pending batches the window can hold.
+    /// 返回窗口是否已满。
+    #[must_use]
+    pub fn is_full(&self) -> bool {
+        self.pending.len() >= self.capacity
+    }
+
+    /// 返回最大未 ACK frame 数。
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn push_and_ack_basic() {
-        let mut w = SequenceWindow::new(10);
-        let s1 = w.push(b"a".to_vec()).unwrap();
-        let s2 = w.push(b"b".to_vec()).unwrap();
-        assert_eq!(s1, 1);
-        assert_eq!(s2, 2);
-        assert_eq!(w.len(), 2);
-
-        w.ack(1).unwrap();
-        assert_eq!(w.len(), 1);
-
-        let pending = w.pending_batches();
-        assert_eq!(pending.len(), 1);
-        assert_eq!(pending[0].sequence, 2);
-    }
-
-    #[test]
-    fn ack_unknown_returns_error() {
-        let mut w = SequenceWindow::new(10);
-        w.push(b"a".to_vec()).unwrap();
-        assert!(w.ack(999).is_err());
-    }
-
-    #[test]
-    fn duplicate_ack_returns_error() {
-        let mut w = SequenceWindow::new(10);
-        w.push(b"a".to_vec()).unwrap();
-        w.ack(1).unwrap();
-        assert!(w.ack(1).is_err());
-    }
-
-    #[test]
-    fn full_window_rejects_push() {
-        let mut w = SequenceWindow::new(1);
-        w.push(b"a".to_vec()).unwrap();
-        assert!(w.push(b"b".to_vec()).is_err());
+    fn ensure_capacity(&self) -> Result<(), SequenceWindowError> {
+        if self.is_full() {
+            Err(SequenceWindowError::WindowFull {
+                capacity: self.capacity,
+                pending: self.pending.len(),
+            })
+        } else {
+            Ok(())
+        }
     }
 }

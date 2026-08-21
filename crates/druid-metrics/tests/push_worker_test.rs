@@ -1,16 +1,42 @@
-//! Tests for the client-side `PushWorker`.
-//!
-//! The `PushWorker` consumes batches from an mpsc channel, assigns sequence
-//! numbers via a `SequenceWindow`, and pushes them to the server through a
-//! transport abstraction. It processes ACKs to free window slots.
+//! Behavioral tests for payload-preserving push and ACK-window backpressure.
 
 use std::time::Duration;
 
-use druid_metrics::protocol::{BatchAck, FrameHeader, ServerFrame};
+use druid_metrics::aggregator::AggregatedBatch;
+use druid_metrics::protocol::{
+    client_frame, BatchAck, ClientFrame, FrameHeader, PoolSnapshotMsg, ServerFrame, SnapshotBatch,
+    SnapshotEntry,
+};
 use druid_metrics::push_worker::{PushEvent, TransportPair};
+use druid_metrics::sequence_window::PendingFrame;
+use prost::Message;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
-fn make_ack(seq: u64) -> ServerFrame {
+fn batch(datasource_id: u64) -> AggregatedBatch {
+    AggregatedBatch {
+        entries: vec![SnapshotEntry {
+            datasource_id,
+            datasource_name: format!("datasource-{datasource_id}"),
+            driver_name: Some("test-driver".to_owned()),
+            pool: Some(PoolSnapshotMsg {
+                active_count: 1,
+                idle_count: 2,
+                max_active: 8,
+                max_idle: 4,
+                waiting_count: 0,
+            }),
+            sql_stats: Vec::new(),
+            wall_check_count: 0,
+            wall_deny_count: 0,
+            wall_violation_count: 0,
+            sampling_time_millis: 42,
+        }],
+        is_full_snapshot: false,
+    }
+}
+
+fn make_ack(sequence: u64) -> ServerFrame {
     ServerFrame {
         payload: Some(druid_metrics::protocol::server_frame::Payload::BatchAck(
             BatchAck {
@@ -23,162 +49,156 @@ fn make_ack(seq: u64) -> ServerFrame {
                     sequence: 0,
                     emitted_at_unix_ms: 0,
                 }),
-                accepted_sequence: seq,
+                accepted_sequence: sequence,
             },
         )),
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Test 1: Normal push -- worker sends batch, receives ACK, window drains.
-// ──────────────────────────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn normal_push_and_ack() {
-    let pair = TransportPair::new(64);
-    let (batch_tx, batch_rx) = mpsc::channel::<PushEvent>(16);
-
-    let (mut client_rx, server_tx, worker) = pair.into_worker(batch_rx, 256);
-    let handle = tokio::spawn(async move { worker.run().await });
-
-    // Enqueue one batch.
-    batch_tx
-        .send(PushEvent::Batch {
-            payload_bytes: b"hello".to_vec(),
-        })
-        .await
-        .unwrap();
-
-    // The worker should send a ClientFrame containing a SnapshotBatch.
-    let frame = tokio::time::timeout(Duration::from_secs(2), client_rx.recv())
-        .await
-        .expect("worker should send a frame within 2s")
-        .expect("channel open");
-    let seq = match frame.payload {
-        Some(druid_metrics::protocol::client_frame::Payload::SnapshotBatch(batch)) => {
-            batch.header.as_ref().unwrap().sequence
-        }
+fn snapshot_batch(frame: &ClientFrame) -> &druid_metrics::protocol::SnapshotBatch {
+    match frame.payload.as_ref() {
+        Some(client_frame::Payload::SnapshotBatch(batch)) => batch,
         other => panic!("expected SnapshotBatch, got {other:?}"),
-    };
-    assert_eq!(seq, 1);
-
-    // Simulate server ACK.
-    server_tx.send(make_ack(seq)).await.unwrap();
-
-    // Give the worker time to process the ACK.
-    tokio::time::sleep(Duration::from_millis(50)).await;
-
-    // Shut down cleanly.
-    drop(batch_tx);
-    drop(server_tx);
-    let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
+    }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Test 2: Worker waits when no batches are available.
-// ──────────────────────────────────────────────────────────────────────────────
+#[tokio::test]
+async fn disconnect_and_reconnect_resend_the_complete_frame_byte_identically() {
+    let pair = TransportPair::new(8);
+    let (batch_tx, batch_rx) = mpsc::channel(4);
+    let (mut first_rx, first_server_tx, worker) = pair.into_worker(batch_rx, 4);
+    let first_handle = tokio::spawn(worker.run());
+
+    batch_tx.send(PushEvent::Batch(batch(17))).await.unwrap();
+    let first = first_rx
+        .recv()
+        .await
+        .expect("first connection receives frame");
+    assert!(!snapshot_batch(&first).entries.is_empty());
+    assert_eq!(snapshot_batch(&first).header.as_ref().unwrap().sequence, 1);
+
+    drop(first_server_tx);
+    let pending = first_handle.await.unwrap();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].encoded_frame, first.encode_to_vec());
+
+    let reconnect_pair = TransportPair::new(8);
+    let (resend_tx, resend_rx) = mpsc::channel(4);
+    resend_tx
+        .send(PushEvent::Resend(pending[0].clone()))
+        .await
+        .unwrap();
+    let (mut reconnect_rx, reconnect_server_tx, reconnect_worker) =
+        reconnect_pair.into_worker(resend_rx, 4);
+    let reconnect_handle = tokio::spawn(reconnect_worker.run());
+
+    let resent = reconnect_rx.recv().await.expect("reconnect resends frame");
+    assert_eq!(first.encode_to_vec(), resent.encode_to_vec());
+    reconnect_server_tx.send(make_ack(1)).await.unwrap();
+
+    resend_tx.send(PushEvent::Batch(batch(18))).await.unwrap();
+    let next = reconnect_rx
+        .recv()
+        .await
+        .expect("stream continues after retry");
+    assert_eq!(snapshot_batch(&next).header.as_ref().unwrap().sequence, 2);
+
+    drop(resend_tx);
+    drop(reconnect_server_tx);
+    let _ = reconnect_handle.await.unwrap();
+    drop(batch_tx);
+}
 
 #[tokio::test]
-async fn worker_waits_when_queue_empty() {
-    let pair = TransportPair::new(64);
-    let (batch_tx, batch_rx) = mpsc::channel::<PushEvent>(16);
+async fn full_window_pauses_batch_admission_until_ack() {
+    let pair = TransportPair::new(8);
+    let (batch_tx, batch_rx) = mpsc::channel(4);
+    let (mut client_rx, server_tx, worker) = pair.into_worker(batch_rx, 1);
+    let handle = tokio::spawn(worker.run());
 
-    let (mut client_rx, _server_tx, worker) = pair.into_worker(batch_rx, 256);
-    let handle = tokio::spawn(async move { worker.run().await });
+    batch_tx.send(PushEvent::Batch(batch(1))).await.unwrap();
+    batch_tx.send(PushEvent::Batch(batch(2))).await.unwrap();
+    let first = client_rx.recv().await.unwrap();
+    assert_eq!(snapshot_batch(&first).header.as_ref().unwrap().sequence, 1);
 
-    // No batches sent -- worker should be idle.
-    // Verify no frame is sent within 200ms.
-    let result = tokio::time::timeout(Duration::from_millis(200), client_rx.recv()).await;
     assert!(
-        result.is_err(),
-        "worker should not send while queue is empty"
+        tokio::time::timeout(Duration::from_millis(50), client_rx.recv())
+            .await
+            .is_err(),
+        "second batch must remain queued while the ACK window is full"
     );
+    assert!(!handle.is_finished(), "window saturation is not terminal");
 
-    // Now send a batch.
+    server_tx.send(make_ack(1)).await.unwrap();
+    let second = tokio::time::timeout(Duration::from_secs(1), client_rx.recv())
+        .await
+        .expect("ACK releases admission")
+        .unwrap();
+    assert_eq!(snapshot_batch(&second).header.as_ref().unwrap().sequence, 2);
+
+    drop(batch_tx);
+    drop(server_tx);
+    let _ = handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn cancellation_stops_a_worker_while_the_window_is_saturated() {
+    let pair = TransportPair::new(8);
+    let (batch_tx, batch_rx) = mpsc::channel(4);
+    let cancellation = CancellationToken::new();
+    let (_client_rx, _server_tx, worker) = pair.into_worker(batch_rx, 1);
+    let worker = worker.with_cancellation_token(cancellation.clone());
+    let handle = tokio::spawn(worker.run());
+
+    batch_tx.send(PushEvent::Batch(batch(1))).await.unwrap();
+    batch_tx.send(PushEvent::Batch(batch(2))).await.unwrap();
+    tokio::task::yield_now().await;
+    cancellation.cancel();
+
+    let pending = tokio::time::timeout(Duration::from_secs(1), handle)
+        .await
+        .expect("cancellation terminates a saturated worker")
+        .unwrap();
+    assert_eq!(pending.len(), 1);
+}
+
+#[tokio::test]
+async fn resend_rejects_a_pending_sequence_that_disagrees_with_the_encoded_header() {
+    let encoded_frame = ClientFrame {
+        payload: Some(client_frame::Payload::SnapshotBatch(SnapshotBatch {
+            header: Some(FrameHeader {
+                protocol_version: 1,
+                service_name: "druid-pool".into(),
+                instance_id: "local".into(),
+                boot_id: String::new(),
+                stream_epoch: 0,
+                sequence: 1,
+                emitted_at_unix_ms: 1,
+            }),
+            entries: batch(9).entries,
+            is_full_snapshot: false,
+        })),
+    }
+    .encode_to_vec();
+    let pair = TransportPair::new(8);
+    let (batch_tx, batch_rx) = mpsc::channel(1);
+    let (mut client_rx, _server_tx, worker) = pair.into_worker(batch_rx, 4);
+    let handle = tokio::spawn(worker.run());
+
     batch_tx
-        .send(PushEvent::Batch {
-            payload_bytes: b"delayed".to_vec(),
-        })
+        .send(PushEvent::Resend(PendingFrame {
+            sequence: 7,
+            encoded_frame,
+        }))
         .await
         .unwrap();
 
-    let frame = tokio::time::timeout(Duration::from_secs(2), client_rx.recv())
-        .await
-        .expect("worker should send after batch arrives")
-        .expect("channel open");
-    assert!(frame.payload.is_some());
-
-    // Clean up.
-    drop(batch_tx);
-    let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
-}
-
-// ──────────────────────────────────────────────────────────────────────────────
-// Test 3: Pending (un-ACKed) batches survive a simulated reconnect.
-// ──────────────────────────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn pending_batches_available_after_simulated_disconnect() {
-    // This test verifies the SequenceWindow tracks un-ACKed batches
-    // correctly. We simulate the scenario: push 3 batches, ACK 1,
-    // then verify 2 remain pending (as would be resent on reconnect).
-    use druid_metrics::sequence_window::SequenceWindow;
-
-    let mut window = SequenceWindow::new(256);
-    let s1 = window.push(b"batch-1".to_vec()).unwrap();
-    let s2 = window.push(b"batch-2".to_vec()).unwrap();
-    let s3 = window.push(b"batch-3".to_vec()).unwrap();
-
-    // Server ACKs seq 1.
-    window.ack(s1).unwrap();
-
-    // On reconnect, pending batches should be seq 2 and 3.
-    let pending = window.pending_batches();
-    assert_eq!(pending.len(), 2);
-    assert_eq!(pending[0].sequence, s2);
-    assert_eq!(pending[1].sequence, s3);
-    assert_eq!(pending[0].payload_bytes, b"batch-2");
-    assert_eq!(pending[1].payload_bytes, b"batch-3");
-
-    // Verify the worker can actually resend these.
-    let pair = TransportPair::new(64);
-    let (batch_tx, batch_rx) = mpsc::channel::<PushEvent>(16);
-
-    // Enqueue the pending batches as reconnect events.
-    for p in &pending {
-        batch_tx
-            .send(PushEvent::Resend {
-                sequence: p.sequence,
-                payload_bytes: p.payload_bytes.clone(),
-            })
-            .await
-            .unwrap();
-    }
-
-    let (mut client_rx, server_tx, worker) = pair.into_worker(batch_rx, 256);
-    let handle = tokio::spawn(async move { worker.run().await });
-
-    // Expect two frames with the original sequences.
-    for expected_seq in [s2, s3] {
-        let frame = tokio::time::timeout(Duration::from_secs(2), client_rx.recv())
-            .await
-            .expect("worker should send resend frame")
-            .expect("channel open");
-        match frame.payload {
-            Some(druid_metrics::protocol::client_frame::Payload::SnapshotBatch(batch)) => {
-                let hdr = batch.header.as_ref().unwrap();
-                assert_eq!(hdr.sequence, expected_seq);
-            }
-            other => panic!("expected SnapshotBatch, got {other:?}"),
-        }
-    }
-
-    // ACK both.
-    server_tx.send(make_ack(s2)).await.unwrap();
-    server_tx.send(make_ack(s3)).await.unwrap();
-
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    drop(batch_tx);
-    drop(server_tx);
-    let _ = tokio::time::timeout(Duration::from_secs(2), handle).await;
+    assert!(
+        client_rx.recv().await.is_none(),
+        "invalid resend is not sent"
+    );
+    assert!(
+        handle.await.unwrap().is_empty(),
+        "invalid resend is not stored"
+    );
 }
