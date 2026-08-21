@@ -29,6 +29,10 @@ REQUIRED_DELEGATES = frozenset(
     }
 )
 
+# Leave this empty until a PhysicalConnection default is proven observationally equivalent to
+# delegating through an external-pool lease. Every unlisted trait method fails closed.
+EQUIVALENT_DEFAULTS = frozenset()
+
 
 def block_after(source: str, declaration: re.Pattern[str]) -> str:
     """Return the brace-balanced Rust block beginning at a declaration match."""
@@ -60,43 +64,117 @@ def method_names(block: str) -> set[str]:
     )
 
 
-def main() -> int:
+def validation_errors(
+    trait_methods: set[str],
+    lease_methods: set[str],
+    named_required: frozenset[str] = REQUIRED_DELEGATES,
+) -> list[str]:
+    """Return every stale named requirement or missing transparent lease delegate."""
+
+    stale_required = named_required - trait_methods
+    stale_equivalents = EQUIVALENT_DEFAULTS - trait_methods
+    required_delegates = trait_methods - EQUIVALENT_DEFAULTS
+    missing_delegates = required_delegates - lease_methods
+    errors = []
+    if stale_required:
+        errors.append(
+            "FAIL: verifier required methods absent from PhysicalConnection: "
+            + ", ".join(sorted(stale_required))
+        )
+    if stale_equivalents:
+        errors.append(
+            "FAIL: verifier equivalent defaults absent from PhysicalConnection: "
+            + ", ".join(sorted(stale_equivalents))
+        )
+    if missing_delegates:
+        errors.append(
+            "FAIL: PhysicalConnectionLease misses delegates: "
+            + ", ".join(sorted(missing_delegates))
+        )
+    return errors
+
+
+def parse_surface() -> tuple[set[str], set[str]]:
+    """Parse the current trait and lease implementation method surfaces."""
+
+    trait_methods = method_names(
+        block_after(
+            PHYSICAL_CONNECTION.read_text(encoding="utf-8"),
+            re.compile(r"\bpub\s+trait\s+PhysicalConnection\b"),
+        )
+    )
+    lease_methods = method_names(
+        block_after(
+            PHYSICAL_CONNECTION_LEASE.read_text(encoding="utf-8"),
+            re.compile(
+                r"\bimpl\s*<[^>]+>\s+PhysicalConnection\s+for\s+"
+                r"PhysicalConnectionLease\s*<[^>]+>",
+                re.DOTALL,
+            ),
+        )
+    )
+    return trait_methods, lease_methods
+
+
+def self_test() -> int:
+    """Inject a future trait default and prove that an unmodified lease fails validation."""
+
+    synthetic_trait = """
+        pub trait PhysicalConnection {
+            async fn existing(&mut self) {}
+            async fn future_default(&mut self) {}
+        }
+    """
+    synthetic_lease = """
+        impl<L> PhysicalConnection for PhysicalConnectionLease<L> {
+            async fn existing(&mut self) {}
+        }
+    """
+    trait_methods = method_names(
+        block_after(
+            synthetic_trait,
+            re.compile(r"\bpub\s+trait\s+PhysicalConnection\b"),
+        )
+    )
+    lease_methods = method_names(
+        block_after(
+            synthetic_lease,
+            re.compile(
+                r"\bimpl\s*<[^>]+>\s+PhysicalConnection\s+for\s+"
+                r"PhysicalConnectionLease\s*<[^>]+>",
+                re.DOTALL,
+            ),
+        )
+    )
+    errors = validation_errors(trait_methods, lease_methods, frozenset())
+    expected = "FAIL: PhysicalConnectionLease misses delegates: future_default"
+    if errors == [expected]:
+        print("PASS: verifier evolution probe rejects synthetic trait method")
+        return 0
+
+    print("FAIL: verifier evolution probe did not reject synthetic trait method", file=sys.stderr)
+    for error in errors:
+        print(error, file=sys.stderr)
+    return 1
+
+
+def main(arguments: list[str]) -> int:
+    if arguments == ["--self-test"]:
+        return self_test()
+    if arguments:
+        print("usage: verify_physical_connection_lease_surface.py [--self-test]", file=sys.stderr)
+        return 2
+
     try:
-        trait_methods = method_names(
-            block_after(
-                PHYSICAL_CONNECTION.read_text(encoding="utf-8"),
-                re.compile(r"\bpub\s+trait\s+PhysicalConnection\b"),
-            )
-        )
-        lease_methods = method_names(
-            block_after(
-                PHYSICAL_CONNECTION_LEASE.read_text(encoding="utf-8"),
-                re.compile(
-                    r"\bimpl\s*<[^>]+>\s+PhysicalConnection\s+for\s+"
-                    r"PhysicalConnectionLease\s*<[^>]+>",
-                    re.DOTALL,
-                ),
-            )
-        )
+        trait_methods, lease_methods = parse_surface()
     except (OSError, ValueError) as error:
         print(f"FAIL: could not parse PhysicalConnection lease surface: {error}", file=sys.stderr)
         return 1
 
-    stale_required = REQUIRED_DELEGATES - trait_methods
-    missing_delegates = REQUIRED_DELEGATES - lease_methods
-    if stale_required or missing_delegates:
-        if stale_required:
-            print(
-                "FAIL: verifier required methods absent from PhysicalConnection: "
-                + ", ".join(sorted(stale_required)),
-                file=sys.stderr,
-            )
-        if missing_delegates:
-            print(
-                "FAIL: PhysicalConnectionLease misses delegates: "
-                + ", ".join(sorted(missing_delegates)),
-                file=sys.stderr,
-            )
+    errors = validation_errors(trait_methods, lease_methods)
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
         return 1
 
     print("PASS: PhysicalConnectionLease delegates all required methods")
@@ -104,4 +182,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))
