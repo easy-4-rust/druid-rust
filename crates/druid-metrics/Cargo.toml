@@ -13,8 +13,8 @@ name = "druid_metrics"
 
 [features]
 default  = []
-client   = ["dep:tonic"]
-server   = ["dep:tonic"]
+client   = ["dep:tonic", "dep:tonic-prost"]
+server   = ["dep:tonic", "dep:tonic-prost"]
 
 [dependencies]
 druid   = { path = "../druid" }
@@ -30,9 +30,9 @@ tokio-util   = { workspace = true }
 # gRPC / protobuf
 prost        = { workspace = true }
 tonic        = { workspace = true, optional = true }
+tonic-prost  = { workspace = true, optional = true }
 
 [build-dependencies]
-tonic-build            = { workspace = true }
 tonic-prost-build      = { workspace = true }
 protoc-bin-vendored    = { workspace = true }
 

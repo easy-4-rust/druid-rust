@@ -1,5 +1,5 @@
-//! gRPC ingest service for receiving metrics from druid-metrics runtime.
+//! 接收 druid-metrics 运行时指标的 gRPC ingest 服务。
 
 mod ingest_service;
 
-pub use ingest_service::{ingest_proto, IngestService};
+pub use ingest_service::IngestService;

@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, optional = true }
-druid-metrics = { version = "0.0.0-design", path = "../druid-metrics" }
+druid-metrics = { version = "0.0.0-design", path = "../druid-metrics", features = ["server"] }
 tokio         = { workspace = true }
 tokio-util    = { workspace = true }
 axum          = { workspace = true }
@@ -33,7 +33,6 @@ tokio-metrics = { workspace = true }
 topcoat       = { workspace = true }
 prost         = { workspace = true }
 tonic         = { workspace = true, features = ["transport"] }
-tonic-prost   = { workspace = true }
 tokio-stream  = { workspace = true }
 validator     = { workspace = true }
 uuid          = { workspace = true }
@@ -49,10 +48,6 @@ parking_lot   = { workspace = true }
 tracing              = { workspace = true }
 tracing-subscriber   = { workspace = true }
 arc-swap      = { workspace = true }
-
-[build-dependencies]
-tonic-prost-build = { workspace = true }
-prost-build       = { workspace = true }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "test-util", "macros"] }

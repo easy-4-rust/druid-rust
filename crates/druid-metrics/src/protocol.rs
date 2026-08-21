@@ -1,53 +1,48 @@
-//! gRPC protocol types for Druid metrics delivery.
+//! Druid 指标传输使用的 gRPC 协议类型。
 //!
-//! Generated from `proto/druid_metrics_v1.proto` via `tonic-build`.
-//! This module provides the wire-format types and convenience
-//! encode/decode helpers for client and server frames.
+//! 所有类型由唯一的 `proto/druid_metrics_v1.proto` 生成。Cargo 的 `client`
+//! 与 `server` feature 分别启用对应 Tonic stub；未启用任一 feature 时仍生成消息类型。
 
-// Include the generated protobuf + gRPC code.
-// tonic-build places the file at OUT_DIR/<package_path>.rs
-// where package "druid_metrics.v1" becomes "druid_metrics/v1.rs".
+// 包含生成的 protobuf 与 gRPC 代码。
+// tonic-prost-build 将 package `druid_metrics.v1` 输出到 OUT_DIR/druid_metrics.v1.rs。
 pub mod v1 {
     include!(concat!(env!("OUT_DIR"), "/druid_metrics.v1.rs"));
 }
 
-// Re-export all generated types at the `protocol` level so callers can do
-// `use druid_metrics::protocol::*`.
+// 在 protocol 层重导出全部生成类型，供调用方统一引用。
 pub use v1::*;
 
 use prost::Message;
 
 // ─── Client frame encode / decode ──────────────────────────────────────────
 
-/// Encode a [`ClientFrame`] into a length-delimited byte vector.
+/// 将 [`ClientFrame`] 编码为 protobuf 字节数组。
 ///
-/// # Errors
-/// Returns a [`prost::EncodeError`] if the buffer is too small (should never
-/// happen with a `Vec`).
+/// `Vec` 动态扩容，因此正常编码不会失败。
 pub fn encode_client_frame(frame: &ClientFrame) -> Vec<u8> {
     let mut buf = Vec::with_capacity(frame.encoded_len());
     frame.encode(&mut buf).expect("Vec::encode never fails");
     buf
 }
 
-/// Decode a [`ClientFrame`] from raw bytes.
+/// 从 protobuf 字节解码 [`ClientFrame`]。
 ///
 /// # Errors
-/// Returns a [`prost::DecodeError`] if the bytes are not a valid protobuf.
+/// 输入不是合法 protobuf 时返回 [`prost::DecodeError`]。
 pub fn decode_client_frame(bytes: &[u8]) -> Result<ClientFrame, prost::DecodeError> {
     ClientFrame::decode(bytes)
 }
 
 // ─── Server frame encode / decode ──────────────────────────────────────────
 
-/// Encode a [`ServerFrame`] into a length-delimited byte vector.
+/// 将 [`ServerFrame`] 编码为 protobuf 字节数组。
 pub fn encode_server_frame(frame: &ServerFrame) -> Vec<u8> {
     let mut buf = Vec::with_capacity(frame.encoded_len());
     frame.encode(&mut buf).expect("Vec::encode never fails");
     buf
 }
 
-/// Decode a [`ServerFrame`] from raw bytes.
+/// 从 protobuf 字节解码 [`ServerFrame`]。
 pub fn decode_server_frame(bytes: &[u8]) -> Result<ServerFrame, prost::DecodeError> {
     ServerFrame::decode(bytes)
 }
