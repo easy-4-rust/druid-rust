@@ -1,5 +1,12 @@
 # Five-Crate Architecture Specification Implementation Plan
 
+> **SUPERSEDED（2026-08-21）：** 本计划的 `druid-core + druid facade` 目标已由
+> `ADR-CRATE-002` 取代。当前规格事实源为
+> [`2026-08-21-rdbc-first-five-crate-architecture.md`](../specs/2026-08-21-rdbc-first-five-crate-architecture.md)，
+> 当前总路线为
+> [`2026-08-21-rdbc-first-master-roadmap.md`](2026-08-21-rdbc-first-master-roadmap.md)。
+> 以下完成记录保留为历史证据，不得继续作为当前执行清单。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将五 Crate 目标写入正式架构事实源，废止当前“三 Crate only”结论，并为后续源码迁移提供唯一、无冲突的职责和依赖定义。

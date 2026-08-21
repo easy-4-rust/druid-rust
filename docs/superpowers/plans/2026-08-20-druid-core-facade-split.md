@@ -1,5 +1,10 @@
 # Druid Core and Facade Split Implementation Plan
 
+> **SUPERSEDED（2026-08-21）：** 不再创建 `druid-core + druid facade`。
+> 当前执行计划为
+> [`2026-08-21-druid-rdbc-extraction.md`](2026-08-21-druid-rdbc-extraction.md)，
+> 保留 `druid` 产品身份并抽取低层 `druid-rdbc`。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将当前 `druid` package 机械拆成 `druid-core` 实现 crate 与 `druid` 稳定门面，同时保持现有最终用户 API 路径和连接池行为。

@@ -2,35 +2,34 @@
 
 > 本文是 druid-rust 的唯一总体架构基线。项目目标是把 Alibaba Druid
 > 1.2.28 的功能语义有规划地迁移到 Rust，不是借鉴、重新想象或按文件机械翻译。
-> 对象完成度、语义完成度和命名检查分别以 `docs/druid`、
-> `docs/druid-admin`、`docs/druid-wrapper` 下的模块账本为准。
+> 对象完成度、语义完成度和命名检查以 `docs/superpowers/specs/` 下的对象语义
+> 总账、命名审计和驱动矩阵为准；执行状态以 `docs/superpowers/plans/` 为准。
 
 | 字段 | 当前值 |
 | :--- | :--- |
-| 架构版本 | `V2.0.0-MIGRATION` |
+| 架构版本 | `V3.0.0-RDBC-FIRST` |
 | Java 基线 | Druid `1.2.28`，提交 `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
 | Rust 基线 | 当前工作区 HEAD |
 | Rust MSRV | `1.95` |
 | 默认工具链 | `1.97.1` |
 | 文档状态 | 执行中；不得理解为完整迁移已经完成 |
-| 事实核验日期 | 2026-07-29 |
+| 事实核验日期 | 2026-08-21 |
 
 ## 1. 文档责任与阅读路径
 
-根 `docs/` 维护项目级架构与治理入口，三个模块目录维护各自迁移账本：
+根 `docs/` 维护项目级架构入口，Superpowers specs/plans 维护规格事实与执行清单：
 
 | 权威来源 | 责任 |
 | :--- | :--- |
 | 本文 | 当前架构、目标架构、不变量、模块边界和 ADR |
-| [文档总入口](./README.md) | 总路线、模块账本导航和全 workspace 门禁 |
-| [连接专项架构](./连接抽象与驱动适配架构.md) | 跨 `druid`/`druid-wrapper` 的连接对象、所有权和驱动边界 |
-| [`druid`](./druid/迁移路线图.md) | Java core 对象、语义和命名账本 |
-| [`druid-admin`](./druid-admin/迁移路线图.md) | Java admin 对象、语义和命名账本 |
-| [`druid-wrapper`](./druid-wrapper/迁移路线图.md) | Java wrapper 与 Rust 扩展适配账本 |
+| [Superpowers 总入口](./superpowers/README.md) | 当前规格、计划、状态和历史 supersede 导航 |
+| [RDBC-First 架构规格](./superpowers/specs/2026-08-21-rdbc-first-five-crate-architecture.md) | ADR-CRATE-002、目标 DAG、RDBC/运行时不变量和完成门禁 |
+| [连接专项架构](./superpowers/specs/2026-08-12-connection-abstraction-design.md) | 连接对象、所有权、回收和驱动边界；旧 crate 目标段为历史记录 |
+| [对象/语义总账](./superpowers/specs/2026-08-12-object-and-semantic-mapping.md) | Java core/admin/wrapper 对象和语义状态 |
+| [命名审计](./superpowers/specs/2026-08-12-object-naming-audit.md) | canonical 名称、兼容路径和对象文件规则 |
 
-`druid`、`druid-admin` 和 `druid-wrapper` 三个目录分别是所属对象、语义和
-名称状态的唯一权威账本。项目级文档只聚合导航、架构和统一门禁，不形成第二套
-完成率。README 只承担项目入口，不维护独立路线图。
+同一变更只允许一个当前架构事实源。2026-08-20 的 `druid-core + druid facade`
+计划由 ADR-CRATE-002 取代，旧文件保留历史证据但不得继续执行。
 
 状态含义：
 
@@ -71,37 +70,23 @@
 
 ```mermaid
 flowchart TB
-    App["应用 / Web / Worker"] --> Druid["druid<br/>默认集成 Toasty"]
-    App -. "可选数据库与外部池扩展" .-> Wrapper["druid-wrapper"]
-    App -. "可选管理面" .-> Admin["druid-admin"]
+    RDBC["druid-rdbc<br/>Types / Errors / Driver SPI / Resources / Java Compat"]
+    Druid["druid<br/>Pool / Filter / SQL Parser / Wall / Stat / Dynamic"]
+    Wrapper["druid-wrapper<br/>SQLx / Toasty / RBDC / JDBC Agent<br/>bb8 / deadpool"]
+    Metrics["druid-metrics<br/>Snapshot / Aggregator / Single gRPC Protocol"]
+    Admin["druid-admin<br/>Authenticated HTTP + gRPC / Repository / UI"]
+    Bench["druid-bench<br/>Contracts / Differential / Benchmarks"]
 
-    Wrapper -->|"PhysicalConnection / Pool 合同"| Druid
-    Admin -->|"管理读取合同"| Druid
-
-    Druid --> Pool["DruidPool"]
-    Pool --> Public["DruidPooledConnection"]
-    Public --> Holder["DruidConnectionHolder"]
-    Holder --> SPI["PhysicalConnection SPI"]
-
-    SPI --> Toasty["ToastyConnectionAdapter<br/>内置标准"]
-    Wrapper --> Sqlx["SqlxConnectionAdapter"]
-    Wrapper --> Rbdc["RbdcConnectionAdapter"]
-    Wrapper --> External["bb8 / deadpool"]
-    Sqlx --> SPI
-    Rbdc --> SPI
-
-    Toasty --> SQLite["SQLite：默认真实门禁"]
-    Toasty --> Pg["PostgreSQL：可选 feature"]
-    Toasty --> MySql["MySQL：可选 feature"]
-    Toasty --> Turso["Turso：可选 feature"]
-
-    Pool --> Filter["FilterChain"]
-    Filter --> Sql["SQL / Wall"]
-    Filter --> Stats["Stats / tracing / metrics"]
-    Dynamic["DynamicDataSource"] --> Pool
-
-    External --> Lease["PhysicalConnectionLease"]
-    Lease --> Public
+    Druid --> RDBC
+    Wrapper --> RDBC
+    Wrapper --> Druid
+    Metrics --> Druid
+    Admin --> Metrics
+    Bench --> RDBC
+    Bench --> Druid
+    Bench --> Wrapper
+    Bench --> Metrics
+    Bench --> Admin
 ```
 
 最重要的架构不变量：
@@ -113,38 +98,47 @@ flowchart TB
 5. 外部池模式只持有 bb8/deadpool lease，不再嵌套进 `DruidPool`。
 6. 每个连接租约只能归还一次；正常回收、淘汰和回收错误必须显式区分。
 7. Adapter 不支持的能力返回结构化 `UnsupportedOperation`，不得静默成功。
-8. 产品和发布边界只有 `druid`、`druid-wrapper`、`druid-admin` 三个模块。
-9. Toasty 属于 `druid` 默认实现；其他数据库操作适配统一属于 `druid-wrapper`。
+8. 目标产品边界是 `druid-rdbc`、`druid`、`druid-wrapper`、`druid-metrics`、`druid-admin`；`druid-bench` 只负责验证。
+9. Toasty/SQLx/RBDC/JDBC Agent/bb8/deadpool 统一属于 `druid-wrapper`；`druid-rdbc` 不含具体数据库依赖。
+10. `druid::sql::*` 保持消费者 canonical 路径；底层 driver SPI 统一归 `druid-rdbc`。
+11. Metrics/Admin 只允许一份 `druid_metrics.v1` 线协议。
 
-## 4. 三模块职责与收敛
+## 4. 当前模块与目标收敛
 
 | 模块 | Java 来源 | 职责 | 当前状态 |
 | :--- | :--- | :--- | :--- |
-| `druid` | `/core` | 连接池、SQL、Wall、Stat、Dynamic、JDBC 平台对象、内部 SPI；默认 Toasty | PARTIAL |
-| `druid-wrapper` | `/druid-wrapper` | SQLx、RBDC、bb8、deadpool 及各种数据库操作/连接生态封装 | PARTIAL |
-| `druid-admin` | `/druid-admin` | 服务发现、监控聚合、DTO、路由、资源和管理扩展 | IMPLEMENTED_UNVERIFIED；功能 UI PARTIAL |
+| `druid` | `/core` | 当前持有 Pool、logical handles、Physical SPI、Parser、Wall、Stat、Dynamic；目标抽出 RDBC 低层合同 | PARTIAL |
+| `druid-wrapper` | `/druid-wrapper` | SQLx、Toasty、RBDC、JDBC Agent、bb8、deadpool、driver tooling | PARTIAL |
+| `druid-metrics` | Rust-only | sampler/aggregator/protocol 组件已存在，生产 exporter/gRPC 闭环未完成 | PARTIAL |
+| `druid-admin` | `/druid-admin` | HTTP/UI/repository 已存在；gRPC、安全和 TTL 未闭合 | IMPLEMENTED_UNVERIFIED |
+| `druid-rdbc` | Java 平台映射 | 目标新增；承载 Types/Errors/Driver SPI/Resources/Java Compat | TODO |
 
 依赖方向：
 
 ```mermaid
 flowchart LR
     App["应用"] --> Druid["druid"]
-    App -. "可选" .-> Wrapper["druid-wrapper"]
-    App -. "可选" .-> Admin["druid-admin"]
-    Wrapper -->|"SPI / Pool"| Druid
-    Admin -->|"管理读取"| Druid
+    App -. "可选 driver" .-> Wrapper["druid-wrapper"]
+    App -. "可选管理面" .-> Admin["druid-admin"]
+    Druid --> Rdbc["druid-rdbc"]
+    Wrapper --> Rdbc
+    Wrapper --> Druid
+    Metrics["druid-metrics"] --> Druid
+    Admin --> Metrics
 ```
 
-原 13 个 workspace crate 已在 2026-07-29 物理收敛为三个：
+历史上 13 个 workspace crate 曾在 2026-07-29 物理收敛为三个；下表只记录
+归并来源，不代表 2026-08-21 当前模块数量或目标拓扑：
 
 | 已删除的原物理实现 | 当前模块 | 当前目录 |
 | :--- | :--- | :--- |
 | `druid-core`、`druid-pool`、`druid-sql`、`druid-stats`、`druid-dynamic` | `druid` | `crates/druid/src/{core,pool,sql,stats,dynamic}/` |
-| `druid-toasty` | `druid` | `crates/druid/src/toasty/` |
+| `druid-toasty` | 后续迁入 `druid-wrapper` | `crates/druid-wrapper/src/toasty/` |
 | `druid-sqlx`、`druid-rbdc`、`druid-sqlx-bb8`、`druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/rbdc/`、`crates/druid-wrapper/src/sqlx/{bb8,deadpool}/` |
 
-`cargo metadata` 只返回 `druid`、`druid-wrapper`、`druid-admin` 三个 workspace
-member。内部目录不得独立发布、独立维护版本或单独计算完成率。
+当前 `cargo metadata` 返回 `druid`、`druid-wrapper`、`druid-metrics`、
+`druid-admin`、`druid-bench`。目标新增 `druid-rdbc`；迁移期间全部 package
+`publish = false`。
 
 ## 5. 连接对象模型
 
@@ -224,20 +218,20 @@ bb8/deadpool 已经管理连接容量和回收，因此它们实现 `Pool` provi
 
 任何获取路径必须在 native 和 external provider 中二选一，禁止 pool-in-pool。
 
-## 7. Toasty 内置标准数据源
+## 7. Toasty 标准 Driver Adapter
 
-Toasty 是 `druid` 模块内部的默认 ORM/driver 入口，其他连接生态属于
-`druid-wrapper`。Toasty 源码与 feature 已归入 `druid::toasty`，不形成独立模块
-或发布物。Toasty Adapter 不创建 `toasty::Db`，因为 `Db` 自身包含连接池，直接
+Toasty 当前位于 `druid-wrapper::toasty`，与 SQLx、RBDC、JDBC Agent 一样实现
+`PhysicalConnection`；目标态改为实现 `druid-rdbc` Driver SPI。Toasty 不形成独立
+产品 crate。Toasty Adapter 不创建 `toasty::Db`，因为 `Db` 自身包含连接池，直接
 调用 Toasty `Driver::connect` 获取单条 raw connection，让 DruidPool 独占容量、
 回收、Filter 和统计职责。
 
 | feature | 定位 | 当前证据 |
 | :--- | :--- | :--- |
-| `sqlite`（default） | 内置默认 SQL 数据源 | 真实 SQLite contract |
-| `postgresql` | 内置可选 SQL 数据源 | feature 编译通过；真实容器待补 |
-| `mysql` | 内置可选 SQL 数据源 | feature 编译通过；真实容器待补 |
-| `turso` | 内置可选 SQL 数据源 | feature 编译通过；真实服务门禁待补 |
+| `sqlite`（Wrapper default） | 当前默认 Toasty SQLite Adapter | 真实 SQLite contract |
+| `postgresql` | Wrapper 可选 Toasty Adapter | feature 存在；真实容器证据待重新核验 |
+| `mysql` | Wrapper 可选 Toasty Adapter | feature 存在；真实容器证据待重新核验 |
+| `turso` | Wrapper 可选 Toasty Adapter | feature 存在；真实服务门禁待补 |
 
 Toasty 的 DynamoDB 等非 SQL provider 不暴露为 Druid feature，也不进入
 `PhysicalConnection` 与数据库支持计数。
@@ -247,7 +241,7 @@ SQLite 与 SQLx 同时启用时必须只有一个 `libsqlite3-sys` 链接版本�
 与 SQLx 0.8 共用的兼容版本；补丁来源和移除条件写在 vendor README。
 
 专项设计见
-[`docs/druid/Toasty-内置数据源标准实现.md`](./druid/Toasty-内置数据源标准实现.md)。
+[`Toasty 内置数据源规格`](./superpowers/specs/2026-08-12-toasty-builtin-datasource.md)。
 
 ## 8. SQL 执行、Filter 与统计
 
@@ -417,12 +411,12 @@ flowchart LR
 6. 并发压力、取消、超时、故障注入和性能；
 7. fmt、clippy、doc、dependency、license 和安全门禁。
 
-2026-07-29 三模块归并后已记录证据：
+历史 2026-07-29 三模块归并曾记录以下证据（不可替代当前 HEAD 验证）：
 
 - `cargo test --workspace --all-targets`：453/453；
 - Toasty/core/SQLx/bb8/deadpool/wrapper：21 个真实 SQLite 用例；
 - `cargo check -p druid --all-features` 通过；
-- `cargo metadata` 只包含三个 workspace member。
+- 当时 `cargo metadata` 只包含三个 workspace member。
 
 这些证据只证明对应切片。PostgreSQL/MySQL/Turso 真实矩阵、Java 全对象差分、
 全工作区覆盖率及 clippy 告警仍是未关闭门禁。
@@ -444,11 +438,11 @@ flowchart LR
 
 路线和总账：
 
-- [迁移总路线图](./迁移总路线图.md)
-- [`druid` 对象、语义和名称账本](./druid/迁移路线图.md)
-- [`druid-admin` 对象、语义和名称账本](./druid-admin/迁移路线图.md)
-- [`druid-wrapper` 对象、语义和名称账本](./druid-wrapper/迁移路线图.md)
-- [连接抽象与驱动适配架构](./连接抽象与驱动适配架构.md)
+- [RDBC-First 总路线](./superpowers/plans/2026-08-21-rdbc-first-master-roadmap.md)
+- [对象与语义总账](./superpowers/specs/2026-08-12-object-and-semantic-mapping.md)
+- [对象名称审计](./superpowers/specs/2026-08-12-object-naming-audit.md)
+- [驱动集成矩阵](./superpowers/specs/2026-08-12-driver-integration-matrix.md)
+- [连接抽象与驱动适配架构](./superpowers/specs/2026-08-12-connection-abstraction-design.md)
 
 ## 17. ADR
 
@@ -465,29 +459,29 @@ flowchart LR
 | ADR-009 | DynamicDataSource 使用 ArcSwap，事务租约不随切换漂移 | 已确认 |
 | ADR-010 | Admin 的 Java 兼容面与 Rust-only API 分账 | 已确认 |
 | ADR-011 | 完成状态由差分和真实门禁决定，不由文件/方法计数决定 | 已确认 |
-| ADR-012 | 产品、文档和发布边界只有 `druid`、`druid-wrapper`、`druid-admin` | 已确认 |
-| ADR-013 | 现有内部 crate 必须归并为三模块目录，facade 重导出不等于完成归并 | SUPERSEDED_BY ADR-CRATE-001 |
-| ADR-CRATE-001 | 五 Crate 目标拓扑：`druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`；当前源码仍为三 crate，批准目标为五 crate | ACCEPTED |
+| ADR-012 | 产品、文档和发布边界只有 `druid`、`druid-wrapper`、`druid-admin` | SUPERSEDED_BY ADR-CRATE-002 |
+| ADR-013 | 现有内部 crate 必须归并为三模块目录，facade 重导出不等于完成归并 | SUPERSEDED_BY ADR-CRATE-002 |
+| ADR-CRATE-001 | `druid-core`、`druid` facade、Wrapper、Metrics、Admin | SUPERSEDED_BY ADR-CRATE-002 |
+| ADR-CRATE-002 | `druid-rdbc`、`druid`、`druid-wrapper`、`druid-metrics`、`druid-admin`；`druid-bench` 为验证成员 | ACCEPTED |
+| ADR-RDBC-001 | `druid::sql::*` 保持消费者路径；driver SPI 归 `druid-rdbc` | ACCEPTED |
+| ADR-RDBC-002 | logical handle 使用具体类型，不机械复制 Java trait 继承 | ACCEPTED |
 | ADR-METRICS-001 | 统计 registry、sampler、timeline、Prometheus model 和 gRPC protocol/runtime 从 `druid` core 移入独立 `druid-metrics` crate | ACCEPTED |
 | ADR-TRANSPORT-001 | 管理面 ingest repository、REST、认证、兼容静态 UI 和独立 binary 从 `druid-admin` 拆分出独立传输层职责 | ACCEPTED |
 | ADR-ADMIN-001 | `druid-admin` 只消费 `druid-metrics` 协议，不反向依赖 `druid-wrapper`；管理统计归属 Metrics，HTTP/REST service 归属 Admin | ACCEPTED |
 
-### 五 Crate 目标依赖图
+### RDBC-First 五产品 Crate 目标依赖图
 
-> 以下为已批准的五 Crate 目标拓扑。当前源码仍为三 Crate，源码迁移按
-> `docs/superpowers/plans/` 下的专项计划执行。
+> 以下为 ADR-CRATE-002 当前目标，按 2026-08-21 RDBC-First 计划集执行。
 
 ```text
-druid-core ──> druid-wrapper
-druid-core ──> druid-metrics
-druid-core ──> druid (facade)
-druid-metrics ──> druid-admin
-druid-admin -X-> druid-wrapper（禁止反向依赖）
+druid-rdbc <── druid
+druid-rdbc <── druid-wrapper ──> druid
+druid <── druid-metrics <── druid-admin
+druid-admin -X-> druid / druid-wrapper
 ```
 
-`druid`（facade）可选依赖 `druid-metrics` 和 `druid-wrapper`，Cargo 方向不会
-形成循环。`druid-core` 是无具体驱动和无管理传输的核心；`druid` 是稳定门面；
-Wrapper 和 Metrics 分别从 Core 向上扩展；Admin 只消费 Metrics 协议。
+`druid` 保留核心产品身份；`druid-rdbc` 是低层可演进合同；Wrapper 同时消费
+RDBC SPI 和 Druid Pool；Metrics 消费 Druid typed snapshot；Admin 只消费 Metrics。
 
 ADR 反转必须同步修改源码、架构、对象账本、语义账本、测试和发布说明。
 

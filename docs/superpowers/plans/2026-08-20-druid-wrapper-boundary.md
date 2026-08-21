@@ -1,5 +1,11 @@
 # Druid Wrapper Boundary Implementation Plan
 
+> **SUPERSEDED（2026-08-21）：** 当前 Wrapper 边界由
+> [`External Pool RDBC Conformance`](2026-08-21-external-pool-rdbc-conformance.md)、
+> [`druid-rdbc Extraction`](2026-08-21-druid-rdbc-extraction.md) 和
+> [`Driver Registry and Feature Boundaries`](2026-08-21-driver-registry-feature-boundaries.md)
+> 三份计划接管。旧 `druid-core`/inventory 目标仅作历史记录。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将全部具体数据库 Adapter、vendor checker/sorter 和 driver 管理工具收敛到 `druid-wrapper`，使 `druid-core` 只保留稳定 SPI。

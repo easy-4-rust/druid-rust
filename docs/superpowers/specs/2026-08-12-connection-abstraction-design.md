@@ -1,5 +1,10 @@
 # 连接抽象与驱动适配架构设计
 
+> **架构覆盖说明（2026-08-21）：** 本文的连接生命周期和 Java/Rust 语义账本继续
+> 有效；其中 `ADR-CRATE-001`、`druid-core + druid facade` 和“当前三 Crate”段落
+> 已由 [`ADR-CRATE-002`](2026-08-21-rdbc-first-five-crate-architecture.md) 取代，
+> 只保留为历史决策记录。
+
 > 日期：2026-08-12  来源：原 docs/连接抽象与驱动适配架构.md
 
 核心决策：`DruidPooledConnection` 是对外稳定的 Druid 池化连接；
@@ -1034,7 +1039,8 @@ native 和 bridge provider 均需执行：
 | ADR-CONN-007 | `java.sql.*` 归入平台依赖映射，不计 Druid 对象完成率 | ACCEPTED |
 | ADR-CONN-008 | 产品与发布边界固定为 `druid`、`druid-admin`、`druid-wrapper` 三个 crate | SUPERSEDED_BY ADR-CRATE-001 |
 | ADR-CONN-009 | Toasty 归 `druid::toasty`；其余数据库实现统一归 `druid-wrapper`，禁止独立发布 | ACCEPTED |
-| ADR-CRATE-001 | 五 Crate 目标拓扑：`druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`；当前源码仍为三 crate，批准目标为五 crate | ACCEPTED |
+| ADR-CRATE-001 | `druid-core + druid facade` 五 Crate 目标 | SUPERSEDED_BY ADR-CRATE-002 |
+| ADR-CRATE-002 | `druid-rdbc + druid + wrapper + metrics + admin`；`druid-bench` 为验证成员 | ACCEPTED；详见 2026-08-21 RDBC-First 规格 |
 | ADR-METRICS-001 | 统计 registry、sampler、timeline、Prometheus model 和 gRPC protocol/runtime 从 `druid` core 移入独立 `druid-metrics` crate | ACCEPTED |
 | ADR-TRANSPORT-001 | 管理面 ingest repository、REST、认证、兼容静态 UI 和独立 binary 从 `druid-admin` 拆分出独立传输层职责 | ACCEPTED |
 | ADR-ADMIN-001 | `druid-admin` 只消费 `druid-metrics` 协议，不反向依赖 `druid-wrapper`；管理统计归属 Metrics，HTTP/REST service 归属 Admin | ACCEPTED |

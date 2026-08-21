@@ -1,5 +1,9 @@
 # Five-Crate Verification and Release Readiness Plan
 
+> **SUPERSEDED（2026-08-21）：** 本文件保留 2026-08-20 的失败/通过证据；当前
+> `ADR-CRATE-002` 最终门禁见
+> [`2026-08-21-rdbc-first-verification.md`](2026-08-21-rdbc-first-verification.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 对五 Crate 架构执行依赖、功能、可靠性、性能、安全、文档和发布门禁，只把有新鲜证据的状态标记为 DONE。

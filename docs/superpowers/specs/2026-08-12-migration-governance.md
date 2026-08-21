@@ -1,5 +1,9 @@
 # 迁移治理规格
 
+> **架构覆盖说明（2026-08-21）：** 迁移状态、差分和完成门禁继续有效；目标 crate
+> 归属由 [`ADR-CRATE-002`](2026-08-21-rdbc-first-five-crate-architecture.md) 取代
+> 旧 ADR-CRATE-001。
+
 > 日期：2026-08-12  来源：原 docs/README.md 全局治理段
 
 ## 状态定义

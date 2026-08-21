@@ -1,5 +1,10 @@
 # Druid Metrics Runtime Implementation Plan
 
+> **SUPERSEDED_FOR_REMAINING_WORK（2026-08-21）：** 已实现内容保留；尚未闭合的
+> aggregator/exporter/task/shutdown 工作由
+> [`Metrics/Admin Single Protocol`](2026-08-21-metrics-admin-single-protocol.md) 和
+> [`Runtime Production Hardening`](2026-08-21-runtime-production-hardening.md) 接管。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 创建 `druid-metrics`，在 SQL 热路径之外完成 datasource 注册、非阻塞采样、单写者聚合、timeline 和 Prometheus 模型。

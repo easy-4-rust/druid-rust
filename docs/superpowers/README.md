@@ -18,24 +18,27 @@
 - **状态基于代码事实**：每处 DONE 标注引用具体 crate 路径或文件数或测试覆盖率；TODO 引用 Java 侧缺失对象清单。
 - **架构文档**：[druid-rust-Architecture.zh_CN.md](../druid-rust-Architecture.zh_CN.md) 独立于 superpowers 的权威架构文档。
 
-### 三模块治理基线（当前源码）
+### 当前源码治理基线（2026-08-21）
 
 | 模块 | Java 来源与职责 | Rust crate |
 | :--- | :--- | :--- |
-| `druid` | Java `/core` 的完整语义迁移；内部包含 core、pool、SQL/Wall、Stat、Dynamic 和默认 Toasty 数据源实现 | `crates/druid/`（325 .rs） |
-| `druid-admin` | Java `/druid-admin` 的管理、监控、认证与 API 语义迁移 | `crates/druid-admin/`（49 .rs） |
-| `druid-wrapper` | Java `/druid-wrapper` 及 Rust 数据库生态封装；内部包含 SQLx、RBDC、bb8、deadpool | `crates/druid-wrapper/`（95 .rs） |
+| `druid` | Java `/core` 语义迁移；Pool、Filter、SQL Parser、Wall、Stat、Dynamic、logical RDBC handles | `crates/druid/` |
+| `druid-admin` | Java `/druid-admin` 管理、HTTP/UI、repository 与当前独立 binary | `crates/druid-admin/` |
+| `druid-wrapper` | Java `/druid-wrapper` 与 Rust driver/外部池生态 | `crates/druid-wrapper/` |
+| `druid-metrics` | typed snapshot、sampler、aggregator、timeline、协议组件 | `crates/druid-metrics/` |
+| `druid-bench` | 合同、差分和性能验证成员；不计产品 crate | `crates/druid-bench/` |
 
-### 五 Crate 目标拓扑（已批准，ADR-CRATE-001）
+### RDBC-First 五产品 Crate 目标（已批准，ADR-CRATE-002）
 
-> 当前源码仍为三 Crate。以下为已批准的五 Crate 目标归属。
+> `ADR-CRATE-002` 已取代 `ADR-CRATE-001`。保留 `druid` 核心产品身份，新增
+> `druid-rdbc`；不再执行 `druid-core + druid facade` 拆分。
 
 | 目标 Crate | 职责 | 依赖 |
 | :--- | :--- | :--- |
-| `druid-core` | RDBC/JDBC 类型、Pool、Filter、SQL、Wall、Dynamic、统计原始状态和 typed snapshot | -- |
-| `druid`（facade） | stable re-exports and optional features only | druid-core |
-| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、vendor checker/sorter、driver tooling | druid-core |
-| `druid-metrics` | registry、sampler、timeline、Prometheus model、gRPC protocol/runtime | druid-core |
+| `druid-rdbc` | Types、Errors、Physical Driver SPI、Resources、Java compatibility | -- |
+| `druid` | Pool、Filter、SQL Parser、Wall、Stat、Dynamic；保留 `druid::sql::*` | druid-rdbc |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、bb8/deadpool、driver tooling | druid-rdbc + druid |
+| `druid-metrics` | registry、sampler、bounded aggregator、timeline、唯一 gRPC protocol/runtime | druid |
 | `druid-admin` | ingest repository、REST、认证、兼容静态 UI、独立 binary | druid-metrics |
 
 ---
@@ -50,6 +53,7 @@
 | 2026-08-12 | [driver-integration-matrix.md](specs/2026-08-12-driver-integration-matrix.md) | 数据库驱动集成矩阵（D0-D5 验证级别、80 产品目录） | 设计完成 |
 | 2026-08-12 | [object-and-semantic-mapping.md](specs/2026-08-12-object-and-semantic-mapping.md) | 对象级与语义迁移对照聚合（3 模块 × 对象级 + 语义表） | 设计完成 |
 | 2026-08-12 | [object-naming-audit.md](specs/2026-08-12-object-naming-audit.md) | 对象名称一致性审计聚合（3 模块） | 设计完成 |
+| 2026-08-21 | [rdbc-first-five-crate-architecture.md](specs/2026-08-21-rdbc-first-five-crate-architecture.md) | ADR-CRATE-002、RDBC 合同、目标 DAG、运行时与完成门禁 | **ACCEPTED / 当前架构事实源** |
 
 ---
 
@@ -64,33 +68,25 @@
 | 管理端 | [druid-admin-migration.md](plans/2026-08-12-druid-admin-migration.md) | A0-A9 管理端阶段 | IMPLEMENTED_UNVERIFIED |
 | 驱动封装 | [druid-wrapper-migration.md](plans/2026-08-12-druid-wrapper-migration.md) | W0-W9 驱动封装阶段 | 进行中 |
 
-### 2026-08-20 五 Crate 架构重构计划集
+### 2026-08-21 RDBC-First 执行计划集
 
-> 以下文件是已批准目标的逐步实施计划，当前仅完成计划编写，不代表源码已经拆分。
+> 以下计划是当前唯一执行清单。计划文件存在不代表实现完成。
 
 | 顺序 | plan 文件 | 交付物 | 状态 |
 |---:|---|---|---|
-| 00 | [five-crate-architecture-spec.md](plans/2026-08-20-five-crate-architecture-spec.md) | 五 Crate 规格、ADR 与文档一致性门禁 | 待执行 |
-| 01 | [druid-core-facade-split.md](plans/2026-08-20-druid-core-facade-split.md) | `druid-core` 编译边界、`druid` 门面、typed snapshot SPI | 待执行 |
-| 02 | [druid-wrapper-boundary.md](plans/2026-08-20-druid-wrapper-boundary.md) | Toasty/vendor/driver tooling 收敛到 Wrapper | 待执行 |
-| 03 | [druid-metrics-runtime.md](plans/2026-08-20-druid-metrics-runtime.md) | 非阻塞采样、聚合、timeline、Prometheus model | 待执行 |
-| 04 | [druid-metrics-grpc.md](plans/2026-08-20-druid-metrics-grpc.md) | gRPC bidi、sequence/ACK、重连与 reset | 待执行 |
-| 05 | [standalone-druid-admin.md](plans/2026-08-20-standalone-druid-admin.md) | 独立 Axum Admin、repository、兼容 UI/API | 待执行 |
-| 06 | [druid-facade-cutover.md](plans/2026-08-20-druid-facade-cutover.md) | Facade features、示例与迁移指南 | 待执行 |
-| 07 | [five-crate-verification.md](plans/2026-08-20-five-crate-verification.md) | 依赖、功能、可靠性、性能和发布门禁 | 待执行 |
+| 00 | [RDBC-First Master Roadmap](plans/2026-08-21-rdbc-first-master-roadmap.md) | 跨计划顺序、依赖、状态和最终同步 | 待执行 |
+| 01 | [External Pool RDBC Conformance](plans/2026-08-21-external-pool-rdbc-conformance.md) | direct SQLx / bb8 / deadpool 统一合同 | 待执行 |
+| 02 | [Metrics/Admin Single Protocol](plans/2026-08-21-metrics-admin-single-protocol.md) | 唯一 proto、真实 payload/gRPC、安全默认值 | 待执行 |
+| 03 | [druid-rdbc Extraction](plans/2026-08-21-druid-rdbc-extraction.md) | 无行为抽取低层合同 crate、保持旧路径 | 待执行 |
+| 04 | [RDBC Contract Hardening](plans/2026-08-21-rdbc-contract-hardening.md) | 错误、能力、resource cancellation、async cursor | 待执行 |
+| 05 | [Driver Registry and Feature Boundaries](plans/2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional dependencies、发布边界 | 待执行 |
+| 06 | [Runtime Production Hardening](plans/2026-08-21-runtime-production-hardening.md) | 有界队列、supervisor、shutdown、TTL、认证 | 待执行 |
+| 07 | [RDBC-First Verification](plans/2026-08-21-rdbc-first-verification.md) | 依赖、API、语义、可靠性、安全、性能和发布门禁 | 待执行 |
 
-### 八份专项计划导航
+### 2026-08-20 历史计划
 
-| 序号 | 计划文件 | 目标 |
-|---:|---|---|
-| 00 | [five-crate-architecture-spec.md](plans/2026-08-20-five-crate-architecture-spec.md) | 五 Crate 规格、ADR 与文档一致性门禁 |
-| 01 | [druid-core-facade-split.md](plans/2026-08-20-druid-core-facade-split.md) | `druid-core` 编译边界、`druid` 门面、typed snapshot SPI |
-| 02 | [druid-wrapper-boundary.md](plans/2026-08-20-druid-wrapper-boundary.md) | Toasty/vendor/driver tooling 收敛到 Wrapper |
-| 03 | [druid-metrics-runtime.md](plans/2026-08-20-druid-metrics-runtime.md) | 非阻塞采样、聚合、timeline、Prometheus model |
-| 04 | [druid-metrics-grpc.md](plans/2026-08-20-druid-metrics-grpc.md) | gRPC bidi、sequence/ACK、重连与 reset |
-| 05 | [standalone-druid-admin.md](plans/2026-08-20-standalone-druid-admin.md) | 独立 Axum Admin、repository、兼容 UI/API |
-| 06 | [druid-facade-cutover.md](plans/2026-08-20-druid-facade-cutover.md) | Facade features、示例与迁移指南 |
-| 07 | [five-crate-verification.md](plans/2026-08-20-five-crate-verification.md) | 依赖、功能、可靠性、性能和发布门禁 |
+原 `druid-core + druid facade` 八份计划均已在文件头标注 `SUPERSEDED` 或
+`SUPERSEDED_FOR_REMAINING_WORK`。完成/失败证据继续保留，但不得从旧 checkbox 恢复执行。
 
 ### 按模块状态明细
 
@@ -111,7 +107,9 @@
 | Java 提交 | `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
 | Java 主源码 | core 1,644 个 `.java`；全仓 1,719 个 `.java` |
 | Rust 源仓库 | `/Users/wandl/workspaces/workspace-github-easy-4-rust/druid-rust` |
-| Rust 产品模块 | `druid`、`druid-admin`、`druid-wrapper`（3 个 workspace member） |
+| Rust 当前产品模块 | `druid`、`druid-admin`、`druid-wrapper`、`druid-metrics` |
+| Rust 当前验证成员 | `druid-bench` |
+| Rust 目标产品模块 | 新增 `druid-rdbc`，形成 ADR-CRATE-002 五产品 Crate |
 | Rust 工具链 | MSRV 1.95；默认工具链 1.97.1 |
 
 ---

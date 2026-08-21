@@ -1,5 +1,9 @@
 # Druid Metrics gRPC Delivery Implementation Plan
 
+> **SUPERSEDED_FOR_REMAINING_WORK（2026-08-21）：** sequence/ACK 设计继续保留，
+> 但当前 Metrics/Admin 双 proto 和空 payload 实现不满足本计划目标。统一协议执行清单见
+> [`2026-08-21-metrics-admin-single-protocol.md`](2026-08-21-metrics-admin-single-protocol.md)。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为 `druid-metrics` 实现 gRPC 双向流、sequence/ACK、会话内至少一次、重连重发和远程 reset 命令。

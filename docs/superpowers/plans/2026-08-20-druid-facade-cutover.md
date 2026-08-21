@@ -1,5 +1,9 @@
 # Druid Facade Features and Cutover Implementation Plan
 
+> **SUPERSEDED（2026-08-21）：** `druid` 不再降为薄 facade；它保留核心产品身份。
+> 公共路径兼容与 `druid-rdbc` 抽取由
+> [`2026-08-21-druid-rdbc-extraction.md`](2026-08-21-druid-rdbc-extraction.md) 执行。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 让最终用户既可使用纯 Core，也可只声明一个 `druid` 依赖并通过可选 feature 启用 Metrics 或 Wrapper Adapter。

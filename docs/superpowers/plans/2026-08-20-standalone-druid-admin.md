@@ -1,5 +1,10 @@
 # Standalone Druid Admin Implementation Plan
 
+> **SUPERSEDED_FOR_REMAINING_WORK（2026-08-21）：** 已实现 HTTP/UI/Repository 保留，
+> gRPC、认证、安全默认值、TTL 和生产 shutdown 由
+> [`Metrics/Admin Single Protocol`](2026-08-21-metrics-admin-single-protocol.md) 与
+> [`Runtime Production Hardening`](2026-08-21-runtime-production-hardening.md) 接管。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 将 `druid-admin` 改成独立 Axum 服务，通过 gRPC push repository 提供静态 UI、Java 兼容 REST/JSON、Prometheus 和远程 reset。
