@@ -60,22 +60,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let grpc_shutdown = shutdown_token.clone();
 
     let grpc_handle = tokio::spawn(async move {
-        let _ = ingest_service; // Will be used when gRPC is fully wired
-        grpc_shutdown.cancelled().await;
-        Ok::<(), tonic::transport::Error>(())
+        tonic::transport::Server::builder()
+            .add_service(ingest_service.into_server())
+            .serve_with_shutdown(grpc_addr, grpc_shutdown.cancelled_owned())
+            .await
     });
 
     // Graceful shutdown on SIGTERM/SIGINT
-    let shutdown_token_clone = shutdown_token.clone();
-    tokio::spawn(async move {
-        shutdown_signal().await;
-        tracing::info!("shutdown signal received, stopping servers");
-        shutdown_token_clone.cancel();
-    });
+    shutdown_signal().await;
+    tracing::info!("shutdown signal received, stopping servers");
+    shutdown_token.cancel();
 
-    // Wait for both servers
-    let (http_result, _grpc_result) = tokio::join!(http_handle, grpc_handle);
+    // Join both graceful server shutdown paths before returning from main.
+    let (http_result, grpc_result) = tokio::join!(http_handle, grpc_handle);
     http_result??;
+    grpc_result??;
 
     tracing::info!("druid-admin stopped");
     Ok(())

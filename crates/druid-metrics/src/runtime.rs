@@ -12,6 +12,8 @@ use crate::config::DruidMetricsConfig;
 use crate::error::MetricsError;
 use crate::registry::{RegistrationGuard, RegistryEntry};
 use crate::self_metrics::RuntimeSelfMetrics;
+#[cfg(feature = "client")]
+use crate::{grpc_client::GrpcClientConfig, grpc_client::GrpcMetricsClient};
 
 /// Non-blocking local metrics runtime.
 ///
@@ -24,7 +26,7 @@ pub struct DruidMetricsRuntime {
     registry: Arc<RwLock<Vec<RegistryEntry>>>,
     sampler_handle: Option<JoinHandle<()>>,
     aggregator_handle: Option<JoinHandle<Result<(), MetricsError>>>,
-    exporter_handle: Option<JoinHandle<()>>,
+    exporter_handle: Option<JoinHandle<Result<(), MetricsError>>>,
     unregister_handle: Option<JoinHandle<()>>,
     unregister_tx: mpsc::UnboundedSender<u64>,
     sampler_cancel_token: CancellationToken,
@@ -37,8 +39,23 @@ impl DruidMetricsRuntime {
     /// Start the metrics runtime with the given configuration.
     ///
     /// Spawns sampler, aggregator, and exporter tasks under a supervisor.
-    #[allow(clippy::unused_async)]
     pub async fn start(config: DruidMetricsConfig) -> Result<Self, MetricsError> {
+        Self::start_inner(config, RuntimeExporterConfig::Drain).await
+    }
+
+    /// 启动指标 runtime，并把聚合输出接入真实 Tonic Admin 客户端。
+    #[cfg(feature = "client")]
+    pub async fn start_with_grpc(
+        config: DruidMetricsConfig,
+        grpc_config: GrpcClientConfig,
+    ) -> Result<Self, MetricsError> {
+        Self::start_inner(config, RuntimeExporterConfig::Grpc(Box::new(grpc_config))).await
+    }
+
+    async fn start_inner(
+        config: DruidMetricsConfig,
+        exporter_config: RuntimeExporterConfig,
+    ) -> Result<Self, MetricsError> {
         let sampler_cancel_token = CancellationToken::new();
         let aggregator_cancel_token = CancellationToken::new();
         let unregister_cancel_token = CancellationToken::new();
@@ -50,6 +67,26 @@ impl DruidMetricsRuntime {
 
         // Single shared registry: runtime::register() writes, sampler reads + cleans
         let registry: Arc<RwLock<Vec<RegistryEntry>>> = Arc::new(RwLock::new(Vec::new()));
+
+        let exporter = match exporter_config {
+            RuntimeExporterConfig::Drain => RuntimeExporter::Drain,
+            #[cfg(feature = "client")]
+            RuntimeExporterConfig::Grpc(grpc_config) => {
+                let command_executor = crate::registry::RegistryCommandExecutor::new(
+                    Arc::clone(&registry),
+                    config.batch_size,
+                    config.max_sql_statements,
+                    config.sql_text_policy,
+                );
+                RuntimeExporter::Grpc(
+                    GrpcMetricsClient::connect_with_command_executor(
+                        *grpc_config,
+                        Some(command_executor),
+                    )
+                    .await?,
+                )
+            }
+        };
 
         // Sampler task -- uses the shared registry directly
         let sampler_registry = Arc::clone(&registry);
@@ -85,8 +122,23 @@ impl DruidMetricsRuntime {
             .await
         });
 
-        // Exporter task (V1: drain-only placeholder; Task 4 adds network transport).
-        let exporter_handle = tokio::spawn(async move { while batch_rx.recv().await.is_some() {} });
+        #[cfg(feature = "client")]
+        let exporter_shutdown_timeout = config.shutdown_timeout;
+        let exporter_handle = tokio::spawn(async move {
+            match exporter {
+                RuntimeExporter::Drain => {
+                    while batch_rx.recv().await.is_some() {}
+                    Ok(())
+                }
+                #[cfg(feature = "client")]
+                RuntimeExporter::Grpc(client) => {
+                    while let Some(batch) = batch_rx.recv().await {
+                        client.send_batch(batch).await?;
+                    }
+                    client.shutdown(exporter_shutdown_timeout).await
+                }
+            }
+        });
 
         // Unregister listener task: removes entries from registry when guards are dropped
         let mut unreg_rx = unregister_rx;
@@ -197,9 +249,17 @@ impl DruidMetricsRuntime {
                 }
             }
             if let Some(handle) = exporter_handle.as_mut() {
-                if let Err(error) = handle.await {
-                    if first_error.is_none() {
-                        first_error = Some(MetricsError::Join(error));
+                match handle.await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        if first_error.is_none() {
+                            first_error = Some(error);
+                        }
+                    }
+                    Err(error) => {
+                        if first_error.is_none() {
+                            first_error = Some(MetricsError::Join(error));
+                        }
                     }
                 }
             }
@@ -242,6 +302,18 @@ impl DruidMetricsRuntime {
     pub fn self_metrics(&self) -> &Arc<RuntimeSelfMetrics> {
         &self.self_metrics
     }
+}
+
+enum RuntimeExporterConfig {
+    Drain,
+    #[cfg(feature = "client")]
+    Grpc(Box<GrpcClientConfig>),
+}
+
+enum RuntimeExporter {
+    Drain,
+    #[cfg(feature = "client")]
+    Grpc(GrpcMetricsClient),
 }
 
 struct UnregisterListenerActiveGuard(Arc<RuntimeSelfMetrics>);

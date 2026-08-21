@@ -74,6 +74,8 @@ impl TransportPair {
             command_executor: None,
             deferred_server_frames: VecDeque::new(),
             deferred_server_capacity,
+            replay_frames: VecDeque::new(),
+            force_first_batch_full_snapshot: false,
         };
         (self.client_rx, self.server_tx, worker)
     }
@@ -95,6 +97,16 @@ pub struct PushWorker {
     command_executor: Option<RegistryCommandExecutor>,
     deferred_server_frames: VecDeque<ServerFrame>,
     deferred_server_capacity: usize,
+    replay_frames: VecDeque<PendingFrame>,
+    force_first_batch_full_snapshot: bool,
+}
+
+/// 一次 transport 会话退出后交还给重连 supervisor 的全部状态。
+pub struct PushWorkerExit {
+    /// 仍未 ACK、必须按原字节重发的 frame。
+    pub pending_frames: Vec<PendingFrame>,
+    /// 尚未消费的聚合批次接收端；重连后继续由同一单写者状态机消费。
+    pub batch_rx: mpsc::Receiver<PushEvent>,
 }
 
 impl PushWorker {
@@ -124,6 +136,8 @@ impl PushWorker {
             command_executor: None,
             deferred_server_frames: VecDeque::new(),
             deferred_server_capacity,
+            replay_frames: VecDeque::new(),
+            force_first_batch_full_snapshot: false,
         }
     }
 
@@ -141,11 +155,55 @@ impl PushWorker {
         self
     }
 
+    /// 恢复上一次网络会话留下的完整未 ACK frame。
+    ///
+    /// 所有 frame 会在任何网络发送前完成解码、sequence 一致性和窗口容量校验。
+    pub fn with_pending_frames(
+        mut self,
+        pending_frames: Vec<PendingFrame>,
+    ) -> Result<Self, PushWorkerError> {
+        let mut validated = VecDeque::with_capacity(pending_frames.len());
+        for pending in pending_frames {
+            Self::decode_pending_frame(&pending)?;
+            validated.push_back(pending);
+        }
+        for pending in &validated {
+            self.window
+                .restore(pending.clone())
+                .map_err(PushWorkerError::Window)?;
+        }
+        self.replay_frames = validated;
+        Ok(self)
+    }
+
+    /// 要求当前会话消费到的第一个新批次使用全量快照标记。
+    #[must_use]
+    pub fn with_first_batch_full_snapshot(mut self, required: bool) -> Self {
+        self.force_first_batch_full_snapshot = required;
+        self
+    }
+
     /// 运行 worker，直到取消、输入关闭或 transport 断开。
     ///
     /// 返回仍未 ACK 的完整 frame，供下一连接按原 sequence、原字节恢复。
-    pub async fn run(mut self) -> Vec<PendingFrame> {
+    pub async fn run(self) -> Vec<PendingFrame> {
+        self.run_session().await.pending_frames
+    }
+
+    /// 运行一个 transport 会话，并把批次接收端与未 ACK frame 一并交回 supervisor。
+    pub async fn run_session(mut self) -> PushWorkerExit {
+        let mut batch_input_closed = false;
+        while let Some(pending) = self.replay_frames.pop_front() {
+            if let Err(error) = self.send_encoded_frame(&pending.encoded_frame).await {
+                tracing::warn!(%error, "failed to replay pending metrics frame");
+                return self.into_exit();
+            }
+        }
+
         loop {
+            if batch_input_closed && self.window.is_empty() {
+                break;
+            }
             if !self.window.is_full() {
                 if let Some(frame) = self.deferred_server_frames.pop_front() {
                     if !self.process_server_frame(frame).await {
@@ -165,11 +223,12 @@ impl PushWorker {
                 biased;
                 () = self.cancellation.cancelled() => Event::Cancelled,
                 frame = self.transport_rx.recv() => Event::Server(frame),
-                batch = self.batch_rx.recv(), if !self.window.is_full() => Event::Batch(batch),
+                batch = self.batch_rx.recv(), if !self.window.is_full() && !batch_input_closed => Event::Batch(batch),
             };
 
             match event {
-                Event::Cancelled | Event::Batch(None) => break,
+                Event::Cancelled => break,
+                Event::Batch(None) => batch_input_closed = true,
                 Event::Server(Some(frame)) => {
                     if !self.process_server_frame(frame).await {
                         break;
@@ -188,12 +247,25 @@ impl PushWorker {
             }
         }
 
-        self.window.pending_frames()
+        self.into_exit()
+    }
+
+    fn into_exit(self) -> PushWorkerExit {
+        PushWorkerExit {
+            pending_frames: self.window.pending_frames(),
+            batch_rx: self.batch_rx,
+        }
     }
 
     async fn process_push_event(&mut self, event: PushEvent) -> Result<(), PushWorkerError> {
         match event {
-            PushEvent::Batch(batch) => self.push_new_batch(batch).await,
+            PushEvent::Batch(mut batch) => {
+                if self.force_first_batch_full_snapshot {
+                    batch.is_full_snapshot = true;
+                    self.force_first_batch_full_snapshot = false;
+                }
+                self.push_new_batch(batch).await
+            }
             PushEvent::Resend(pending) => self.push_resend(pending).await,
         }
     }
@@ -227,6 +299,14 @@ impl PushWorker {
     }
 
     async fn push_resend(&mut self, pending: PendingFrame) -> Result<(), PushWorkerError> {
+        let frame = Self::decode_pending_frame(&pending)?;
+        self.window
+            .restore(pending)
+            .map_err(PushWorkerError::Window)?;
+        self.send_outbound(frame).await
+    }
+
+    fn decode_pending_frame(pending: &PendingFrame) -> Result<ClientFrame, PushWorkerError> {
         let frame = decode_client_frame(&pending.encoded_frame).map_err(PushWorkerError::Decode)?;
         let encoded_sequence = match frame.payload.as_ref() {
             Some(client_frame::Payload::SnapshotBatch(batch)) => batch
@@ -242,10 +322,7 @@ impl PushWorker {
                 encoded_sequence,
             });
         }
-        self.window
-            .restore(pending)
-            .map_err(PushWorkerError::Window)?;
-        self.send_outbound(frame).await
+        Ok(frame)
     }
 
     async fn send_encoded_frame(&mut self, encoded_frame: &[u8]) -> Result<(), PushWorkerError> {

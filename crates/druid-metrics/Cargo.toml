@@ -13,7 +13,7 @@ name = "druid_metrics"
 
 [features]
 default  = []
-client   = ["dep:tonic", "dep:tonic-prost"]
+client   = ["dep:tonic", "dep:tonic-prost", "dep:tokio-stream"]
 server   = ["dep:tonic", "dep:tonic-prost"]
 
 [dependencies]
@@ -32,6 +32,7 @@ tokio-util   = { workspace = true }
 prost        = { workspace = true }
 tonic        = { workspace = true, optional = true }
 tonic-prost  = { workspace = true, optional = true }
+tokio-stream = { workspace = true, optional = true }
 
 [build-dependencies]
 tonic-prost-build      = { workspace = true }

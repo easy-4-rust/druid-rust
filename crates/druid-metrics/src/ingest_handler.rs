@@ -102,8 +102,8 @@ impl IngestHandler {
                 let hdr = hello.header.as_ref()?;
                 let key = self.stream_key(hdr);
                 let mut state = self.state.lock().expect("ingest lock poisoned");
-                state.streams.entry(key).or_insert_with(StreamState::new);
-                Some(self.make_hello_ack(hdr, true))
+                let stream = state.streams.entry(key).or_insert_with(StreamState::new);
+                Some(self.make_hello_ack(hdr, !stream.initialized))
             }
             Some(client_frame::Payload::Heartbeat(_)) => None,
             Some(client_frame::Payload::CommandAck(ack)) => {

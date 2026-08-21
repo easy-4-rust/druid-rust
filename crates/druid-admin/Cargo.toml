@@ -54,3 +54,4 @@ tokio         = { workspace = true, features = ["full", "test-util", "macros"] }
 reqwest       = { workspace = true, features = ["json"] }
 tonic         = { workspace = true, features = ["transport"] }
 tokio-stream  = { workspace = true }
+druid-metrics = { version = "0.0.0-design", path = "../druid-metrics", features = ["client", "server"] }
