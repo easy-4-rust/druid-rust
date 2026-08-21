@@ -1,8 +1,9 @@
 #![allow(clippy::case_sensitive_file_extension_comparisons)]
 #![allow(clippy::unused_async)] // axum handlers require async signature even when no .await
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::extract::{Form, OriginalUri, Path, Query, Request, State};
 use axum::http::{header, StatusCode};
@@ -21,15 +22,22 @@ use crate::service::{MonitorStatService, StatQuery};
 
 use super::LoginRequest;
 
+/// Session expiry duration (2 hours, matching typical Java Servlet session).
+const SESSION_TTL: Duration = Duration::from_secs(7200);
+
 /// Druid 管理协议的 Axum 路由。
 ///
 /// 对应 Java: `com.alibaba.druid.admin.servlet.MonitorViewServlet`。
+///
+/// Sessions are stored with creation timestamps and expired after
+/// [`SESSION_TTL`] to prevent unbounded memory growth.
 #[derive(Clone)]
 pub struct MonitorViewServlet {
     monitor_stat_service: Arc<MonitorStatService>,
     task_monitor: TaskMonitor,
     credentials: Option<Arc<(String, String)>>,
-    sessions: Arc<RwLock<HashSet<String>>>,
+    /// Session token -> creation instant. Expired entries are pruned on access.
+    sessions: Arc<RwLock<HashMap<String, Instant>>>,
     context_path: Arc<String>,
 }
 
@@ -47,7 +55,7 @@ impl MonitorViewServlet {
             monitor_stat_service,
             task_monitor: TaskMonitor::new(),
             credentials: None,
-            sessions: Arc::new(RwLock::new(HashSet::new())),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
             context_path: Arc::new("/druid".to_owned()),
         }
     }
@@ -80,11 +88,26 @@ impl MonitorViewServlet {
         let auth_state = self.clone();
         let context_path = self.context_path.to_string();
         let admin_routes = Router::new()
-            .route("/", get(Self::root))
             .route("/index.html", get(Self::legacy_page))
             .route("/login.html", get(Self::login_page))
             .route("/nopermit.html", get(Self::no_permit_page))
-            .route("/{page}.html", get(Self::named_legacy_page))
+            .route("/datasource.html", get(Self::datasource_page))
+            .route("/sql.html", get(Self::sql_page))
+            .route("/sql-detail.html", get(Self::sql_detail_page))
+            .route("/wall.html", get(Self::wall_page))
+            .route("/api.html", get(Self::api_page))
+            .route("/spring.html", get(Self::spring_page))
+            .route("/spring-detail.html", get(Self::spring_detail_page))
+            .route("/weburi.html", get(Self::weburi_page))
+            .route("/weburi-detail.html", get(Self::weburi_detail_page))
+            .route("/websession.html", get(Self::websession_page))
+            .route("/websession-detail.html", get(Self::websession_detail_page))
+            .route("/webapp.html", get(Self::webapp_page))
+            .route("/connectionInfo.html", get(Self::connection_info_page))
+            .route(
+                "/activeConnectionStackTrace.html",
+                get(Self::active_connection_stack_trace_page),
+            )
             .route("/css/{asset}", get(Self::legacy_style))
             .route("/js/{asset}", get(Self::legacy_script))
             .route("/submitLogin", post(Self::submit_login))
@@ -108,10 +131,18 @@ impl MonitorViewServlet {
             .route("/api/connections/{id}", get(Self::connection_info))
             .route("/api/active", get(Self::active))
             .fallback(Self::legacy_dispatch);
+        // Merge admin routes into a single router that also handles the
+        // bare context-path (e.g. /druid and /druid/) by redirecting to
+        // the index page.
+        let context_slash = format!("{context_path}/");
         Router::new()
             .route(&context_path, get(Self::root))
-            .nest(&context_path, admin_routes)
-            .route("/metrics", get(Self::metrics))
+            .route(&context_slash, get(Self::root))
+            .merge(
+                Router::new()
+                    .nest(&context_path, admin_routes)
+                    .route("/metrics", get(Self::metrics)),
+            )
             .with_state(self)
             .layer(middleware::from_fn_with_state(auth_state, Self::authorize))
     }
@@ -143,8 +174,60 @@ impl MonitorViewServlet {
         static_resource_response("index.html")
     }
 
-    async fn named_legacy_page(Path(page): Path<String>) -> Response {
-        static_resource_response(&format!("{page}.html"))
+    async fn datasource_page() -> Response {
+        static_resource_response("datasource.html")
+    }
+
+    async fn sql_page() -> Response {
+        static_resource_response("sql.html")
+    }
+
+    async fn sql_detail_page() -> Response {
+        static_resource_response("sql-detail.html")
+    }
+
+    async fn wall_page() -> Response {
+        static_resource_response("wall.html")
+    }
+
+    async fn api_page() -> Response {
+        static_resource_response("api.html")
+    }
+
+    async fn spring_page() -> Response {
+        static_resource_response("spring.html")
+    }
+
+    async fn spring_detail_page() -> Response {
+        static_resource_response("spring-detail.html")
+    }
+
+    async fn weburi_page() -> Response {
+        static_resource_response("weburi.html")
+    }
+
+    async fn weburi_detail_page() -> Response {
+        static_resource_response("weburi-detail.html")
+    }
+
+    async fn websession_page() -> Response {
+        static_resource_response("websession.html")
+    }
+
+    async fn websession_detail_page() -> Response {
+        static_resource_response("websession-detail.html")
+    }
+
+    async fn webapp_page() -> Response {
+        static_resource_response("webapp.html")
+    }
+
+    async fn connection_info_page() -> Response {
+        static_resource_response("connectionInfo.html")
+    }
+
+    async fn active_connection_stack_trace_page() -> Response {
+        static_resource_response("activeConnectionStackTrace.html")
     }
 
     async fn login_page() -> Response {
@@ -174,7 +257,7 @@ impl MonitorViewServlet {
             return (StatusCode::OK, "error").into_response();
         }
         let token = uuid::Uuid::new_v4().simple().to_string();
-        state.sessions.write().insert(token.clone());
+        state.sessions.write().insert(token.clone(), Instant::now());
         (
             StatusCode::OK,
             [(
@@ -491,9 +574,18 @@ fn missing_parameter(name: &str) -> Response {
 }
 
 fn error_response(error: impl std::fmt::Display) -> Response {
+    let error_msg = error.to_string();
+    // Map well-known error patterns to appropriate HTTP status codes.
+    let status = if error_msg.contains("unknown serviceId") {
+        StatusCode::NOT_FOUND
+    } else if error_msg.contains("invalid parameter") {
+        StatusCode::UNPROCESSABLE_ENTITY
+    } else {
+        StatusCode::BAD_GATEWAY
+    };
     (
-        StatusCode::BAD_GATEWAY,
-        Json::<Value>(json!({"ResultCode": -1, "Content": error.to_string()})),
+        status,
+        Json::<Value>(json!({"ResultCode": -1, "Content": error_msg})),
     )
         .into_response()
 }
@@ -513,18 +605,31 @@ fn is_public_path(path: &str, context_path: &str) -> bool {
         || relative_path.starts_with("/js/")
 }
 
-fn request_has_session(request: &Request, sessions: &RwLock<HashSet<String>>) -> bool {
-    request
+/// Check whether the request carries a valid (non-expired) session token.
+///
+/// While holding the write lock, expired sessions are pruned to prevent
+/// unbounded memory growth.
+fn request_has_session(request: &Request, sessions: &RwLock<HashMap<String, Instant>>) -> bool {
+    let token = request
         .headers()
         .get(header::COOKIE)
         .and_then(|value| value.to_str().ok())
         .and_then(|cookies| {
             cookies.split(';').find_map(|cookie| {
                 let (name, value) = cookie.trim().split_once('=')?;
-                (name == "druid-session").then_some(value)
+                (name == "druid-session").then_some(value.to_owned())
             })
-        })
-        .is_some_and(|token| sessions.read().contains(token))
+        });
+    let Some(token) = token else {
+        return false;
+    };
+    let now = Instant::now();
+    let mut guard = sessions.write();
+    // Prune expired sessions.
+    guard.retain(|_, created| now.duration_since(*created) < SESSION_TTL);
+    guard
+        .get(&token)
+        .is_some_and(|created| now.duration_since(*created) < SESSION_TTL)
 }
 
 fn request_has_credentials(request: &Request, credentials: &(String, String)) -> bool {

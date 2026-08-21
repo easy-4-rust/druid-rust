@@ -31,34 +31,50 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde_json::{json, Value};
 
+/// Maximum request body size (1 MiB) for the standalone admin.
+const MAX_BODY_SIZE: usize = 1 << 20;
+
 /// Build the standalone Axum router with /health, REST API, /metrics, and static UI.
 ///
 /// This router is used by the standalone `druid-admin` binary and
 /// integration tests. It does NOT include the gRPC ingest service
 /// (that runs on a separate port).
+///
+/// Middleware stack (applied outermost first):
+/// 1. `TraceLayer` -- request/response tracing via `tracing`
+/// 2. Body size limit -- 1 MiB
 #[must_use]
 pub fn standalone_router(repo: MetricsRepository) -> Router {
+    // Group JSON API endpoints under /druid/*.json
+    let api_routes = Router::new()
+        .route("/datasource.json", get(datasource_handler))
+        .route("/sql.json", get(sql_handler))
+        .route("/wall.json", get(wall_handler))
+        .route("/api.json", get(api_handler));
+
+    // Group static UI endpoints under /druid/*.html and assets
+    let ui_routes = Router::new()
+        .route("/", get(ui_index))
+        .route("/index.html", get(ui_index))
+        .route("/datasource.html", get(ui_datasource))
+        .route("/sql.html", get(ui_sql))
+        .route("/wall.html", get(ui_wall))
+        .route("/api.html", get(ui_api))
+        .route("/login.html", get(ui_login))
+        .route("/spring.html", get(ui_spring))
+        .route("/weburi.html", get(ui_weburi))
+        .route("/websession.html", get(ui_websession))
+        .route("/webapp.html", get(ui_webapp))
+        .route("/css/{asset}", get(ui_css))
+        .route("/js/{asset}", get(ui_js));
+
     Router::new()
         .route("/health", get(health_handler))
-        .route("/druid/datasource.json", get(datasource_handler))
-        .route("/druid/sql.json", get(sql_handler))
-        .route("/druid/wall.json", get(wall_handler))
-        .route("/druid/api.json", get(api_handler))
         .route("/metrics", get(metrics_handler))
-        .route("/druid/", get(ui_index))
-        .route("/druid/index.html", get(ui_index))
-        .route("/druid/datasource.html", get(ui_datasource))
-        .route("/druid/sql.html", get(ui_sql))
-        .route("/druid/wall.html", get(ui_wall))
-        .route("/druid/api.html", get(ui_api))
-        .route("/druid/login.html", get(ui_login))
-        .route("/druid/spring.html", get(ui_spring))
-        .route("/druid/weburi.html", get(ui_weburi))
-        .route("/druid/websession.html", get(ui_websession))
-        .route("/druid/webapp.html", get(ui_webapp))
-        .route("/druid/css/{asset}", get(ui_css))
-        .route("/druid/js/{asset}", get(ui_js))
+        .nest("/druid", api_routes.merge(ui_routes))
         .with_state(repo)
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_SIZE))
+        .layer(tower_http::trace::TraceLayer::new_for_http())
 }
 
 /// Serve static HTML from the embedded resources.

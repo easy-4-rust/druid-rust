@@ -1,9 +1,9 @@
 [package]
 name         = "druid-bench"
-version      = "0.0.0-design"
-edition      = "2021"
-rust-version = "1.95"
-license      = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 description  = "druid-rust performance benchmarks"
 publish      = false
 
@@ -13,9 +13,9 @@ workspace = true
 [dependencies]
 druid         = { version = "0.0.0-design", path = "../druid" }
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper", default-features = false, optional = true }
-criterion     = { version = "0.5", features = ["html_reports"] }
+criterion     = { workspace = true }
 tokio         = { workspace = true }
-futures       = "0.3"
+futures       = { workspace = true }
 
 [dev-dependencies]
 druid-wrapper = { path = "../druid-wrapper", default-features = false, features = ["sqlite"] }

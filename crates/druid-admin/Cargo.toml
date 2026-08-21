@@ -1,9 +1,9 @@
 [package]
 name         = "druid-admin"
-version      = "0.0.0-design"
-edition      = "2021"
-rust-version = "1.95"
-license      = "Apache-2.0"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
 description  = "druid-rust admin: axum-based HTTP endpoints that expose datasource, SQL, wall and /metrics"
 publish      = false
 
@@ -26,14 +26,15 @@ axum          = { workspace = true }
 axum-valid    = { workspace = true }
 chrono        = { workspace = true }
 tower         = { workspace = true }
+tower-http    = { version = "0.7", features = ["trace"] }
 hyper         = { workspace = true }
 reqwest       = { workspace = true }
 tokio-metrics = { workspace = true }
 topcoat       = { workspace = true }
 prost         = { workspace = true }
-tonic         = "0.14"
-tonic-prost   = "0.14"
-tokio-stream  = "0.1"
+tonic         = { workspace = true, features = ["transport"] }
+tonic-prost   = { workspace = true }
+tokio-stream  = { workspace = true }
 validator     = { workspace = true }
 uuid          = { workspace = true }
 kube          = { workspace = true }
@@ -50,11 +51,11 @@ tracing-subscriber   = { workspace = true }
 arc-swap      = { workspace = true }
 
 [build-dependencies]
-tonic-prost-build = "0.14"
-prost-build       = "0.14"
+tonic-prost-build = { workspace = true }
+prost-build       = { workspace = true }
 
 [dev-dependencies]
 tokio         = { workspace = true, features = ["full", "test-util", "macros"] }
 reqwest       = { workspace = true, features = ["json"] }
-tonic         = { version = "0.14", features = ["transport"] }
-tokio-stream  = "0.1"
+tonic         = { workspace = true, features = ["transport"] }
+tokio-stream  = { workspace = true }
