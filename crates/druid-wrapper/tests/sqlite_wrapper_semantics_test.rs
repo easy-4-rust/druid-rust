@@ -239,8 +239,8 @@ async fn pooled_wrapper_unwraps_the_real_sqlite_adapter_and_itself() {
 async fn real_sqlite_database_error_flows_through_sorter_and_discards_physical_connection() {
     let factory = SqlxConnectionFactory::new("sqlite::memory:");
     let physical = factory.create().await.expect("必须创建真实 SQLite 连接");
-    let observed_disposition = Arc::new(Mutex::new(None));
-    let disposition_for_callback = observed_disposition.clone();
+    let observed_dispositions = Arc::new(Mutex::new(Vec::new()));
+    let dispositions_for_callback = observed_dispositions.clone();
     let mut connection = DruidPooledConnection::with_recycle_policy(
         physical,
         8,
@@ -249,9 +249,10 @@ async fn real_sqlite_database_error_flows_through_sorter_and_discards_physical_c
         false,
         None,
         Box::new(move |_physical, _id, disposition| {
-            *disposition_for_callback
+            dispositions_for_callback
                 .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(disposition);
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(disposition);
             false
         }),
     )
@@ -272,24 +273,40 @@ async fn real_sqlite_database_error_flows_through_sorter_and_discards_physical_c
     // 保留一个仅标记 discard 的 holder。
     assert!(connection.connection_holder().is_none());
     assert!(matches!(
-        *observed_disposition
+        observed_dispositions
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
-        Some(ConnectionRecycleDisposition::Discard {
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_slice(),
+        [ConnectionRecycleDisposition::Discard {
             recycle_error: None
-        })
+        }]
     ));
 
     connection
         .close()
         .await
         .expect("fatal 异常后的 close 不得吞吐错误");
+    connection
+        .close()
+        .await
+        .expect("fatal 异常后的重复 close 必须幂等");
     assert!(matches!(
-        *observed_disposition
+        observed_dispositions
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner),
-        Some(ConnectionRecycleDisposition::Discard {
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_slice(),
+        [ConnectionRecycleDisposition::Discard {
             recycle_error: None
-        })
+        }]
     ));
+
+    let mut reacquired = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .expect("fatal discard 后必须可以新建直连 SQLite adapter");
+    let rows = reacquired
+        .fetch("SELECT 1", Vec::new())
+        .await
+        .expect("新直连 adapter 必须可以执行 SQLite SQL");
+    assert_eq!(rows.len(), 1);
+    reacquired.close().await.expect("新直连 adapter 必须可关闭");
 }
