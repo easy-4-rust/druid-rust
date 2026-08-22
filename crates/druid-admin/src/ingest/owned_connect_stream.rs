@@ -148,6 +148,7 @@ mod tests {
     use std::time::Duration;
 
     use druid_metrics::protocol::FrameHeader;
+    use druid_metrics::ServiceIdentity;
     use tokio::sync::Notify;
     use tokio_stream::StreamExt as _;
     use tokio_util::sync::CancellationToken;
@@ -200,6 +201,8 @@ mod tests {
         let task = tokio::spawn(async move {
             let _guard = BrokerAttachment::attach(
                 task_broker,
+                ServiceIdentity::try_new("orders", "instance-drop", "boot-drop")
+                    .expect("response-drop identity is valid"),
                 FrameHeader {
                     protocol_version: 1,
                     service_name: "orders".to_owned(),

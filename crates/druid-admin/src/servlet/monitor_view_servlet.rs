@@ -469,15 +469,15 @@ impl MonitorViewServlet {
         Path(id): Path<i64>,
         Query(parameters): Query<HashMap<String, String>>,
     ) -> Response {
-        let Some(service_id) = parameters.get("serviceId").cloned() else {
+        let Some(service_id) = parameters.get("serviceId") else {
             return missing_parameter("serviceId");
+        };
+        let Ok(service_identity) = ServiceIdentity::parse(service_id) else {
+            return invalid_service_id();
         };
         match &state.backend {
             MonitorBackend::Remote(_) => Self::data_sources(State(state)).await,
             MonitorBackend::Repository(repository) => {
-                let Some(service_identity) = ServiceIdentity::from_service_id(&service_id) else {
-                    return invalid_service_id();
-                };
                 let content = repository
                     .get_datasource(&DataSourceId {
                         service_identity,
@@ -666,8 +666,11 @@ impl MonitorViewServlet {
         Path(id): Path<i64>,
         Query(parameters): Query<HashMap<String, String>>,
     ) -> Response {
-        let Some(service_id) = parameters.get("serviceId").cloned() else {
+        let Some(service_id) = parameters.get("serviceId") else {
             return missing_parameter("serviceId");
+        };
+        let Ok(service_identity) = ServiceIdentity::parse(service_id) else {
+            return invalid_service_id();
         };
         let Some(datasource_id) = parameters
             .get("dataSourceId")
@@ -681,7 +684,7 @@ impl MonitorViewServlet {
                 state
                     .task_monitor
                     .instrument(async move {
-                        match service.get_sql_stat(id, &service_id).await {
+                        match service.get_sql_stat(id, service_id).await {
                             Ok(result) => Json(result).into_response(),
                             Err(error) => error_response(error),
                         }
@@ -689,7 +692,7 @@ impl MonitorViewServlet {
                     .await
             }
             MonitorBackend::Repository(repository) => repository
-                .get_sql_stat(&service_id, datasource_id, id)
+                .get_sql_stat(&service_identity, datasource_id, id)
                 .map_or_else(
                     || StatusCode::NOT_FOUND.into_response(),
                     |stat| Json(stat).into_response(),
@@ -702,18 +705,24 @@ impl MonitorViewServlet {
         Path(id): Path<i64>,
         Query(parameters): Query<HashMap<String, String>>,
     ) -> Response {
-        let Some(service_id) = parameters.get("serviceId").cloned() else {
+        let Some(service_id) = parameters.get("serviceId") else {
             return missing_parameter("serviceId");
         };
-        connection_response(state, id, service_id).await
+        let Ok(service_identity) = ServiceIdentity::parse(service_id) else {
+            return invalid_service_id();
+        };
+        connection_response(state, id, service_identity).await
     }
 
     async fn active(
         State(state): State<Self>,
         Query(parameters): Query<HashMap<String, String>>,
     ) -> Response {
-        let Some(service_id) = parameters.get("serviceId").cloned() else {
+        let Some(service_id) = parameters.get("serviceId") else {
             return missing_parameter("serviceId");
+        };
+        let Ok(service_identity) = ServiceIdentity::parse(service_id) else {
+            return invalid_service_id();
         };
         let Some(id) = parameters
             .get("id")
@@ -721,7 +730,7 @@ impl MonitorViewServlet {
         else {
             return missing_parameter("id");
         };
-        connection_response(state, id, service_id).await
+        connection_response(state, id, service_identity).await
     }
 
     async fn legacy_dispatch(
@@ -894,7 +903,11 @@ fn command_error_response(status: StatusCode, error: &str) -> Response {
     (status, Json(json!({"success": false, "error": error}))).into_response()
 }
 
-async fn connection_response(state: MonitorViewServlet, id: i64, service_id: String) -> Response {
+async fn connection_response(
+    state: MonitorViewServlet,
+    id: i64,
+    service_identity: ServiceIdentity,
+) -> Response {
     match &state.backend {
         MonitorBackend::Remote(service) => {
             let service = Arc::clone(service);
@@ -902,7 +915,10 @@ async fn connection_response(state: MonitorViewServlet, id: i64, service_id: Str
                 .task_monitor
                 .instrument(async move {
                     match service
-                        .get_pooling_connection_info_by_data_source_id(id, &service_id)
+                        .get_pooling_connection_info_by_data_source_id(
+                            id,
+                            service_identity.service_id(),
+                        )
                         .await
                     {
                         Ok(result) => Json(result).into_response(),
@@ -912,12 +928,9 @@ async fn connection_response(state: MonitorViewServlet, id: i64, service_id: Str
                 .await
         }
         MonitorBackend::Repository(repository) => repository
-            .get_datasource(&match ServiceIdentity::from_service_id(&service_id) {
-                Some(service_identity) => DataSourceId {
-                    service_identity,
-                    identity: id,
-                },
-                None => return invalid_service_id(),
+            .get_datasource(&DataSourceId {
+                service_identity,
+                identity: id,
             })
             .map_or_else(
                 || StatusCode::NOT_FOUND.into_response(),

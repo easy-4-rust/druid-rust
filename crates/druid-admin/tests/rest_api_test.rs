@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use base64::Engine as _;
 use serde_json::Value;
 
 /// Helper: start the standalone HTTP server and return (addr, handle).
@@ -143,7 +144,8 @@ async fn datasource_json_returns_populated_content() {
 
     // Insert a test datasource entry
     let id = DataSourceId {
-        service_identity: ServiceIdentity::new("test-service", "test-instance", "test-boot"),
+        service_identity: ServiceIdentity::try_new("test-service", "test-instance", "test-boot")
+            .unwrap(),
         identity: 1,
     };
     let entry = DataSourceEntry {
@@ -203,16 +205,17 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
         ("svc-a", 2, "postgresql", "svc-a-ds-2"),
         ("svc-b", 1, "sqlite", "svc-b-ds-1"),
     ] {
-        let service_identity = ServiceIdentity::new(service_name, "detail-instance", "detail-boot");
-        let service_id = service_identity.service_id();
+        let service_identity =
+            ServiceIdentity::try_new(service_name, "detail-instance", "detail-boot").unwrap();
+        let service_id = service_identity.service_id().to_owned();
         let mut sql_stats = HashMap::new();
         sql_stats.insert(
             101,
             SqlListContent {
-                service_id: Some(service_id.clone()),
-                service_name: Some(service_name.to_owned()),
-                instance_id: Some("detail-instance".to_owned()),
-                boot_id: Some("detail-boot".to_owned()),
+                service_id: Some(service_id.clone().into()),
+                service_name: Some(service_name.into()),
+                instance_id: Some("detail-instance".into()),
+                boot_id: Some("detail-boot".into()),
                 id: 1,
                 hash: 101,
                 sql: Some(sql.to_owned()),
@@ -227,10 +230,10 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
             },
             DataSourceEntry {
                 datasource: DataSourceContent {
-                    service_id: Some(service_id.clone()),
-                    service_name: Some(service_name.to_owned()),
-                    instance_id: Some("detail-instance".to_owned()),
-                    boot_id: Some("detail-boot".to_owned()),
+                    service_id: Some(service_id.clone().into()),
+                    service_name: Some(service_name.into()),
+                    instance_id: Some("detail-instance".into()),
+                    boot_id: Some("detail-boot".into()),
                     identity: datasource_id,
                     db_type: Some(db_type.to_owned()),
                     ..Default::default()
@@ -249,8 +252,14 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
     let address = listener.local_addr().expect("composite detail address");
     let handle = tokio::spawn(async move { axum::serve(listener, app).await });
 
-    let service_a = ServiceIdentity::new("svc-a", "detail-instance", "detail-boot").service_id();
-    let service_b = ServiceIdentity::new("svc-b", "detail-instance", "detail-boot").service_id();
+    let service_a = ServiceIdentity::try_new("svc-a", "detail-instance", "detail-boot")
+        .unwrap()
+        .service_id()
+        .to_owned();
+    let service_b = ServiceIdentity::try_new("svc-b", "detail-instance", "detail-boot")
+        .unwrap()
+        .service_id()
+        .to_owned();
 
     let datasource: Value = reqwest::get(format!(
         "http://{address}/druid/api/datasources/1?serviceId={service_b}"
@@ -288,5 +297,58 @@ async fn detail_routes_use_service_datasource_and_sql_composite_identity() {
         missing_datasource.status(),
         reqwest::StatusCode::UNPROCESSABLE_ENTITY
     );
+    handle.abort();
+}
+
+#[tokio::test]
+async fn malformed_service_identity_is_uniform_422_and_well_formed_missing_is_404() {
+    let repository = druid_admin::repository::MetricsRepository::new();
+    let app = druid_admin::standalone_router(repository);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let handle = tokio::spawn(async move { axum::serve(listener, app).await });
+    let valid = druid_metrics::ServiceIdentity::try_new("missing", "instance", "boot")
+        .unwrap()
+        .service_id()
+        .to_owned();
+    let mut decoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .decode(valid.strip_prefix("sid1_").unwrap())
+        .unwrap();
+    decoded.push(0);
+    let trailing = format!(
+        "sid1_{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(decoded)
+    );
+    let malformed = [
+        "sid1_***".to_owned(),
+        format!(
+            "sid1_{}",
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"wrong-magic")
+        ),
+        valid[..valid.len() - 1].to_owned(),
+        trailing,
+    ];
+    for service_id in malformed {
+        for path in [
+            format!("/druid/api/datasources/42?serviceId={service_id}"),
+            format!("/druid/api/sql/1?serviceId={service_id}&dataSourceId=42"),
+            format!("/druid/api/connections/42?serviceId={service_id}"),
+        ] {
+            let response = reqwest::get(format!("http://{address}{path}"))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+        }
+    }
+    for path in [
+        format!("/druid/api/datasources/42?serviceId={valid}"),
+        format!("/druid/api/sql/1?serviceId={valid}&dataSourceId=42"),
+        format!("/druid/api/connections/42?serviceId={valid}"),
+    ] {
+        let response = reqwest::get(format!("http://{address}{path}"))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+    }
     handle.abort();
 }

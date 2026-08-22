@@ -93,11 +93,12 @@ impl CommandBroker {
     /// 注册/替换一个 live stream，并立即重投该 identity 的全部未完成命令。
     pub(crate) fn attach_stream(
         &self,
+        selector: &ServiceIdentity,
         header: &FrameHeader,
         sender: mpsc::Sender<ServerFrame>,
         cancellation: CancellationToken,
     ) -> Result<(), String> {
-        let selector = service_identity(header);
+        let selector = selector.clone();
         let mut inner = self
             .inner
             .lock()
@@ -140,18 +141,21 @@ impl CommandBroker {
     }
 
     /// 只在 sender 仍是当前连接时注销 live stream。
-    pub(crate) fn detach_stream(&self, header: &FrameHeader, sender: &mpsc::Sender<ServerFrame>) {
-        let selector = service_identity(header);
+    pub(crate) fn detach_stream(
+        &self,
+        selector: &ServiceIdentity,
+        sender: &mpsc::Sender<ServerFrame>,
+    ) {
         let mut inner = self
             .inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if inner
             .streams
-            .get(&selector)
+            .get(selector)
             .is_some_and(|(_, current, _)| current.same_channel(sender))
         {
-            inner.streams.remove(&selector);
+            inner.streams.remove(selector);
         }
     }
 
@@ -159,7 +163,9 @@ impl CommandBroker {
     ///
     /// 命令 journal 与稳定结果不会被删除。
     pub fn cancel_stream(&self, service_name: &str, instance_id: &str, boot_id: &str) -> bool {
-        let selector = ServiceIdentity::new(service_name, instance_id, boot_id);
+        let Ok(selector) = ServiceIdentity::try_new(service_name, instance_id, boot_id) else {
+            return false;
+        };
         let stream = self
             .inner
             .lock()
@@ -177,18 +183,18 @@ impl CommandBroker {
     /// 记录客户端 CommandAck，唤醒 HTTP waiter，并保留稳定结果用于 replay。
     pub(crate) fn record_result(
         &self,
+        selector: &ServiceIdentity,
         header: &FrameHeader,
         acknowledgement: &CommandAck,
     ) -> Result<(), String> {
-        let key = (service_identity(header), acknowledgement.command_id.clone());
+        let key = (selector.clone(), acknowledgement.command_id.clone());
         let mut inner = self
             .inner
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let selector = service_identity(header);
         let current_header = inner
             .streams
-            .get(&selector)
+            .get(selector)
             .map(|(current_header, _, _)| current_header)
             .ok_or_else(|| "command acknowledgement stream is no longer live".to_owned())?;
         if current_header.stream_epoch != header.stream_epoch
@@ -216,7 +222,8 @@ impl CommandBroker {
         if command_id.trim().is_empty() {
             return Err("command ID must be non-empty".to_owned());
         }
-        let selector = ServiceIdentity::new(service_name, instance_id, boot_id);
+        let selector =
+            ServiceIdentity::try_new(service_name, instance_id, boot_id).map_err(str::to_owned)?;
         let key: CommandKey = (selector.clone(), command_id.to_owned());
         let canonical = canonical_command_payload(&Some(payload.clone())).map_err(str::to_owned)?;
         let (sender, frame, mut result_rx, inserted) = {
@@ -328,14 +335,6 @@ fn command_frame(
             payload: Some(payload),
         })),
     }
-}
-
-fn service_identity(header: &FrameHeader) -> ServiceIdentity {
-    ServiceIdentity::new(
-        header.service_name.clone(),
-        header.instance_id.clone(),
-        header.boot_id.clone(),
-    )
 }
 
 fn now_unix_ms() -> u64 {

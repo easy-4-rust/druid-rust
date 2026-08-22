@@ -44,4 +44,6 @@ pub use config::{DruidMetricsConfig, DruidMetricsConfigBuilder, SqlTextPolicy};
 pub use error::{MetricsConfigError, MetricsError};
 pub use registry::RegistrationGuard;
 pub use runtime::DruidMetricsRuntime;
-pub use service_identity::ServiceIdentity;
+pub use service_identity::{
+    ServiceIdentity, MAX_CANONICAL_SERVICE_ID_BYTES, MAX_SERVICE_ID_COMPONENT_BYTES,
+};

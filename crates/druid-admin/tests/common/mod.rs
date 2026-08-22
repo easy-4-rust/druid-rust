@@ -15,7 +15,7 @@ use druid_admin::repository::{DataSourceEntry, DataSourceId, MetricsRepository};
 use druid_metrics::ServiceIdentity;
 
 fn test_service_identity() -> ServiceIdentity {
-    ServiceIdentity::new("svc-1", "test-instance", "test-boot")
+    ServiceIdentity::try_new("svc-1", "test-instance", "test-boot").unwrap()
 }
 
 /// Time to wait for servers to become ready.

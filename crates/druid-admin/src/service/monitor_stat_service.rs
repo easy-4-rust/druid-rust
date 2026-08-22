@@ -318,7 +318,7 @@ impl MonitorStatService {
                 Ok(remote) => {
                     for mut item in remote.content.into_iter().flatten() {
                         item.name = Some(node.service_name.clone());
-                        item.service_id = Some(node.id.clone());
+                        item.service_id = Some(node.id.clone().into());
                         content.push(item);
                     }
                 }
@@ -346,7 +346,7 @@ impl MonitorStatService {
                         item.name = Value::String(node.service_name.clone());
                         item.address = Some(node.address.clone());
                         item.port = u16::try_from(node.port).ok();
-                        item.service_id = Some(node.id.clone());
+                        item.service_id = Some(node.id.clone().into());
                         content.push(serde_json::to_value(item)?);
                     }
                 }

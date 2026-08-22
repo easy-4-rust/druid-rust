@@ -11,7 +11,7 @@ use druid_metrics::protocol::{
     client_frame, server_frame, ClientFrame, FrameHeader, ServerError, ServerFrame, SnapshotBatch,
     SnapshotEntry,
 };
-use druid_metrics::ServiceIdentity as CanonicalServiceIdentity;
+use druid_metrics::{ServiceIdentity as CanonicalServiceIdentity, MAX_SERVICE_ID_COMPONENT_BYTES};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tonic::{Request, Response, Status, Streaming};
@@ -108,7 +108,7 @@ impl MetricsIngest for IngestService {
 
         let task = tokio::spawn(async move {
             let _active_guard = ActiveIngestStreamGuard::new(active_streams);
-            let mut stream_identity = None;
+            let mut stream_identity: Option<StreamIdentity> = None;
             let mut attachment_guard = None;
             loop {
                 let inbound_frame = tokio::select! {
@@ -126,7 +126,7 @@ impl MetricsIngest for IngestService {
                         break;
                     }
                 };
-                let Some(header) = frame_header(&frame).cloned() else {
+                let Some(header_ref) = frame_header(&frame) else {
                     let _ = send_protocol_error(
                         &response_tx,
                         None,
@@ -139,10 +139,10 @@ impl MetricsIngest for IngestService {
                     .await;
                     break;
                 };
-                if header.protocol_version != PROTOCOL_VERSION {
+                if header_ref.protocol_version != PROTOCOL_VERSION {
                     let _ = send_protocol_error(
                         &response_tx,
-                        Some(&header),
+                        Some(header_ref),
                         426,
                         "unsupported protocol version",
                         true,
@@ -152,6 +152,52 @@ impl MetricsIngest for IngestService {
                     .await;
                     break;
                 }
+                let identity_over_budget = [
+                    header_ref.service_name.as_str(),
+                    header_ref.instance_id.as_str(),
+                    header_ref.boot_id.as_str(),
+                ]
+                .iter()
+                .any(|component| component.len() > MAX_SERVICE_ID_COMPONENT_BYTES);
+                if identity_over_budget {
+                    let _ = send_protocol_error(
+                        &response_tx,
+                        None,
+                        413,
+                        "service identity exceeds configured byte budget",
+                        true,
+                        &shutdown,
+                        &stream_cancel,
+                    )
+                    .await;
+                    break;
+                }
+                let incoming_identity = if let Some(existing) = stream_identity.as_ref() {
+                    existing.clone()
+                } else {
+                    let Ok(identity) = CanonicalServiceIdentity::try_new(
+                        &header_ref.service_name,
+                        &header_ref.instance_id,
+                        &header_ref.boot_id,
+                    ) else {
+                        let _ = send_protocol_error(
+                            &response_tx,
+                            None,
+                            400,
+                            "service identity is invalid",
+                            true,
+                            &shutdown,
+                            &stream_cancel,
+                        )
+                        .await;
+                        break;
+                    };
+                    StreamIdentity {
+                        service_identity: identity,
+                        stream_epoch: header_ref.stream_epoch,
+                    }
+                };
+                let header = header_ref.clone();
 
                 match frame.payload.as_ref() {
                     Some(client_frame::Payload::Hello(hello)) => {
@@ -181,7 +227,7 @@ impl MetricsIngest for IngestService {
                             .await;
                             break;
                         }
-                        stream_identity = Some(StreamIdentity::from(&header));
+                        stream_identity = Some(incoming_identity.clone());
                     }
                     Some(_) => {
                         let Some(expected) = stream_identity.as_ref() else {
@@ -197,7 +243,11 @@ impl MetricsIngest for IngestService {
                             .await;
                             break;
                         };
-                        if expected != &StreamIdentity::from(&header) {
+                        if expected.stream_epoch != header.stream_epoch
+                            || expected.service_identity.service_name() != header.service_name
+                            || expected.service_identity.instance_id() != header.instance_id
+                            || expected.service_identity.boot_id() != header.boot_id
+                        {
                             let _ = send_protocol_error(
                                 &response_tx,
                                 Some(&header),
@@ -244,7 +294,7 @@ impl MetricsIngest for IngestService {
                         .await;
                         break;
                     }
-                    if let Err(error) = prepare_batch(&header, batch) {
+                    if let Err(error) = prepare_batch(&incoming_identity, header.sequence, batch) {
                         let _ = send_protocol_error(
                             &response_tx,
                             Some(&header),
@@ -267,7 +317,11 @@ impl MetricsIngest for IngestService {
                     Some(client_frame::Payload::Goodbye(_))
                 );
                 if let Some(client_frame::Payload::CommandAck(ack)) = frame.payload.as_ref() {
-                    if let Err(error) = command_broker.record_result(&header, ack) {
+                    if let Err(error) = command_broker.record_result(
+                        &incoming_identity.service_identity,
+                        &header,
+                        ack,
+                    ) {
                         let _ = send_protocol_error(
                             &response_tx,
                             Some(&header),
@@ -282,21 +336,32 @@ impl MetricsIngest for IngestService {
                     }
                 }
                 let response = if is_snapshot {
-                    let service_id = canonical_service_identity(&header);
+                    let service_identity = &incoming_identity;
                     handler
-                        .handle_frame_with_snapshot_commit(&frame, |entries, replace| {
-                            let Ok(prepared) = prepare_entries(&header, entries) else {
-                                return false;
-                            };
-                            if replace {
-                                repository.replace_stream(&service_id, prepared)
-                            } else {
-                                repository.apply_batch(prepared)
-                            }
-                        })
+                        .handle_frame_with_identity_and_snapshot_commit(
+                            &frame,
+                            &service_identity.service_identity,
+                            |entries, replace| {
+                                let Ok(prepared) =
+                                    prepare_entries(service_identity, header.sequence, entries)
+                                else {
+                                    return false;
+                                };
+                                if replace {
+                                    repository.replace_stream(
+                                        &service_identity.service_identity,
+                                        prepared,
+                                    )
+                                } else {
+                                    repository.apply_batch(prepared)
+                                }
+                            },
+                        )
                         .await
                 } else {
-                    handler.handle_frame(&frame).await
+                    handler
+                        .handle_frame_with_identity(&frame, &incoming_identity.service_identity)
+                        .await
                 };
                 let close_after_response = matches!(
                     response.as_ref().and_then(|frame| frame.payload.as_ref()),
@@ -313,6 +378,7 @@ impl MetricsIngest for IngestService {
                 ) {
                     match BrokerAttachment::attach(
                         command_broker.clone(),
+                        incoming_identity.service_identity.clone(),
                         header.clone(),
                         command_tx.clone(),
                         connection_cancel.clone(),
@@ -356,15 +422,6 @@ struct StreamIdentity {
     stream_epoch: u64,
 }
 
-impl From<&FrameHeader> for StreamIdentity {
-    fn from(header: &FrameHeader) -> Self {
-        Self {
-            service_identity: canonical_service_identity(header),
-            stream_epoch: header.stream_epoch,
-        }
-    }
-}
-
 fn frame_header(frame: &ClientFrame) -> Option<&FrameHeader> {
     match frame.payload.as_ref()? {
         client_frame::Payload::Hello(value) => value.header.as_ref(),
@@ -376,24 +433,27 @@ fn frame_header(frame: &ClientFrame) -> Option<&FrameHeader> {
 }
 
 fn prepare_batch(
-    header: &FrameHeader,
+    stream_identity: &StreamIdentity,
+    sequence: u64,
     batch: &SnapshotBatch,
 ) -> Result<Vec<(DataSourceId, DataSourceEntry)>, String> {
-    prepare_entries(header, &batch.entries)
+    prepare_entries(stream_identity, sequence, &batch.entries)
 }
 
 fn prepare_entries(
-    header: &FrameHeader,
+    stream_identity: &StreamIdentity,
+    sequence: u64,
     entries: &[SnapshotEntry],
 ) -> Result<Vec<(DataSourceId, DataSourceEntry)>, String> {
     entries
         .iter()
-        .map(|entry| prepare_entry(header, entry))
+        .map(|entry| prepare_entry(stream_identity, sequence, entry))
         .collect()
 }
 
 fn prepare_entry(
-    header: &FrameHeader,
+    stream_identity: &StreamIdentity,
+    sequence: u64,
     entry: &SnapshotEntry,
 ) -> Result<(DataSourceId, DataSourceEntry), String> {
     let identity = checked_i64(entry.datasource_id, "datasource_id")?;
@@ -401,8 +461,11 @@ fn prepare_entry(
         .pool
         .as_ref()
         .ok_or_else(|| format!("datasource {} is missing pool metrics", entry.datasource_id))?;
-    let service_identity = canonical_service_identity(header);
-    let service_id = service_identity.service_id();
+    let service_identity = &stream_identity.service_identity;
+    let service_id = service_identity.shared_service_id();
+    let service_name = service_identity.shared_service_name();
+    let instance_id = service_identity.shared_instance_id();
+    let boot_id = service_identity.shared_boot_id();
     let db_type = entry.driver_name.clone();
     let mut sql_stats = HashMap::with_capacity(entry.sql_stats.len());
     for (index, stat) in entry.sql_stats.iter().enumerate() {
@@ -412,10 +475,10 @@ fn prepare_entry(
         let previous = sql_stats.insert(
             hash,
             SqlListContent {
-                service_id: Some(service_id.clone()),
-                service_name: Some(header.service_name.clone()),
-                instance_id: Some(header.instance_id.clone()),
-                boot_id: Some(header.boot_id.clone()),
+                service_id: Some(Arc::clone(&service_id)),
+                service_name: Some(Arc::clone(&service_name)),
+                instance_id: Some(Arc::clone(&instance_id)),
+                boot_id: Some(Arc::clone(&boot_id)),
                 id: checked_i64(index as u64 + 1, "sql_index")?,
                 sql: Some(stat.fingerprint.clone()),
                 hash,
@@ -445,10 +508,10 @@ fn prepare_entry(
     wall.content.black_list_hit_count = checked_i64(entry.wall_deny_count, "wall.deny_count")?;
     wall.content.violation_count = checked_i64(entry.wall_violation_count, "wall.violation_count")?;
     let datasource = DataSourceContent {
-        service_id: Some(service_id.clone()),
-        service_name: Some(header.service_name.clone()),
-        instance_id: Some(header.instance_id.clone()),
-        boot_id: Some(header.boot_id.clone()),
+        service_id: Some(service_id),
+        service_name: Some(service_name),
+        instance_id: Some(instance_id),
+        boot_id: Some(boot_id),
         identity,
         name: Some(entry.datasource_name.clone()),
         db_type: db_type.clone(),
@@ -462,7 +525,7 @@ fn prepare_entry(
     };
     Ok((
         DataSourceId {
-            service_identity,
+            service_identity: service_identity.clone(),
             identity,
         },
         DataSourceEntry {
@@ -470,17 +533,9 @@ fn prepare_entry(
             sql_stats,
             wall,
             last_updated_ms: checked_i64(entry.sampling_time_millis, "sampling_time_millis")?,
-            sequence: header.sequence,
+            sequence,
         },
     ))
-}
-
-fn canonical_service_identity(header: &FrameHeader) -> CanonicalServiceIdentity {
-    CanonicalServiceIdentity::new(
-        header.service_name.clone(),
-        header.instance_id.clone(),
-        header.boot_id.clone(),
-    )
 }
 
 fn checked_i64(value: u64, field: &str) -> Result<i64, String> {

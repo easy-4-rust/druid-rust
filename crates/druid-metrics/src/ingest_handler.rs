@@ -109,7 +109,17 @@ impl IngestHandler {
     /// Returns `None` for frames that don't require a response (e.g.
     /// Heartbeat).
     pub async fn handle_frame(&self, frame: &ClientFrame) -> Option<ServerFrame> {
-        self.handle_frame_with_snapshot_commit(frame, |_, _| true)
+        self.handle_frame_with_optional_identity(frame, None, |_, _| true)
+            .await
+    }
+
+    /// 使用调用方已校验并缓存的类型化服务身份处理一帧，避免重复构造 canonical ID。
+    pub async fn handle_frame_with_identity(
+        &self,
+        frame: &ClientFrame,
+        service_identity: &ServiceIdentity,
+    ) -> Option<ServerFrame> {
+        self.handle_frame_with_optional_identity(frame, Some(service_identity), |_, _| true)
             .await
     }
 
@@ -122,13 +132,40 @@ impl IngestHandler {
         frame: &ClientFrame,
         commit: impl FnOnce(&[SnapshotEntry], bool) -> bool,
     ) -> Option<ServerFrame> {
+        self.handle_frame_with_optional_identity(frame, None, commit)
+            .await
+    }
+
+    /// 使用已校验的类型化服务身份提交 snapshot，避免按 frame 重复编码身份。
+    pub async fn handle_frame_with_identity_and_snapshot_commit(
+        &self,
+        frame: &ClientFrame,
+        service_identity: &ServiceIdentity,
+        commit: impl FnOnce(&[SnapshotEntry], bool) -> bool,
+    ) -> Option<ServerFrame> {
+        self.handle_frame_with_optional_identity(frame, Some(service_identity), commit)
+            .await
+    }
+
+    async fn handle_frame_with_optional_identity(
+        &self,
+        frame: &ClientFrame,
+        service_identity: Option<&ServiceIdentity>,
+        commit: impl FnOnce(&[SnapshotEntry], bool) -> bool,
+    ) -> Option<ServerFrame> {
         match &frame.payload {
             Some(client_frame::Payload::SnapshotBatch(batch)) => {
-                self.handle_snapshot_batch(batch, commit).await
+                self.handle_snapshot_batch(batch, service_identity, commit)
+                    .await
             }
             Some(client_frame::Payload::Hello(hello)) => {
                 let hdr = hello.header.as_ref()?;
-                let key = self.stream_key(hdr);
+                let key = match self.stream_key(hdr, service_identity) {
+                    Ok(key) => key,
+                    Err(message) => {
+                        return Some(self.make_snapshot_transaction_error(hdr, message))
+                    }
+                };
                 let mut state = self.state.lock().expect("ingest lock poisoned");
                 if !state.streams.contains_key(&key) && state.streams.len() >= self.max_streams {
                     return Some(self.make_snapshot_transaction_error(
@@ -154,6 +191,7 @@ impl IngestHandler {
     async fn handle_snapshot_batch(
         &self,
         batch: &crate::protocol::SnapshotBatch,
+        service_identity: Option<&ServiceIdentity>,
         commit: impl FnOnce(&[SnapshotEntry], bool) -> bool,
     ) -> Option<ServerFrame> {
         let hdr = batch.header.as_ref()?;
@@ -161,7 +199,10 @@ impl IngestHandler {
             Ok(transaction) => transaction,
             Err(message) => return Some(self.make_snapshot_transaction_error(hdr, message)),
         };
-        let key = self.stream_key(hdr);
+        let key = match self.stream_key(hdr, service_identity) {
+            Ok(key) => key,
+            Err(message) => return Some(self.make_snapshot_transaction_error(hdr, message)),
+        };
         let seq = hdr.sequence;
         let Some(next_sequence) = seq.checked_add(1).filter(|_| seq != 0) else {
             return Some(self.make_sequence_error(hdr));
@@ -270,15 +311,26 @@ impl IngestHandler {
         }
     }
 
-    fn stream_key(&self, hdr: &FrameHeader) -> StreamKey {
-        StreamKey {
-            service_identity: ServiceIdentity::new(
-                hdr.service_name.clone(),
-                hdr.instance_id.clone(),
-                hdr.boot_id.clone(),
-            ),
+    fn stream_key(
+        &self,
+        hdr: &FrameHeader,
+        service_identity: Option<&ServiceIdentity>,
+    ) -> Result<StreamKey, &'static str> {
+        let service_identity = if let Some(service_identity) = service_identity {
+            if service_identity.service_name() != hdr.service_name
+                || service_identity.instance_id() != hdr.instance_id
+                || service_identity.boot_id() != hdr.boot_id
+            {
+                return Err("typed service identity does not match frame header");
+            }
+            service_identity.clone()
+        } else {
+            ServiceIdentity::try_new(&hdr.service_name, &hdr.instance_id, &hdr.boot_id)?
+        };
+        Ok(StreamKey {
+            service_identity,
             stream_epoch: hdr.stream_epoch,
-        }
+        })
     }
 
     fn make_batch_ack(&self, hdr: &FrameHeader, seq: u64) -> ServerFrame {
@@ -424,7 +476,9 @@ impl IngestHandler {
         instance: &str,
         boot: &str,
     ) -> Vec<SnapshotEntry> {
-        let service_identity = ServiceIdentity::new(service, instance, boot);
+        let Ok(service_identity) = ServiceIdentity::try_new(service, instance, boot) else {
+            return Vec::new();
+        };
         let state = self.state.lock().expect("ingest lock poisoned");
         state
             .streams

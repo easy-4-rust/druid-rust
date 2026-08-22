@@ -130,7 +130,9 @@ impl DruidMetricsRuntime {
             match exporter {
                 RuntimeExporter::Drain => {
                     while batch_rx.recv().await.is_some() {
-                        exporter_self_metrics.decrement_pending_export_batches();
+                        exporter_self_metrics
+                            .decrement_pending_export_batches()
+                            .map_err(|error| MetricsError::ChannelSend(error.to_string()))?;
                     }
                     Ok(())
                 }

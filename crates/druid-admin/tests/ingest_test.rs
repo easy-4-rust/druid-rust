@@ -13,7 +13,7 @@ use druid_admin::repository::{
 use druid_metrics::ServiceIdentity;
 
 fn service_identity(service_name: &str) -> ServiceIdentity {
-    ServiceIdentity::new(service_name, "test-instance", "test-boot")
+    ServiceIdentity::try_new(service_name, "test-instance", "test-boot").unwrap()
 }
 
 fn make_entry(identity: i64, db_type: &str, sequence: u64) -> (DataSourceId, DataSourceEntry) {

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use crate::pipeline_ownership::PipelineOwnership;
+use crate::pipeline_ownership::{BatchWorkId, PipelineOwnership, PipelineOwnershipError};
 
 /// Internal runtime self-metrics (counters for the metrics pipeline itself).
 #[derive(Debug)]
@@ -94,23 +94,33 @@ impl RuntimeSelfMetrics {
         self.ownership.exporter_batches()
     }
 
-    /// 在一个 batch 成功进入 exporter channel 后增加 backlog。
-    pub fn increment_pending_export_batches(&self) {
-        self.ownership.transfer_aggregator_to_exporter(0);
-    }
-
-    pub(crate) fn decrement_pending_export_batches(&self) {
-        self.ownership.finish_exporter_batch();
+    pub(crate) fn decrement_pending_export_batches(&self) -> Result<(), PipelineOwnershipError> {
+        let id =
+            self.ownership
+                .exporter_front()
+                .ok_or(PipelineOwnershipError::InvalidTransition(
+                    "exporter ownership is missing",
+                ))?;
+        self.ownership.finish_exporter_batch(id)
     }
 
     /// 原子把指定 aggregator snapshot 数转成一个 exporter batch owner。
-    pub fn transfer_aggregator_to_exporter(&self, snapshots: usize) {
-        self.ownership.transfer_aggregator_to_exporter(snapshots);
+    pub fn transfer_aggregator_to_exporter(&self, snapshots: usize) -> Result<u64, &'static str> {
+        self.ownership
+            .transfer_aggregator_to_exporter(snapshots)
+            .map(BatchWorkId::into_raw)
+            .map_err(PipelineOwnershipError::message)
     }
 
     /// exporter channel 关闭时原子把 batch ownership 还原为 snapshot owner。
-    pub fn restore_exporter_to_aggregator(&self, snapshots: usize) {
-        self.ownership.restore_exporter_to_aggregator(snapshots);
+    pub fn restore_exporter_to_aggregator(
+        &self,
+        id: u64,
+        snapshots: usize,
+    ) -> Result<(), &'static str> {
+        self.ownership
+            .restore_exporter_to_aggregator(BatchWorkId::from_raw(id), snapshots)
+            .map_err(PipelineOwnershipError::message)
     }
 
     pub(crate) fn total_unflushed(&self) -> usize {

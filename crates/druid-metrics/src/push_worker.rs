@@ -13,13 +13,18 @@ use tokio_util::sync::CancellationToken;
 use crate::aggregator::AggregatedBatch;
 use crate::command_journal::CommandJournal;
 use crate::command_payload::canonical_command_payload;
-use crate::pipeline_ownership::PipelineOwnership;
+use crate::pipeline_ownership::{
+    CommandTransition, CommandWorkKey, PipelineOwnership, PipelineOwnershipError,
+};
 use crate::protocol::{
     client_frame, decode_client_frame, encode_client_frame, ClientFrame, FrameHeader, ServerFrame,
     SnapshotBatch, SnapshotTransaction,
 };
 use crate::registry::RegistryCommandExecutor;
 use crate::sequence_window::{PendingFrame, SequenceWindow, SequenceWindowError};
+
+#[doc(hidden)]
+pub use crate::pipeline_ownership::BatchWorkId;
 
 /// PushWorker 消费的新批次或重连 frame。
 #[derive(Debug, Clone)]
@@ -28,6 +33,8 @@ pub enum PushEvent {
     Batch(AggregatedBatch),
     /// 带 supervisor cutoff generation 的 live 聚合批次。
     BatchAt {
+        /// 与 ownership ledger 中 batch 一一对应的单调工作标识。
+        work_id: BatchWorkId,
         /// 入队时观察到的 resync generation。
         generation: u64,
         /// 已类型化、隐私处理的批次。
@@ -169,7 +176,7 @@ pub enum FullSnapshotCommandState {
 }
 
 impl FullSnapshotCommandState {
-    fn command_id(&self) -> &str {
+    pub(crate) fn command_id(&self) -> &str {
         match self {
             Self::PendingChunks { command_id } | Self::ReplyReady { command_id } => command_id,
         }
@@ -238,21 +245,59 @@ impl PushProgress {
     }
 
     /// 在批次进入有界客户端队列前记账。
-    pub fn queue_batch(&self) {
-        self.ownership.queue_client_batch();
+    #[cfg(feature = "client")]
+    pub(crate) fn queue_batch(&self) -> Result<BatchWorkId, PipelineOwnershipError> {
+        self.ownership.queue_client_batch()
     }
 
-    /// 撤销一次未成功入队的批次记账。
-    pub fn undo_queue_batch(&self) {
-        self.ownership.undo_client_batch();
+    /// 把一组权威批次放到 live 队列之前，并保留批次顺序。
+    pub(crate) fn queue_batches_front(&self, count: usize) -> Result<(), PipelineOwnershipError> {
+        self.ownership.queue_client_batches_front(count)
     }
 
-    fn transfer_queued_batch_to_pending_frames(&self, pending: usize) {
-        self.ownership.transfer_client_to_pending_frames(pending);
+    pub(crate) fn client_front(&self) -> Result<BatchWorkId, PipelineOwnershipError> {
+        self.ownership
+            .client_front()
+            .ok_or(PipelineOwnershipError::InvalidTransition(
+                "client ownership is missing",
+            ))
     }
 
-    pub(crate) fn set_pending_frames(&self, pending: usize) {
-        self.ownership.set_pending_frames(pending);
+    #[cfg(feature = "client")]
+    pub(crate) fn drop_client_batch(&self, id: BatchWorkId) -> Result<(), PipelineOwnershipError> {
+        self.ownership.drop_client_batch(id)
+    }
+
+    fn transfer_queued_batch_to_pending_frames(
+        &self,
+        id: BatchWorkId,
+    ) -> Result<(), PipelineOwnershipError> {
+        self.ownership.transfer_client_to_pending_frames(id)
+    }
+
+    pub(crate) fn verify_pending_frames(
+        &self,
+        pending: usize,
+    ) -> Result<(), PipelineOwnershipError> {
+        self.ownership.verify_pending_frames(pending)
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn discard_pending_frames(
+        &self,
+        pending: usize,
+    ) -> Result<(), PipelineOwnershipError> {
+        self.ownership.discard_pending_frames(pending)
+    }
+
+    fn finish_pending_frame(&self) -> Result<(), PipelineOwnershipError> {
+        let id =
+            self.ownership
+                .pending_front()
+                .ok_or(PipelineOwnershipError::InvalidTransition(
+                    "pending-frame ownership is missing",
+                ))?;
+        self.ownership.finish_pending_frame(id)
     }
 
     /// 返回已进入处理或 durable confirmation、尚未完成的远程命令数。
@@ -267,32 +312,52 @@ impl PushProgress {
         self.ownership.transport_commands()
     }
 
-    fn begin_command(&self) {
-        self.ownership.transfer_transport_command_to_processing();
+    fn begin_command(
+        &self,
+        command: &crate::protocol::Command,
+    ) -> Result<(CommandWorkKey, CommandTransition), PipelineOwnershipError> {
+        let key = CommandWorkKey::from_command(command)?;
+        let transition = self.ownership.start_command(&key)?;
+        Ok((key, transition))
     }
 
-    pub(crate) fn finish_command_if_pending(&self) {
-        self.ownership.finish_processing_command();
-    }
-
-    #[cfg(feature = "client")]
-    pub(crate) fn queue_transport_command(&self) {
-        self.ownership.queue_transport_command();
-    }
-
-    #[cfg(feature = "client")]
-    pub(crate) fn drop_transport_command(&self) {
-        self.ownership.drop_transport_command();
-    }
-
-    #[cfg(feature = "client")]
-    pub(crate) fn transfer_exporter_batch_to_client(&self) {
-        self.ownership.transfer_exporter_to_client();
+    pub(crate) fn finish_command(
+        &self,
+        key: &CommandWorkKey,
+    ) -> Result<(), PipelineOwnershipError> {
+        self.ownership.finish_command(key)
     }
 
     #[cfg(feature = "client")]
-    pub(crate) fn restore_client_batch_to_exporter(&self) {
-        self.ownership.restore_client_to_exporter();
+    pub(crate) fn queue_transport_command(
+        &self,
+        command: &crate::protocol::Command,
+    ) -> Result<CommandWorkKey, PipelineOwnershipError> {
+        let key = CommandWorkKey::from_command(command)?;
+        self.ownership.queue_command(key.clone())?;
+        Ok(key)
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn drop_transport_command(
+        &self,
+        key: &CommandWorkKey,
+    ) -> Result<(), PipelineOwnershipError> {
+        self.ownership.drop_command(key)
+    }
+
+    #[cfg(feature = "client")]
+    pub(crate) fn transfer_exporter_batch_to_client(
+        &self,
+    ) -> Result<BatchWorkId, PipelineOwnershipError> {
+        let id =
+            self.ownership
+                .exporter_front()
+                .ok_or(PipelineOwnershipError::InvalidTransition(
+                    "exporter ownership is missing",
+                ))?;
+        self.ownership.transfer_exporter_to_client(id)?;
+        Ok(id)
     }
 }
 
@@ -441,10 +506,12 @@ impl PushWorker {
 
     /// 注入跨连接共享的真实进度计数器。
     #[must_use]
-    pub fn with_progress(mut self, progress: PushProgress) -> Self {
-        progress.set_pending_frames(self.window.len());
+    pub fn with_progress(mut self, progress: PushProgress) -> Result<Self, PushWorkerError> {
+        progress
+            .verify_pending_frames(self.window.len())
+            .map_err(ownership_error)?;
         self.progress = Some(progress);
-        self
+        Ok(self)
     }
 
     /// 恢复跨 transport 会话仍待完成的远程全量快照命令。
@@ -620,18 +687,41 @@ impl PushWorker {
 
     async fn process_push_event(&mut self, event: PushEvent) -> Result<(), PushWorkerError> {
         match event {
-            PushEvent::Batch(mut batch) | PushEvent::BatchAt { mut batch, .. } => {
+            PushEvent::Batch(mut batch) => {
                 if self.force_first_batch_full_snapshot {
                     batch.is_full_snapshot = true;
                     self.force_first_batch_full_snapshot = false;
                 }
-                self.push_new_batch(batch).await
+                self.push_new_batch(batch, None).await
+            }
+            PushEvent::BatchAt {
+                work_id, mut batch, ..
+            } => {
+                if self.force_first_batch_full_snapshot {
+                    batch.is_full_snapshot = true;
+                    self.force_first_batch_full_snapshot = false;
+                }
+                self.push_new_batch(batch, Some(work_id)).await
             }
             PushEvent::Resend(pending) => self.push_resend(pending).await,
         }
     }
 
-    async fn push_new_batch(&mut self, batch: AggregatedBatch) -> Result<(), PushWorkerError> {
+    async fn push_new_batch(
+        &mut self,
+        batch: AggregatedBatch,
+        work_id: Option<BatchWorkId>,
+    ) -> Result<(), PushWorkerError> {
+        let work_id = match (&self.progress, work_id) {
+            (Some(_), Some(work_id)) => Some(work_id),
+            (Some(progress), None) => Some(progress.client_front().map_err(ownership_error)?),
+            (None, None) => None,
+            (None, Some(_)) => {
+                return Err(PushWorkerError::Ownership(
+                    "tracked batch requires pipeline progress".to_owned(),
+                ));
+            }
+        };
         let is_full_snapshot = batch.is_full_snapshot;
         if is_full_snapshot && self.snapshot_transaction.is_none() {
             self.start_snapshot_transaction(1)?;
@@ -672,8 +762,10 @@ impl PushWorker {
                 })
             })
             .map_err(PushWorkerError::Window)?;
-        if let Some(progress) = &self.progress {
-            progress.transfer_queued_batch_to_pending_frames(self.window.len());
+        if let (Some(progress), Some(work_id)) = (&self.progress, work_id) {
+            progress
+                .transfer_queued_batch_to_pending_frames(work_id)
+                .map_err(ownership_error)?;
         }
         if is_full_snapshot {
             let Some((_, chunk_index, chunk_count)) = self.snapshot_transaction.as_mut() else {
@@ -694,7 +786,11 @@ impl PushWorker {
         self.window
             .restore(pending)
             .map_err(PushWorkerError::Window)?;
-        self.update_pending_progress();
+        if let Some(progress) = &self.progress {
+            progress
+                .verify_pending_frames(self.window.len())
+                .map_err(ownership_error)?;
+        }
         self.send_outbound(frame).await
     }
 
@@ -752,12 +848,62 @@ impl PushWorker {
             return Ok(());
         }
         if self.deferred_server_frames.len() >= self.deferred_server_capacity {
+            #[cfg(feature = "client")]
+            if let (
+                Some(progress),
+                Some(crate::protocol::server_frame::Payload::Command(command)),
+            ) = (&self.progress, frame.payload.as_ref())
+            {
+                let key = CommandWorkKey::from_command(command).map_err(ownership_error)?;
+                progress
+                    .drop_transport_command(&key)
+                    .map_err(ownership_error)?;
+            }
             return Err(PushWorkerError::ServerInboundOverload {
                 capacity: self.deferred_server_capacity,
             });
         }
         self.deferred_server_frames.push_back(frame);
         Ok(())
+    }
+
+    fn begin_command_ownership(
+        &self,
+        command: &crate::protocol::Command,
+    ) -> Result<Option<CommandWorkKey>, PushWorkerError> {
+        self.progress
+            .as_ref()
+            .map(|progress| {
+                progress
+                    .begin_command(command)
+                    .map(|(key, _transition)| key)
+                    .map_err(ownership_error)
+            })
+            .transpose()
+    }
+
+    fn finish_command_ownership(
+        &self,
+        key: Option<&CommandWorkKey>,
+    ) -> Result<(), PushWorkerError> {
+        match (&self.progress, key) {
+            (Some(progress), Some(key)) => progress.finish_command(key).map_err(ownership_error),
+            (None, None) => Ok(()),
+            _ => Err(PushWorkerError::Ownership(
+                "command progress and work key must be present together".to_owned(),
+            )),
+        }
+    }
+
+    fn finish_command_after_reply(&self, sent: bool, key: Option<&CommandWorkKey>) -> bool {
+        if !sent {
+            return false;
+        }
+        if let Err(error) = self.finish_command_ownership(key) {
+            tracing::error!(%error, "failed to finish command ownership");
+            return false;
+        }
+        true
     }
 
     async fn process_server_frame(&mut self, frame: ServerFrame) -> bool {
@@ -778,20 +924,19 @@ impl PushWorker {
                     ) =>
             {
                 if self.window.capacity() == 0 {
-                    if let Some(progress) = &self.progress {
-                        progress.begin_command();
-                    }
+                    let key = match self.begin_command_ownership(&command) {
+                        Ok(key) => key,
+                        Err(error) => {
+                            tracing::error!(%error, "failed to start command ownership");
+                            return false;
+                        }
+                    };
                     let reply = self.make_command_ack(
                         command.command_id,
                         Err("ACK window capacity is zero".to_owned()),
                     );
                     let sent = self.send_outbound(reply).await.is_ok();
-                    if sent {
-                        if let Some(progress) = &self.progress {
-                            progress.finish_command_if_pending();
-                        }
-                    }
-                    return sent;
+                    return self.finish_command_after_reply(sent, key.as_ref());
                 }
                 if self.deferred_server_frames.is_empty() {
                     self.deferred_server_frames.push_back(ServerFrame {
@@ -799,20 +944,19 @@ impl PushWorker {
                     });
                     true
                 } else {
-                    if let Some(progress) = &self.progress {
-                        progress.begin_command();
-                    }
+                    let key = match self.begin_command_ownership(&command) {
+                        Ok(key) => key,
+                        Err(error) => {
+                            tracing::error!(%error, "failed to start command ownership");
+                            return false;
+                        }
+                    };
                     let reply = self.make_command_ack(
                         command.command_id,
                         Err("another full snapshot command is waiting for ACK capacity".to_owned()),
                     );
                     let sent = self.send_outbound(reply).await.is_ok();
-                    if sent {
-                        if let Some(progress) = &self.progress {
-                            progress.finish_command_if_pending();
-                        }
-                    }
-                    sent
+                    self.finish_command_after_reply(sent, key.as_ref())
                 }
             }
             Some(Payload::Command(command))
@@ -821,23 +965,26 @@ impl PushWorker {
                     Some(crate::protocol::command::Payload::RequestFullSnapshot(_))
                 ) =>
             {
-                if let Some(progress) = &self.progress {
-                    progress.begin_command();
-                }
-                self.handle_full_snapshot_command(command).await
+                let key = match self.begin_command_ownership(&command) {
+                    Ok(key) => key,
+                    Err(error) => {
+                        tracing::error!(%error, "failed to start command ownership");
+                        return false;
+                    }
+                };
+                self.handle_full_snapshot_command(command, key).await
             }
             Some(Payload::Command(command)) => {
-                if let Some(progress) = &self.progress {
-                    progress.begin_command();
-                }
+                let key = match self.begin_command_ownership(&command) {
+                    Ok(key) => key,
+                    Err(error) => {
+                        tracing::error!(%error, "failed to start command ownership");
+                        return false;
+                    }
+                };
                 let reply = self.handle_command(command);
                 let sent = self.send_outbound(reply).await.is_ok();
-                if sent {
-                    if let Some(progress) = &self.progress {
-                        progress.finish_command_if_pending();
-                    }
-                }
-                sent
+                self.finish_command_after_reply(sent, key.as_ref())
             }
             Some(Payload::HelloAck(_)) | None => true,
             Some(Payload::ResyncRequired(resync)) => {
@@ -860,18 +1007,11 @@ impl PushWorker {
         use crate::protocol::command::Payload;
 
         let command_id = command.command_id;
-        let mut coalesced_replay = false;
         let canonical = canonical_command_payload(&command.payload).map_err(str::to_owned);
         let result = canonical.and_then(|canonical| {
             match self.command_journal.begin(&command_id, canonical)? {
-                (false, Some(result)) => {
-                    coalesced_replay = true;
-                    result
-                }
-                (false, None) => {
-                    coalesced_replay = true;
-                    Err("command is already executing".to_owned())
-                }
+                (false, Some(result)) => result,
+                (false, None) => Err("command is already executing".to_owned()),
                 (true, None) => {
                     let result = match command.payload {
                         Some(Payload::ResetStats(reset)) => self
@@ -894,29 +1034,21 @@ impl PushWorker {
                 (true, Some(_)) => Err("new command unexpectedly had a result".to_owned()),
             }
         });
-        if coalesced_replay {
-            // transport 重投只借用既有 durable lifecycle，不形成第二个 processing owner。
-            if let Some(progress) = &self.progress {
-                progress.finish_command_if_pending();
-            }
-        }
-
         self.make_command_ack(command_id, result)
     }
 
-    async fn handle_full_snapshot_command(&mut self, command: crate::protocol::Command) -> bool {
+    async fn handle_full_snapshot_command(
+        &mut self,
+        command: crate::protocol::Command,
+        ownership_key: Option<CommandWorkKey>,
+    ) -> bool {
         let command_id = command.command_id;
         let canonical = match canonical_command_payload(&command.payload) {
             Ok(canonical) => canonical,
             Err(error) => {
                 let reply = self.make_command_ack(command_id, Err(error.to_owned()));
                 let sent = self.send_outbound(reply).await.is_ok();
-                if sent {
-                    if let Some(progress) = &self.progress {
-                        progress.finish_command_if_pending();
-                    }
-                }
-                return sent;
+                return self.finish_command_after_reply(sent, ownership_key.as_ref());
             }
         };
         let (execute, existing_result) = match self.command_journal.begin(&command_id, canonical) {
@@ -924,20 +1056,13 @@ impl PushWorker {
             Err(error) => {
                 let reply = self.make_command_ack(command_id, Err(error));
                 let sent = self.send_outbound(reply).await.is_ok();
-                if sent {
-                    if let Some(progress) = &self.progress {
-                        progress.finish_command_if_pending();
-                    }
-                }
-                return sent;
+                return self.finish_command_after_reply(sent, ownership_key.as_ref());
             }
         };
         if let Some(pending) = self.full_snapshot_command.as_ref() {
             if pending.command_id() == command_id {
-                // 同一 durable lifecycle 的重投帧只合并，不得再占一个 processing owner。
-                if let Some(progress) = &self.progress {
-                    progress.finish_command_if_pending();
-                }
+                // 同一 durable lifecycle 的重投帧只合并；keyed ledger 已消费 replay
+                // queued token，但保留原 processing owner，直到有序 Goodbye/EOF 确认。
                 return match pending {
                     FullSnapshotCommandState::ReplyReady { .. } => {
                         let reply = self.make_command_ack(command_id, Ok(()));
@@ -957,24 +1082,14 @@ impl PushWorker {
                 )),
             );
             let sent = self.send_outbound(reply).await.is_ok();
-            if sent {
-                if let Some(progress) = &self.progress {
-                    progress.finish_command_if_pending();
-                }
-            }
-            return sent;
+            return self.finish_command_after_reply(sent, ownership_key.as_ref());
         }
         if !execute {
             let result = existing_result
                 .unwrap_or_else(|| Err("full snapshot command is already executing".to_owned()));
             let reply = self.make_command_ack(command_id, result);
             let sent = self.send_outbound(reply).await.is_ok();
-            if sent {
-                if let Some(progress) = &self.progress {
-                    progress.finish_command_if_pending();
-                }
-            }
-            return sent;
+            return self.finish_command_after_reply(sent, ownership_key.as_ref());
         }
         let batches = self
             .command_executor
@@ -988,22 +1103,18 @@ impl PushWorker {
                 self.command_journal.complete(&command_id, result.clone());
                 let reply = self.make_command_ack(command_id, result);
                 let sent = self.send_outbound(reply).await.is_ok();
-                if sent {
-                    if let Some(progress) = &self.progress {
-                        progress.finish_command_if_pending();
-                    }
-                }
-                return sent;
+                return self.finish_command_after_reply(sent, ownership_key.as_ref());
             }
         };
+        if let Some(progress) = &self.progress {
+            if let Err(error) = progress.queue_batches_front(batches.len()) {
+                tracing::error!(%error, "failed to own authoritative command batches");
+                return false;
+            }
+        }
         self.full_snapshot_command = Some(FullSnapshotCommandState::PendingChunks {
             command_id: command_id.clone(),
         });
-        for _ in &batches {
-            if let Some(progress) = &self.progress {
-                progress.queue_batch();
-            }
-        }
         self.initial_batches.extend(batches);
         let advanced = self.advance_full_snapshot_command().await;
         advanced && !self.reply_confirmation_ready()
@@ -1077,7 +1188,7 @@ impl PushWorker {
                 .expect("authoritative batch queue was checked as non-empty");
             let retry_batch = batch.clone();
             let pending_before = self.window.len();
-            if let Err(error) = self.push_new_batch(batch).await {
+            if let Err(error) = self.push_new_batch(batch, None).await {
                 if self.window.len() == pending_before {
                     self.initial_batches.push_front(retry_batch);
                 }
@@ -1143,8 +1254,7 @@ impl PushWorker {
                 };
                 match frame.payload {
                     Some(Payload::BatchAck(ack)) => {
-                        self.acknowledge(ack.accepted_sequence)
-                            .map_err(PushWorkerError::Window)?;
+                        self.acknowledge(ack.accepted_sequence)?;
                     }
                     Some(Payload::ResyncRequired(resync)) => {
                         self.resync_required = true;
@@ -1154,17 +1264,13 @@ impl PushWorker {
                         return Err(PushWorkerError::ServerInterrupted(error.message));
                     }
                     Some(Payload::Command(command)) => {
-                        if let Some(progress) = &self.progress {
-                            progress.begin_command();
-                        }
+                        let key = self.begin_command_ownership(&command)?;
                         let reply = self.make_command_ack(
                             command.command_id,
                             Err("authoritative full snapshot is waiting for ACKs".to_owned()),
                         );
                         self.send_outbound(reply).await?;
-                        if let Some(progress) = &self.progress {
-                            progress.finish_command_if_pending();
-                        }
+                        self.finish_command_ownership(key.as_ref())?;
                     }
                     Some(Payload::HelloAck(_) | Payload::Error(_)) | None => {}
                 }
@@ -1185,21 +1291,16 @@ impl PushWorker {
 
             match frame.payload {
                 Some(Payload::BatchAck(ack)) => {
-                    self.acknowledge(ack.accepted_sequence)
-                        .map_err(PushWorkerError::Window)?;
+                    self.acknowledge(ack.accepted_sequence)?;
                 }
                 Some(Payload::Command(command)) => {
-                    if let Some(progress) = &self.progress {
-                        progress.begin_command();
-                    }
+                    let key = self.begin_command_ownership(&command)?;
                     let reply = self.make_command_ack(
                         command.command_id,
                         Err("full snapshot command is waiting for ACK capacity".to_owned()),
                     );
                     self.send_outbound(reply).await?;
-                    if let Some(progress) = &self.progress {
-                        progress.finish_command_if_pending();
-                    }
+                    self.finish_command_ownership(key.as_ref())?;
                 }
                 Some(Payload::Error(error)) if error.close_stream => {
                     return Err(PushWorkerError::ServerInterrupted(error.message));
@@ -1226,22 +1327,25 @@ impl PushWorker {
         }
     }
 
-    fn acknowledge(&mut self, sequence: u64) -> Result<(), SequenceWindowError> {
-        self.window.ack(sequence)?;
-        self.update_pending_progress();
+    fn acknowledge(&mut self, sequence: u64) -> Result<(), PushWorkerError> {
+        self.window.ack(sequence).map_err(PushWorkerError::Window)?;
+        if let Some(progress) = &self.progress {
+            progress.finish_pending_frame().map_err(ownership_error)?;
+        }
         Ok(())
     }
+}
 
-    fn update_pending_progress(&self) {
-        if let Some(progress) = &self.progress {
-            progress.set_pending_frames(self.window.len());
-        }
-    }
+fn ownership_error(error: PipelineOwnershipError) -> PushWorkerError {
+    PushWorkerError::Ownership(error.to_string())
 }
 
 /// PushWorker 的窗口、编码或 transport 错误。
 #[derive(Debug, thiserror::Error)]
 pub enum PushWorkerError {
+    /// Pipeline ownership transition violated its keyed lifecycle.
+    #[error("pipeline ownership transition failed: {0}")]
+    Ownership(String),
     /// SequenceWindow 拒绝 frame。
     #[error(transparent)]
     Window(#[from] SequenceWindowError),

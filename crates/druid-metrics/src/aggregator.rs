@@ -173,9 +173,13 @@ async fn flush_pending(
         };
         // batch 在等待有界 exporter channel 时已经离开 aggregator；锁内原子
         // handoff 保证 shutdown 任一瞬间只观察到一个 owner。
-        self_metrics.transfer_aggregator_to_exporter(take);
+        let work_id = self_metrics
+            .transfer_aggregator_to_exporter(take)
+            .map_err(|error| MetricsError::ChannelSend(error.to_string()))?;
         if batch_tx.send(batch).await.is_err() {
-            self_metrics.restore_exporter_to_aggregator(take);
+            self_metrics
+                .restore_exporter_to_aggregator(work_id, take)
+                .map_err(|error| MetricsError::ChannelSend(error.to_string()))?;
             let unflushed = self_metrics.pending_snapshots();
             return Err(output_closed_error(unflushed));
         }

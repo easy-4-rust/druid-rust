@@ -15,6 +15,7 @@ use tonic::transport::{Channel, Endpoint};
 use crate::aggregator::AggregatedBatch;
 use crate::command_journal::CommandJournal;
 use crate::error::MetricsError;
+use crate::pipeline_ownership::CommandWorkKey;
 use crate::pipeline_ownership::PipelineOwnership;
 use crate::protocol::metrics_ingest_client::MetricsIngestClient;
 use crate::protocol::{
@@ -169,18 +170,17 @@ impl GrpcMetricsClient {
             .batch_tx
             .as_ref()
             .ok_or_else(|| MetricsError::ChannelSend("gRPC client is shutting down".to_owned()))?;
-        self.progress.queue_batch();
-        let generation = self.generation.load(Ordering::Acquire);
-        if batch_tx
-            .send(PushEvent::BatchAt { generation, batch })
+        let permit = batch_tx
+            .reserve()
             .await
-            .is_err()
-        {
-            self.progress.undo_queue_batch();
-            return Err(MetricsError::ChannelSend(
-                "gRPC push worker stopped".to_owned(),
-            ));
-        }
+            .map_err(|_| MetricsError::ChannelSend("gRPC push worker stopped".to_owned()))?;
+        let work_id = self.progress.queue_batch().map_err(other_error)?;
+        let generation = self.generation.load(Ordering::Acquire);
+        permit.send(PushEvent::BatchAt {
+            work_id,
+            generation,
+            batch,
+        });
         Ok(())
     }
 
@@ -193,18 +193,20 @@ impl GrpcMetricsClient {
             .batch_tx
             .as_ref()
             .ok_or_else(|| MetricsError::ChannelSend("gRPC client is shutting down".to_owned()))?;
-        self.progress.transfer_exporter_batch_to_client();
-        let generation = self.generation.load(Ordering::Acquire);
-        if batch_tx
-            .send(PushEvent::BatchAt { generation, batch })
+        let permit = batch_tx
+            .reserve()
             .await
-            .is_err()
-        {
-            self.progress.restore_client_batch_to_exporter();
-            return Err(MetricsError::ChannelSend(
-                "gRPC push worker stopped".to_owned(),
-            ));
-        }
+            .map_err(|_| MetricsError::ChannelSend("gRPC push worker stopped".to_owned()))?;
+        let work_id = self
+            .progress
+            .transfer_exporter_batch_to_client()
+            .map_err(other_error)?;
+        let generation = self.generation.load(Ordering::Acquire);
+        permit.send(PushEvent::BatchAt {
+            work_id,
+            generation,
+            batch,
+        });
         Ok(())
     }
 
@@ -309,29 +311,42 @@ async fn run_supervisor(
                 )
             })?;
             for _ in authoritative_batches.drain(..) {
-                progress.undo_queue_batch();
+                let id = progress.client_front().map_err(other_error)?;
+                progress.drop_client_batch(id).map_err(other_error)?;
             }
-            for _ in preserved_live_events.drain(..) {
-                progress.undo_queue_batch();
+            for event in preserved_live_events.drain(..) {
+                if let PushEvent::BatchAt { work_id, .. } = event {
+                    progress.drop_client_batch(work_id).map_err(other_error)?;
+                }
             }
             authoritative_batches = executor.full_snapshot().map_err(other_error)?;
             snapshot_transaction = None;
+            progress
+                .discard_pending_frames(pending_frames.len())
+                .map_err(other_error)?;
             pending_frames.clear();
-            progress.set_pending_frames(0);
             while let Ok(event) = batch_rx.try_recv() {
                 match event {
-                    PushEvent::BatchAt { generation, batch } if generation >= cutoff_generation => {
-                        preserved_live_events.push(PushEvent::BatchAt { generation, batch });
+                    PushEvent::BatchAt {
+                        work_id,
+                        generation,
+                        batch,
+                    } if generation >= cutoff_generation => {
+                        preserved_live_events.push(PushEvent::BatchAt {
+                            work_id,
+                            generation,
+                            batch,
+                        });
                     }
-                    PushEvent::Batch(_) | PushEvent::BatchAt { .. } => {
-                        progress.undo_queue_batch();
+                    PushEvent::BatchAt { work_id, .. } => {
+                        progress.drop_client_batch(work_id).map_err(other_error)?;
                     }
-                    PushEvent::Resend(_) => {}
+                    PushEvent::Batch(_) | PushEvent::Resend(_) => {}
                 }
             }
-            for _ in &authoritative_batches {
-                progress.queue_batch();
-            }
+            progress
+                .queue_batches_front(authoritative_batches.len())
+                .map_err(other_error)?;
         }
         let exit = run_connected_session(
             &config,
@@ -377,7 +392,7 @@ async fn run_supervisor(
         }
         if cancellation.is_cancelled() {
             return Err(MetricsError::ShutdownTimeout {
-                unflushed: pending_frames.len().saturating_add(batch_rx.len()),
+                unflushed: progress.unflushed(),
             });
         }
 
@@ -446,21 +461,27 @@ async fn run_connected_session(
             match message {
                 Ok(Some(frame)) => {
                     validate_server_frame(&frame, &reader_config, stream_epoch)?;
-                    let is_command = matches!(
-                        frame.payload.as_ref(),
-                        Some(server_frame::Payload::Command(_))
-                    );
-                    if is_command {
-                        reader_progress.queue_transport_command();
-                    }
+                    let command_key = if let Some(server_frame::Payload::Command(command)) =
+                        frame.payload.as_ref()
+                    {
+                        Some(
+                            reader_progress
+                                .queue_transport_command(command)
+                                .map_err(other_error)?,
+                        )
+                    } else {
+                        None
+                    };
                     let permit = tokio::select! {
                         biased;
                         () = reader_task_cancellation.cancelled() => return Ok(Some(frame)),
                         result = server_tx.reserve() => result,
                     };
                     let Ok(permit) = permit else {
-                        if is_command {
-                            reader_progress.drop_transport_command();
+                        if let Some(key) = command_key.as_ref() {
+                            reader_progress
+                                .drop_transport_command(key)
+                                .map_err(other_error)?;
                         }
                         return Ok(None);
                     };
@@ -491,6 +512,7 @@ async fn run_connected_session(
     .with_pending_frames(pending_frames)
     .map_err(other_error)?
     .with_progress(progress)
+    .map_err(other_error)?
     .with_initial_batches(authoritative_batches)
     .with_snapshot_transaction(snapshot_transaction)
     .with_command_journal(command_journal)
@@ -551,8 +573,26 @@ async fn run_connected_session(
             );
             return Ok(exit);
         }
+        let command_id = exit
+            .full_snapshot_command
+            .as_ref()
+            .map(FullSnapshotCommandState::command_id)
+            .ok_or_else(|| {
+                MetricsError::ChannelSend("full snapshot command ownership is missing".to_owned())
+            })?
+            .to_owned();
+        let key = CommandWorkKey::from_parts(
+            &config.service_name,
+            &config.instance_id,
+            &config.boot_id,
+            &command_id,
+            &Some(crate::protocol::command::Payload::RequestFullSnapshot(
+                crate::protocol::RequestFullSnapshotCmd {},
+            )),
+        )
+        .map_err(other_error)?;
         exit.confirm_full_snapshot_command_reply(config.ack_window_capacity);
-        session_progress.finish_command_if_pending();
+        session_progress.finish_command(&key).map_err(other_error)?;
     } else if clean_shutdown {
         if reader_closed_before_goodbye {
             return Err(MetricsError::ChannelSend(
@@ -576,6 +616,7 @@ fn collect_successor_command(
     let Some(server_frame::Payload::Command(command)) = frame.payload.as_ref() else {
         return Ok(());
     };
+    let key = CommandWorkKey::from_command(command).map_err(other_error)?;
     if let Some(existing_command) = exit.successor_commands.iter().find_map(|existing| {
         let Some(server_frame::Payload::Command(existing_command)) = existing.payload.as_ref()
         else {
@@ -584,16 +625,16 @@ fn collect_successor_command(
         (existing_command.command_id == command.command_id).then_some(existing_command)
     }) {
         if existing_command.payload == command.payload {
-            progress.drop_transport_command();
+            progress.drop_transport_command(&key).map_err(other_error)?;
             return Ok(());
         }
-        progress.drop_transport_command();
+        progress.drop_transport_command(&key).map_err(other_error)?;
         return Err(MetricsError::ChannelSend(
             "successor command ID has a conflicting payload".to_owned(),
         ));
     }
     if exit.successor_commands.len() >= capacity {
-        progress.drop_transport_command();
+        progress.drop_transport_command(&key).map_err(other_error)?;
         return Err(MetricsError::ChannelSend(format!(
             "successor command queue full: capacity {capacity}"
         )));
@@ -806,6 +847,8 @@ fn validate_config(config: &GrpcClientConfig) -> Result<(), MetricsError> {
             "gRPC stream identity fields must be non-empty".to_owned(),
         ));
     }
+    crate::ServiceIdentity::try_new(&config.service_name, &config.instance_id, &config.boot_id)
+        .map_err(|error| MetricsError::ChannelSend(error.to_owned()))?;
     let uri = config.endpoint.uri();
     let host = uri
         .host()

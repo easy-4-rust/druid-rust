@@ -159,13 +159,12 @@ impl MetricsRepository {
     /// 通过 service + datasource + SQL id/hash 精确查询 SQL detail。
     pub fn get_sql_stat(
         &self,
-        service_id: &str,
+        service_identity: &ServiceIdentity,
         datasource_identity: i64,
         sql_identity: i64,
     ) -> Option<SqlListContent> {
-        let service_identity = ServiceIdentity::from_service_id(service_id)?;
         self.get_datasource(&DataSourceId {
-            service_identity,
+            service_identity: service_identity.clone(),
             identity: datasource_identity,
         })
         .and_then(|entry| {

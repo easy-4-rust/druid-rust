@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::sync::Arc;
 
 /// SQL 列表统计响应。
 ///
@@ -18,13 +19,13 @@ pub struct SqlListResult {
 #[serde(default)]
 pub struct SqlListContent {
     #[serde(rename = "serviceId", skip_serializing_if = "Option::is_none")]
-    pub service_id: Option<String>,
+    pub service_id: Option<Arc<str>>,
     #[serde(rename = "serviceName", skip_serializing_if = "Option::is_none")]
-    pub service_name: Option<String>,
+    pub service_name: Option<Arc<str>>,
     #[serde(rename = "instanceId", skip_serializing_if = "Option::is_none")]
-    pub instance_id: Option<String>,
+    pub instance_id: Option<Arc<str>>,
     #[serde(rename = "bootId", skip_serializing_if = "Option::is_none")]
-    pub boot_id: Option<String>,
+    pub boot_id: Option<Arc<str>>,
     #[serde(rename = "address", skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
     #[serde(rename = "port", skip_serializing_if = "Option::is_none")]

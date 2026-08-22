@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
+use base64::Engine as _;
 use druid::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidTelemetrySnapshot, PoolSnapshot,
     SnapshotUnavailable,
@@ -719,8 +720,10 @@ async fn health_and_metrics_remain_truthful_after_grpc_ingest() {
     assert!(metrics.contains("druid_admin_datasource_count 1"));
     assert!(metrics.contains("druid_admin_ingest_total 1"));
     let service_id =
-        druid_metrics::ServiceIdentity::new("orders-runtime", "instance-health", "boot-health")
-            .service_id();
+        druid_metrics::ServiceIdentity::try_new("orders-runtime", "instance-health", "boot-health")
+            .unwrap()
+            .service_id()
+            .to_owned();
     assert!(metrics.contains(&format!(
         "druid_admin_datasource_active_count{{service_id=\"{service_id}\",service_name=\"orders-runtime\",instance_id=\"instance-health\",boot_id=\"boot-health\",datasource=\"42\",datasource_name=\"orders\",db_type=\"postgresql\"}} 7"
     )));
@@ -4073,6 +4076,25 @@ async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_a
     let service = IngestService::new(repository.clone()).with_command_broker(broker.clone());
     let (grpc_shutdown, grpc_handle) = start_production_server_at(grpc_addr, service).await;
     let (http_addr, http_shutdown, http_handle) = start_http_with_repo(repository.clone()).await;
+
+    let exact_component = format!("{}x", "界".repeat(85));
+    assert_eq!(exact_component.len(), 256);
+    let exact_identity = StreamIdentity {
+        service_name: exact_component,
+        instance_id: "bounded-instance".to_owned(),
+        boot_id: "bounded-boot".to_owned(),
+        stream_epoch: 91_400,
+    };
+    let exact_stream = open_generated_stream(&format!("http://{grpc_addr}"), &exact_identity).await;
+    drop(exact_stream.tx);
+    drop(exact_stream.inbound);
+    tokio::time::timeout(TEST_TIMEOUT, async {
+        while broker.live_stream_count() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("exact-budget stream detaches");
     let endpoint = format!("http://{grpc_addr}");
     let first_identity = StreamIdentity {
         service_name: "a/b".to_owned(),
@@ -4086,18 +4108,22 @@ async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_a
         boot_id: "boot-碰撞".to_owned(),
         stream_epoch: 91_301,
     };
-    let first_service_id = druid_metrics::ServiceIdentity::new(
+    let first_service_id = druid_metrics::ServiceIdentity::try_new(
         &first_identity.service_name,
         &first_identity.instance_id,
         &first_identity.boot_id,
     )
-    .service_id();
-    let second_service_id = druid_metrics::ServiceIdentity::new(
+    .unwrap()
+    .service_id()
+    .to_owned();
+    let second_service_id = druid_metrics::ServiceIdentity::try_new(
         &second_identity.service_name,
         &second_identity.instance_id,
         &second_identity.boot_id,
     )
-    .service_id();
+    .unwrap()
+    .service_id()
+    .to_owned();
     assert_ne!(first_service_id, second_service_id);
 
     let mut first = open_generated_stream(&endpoint, &first_identity).await;
@@ -4126,7 +4152,10 @@ async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_a
         .collect::<std::collections::HashSet<_>>();
     assert_eq!(
         exposed_ids,
-        std::collections::HashSet::from([first_service_id.clone(), second_service_id.clone()])
+        std::collections::HashSet::from([
+            std::sync::Arc::<str>::from(first_service_id.clone()),
+            std::sync::Arc::<str>::from(second_service_id.clone()),
+        ])
     );
 
     for (stream, identity, command_id) in [
@@ -4240,6 +4269,107 @@ async fn old_slash_collision_pair_stays_distinct_across_broker_repository_rest_a
         .await
         .expect("collision HTTP joins")
         .expect("collision HTTP stops");
+}
+
+#[tokio::test]
+async fn overlong_identity_is_rejected_before_hello_attachment_repository_or_rest_lookup() {
+    let repository = MetricsRepository::new();
+    let broker = CommandBroker::new(4, TEST_TIMEOUT);
+    let grpc_addr = reserve_loopback_addr().await;
+    let service = IngestService::new(repository.clone()).with_command_broker(broker.clone());
+    let (grpc_shutdown, grpc_handle) = start_production_server_at(grpc_addr, service).await;
+    let (http_addr, http_shutdown, http_handle) = start_http_with_repo(repository.clone()).await;
+
+    let channel = Endpoint::from_shared(format!("http://{grpc_addr}"))
+        .expect("valid overlong identity endpoint")
+        .connect()
+        .await
+        .expect("connect overlong identity client");
+    let mut client = MetricsIngestClient::new(channel);
+    let (tx, rx) = mpsc::channel(2);
+    let mut inbound = client
+        .connect(ReceiverStream::new(rx))
+        .await
+        .expect("open overlong identity stream")
+        .into_inner();
+    let overlong_component = "x".repeat(257);
+    tx.send(ClientFrame {
+        payload: Some(client_frame::Payload::Hello(ClientHello {
+            header: Some(FrameHeader {
+                protocol_version: 1,
+                service_name: overlong_component.clone(),
+                instance_id: "bounded-instance".to_owned(),
+                boot_id: "bounded-boot".to_owned(),
+                stream_epoch: 91_401,
+                sequence: 0,
+                emitted_at_unix_ms: 1,
+            }),
+            supported_protocol_version: 1,
+            full_snapshot_requested: false,
+        })),
+    })
+    .await
+    .expect("send overlong ClientHello");
+    let rejected = next_server_frame(&mut inbound).await;
+    assert!(matches!(
+        rejected.payload,
+        Some(server_frame::Payload::Error(
+            druid_metrics::protocol::ServerError {
+                code: 413,
+                close_stream: true,
+                ..
+            }
+        ))
+    ));
+    assert_eq!(broker.live_stream_count(), 0);
+    assert!(repository.is_empty());
+    assert!(broker
+        .issue_reset(
+            &overlong_component,
+            "bounded-instance",
+            "bounded-boot",
+            "overlong-command",
+            vec![42],
+        )
+        .await
+        .is_err());
+
+    let mut oversized_payload = b"druid-service-identity-v1\0".to_vec();
+    for component in [
+        overlong_component.as_str(),
+        "bounded-instance",
+        "bounded-boot",
+    ] {
+        oversized_payload.extend_from_slice(&(component.len() as u64).to_be_bytes());
+        oversized_payload.extend_from_slice(component.as_bytes());
+    }
+    let oversized_service_id = format!(
+        "sid1_{}",
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(oversized_payload)
+    );
+    for path in [
+        format!("/druid/api/datasources/42?serviceId={oversized_service_id}"),
+        format!("/druid/api/sql/1?serviceId={oversized_service_id}&dataSourceId=42"),
+        format!("/druid/api/connections/42?serviceId={oversized_service_id}"),
+    ] {
+        let response = reqwest::get(format!("http://{http_addr}{path}"))
+            .await
+            .expect("oversized serviceId detail response");
+        assert_eq!(response.status(), reqwest::StatusCode::UNPROCESSABLE_ENTITY);
+    }
+
+    drop(tx);
+    drop(inbound);
+    grpc_shutdown.cancel();
+    grpc_handle
+        .await
+        .expect("overlong identity gRPC joins")
+        .expect("overlong identity gRPC stops");
+    http_shutdown.cancel();
+    http_handle
+        .await
+        .expect("overlong identity HTTP joins")
+        .expect("overlong identity HTTP stops");
 }
 
 #[tokio::test]

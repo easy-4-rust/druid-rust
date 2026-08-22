@@ -24,7 +24,8 @@ async fn start_server_with_datasource_count(
     for identity in 1..=datasource_count {
         let service_name = format!("svc-{identity}");
         let service_identity =
-            ServiceIdentity::new(service_name.clone(), "metrics-instance", "metrics-boot");
+            ServiceIdentity::try_new(service_name.clone(), "metrics-instance", "metrics-boot")
+                .unwrap();
         let id = DataSourceId {
             service_identity: service_identity.clone(),
             identity,
@@ -33,10 +34,10 @@ async fn start_server_with_datasource_count(
             datasource: DataSourceContent {
                 identity,
                 name: Some(format!("service-{identity}")),
-                service_id: Some(service_identity.service_id()),
-                service_name: Some(service_name),
-                instance_id: Some("metrics-instance".to_owned()),
-                boot_id: Some("metrics-boot".to_owned()),
+                service_id: Some(service_identity.shared_service_id()),
+                service_name: Some(service_name.into()),
+                instance_id: Some("metrics-instance".into()),
+                boot_id: Some("metrics-boot".into()),
                 db_type: Some("mysql".to_owned()),
                 active_count: 5 + identity,
                 pooling_count: 10 + identity,
@@ -287,7 +288,7 @@ async fn metrics_output_over_budget_is_rejected_and_counted_without_silent_trunc
         .expect("valid metrics output budget");
     let repository = MetricsRepository::with_config(config);
     let service_identity =
-        ServiceIdentity::new("bounded-service", "metrics-instance", "metrics-boot");
+        ServiceIdentity::try_new("bounded-service", "metrics-instance", "metrics-boot").unwrap();
     let id = DataSourceId {
         service_identity: service_identity.clone(),
         identity: 1,
@@ -296,10 +297,10 @@ async fn metrics_output_over_budget_is_rejected_and_counted_without_silent_trunc
         datasource: DataSourceContent {
             identity: 1,
             name: Some("bounded-service".to_owned()),
-            service_id: Some(service_identity.service_id()),
-            service_name: Some("bounded-service".to_owned()),
-            instance_id: Some("metrics-instance".to_owned()),
-            boot_id: Some("metrics-boot".to_owned()),
+            service_id: Some(service_identity.shared_service_id()),
+            service_name: Some("bounded-service".into()),
+            instance_id: Some("metrics-instance".into()),
+            boot_id: Some("metrics-boot".into()),
             db_type: Some("postgresql".to_owned()),
             active_count: 7,
             ..Default::default()
