@@ -15,6 +15,15 @@ from typing import NoReturn
 RDBC_MODULES = {"types", "error", "spi", "resource", "compat"}
 MAPPING_HEADER = "old_path\tnew_path\tcompile_mode\told_module_file"
 COMPILE_MODES = {"OWNED", "DYN_TRAIT", "PATH_ONLY"}
+RUST_2021_KEYWORDS = {
+    "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else",
+    "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop",
+    "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static",
+    "struct", "super", "trait", "true", "type", "union", "unsafe", "use", "where",
+    "while", "abstract", "become", "box", "do", "final", "macro", "override", "priv",
+    "typeof", "unsized", "virtual", "yield", "try",
+}
+RAW_IDENTIFIER_DISALLOWED = {"crate", "self", "super", "Self", "_"}
 
 
 class VerificationError(RuntimeError):
@@ -56,6 +65,7 @@ class ManifestShim:
     target_facade: Path
     new_path: str
     reexport: str
+    old_export: str
 
 
 @dataclass(frozen=True)
@@ -153,6 +163,22 @@ def tokenize(source: str) -> list[Token]:
         if raw is not None:
             token, index = raw
             tokens.append(token)
+            continue
+        if source.startswith("r#", index):
+            end = index + 2
+            if (
+                end >= len(source)
+                or not source[end].isascii()
+                or not (source[end].isalpha() or source[end] == "_")
+            ):
+                fail(f"invalid raw Rust identifier at byte offset {index}")
+            end += 1
+            while end < len(source) and source[end].isascii() and (
+                source[end].isalnum() or source[end] == "_"
+            ):
+                end += 1
+            tokens.append(Token("IDENT", source[index:end]))
+            index = end
             continue
         if source.startswith('b"', index):
             token, index = consume_quoted(source, index + 2, '"', "BYTE_STRING")
@@ -283,9 +309,9 @@ def parse_facade_items(source: str) -> list[FacadeItem]:
             items.append(FacadeItem("mod", public, tokens[index + 1].text))
             index += 3
             continue
-        if public and tokens[index] == Token("IDENT", "use"):
+        if tokens[index] == Token("IDENT", "use"):
             path, alias, index = parse_reexport(tokens, index + 1)
-            items.append(FacadeItem("use", True, "".join(path), alias))
+            items.append(FacadeItem("use", public, "".join(path), alias))
             continue
         fail("extra Rust syntax in public-path facade")
     return items
@@ -371,6 +397,41 @@ def old_module_components(old_module: Path) -> tuple[str, ...]:
     return components
 
 
+def normalize_manifest_identifier(identifier: str, line_number: int) -> str:
+    """Validate one ASCII Rust 2021 identifier and remove an allowed raw prefix."""
+
+    raw = identifier.startswith("r#")
+    candidate = identifier[2:] if raw else identifier
+    if (
+        not candidate
+        or not candidate.isascii()
+        or not (candidate[0].isalpha() or candidate[0] == "_")
+        or any(not (character.isalnum() or character == "_") for character in candidate)
+    ):
+        fail(f"mapping row {line_number} has invalid Rust identifier: {identifier}")
+    if raw:
+        if candidate in RAW_IDENTIFIER_DISALLOWED:
+            fail(f"mapping row {line_number} has invalid raw identifier: {identifier}")
+        return candidate
+    if candidate in RUST_2021_KEYWORDS:
+        fail(f"mapping row {line_number} uses keyword without raw prefix: {identifier}")
+    return candidate
+
+
+def normalize_manifest_path(
+    path: str, crate_name: str, line_number: int
+) -> tuple[list[str], list[str]]:
+    """Validate an absolute manifest path and return spelling plus normalized identifiers."""
+
+    segments = path.split("::")
+    if len(segments) < 2 or segments[0] != crate_name:
+        fail(f"mapping row {line_number} has invalid path prefix: {path}")
+    normalized = [segments[0]]
+    for segment in segments[1:]:
+        normalized.append(normalize_manifest_identifier(segment, line_number))
+    return segments, normalized
+
+
 def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
     """Convert one authoritative TSV row into a facade-targeted public path contract."""
 
@@ -379,33 +440,41 @@ def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
         fail(f"mapping row {line_number} has an empty required field")
     if compile_mode not in COMPILE_MODES:
         fail(f"mapping row {line_number} has invalid compile_mode: {compile_mode}")
-    old_segments = old_path.split("::")
-    if (
-        len(old_segments) < 3
-        or old_segments[0] != "druid"
-        or any(not segment.isidentifier() for segment in old_segments)
-    ):
+    old_segments, normalized_old_segments = normalize_manifest_path(
+        old_path, "druid", line_number
+    )
+    if len(old_segments) < 3:
         fail(f"mapping row {line_number} has invalid old_path: {old_path}")
-    new_segments = new_path.split("::")
+    new_segments, normalized_new_segments = normalize_manifest_path(
+        new_path, "druid_rdbc", line_number
+    )
     if (
         len(new_segments) != 3
-        or new_segments[0] != "druid_rdbc"
-        or new_segments[1] not in RDBC_MODULES
-        or any(not segment.isidentifier() for segment in new_segments)
+        or normalized_new_segments[1] not in RDBC_MODULES
     ):
         fail(f"mapping row {line_number} has invalid new_path: {new_path}")
     old_module = Path(old_module_file)
     if old_module.is_absolute() or old_module.suffix != ".rs" or ".." in old_module.parts:
         fail(f"mapping row {line_number} has invalid old_module_file: {old_module_file}")
-    if tuple(old_segments[1:-1]) != old_module_components(old_module):
+    if tuple(normalized_old_segments[1:-1]) != old_module_components(old_module):
         fail(
             f"mapping row {line_number} old_path modules do not match old_module_file"
         )
     old_leaf = old_segments[-1]
     new_leaf = new_segments[-1]
-    reexport = new_path if old_leaf == new_leaf else f"{new_path} as {old_leaf}"
-    target_facade = Path("crates/druid-rdbc/src") / new_segments[1] / "mod.rs"
-    return ManifestShim(old_module, target_facade, new_path, reexport)
+    reexport = (
+        new_path
+        if normalized_old_segments[-1] == normalized_new_segments[-1]
+        else f"{new_path} as {old_leaf}"
+    )
+    target_facade = Path("crates/druid-rdbc/src") / normalized_new_segments[1] / "mod.rs"
+    return ManifestShim(
+        old_module,
+        target_facade,
+        new_path,
+        reexport,
+        normalized_old_segments[-1],
+    )
 
 
 def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGroup]:
@@ -472,6 +541,9 @@ def verify_shim_group(root: Path, group: ShimGroup) -> None:
 
     for mapping in group.mappings:
         verify_target_facade(root, mapping)
+    if group.old_module.name == "mod.rs":
+        verify_parent_facade(root, group)
+        return
     old_module = root / group.old_module
     if not old_module.is_file():
         fail(f"missing old module: {group.old_module}")
@@ -495,6 +567,57 @@ def verify_shim_group(root: Path, group: ShimGroup) -> None:
         fail(f"duplicate named re-export in shim: {group.old_module}")
     if set(actual_reexports) != expected_reexports:
         fail(f"shim target mismatch in {group.old_module}: expected exact re-export set")
+
+
+def normalized_export_name(item: FacadeItem) -> str:
+    """Return a source export's semantic leaf name while preserving raw-identifier identity."""
+
+    name = item.alias or item.value.rsplit("::", maxsplit=1)[-1]
+    return name[2:] if name.startswith("r#") else name
+
+
+def verify_parent_facade(root: Path, group: ShimGroup) -> None:
+    """Verify mapped aliases inside a parent facade without constraining unrelated baseline exports."""
+
+    old_module = root / group.old_module
+    if not old_module.is_file():
+        fail(f"missing old module: {group.old_module}")
+    expected_by_export: dict[str, str] = {}
+    for mapping in group.mappings:
+        if mapping.old_export in expected_by_export:
+            fail(
+                f"conflicting mapped export {mapping.old_export} in parent facade: "
+                f"{group.old_module}"
+            )
+        expected_by_export[mapping.old_export] = mapping.reexport
+
+    seen_exports: set[str] = set()
+    for item in parse_facade_items(old_module.read_text(encoding="utf-8")):
+        if item.kind != "use" or not item.public:
+            continue
+        exported_name = normalized_export_name(item)
+        expected = expected_by_export.get(exported_name)
+        if expected is None:
+            continue
+        actual = (
+            item.value if item.alias is None else f"{item.value} as {item.alias}"
+        )
+        if actual != expected:
+            fail(
+                f"parent facade export {exported_name} has wrong target in "
+                f"{group.old_module}"
+            )
+        if exported_name in seen_exports:
+            fail(
+                f"duplicate mapped export {exported_name} in parent facade: "
+                f"{group.old_module}"
+            )
+        seen_exports.add(exported_name)
+    missing = sorted(set(expected_by_export) - seen_exports)
+    if missing:
+        fail(
+            f"parent facade missing mapped exports {missing} in {group.old_module}"
+        )
 
 
 def verify_source_tree(root: Path, mappings: list[ShimMapping | ShimGroup]) -> None:
@@ -867,6 +990,105 @@ class PublicPathVerifierTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "inconsistent compile_mode"):
             load_mapping(self.write_manifest([first_mode, inconsistent_mode]), False)
+
+    def test_parent_facade_keeps_unrelated_exports(self) -> None:
+        """A mapped parent mod.rs can retain unrelated baseline modules and uses."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        parent.write_text(
+            "pub mod untouched;\n"
+            "use private_baseline::Hidden;\n"
+            "pub use unrelated_baseline::Other;\n"
+            "pub use druid_rdbc::types::Value;\n",
+            encoding="utf-8",
+        )
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_parent_facade_rejects_bad_mapped_exports(self) -> None:
+        """Parent rows reject wrong, missing, duplicate, and wildcard mapped exports."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        for source in (
+            "pub use druid_rdbc::types::Other as Value;\n",
+            "pub use unrelated_baseline::Other;\n",
+            "pub use druid_rdbc::types::Value;\n"
+            "pub use unrelated_baseline::Other as Value;\n",
+            "pub use druid_rdbc::types::*;\n",
+        ):
+            with self.subTest(source=source):
+                parent.write_text(source, encoding="utf-8")
+                with self.assertRaises(VerificationError):
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_manifest_uses_rust_2021_identifier_policy(self) -> None:
+        """Manifest paths distinguish forbidden plain keywords from valid and invalid raw identifiers."""
+
+        for keyword in ("type", "match", "async", "crate", "self"):
+            with self.subTest(plain_old_keyword=keyword):
+                row = (
+                    f"druid::core::{keyword}::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    f"crates/druid/src/core/{keyword}.rs",
+                )
+                with self.assertRaises(VerificationError):
+                    load_mapping(self.write_manifest([row]), False)
+            with self.subTest(plain_new_keyword=keyword):
+                row = (
+                    "druid::core::value::Value",
+                    f"druid_rdbc::types::{keyword}",
+                    "OWNED",
+                    "crates/druid/src/core/value.rs",
+                )
+                with self.assertRaises(VerificationError):
+                    load_mapping(self.write_manifest([row]), False)
+
+        raw_row = (
+            "druid::core::r#type::r#match",
+            "druid_rdbc::types::r#type",
+            "OWNED",
+            "crates/druid/src/core/type.rs",
+        )
+        groups = load_mapping(self.write_manifest([raw_row]), False)
+        self.assertEqual(
+            "druid_rdbc::types::r#type as r#match",
+            groups[0].mappings[0].reexport,
+        )
+
+        for special in ("crate", "self", "super", "Self", "_"):
+            with self.subTest(special_raw_identifier=special):
+                row = (
+                    f"druid::core::r#{special}::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    f"crates/druid/src/core/{special}.rs",
+                )
+                with self.assertRaises(VerificationError):
+                    load_mapping(self.write_manifest([row]), False)
 
 
 def main() -> int:

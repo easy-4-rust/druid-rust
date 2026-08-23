@@ -230,6 +230,11 @@ set of named re-exports. A direct new path has the form `druid_rdbc::{types,erro
 and is validated through that public domain facade, never by guessing a private implementation file.
 If an old leaf name differs from the new leaf, the shim must use `as OldLeaf`; unchanged leaf names
 must remain unaliased.
+When old_module_file is a parent mod.rs, validate only the mapped public aliases in its real export
+set: unrelated targeted baseline exports, public modules, and private module/use declarations remain
+allowed. Every mapped exported old leaf must occur exactly once with its mapped target; wildcard and
+conflicting aliases fail. Leaf .rs shim files remain exact grouped mapped-re-export sets with no
+additional item.
 
 - [ ] **Step 4: Run GREEN type/error regression**
 
@@ -743,6 +748,10 @@ old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file
 unique; repeated `old_module_file` rows are grouped as one exact named-re-export set. A repeated
 `new_path` is permitted for distinct legacy aliases only when all rows use the same compile mode.
 Whitespace-only, trailing, malformed, or empty TSV fields fail.
+Manifest identifiers use an explicit ASCII Rust 2021 policy: ordinary identifiers match
+[A-Za-z_][A-Za-z0-9_]* and cannot be strict or reserved keywords. Raw r#ident is permitted when Rust
+permits it and is normalized to ident for filesystem correspondence; r#crate, r#self, r#super,
+r#Self, r#_, and malformed raw identifiers fail.
 
 `compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. The verifier derives the live baseline
 denominator, and every moved public definition present in
