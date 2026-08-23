@@ -76,22 +76,24 @@ pub use driver::Driver;
 pub use driver_action::DriverAction;
 pub use driver_manager::DriverManager;
 pub use driver_property_info::DriverPropertyInfo;
-pub use exceptions::{
-    BatchUpdateException, DataTruncation, SqlClientInfoException, SqlDataException, SqlException,
-    SqlExceptionKind, SqlFeatureNotSupportedException, SqlIntegrityConstraintViolationException,
-    SqlInvalidAuthorizationSpecException, SqlNonTransientConnectionException,
-    SqlNonTransientException, SqlRecoverableException, SqlSyntaxErrorException,
-    SqlTimeoutException, SqlTransactionRollbackException, SqlTransientConnectionException,
-    SqlTransientException, SqlWarning,
+pub use druid_rdbc::error::{
+    SqlException as SqlDataException, SqlException as SqlFeatureNotSupportedException,
+    SqlException as SqlIntegrityConstraintViolationException,
+    SqlException as SqlInvalidAuthorizationSpecException,
+    SqlException as SqlNonTransientConnectionException, SqlException as SqlNonTransientException,
+    SqlException as SqlRecoverableException, SqlException as SqlSyntaxErrorException,
+    SqlException as SqlTimeoutException, SqlException as SqlTransactionRollbackException,
+    SqlException as SqlTransientConnectionException, SqlException as SqlTransientException,
 };
-pub use exceptions::{SqlException as SQLException, SqlWarning as SQLWarning};
+pub use druid_rdbc::error::{SqlException, SqlExceptionKind, SqlWarning};
+pub use druid_rdbc::error::{SqlException as SQLException, SqlWarning as SQLWarning};
+pub use druid_rdbc::types::{RdbcType as RDBCType, SqlType as SQLType};
+pub use druid_rdbc::types::{RdbcType, Types};
+pub use exceptions::{BatchUpdateException, DataTruncation, SqlClientInfoException};
 pub use n_clob::{NClob, RdbcNClob};
 pub use parameter_meta_data::{ParameterMetaData, ParameterMode, ParameterNullability};
 pub use prepared_statement::PreparedStatement;
 pub use pseudo_column_usage::PseudoColumnUsage;
-pub use rdbc_sql_type::SqlType as SQLType;
-pub use rdbc_type::RdbcType;
-pub use rdbc_type::RdbcType as RDBCType;
 pub use rdbc_url::RdbcUrl;
 pub use ref_value::{RdbcRef, Ref};
 pub use result_set::ResultSet;
@@ -113,7 +115,6 @@ pub use statement::Statement;
 pub use struct_value::Struct;
 pub use time::Time;
 pub use timestamp::Timestamp;
-pub use types::Types;
 pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
 
 // java.sql LOB/stream helpers live in core because pooled statements also consume them,

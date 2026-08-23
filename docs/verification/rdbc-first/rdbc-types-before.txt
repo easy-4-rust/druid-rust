@@ -1,0 +1,29 @@
+P03 Task 2 independent RDBC types/errors baseline
+Captured: 2026-08-24 Asia/Shanghai
+HEAD: 2ff62bec76f1c21729f8b9295c7676b756efdb76
+
+command: cargo test -p druid --test rdbc_standard_test
+exit: 0
+count: 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+command: cargo test -p druid --test rdbc_extended_types_test
+exit: 0
+count: 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+command: cargo test -p druid --test rdbc_url_extended_test
+exit: 0
+count: 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+command: cargo test -p druid --test druid_error_test
+exit: 0
+count: 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+command: cargo test -p druid --test exception_sorter_semantics_test
+exit: 0
+count: 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+
+aggregate: 94 passed; 0 failed
+
+command: rg -n 'DruidError' crates/druid/src/core/{value,row,rdbc_url,sql_exception,sql_warning}.rs crates/druid/src/sql/{types,rdbc_type,rdbc_sql_type}.rs
+exit: 1 (expected no-match status)
+count: 0 matches across 8 source files

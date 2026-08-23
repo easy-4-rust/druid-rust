@@ -1706,6 +1706,7 @@ dependencies = [
  "bitflags 2.13.1",
  "chrono",
  "dashmap",
+ "druid-rdbc",
  "druid-wrapper",
  "encoding_rs",
  "fastrand",

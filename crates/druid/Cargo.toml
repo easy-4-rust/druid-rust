@@ -28,6 +28,7 @@ num-bigint.workspace = true
 base64.workspace = true
 chrono.workspace = true
 dashmap.workspace = true
+druid-rdbc = { version = "0.0.0-design", path = "../druid-rdbc" }
 encoding_rs.workspace = true
 fastrand.workspace = true
 moka = { workspace = true, features = ["sync"] }
