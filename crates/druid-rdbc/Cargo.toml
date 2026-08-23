@@ -1,0 +1,24 @@
+[package]
+name = "druid-rdbc"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+async-trait.workspace = true
+bitflags.workspace = true
+bigdecimal.workspace = true
+chrono.workspace = true
+jiff.workspace = true
+num-bigint.workspace = true
+parking_lot.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+url.workspace = true
+uuid.workspace = true
+
+[lints]
+workspace = true

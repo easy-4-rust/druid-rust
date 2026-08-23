@@ -1809,6 +1809,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "druid-rdbc"
+version = "0.0.0-design"
+dependencies = [
+ "async-trait",
+ "bigdecimal",
+ "bitflags 2.13.1",
+ "chrono",
+ "jiff",
+ "num-bigint",
+ "parking_lot",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tokio",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "druid-wrapper"
 version = "0.0.0-design"
 dependencies = [
