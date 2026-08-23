@@ -527,11 +527,13 @@ move.
 Within this single task/commit, move in this order: value/parameter/XML descriptors → resource
 Access/state/handles → result-set/metadata → statement/prepared/callable → wrapper/connection/factory.
 Update the cumulative public-path TSV denominator with one exact row for every moved public
-definition before each default source-only invocation; every moved leaf is `PURE_SHIM`, while
-parent and secondary compatibility facades are `FACADE_MEMBERSHIP`. An empty, four-column, stale,
-or source-mode-inconsistent denominator blocks the slice. Task 4 closes at 285 rows, including the
-11 reviewed secondary aliases in `core::connection`, `core::connection_factory`, SQL RowId,
-RowIdLifetime, and ResultSetMetaData facades.
+definition before each default source-only invocation. Moved leaves and whole-file exact secondary
+compatibility facades use `PURE_SHIM`; parents and secondary compatibility facades that retain
+unrelated baseline items use `FACADE_MEMBERSHIP`. An empty, four-column, stale, or
+source-mode-inconsistent denominator blocks the slice. Task 4 closes at 285 rows and 75 source
+groups—71 `PURE_SHIM`, 4 `FACADE_MEMBERSHIP`—including the 11 reviewed secondary aliases in
+`core::connection`, `core::connection_factory`, SQL RowId, RowIdLifetime, and ResultSetMetaData
+facades.
 After each small source slice run only:
 
 ```bash
@@ -787,9 +789,17 @@ git add Cargo.lock crates/druid-wrapper scripts/verify_wrapper_rdbc_import_bound
   docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv
 git commit -m "refactor(wrapper): consume rdbc contracts directly"
 python3 scripts/verify_rdbc_public_paths.py --source-only
+git diff --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --cached --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
+git diff --cached --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
 git diff --quiet HEAD^..HEAD -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
 git diff --quiet HEAD^..HEAD -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
 ```
+
+The postcommit hook fails for a late working-tree mutation, an accidentally staged denominator,
+or a Task 5 commit that changed either frozen file; source/hash validation runs before all six Git
+diff guards.
 
 ### Task 6: 收口 public API、DAG 和文档
 
