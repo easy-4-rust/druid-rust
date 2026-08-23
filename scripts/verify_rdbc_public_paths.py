@@ -13,8 +13,89 @@ from typing import NoReturn
 
 
 RDBC_MODULES = {"types", "error", "spi", "resource", "compat"}
-MAPPING_HEADER = "old_path\tnew_path\tcompile_mode\told_module_file"
+MAPPING_HEADER = "old_path\tnew_path\tcompile_mode\told_module_file\tsource_mode"
 COMPILE_MODES = {"OWNED", "DYN_TRAIT", "PATH_ONLY"}
+SOURCE_MODES = {"PURE_SHIM", "FACADE_MEMBERSHIP"}
+MINIMUM_LIVE_MAPPING_ROWS = 285
+REQUIRED_SECONDARY_ROWS = (
+    (
+        "druid::core::connection::ExecResult",
+        "druid_rdbc::spi::ExecResult",
+        "OWNED",
+        "crates/druid/src/core/connection.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::core::connection::PhysicalConnection",
+        "druid_rdbc::spi::PhysicalConnection",
+        "DYN_TRAIT",
+        "crates/druid/src/core/connection.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::core::connection::Connection",
+        "druid_rdbc::spi::PhysicalConnection",
+        "DYN_TRAIT",
+        "crates/druid/src/core/connection.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::core::connection_factory::PhysicalConnectionFactory",
+        "druid_rdbc::spi::PhysicalConnectionFactory",
+        "DYN_TRAIT",
+        "crates/druid/src/core/connection_factory.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::core::connection_factory::ConnectionFactory",
+        "druid_rdbc::spi::PhysicalConnectionFactory",
+        "DYN_TRAIT",
+        "crates/druid/src/core/connection_factory.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::sql::row_id::RowId",
+        "druid_rdbc::types::RdbcRowId",
+        "OWNED",
+        "crates/druid/src/sql/row_id.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::sql::RowId",
+        "druid_rdbc::types::RdbcRowId",
+        "OWNED",
+        "crates/druid/src/sql/mod.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::sql::row_id_lifetime::RowIdLifetime",
+        "druid_rdbc::spi::DatabaseMetaDataRowIdLifetime",
+        "OWNED",
+        "crates/druid/src/sql/row_id_lifetime.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::sql::RowIdLifetime",
+        "druid_rdbc::spi::DatabaseMetaDataRowIdLifetime",
+        "OWNED",
+        "crates/druid/src/sql/mod.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::sql::result_set_meta_data::ResultSetMetaData",
+        "druid_rdbc::spi::ResultSetMetaData",
+        "OWNED",
+        "crates/druid/src/sql/result_set_meta_data.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+    (
+        "druid::sql::ResultSetMetaData",
+        "druid_rdbc::spi::ResultSetMetaData",
+        "OWNED",
+        "crates/druid/src/sql/mod.rs",
+        "FACADE_MEMBERSHIP",
+    ),
+)
 RUST_2021_STRICT_RESERVED_KEYWORDS = {
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else",
     "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop",
@@ -71,9 +152,12 @@ class TopLevelBinding:
 class ManifestShim:
     """One public path row normalized into a directed old-module re-export contract."""
 
+    old_path: str
     old_module: Path
     target_facade: Path
     new_path: str
+    compile_mode: str
+    source_mode: str
     canonical_new_path: tuple[str, ...]
     reexport: str
     old_export: str
@@ -84,6 +168,7 @@ class ShimGroup:
     """All public definitions owned by the same old module file."""
 
     old_module: Path
+    source_mode: str
     mappings: tuple[ManifestShim, ...]
 
 
@@ -479,11 +564,13 @@ def normalize_manifest_path(
 def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
     """Convert one authoritative TSV row into a facade-targeted public path contract."""
 
-    old_path, new_path, compile_mode, old_module_file = fields
+    old_path, new_path, compile_mode, old_module_file, source_mode = fields
     if any(not field or field != field.strip() for field in fields):
         fail(f"mapping row {line_number} has an empty required field")
     if compile_mode not in COMPILE_MODES:
         fail(f"mapping row {line_number} has invalid compile_mode: {compile_mode}")
+    if source_mode not in SOURCE_MODES:
+        fail(f"mapping row {line_number} has invalid source_mode: {source_mode}")
     old_segments, normalized_old_segments = normalize_manifest_path(
         old_path, "druid", line_number
     )
@@ -500,6 +587,10 @@ def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
     old_module = Path(old_module_file)
     if old_module.is_absolute() or old_module.suffix != ".rs" or ".." in old_module.parts:
         fail(f"mapping row {line_number} has invalid old_module_file: {old_module_file}")
+    if old_module.name == "mod.rs" and source_mode != "FACADE_MEMBERSHIP":
+        fail(
+            f"mapping row {line_number} parent mod.rs requires FACADE_MEMBERSHIP"
+        )
     if tuple(normalized_old_segments[1:-1]) != old_module_components(old_module):
         fail(
             f"mapping row {line_number} old_path modules do not match old_module_file"
@@ -512,9 +603,12 @@ def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
     )
     target_facade = Path("crates/druid-rdbc/src") / normalized_new_segments[1] / "mod.rs"
     return ManifestShim(
+        old_path,
         old_module,
         target_facade,
         new_path,
+        compile_mode,
+        source_mode,
         tuple(normalized_new_segments),
         reexport,
         normalized_old_segments[-1],
@@ -532,12 +626,13 @@ def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGro
     mappings_by_module: dict[Path, list[ManifestShim]] = {}
     seen_old_paths: set[str] = set()
     mode_by_new_path: dict[str, str] = {}
+    source_mode_by_module: dict[Path, str] = {}
     for line_number, line in enumerate(lines[1:], start=2):
         if not line:
             fail(f"mapping row {line_number} is empty")
         fields = line.split("\t")
-        if len(fields) != 4:
-            fail(f"mapping row {line_number} must have four tab-separated fields")
+        if len(fields) != 5:
+            fail(f"mapping row {line_number} must have five tab-separated fields")
         mapping = mapping_from_fields(fields, line_number)
         normalized_old_path = "::".join(
             normalize_manifest_path(fields[0], "druid", line_number)[1]
@@ -552,6 +647,14 @@ def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGro
                 f"mapping row {line_number} has inconsistent compile_mode for "
                 f"{normalized_new_path}"
             )
+        previous_source_mode = source_mode_by_module.setdefault(
+            mapping.old_module, mapping.source_mode
+        )
+        if previous_source_mode != mapping.source_mode:
+            fail(
+                f"mapping row {line_number} has inconsistent source_mode for "
+                f"{mapping.old_module}"
+            )
         mappings_by_module.setdefault(mapping.old_module, []).append(mapping)
     if not mappings_by_module and not allow_empty_scaffold:
         fail("mapping manifest has no rows; --allow-empty-scaffold is required")
@@ -562,8 +665,38 @@ def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGro
         ]
         if len(reexports) != len(set(reexports)):
             fail(f"mapping rows for {old_module} duplicate an expected re-export")
-        groups.append(ShimGroup(old_module, tuple(mappings)))
+        groups.append(
+            ShimGroup(old_module, source_mode_by_module[old_module], tuple(mappings))
+        )
     return groups
+
+
+def verify_required_secondary_denominator(
+    mappings: list[ShimGroup], minimum_rows: int | None = None
+) -> None:
+    """Require every reviewed secondary facade path with its exact mapping contract."""
+
+    observed = {
+        (
+            mapping.old_path,
+            mapping.new_path,
+            mapping.compile_mode,
+            str(mapping.old_module),
+            mapping.source_mode,
+        )
+        for group in mappings
+        for mapping in group.mappings
+    }
+    missing = sorted(set(REQUIRED_SECONDARY_ROWS) - observed)
+    if missing:
+        fail(
+            "mapping manifest is missing reviewed secondary public paths: "
+            + ", ".join(row[0] for row in missing)
+        )
+    if minimum_rows is not None and len(observed) < minimum_rows:
+        fail(
+            f"mapping manifest has {len(observed)} rows; expected at least {minimum_rows}"
+        )
 
 
 def verify_target_facade(root: Path, mapping: ManifestShim) -> None:
@@ -591,8 +724,8 @@ def verify_shim_group(root: Path, group: ShimGroup) -> None:
 
     for mapping in group.mappings:
         verify_target_facade(root, mapping)
-    if group.old_module.name == "mod.rs":
-        verify_parent_facade(root, group)
+    if group.source_mode == "FACADE_MEMBERSHIP":
+        verify_facade_membership(root, group)
         return
     old_module = root / group.old_module
     if not old_module.is_file():
@@ -1010,8 +1143,8 @@ def scan_top_level_bindings(source: str) -> list[TopLevelBinding]:
     return scan_top_level_bindings_tokens(tokenize(source))
 
 
-def verify_parent_facade(root: Path, group: ShimGroup) -> None:
-    """Verify mapped aliases inside a parent facade without constraining unrelated baseline exports."""
+def verify_facade_membership(root: Path, group: ShimGroup) -> None:
+    """Verify mapped aliases without constraining unrelated parent or secondary facade exports."""
 
     old_module = root / group.old_module
     if not old_module.is_file():
@@ -1020,7 +1153,7 @@ def verify_parent_facade(root: Path, group: ShimGroup) -> None:
     for mapping in group.mappings:
         if mapping.old_export in expected_by_export:
             fail(
-                f"conflicting mapped export {mapping.old_export} in parent facade: "
+                f"conflicting mapped export {mapping.old_export} in compatibility facade: "
                 f"{group.old_module}"
             )
         expected_by_export[mapping.old_export] = mapping.canonical_new_path
@@ -1030,7 +1163,7 @@ def verify_parent_facade(root: Path, group: ShimGroup) -> None:
         matching = [binding for binding in bindings if binding.name == exported_name]
         if not matching:
             fail(
-                f"parent facade missing mapped exports ['{exported_name}'] in "
+                f"compatibility facade missing mapped exports ['{exported_name}'] in "
                 f"{group.old_module}"
             )
         if len(matching) == 1:
@@ -1038,12 +1171,12 @@ def verify_parent_facade(root: Path, group: ShimGroup) -> None:
             if binding.kind == "use" and binding.public:
                 if binding.target != expected_target:
                     fail(
-                        f"parent facade mapped export {exported_name} has wrong target in "
+                        f"compatibility facade mapped export {exported_name} has wrong target in "
                         f"{group.old_module}"
                     )
                 continue
         fail(
-            f"parent facade mapped export {exported_name} has conflicting binding in "
+            f"compatibility facade mapped export {exported_name} has conflicting binding in "
             f"{group.old_module}"
         )
 
@@ -1265,11 +1398,66 @@ class PublicPathVerifierTest(unittest.TestCase):
             load_mapping(mapping_file, allow_empty_scaffold=False)
         self.assertEqual([], load_mapping(mapping_file, allow_empty_scaffold=True))
 
-    def write_manifest(self, rows: list[tuple[str, str, str, str]]) -> Path:
+    def test_requires_reviewed_secondary_denominator(self) -> None:
+        """The eleven reviewed secondary facade paths are an executable denominator."""
+
+        self.assertEqual(11, len(REQUIRED_SECONDARY_ROWS))
+        mapping_file = self.write_manifest(list(REQUIRED_SECONDARY_ROWS))
+        mappings = load_mapping(mapping_file, allow_empty_scaffold=False)
+        verify_required_secondary_denominator(mappings)
+        with self.assertRaisesRegex(VerificationError, "expected at least 285"):
+            verify_required_secondary_denominator(
+                mappings, minimum_rows=MINIMUM_LIVE_MAPPING_ROWS
+            )
+        with self.assertRaisesRegex(VerificationError, "secondary public paths"):
+            verify_required_secondary_denominator(
+                load_mapping(
+                    self.write_manifest(list(REQUIRED_SECONDARY_ROWS[:-1])),
+                    allow_empty_scaffold=False,
+                )
+            )
+
+    def test_five_parameter_constants_are_legal_path_only_rows(self) -> None:
+        """Module constants use PATH_ONLY without weakening owned or dyn identity modes."""
+
+        constants = (
+            "ASCII_INPUT_STREAM",
+            "BINARY_INPUT_STREAM",
+            "CHARACTER_INPUT_STREAM",
+            "NCHARACTER_INPUT_STREAM",
+            "URL",
+        )
+        rows = [
+            (
+                f"druid::core::rdbc_parameter::{constant}",
+                f"druid_rdbc::types::{constant}",
+                "PATH_ONLY",
+                "crates/druid/src/core/rdbc_parameter.rs",
+                "PURE_SHIM",
+            )
+            for constant in constants
+        ]
+        groups = load_mapping(self.write_manifest(rows), allow_empty_scaffold=False)
+        self.assertEqual(
+            {"PATH_ONLY"},
+            {mapping.compile_mode for group in groups for mapping in group.mappings},
+        )
+
+    def write_manifest(self, rows: list[tuple[str, ...]]) -> Path:
         """Write an authoritative TSV fixture below this test's temporary repository."""
 
         mapping_file = self.root / "rdbc-public-path-map.tsv"
-        contents = [MAPPING_HEADER, *("\t".join(row) for row in rows)]
+        normalized_rows = []
+        for row in rows:
+            if len(row) == 4:
+                source_mode = (
+                    "FACADE_MEMBERSHIP"
+                    if Path(row[3]).name == "mod.rs"
+                    else "PURE_SHIM"
+                )
+                row = (*row, source_mode)
+            normalized_rows.append(row)
+        contents = [MAPPING_HEADER, *("\t".join(row) for row in normalized_rows)]
         mapping_file.write_text("\n".join(contents) + "\n", encoding="utf-8")
         return mapping_file
 
@@ -1398,6 +1586,20 @@ class PublicPathVerifierTest(unittest.TestCase):
                 "OWNED",
                 "crates/druid/src/core/legacy_fixture.rs",
             ),
+            (
+                "druid::core::legacy_fixture::FixtureType",
+                "druid_rdbc::types::Value",
+                "OWNED",
+                "crates/druid/src/core/legacy_fixture.rs",
+                "BANANA",
+            ),
+            (
+                "druid::core::FixtureType",
+                "druid_rdbc::types::Value",
+                "OWNED",
+                "crates/druid/src/core/mod.rs",
+                "PURE_SHIM",
+            ),
         ]
         for row in invalid_rows:
             with self.subTest(row=row):
@@ -1434,6 +1636,25 @@ class PublicPathVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "inconsistent compile_mode"):
             load_mapping(self.write_manifest([first_mode, inconsistent_mode]), False)
 
+        mixed_source_modes = (
+            (
+                "druid::core::legacy_fixture::FixtureType",
+                "druid_rdbc::types::Value",
+                "OWNED",
+                "crates/druid/src/core/legacy_fixture.rs",
+                "PURE_SHIM",
+            ),
+            (
+                "druid::core::legacy_fixture::OtherFixture",
+                "druid_rdbc::types::OtherFixture",
+                "OWNED",
+                "crates/druid/src/core/legacy_fixture.rs",
+                "FACADE_MEMBERSHIP",
+            ),
+        )
+        with self.assertRaisesRegex(VerificationError, "inconsistent source_mode"):
+            load_mapping(self.write_manifest(list(mixed_source_modes)), False)
+
     def test_parent_facade_keeps_unrelated_exports(self) -> None:
         """A mapped parent mod.rs can retain unrelated baseline modules and uses."""
 
@@ -1454,6 +1675,30 @@ class PublicPathVerifierTest(unittest.TestCase):
                     "druid_rdbc::types::Value",
                     "OWNED",
                     "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_secondary_facade_membership_keeps_unrelated_exports(self) -> None:
+        """A non-mod.rs secondary facade validates one exact alias without becoming a shim."""
+
+        self.prepare_direct_type_facade()
+        facade = self.root / "crates" / "druid" / "src" / "core" / "connection.rs"
+        facade.parent.mkdir(parents=True, exist_ok=True)
+        facade.write_text(
+            "pub use unrelated::Other;\n"
+            "pub use druid_rdbc::types::Value;\n",
+            encoding="utf-8",
+        )
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::connection::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/connection.rs",
+                    "FACADE_MEMBERSHIP",
                 )
             ]
         )
@@ -1976,13 +2221,17 @@ def main() -> int:
         if not mapping_path.is_absolute():
             mapping_path = repository_root() / mapping_path
         mappings = load_mapping(mapping_path, arguments.allow_empty_scaffold)
+        if not arguments.allow_empty_scaffold:
+            verify_required_secondary_denominator(
+                mappings, minimum_rows=MINIMUM_LIVE_MAPPING_ROWS
+            )
         verify_source_tree(arguments.root.resolve(), mappings)
     except VerificationError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     print(
         "PASS: RDBC public-path source verification "
-        f"({len(RDBC_MODULES)} declared modules, {len(mappings)} shim mappings)"
+        f"({len(RDBC_MODULES)} declared modules, {len(mappings)} source groups)"
     )
     return 0
 

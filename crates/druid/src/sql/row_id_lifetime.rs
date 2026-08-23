@@ -2,4 +2,4 @@
 ///
 /// Corresponds to Java: `java.sql.RowIdLifetime`. It distinguishes unsupported, transaction,
 /// session, and effectively unlimited lifetimes. Druid does not extend the driver's lifetime.
-pub use crate::core::DatabaseMetaDataRowIdLifetime as RowIdLifetime;
+pub use druid_rdbc::spi::DatabaseMetaDataRowIdLifetime as RowIdLifetime;

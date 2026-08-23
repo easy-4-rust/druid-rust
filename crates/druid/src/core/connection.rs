@@ -5,10 +5,10 @@
 
 pub use super::conn_state::ConnState;
 pub use super::connection_ext::ConnectionExt;
-pub use super::exec_result::ExecResult;
 pub use super::meta_data::MetaData;
-pub use super::physical_connection::PhysicalConnection;
-pub use super::physical_connection::PhysicalConnection as Connection;
 pub use super::row::Row;
 pub use super::savepoint::Savepoint;
 pub use super::statement_type::StatementType;
+pub use druid_rdbc::spi::ExecResult;
+pub use druid_rdbc::spi::PhysicalConnection;
+pub use druid_rdbc::spi::PhysicalConnection as Connection;

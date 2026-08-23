@@ -356,6 +356,10 @@ fn main() {
 
     bidirectional_owned_identity!(druid::core::exec_result::ExecResult, druid_rdbc::spi::ExecResult);
     bidirectional_owned_identity!(druid::core::ExecResult, druid_rdbc::spi::ExecResult);
+    bidirectional_owned_identity!(
+        druid::core::connection::ExecResult,
+        druid_rdbc::spi::ExecResult
+    );
     bidirectional_owned_identity!(druid::core::wrapper::Unwrapped, druid_rdbc::spi::Unwrapped);
     bidirectional_owned_identity!(druid::sql::wrapper::Unwrapped, druid_rdbc::spi::Unwrapped);
     bidirectional_dyn_identity!(druid::core::wrapper::Wrapper, druid_rdbc::spi::Wrapper);
@@ -442,7 +446,23 @@ fn main() {
     bidirectional_owned_identity!(druid::core::rdbc_xml_source::RdbcXmlSource, druid_rdbc::resource::RdbcXmlSource);
 
     bidirectional_arc_dyn_identity!(druid::core::physical_connection_factory::PhysicalConnectionFactory, druid_rdbc::spi::PhysicalConnectionFactory);
+    bidirectional_arc_dyn_identity!(
+        druid::core::connection_factory::PhysicalConnectionFactory,
+        druid_rdbc::spi::PhysicalConnectionFactory
+    );
+    bidirectional_arc_dyn_identity!(
+        druid::core::connection_factory::ConnectionFactory,
+        druid_rdbc::spi::PhysicalConnectionFactory
+    );
     bidirectional_box_dyn_identity!(druid::core::physical_connection::PhysicalConnection, druid_rdbc::spi::PhysicalConnection);
+    bidirectional_box_dyn_identity!(
+        druid::core::connection::PhysicalConnection,
+        druid_rdbc::spi::PhysicalConnection
+    );
+    bidirectional_box_dyn_identity!(
+        druid::core::connection::Connection,
+        druid_rdbc::spi::PhysicalConnection
+    );
     bidirectional_dyn_identity!(druid::core::physical_statement::PhysicalStatement, druid_rdbc::spi::PhysicalStatement);
     bidirectional_dyn_identity!(druid::core::physical_prepared_statement::PhysicalPreparedStatement, druid_rdbc::spi::PhysicalPreparedStatement);
     bidirectional_dyn_identity!(druid::core::physical_callable_statement::PhysicalCallableStatement, druid_rdbc::spi::PhysicalCallableStatement);
@@ -463,6 +483,14 @@ fn main() {
     bidirectional_owned_identity!(druid::core::prepared_statement_key::PreparedStatementKey, druid_rdbc::spi::PreparedStatementKey);
     bidirectional_owned_identity!(druid::core::prepared_statement_key::PreparedStatementMethodType, druid_rdbc::spi::PreparedStatementMethodType);
     bidirectional_owned_identity!(druid::core::result_set_meta_data::ResultSetMetaData, druid_rdbc::spi::ResultSetMetaData);
+    bidirectional_owned_identity!(
+        druid::sql::result_set_meta_data::ResultSetMetaData,
+        druid_rdbc::spi::ResultSetMetaData
+    );
+    bidirectional_owned_identity!(
+        druid::sql::ResultSetMetaData,
+        druid_rdbc::spi::ResultSetMetaData
+    );
     bidirectional_owned_identity!(druid::core::result_set_column_meta::ResultSetColumnMeta, druid_rdbc::spi::ResultSetColumnMeta);
     bidirectional_owned_identity!(druid::core::result_set_column_type::ResultSetColumnType, druid_rdbc::spi::ResultSetColumnType);
 
@@ -501,6 +529,16 @@ fn main() {
     bidirectional_owned_identity!(druid::core::rdbc_reader::RdbcCharacterLength, druid_rdbc::resource::RdbcCharacterLength);
     bidirectional_dyn_identity!(druid::core::rdbc_writer::PhysicalCharacterWriter, druid_rdbc::resource::PhysicalCharacterWriter);
     bidirectional_owned_identity!(druid::core::rdbc_writer::RdbcWriter, druid_rdbc::resource::RdbcWriter);
+    bidirectional_owned_identity!(druid::sql::row_id::RowId, druid_rdbc::types::RdbcRowId);
+    bidirectional_owned_identity!(druid::sql::RowId, druid_rdbc::types::RdbcRowId);
+    bidirectional_owned_identity!(
+        druid::sql::row_id_lifetime::RowIdLifetime,
+        druid_rdbc::spi::DatabaseMetaDataRowIdLifetime
+    );
+    bidirectional_owned_identity!(
+        druid::sql::RowIdLifetime,
+        druid_rdbc::spi::DatabaseMetaDataRowIdLifetime
+    );
     let _: Option<druid_rdbc::error::RdbcError> = None;
 
     mod sql_glob_contract {

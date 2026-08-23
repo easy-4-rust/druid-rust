@@ -3,10 +3,15 @@
 
 from __future__ import annotations
 
-import re
 import sys
 import tempfile
 from pathlib import Path
+
+SCRIPT_DIRECTORY = Path(__file__).resolve().parent
+if str(SCRIPT_DIRECTORY) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIRECTORY))
+
+import verify_rdbc_public_paths as rust_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,135 +51,124 @@ REQUIRED_DELEGATES = frozenset(
 EQUIVALENT_DEFAULTS = frozenset()
 
 
-def source_without_comments(source: str) -> str:
-    """Remove Rust comments while preserving every non-comment token for exact comparison."""
-
-    output: list[str] = []
-    index = 0
-    while index < len(source):
-        if source.startswith("//", index):
-            newline = source.find("\n", index + 2)
-            if newline == -1:
-                break
-            output.append("\n")
-            index = newline + 1
-            continue
-        if source.startswith("/*", index):
-            depth = 1
-            index += 2
-            while index < len(source) and depth:
-                if source.startswith("/*", index):
-                    depth += 1
-                    index += 2
-                elif source.startswith("*/", index):
-                    depth -= 1
-                    index += 2
-                else:
-                    index += 1
-            if depth:
-                raise ValueError("unclosed block comment in old PhysicalConnection shim")
-            output.append(" ")
-            continue
-
-        raw_prefix_length = 0
-        if source[index] == "r":
-            raw_prefix_length = 1
-        elif source.startswith("br", index):
-            raw_prefix_length = 2
-        if raw_prefix_length:
-            cursor = index + raw_prefix_length
-            while cursor < len(source) and source[cursor] == "#":
-                cursor += 1
-            if cursor < len(source) and source[cursor] == '"':
-                hashes = source[index + raw_prefix_length : cursor]
-                terminator = '"' + hashes
-                end = source.find(terminator, cursor + 1)
-                if end == -1:
-                    raise ValueError("unclosed raw string in old PhysicalConnection shim")
-                end += len(terminator)
-                output.append(source[index:end])
-                index = end
-                continue
-
-        quote_index = index + 1 if source.startswith("b\"", index) else index
-        if quote_index < len(source) and source[quote_index] in {'"', "'"}:
-            quote = source[quote_index]
-            cursor = quote_index + 1
-            escaped = False
-            while cursor < len(source):
-                character = source[cursor]
-                if escaped:
-                    escaped = False
-                elif character == "\\":
-                    escaped = True
-                elif character == quote:
-                    cursor += 1
-                    break
-                cursor += 1
-            else:
-                raise ValueError("unclosed literal in old PhysicalConnection shim")
-            output.append(source[index:cursor])
-            index = cursor
-            continue
-
-        output.append(source[index])
-        index += 1
-    return "".join(output)
-
-
-def source_tokens(source: str) -> tuple[str, ...]:
-    """Tokenize the exact shim grammar after comments and module docs are removed."""
-
-    return tuple(
-        re.findall(
-            r"::|[A-Za-z_][A-Za-z0-9_]*|[^\s]",
-            source_without_comments(source),
-        )
-    )
-
-
 def old_shim_errors(path: Path = OLD_PHYSICAL_CONNECTION) -> list[str]:
     """Reject a missing or non-exact old PhysicalConnection compatibility shim."""
 
     if not path.is_file():
         return ["FAIL: old PhysicalConnection shim is missing"]
     try:
-        tokens = source_tokens(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, ValueError):
+        tokens = rust_source.tokenize(path.read_text(encoding="utf-8"))
+        index = rust_source.consume_docs(tokens, 0)
+        token_text = tuple(token.text for token in tokens[index:])
+    except (OSError, UnicodeError, rust_source.VerificationError):
         return ["FAIL: old PhysicalConnection shim is not an exact directed re-export"]
-    if tokens != EXPECTED_OLD_SHIM_TOKENS:
+    if token_text != EXPECTED_OLD_SHIM_TOKENS:
         return ["FAIL: old PhysicalConnection shim is not an exact directed re-export"]
     return []
 
 
-def block_after(source: str, declaration: re.Pattern[str]) -> str:
-    """Return the brace-balanced Rust block beginning at a declaration match."""
+def top_level_method_names(
+    tokens: list[rust_source.Token], start: int, end: int
+) -> set[str]:
+    """Return function names directly inside one token-delimited trait or impl body."""
 
-    match = declaration.search(source)
-    if match is None:
-        raise ValueError(f"declaration not found: {declaration.pattern}")
-    opening = source.find("{", match.end())
-    if opening == -1:
-        raise ValueError(f"opening brace not found: {declaration.pattern}")
+    names: set[str] = set()
+    stack: list[str] = []
+    index = start
+    while index < end:
+        token = tokens[index]
+        if not stack and token.text == "fn":
+            if index + 1 >= end or tokens[index + 1].kind != "IDENT":
+                raise ValueError("malformed top-level function declaration")
+            names.add(tokens[index + 1].text)
+        if token.text in rust_source.DELIMITER_PAIRS:
+            stack.append(rust_source.DELIMITER_PAIRS[token.text])
+        elif token.text in rust_source.DELIMITER_PAIRS.values():
+            if not stack or token.text != stack[-1]:
+                raise ValueError("unbalanced delimiter in trait or impl body")
+            stack.pop()
+        index += 1
+    if stack:
+        raise ValueError("unclosed delimiter in trait or impl body")
+    return names
 
-    depth = 0
-    for index in range(opening, len(source)):
-        character = source[index]
-        if character == "{":
-            depth += 1
-        elif character == "}":
-            depth -= 1
-            if depth == 0:
-                return source[opening + 1 : index]
-    raise ValueError(f"unclosed block: {declaration.pattern}")
+
+def trait_method_names(source: str) -> set[str]:
+    """Parse the canonical PhysicalConnection trait through the shared Rust tokenizer."""
+
+    tokens = rust_source.tokenize(source)
+    stack: list[str] = []
+    for index, token in enumerate(tokens):
+        if (
+            not stack
+            and token.text == "trait"
+            and index + 1 < len(tokens)
+            and tokens[index + 1].text == "PhysicalConnection"
+        ):
+            opening = next(
+                (
+                    cursor
+                    for cursor in range(index + 2, len(tokens))
+                    if tokens[cursor].text == "{"
+                ),
+                None,
+            )
+            if opening is None:
+                raise ValueError("opening brace not found: PhysicalConnection trait")
+            start, end = rust_source.find_matching_brace(
+                tokens, opening, "PhysicalConnection trait"
+            )
+            return top_level_method_names(tokens, start, end)
+        if token.text in rust_source.DELIMITER_PAIRS:
+            stack.append(rust_source.DELIMITER_PAIRS[token.text])
+        elif token.text in rust_source.DELIMITER_PAIRS.values():
+            if not stack or token.text != stack[-1]:
+                raise ValueError("unbalanced top-level trait delimiter")
+            stack.pop()
+    raise ValueError("declaration not found: PhysicalConnection trait")
 
 
-def method_names(block: str) -> set[str]:
-    """Extract Rust trait or impl method declarations without depending on formatting."""
+def lease_method_names(source: str) -> set[str]:
+    """Parse the PhysicalConnectionLease impl through the shared Rust tokenizer."""
 
-    return set(
-        re.findall(r"(?m)^\s*(?:async\s+)?fn\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", block)
-    )
+    tokens = rust_source.tokenize(source)
+    stack: list[str] = []
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if not stack and token.text == "impl":
+            opening = next(
+                (
+                    cursor
+                    for cursor in range(index + 1, len(tokens))
+                    if tokens[cursor].text == "{"
+                ),
+                None,
+            )
+            if opening is None:
+                raise ValueError("opening brace not found: PhysicalConnectionLease impl")
+            header = [item.text for item in tokens[index:opening]]
+            if "for" in header:
+                for_index = header.index("for")
+                if (
+                    "PhysicalConnection" in header[:for_index]
+                    and "PhysicalConnectionLease" in header[for_index + 1 :]
+                ):
+                    start, end = rust_source.find_matching_brace(
+                        tokens, opening, "PhysicalConnectionLease impl"
+                    )
+                    return top_level_method_names(tokens, start, end)
+            _, end = rust_source.find_matching_brace(tokens, opening, "impl")
+            index = end + 1
+            continue
+        if token.text in rust_source.DELIMITER_PAIRS:
+            stack.append(rust_source.DELIMITER_PAIRS[token.text])
+        elif token.text in rust_source.DELIMITER_PAIRS.values():
+            if not stack or token.text != stack[-1]:
+                raise ValueError("unbalanced top-level impl delimiter")
+            stack.pop()
+        index += 1
+    raise ValueError("declaration not found: PhysicalConnectionLease impl")
 
 
 def validation_errors(
@@ -210,21 +204,11 @@ def validation_errors(
 def parse_surface() -> tuple[set[str], set[str]]:
     """Parse the current trait and lease implementation method surfaces."""
 
-    trait_methods = method_names(
-        block_after(
-            PHYSICAL_CONNECTION.read_text(encoding="utf-8"),
-            re.compile(r"\bpub\s+trait\s+PhysicalConnection\b"),
-        )
+    trait_methods = trait_method_names(
+        PHYSICAL_CONNECTION.read_text(encoding="utf-8")
     )
-    lease_methods = method_names(
-        block_after(
-            PHYSICAL_CONNECTION_LEASE.read_text(encoding="utf-8"),
-            re.compile(
-                r"\bimpl\s*<[^>]+>\s+PhysicalConnection\s+for\s+"
-                r"PhysicalConnectionLease\s*<[^>]+>",
-                re.DOTALL,
-            ),
-        )
+    lease_methods = lease_method_names(
+        PHYSICAL_CONNECTION_LEASE.read_text(encoding="utf-8")
     )
     return trait_methods, lease_methods
 
@@ -232,33 +216,32 @@ def parse_surface() -> tuple[set[str], set[str]]:
 def self_test() -> int:
     """Inject a future trait default and prove that an unmodified lease fails validation."""
 
-    synthetic_trait = """
+    synthetic_trait = r'''
+        /// Documentation can contain a closing brace: }.
         pub trait PhysicalConnection {
-            async fn existing(&mut self) {}
+            async fn existing(&mut self) {
+                let normal = "}";
+                let raw = r##"}"##;
+                let bytes = b"}";
+                let raw_bytes = br##"}"##;
+                let character = '}';
+                if true {
+                    match normal {
+                        "}" => {}
+                        _ => {}
+                    }
+                }
+            }
             async fn future_default(&mut self) {}
         }
-    """
+    '''
     synthetic_lease = """
         impl<L> PhysicalConnection for PhysicalConnectionLease<L> {
             async fn existing(&mut self) {}
         }
     """
-    trait_methods = method_names(
-        block_after(
-            synthetic_trait,
-            re.compile(r"\bpub\s+trait\s+PhysicalConnection\b"),
-        )
-    )
-    lease_methods = method_names(
-        block_after(
-            synthetic_lease,
-            re.compile(
-                r"\bimpl\s*<[^>]+>\s+PhysicalConnection\s+for\s+"
-                r"PhysicalConnectionLease\s*<[^>]+>",
-                re.DOTALL,
-            ),
-        )
-    )
+    trait_methods = trait_method_names(synthetic_trait)
+    lease_methods = lease_method_names(synthetic_lease)
     errors = validation_errors(trait_methods, lease_methods, frozenset())
     expected = "FAIL: PhysicalConnectionLease misses delegates: future_default"
     if errors != [expected]:

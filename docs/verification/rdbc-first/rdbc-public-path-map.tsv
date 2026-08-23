@@ -1,275 +1,286 @@
-old_path	new_path	compile_mode	old_module_file
-druid::core::value::Value	druid_rdbc::types::Value	OWNED	crates/druid/src/core/value.rs
-druid::core::row::Row	druid_rdbc::types::Row	OWNED	crates/druid/src/core/row.rs
-druid::core::rdbc_url::RdbcUrl	druid_rdbc::types::RdbcUrl	OWNED	crates/druid/src/core/rdbc_url.rs
-druid::sql::types::Types	druid_rdbc::types::Types	OWNED	crates/druid/src/sql/types.rs
-druid::sql::rdbc_type::RdbcType	druid_rdbc::types::RdbcType	OWNED	crates/druid/src/sql/rdbc_type.rs
-druid::sql::rdbc_sql_type::SqlType	druid_rdbc::types::SqlType	DYN_TRAIT	crates/druid/src/sql/rdbc_sql_type.rs
-druid::core::sql_exception::SqlException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/core/sql_exception.rs
-druid::core::sql_exception::SqlExceptionCause	druid_rdbc::error::SqlExceptionCause	OWNED	crates/druid/src/core/sql_exception.rs
-druid::core::sql_exception::SqlExceptionKind	druid_rdbc::error::SqlExceptionKind	OWNED	crates/druid/src/core/sql_exception.rs
-druid::core::sql_warning::SqlWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/core/sql_warning.rs
-druid::core::Value	druid_rdbc::types::Value	OWNED	crates/druid/src/core/mod.rs
-druid::core::Row	druid_rdbc::types::Row	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcUrl	druid_rdbc::types::RdbcUrl	OWNED	crates/druid/src/core/mod.rs
-druid::core::SqlException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/core/mod.rs
-druid::core::SqlExceptionCause	druid_rdbc::error::SqlExceptionCause	OWNED	crates/druid/src/core/mod.rs
-druid::core::SqlExceptionKind	druid_rdbc::error::SqlExceptionKind	OWNED	crates/druid/src/core/mod.rs
-druid::core::SqlWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/core/mod.rs
-druid::sql::Types	druid_rdbc::types::Types	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcType	druid_rdbc::types::RdbcType	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RDBCType	druid_rdbc::types::RdbcType	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SQLType	druid_rdbc::types::SqlType	DYN_TRAIT	crates/druid/src/sql/mod.rs
-druid::sql::SqlException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SQLException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlExceptionKind	druid_rdbc::error::SqlExceptionKind	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SQLWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlTransientException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlTransientConnectionException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlNonTransientException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlNonTransientConnectionException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlRecoverableException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlDataException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlIntegrityConstraintViolationException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlInvalidAuthorizationSpecException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlSyntaxErrorException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlTransactionRollbackException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlFeatureNotSupportedException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlTimeoutException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs
-druid::core::error::DruidError	druid_rdbc::compat::DruidError	OWNED	crates/druid/src/core/error.rs
-druid::core::DruidError	druid_rdbc::compat::DruidError	OWNED	crates/druid/src/core/mod.rs
-druid::core::rdbc_string::RdbcString	druid_rdbc::types::RdbcString	OWNED	crates/druid/src/core/rdbc_string.rs
-druid::core::RdbcString	druid_rdbc::types::RdbcString	OWNED	crates/druid/src/core/mod.rs
-druid::sql::RdbcString	druid_rdbc::types::RdbcString	OWNED	crates/druid/src/sql/mod.rs
-druid::core::savepoint::Savepoint	druid_rdbc::types::Savepoint	OWNED	crates/druid/src/core/savepoint.rs
-druid::core::Savepoint	druid_rdbc::types::Savepoint	OWNED	crates/druid/src/core/mod.rs
-druid::sql::Savepoint	druid_rdbc::types::Savepoint	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::date::Date	druid_rdbc::types::Date	OWNED	crates/druid/src/sql/date.rs
-druid::sql::Date	druid_rdbc::types::Date	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::time::Time	druid_rdbc::types::Time	OWNED	crates/druid/src/sql/time.rs
-druid::sql::Time	druid_rdbc::types::Time	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::timestamp::Timestamp	druid_rdbc::types::Timestamp	OWNED	crates/druid/src/sql/timestamp.rs
-druid::sql::Timestamp	druid_rdbc::types::Timestamp	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::exceptions::SqlExceptionKind	druid_rdbc::compat::SqlExceptionKind	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlException	druid_rdbc::compat::SqlException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlWarning	druid_rdbc::compat::SqlWarning	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlTransientException	druid_rdbc::compat::SqlTransientException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlTransientConnectionException	druid_rdbc::compat::SqlTransientConnectionException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlNonTransientException	druid_rdbc::compat::SqlNonTransientException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlNonTransientConnectionException	druid_rdbc::compat::SqlNonTransientConnectionException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlRecoverableException	druid_rdbc::compat::SqlRecoverableException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlDataException	druid_rdbc::compat::SqlDataException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlIntegrityConstraintViolationException	druid_rdbc::compat::SqlIntegrityConstraintViolationException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlInvalidAuthorizationSpecException	druid_rdbc::compat::SqlInvalidAuthorizationSpecException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlSyntaxErrorException	druid_rdbc::compat::SqlSyntaxErrorException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlTransactionRollbackException	druid_rdbc::compat::SqlTransactionRollbackException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlFeatureNotSupportedException	druid_rdbc::compat::SqlFeatureNotSupportedException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlTimeoutException	druid_rdbc::compat::SqlTimeoutException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::BatchUpdateException	druid_rdbc::compat::BatchUpdateException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::DataTruncation	druid_rdbc::compat::DataTruncation	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::exceptions::SqlClientInfoException	druid_rdbc::compat::SqlClientInfoException	OWNED	crates/druid/src/sql/exceptions.rs
-druid::sql::BatchUpdateException	druid_rdbc::compat::BatchUpdateException	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::DataTruncation	druid_rdbc::compat::DataTruncation	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlClientInfoException	druid_rdbc::compat::SqlClientInfoException	OWNED	crates/druid/src/sql/mod.rs
-druid::core::rdbc_calendar::RdbcCalendar	druid_rdbc::types::RdbcCalendar	OWNED	crates/druid/src/core/rdbc_calendar.rs
-druid::core::rdbc_calendar::RdbcCalendarArgument	druid_rdbc::types::RdbcCalendarArgument	OWNED	crates/druid/src/core/rdbc_calendar.rs
-druid::core::rdbc_object::RdbcObject	druid_rdbc::types::RdbcObject	OWNED	crates/druid/src/core/rdbc_object.rs
-druid::core::rdbc_opaque_object::PhysicalRdbcOpaqueObject	druid_rdbc::types::PhysicalRdbcOpaqueObject	DYN_TRAIT	crates/druid/src/core/rdbc_opaque_object.rs
-druid::core::rdbc_opaque_object::RdbcOpaqueObject	druid_rdbc::types::RdbcOpaqueObject	OWNED	crates/druid/src/core/rdbc_opaque_object.rs
-druid::core::rdbc_row_id::RdbcRowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/core/rdbc_row_id.rs
-druid::core::rdbc_target_type::RdbcTargetType	druid_rdbc::types::RdbcTargetType	OWNED	crates/druid/src/core/rdbc_target_type.rs
-druid::core::rdbc_type_map::RdbcTypeMap	druid_rdbc::types::RdbcTypeMap	OWNED	crates/druid/src/core/rdbc_type_map.rs
-druid::core::rdbc_parameter::ASCII_INPUT_STREAM	druid_rdbc::types::ASCII_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::BINARY_INPUT_STREAM	druid_rdbc::types::BINARY_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::CHARACTER_INPUT_STREAM	druid_rdbc::types::CHARACTER_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::NCHARACTER_INPUT_STREAM	druid_rdbc::types::NCHARACTER_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::URL	druid_rdbc::types::URL	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::RdbcParameter	druid_rdbc::types::RdbcParameter	DYN_TRAIT	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::RdbcParameterType	druid_rdbc::types::RdbcParameterType	OWNED	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter::RdbcParameterValue	druid_rdbc::types::RdbcParameterValue	OWNED	crates/druid/src/core/rdbc_parameter.rs
-druid::core::rdbc_parameter_date::RdbcParameterDate	druid_rdbc::types::RdbcParameterDate	OWNED	crates/druid/src/core/rdbc_parameter_date.rs
-druid::core::rdbc_parameter_decimal::RdbcParameterDecimal	druid_rdbc::types::RdbcParameterDecimal	OWNED	crates/druid/src/core/rdbc_parameter_decimal.rs
-druid::core::rdbc_parameter_impl::RdbcParameterImpl	druid_rdbc::types::RdbcParameterImpl	OWNED	crates/druid/src/core/rdbc_parameter_impl.rs
-druid::core::rdbc_parameter_int::RdbcParameterInt	druid_rdbc::types::RdbcParameterInt	OWNED	crates/druid/src/core/rdbc_parameter_int.rs
-druid::core::rdbc_parameter_long::RdbcParameterLong	druid_rdbc::types::RdbcParameterLong	OWNED	crates/druid/src/core/rdbc_parameter_long.rs
-druid::core::rdbc_parameter_null::RdbcParameterNull	druid_rdbc::types::RdbcParameterNull	OWNED	crates/druid/src/core/rdbc_parameter_null.rs
-druid::core::rdbc_parameter_string::RdbcParameterString	druid_rdbc::types::RdbcParameterString	OWNED	crates/druid/src/core/rdbc_parameter_string.rs
-druid::core::rdbc_parameter_timestamp::RdbcParameterTimestamp	druid_rdbc::types::RdbcParameterTimestamp	OWNED	crates/druid/src/core/rdbc_parameter_timestamp.rs
-druid::core::rdbc_xml_representation_type::RdbcXmlRepresentationType	druid_rdbc::resource::RdbcXmlRepresentationType	OWNED	crates/druid/src/core/rdbc_xml_representation_type.rs
-druid::core::rdbc_xml_result::PhysicalXmlResult	druid_rdbc::resource::PhysicalXmlResult	DYN_TRAIT	crates/druid/src/core/rdbc_xml_result.rs
-druid::core::rdbc_xml_result::RdbcXmlResult	druid_rdbc::resource::RdbcXmlResult	OWNED	crates/druid/src/core/rdbc_xml_result.rs
-druid::core::rdbc_xml_source::PhysicalXmlSource	druid_rdbc::resource::PhysicalXmlSource	DYN_TRAIT	crates/druid/src/core/rdbc_xml_source.rs
-druid::core::rdbc_xml_source::RdbcXmlSource	druid_rdbc::resource::RdbcXmlSource	OWNED	crates/druid/src/core/rdbc_xml_source.rs
-druid::core::RdbcCalendar	druid_rdbc::types::RdbcCalendar	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableCalendar	druid_rdbc::types::RdbcCalendar	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcCalendarArgument	druid_rdbc::types::RdbcCalendarArgument	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableCalendarArgument	druid_rdbc::types::RdbcCalendarArgument	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcObject	druid_rdbc::types::RdbcObject	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableOutputValue	druid_rdbc::types::RdbcObject	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalRdbcOpaqueObject	druid_rdbc::types::PhysicalRdbcOpaqueObject	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcOpaqueObject	druid_rdbc::types::RdbcOpaqueObject	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcRowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcTargetType	druid_rdbc::types::RdbcTargetType	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableTargetType	druid_rdbc::types::RdbcTargetType	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcTypeMap	druid_rdbc::types::RdbcTypeMap	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableTypeMap	druid_rdbc::types::RdbcTypeMap	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameter	druid_rdbc::types::RdbcParameter	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterType	druid_rdbc::types::RdbcParameterType	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterValue	druid_rdbc::types::RdbcParameterValue	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterDate	druid_rdbc::types::RdbcParameterDate	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterDecimal	druid_rdbc::types::RdbcParameterDecimal	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterImpl	druid_rdbc::types::RdbcParameterImpl	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterInt	druid_rdbc::types::RdbcParameterInt	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterLong	druid_rdbc::types::RdbcParameterLong	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterNull	druid_rdbc::types::RdbcParameterNull	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterString	druid_rdbc::types::RdbcParameterString	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcParameterTimestamp	druid_rdbc::types::RdbcParameterTimestamp	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcXmlRepresentationType	druid_rdbc::resource::RdbcXmlRepresentationType	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalXmlResult	druid_rdbc::resource::PhysicalXmlResult	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcXmlResult	druid_rdbc::resource::RdbcXmlResult	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalXmlSource	druid_rdbc::resource::PhysicalXmlSource	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcXmlSource	druid_rdbc::resource::RdbcXmlSource	OWNED	crates/druid/src/core/mod.rs
-druid::spi::RdbcArrayAccess	druid_rdbc::resource::RdbcArrayAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcBlobAccess	druid_rdbc::resource::RdbcBlobAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcClobAccess	druid_rdbc::resource::RdbcClobAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcNClobAccess	druid_rdbc::resource::RdbcNClobAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcRefAccess	druid_rdbc::resource::RdbcRefAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceAccess	druid_rdbc::resource::RdbcResourceAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceCapabilities	druid_rdbc::resource::RdbcResourceCapabilities	OWNED	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceContext	druid_rdbc::resource::RdbcResourceContext	OWNED	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceFactory	druid_rdbc::resource::RdbcResourceFactory	OWNED	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceId	druid_rdbc::resource::RdbcResourceId	OWNED	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceKind	druid_rdbc::resource::RdbcResourceKind	OWNED	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceOwner	druid_rdbc::resource::RdbcResourceOwner	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::spi::RdbcResourceState	druid_rdbc::resource::RdbcResourceState	OWNED	crates/druid/src/spi/mod.rs
-druid::spi::RdbcSqlXmlAccess	druid_rdbc::resource::RdbcSqlXmlAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs
-druid::sql::array::Array	druid_rdbc::resource::Array	OWNED	crates/druid/src/sql/array.rs
-druid::sql::array::RdbcArray	druid_rdbc::resource::RdbcArray	OWNED	crates/druid/src/sql/array.rs
-druid::sql::blob::Blob	druid_rdbc::resource::Blob	OWNED	crates/druid/src/sql/blob.rs
-druid::sql::blob::RdbcBlob	druid_rdbc::resource::RdbcBlob	OWNED	crates/druid/src/sql/blob.rs
-druid::sql::clob::Clob	druid_rdbc::resource::Clob	OWNED	crates/druid/src/sql/clob.rs
-druid::sql::clob::RdbcClob	druid_rdbc::resource::RdbcClob	OWNED	crates/druid/src/sql/clob.rs
-druid::sql::n_clob::NClob	druid_rdbc::resource::NClob	OWNED	crates/druid/src/sql/n_clob.rs
-druid::sql::n_clob::RdbcNClob	druid_rdbc::resource::RdbcNClob	OWNED	crates/druid/src/sql/n_clob.rs
-druid::sql::ref_value::Ref	druid_rdbc::resource::Ref	OWNED	crates/druid/src/sql/ref_value.rs
-druid::sql::ref_value::RdbcRef	druid_rdbc::resource::RdbcRef	OWNED	crates/druid/src/sql/ref_value.rs
-druid::sql::sql_xml::SqlXml	druid_rdbc::resource::SqlXml	OWNED	crates/druid/src/sql/sql_xml.rs
-druid::sql::sql_xml::RdbcSqlXml	druid_rdbc::resource::RdbcSqlXml	OWNED	crates/druid/src/sql/sql_xml.rs
-druid::sql::Array	druid_rdbc::resource::Array	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcArray	druid_rdbc::resource::RdbcArray	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::Blob	druid_rdbc::resource::Blob	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcBlob	druid_rdbc::resource::RdbcBlob	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::Clob	druid_rdbc::resource::Clob	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcClob	druid_rdbc::resource::RdbcClob	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::NClob	druid_rdbc::resource::NClob	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcNClob	druid_rdbc::resource::RdbcNClob	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::Ref	druid_rdbc::resource::Ref	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcRef	druid_rdbc::resource::RdbcRef	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SqlXml	druid_rdbc::resource::SqlXml	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::SQLXML	druid_rdbc::resource::SqlXml	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcSqlXml	druid_rdbc::resource::RdbcSqlXml	OWNED	crates/druid/src/sql/mod.rs
-druid::core::RdbcArray	druid_rdbc::resource::RdbcArray	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcBlob	druid_rdbc::resource::RdbcBlob	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcClob	druid_rdbc::resource::RdbcClob	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcNClob	druid_rdbc::resource::RdbcNClob	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcRef	druid_rdbc::resource::RdbcRef	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcSqlXml	druid_rdbc::resource::RdbcSqlXml	OWNED	crates/druid/src/core/mod.rs
-druid::core::rdbc_input_stream::RdbcInputStream	druid_rdbc::resource::RdbcInputStream	OWNED	crates/druid/src/core/rdbc_input_stream.rs
-druid::core::rdbc_input_stream::RdbcStreamLength	druid_rdbc::resource::RdbcStreamLength	OWNED	crates/druid/src/core/rdbc_input_stream.rs
-druid::core::rdbc_output_stream::RdbcOutputStream	druid_rdbc::resource::RdbcOutputStream	OWNED	crates/druid/src/core/rdbc_output_stream.rs
-druid::core::rdbc_reader::PhysicalCharacterReader	druid_rdbc::resource::PhysicalCharacterReader	DYN_TRAIT	crates/druid/src/core/rdbc_reader.rs
-druid::core::rdbc_reader::RdbcCharacterLength	druid_rdbc::resource::RdbcCharacterLength	OWNED	crates/druid/src/core/rdbc_reader.rs
-druid::core::rdbc_reader::RdbcReader	druid_rdbc::resource::RdbcReader	OWNED	crates/druid/src/core/rdbc_reader.rs
-druid::core::rdbc_writer::PhysicalCharacterWriter	druid_rdbc::resource::PhysicalCharacterWriter	DYN_TRAIT	crates/druid/src/core/rdbc_writer.rs
-druid::core::rdbc_writer::RdbcWriter	druid_rdbc::resource::RdbcWriter	OWNED	crates/druid/src/core/rdbc_writer.rs
-druid::core::RdbcInputStream	druid_rdbc::resource::RdbcInputStream	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcStreamLength	druid_rdbc::resource::RdbcStreamLength	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcOutputStream	druid_rdbc::resource::RdbcOutputStream	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalCharacterReader	druid_rdbc::resource::PhysicalCharacterReader	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcCharacterLength	druid_rdbc::resource::RdbcCharacterLength	OWNED	crates/druid/src/core/mod.rs
-druid::core::RdbcReader	druid_rdbc::resource::RdbcReader	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalCharacterWriter	druid_rdbc::resource::PhysicalCharacterWriter	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcWriter	druid_rdbc::resource::RdbcWriter	OWNED	crates/druid/src/core/mod.rs
-druid::sql::RdbcInputStream	druid_rdbc::resource::RdbcInputStream	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcStreamLength	druid_rdbc::resource::RdbcStreamLength	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcOutputStream	druid_rdbc::resource::RdbcOutputStream	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcCharacterLength	druid_rdbc::resource::RdbcCharacterLength	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcReader	druid_rdbc::resource::RdbcReader	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::RdbcWriter	druid_rdbc::resource::RdbcWriter	OWNED	crates/druid/src/sql/mod.rs
-druid::core::database_meta_data_row_id_lifetime::DatabaseMetaDataRowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/core/database_meta_data_row_id_lifetime.rs
-druid::core::result_set_nullability::ResultSetNullability	druid_rdbc::spi::ResultSetNullability	OWNED	crates/druid/src/core/result_set_nullability.rs
-druid::core::result_set_update::ResultSetUpdate	druid_rdbc::spi::ResultSetUpdate	OWNED	crates/druid/src/core/result_set_update.rs
-druid::core::physical_database_meta_data::PhysicalDatabaseMetaData	druid_rdbc::spi::PhysicalDatabaseMetaData	DYN_TRAIT	crates/druid/src/core/physical_database_meta_data.rs
-druid::core::physical_result_set_meta_data::PhysicalResultSetMetaData	druid_rdbc::spi::PhysicalResultSetMetaData	DYN_TRAIT	crates/druid/src/core/physical_result_set_meta_data.rs
-druid::core::rdbc_result_set::PhysicalResultSet	druid_rdbc::spi::PhysicalResultSet	DYN_TRAIT	crates/druid/src/core/rdbc_result_set.rs
-druid::core::rdbc_result_set::RdbcResultSet	druid_rdbc::spi::RdbcResultSet	OWNED	crates/druid/src/core/rdbc_result_set.rs
-druid::core::rdbc_result_set::RowSetResultSet	druid_rdbc::spi::RowSetResultSet	OWNED	crates/druid/src/core/rdbc_result_set.rs
-druid::core::result_set_meta_data::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/core/result_set_meta_data.rs
-druid::core::result_set_column_meta::ResultSetColumnMeta	druid_rdbc::spi::ResultSetColumnMeta	OWNED	crates/druid/src/core/result_set_column_meta.rs
-druid::core::result_set_column_type::ResultSetColumnType	druid_rdbc::spi::ResultSetColumnType	OWNED	crates/druid/src/core/result_set_column_type.rs
-druid::core::DatabaseMetaDataRowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/core/mod.rs
-druid::core::ResultSetNullability	druid_rdbc::spi::ResultSetNullability	OWNED	crates/druid/src/core/mod.rs
-druid::core::ResultSetUpdate	druid_rdbc::spi::ResultSetUpdate	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalDatabaseMetaData	druid_rdbc::spi::PhysicalDatabaseMetaData	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::PhysicalResultSetMetaData	druid_rdbc::spi::PhysicalResultSetMetaData	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::PhysicalResultSet	druid_rdbc::spi::PhysicalResultSet	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::RdbcResultSet	druid_rdbc::spi::RdbcResultSet	OWNED	crates/druid/src/core/mod.rs
-druid::core::RowSetResultSet	druid_rdbc::spi::RowSetResultSet	OWNED	crates/druid/src/core/mod.rs
-druid::core::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/core/mod.rs
-druid::core::ResultSetColumnMeta	druid_rdbc::spi::ResultSetColumnMeta	OWNED	crates/druid/src/core/mod.rs
-druid::core::ResultSetColumnType	druid_rdbc::spi::ResultSetColumnType	OWNED	crates/druid/src/core/mod.rs
-druid::core::exec_result::ExecResult	druid_rdbc::spi::ExecResult	OWNED	crates/druid/src/core/exec_result.rs
-druid::core::callable_input_parameter::CallableInputParameter	druid_rdbc::spi::CallableInputParameter	OWNED	crates/druid/src/core/callable_input_parameter.rs
-druid::core::callable_out_parameter::CallableOutParameter	druid_rdbc::spi::CallableOutParameter	OWNED	crates/druid/src/core/callable_out_parameter.rs
-druid::core::callable_parameter::CallableParameter	druid_rdbc::spi::CallableParameter	OWNED	crates/druid/src/core/callable_parameter.rs
-druid::core::physical_statement::PhysicalStatement	druid_rdbc::spi::PhysicalStatement	DYN_TRAIT	crates/druid/src/core/physical_statement.rs
-druid::core::physical_statement::PhysicalStatementOptions	druid_rdbc::spi::PhysicalStatementOptions	OWNED	crates/druid/src/core/physical_statement.rs
-druid::core::physical_statement::SqlTextStatement	druid_rdbc::spi::SqlTextStatement	OWNED	crates/druid/src/core/physical_statement.rs
-druid::core::physical_statement::StatementExecuteResult	druid_rdbc::spi::StatementExecuteResult	OWNED	crates/druid/src/core/physical_statement.rs
-druid::core::physical_statement::StatementGeneratedKeys	druid_rdbc::spi::StatementGeneratedKeys	OWNED	crates/druid/src/core/physical_statement.rs
-druid::core::physical_prepared_statement::PhysicalPreparedStatement	druid_rdbc::spi::PhysicalPreparedStatement	DYN_TRAIT	crates/druid/src/core/physical_prepared_statement.rs
-druid::core::physical_prepared_statement::SqlTextPreparedStatement	druid_rdbc::spi::SqlTextPreparedStatement	OWNED	crates/druid/src/core/physical_prepared_statement.rs
-druid::core::physical_callable_statement::PhysicalCallableStatement	druid_rdbc::spi::PhysicalCallableStatement	DYN_TRAIT	crates/druid/src/core/physical_callable_statement.rs
-druid::core::prepared_input_parameter::PreparedInputParameter	druid_rdbc::spi::PreparedInputParameter	OWNED	crates/druid/src/core/prepared_input_parameter.rs
-druid::core::prepared_input_parameter::PreparedTypeNameArgument	druid_rdbc::spi::PreparedTypeNameArgument	OWNED	crates/druid/src/core/prepared_input_parameter.rs
-druid::core::prepared_statement_key::PreparedStatementKey	druid_rdbc::spi::PreparedStatementKey	OWNED	crates/druid/src/core/prepared_statement_key.rs
-druid::core::prepared_statement_key::PreparedStatementMethodType	druid_rdbc::spi::PreparedStatementMethodType	OWNED	crates/druid/src/core/prepared_statement_key.rs
-druid::core::ExecResult	druid_rdbc::spi::ExecResult	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableInputParameter	druid_rdbc::spi::CallableInputParameter	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableOutParameter	druid_rdbc::spi::CallableOutParameter	OWNED	crates/druid/src/core/mod.rs
-druid::core::CallableParameter	druid_rdbc::spi::CallableParameter	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalStatement	druid_rdbc::spi::PhysicalStatement	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::PhysicalStatementOptions	druid_rdbc::spi::PhysicalStatementOptions	OWNED	crates/druid/src/core/mod.rs
-druid::core::SqlTextStatement	druid_rdbc::spi::SqlTextStatement	OWNED	crates/druid/src/core/mod.rs
-druid::core::StatementExecuteResult	druid_rdbc::spi::StatementExecuteResult	OWNED	crates/druid/src/core/mod.rs
-druid::core::StatementGeneratedKeys	druid_rdbc::spi::StatementGeneratedKeys	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalPreparedStatement	druid_rdbc::spi::PhysicalPreparedStatement	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::SqlTextPreparedStatement	druid_rdbc::spi::SqlTextPreparedStatement	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalCallableStatement	druid_rdbc::spi::PhysicalCallableStatement	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::PreparedInputParameter	druid_rdbc::spi::PreparedInputParameter	OWNED	crates/druid/src/core/mod.rs
-druid::core::PreparedTypeNameArgument	druid_rdbc::spi::PreparedTypeNameArgument	OWNED	crates/druid/src/core/mod.rs
-druid::core::PreparedStatementKey	druid_rdbc::spi::PreparedStatementKey	OWNED	crates/druid/src/core/mod.rs
-druid::core::PreparedStatementMethodType	druid_rdbc::spi::PreparedStatementMethodType	OWNED	crates/druid/src/core/mod.rs
-druid::core::wrapper::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/core/wrapper.rs
-druid::core::wrapper::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/core/wrapper.rs
-druid::core::wrapper::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/core/wrapper.rs
-druid::sql::wrapper::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/sql/wrapper.rs
-druid::sql::wrapper::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/sql/wrapper.rs
-druid::sql::wrapper::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/sql/wrapper.rs
-druid::core::physical_connection::PhysicalConnection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/physical_connection.rs
-druid::core::physical_connection_capabilities::PhysicalConnectionCapabilities	druid_rdbc::spi::PhysicalConnectionCapabilities	OWNED	crates/druid/src/core/physical_connection_capabilities.rs
-druid::core::physical_connection_factory::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/physical_connection_factory.rs
-druid::core::physical_connection_info::PhysicalConnectionInfo	druid_rdbc::spi::PhysicalConnectionInfo	OWNED	crates/druid/src/core/physical_connection_info.rs
-druid::core::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/core/mod.rs
-druid::core::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/core/mod.rs
-druid::sql::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/sql/mod.rs
-druid::sql::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/sql/mod.rs
-druid::sql::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/sql/mod.rs
-druid::core::PhysicalConnection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::Connection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::PhysicalConnectionCapabilities	druid_rdbc::spi::PhysicalConnectionCapabilities	OWNED	crates/druid/src/core/mod.rs
-druid::core::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::ConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/mod.rs
-druid::core::PhysicalConnectionInfo	druid_rdbc::spi::PhysicalConnectionInfo	OWNED	crates/druid/src/core/mod.rs
+old_path	new_path	compile_mode	old_module_file	source_mode
+druid::core::value::Value	druid_rdbc::types::Value	OWNED	crates/druid/src/core/value.rs	PURE_SHIM
+druid::core::row::Row	druid_rdbc::types::Row	OWNED	crates/druid/src/core/row.rs	PURE_SHIM
+druid::core::rdbc_url::RdbcUrl	druid_rdbc::types::RdbcUrl	OWNED	crates/druid/src/core/rdbc_url.rs	PURE_SHIM
+druid::sql::types::Types	druid_rdbc::types::Types	OWNED	crates/druid/src/sql/types.rs	PURE_SHIM
+druid::sql::rdbc_type::RdbcType	druid_rdbc::types::RdbcType	OWNED	crates/druid/src/sql/rdbc_type.rs	PURE_SHIM
+druid::sql::rdbc_sql_type::SqlType	druid_rdbc::types::SqlType	DYN_TRAIT	crates/druid/src/sql/rdbc_sql_type.rs	PURE_SHIM
+druid::core::sql_exception::SqlException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/core/sql_exception.rs	PURE_SHIM
+druid::core::sql_exception::SqlExceptionCause	druid_rdbc::error::SqlExceptionCause	OWNED	crates/druid/src/core/sql_exception.rs	PURE_SHIM
+druid::core::sql_exception::SqlExceptionKind	druid_rdbc::error::SqlExceptionKind	OWNED	crates/druid/src/core/sql_exception.rs	PURE_SHIM
+druid::core::sql_warning::SqlWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/core/sql_warning.rs	PURE_SHIM
+druid::core::Value	druid_rdbc::types::Value	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::Row	druid_rdbc::types::Row	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcUrl	druid_rdbc::types::RdbcUrl	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::SqlException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::SqlExceptionCause	druid_rdbc::error::SqlExceptionCause	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::SqlExceptionKind	druid_rdbc::error::SqlExceptionKind	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::SqlWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Types	druid_rdbc::types::Types	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcType	druid_rdbc::types::RdbcType	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RDBCType	druid_rdbc::types::RdbcType	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SQLType	druid_rdbc::types::SqlType	DYN_TRAIT	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SQLException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlExceptionKind	druid_rdbc::error::SqlExceptionKind	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SQLWarning	druid_rdbc::error::SqlWarning	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlTransientException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlTransientConnectionException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlNonTransientException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlNonTransientConnectionException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlRecoverableException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlDataException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlIntegrityConstraintViolationException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlInvalidAuthorizationSpecException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlSyntaxErrorException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlTransactionRollbackException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlFeatureNotSupportedException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlTimeoutException	druid_rdbc::error::SqlException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::core::error::DruidError	druid_rdbc::compat::DruidError	OWNED	crates/druid/src/core/error.rs	PURE_SHIM
+druid::core::DruidError	druid_rdbc::compat::DruidError	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::rdbc_string::RdbcString	druid_rdbc::types::RdbcString	OWNED	crates/druid/src/core/rdbc_string.rs	PURE_SHIM
+druid::core::RdbcString	druid_rdbc::types::RdbcString	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcString	druid_rdbc::types::RdbcString	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::core::savepoint::Savepoint	druid_rdbc::types::Savepoint	OWNED	crates/druid/src/core/savepoint.rs	PURE_SHIM
+druid::core::Savepoint	druid_rdbc::types::Savepoint	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Savepoint	druid_rdbc::types::Savepoint	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::date::Date	druid_rdbc::types::Date	OWNED	crates/druid/src/sql/date.rs	PURE_SHIM
+druid::sql::Date	druid_rdbc::types::Date	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::time::Time	druid_rdbc::types::Time	OWNED	crates/druid/src/sql/time.rs	PURE_SHIM
+druid::sql::Time	druid_rdbc::types::Time	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::timestamp::Timestamp	druid_rdbc::types::Timestamp	OWNED	crates/druid/src/sql/timestamp.rs	PURE_SHIM
+druid::sql::Timestamp	druid_rdbc::types::Timestamp	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::exceptions::SqlExceptionKind	druid_rdbc::compat::SqlExceptionKind	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlException	druid_rdbc::compat::SqlException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlWarning	druid_rdbc::compat::SqlWarning	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlTransientException	druid_rdbc::compat::SqlTransientException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlTransientConnectionException	druid_rdbc::compat::SqlTransientConnectionException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlNonTransientException	druid_rdbc::compat::SqlNonTransientException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlNonTransientConnectionException	druid_rdbc::compat::SqlNonTransientConnectionException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlRecoverableException	druid_rdbc::compat::SqlRecoverableException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlDataException	druid_rdbc::compat::SqlDataException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlIntegrityConstraintViolationException	druid_rdbc::compat::SqlIntegrityConstraintViolationException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlInvalidAuthorizationSpecException	druid_rdbc::compat::SqlInvalidAuthorizationSpecException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlSyntaxErrorException	druid_rdbc::compat::SqlSyntaxErrorException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlTransactionRollbackException	druid_rdbc::compat::SqlTransactionRollbackException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlFeatureNotSupportedException	druid_rdbc::compat::SqlFeatureNotSupportedException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlTimeoutException	druid_rdbc::compat::SqlTimeoutException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::BatchUpdateException	druid_rdbc::compat::BatchUpdateException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::DataTruncation	druid_rdbc::compat::DataTruncation	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::exceptions::SqlClientInfoException	druid_rdbc::compat::SqlClientInfoException	OWNED	crates/druid/src/sql/exceptions.rs	PURE_SHIM
+druid::sql::BatchUpdateException	druid_rdbc::compat::BatchUpdateException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::DataTruncation	druid_rdbc::compat::DataTruncation	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlClientInfoException	druid_rdbc::compat::SqlClientInfoException	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::core::rdbc_calendar::RdbcCalendar	druid_rdbc::types::RdbcCalendar	OWNED	crates/druid/src/core/rdbc_calendar.rs	PURE_SHIM
+druid::core::rdbc_calendar::RdbcCalendarArgument	druid_rdbc::types::RdbcCalendarArgument	OWNED	crates/druid/src/core/rdbc_calendar.rs	PURE_SHIM
+druid::core::rdbc_object::RdbcObject	druid_rdbc::types::RdbcObject	OWNED	crates/druid/src/core/rdbc_object.rs	PURE_SHIM
+druid::core::rdbc_opaque_object::PhysicalRdbcOpaqueObject	druid_rdbc::types::PhysicalRdbcOpaqueObject	DYN_TRAIT	crates/druid/src/core/rdbc_opaque_object.rs	PURE_SHIM
+druid::core::rdbc_opaque_object::RdbcOpaqueObject	druid_rdbc::types::RdbcOpaqueObject	OWNED	crates/druid/src/core/rdbc_opaque_object.rs	PURE_SHIM
+druid::core::rdbc_row_id::RdbcRowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/core/rdbc_row_id.rs	PURE_SHIM
+druid::core::rdbc_target_type::RdbcTargetType	druid_rdbc::types::RdbcTargetType	OWNED	crates/druid/src/core/rdbc_target_type.rs	PURE_SHIM
+druid::core::rdbc_type_map::RdbcTypeMap	druid_rdbc::types::RdbcTypeMap	OWNED	crates/druid/src/core/rdbc_type_map.rs	PURE_SHIM
+druid::core::rdbc_parameter::ASCII_INPUT_STREAM	druid_rdbc::types::ASCII_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::BINARY_INPUT_STREAM	druid_rdbc::types::BINARY_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::CHARACTER_INPUT_STREAM	druid_rdbc::types::CHARACTER_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::NCHARACTER_INPUT_STREAM	druid_rdbc::types::NCHARACTER_INPUT_STREAM	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::URL	druid_rdbc::types::URL	PATH_ONLY	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::RdbcParameter	druid_rdbc::types::RdbcParameter	DYN_TRAIT	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::RdbcParameterType	druid_rdbc::types::RdbcParameterType	OWNED	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter::RdbcParameterValue	druid_rdbc::types::RdbcParameterValue	OWNED	crates/druid/src/core/rdbc_parameter.rs	PURE_SHIM
+druid::core::rdbc_parameter_date::RdbcParameterDate	druid_rdbc::types::RdbcParameterDate	OWNED	crates/druid/src/core/rdbc_parameter_date.rs	PURE_SHIM
+druid::core::rdbc_parameter_decimal::RdbcParameterDecimal	druid_rdbc::types::RdbcParameterDecimal	OWNED	crates/druid/src/core/rdbc_parameter_decimal.rs	PURE_SHIM
+druid::core::rdbc_parameter_impl::RdbcParameterImpl	druid_rdbc::types::RdbcParameterImpl	OWNED	crates/druid/src/core/rdbc_parameter_impl.rs	PURE_SHIM
+druid::core::rdbc_parameter_int::RdbcParameterInt	druid_rdbc::types::RdbcParameterInt	OWNED	crates/druid/src/core/rdbc_parameter_int.rs	PURE_SHIM
+druid::core::rdbc_parameter_long::RdbcParameterLong	druid_rdbc::types::RdbcParameterLong	OWNED	crates/druid/src/core/rdbc_parameter_long.rs	PURE_SHIM
+druid::core::rdbc_parameter_null::RdbcParameterNull	druid_rdbc::types::RdbcParameterNull	OWNED	crates/druid/src/core/rdbc_parameter_null.rs	PURE_SHIM
+druid::core::rdbc_parameter_string::RdbcParameterString	druid_rdbc::types::RdbcParameterString	OWNED	crates/druid/src/core/rdbc_parameter_string.rs	PURE_SHIM
+druid::core::rdbc_parameter_timestamp::RdbcParameterTimestamp	druid_rdbc::types::RdbcParameterTimestamp	OWNED	crates/druid/src/core/rdbc_parameter_timestamp.rs	PURE_SHIM
+druid::core::rdbc_xml_representation_type::RdbcXmlRepresentationType	druid_rdbc::resource::RdbcXmlRepresentationType	OWNED	crates/druid/src/core/rdbc_xml_representation_type.rs	PURE_SHIM
+druid::core::rdbc_xml_result::PhysicalXmlResult	druid_rdbc::resource::PhysicalXmlResult	DYN_TRAIT	crates/druid/src/core/rdbc_xml_result.rs	PURE_SHIM
+druid::core::rdbc_xml_result::RdbcXmlResult	druid_rdbc::resource::RdbcXmlResult	OWNED	crates/druid/src/core/rdbc_xml_result.rs	PURE_SHIM
+druid::core::rdbc_xml_source::PhysicalXmlSource	druid_rdbc::resource::PhysicalXmlSource	DYN_TRAIT	crates/druid/src/core/rdbc_xml_source.rs	PURE_SHIM
+druid::core::rdbc_xml_source::RdbcXmlSource	druid_rdbc::resource::RdbcXmlSource	OWNED	crates/druid/src/core/rdbc_xml_source.rs	PURE_SHIM
+druid::core::RdbcCalendar	druid_rdbc::types::RdbcCalendar	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableCalendar	druid_rdbc::types::RdbcCalendar	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcCalendarArgument	druid_rdbc::types::RdbcCalendarArgument	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableCalendarArgument	druid_rdbc::types::RdbcCalendarArgument	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcObject	druid_rdbc::types::RdbcObject	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableOutputValue	druid_rdbc::types::RdbcObject	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalRdbcOpaqueObject	druid_rdbc::types::PhysicalRdbcOpaqueObject	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcOpaqueObject	druid_rdbc::types::RdbcOpaqueObject	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcRowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcTargetType	druid_rdbc::types::RdbcTargetType	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableTargetType	druid_rdbc::types::RdbcTargetType	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcTypeMap	druid_rdbc::types::RdbcTypeMap	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableTypeMap	druid_rdbc::types::RdbcTypeMap	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameter	druid_rdbc::types::RdbcParameter	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterType	druid_rdbc::types::RdbcParameterType	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterValue	druid_rdbc::types::RdbcParameterValue	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterDate	druid_rdbc::types::RdbcParameterDate	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterDecimal	druid_rdbc::types::RdbcParameterDecimal	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterImpl	druid_rdbc::types::RdbcParameterImpl	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterInt	druid_rdbc::types::RdbcParameterInt	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterLong	druid_rdbc::types::RdbcParameterLong	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterNull	druid_rdbc::types::RdbcParameterNull	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterString	druid_rdbc::types::RdbcParameterString	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcParameterTimestamp	druid_rdbc::types::RdbcParameterTimestamp	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcXmlRepresentationType	druid_rdbc::resource::RdbcXmlRepresentationType	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalXmlResult	druid_rdbc::resource::PhysicalXmlResult	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcXmlResult	druid_rdbc::resource::RdbcXmlResult	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalXmlSource	druid_rdbc::resource::PhysicalXmlSource	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcXmlSource	druid_rdbc::resource::RdbcXmlSource	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcArrayAccess	druid_rdbc::resource::RdbcArrayAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcBlobAccess	druid_rdbc::resource::RdbcBlobAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcClobAccess	druid_rdbc::resource::RdbcClobAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcNClobAccess	druid_rdbc::resource::RdbcNClobAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcRefAccess	druid_rdbc::resource::RdbcRefAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceAccess	druid_rdbc::resource::RdbcResourceAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceCapabilities	druid_rdbc::resource::RdbcResourceCapabilities	OWNED	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceContext	druid_rdbc::resource::RdbcResourceContext	OWNED	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceFactory	druid_rdbc::resource::RdbcResourceFactory	OWNED	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceId	druid_rdbc::resource::RdbcResourceId	OWNED	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceKind	druid_rdbc::resource::RdbcResourceKind	OWNED	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceOwner	druid_rdbc::resource::RdbcResourceOwner	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcResourceState	druid_rdbc::resource::RdbcResourceState	OWNED	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::spi::RdbcSqlXmlAccess	druid_rdbc::resource::RdbcSqlXmlAccess	DYN_TRAIT	crates/druid/src/spi/mod.rs	FACADE_MEMBERSHIP
+druid::sql::array::Array	druid_rdbc::resource::Array	OWNED	crates/druid/src/sql/array.rs	PURE_SHIM
+druid::sql::array::RdbcArray	druid_rdbc::resource::RdbcArray	OWNED	crates/druid/src/sql/array.rs	PURE_SHIM
+druid::sql::blob::Blob	druid_rdbc::resource::Blob	OWNED	crates/druid/src/sql/blob.rs	PURE_SHIM
+druid::sql::blob::RdbcBlob	druid_rdbc::resource::RdbcBlob	OWNED	crates/druid/src/sql/blob.rs	PURE_SHIM
+druid::sql::clob::Clob	druid_rdbc::resource::Clob	OWNED	crates/druid/src/sql/clob.rs	PURE_SHIM
+druid::sql::clob::RdbcClob	druid_rdbc::resource::RdbcClob	OWNED	crates/druid/src/sql/clob.rs	PURE_SHIM
+druid::sql::n_clob::NClob	druid_rdbc::resource::NClob	OWNED	crates/druid/src/sql/n_clob.rs	PURE_SHIM
+druid::sql::n_clob::RdbcNClob	druid_rdbc::resource::RdbcNClob	OWNED	crates/druid/src/sql/n_clob.rs	PURE_SHIM
+druid::sql::ref_value::Ref	druid_rdbc::resource::Ref	OWNED	crates/druid/src/sql/ref_value.rs	PURE_SHIM
+druid::sql::ref_value::RdbcRef	druid_rdbc::resource::RdbcRef	OWNED	crates/druid/src/sql/ref_value.rs	PURE_SHIM
+druid::sql::sql_xml::SqlXml	druid_rdbc::resource::SqlXml	OWNED	crates/druid/src/sql/sql_xml.rs	PURE_SHIM
+druid::sql::sql_xml::RdbcSqlXml	druid_rdbc::resource::RdbcSqlXml	OWNED	crates/druid/src/sql/sql_xml.rs	PURE_SHIM
+druid::sql::Array	druid_rdbc::resource::Array	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcArray	druid_rdbc::resource::RdbcArray	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Blob	druid_rdbc::resource::Blob	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcBlob	druid_rdbc::resource::RdbcBlob	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Clob	druid_rdbc::resource::Clob	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcClob	druid_rdbc::resource::RdbcClob	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::NClob	druid_rdbc::resource::NClob	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcNClob	druid_rdbc::resource::RdbcNClob	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Ref	druid_rdbc::resource::Ref	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcRef	druid_rdbc::resource::RdbcRef	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SqlXml	druid_rdbc::resource::SqlXml	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::SQLXML	druid_rdbc::resource::SqlXml	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcSqlXml	druid_rdbc::resource::RdbcSqlXml	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcArray	druid_rdbc::resource::RdbcArray	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcBlob	druid_rdbc::resource::RdbcBlob	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcClob	druid_rdbc::resource::RdbcClob	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcNClob	druid_rdbc::resource::RdbcNClob	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcRef	druid_rdbc::resource::RdbcRef	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcSqlXml	druid_rdbc::resource::RdbcSqlXml	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::rdbc_input_stream::RdbcInputStream	druid_rdbc::resource::RdbcInputStream	OWNED	crates/druid/src/core/rdbc_input_stream.rs	PURE_SHIM
+druid::core::rdbc_input_stream::RdbcStreamLength	druid_rdbc::resource::RdbcStreamLength	OWNED	crates/druid/src/core/rdbc_input_stream.rs	PURE_SHIM
+druid::core::rdbc_output_stream::RdbcOutputStream	druid_rdbc::resource::RdbcOutputStream	OWNED	crates/druid/src/core/rdbc_output_stream.rs	PURE_SHIM
+druid::core::rdbc_reader::PhysicalCharacterReader	druid_rdbc::resource::PhysicalCharacterReader	DYN_TRAIT	crates/druid/src/core/rdbc_reader.rs	PURE_SHIM
+druid::core::rdbc_reader::RdbcCharacterLength	druid_rdbc::resource::RdbcCharacterLength	OWNED	crates/druid/src/core/rdbc_reader.rs	PURE_SHIM
+druid::core::rdbc_reader::RdbcReader	druid_rdbc::resource::RdbcReader	OWNED	crates/druid/src/core/rdbc_reader.rs	PURE_SHIM
+druid::core::rdbc_writer::PhysicalCharacterWriter	druid_rdbc::resource::PhysicalCharacterWriter	DYN_TRAIT	crates/druid/src/core/rdbc_writer.rs	PURE_SHIM
+druid::core::rdbc_writer::RdbcWriter	druid_rdbc::resource::RdbcWriter	OWNED	crates/druid/src/core/rdbc_writer.rs	PURE_SHIM
+druid::core::RdbcInputStream	druid_rdbc::resource::RdbcInputStream	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcStreamLength	druid_rdbc::resource::RdbcStreamLength	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcOutputStream	druid_rdbc::resource::RdbcOutputStream	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalCharacterReader	druid_rdbc::resource::PhysicalCharacterReader	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcCharacterLength	druid_rdbc::resource::RdbcCharacterLength	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcReader	druid_rdbc::resource::RdbcReader	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalCharacterWriter	druid_rdbc::resource::PhysicalCharacterWriter	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcWriter	druid_rdbc::resource::RdbcWriter	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcInputStream	druid_rdbc::resource::RdbcInputStream	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcStreamLength	druid_rdbc::resource::RdbcStreamLength	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcOutputStream	druid_rdbc::resource::RdbcOutputStream	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcCharacterLength	druid_rdbc::resource::RdbcCharacterLength	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcReader	druid_rdbc::resource::RdbcReader	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::RdbcWriter	druid_rdbc::resource::RdbcWriter	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::core::database_meta_data_row_id_lifetime::DatabaseMetaDataRowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/core/database_meta_data_row_id_lifetime.rs	PURE_SHIM
+druid::core::result_set_nullability::ResultSetNullability	druid_rdbc::spi::ResultSetNullability	OWNED	crates/druid/src/core/result_set_nullability.rs	PURE_SHIM
+druid::core::result_set_update::ResultSetUpdate	druid_rdbc::spi::ResultSetUpdate	OWNED	crates/druid/src/core/result_set_update.rs	PURE_SHIM
+druid::core::physical_database_meta_data::PhysicalDatabaseMetaData	druid_rdbc::spi::PhysicalDatabaseMetaData	DYN_TRAIT	crates/druid/src/core/physical_database_meta_data.rs	PURE_SHIM
+druid::core::physical_result_set_meta_data::PhysicalResultSetMetaData	druid_rdbc::spi::PhysicalResultSetMetaData	DYN_TRAIT	crates/druid/src/core/physical_result_set_meta_data.rs	PURE_SHIM
+druid::core::rdbc_result_set::PhysicalResultSet	druid_rdbc::spi::PhysicalResultSet	DYN_TRAIT	crates/druid/src/core/rdbc_result_set.rs	PURE_SHIM
+druid::core::rdbc_result_set::RdbcResultSet	druid_rdbc::spi::RdbcResultSet	OWNED	crates/druid/src/core/rdbc_result_set.rs	PURE_SHIM
+druid::core::rdbc_result_set::RowSetResultSet	druid_rdbc::spi::RowSetResultSet	OWNED	crates/druid/src/core/rdbc_result_set.rs	PURE_SHIM
+druid::core::result_set_meta_data::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/core/result_set_meta_data.rs	PURE_SHIM
+druid::core::result_set_column_meta::ResultSetColumnMeta	druid_rdbc::spi::ResultSetColumnMeta	OWNED	crates/druid/src/core/result_set_column_meta.rs	PURE_SHIM
+druid::core::result_set_column_type::ResultSetColumnType	druid_rdbc::spi::ResultSetColumnType	OWNED	crates/druid/src/core/result_set_column_type.rs	PURE_SHIM
+druid::core::DatabaseMetaDataRowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::ResultSetNullability	druid_rdbc::spi::ResultSetNullability	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::ResultSetUpdate	druid_rdbc::spi::ResultSetUpdate	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalDatabaseMetaData	druid_rdbc::spi::PhysicalDatabaseMetaData	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalResultSetMetaData	druid_rdbc::spi::PhysicalResultSetMetaData	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalResultSet	druid_rdbc::spi::PhysicalResultSet	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RdbcResultSet	druid_rdbc::spi::RdbcResultSet	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::RowSetResultSet	druid_rdbc::spi::RowSetResultSet	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::ResultSetColumnMeta	druid_rdbc::spi::ResultSetColumnMeta	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::ResultSetColumnType	druid_rdbc::spi::ResultSetColumnType	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::exec_result::ExecResult	druid_rdbc::spi::ExecResult	OWNED	crates/druid/src/core/exec_result.rs	PURE_SHIM
+druid::core::callable_input_parameter::CallableInputParameter	druid_rdbc::spi::CallableInputParameter	OWNED	crates/druid/src/core/callable_input_parameter.rs	PURE_SHIM
+druid::core::callable_out_parameter::CallableOutParameter	druid_rdbc::spi::CallableOutParameter	OWNED	crates/druid/src/core/callable_out_parameter.rs	PURE_SHIM
+druid::core::callable_parameter::CallableParameter	druid_rdbc::spi::CallableParameter	OWNED	crates/druid/src/core/callable_parameter.rs	PURE_SHIM
+druid::core::physical_statement::PhysicalStatement	druid_rdbc::spi::PhysicalStatement	DYN_TRAIT	crates/druid/src/core/physical_statement.rs	PURE_SHIM
+druid::core::physical_statement::PhysicalStatementOptions	druid_rdbc::spi::PhysicalStatementOptions	OWNED	crates/druid/src/core/physical_statement.rs	PURE_SHIM
+druid::core::physical_statement::SqlTextStatement	druid_rdbc::spi::SqlTextStatement	OWNED	crates/druid/src/core/physical_statement.rs	PURE_SHIM
+druid::core::physical_statement::StatementExecuteResult	druid_rdbc::spi::StatementExecuteResult	OWNED	crates/druid/src/core/physical_statement.rs	PURE_SHIM
+druid::core::physical_statement::StatementGeneratedKeys	druid_rdbc::spi::StatementGeneratedKeys	OWNED	crates/druid/src/core/physical_statement.rs	PURE_SHIM
+druid::core::physical_prepared_statement::PhysicalPreparedStatement	druid_rdbc::spi::PhysicalPreparedStatement	DYN_TRAIT	crates/druid/src/core/physical_prepared_statement.rs	PURE_SHIM
+druid::core::physical_prepared_statement::SqlTextPreparedStatement	druid_rdbc::spi::SqlTextPreparedStatement	OWNED	crates/druid/src/core/physical_prepared_statement.rs	PURE_SHIM
+druid::core::physical_callable_statement::PhysicalCallableStatement	druid_rdbc::spi::PhysicalCallableStatement	DYN_TRAIT	crates/druid/src/core/physical_callable_statement.rs	PURE_SHIM
+druid::core::prepared_input_parameter::PreparedInputParameter	druid_rdbc::spi::PreparedInputParameter	OWNED	crates/druid/src/core/prepared_input_parameter.rs	PURE_SHIM
+druid::core::prepared_input_parameter::PreparedTypeNameArgument	druid_rdbc::spi::PreparedTypeNameArgument	OWNED	crates/druid/src/core/prepared_input_parameter.rs	PURE_SHIM
+druid::core::prepared_statement_key::PreparedStatementKey	druid_rdbc::spi::PreparedStatementKey	OWNED	crates/druid/src/core/prepared_statement_key.rs	PURE_SHIM
+druid::core::prepared_statement_key::PreparedStatementMethodType	druid_rdbc::spi::PreparedStatementMethodType	OWNED	crates/druid/src/core/prepared_statement_key.rs	PURE_SHIM
+druid::core::ExecResult	druid_rdbc::spi::ExecResult	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableInputParameter	druid_rdbc::spi::CallableInputParameter	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableOutParameter	druid_rdbc::spi::CallableOutParameter	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::CallableParameter	druid_rdbc::spi::CallableParameter	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalStatement	druid_rdbc::spi::PhysicalStatement	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalStatementOptions	druid_rdbc::spi::PhysicalStatementOptions	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::SqlTextStatement	druid_rdbc::spi::SqlTextStatement	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::StatementExecuteResult	druid_rdbc::spi::StatementExecuteResult	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::StatementGeneratedKeys	druid_rdbc::spi::StatementGeneratedKeys	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalPreparedStatement	druid_rdbc::spi::PhysicalPreparedStatement	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::SqlTextPreparedStatement	druid_rdbc::spi::SqlTextPreparedStatement	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalCallableStatement	druid_rdbc::spi::PhysicalCallableStatement	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PreparedInputParameter	druid_rdbc::spi::PreparedInputParameter	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PreparedTypeNameArgument	druid_rdbc::spi::PreparedTypeNameArgument	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PreparedStatementKey	druid_rdbc::spi::PreparedStatementKey	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PreparedStatementMethodType	druid_rdbc::spi::PreparedStatementMethodType	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::wrapper::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/core/wrapper.rs	PURE_SHIM
+druid::core::wrapper::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/core/wrapper.rs	PURE_SHIM
+druid::core::wrapper::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/core/wrapper.rs	PURE_SHIM
+druid::sql::wrapper::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/sql/wrapper.rs	PURE_SHIM
+druid::sql::wrapper::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/sql/wrapper.rs	PURE_SHIM
+druid::sql::wrapper::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/sql/wrapper.rs	PURE_SHIM
+druid::core::physical_connection::PhysicalConnection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/physical_connection.rs	PURE_SHIM
+druid::core::physical_connection_capabilities::PhysicalConnectionCapabilities	druid_rdbc::spi::PhysicalConnectionCapabilities	OWNED	crates/druid/src/core/physical_connection_capabilities.rs	PURE_SHIM
+druid::core::physical_connection_factory::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/physical_connection_factory.rs	PURE_SHIM
+druid::core::physical_connection_info::PhysicalConnectionInfo	druid_rdbc::spi::PhysicalConnectionInfo	OWNED	crates/druid/src/core/physical_connection_info.rs	PURE_SHIM
+druid::core::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Unwrapped	druid_rdbc::spi::Unwrapped	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::Wrapper	druid_rdbc::spi::Wrapper	DYN_TRAIT	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::WrapperExt	druid_rdbc::spi::WrapperExt	PATH_ONLY	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalConnection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::Connection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalConnectionCapabilities	druid_rdbc::spi::PhysicalConnectionCapabilities	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::ConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::PhysicalConnectionInfo	druid_rdbc::spi::PhysicalConnectionInfo	OWNED	crates/druid/src/core/mod.rs	FACADE_MEMBERSHIP
+druid::core::connection::ExecResult	druid_rdbc::spi::ExecResult	OWNED	crates/druid/src/core/connection.rs	FACADE_MEMBERSHIP
+druid::core::connection::PhysicalConnection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/connection.rs	FACADE_MEMBERSHIP
+druid::core::connection::Connection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/connection.rs	FACADE_MEMBERSHIP
+druid::core::connection_factory::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/connection_factory.rs	FACADE_MEMBERSHIP
+druid::core::connection_factory::ConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/connection_factory.rs	FACADE_MEMBERSHIP
+druid::sql::row_id::RowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/sql/row_id.rs	FACADE_MEMBERSHIP
+druid::sql::RowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::row_id_lifetime::RowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/sql/row_id_lifetime.rs	FACADE_MEMBERSHIP
+druid::sql::RowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
+druid::sql::result_set_meta_data::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/sql/result_set_meta_data.rs	FACADE_MEMBERSHIP
+druid::sql::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP

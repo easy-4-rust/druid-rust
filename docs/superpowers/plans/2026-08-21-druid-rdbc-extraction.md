@@ -47,6 +47,11 @@
 **Interfaces:**
 - Produces: package `druid-rdbc`, Rust crate `druid_rdbc`, five declaration-only module facades, dependency verifier, public-path/source-shim verifier, external-consumer fixture
 - Produces: the tracked `rdbc-public-path-map.tsv` denominator and `python3 scripts/verify_rdbc_public_paths.py --source-only` for checking declared new modules and exact old-module shim targets before the SCC can compile
+- Produces: the five-column mapping schema
+  `old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file<TAB>source_mode`.
+  `source_mode` is `PURE_SHIM` for a whole-file exact compatibility shim or
+  `FACADE_MEMBERSHIP` for a parent/secondary facade that retains unrelated baseline items while
+  requiring every mapped alias to bind uniquely and directly to its canonical target.
 
 - [ ] **Step 1: 写 topology RED 脚本**
 
@@ -63,10 +68,12 @@ FORBIDDEN = {
 ```
 
 It exits 1 when the unique local workspace member is absent, multiple, mismatched, or reaches a
-forbidden package. The public-path script must use a fail-closed Rust lexical sanitizer: after
-allowed documentation/comments are removed, an old shim is exactly one named `pub use <mapped-path>;`;
-wildcards and every additional item/syntax fail. Facades allow only module declarations and targeted
-re-exports.
+forbidden package. The public-path script must use one fail-closed Rust tokenizer. For
+`PURE_SHIM`, after allowed documentation/comments are removed, the whole old file is exactly its
+mapped named `pub use` set; wildcards and every additional item/syntax fail. For
+`FACADE_MEMBERSHIP`, every mapped alias has exactly one unrestricted-public direct target, no
+same-name competing binding or wildcard exists, and unrelated baseline modules/exports/items remain
+allowed. Domain facades allow only private module declarations and targeted re-exports.
 
 - [ ] **Step 2: Run RED boundary**
 
@@ -222,22 +229,26 @@ pub use druid_rdbc::types::Value;
 
 Update `core/mod.rs`/`sql/mod.rs` root exports without removing a baseline name. Do not replace a
 module shim with only a parent re-export. In the same commit update the cumulative TSV denominator
-with exactly one row for every moved public definition; the new path, compile mode, and old module
-file must describe the exact directed shim before the default nonempty source-only gate runs.
+with exactly one row for every moved public definition; the new path, compile mode, old module
+file, and source mode must describe the compatibility source before the default nonempty source-only
+gate runs. Moved leaf files use `PURE_SHIM`; `core/mod.rs`, `sql/mod.rs`, and any secondary facade
+containing unrelated baseline exports use `FACADE_MEMBERSHIP`.
 Rows are keyed by old public path, not by implementation file: one old module file may therefore
-have several rows. The verifier groups those rows and requires the old shim to contain exactly that
-set of named re-exports. A direct new path has the form `druid_rdbc::{types,error,spi,resource,compat}::Item`
+have several rows. The verifier groups those rows and applies their one consistent `source_mode`:
+whole-file exact re-export equality for `PURE_SHIM`, or unique mapped-name membership for
+`FACADE_MEMBERSHIP`. A direct new path has the form `druid_rdbc::{types,error,spi,resource,compat}::Item`
 and is validated through that public domain facade, never by guessing a private implementation file.
 If an old leaf name differs from the new leaf, the shim must use `as OldLeaf`; unchanged leaf names
 must remain unaliased.
-When `old_module_file` is a parent `mod.rs`, scan its top-level Rust bindings after lexically skipping
-nested comments plus normal/byte/raw strings and character literals. For every mapped old leaf, the
-parent must contain exactly one unrestricted-public use-tree binding to the canonical mapped new path.
+When `source_mode` is `FACADE_MEMBERSHIP`, scan the parent or secondary facade's top-level Rust
+bindings after lexically skipping nested comments plus normal/byte/raw strings and character
+literals. For every mapped old leaf, the facade must contain exactly one unrestricted-public
+use-tree binding to the canonical mapped new path.
 Any second private/restricted/public use binding, module, type/trait/union, value (`fn`/`const`/`static`/
 foreign item), extern-crate alias, or macro declaration with that canonical name fails. Grouped/nested
 use trees, aliases, and `self` members are resolved; any wildcard use fails. Unrelated baseline
 attributes, `pub(crate)` modules, grouped named uses, functions, impls, and other complete items remain
-allowed. Leaf `.rs` shim files remain exact grouped mapped-re-export sets with no additional item.
+allowed. `PURE_SHIM` leaf files remain exact grouped mapped-re-export sets with no additional item.
 
 - [ ] **Step 4: Run GREEN type/error regression**
 
@@ -334,8 +345,8 @@ Recreate `core/error.rs`, `core/rdbc_string.rs`, `core/savepoint.rs`, `sql/date.
 `core/error.rs` contains no coherence implementation; `core/xa.rs` retains the
 `From<XaStateTransitionError>` implementation. Preserve both root and module-qualified API
 identities shown by `api/druid-public-api.rdbc-first.before.txt`. In the same commit update the
-cumulative TSV denominator with one exact row for every moved public definition; then run the
-default nonempty source-only verifier.
+cumulative TSV denominator with one exact row for every moved public definition and its
+`PURE_SHIM` or `FACADE_MEMBERSHIP` source mode; then run the default nonempty source-only verifier.
 
 - [ ] **Step 4: Run GREEN error/identity regression**
 
@@ -450,9 +461,15 @@ modules and old shims are internally closed.
 - Modify: `crates/druid-rdbc/src/spi/mod.rs`
 - Modify: `crates/druid-rdbc/src/resource/mod.rs`
 - Modify: `crates/druid/src/core/mod.rs`
+- Modify: `crates/druid/src/core/connection.rs`
+- Modify: `crates/druid/src/core/connection_factory.rs`
 - Modify: `crates/druid/src/spi/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
+- Modify: `crates/druid/src/sql/result_set_meta_data.rs`
+- Modify: `crates/druid/src/sql/row_id.rs`
+- Modify: `crates/druid/src/sql/row_id_lifetime.rs`
 - Modify: `crates/druid/tests/rdbc_external_consumer_test.rs`
+- Modify: `scripts/verify_rdbc_public_paths.py`
 - Modify: `scripts/verify_physical_connection_lease_surface.py`
 - Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Test: `crates/druid/tests/physical_connection_contract.rs`
@@ -476,6 +493,11 @@ modules and old shims are internally closed.
   rejects a missing, wrong-target, copied-definition, wildcard, or otherwise non-pure old
   `core::physical_connection` shim. This Task 4 scope expansion was approved after the original
   verifier's hard-coded old implementation path became unreachable by design.
+- Verifies: the lease checker imports the existing public-path Rust tokenizer by script-relative
+  module resolution, with no import-time CLI side effect, and obtains only top-level `fn` names
+  from the canonical trait/lease-impl token blocks. Documentation, nested comments, normal/raw/byte
+  strings, character literals, and nested default bodies containing braces cannot truncate the
+  surface; the self-test places a missing future default after all of those adversarial forms.
 - Visibility seam: `ResultSetMetaData::with_mysql8_datetime_compatibility` is the sole approved
   normalized non-import delta: `pub(crate)` becomes `pub` because its unchanged canonical
   implementation moved to `druid-rdbc` while the existing MySQL8 filter caller remains in
@@ -504,8 +526,11 @@ move.
 Within this single task/commit, move in this order: value/parameter/XML descriptors → resource
 Access/state/handles → result-set/metadata → statement/prepared/callable → wrapper/connection/factory.
 Update the cumulative public-path TSV denominator with one exact row for every moved public
-definition before each default source-only invocation; an empty or stale denominator blocks the
-slice.
+definition before each default source-only invocation; every moved leaf is `PURE_SHIM`, while
+parent and secondary compatibility facades are `FACADE_MEMBERSHIP`. An empty, four-column, stale,
+or source-mode-inconsistent denominator blocks the slice. Task 4 closes at 285 rows, including the
+11 reviewed secondary aliases in `core::connection`, `core::connection_factory`, SQL RowId,
+RowIdLifetime, and ResultSetMetaData facades.
 After each small source slice run only:
 
 ```bash
@@ -529,6 +554,7 @@ Only after the full SCC is closed, run:
 ```bash
 python3 scripts/verify_physical_connection_lease_surface.py --self-test
 python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py --self-test
 python3 scripts/verify_rdbc_public_paths.py --source-only
 python3 scripts/verify_physical_connection_lease_surface.py
 cargo check -p druid-rdbc -p druid -p druid-wrapper --all-targets
@@ -556,6 +582,7 @@ include the owning manifest plus `Cargo.lock`, and rerun the dependency and all-
 
 ```bash
 git add crates/druid-rdbc crates/druid crates/druid-wrapper \
+  scripts/verify_rdbc_public_paths.py \
   scripts/verify_physical_connection_lease_surface.py \
   docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md \
   docs/verification/rdbc-first/rdbc-public-path-map.tsv
@@ -624,6 +651,8 @@ git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 - Produces: concrete adapters that import driver-facing contracts directly from `druid-rdbc`
 - Produces: a live-set verifier plus tracked before/after classification manifests; manifest rows
   are keyed by production file and moved symbol family, not by a fixed expected file count
+- Preserves: the complete 285-row five-column public-path manifest unchanged; wrapper import
+  cutover creates no new `druid` compatibility path and must not erase or rewrite `source_mode`
 - Preserves: imports of `DruidPooledConnection`, logical pooled statements/result sets, `Pool`,
   `Filter`, driver catalog/product configuration, and Druid lifecycle from `druid`
 
@@ -766,14 +795,14 @@ Complete and validate the cumulative tracked `rdbc-public-path-map.tsv`, which T
 from its Task 1 header-only scaffold, against this schema:
 
 ```text
-old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file
+old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file<TAB>source_mode
 ```
 
 `old_path` is a legal absolute `druid::...::Item` path whose module components exactly match
 `old_module_file` under `crates/druid/src` (including `mod.rs`). `new_path` is a legal direct
 `druid_rdbc::{types,error,spi,resource,compat}::Item` public-facade path. `old_path` is globally
-unique; repeated `old_module_file` rows are grouped as one exact named-re-export set. A repeated
-`new_path` is permitted for distinct legacy aliases only when all rows use the same compile mode.
+unique; repeated `old_module_file` rows use one consistent `source_mode`. A repeated `new_path` is
+permitted for distinct legacy aliases only when all rows use the same compile mode.
 Whitespace-only, trailing, malformed, or empty TSV fields fail.
 Manifest identifiers use an explicit ASCII Rust 2021 policy: ordinary identifiers match
 `[A-Za-z_][A-Za-z0-9_]*`, cannot be `_`, and cannot be strict or reserved keywords; contextual
@@ -783,14 +812,34 @@ strict/reserved keyword. Redundant raw nonkeywords are rejected, and `r#crate`, 
 duplicate/mode keys, and module components are compared by canonical names with `r#` removed;
 `old_module_file` uses the corresponding canonical filesystem component without `r#`.
 
+`source_mode` is `PURE_SHIM` or `FACADE_MEMBERSHIP`. `PURE_SHIM` validates the entire old source
+file as exactly the mapped named re-export set after lexical removal of allowed documentation and
+comments; it rejects every extra item, modifier, non-documentation attribute, macro, or wildcard.
+`FACADE_MEMBERSHIP` applies to parent and secondary facades that retain unrelated baseline
+exports. It requires each mapped alias to have exactly one unrestricted-public binding directly to
+the canonical new path, rejects a same-name private/restricted/public competing binding and every
+wildcard, and otherwise permits unrelated complete baseline items. Parent `mod.rs` rows must use
+`FACADE_MEMBERSHIP`; mixed source modes for one old file fail.
+
 `compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. The verifier derives the live baseline
 denominator, and every moved public definition present in
 `api/druid-public-api.rdbc-first.before.txt` must have exactly one row: no missing, duplicate, stale,
 or extra mapping row is permitted. `OWNED` generates old→new and
-new→old value assignments; `DYN_TRAIT` generates reference conversions in both directions;
-`PATH_ONLY` is allowed only for non-dyn-compatible traits and still compiles both paths while the
-verifier proves the old module file is an exact directed `pub use` shim. Missing, duplicate, stale,
-or wildcard mappings fail.
+new→old value assignments; `DYN_TRAIT` generates reference conversions in both directions.
+`PATH_ONLY` covers non-dyn-compatible traits, module constants, and other items whose contract is
+that both names compile but which cannot use owned or trait-object identity assignments. The Task 6
+generator compiles non-dyn traits through both imported trait names and generic bounds, evaluates
+both module-constant paths with locally inferred types, and emits distinct path-use checks for any
+remaining path-only item. Source verification still proves the exact re-export or unique facade
+membership, so `PATH_ONLY` cannot weaken an `OWNED` or `DYN_TRAIT` row. The five
+`rdbc_parameter` module constants are explicitly validated `PATH_ONLY` rows. Missing, duplicate,
+stale, source-mode-inconsistent, or wildcard mappings fail.
+
+The post-Task-4 denominator is exactly 285 rows: the prior 274 rows plus 11 API-before-backed
+secondary aliases for `ExecResult`, PhysicalConnection/Connection,
+PhysicalConnectionFactory/ConnectionFactory, SQL RowId/RowIdLifetime, and ResultSetMetaData. Task 5
+does not change this denominator. Task 6 derives the complete live baseline set and requires exact
+equality with all 285 rows before compile/API comparison; a smaller denominator is never accepted.
 
 `druid-public-api.rdbc-first.allowlist.txt` contains exact API additions permitted in P03. Removed or
 changed baseline lines can never be allowlisted.
@@ -802,11 +851,13 @@ must enumerate each exact addition emitted for that method through the existing 
 `druid::sql` re-export paths. It must not allowlist a prefix, wildcard, removal, changed signature,
 or any unrelated addition.
 
-The source-only public-path gate is also the privacy gate: before compile/API modes, run
+The source-only public-path gate is also the privacy and source-mode gate: before compile/API modes, run
 `python3 scripts/verify_rdbc_public_paths.py --source-only`. It requires only `lib.rs` to expose the
 five public domain modules; in each `druid-rdbc/src/{types,error,spi,resource,compat}/mod.rs`, every
 implementation declaration must be private `mod name;`. `pub mod name;` and every
 visibility-qualified implementation declaration fail, while targeted `pub use` remains allowed.
+It then applies whole-file exact checking only to `PURE_SHIM` groups and unique direct-target
+membership checking to every `FACADE_MEMBERSHIP` group, including non-`mod.rs` secondary facades.
 
 - [ ] **Step 3: Generate/compile every mapping and compare the working-tree snapshot**
 

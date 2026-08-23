@@ -1,4 +1,4 @@
 //! 物理连接工厂旧路径兼容导出。
 
-pub use super::physical_connection_factory::PhysicalConnectionFactory;
-pub use super::physical_connection_factory::PhysicalConnectionFactory as ConnectionFactory;
+pub use druid_rdbc::spi::PhysicalConnectionFactory;
+pub use druid_rdbc::spi::PhysicalConnectionFactory as ConnectionFactory;
