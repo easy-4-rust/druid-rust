@@ -224,6 +224,12 @@ Update `core/mod.rs`/`sql/mod.rs` root exports without removing a baseline name.
 module shim with only a parent re-export. In the same commit append exactly one TSV row for every
 moved public definition; the new path, compile mode, and old module file must describe the exact
 directed shim before the default nonempty source-only gate runs.
+Rows are keyed by old public path, not by implementation file: one old module file may therefore
+have several rows. The verifier groups those rows and requires the old shim to contain exactly that
+set of named re-exports. A direct new path has the form `druid_rdbc::{types,error,spi,resource,compat}::Item`
+and is validated through that public domain facade, never by guessing a private implementation file.
+If an old leaf name differs from the new leaf, the shim must use `as OldLeaf`; unchanged leaf names
+must remain unaliased.
 
 - [ ] **Step 4: Run GREEN type/error regression**
 
@@ -730,6 +736,13 @@ Update the tracked `rdbc-public-path-map.tsv` from its Task 1 header-only scaffo
 ```text
 old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file
 ```
+
+`old_path` is a legal absolute `druid::...::Item` path whose module components exactly match
+`old_module_file` under `crates/druid/src` (including `mod.rs`). `new_path` is a legal direct
+`druid_rdbc::{types,error,spi,resource,compat}::Item` public-facade path. `old_path` is globally
+unique; repeated `old_module_file` rows are grouped as one exact named-re-export set. A repeated
+`new_path` is permitted for distinct legacy aliases only when all rows use the same compile mode.
+Whitespace-only, trailing, malformed, or empty TSV fields fail.
 
 `compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. The verifier derives the live baseline
 denominator, and every moved public definition present in

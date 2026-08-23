@@ -14,6 +14,7 @@ from typing import NoReturn
 
 RDBC_MODULES = {"types", "error", "spi", "resource", "compat"}
 MAPPING_HEADER = "old_path\tnew_path\tcompile_mode\told_module_file"
+COMPILE_MODES = {"OWNED", "DYN_TRAIT", "PATH_ONLY"}
 
 
 class VerificationError(RuntimeError):
@@ -44,6 +45,25 @@ class FacadeItem:
     kind: str
     public: bool
     value: str
+    alias: str | None = None
+
+
+@dataclass(frozen=True)
+class ManifestShim:
+    """One public path row normalized into a directed old-module re-export contract."""
+
+    old_module: Path
+    target_facade: Path
+    new_path: str
+    reexport: str
+
+
+@dataclass(frozen=True)
+class ShimGroup:
+    """All public definitions owned by the same old module file."""
+
+    old_module: Path
+    mappings: tuple[ManifestShim, ...]
 
 
 def repository_root() -> Path:
@@ -189,11 +209,11 @@ def consume_docs(tokens: list[Token], index: int) -> int:
 
 
 def parse_path(tokens: list[Token], index: int) -> tuple[list[str], int]:
-    """Parse a named Rust use path and reject wildcard, grouped, aliased, or unknown forms."""
+    """Parse a named Rust use path and stop before a semicolon or explicit alias."""
 
     path: list[str] = []
     expect_identifier = True
-    while index < len(tokens) and tokens[index].text != ";":
+    while index < len(tokens) and tokens[index].text not in {";", "as"}:
         token = tokens[index]
         if token.text == "*":
             fail("wildcard re-export is forbidden")
@@ -210,7 +230,31 @@ def parse_path(tokens: list[Token], index: int) -> tuple[list[str], int]:
         index += 1
     if index >= len(tokens) or expect_identifier:
         fail("extra Rust syntax in public-path facade")
-    return path, index + 1
+    return path, index
+
+
+def parse_reexport(
+    tokens: list[Token], index: int
+) -> tuple[list[str], str | None, int]:
+    """Parse one named public use item with an optional explicit alias."""
+
+    path, index = parse_path(tokens, index)
+    alias: str | None = None
+    if tokens[index].text == "as":
+        if index + 1 >= len(tokens) or tokens[index + 1].kind != "IDENT":
+            fail("extra Rust syntax in public-path facade")
+        alias = tokens[index + 1].text
+        index += 2
+    if index >= len(tokens) or tokens[index].text != ";":
+        fail("extra Rust syntax in public-path facade")
+    return path, alias, index + 1
+
+
+def render_reexport(path: list[str], alias: str | None) -> str:
+    """Render one normalized named use path for deterministic exact-set comparison."""
+
+    rendered = "".join(path)
+    return rendered if alias is None else f"{rendered} as {alias}"
 
 
 def parse_facade_items(source: str) -> list[FacadeItem]:
@@ -240,21 +284,21 @@ def parse_facade_items(source: str) -> list[FacadeItem]:
             index += 3
             continue
         if public and tokens[index] == Token("IDENT", "use"):
-            path, index = parse_path(tokens, index + 1)
-            items.append(FacadeItem("use", True, "".join(path)))
+            path, alias, index = parse_reexport(tokens, index + 1)
+            items.append(FacadeItem("use", True, "".join(path), alias))
             continue
         fail("extra Rust syntax in public-path facade")
     return items
 
 
-def exact_path_tokens(path: str) -> list[str]:
-    """Tokenize an expected named re-export path and reject non-path syntax."""
+def exact_reexport(path: str) -> str:
+    """Tokenize an expected named re-export and reject non-path syntax."""
 
     tokens = tokenize(path)
-    parsed, index = parse_path(tokens + [Token("PUNCT", ";")], 0)
+    parsed, alias, index = parse_reexport(tokens + [Token("PUNCT", ";")], 0)
     if index != len(tokens) + 1:
         fail("invalid expected re-export path")
-    return parsed
+    return render_reexport(parsed, alias)
 
 
 def verify_rdbc_module_facades(root: Path) -> None:
@@ -301,35 +345,70 @@ def verify_shim(root: Path, mapping: ShimMapping) -> None:
         or tokens[index + 1] != Token("IDENT", "use")
     ):
         fail(f"extra Rust syntax in shim: {mapping.old_module}")
-    actual, index = parse_path(tokens, index + 2)
-    expected = exact_path_tokens(mapping.reexport)
+    actual_path, actual_alias, index = parse_reexport(tokens, index + 2)
+    actual = render_reexport(actual_path, actual_alias)
+    expected = exact_reexport(mapping.reexport)
     if actual != expected:
         fail(f"shim target mismatch in {mapping.old_module}: expected {mapping.reexport}")
     if index != len(tokens):
         fail(f"extra Rust syntax in shim: {mapping.old_module}")
 
 
-def mapping_from_fields(fields: list[str], line_number: int) -> ShimMapping:
-    """Convert one authoritative TSV row into the source paths required by the verifier."""
+def old_module_components(old_module: Path) -> tuple[str, ...]:
+    """Derive a public module path from a Rust source file, including mod.rs facades."""
 
-    old_path, new_path, _compile_mode, old_module_file = fields
-    if not old_path or not new_path or not old_module_file:
+    source_root = Path("crates/druid/src")
+    try:
+        relative = old_module.relative_to(source_root)
+    except ValueError:
+        fail(f"old_module_file must be below {source_root}: {old_module}")
+    if relative.name == "mod.rs":
+        components = relative.parts[:-1]
+    else:
+        components = relative.parts[:-1] + (relative.stem,)
+    if not components or any(not component.isidentifier() for component in components):
+        fail(f"old_module_file has invalid module components: {old_module}")
+    return components
+
+
+def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
+    """Convert one authoritative TSV row into a facade-targeted public path contract."""
+
+    old_path, new_path, compile_mode, old_module_file = fields
+    if any(not field or field != field.strip() for field in fields):
         fail(f"mapping row {line_number} has an empty required field")
+    if compile_mode not in COMPILE_MODES:
+        fail(f"mapping row {line_number} has invalid compile_mode: {compile_mode}")
+    old_segments = old_path.split("::")
+    if (
+        len(old_segments) < 3
+        or old_segments[0] != "druid"
+        or any(not segment.isidentifier() for segment in old_segments)
+    ):
+        fail(f"mapping row {line_number} has invalid old_path: {old_path}")
     new_segments = new_path.split("::")
     if (
-        len(new_segments) < 3
+        len(new_segments) != 3
         or new_segments[0] != "druid_rdbc"
+        or new_segments[1] not in RDBC_MODULES
         or any(not segment.isidentifier() for segment in new_segments)
     ):
         fail(f"mapping row {line_number} has invalid new_path: {new_path}")
     old_module = Path(old_module_file)
     if old_module.is_absolute() or old_module.suffix != ".rs" or ".." in old_module.parts:
         fail(f"mapping row {line_number} has invalid old_module_file: {old_module_file}")
-    target_module = Path("crates/druid-rdbc/src").joinpath(*new_segments[1:-1]).with_suffix(".rs")
-    return ShimMapping(old_module, target_module, new_path)
+    if tuple(old_segments[1:-1]) != old_module_components(old_module):
+        fail(
+            f"mapping row {line_number} old_path modules do not match old_module_file"
+        )
+    old_leaf = old_segments[-1]
+    new_leaf = new_segments[-1]
+    reexport = new_path if old_leaf == new_leaf else f"{new_path} as {old_leaf}"
+    target_facade = Path("crates/druid-rdbc/src") / new_segments[1] / "mod.rs"
+    return ManifestShim(old_module, target_facade, new_path, reexport)
 
 
-def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimMapping]:
+def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGroup]:
     """Read the tracked public-path denominator and reject missing, malformed, or empty standard maps."""
 
     if not mapping_path.is_file():
@@ -337,30 +416,96 @@ def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimMap
     lines = mapping_path.read_text(encoding="utf-8").splitlines()
     if not lines or lines[0] != MAPPING_HEADER:
         fail(f"mapping manifest has invalid header: {mapping_path}")
-    mappings: list[ShimMapping] = []
-    seen_old_paths: set[Path] = set()
+    mappings_by_module: dict[Path, list[ManifestShim]] = {}
+    seen_old_paths: set[str] = set()
+    mode_by_new_path: dict[str, str] = {}
     for line_number, line in enumerate(lines[1:], start=2):
         if not line:
-            continue
+            fail(f"mapping row {line_number} is empty")
         fields = line.split("\t")
         if len(fields) != 4:
             fail(f"mapping row {line_number} must have four tab-separated fields")
+        old_path = fields[0]
+        if old_path in seen_old_paths:
+            fail(f"mapping row {line_number} duplicates old_path: {old_path}")
         mapping = mapping_from_fields(fields, line_number)
-        if mapping.old_module in seen_old_paths:
-            fail(f"mapping row {line_number} duplicates old module: {mapping.old_module}")
-        seen_old_paths.add(mapping.old_module)
-        mappings.append(mapping)
-    if not mappings and not allow_empty_scaffold:
+        seen_old_paths.add(old_path)
+        previous_mode = mode_by_new_path.setdefault(fields[1], fields[2])
+        if previous_mode != fields[2]:
+            fail(
+                f"mapping row {line_number} has inconsistent compile_mode for {fields[1]}"
+            )
+        mappings_by_module.setdefault(mapping.old_module, []).append(mapping)
+    if not mappings_by_module and not allow_empty_scaffold:
         fail("mapping manifest has no rows; --allow-empty-scaffold is required")
-    return mappings
+    groups: list[ShimGroup] = []
+    for old_module, mappings in mappings_by_module.items():
+        reexports = [mapping.reexport for mapping in mappings]
+        if len(reexports) != len(set(reexports)):
+            fail(f"mapping rows for {old_module} duplicate an expected re-export")
+        groups.append(ShimGroup(old_module, tuple(mappings)))
+    return groups
 
 
-def verify_source_tree(root: Path, mappings: list[ShimMapping]) -> None:
+def verify_target_facade(root: Path, mapping: ManifestShim) -> None:
+    """Require the public domain facade to expose the mapped RDBC leaf by name."""
+
+    target = root / mapping.target_facade
+    if not target.is_file():
+        fail(f"missing target facade: {mapping.target_facade}")
+    items = parse_facade_items(target.read_text(encoding="utf-8"))
+    expected_leaf = mapping.new_path.rsplit("::", maxsplit=1)[1]
+    if not any(
+        item.kind == "use"
+        and item.public
+        and (item.alias or item.value.rsplit("::", maxsplit=1)[-1]) == expected_leaf
+        for item in items
+    ):
+        fail(
+            f"target facade does not expose {mapping.new_path}: "
+            f"{mapping.target_facade}"
+        )
+
+
+def verify_shim_group(root: Path, group: ShimGroup) -> None:
+    """Check one old module's exact set of normalized named compatibility re-exports."""
+
+    for mapping in group.mappings:
+        verify_target_facade(root, mapping)
+    old_module = root / group.old_module
+    if not old_module.is_file():
+        fail(f"missing old module: {group.old_module}")
+    tokens = tokenize(old_module.read_text(encoding="utf-8"))
+    index = 0
+    actual_reexports: list[str] = []
+    while index < len(tokens):
+        index = consume_docs(tokens, index)
+        if index >= len(tokens):
+            break
+        if (
+            index + 1 >= len(tokens)
+            or tokens[index] != Token("IDENT", "pub")
+            or tokens[index + 1] != Token("IDENT", "use")
+        ):
+            fail(f"extra Rust syntax in shim: {group.old_module}")
+        path, alias, index = parse_reexport(tokens, index + 2)
+        actual_reexports.append(render_reexport(path, alias))
+    expected_reexports = {mapping.reexport for mapping in group.mappings}
+    if len(actual_reexports) != len(set(actual_reexports)):
+        fail(f"duplicate named re-export in shim: {group.old_module}")
+    if set(actual_reexports) != expected_reexports:
+        fail(f"shim target mismatch in {group.old_module}: expected exact re-export set")
+
+
+def verify_source_tree(root: Path, mappings: list[ShimMapping | ShimGroup]) -> None:
     """Run the source-only facade and compatibility-shim verification."""
 
     verify_rdbc_module_facades(root)
     for mapping in mappings:
-        verify_shim(root, mapping)
+        if isinstance(mapping, ShimGroup):
+            verify_shim_group(root, mapping)
+        else:
+            verify_shim(root, mapping)
 
 
 def write_module_facades(root: Path) -> None:
@@ -553,6 +698,175 @@ class PublicPathVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "no rows"):
             load_mapping(mapping_file, allow_empty_scaffold=False)
         self.assertEqual([], load_mapping(mapping_file, allow_empty_scaffold=True))
+
+    def write_manifest(self, rows: list[tuple[str, str, str, str]]) -> Path:
+        """Write an authoritative TSV fixture below this test's temporary repository."""
+
+        mapping_file = self.root / "rdbc-public-path-map.tsv"
+        contents = [MAPPING_HEADER, *("\t".join(row) for row in rows)]
+        mapping_file.write_text("\n".join(contents) + "\n", encoding="utf-8")
+        return mapping_file
+
+    def prepare_direct_type_facade(self) -> None:
+        """Create the direct public types::Value facade expected by complete mappings."""
+
+        types_directory = self.root / "crates" / "druid-rdbc" / "src" / "types"
+        (types_directory / "value.rs").write_text(
+            "pub struct Value;\n",
+            encoding="utf-8",
+        )
+        (types_directory / "mod.rs").write_text(
+            "mod value;\npub use value::Value;\n",
+            encoding="utf-8",
+        )
+
+    def test_maps_direct_type_to_domain_facade(self) -> None:
+        """A direct druid_rdbc::types::Value mapping targets types/mod.rs, not types.rs."""
+
+        self.prepare_direct_type_facade()
+        old_module = self.root / "crates" / "druid" / "src" / "core" / "legacy_fixture.rs"
+        old_module.parent.mkdir(parents=True, exist_ok=True)
+        old_module.write_text("pub use druid_rdbc::types::Value;\n", encoding="utf-8")
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::legacy_fixture::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/legacy_fixture.rs",
+                )
+            ]
+        )
+        verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_allows_multiple_public_paths_in_one_old_module(self) -> None:
+        """Three rows can require three exact named re-exports from sql_exception.rs."""
+
+        error_directory = self.root / "crates" / "druid-rdbc" / "src" / "error"
+        (error_directory / "sql_exception.rs").write_text("", encoding="utf-8")
+        (error_directory / "mod.rs").write_text(
+            "mod sql_exception;\n"
+            "pub use sql_exception::SqlException;\n"
+            "pub use sql_exception::SqlWarning;\n"
+            "pub use sql_exception::SqlExceptionKind;\n",
+            encoding="utf-8",
+        )
+        old_module = self.root / "crates" / "druid" / "src" / "core" / "sql_exception.rs"
+        old_module.parent.mkdir(parents=True, exist_ok=True)
+        old_module.write_text(
+            "pub use druid_rdbc::error::SqlException;\n"
+            "pub use druid_rdbc::error::SqlWarning;\n"
+            "pub use druid_rdbc::error::SqlExceptionKind;\n",
+            encoding="utf-8",
+        )
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::sql_exception::SqlException",
+                    "druid_rdbc::error::SqlException",
+                    "OWNED",
+                    "crates/druid/src/core/sql_exception.rs",
+                ),
+                (
+                    "druid::core::sql_exception::SqlWarning",
+                    "druid_rdbc::error::SqlWarning",
+                    "OWNED",
+                    "crates/druid/src/core/sql_exception.rs",
+                ),
+                (
+                    "druid::core::sql_exception::SqlExceptionKind",
+                    "druid_rdbc::error::SqlExceptionKind",
+                    "OWNED",
+                    "crates/druid/src/core/sql_exception.rs",
+                ),
+            ]
+        )
+        verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_alias_row_requires_old_leaf_alias(self) -> None:
+        """An old SQLException name is preserved with an explicit alias to SqlException."""
+
+        error_directory = self.root / "crates" / "druid-rdbc" / "src" / "error"
+        (error_directory / "sql_exception.rs").write_text("", encoding="utf-8")
+        (error_directory / "mod.rs").write_text(
+            "mod sql_exception;\npub use sql_exception::SqlException;\n",
+            encoding="utf-8",
+        )
+        old_module = self.root / "crates" / "druid" / "src" / "sql" / "exceptions.rs"
+        old_module.parent.mkdir(parents=True, exist_ok=True)
+        old_module.write_text(
+            "pub use druid_rdbc::error::SqlException as SQLException;\n",
+            encoding="utf-8",
+        )
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::sql::exceptions::SQLException",
+                    "druid_rdbc::error::SqlException",
+                    "DYN_TRAIT",
+                    "crates/druid/src/sql/exceptions.rs",
+                )
+            ]
+        )
+        verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_rejects_invalid_manifest_rows(self) -> None:
+        """Modes, crate prefixes, module paths, duplicate old paths, and modes are schema-bound."""
+
+        invalid_rows = [
+            (
+                "druid::core::legacy_fixture::FixtureType",
+                "druid_rdbc::types::Value",
+                "BANANA",
+                "crates/druid/src/core/legacy_fixture.rs",
+            ),
+            (
+                "other::core::legacy_fixture::FixtureType",
+                "druid_rdbc::types::Value",
+                "OWNED",
+                "crates/druid/src/core/legacy_fixture.rs",
+            ),
+            (
+                "druid::core::wrong_module::FixtureType",
+                "druid_rdbc::types::Value",
+                "OWNED",
+                "crates/druid/src/core/legacy_fixture.rs",
+            ),
+        ]
+        for row in invalid_rows:
+            with self.subTest(row=row):
+                with self.assertRaises(VerificationError):
+                    load_mapping(self.write_manifest([row]), False)
+
+        duplicate_old = (
+            "druid::core::legacy_fixture::FixtureType",
+            "druid_rdbc::types::Value",
+            "OWNED",
+            "crates/druid/src/core/other_fixture.rs",
+        )
+        first_old = (
+            "druid::core::legacy_fixture::FixtureType",
+            "druid_rdbc::types::Value",
+            "OWNED",
+            "crates/druid/src/core/legacy_fixture.rs",
+        )
+        with self.assertRaisesRegex(VerificationError, "old_path"):
+            load_mapping(self.write_manifest([first_old, duplicate_old]), False)
+
+        inconsistent_mode = (
+            "druid::core::other_fixture::OtherFixture",
+            "druid_rdbc::types::Value",
+            "PATH_ONLY",
+            "crates/druid/src/core/other_fixture.rs",
+        )
+        first_mode = (
+            "druid::core::legacy_fixture::FixtureType",
+            "druid_rdbc::types::Value",
+            "OWNED",
+            "crates/druid/src/core/legacy_fixture.rs",
+        )
+        with self.assertRaisesRegex(VerificationError, "inconsistent compile_mode"):
+            load_mapping(self.write_manifest([first_mode, inconsistent_mode]), False)
 
 
 def main() -> int:
