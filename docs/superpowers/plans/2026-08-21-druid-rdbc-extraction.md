@@ -230,11 +230,14 @@ set of named re-exports. A direct new path has the form `druid_rdbc::{types,erro
 and is validated through that public domain facade, never by guessing a private implementation file.
 If an old leaf name differs from the new leaf, the shim must use `as OldLeaf`; unchanged leaf names
 must remain unaliased.
-When old_module_file is a parent mod.rs, validate only the mapped public aliases in its real export
-set: unrelated targeted baseline exports, public modules, and private module/use declarations remain
-allowed. Every mapped exported old leaf must occur exactly once with its mapped target; wildcard and
-conflicting aliases fail. Leaf .rs shim files remain exact grouped mapped-re-export sets with no
-additional item.
+When `old_module_file` is a parent `mod.rs`, scan its top-level Rust bindings after lexically skipping
+nested comments plus normal/byte/raw strings and character literals. For every mapped old leaf, the
+parent must contain exactly one unrestricted-public use-tree binding to the canonical mapped new path.
+Any second private/restricted/public use binding, module, type/trait/union, value (`fn`/`const`/`static`/
+foreign item), extern-crate alias, or macro declaration with that canonical name fails. Grouped/nested
+use trees, aliases, and `self` members are resolved; any wildcard use fails. Unrelated baseline
+attributes, `pub(crate)` modules, grouped named uses, functions, impls, and other complete items remain
+allowed. Leaf `.rs` shim files remain exact grouped mapped-re-export sets with no additional item.
 
 - [ ] **Step 4: Run GREEN type/error regression**
 
@@ -749,9 +752,12 @@ unique; repeated `old_module_file` rows are grouped as one exact named-re-export
 `new_path` is permitted for distinct legacy aliases only when all rows use the same compile mode.
 Whitespace-only, trailing, malformed, or empty TSV fields fail.
 Manifest identifiers use an explicit ASCII Rust 2021 policy: ordinary identifiers match
-[A-Za-z_][A-Za-z0-9_]* and cannot be strict or reserved keywords. Raw r#ident is permitted when Rust
-permits it and is normalized to ident for filesystem correspondence; r#crate, r#self, r#super,
-r#Self, r#_, and malformed raw identifiers fail.
+`[A-Za-z_][A-Za-z0-9_]*`, cannot be `_`, and cannot be strict or reserved keywords; contextual
+`union` remains a valid ordinary path segment. Raw `r#ident` is accepted only to escape a Rust 2021
+strict/reserved keyword. Redundant raw nonkeywords are rejected, and `r#crate`, `r#self`, `r#super`,
+`r#Self`, `r#_`, and malformed raw identifiers fail. Old paths, new paths, exported aliases,
+duplicate/mode keys, and module components are compared by canonical names with `r#` removed;
+`old_module_file` uses the corresponding canonical filesystem component without `r#`.
 
 `compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. The verifier derives the live baseline
 denominator, and every moved public definition present in

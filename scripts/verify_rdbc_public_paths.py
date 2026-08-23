@@ -15,11 +15,11 @@ from typing import NoReturn
 RDBC_MODULES = {"types", "error", "spi", "resource", "compat"}
 MAPPING_HEADER = "old_path\tnew_path\tcompile_mode\told_module_file"
 COMPILE_MODES = {"OWNED", "DYN_TRAIT", "PATH_ONLY"}
-RUST_2021_KEYWORDS = {
+RUST_2021_STRICT_RESERVED_KEYWORDS = {
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else",
     "enum", "extern", "false", "fn", "for", "if", "impl", "in", "let", "loop",
     "match", "mod", "move", "mut", "pub", "ref", "return", "self", "Self", "static",
-    "struct", "super", "trait", "true", "type", "union", "unsafe", "use", "where",
+    "struct", "super", "trait", "true", "type", "unsafe", "use", "where",
     "while", "abstract", "become", "box", "do", "final", "macro", "override", "priv",
     "typeof", "unsized", "virtual", "yield", "try",
 }
@@ -58,12 +58,23 @@ class FacadeItem:
 
 
 @dataclass(frozen=True)
+class TopLevelBinding:
+    """One semantic name bound in a parent module's top-level namespace."""
+
+    kind: str
+    public: bool
+    name: str
+    target: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
 class ManifestShim:
     """One public path row normalized into a directed old-module re-export contract."""
 
     old_module: Path
     target_facade: Path
     new_path: str
+    canonical_new_path: tuple[str, ...]
     reexport: str
     old_export: str
 
@@ -124,6 +135,25 @@ def consume_raw_string(source: str, start: int, byte: bool) -> tuple[Token, int]
         fail("unterminated raw Rust string")
     kind = "BYTE_STRING" if byte else "STRING"
     return Token(kind, source[start:end + len(terminator)]), end + len(terminator)
+
+
+def consume_character_or_lifetime(source: str, start: int) -> tuple[Token, int]:
+    """Consume a character literal or a Rust lifetime/label beginning with an apostrophe."""
+
+    after_quote = start + 1
+    if after_quote >= len(source):
+        fail("unterminated Rust character or lifetime")
+    character = source[after_quote]
+    if character.isascii() and (character.isalpha() or character == "_"):
+        end = after_quote + 1
+        while end < len(source) and source[end].isascii() and (
+            source[end].isalnum() or source[end] == "_"
+        ):
+            end += 1
+        if end >= len(source) or source[end] != "'":
+            return Token("LIFETIME", source[start:end]), end
+    token, end = consume_quoted(source, after_quote, "'", "CHAR")
+    return Token(token.kind, "'" + token.text), end
 
 
 def tokenize(source: str) -> list[Token]:
@@ -189,8 +219,8 @@ def tokenize(source: str) -> list[Token]:
             tokens.append(Token(token.kind, '"' + token.text))
             continue
         if character == "'":
-            token, index = consume_quoted(source, index + 1, "'", "CHAR")
-            tokens.append(Token(token.kind, "'" + token.text))
+            token, index = consume_character_or_lifetime(source, index)
+            tokens.append(token)
             continue
         if character.isascii() and (character.isalpha() or character == "_"):
             end = index + 1
@@ -205,11 +235,8 @@ def tokenize(source: str) -> list[Token]:
             tokens.append(Token("PUNCT", "::"))
             index += 2
             continue
-        if character in "#![];*=(),{}":
-            tokens.append(Token("PUNCT", character))
-            index += 1
-            continue
-        fail(f"unrecognized Rust syntax at byte offset {index}")
+        tokens.append(Token("PUNCT", character))
+        index += 1
     return tokens
 
 
@@ -392,9 +419,20 @@ def old_module_components(old_module: Path) -> tuple[str, ...]:
         components = relative.parts[:-1]
     else:
         components = relative.parts[:-1] + (relative.stem,)
-    if not components or any(not component.isidentifier() for component in components):
+    if not components or any(
+        not is_ascii_identifier_shape(component) or component == "_"
+        for component in components
+    ):
         fail(f"old_module_file has invalid module components: {old_module}")
     return components
+
+
+def is_ascii_identifier_shape(identifier: str) -> bool:
+    """Return whether text has the lexical shape of an ASCII Rust identifier."""
+
+    return bool(identifier) and identifier.isascii() and (
+        identifier[0].isalpha() or identifier[0] == "_"
+    ) and all(character.isalnum() or character == "_" for character in identifier)
 
 
 def normalize_manifest_identifier(identifier: str, line_number: int) -> str:
@@ -402,18 +440,20 @@ def normalize_manifest_identifier(identifier: str, line_number: int) -> str:
 
     raw = identifier.startswith("r#")
     candidate = identifier[2:] if raw else identifier
-    if (
-        not candidate
-        or not candidate.isascii()
-        or not (candidate[0].isalpha() or candidate[0] == "_")
-        or any(not (character.isalnum() or character == "_") for character in candidate)
-    ):
+    if not is_ascii_identifier_shape(candidate):
         fail(f"mapping row {line_number} has invalid Rust identifier: {identifier}")
     if raw:
         if candidate in RAW_IDENTIFIER_DISALLOWED:
             fail(f"mapping row {line_number} has invalid raw identifier: {identifier}")
+        if candidate not in RUST_2021_STRICT_RESERVED_KEYWORDS:
+            fail(
+                f"mapping row {line_number} raw identifier must escape a Rust 2021 "
+                f"keyword: {identifier}"
+            )
         return candidate
-    if candidate in RUST_2021_KEYWORDS:
+    if candidate == "_":
+        fail(f"mapping row {line_number} uses reserved identifier _: {identifier}")
+    if candidate in RUST_2021_STRICT_RESERVED_KEYWORDS:
         fail(f"mapping row {line_number} uses keyword without raw prefix: {identifier}")
     return candidate
 
@@ -461,7 +501,6 @@ def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
             f"mapping row {line_number} old_path modules do not match old_module_file"
         )
     old_leaf = old_segments[-1]
-    new_leaf = new_segments[-1]
     reexport = (
         new_path
         if normalized_old_segments[-1] == normalized_new_segments[-1]
@@ -472,6 +511,7 @@ def mapping_from_fields(fields: list[str], line_number: int) -> ManifestShim:
         old_module,
         target_facade,
         new_path,
+        tuple(normalized_new_segments),
         reexport,
         normalized_old_segments[-1],
     )
@@ -494,22 +534,28 @@ def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGro
         fields = line.split("\t")
         if len(fields) != 4:
             fail(f"mapping row {line_number} must have four tab-separated fields")
-        old_path = fields[0]
-        if old_path in seen_old_paths:
-            fail(f"mapping row {line_number} duplicates old_path: {old_path}")
         mapping = mapping_from_fields(fields, line_number)
-        seen_old_paths.add(old_path)
-        previous_mode = mode_by_new_path.setdefault(fields[1], fields[2])
+        normalized_old_path = "::".join(
+            normalize_manifest_path(fields[0], "druid", line_number)[1]
+        )
+        if normalized_old_path in seen_old_paths:
+            fail(f"mapping row {line_number} duplicates old_path: {fields[0]}")
+        seen_old_paths.add(normalized_old_path)
+        normalized_new_path = "::".join(mapping.canonical_new_path)
+        previous_mode = mode_by_new_path.setdefault(normalized_new_path, fields[2])
         if previous_mode != fields[2]:
             fail(
-                f"mapping row {line_number} has inconsistent compile_mode for {fields[1]}"
+                f"mapping row {line_number} has inconsistent compile_mode for "
+                f"{normalized_new_path}"
             )
         mappings_by_module.setdefault(mapping.old_module, []).append(mapping)
     if not mappings_by_module and not allow_empty_scaffold:
         fail("mapping manifest has no rows; --allow-empty-scaffold is required")
     groups: list[ShimGroup] = []
     for old_module, mappings in mappings_by_module.items():
-        reexports = [mapping.reexport for mapping in mappings]
+        reexports = [
+            (mapping.canonical_new_path, mapping.old_export) for mapping in mappings
+        ]
         if len(reexports) != len(set(reexports)):
             fail(f"mapping rows for {old_module} duplicate an expected re-export")
         groups.append(ShimGroup(old_module, tuple(mappings)))
@@ -523,11 +569,11 @@ def verify_target_facade(root: Path, mapping: ManifestShim) -> None:
     if not target.is_file():
         fail(f"missing target facade: {mapping.target_facade}")
     items = parse_facade_items(target.read_text(encoding="utf-8"))
-    expected_leaf = mapping.new_path.rsplit("::", maxsplit=1)[1]
+    expected_leaf = mapping.canonical_new_path[-1]
     if not any(
         item.kind == "use"
         and item.public
-        and (item.alias or item.value.rsplit("::", maxsplit=1)[-1]) == expected_leaf
+        and normalized_export_name(item) == expected_leaf
         for item in items
     ):
         fail(
@@ -576,47 +622,365 @@ def normalized_export_name(item: FacadeItem) -> str:
     return name[2:] if name.startswith("r#") else name
 
 
+DELIMITER_PAIRS = {"(": ")", "[": "]", "{": "}"}
+
+
+def skip_delimited(tokens: list[Token], index: int, context: str) -> int:
+    """Skip one balanced Rust delimiter tree and return the first following token."""
+
+    if index >= len(tokens) or tokens[index].text not in DELIMITER_PAIRS:
+        fail(f"malformed {context}")
+    stack = [DELIMITER_PAIRS[tokens[index].text]]
+    index += 1
+    while index < len(tokens) and stack:
+        token = tokens[index].text
+        if token in DELIMITER_PAIRS:
+            stack.append(DELIMITER_PAIRS[token])
+        elif token in DELIMITER_PAIRS.values():
+            if token != stack[-1]:
+                fail(f"unbalanced delimiters in {context}")
+            stack.pop()
+        index += 1
+    if stack:
+        fail(f"unterminated delimiters in {context}")
+    return index
+
+
+def consume_outer_attributes(tokens: list[Token], index: int) -> int:
+    """Consume arbitrary top-level outer or inner attributes before one Rust item."""
+
+    while index < len(tokens) and tokens[index].text == "#":
+        index += 1
+        if index < len(tokens) and tokens[index].text == "!":
+            index += 1
+        index = skip_delimited(tokens, index, "top-level attribute")
+    return index
+
+
+def consume_visibility(tokens: list[Token], index: int) -> tuple[bool, int]:
+    """Consume Rust visibility and report whether it is unrestricted public visibility."""
+
+    if index >= len(tokens) or tokens[index].text != "pub":
+        return False, index
+    index += 1
+    if index < len(tokens) and tokens[index].text == "(":
+        return False, skip_delimited(tokens, index, "restricted visibility")
+    return True, index
+
+
+def canonical_source_identifier(
+    token: Token, context: str, *, allow_path_special: bool = False
+) -> str:
+    """Normalize one source identifier while rejecting syntax rustc cannot bind."""
+
+    if token.kind != "IDENT":
+        fail(f"unsupported {context}")
+    raw = token.text.startswith("r#")
+    candidate = token.text[2:] if raw else token.text
+    if not is_ascii_identifier_shape(candidate):
+        fail(f"unsupported {context}")
+    if raw:
+        if candidate in RAW_IDENTIFIER_DISALLOWED:
+            fail(f"invalid raw identifier in {context}: {token.text}")
+        return candidate
+    if candidate == "_":
+        return candidate
+    if candidate in RUST_2021_STRICT_RESERVED_KEYWORDS and not (
+        allow_path_special and candidate in {"crate", "self", "super", "Self"}
+    ):
+        fail(f"unsupported {context}")
+    return candidate
+
+
+def parse_use_group(
+    tokens: list[Token], index: int, prefix: tuple[str, ...], public: bool
+) -> tuple[list[TopLevelBinding], int]:
+    """Parse one grouped Rust use tree, including nested groups and self aliases."""
+
+    if index >= len(tokens) or tokens[index].text != "{":
+        fail("unsupported top-level use syntax")
+    bindings: list[TopLevelBinding] = []
+    index += 1
+    while index < len(tokens) and tokens[index].text != "}":
+        parsed, index = parse_use_tree(tokens, index, prefix, public)
+        bindings.extend(parsed)
+        if index < len(tokens) and tokens[index].text == ",":
+            index += 1
+            continue
+        if index >= len(tokens) or tokens[index].text != "}":
+            fail("unsupported top-level use syntax")
+    if index >= len(tokens):
+        fail("unsupported top-level use syntax")
+    return bindings, index + 1
+
+
+def parse_use_tree(
+    tokens: list[Token], index: int, prefix: tuple[str, ...], public: bool
+) -> tuple[list[TopLevelBinding], int]:
+    """Parse a Rust 2021 use tree into every semantic top-level binding it creates."""
+
+    if index < len(tokens) and tokens[index].text == "::":
+        if prefix:
+            fail("unsupported top-level use syntax")
+        index += 1
+    if index >= len(tokens):
+        fail("unsupported top-level use syntax")
+    if tokens[index].text == "{":
+        return parse_use_group(tokens, index, prefix, public)
+    if tokens[index].text == "*":
+        fail("wildcard use is forbidden in parent facade")
+
+    source_token = tokens[index]
+    segment = canonical_source_identifier(
+        source_token, "top-level use syntax", allow_path_special=True
+    )
+    if segment == "_":
+        fail("unsupported top-level use syntax")
+    index += 1
+    path = prefix + (segment,)
+    if index < len(tokens) and tokens[index].text == "::":
+        index += 1
+        if index < len(tokens) and tokens[index].text == "*":
+            fail("wildcard use is forbidden in parent facade")
+        if index < len(tokens) and tokens[index].text == "{":
+            return parse_use_group(tokens, index, path, public)
+        return parse_use_tree(tokens, index, path, public)
+
+    target = prefix if source_token.text == "self" and prefix else path
+    name = prefix[-1] if source_token.text == "self" and prefix else segment
+    if index < len(tokens) and tokens[index].text == "as":
+        index += 1
+        if index >= len(tokens):
+            fail("unsupported top-level use syntax")
+        name = canonical_source_identifier(tokens[index], "top-level use alias")
+        index += 1
+    if name == "_":
+        return [], index
+    return [TopLevelBinding("use", public, name, target)], index
+
+
+def parse_use_item(
+    tokens: list[Token], index: int, public: bool
+) -> tuple[list[TopLevelBinding], int]:
+    """Parse one complete top-level use item and require its terminating semicolon."""
+
+    bindings, index = parse_use_tree(tokens, index, (), public)
+    if index >= len(tokens) or tokens[index].text != ";":
+        fail("unsupported top-level use syntax")
+    return bindings, index + 1
+
+
+def skip_complete_item(
+    tokens: list[Token], index: int, *, semicolon_terminated: bool = False
+) -> int:
+    """Skip one complete top-level item without interpreting its unrelated implementation."""
+
+    stack: list[str] = []
+    while index < len(tokens):
+        token = tokens[index].text
+        if token in DELIMITER_PAIRS:
+            stack.append(DELIMITER_PAIRS[token])
+        elif token in DELIMITER_PAIRS.values():
+            if not stack or token != stack[-1]:
+                fail("unbalanced delimiters in parent facade item")
+            stack.pop()
+            if not stack and token == "}" and not semicolon_terminated:
+                return index + 1
+        elif token == ";" and not stack:
+            return index + 1
+        index += 1
+    fail("unterminated top-level item in parent facade")
+
+
+def named_binding(
+    tokens: list[Token], index: int, kind: str, public: bool
+) -> TopLevelBinding | None:
+    """Create a normalized item binding, ignoring anonymous const underscore items."""
+
+    if index >= len(tokens):
+        fail(f"missing name for top-level {kind} item")
+    name = canonical_source_identifier(tokens[index], f"top-level {kind} item")
+    if name == "_":
+        return None
+    return TopLevelBinding(kind, public, name)
+
+
+def find_matching_brace(tokens: list[Token], index: int, context: str) -> tuple[int, int]:
+    """Return the token bounds inside one balanced brace block."""
+
+    if index >= len(tokens) or tokens[index].text != "{":
+        fail(f"malformed {context}")
+    after = skip_delimited(tokens, index, context)
+    return index + 1, after - 1
+
+
+def scan_top_level_bindings_tokens(
+    tokens: list[Token], start: int = 0, end: int | None = None
+) -> list[TopLevelBinding]:
+    """Scan direct Rust item bindings while safely skipping unrelated complete items."""
+
+    limit = len(tokens) if end is None else end
+    bindings: list[TopLevelBinding] = []
+    index = start
+    while index < limit:
+        item_start = index
+        index = consume_outer_attributes(tokens, index)
+        if index >= limit:
+            break
+        public, index = consume_visibility(tokens, index)
+        if index >= limit:
+            fail("missing top-level item after visibility")
+
+        keyword_index = index
+        while index < limit and tokens[index].text in {
+            "async",
+            "auto",
+            "default",
+            "unsafe",
+        }:
+            index += 1
+        if index >= limit:
+            fail("missing top-level item after qualifier")
+        keyword = tokens[index].text
+
+        if keyword == "use" and keyword_index == index:
+            parsed, index = parse_use_item(tokens, index + 1, public)
+            bindings.extend(parsed)
+            continue
+
+        if keyword == "extern":
+            cursor = index + 1
+            if cursor < limit and tokens[cursor].text == "crate":
+                cursor += 1
+                binding = named_binding(tokens, cursor, "extern crate", public)
+                cursor += 1
+                if cursor < limit and tokens[cursor].text == "as":
+                    binding = named_binding(tokens, cursor + 1, "extern crate alias", public)
+                if binding is not None:
+                    bindings.append(binding)
+                index = skip_complete_item(tokens, item_start, semicolon_terminated=True)
+                continue
+            if cursor < limit and tokens[cursor].kind in {"STRING", "BYTE_STRING"}:
+                cursor += 1
+            if cursor < limit and tokens[cursor].text == "{":
+                inner_start, inner_end = find_matching_brace(
+                    tokens, cursor, "extern block"
+                )
+                bindings.extend(
+                    scan_top_level_bindings_tokens(tokens, inner_start, inner_end)
+                )
+                index = inner_end + 1
+                if index < limit and tokens[index].text == ";":
+                    index += 1
+                continue
+            if cursor < limit and tokens[cursor].text == "fn":
+                binding = named_binding(tokens, cursor + 1, "fn", public)
+                if binding is not None:
+                    bindings.append(binding)
+            index = skip_complete_item(tokens, item_start)
+            continue
+
+        if keyword == "const":
+            cursor = index + 1
+            while cursor < limit and tokens[cursor].text in {"async", "unsafe"}:
+                cursor += 1
+            if cursor < limit and tokens[cursor].text == "extern":
+                cursor += 1
+                if cursor < limit and tokens[cursor].kind == "STRING":
+                    cursor += 1
+            if cursor < limit and tokens[cursor].text == "fn":
+                binding = named_binding(tokens, cursor + 1, "fn", public)
+                semicolon_terminated = False
+            else:
+                binding = named_binding(tokens, index + 1, "const", public)
+                semicolon_terminated = True
+            if binding is not None:
+                bindings.append(binding)
+            index = skip_complete_item(
+                tokens, item_start, semicolon_terminated=semicolon_terminated
+            )
+            continue
+
+        if keyword == "static":
+            cursor = index + 1
+            if cursor < limit and tokens[cursor].text == "mut":
+                cursor += 1
+            binding = named_binding(tokens, cursor, "static", public)
+            if binding is not None:
+                bindings.append(binding)
+            index = skip_complete_item(tokens, item_start, semicolon_terminated=True)
+            continue
+
+        if keyword == "macro_rules":
+            if index + 2 >= limit or tokens[index + 1].text != "!":
+                fail("unsupported top-level macro declaration")
+            binding = named_binding(tokens, index + 2, "macro", public)
+            if binding is not None:
+                bindings.append(binding)
+            index = skip_complete_item(tokens, item_start)
+            continue
+
+        if keyword == "macro":
+            binding = named_binding(tokens, index + 1, "macro", public)
+            if binding is not None:
+                bindings.append(binding)
+            index = skip_complete_item(tokens, item_start)
+            continue
+
+        if keyword in {"mod", "struct", "enum", "trait", "type", "union", "fn"}:
+            binding = named_binding(tokens, index + 1, keyword, public)
+            if binding is not None:
+                bindings.append(binding)
+            index = skip_complete_item(
+                tokens, item_start, semicolon_terminated=keyword == "type"
+            )
+            continue
+
+        index = skip_complete_item(tokens, item_start)
+    return bindings
+
+
+def scan_top_level_bindings(source: str) -> list[TopLevelBinding]:
+    """Tokenize one parent module and return all direct semantic bindings."""
+
+    return scan_top_level_bindings_tokens(tokenize(source))
+
+
 def verify_parent_facade(root: Path, group: ShimGroup) -> None:
     """Verify mapped aliases inside a parent facade without constraining unrelated baseline exports."""
 
     old_module = root / group.old_module
     if not old_module.is_file():
         fail(f"missing old module: {group.old_module}")
-    expected_by_export: dict[str, str] = {}
+    expected_by_export: dict[str, tuple[str, ...]] = {}
     for mapping in group.mappings:
         if mapping.old_export in expected_by_export:
             fail(
                 f"conflicting mapped export {mapping.old_export} in parent facade: "
                 f"{group.old_module}"
             )
-        expected_by_export[mapping.old_export] = mapping.reexport
+        expected_by_export[mapping.old_export] = mapping.canonical_new_path
 
-    seen_exports: set[str] = set()
-    for item in parse_facade_items(old_module.read_text(encoding="utf-8")):
-        if item.kind != "use" or not item.public:
-            continue
-        exported_name = normalized_export_name(item)
-        expected = expected_by_export.get(exported_name)
-        if expected is None:
-            continue
-        actual = (
-            item.value if item.alias is None else f"{item.value} as {item.alias}"
-        )
-        if actual != expected:
+    bindings = scan_top_level_bindings(old_module.read_text(encoding="utf-8"))
+    for exported_name, expected_target in expected_by_export.items():
+        matching = [binding for binding in bindings if binding.name == exported_name]
+        if not matching:
             fail(
-                f"parent facade export {exported_name} has wrong target in "
+                f"parent facade missing mapped exports ['{exported_name}'] in "
                 f"{group.old_module}"
             )
-        if exported_name in seen_exports:
-            fail(
-                f"duplicate mapped export {exported_name} in parent facade: "
-                f"{group.old_module}"
-            )
-        seen_exports.add(exported_name)
-    missing = sorted(set(expected_by_export) - seen_exports)
-    if missing:
+        if len(matching) == 1:
+            binding = matching[0]
+            if binding.kind == "use" and binding.public:
+                if binding.target != expected_target:
+                    fail(
+                        f"parent facade mapped export {exported_name} has wrong target in "
+                        f"{group.old_module}"
+                    )
+                continue
         fail(
-            f"parent facade missing mapped exports {missing} in {group.old_module}"
+            f"parent facade mapped export {exported_name} has conflicting binding in "
+            f"{group.old_module}"
         )
 
 
@@ -1044,6 +1408,178 @@ class PublicPathVerifierTest(unittest.TestCase):
                 with self.assertRaises(VerificationError):
                     verify_source_tree(self.root, load_mapping(mapping_file, False))
 
+    def test_real_parent_facades_accept_mapped_grouped_reexport(self) -> None:
+        """Current core/sql facades remain valid after one mapped re-export is replaced."""
+
+        self.prepare_direct_type_facade()
+        cases = (
+            (
+                "core",
+                "pub use auto_load::AutoLoad;",
+                "pub use druid_rdbc::types::{Value as AutoLoad};",
+                "AutoLoad",
+            ),
+            (
+                "sql",
+                "pub use char_types::CharTypes;",
+                "pub use druid_rdbc::types::{Value as CharTypes};",
+                "CharTypes",
+            ),
+        )
+        for module, old_reexport, new_reexport, old_export in cases:
+            with self.subTest(module=module):
+                source = (
+                    repository_root()
+                    / "crates"
+                    / "druid"
+                    / "src"
+                    / module
+                    / "mod.rs"
+                ).read_text(encoding="utf-8")
+                self.assertIn(old_reexport, source)
+                source = source.replace(old_reexport, new_reexport, 1)
+                source += (
+                    "\n#[allow(dead_code)]\n"
+                    "struct UnrelatedParentFixture;\n"
+                    "impl UnrelatedParentFixture {\n"
+                    "    fn helper(&self) -> &'static str { \"fixture\" }\n"
+                    "}\n"
+                )
+                parent = (
+                    self.root / "crates" / "druid" / "src" / module / "mod.rs"
+                )
+                parent.parent.mkdir(parents=True, exist_ok=True)
+                parent.write_text(source, encoding="utf-8")
+                mapping_file = self.write_manifest(
+                    [
+                        (
+                            f"druid::{module}::{old_export}",
+                            "druid_rdbc::types::Value",
+                            "OWNED",
+                            f"crates/druid/src/{module}/mod.rs",
+                        )
+                    ]
+                )
+                try:
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+                except VerificationError as error:
+                    self.fail(f"real {module}/mod.rs was rejected: {error}")
+
+    def test_parent_facade_accepts_unrelated_top_level_syntax(self) -> None:
+        """Unrelated visibility, use trees, attributes, functions, and impls are ignored."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        parent.write_text(
+            "#![allow(dead_code)]\n"
+            "pub(crate) mod internal;\n"
+            "#[cfg_attr(test, allow(unused_imports))]\n"
+            "pub use unrelated::{Other, nested::{self as Nested, Thing as Alias}};\n"
+            "pub use druid_rdbc::types::{self as RdbcTypes, Value};\n"
+            "fn helper(value: &str) -> Option<&str> { Some(value) }\n"
+            "struct Holder;\n"
+            "impl Holder { fn value(&self) -> &'static str { r###\"ok\"### } }\n"
+            "unrelated_macro! { baseline tokens }\n",
+            encoding="utf-8",
+        )
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        try:
+            verify_source_tree(self.root, load_mapping(mapping_file, False))
+        except VerificationError as error:
+            self.fail(f"unrelated parent syntax was rejected: {error}")
+
+    def test_parent_facade_rejects_every_competing_mapped_binding(self) -> None:
+        """Private uses, modules, and duplicate public targets cannot bind a mapped alias."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        conflicts = (
+            "pub use druid_rdbc::types::Value;\nuse unrelated::Value;\n",
+            "pub use druid_rdbc::types::Value;\nmod Value;\n",
+            "pub use druid_rdbc::types::Value;\n"
+            "pub use druid_rdbc::types::Value;\n",
+            "pub use druid_rdbc::types::Value;\n"
+            "use unrelated::Other as r#Value;\n",
+            "pub use druid_rdbc::types::Value;\nstruct Value;\n",
+            "pub use druid_rdbc::types::Value;\nenum Value {}\n",
+            "pub use druid_rdbc::types::Value;\ntrait Value {}\n",
+            "pub use druid_rdbc::types::Value;\ntype Value = ();\n",
+            "pub use druid_rdbc::types::Value;\nunion Value { byte: u8 }\n",
+            "pub use druid_rdbc::types::Value;\nfn Value() {}\n",
+            "pub use druid_rdbc::types::Value;\nconst Value: () = ();\n",
+            "pub use druid_rdbc::types::Value;\nstatic Value: () = ();\n",
+            "pub use druid_rdbc::types::Value;\nextern crate unrelated as Value;\n",
+            "pub use druid_rdbc::types::Value;\n"
+            "extern \"C\" { fn Value(); }\n",
+            "pub use druid_rdbc::types::Value;\n"
+            "macro_rules! Value { () => {} }\n",
+            "pub use druid_rdbc::types::Value;\nmacro Value() {}\n",
+        )
+        for source in conflicts:
+            with self.subTest(source=source):
+                parent.write_text(source, encoding="utf-8")
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    "mapped export Value has conflicting binding",
+                ):
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_parent_facade_rejects_missing_wrong_and_wildcard_exports(self) -> None:
+        """Missing, wrong-target, and wildcard parent exports fail with stable diagnostics."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        cases = (
+            ("pub use unrelated::Other;\n", "missing mapped exports"),
+            (
+                "pub use druid_rdbc::types::Other as Value;\n",
+                "mapped export Value has wrong target",
+            ),
+            ("pub use druid_rdbc::types::*;\n", "wildcard use is forbidden"),
+            (
+                "pub use druid_rdbc::types::Value;\nuse unrelated::*;\n",
+                "wildcard use is forbidden",
+            ),
+            ("use unrelated::_;\n", "unsupported top-level use syntax"),
+        )
+        for source, diagnostic in cases:
+            with self.subTest(source=source):
+                parent.write_text(source, encoding="utf-8")
+                with self.assertRaisesRegex(VerificationError, diagnostic):
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+
     def test_manifest_uses_rust_2021_identifier_policy(self) -> None:
         """Manifest paths distinguish forbidden plain keywords from valid and invalid raw identifiers."""
 
@@ -1067,6 +1603,32 @@ class PublicPathVerifierTest(unittest.TestCase):
                 with self.assertRaises(VerificationError):
                     load_mapping(self.write_manifest([row]), False)
 
+        for path, module_file in (
+            ("druid::core::_::Value", "crates/druid/src/core/_.rs"),
+            ("druid::core::value::_", "crates/druid/src/core/value.rs"),
+        ):
+            with self.subTest(plain_underscore=path):
+                row = (
+                    path,
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    module_file,
+                )
+                with self.assertRaisesRegex(VerificationError, "reserved identifier _"):
+                    load_mapping(self.write_manifest([row]), False)
+
+        union_row = (
+            "druid::core::union::union",
+            "druid_rdbc::types::union",
+            "PATH_ONLY",
+            "crates/druid/src/core/union.rs",
+        )
+        try:
+            groups = load_mapping(self.write_manifest([union_row]), False)
+        except VerificationError as error:
+            self.fail(f"Rust 2021 contextual identifier union was rejected: {error}")
+        self.assertEqual("union", groups[0].mappings[0].old_export)
+
         raw_row = (
             "druid::core::r#type::r#match",
             "druid_rdbc::types::r#type",
@@ -1089,6 +1651,35 @@ class PublicPathVerifierTest(unittest.TestCase):
                 )
                 with self.assertRaises(VerificationError):
                     load_mapping(self.write_manifest([row]), False)
+
+    def test_raw_nonkeyword_cannot_bypass_semantic_duplicate_or_mode_keys(self) -> None:
+        """Redundant raw nonkeywords are rejected before semantic key comparisons."""
+
+        ordinary = (
+            "druid::core::value::Value",
+            "druid_rdbc::types::Value",
+            "OWNED",
+            "crates/druid/src/core/value.rs",
+        )
+        duplicate_old = (
+            "druid::core::value::r#Value",
+            "druid_rdbc::types::Value",
+            "OWNED",
+            "crates/druid/src/core/value.rs",
+        )
+        mode_bypass = (
+            "druid::core::other::Other",
+            "druid_rdbc::types::r#Value",
+            "PATH_ONLY",
+            "crates/druid/src/core/other.rs",
+        )
+        for rows in ((ordinary, duplicate_old), (ordinary, mode_bypass)):
+            with self.subTest(rows=rows):
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    "raw identifier must escape a Rust 2021 keyword",
+                ):
+                    load_mapping(self.write_manifest(list(rows)), False)
 
 
 def main() -> int:
