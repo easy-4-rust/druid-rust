@@ -221,9 +221,9 @@ pub use druid_rdbc::types::Value;
 ```
 
 Update `core/mod.rs`/`sql/mod.rs` root exports without removing a baseline name. Do not replace a
-module shim with only a parent re-export. In the same commit append exactly one TSV row for every
-moved public definition; the new path, compile mode, and old module file must describe the exact
-directed shim before the default nonempty source-only gate runs.
+module shim with only a parent re-export. In the same commit update the cumulative TSV denominator
+with exactly one row for every moved public definition; the new path, compile mode, and old module
+file must describe the exact directed shim before the default nonempty source-only gate runs.
 Rows are keyed by old public path, not by implementation file: one old module file may therefore
 have several rows. The verifier groups those rows and requires the old shim to contain exactly that
 set of named re-exports. A direct new path has the form `druid_rdbc::{types,error,spi,resource,compat}::Item`
@@ -278,6 +278,7 @@ git commit -m "refactor(rdbc): extract independent types and sql exceptions"
 - Modify: `crates/druid-rdbc/src/error/mod.rs`
 - Modify: `crates/druid-rdbc/src/compat/mod.rs`
 - Modify: `crates/druid/src/core/mod.rs`
+- Modify: `crates/druid/src/core/xa.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Test: `crates/druid/tests/druid_error_test.rs`
@@ -317,9 +318,10 @@ wildcard; compare `Display`, `class_name()`, `sql_exception()`, `batch_update_co
 Move the full enum, its 24 variants, fields, `Display`, `Error`, classification helpers, and existing
 `From<String>`/`From<&str>` implementations to `compat/druid_error.rs`. Add the exact marker
 `TRANSITIONAL_UNTIL_P04` to its module docs. Do **not** add `#[non_exhaustive]`, a new variant, a new
-conversion, or a wrapper type. Keep the Druid-local `From<XaStateTransitionError>` coherence impl in
-the old `core/error.rs` shim while re-exporting the external type there; its observable conversion
-must remain unchanged.
+conversion, or a wrapper type. Keep the existing Druid-local
+`From<XaStateTransitionError>` coherence impl in `core/xa.rs`, where it continues to compile against
+the re-exported `DruidError`; its observable conversion must remain unchanged. `core/error.rs` is a
+pure exact directed re-export shim and contains no `impl`.
 
 Move `RdbcString`, `Savepoint`, `Date`, `Time`, and `Timestamp` in the same commit and update their
 imports to `crate::compat::DruidError`. `RdbcError` contains only the smallest compilable scaffold
@@ -328,10 +330,12 @@ and is not referenced by those types or any SPI.
 - [ ] **Step 3: Recreate all old paths as exact shims**
 
 Recreate `core/error.rs`, `core/rdbc_string.rs`, `core/savepoint.rs`, `sql/date.rs`, `sql/time.rs`,
-`sql/timestamp.rs`, and `sql/exceptions.rs` as directed re-export modules. Preserve both root and
-module-qualified API identities shown by `api/druid-public-api.rdbc-first.before.txt`. In the same
-commit append one exact TSV row for every moved public definition; then run the default nonempty
-source-only verifier.
+`sql/timestamp.rs`, and `sql/exceptions.rs` as exact directed re-export modules. In particular,
+`core/error.rs` contains no coherence implementation; `core/xa.rs` retains the
+`From<XaStateTransitionError>` implementation. Preserve both root and module-qualified API
+identities shown by `api/druid-public-api.rdbc-first.before.txt`. In the same commit update the
+cumulative TSV denominator with one exact row for every moved public definition; then run the
+default nonempty source-only verifier.
 
 - [ ] **Step 4: Run GREEN error/identity regression**
 
@@ -358,7 +362,8 @@ then rerun dependency-boundary and workspace checks before staging.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid-rdbc crates/druid
+git add crates/druid-rdbc crates/druid \
+  docs/verification/rdbc-first/rdbc-public-path-map.tsv
 git commit -m "refactor(rdbc): establish transitional error seam"
 ```
 
@@ -485,8 +490,9 @@ move.
 
 Within this single task/commit, move in this order: value/parameter/XML descriptors → resource
 Access/state/handles → result-set/metadata → statement/prepared/callable → wrapper/connection/factory.
-Append one exact public-path TSV row with every moved public definition before each default
-source-only invocation; an empty or stale denominator blocks the slice.
+Update the cumulative public-path TSV denominator with one exact row for every moved public
+definition before each default source-only invocation; an empty or stale denominator blocks the
+slice.
 After each small source slice run only:
 
 ```bash
@@ -509,7 +515,7 @@ Only after the full SCC is closed, run:
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
-python3 scripts/verify_rdbc_public_paths.py
+python3 scripts/verify_rdbc_public_paths.py --source-only
 python3 scripts/verify_physical_connection_lease_surface.py
 cargo check -p druid-rdbc -p druid -p druid-wrapper --all-targets
 cargo test -p druid --test physical_connection_contract
@@ -535,7 +541,8 @@ include the owning manifest plus `Cargo.lock`, and rerun the dependency and all-
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid-rdbc crates/druid crates/druid-wrapper
+git add crates/druid-rdbc crates/druid crates/druid-wrapper \
+  docs/verification/rdbc-first/rdbc-public-path-map.tsv
 git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 ```
 
@@ -739,7 +746,8 @@ The P03 baseline comparison has a zero-deletion budget for every existing old mo
 do not remove an ambiguous public alias in P03 even if new canonical documentation stops recommending
 it.
 
-Update the tracked `rdbc-public-path-map.tsv` from its Task 1 header-only scaffold to this schema:
+Complete and validate the cumulative tracked `rdbc-public-path-map.tsv`, which Tasks 2–5 update
+from its Task 1 header-only scaffold, against this schema:
 
 ```text
 old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file
@@ -771,10 +779,17 @@ or wildcard mappings fail.
 `druid-public-api.rdbc-first.allowlist.txt` contains exact API additions permitted in P03. Removed or
 changed baseline lines can never be allowlisted.
 
+The source-only public-path gate is also the privacy gate: before compile/API modes, run
+`python3 scripts/verify_rdbc_public_paths.py --source-only`. It requires only `lib.rs` to expose the
+five public domain modules; in each `druid-rdbc/src/{types,error,spi,resource,compat}/mod.rs`, every
+implementation declaration must be private `mod name;`. `pub mod name;` and every
+visibility-qualified implementation declaration fail, while targeted `pub use` remains allowed.
+
 - [ ] **Step 3: Generate/compile every mapping and compare the working-tree snapshot**
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py --source-only
 python3 scripts/verify_rdbc_public_paths.py \
   --mapping docs/verification/rdbc-first/rdbc-public-path-map.tsv \
   --compile-all-pairs

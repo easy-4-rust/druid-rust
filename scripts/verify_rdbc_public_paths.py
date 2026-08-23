@@ -375,7 +375,11 @@ def verify_rdbc_module_facades(root: Path) -> None:
         facade = source_root / module / "mod.rs"
         if not facade.is_file():
             fail(f"missing target module: {facade.relative_to(root)}")
-        parse_facade_items(facade.read_text(encoding="utf-8"))
+        facade_items = parse_facade_items(facade.read_text(encoding="utf-8"))
+        if any(item.kind == "mod" and item.public for item in facade_items):
+            fail(
+                "RDBC domain facades may declare implementation modules only privately"
+            )
 
 
 def verify_shim(root: Path, mapping: ShimMapping) -> None:
@@ -1222,6 +1226,21 @@ class PublicPathVerifierTest(unittest.TestCase):
             encoding="utf-8",
         )
         verify_source_tree(self.root, [])
+
+    def test_domain_facade_rejects_visible_implementation_modules(self) -> None:
+        """Only lib.rs may publish domains; their implementation modules stay private."""
+
+        facade = self.root / "crates" / "druid-rdbc" / "src" / "types" / "mod.rs"
+        declarations = (
+            "pub mod fixture;",
+            "pub(crate) mod fixture;",
+            "pub(super) mod fixture;",
+        )
+        for declaration in declarations:
+            with self.subTest(declaration=declaration):
+                facade.write_text(declaration + "\n", encoding="utf-8")
+                with self.assertRaises(VerificationError):
+                    verify_source_tree(self.root, [])
 
     def test_facade_rejects_wildcards_and_public_definitions(self) -> None:
         """Facade parsing applies the same no-wildcard and no-definition boundary."""
