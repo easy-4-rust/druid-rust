@@ -167,9 +167,9 @@ pub use druid_pooled_prepared_statement::{
 };
 pub use druid_pooled_result_set::DruidPooledResultSet;
 pub use druid_pooled_statement::DruidPooledStatement;
+pub use druid_rdbc::compat::DruidError;
 pub use druid_rdbc::error::{SqlException, SqlExceptionCause, SqlExceptionKind, SqlWarning};
-pub use druid_rdbc::types::{RdbcUrl, Row, Value};
-pub use error::DruidError;
+pub use druid_rdbc::types::{RdbcString, RdbcUrl, Row, Savepoint, Value};
 pub use exception_sorter::{ExceptionSorter, ExceptionSorterProperties};
 pub use exec_result::ExecResult;
 #[allow(deprecated)]
@@ -256,7 +256,6 @@ pub use rdbc_parameter_timestamp::RdbcParameterTimestamp;
 pub use rdbc_reader::{PhysicalCharacterReader, RdbcCharacterLength, RdbcReader};
 pub use rdbc_result_set::{PhysicalResultSet, RdbcResultSet, RowSetResultSet};
 pub use rdbc_row_id::RdbcRowId;
-pub use rdbc_string::RdbcString;
 pub use rdbc_target_type::RdbcTargetType;
 pub use rdbc_target_type::RdbcTargetType as CallableTargetType;
 pub use rdbc_type_map::{RdbcTypeMap, RdbcTypeMap as CallableTypeMap};
@@ -276,7 +275,6 @@ pub use result_set_nullability::ResultSetNullability;
 pub use result_set_open_context::ResultSetOpenContext;
 pub use result_set_statement::ResultSetStatement;
 pub use result_set_update::ResultSetUpdate;
-pub use savepoint::Savepoint;
 pub use statement_event_listener::StatementEventListener;
 pub use statement_execute_type::StatementExecuteType;
 pub use statement_type::StatementType;

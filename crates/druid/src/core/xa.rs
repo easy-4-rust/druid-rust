@@ -10,7 +10,7 @@
 use std::fmt;
 use std::time::{Duration, Instant};
 
-use crate::core::DruidError;
+use druid_rdbc::compat::DruidError;
 
 // ─── Xid ────────────────────────────────────────────────────────────────────
 

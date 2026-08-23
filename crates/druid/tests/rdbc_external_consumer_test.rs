@@ -219,6 +219,117 @@ fn main() {
     bidirectional_owned_identity!(druid::sql::SqlWarning, druid_rdbc::error::SqlWarning);
     bidirectional_owned_identity!(druid::sql::SQLWarning, druid_rdbc::error::SqlWarning);
 
+    bidirectional_owned_identity!(
+        druid::core::error::DruidError,
+        druid_rdbc::compat::DruidError
+    );
+    bidirectional_owned_identity!(druid::core::DruidError, druid_rdbc::compat::DruidError);
+    bidirectional_owned_identity!(
+        druid::core::rdbc_string::RdbcString,
+        druid_rdbc::types::RdbcString
+    );
+    bidirectional_owned_identity!(druid::core::RdbcString, druid_rdbc::types::RdbcString);
+    bidirectional_owned_identity!(druid::sql::RdbcString, druid_rdbc::types::RdbcString);
+    bidirectional_owned_identity!(
+        druid::core::savepoint::Savepoint,
+        druid_rdbc::types::Savepoint
+    );
+    bidirectional_owned_identity!(druid::core::Savepoint, druid_rdbc::types::Savepoint);
+    bidirectional_owned_identity!(druid::sql::savepoint::Savepoint, druid_rdbc::types::Savepoint);
+    bidirectional_owned_identity!(druid::sql::Savepoint, druid_rdbc::types::Savepoint);
+    bidirectional_owned_identity!(druid::sql::date::Date, druid_rdbc::types::Date);
+    bidirectional_owned_identity!(druid::sql::Date, druid_rdbc::types::Date);
+    bidirectional_owned_identity!(druid::sql::time::Time, druid_rdbc::types::Time);
+    bidirectional_owned_identity!(druid::sql::Time, druid_rdbc::types::Time);
+    bidirectional_owned_identity!(
+        druid::sql::timestamp::Timestamp,
+        druid_rdbc::types::Timestamp
+    );
+    bidirectional_owned_identity!(druid::sql::Timestamp, druid_rdbc::types::Timestamp);
+
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::BatchUpdateException,
+        druid_rdbc::compat::BatchUpdateException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::BatchUpdateException,
+        druid_rdbc::compat::BatchUpdateException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::DataTruncation,
+        druid_rdbc::compat::DataTruncation
+    );
+    bidirectional_owned_identity!(druid::sql::DataTruncation, druid_rdbc::compat::DataTruncation);
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlClientInfoException,
+        druid_rdbc::compat::SqlClientInfoException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::SqlClientInfoException,
+        druid_rdbc::compat::SqlClientInfoException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlTransientException,
+        druid_rdbc::compat::SqlTransientException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlTransientConnectionException,
+        druid_rdbc::compat::SqlTransientConnectionException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlNonTransientException,
+        druid_rdbc::compat::SqlNonTransientException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlNonTransientConnectionException,
+        druid_rdbc::compat::SqlNonTransientConnectionException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlRecoverableException,
+        druid_rdbc::compat::SqlRecoverableException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlDataException,
+        druid_rdbc::compat::SqlDataException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlIntegrityConstraintViolationException,
+        druid_rdbc::compat::SqlIntegrityConstraintViolationException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlInvalidAuthorizationSpecException,
+        druid_rdbc::compat::SqlInvalidAuthorizationSpecException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlSyntaxErrorException,
+        druid_rdbc::compat::SqlSyntaxErrorException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlTransactionRollbackException,
+        druid_rdbc::compat::SqlTransactionRollbackException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlFeatureNotSupportedException,
+        druid_rdbc::compat::SqlFeatureNotSupportedException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlTimeoutException,
+        druid_rdbc::compat::SqlTimeoutException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlExceptionKind,
+        druid_rdbc::compat::SqlExceptionKind
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlException,
+        druid_rdbc::compat::SqlException
+    );
+    bidirectional_owned_identity!(
+        druid::sql::exceptions::SqlWarning,
+        druid_rdbc::compat::SqlWarning
+    );
+    let _: Option<druid_rdbc::error::RdbcError> = None;
+
     mod sql_glob_contract {
         use druid::sql::*;
 

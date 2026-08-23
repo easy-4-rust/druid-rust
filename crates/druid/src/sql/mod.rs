@@ -71,11 +71,11 @@ pub use common_data_source::{CommonDataSource, RdbcLogWriter};
 pub use connection::Connection;
 pub use data_source::DataSource;
 pub use database_meta_data::DatabaseMetaData;
-pub use date::Date;
 pub use driver::Driver;
 pub use driver_action::DriverAction;
 pub use driver_manager::DriverManager;
 pub use driver_property_info::DriverPropertyInfo;
+pub use druid_rdbc::compat::{BatchUpdateException, DataTruncation, SqlClientInfoException};
 pub use druid_rdbc::error::{
     SqlException as SqlDataException, SqlException as SqlFeatureNotSupportedException,
     SqlException as SqlIntegrityConstraintViolationException,
@@ -87,9 +87,11 @@ pub use druid_rdbc::error::{
 };
 pub use druid_rdbc::error::{SqlException, SqlExceptionKind, SqlWarning};
 pub use druid_rdbc::error::{SqlException as SQLException, SqlWarning as SQLWarning};
+pub use druid_rdbc::types::Date;
+pub use druid_rdbc::types::Savepoint;
+pub use druid_rdbc::types::{RdbcString, Time, Timestamp};
 pub use druid_rdbc::types::{RdbcType as RDBCType, SqlType as SQLType};
 pub use druid_rdbc::types::{RdbcType, Types};
-pub use exceptions::{BatchUpdateException, DataTruncation, SqlClientInfoException};
 pub use n_clob::{NClob, RdbcNClob};
 pub use parameter_meta_data::{ParameterMetaData, ParameterMode, ParameterNullability};
 pub use prepared_statement::PreparedStatement;
@@ -100,7 +102,6 @@ pub use result_set::ResultSet;
 pub use result_set_meta_data::ResultSetMetaData;
 pub use row_id::RowId;
 pub use row_id_lifetime::RowIdLifetime;
-pub use savepoint::Savepoint;
 pub use sql_data::SqlData;
 pub use sql_data::SqlData as SQLData;
 pub use sql_input::SqlInput;
@@ -113,15 +114,13 @@ pub use sql_xml::SqlXml as SQLXML;
 pub use sql_xml::{RdbcSqlXml, SqlXml};
 pub use statement::Statement;
 pub use struct_value::Struct;
-pub use time::Time;
-pub use timestamp::Timestamp;
 pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
 
 // java.sql LOB/stream helpers live in core because pooled statements also consume them,
 // but their canonical public path is `druid::sql::*`.
 pub use crate::core::{
     RdbcCharacterLength, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcStreamLength,
-    RdbcString, RdbcWriter,
+    RdbcWriter,
 };
 
 // ─────────────────────────────── Druid SQL 解析 + Wall 防火墙 ───────────────────────────────
