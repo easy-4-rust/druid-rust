@@ -1,5 +1,6 @@
-//! P03 transitional `DruidError` 搬迁的类型身份与可观察行为合同。
+//! P03 transitional `DruidError` 搬迁的类型身份与独立 golden 行为合同。
 
+use std::any::TypeId;
 use std::error::Error;
 use std::time::Duration;
 
@@ -9,27 +10,66 @@ use druid_rdbc::error::{SqlException, SqlExceptionCause};
 use druid_rdbc::types::RdbcString;
 
 #[derive(Debug, PartialEq, Eq)]
+struct SqlObservable {
+    error_code: i32,
+    sql_state: Option<String>,
+    message: Option<String>,
+    class_name: String,
+    assignable_types: Vec<String>,
+    recoverable: bool,
+    causes: Vec<SqlExceptionCause>,
+    next_exceptions: Vec<SqlObservable>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct SourceObservable {
+    display: String,
+    class_name: String,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 struct ObservableError {
     display: String,
     class_name: String,
-    sql_exception: Option<SqlException>,
+    sql_exception: Option<SqlObservable>,
     batch_update_counts: Option<Vec<i32>>,
-    source_chain: Vec<String>,
+    source_chain: Vec<SourceObservable>,
 }
 
-type VariantCase = (
-    &'static str,
-    OldDruidError,
-    usize,
-    Option<i32>,
-    Option<Vec<i32>>,
-);
+struct VariantCase {
+    name: &'static str,
+    value: TransitionalDruidError,
+    expected: ObservableError,
+}
 
-fn source_chain(error: &(dyn Error + 'static)) -> Vec<String> {
+fn observe_sql(exception: &SqlException) -> SqlObservable {
+    SqlObservable {
+        error_code: exception.error_code(),
+        sql_state: exception.sql_state().map(str::to_owned),
+        message: exception.message().map(str::to_owned),
+        class_name: exception.class_name().to_owned(),
+        assignable_types: exception.assignable_types().to_vec(),
+        recoverable: exception.is_recoverable(),
+        causes: exception.causes().to_vec(),
+        next_exceptions: exception
+            .next_exceptions()
+            .iter()
+            .map(observe_sql)
+            .collect(),
+    }
+}
+
+fn observe_source_chain(error: &(dyn Error + 'static)) -> Vec<SourceObservable> {
     let mut chain = Vec::new();
     let mut source = error.source();
     while let Some(current) = source {
-        chain.push(current.to_string());
+        let druid_error = current
+            .downcast_ref::<TransitionalDruidError>()
+            .expect("DruidError source chain must retain typed DruidError causes");
+        chain.push(SourceObservable {
+            display: current.to_string(),
+            class_name: druid_error.class_name().to_owned(),
+        });
         source = current.source();
     }
     chain
@@ -39,13 +79,43 @@ fn observe(error: &TransitionalDruidError) -> ObservableError {
     ObservableError {
         display: error.to_string(),
         class_name: error.class_name().to_owned(),
-        sql_exception: error.sql_exception().cloned(),
+        sql_exception: error.sql_exception().map(|exception| {
+            let cloned = exception.clone();
+            assert_eq!(
+                &cloned, exception,
+                "SqlException clone must preserve all fields"
+            );
+            observe_sql(&cloned)
+        }),
         batch_update_counts: error.batch_update_counts().map(<[i32]>::to_vec),
-        source_chain: source_chain(error),
+        source_chain: observe_source_chain(error),
     }
 }
 
-fn assert_exhaustive_variant(error: &TransitionalDruidError, expected_name: &str) -> &'static str {
+fn golden(
+    display: &str,
+    class_name: &str,
+    sql_exception: Option<SqlObservable>,
+    batch_update_counts: Option<Vec<i32>>,
+    source_chain: Vec<SourceObservable>,
+) -> ObservableError {
+    ObservableError {
+        display: display.to_owned(),
+        class_name: class_name.to_owned(),
+        sql_exception,
+        batch_update_counts,
+        source_chain,
+    }
+}
+
+fn source(display: &str, class_name: &str) -> SourceObservable {
+    SourceObservable {
+        display: display.to_owned(),
+        class_name: class_name.to_owned(),
+    }
+}
+
+fn assert_exhaustive_variant(error: &TransitionalDruidError, expected_name: &str) {
     let actual_name = match error {
         TransitionalDruidError::PoolClosed => "PoolClosed",
         TransitionalDruidError::DataSourceClosed { .. } => "DataSourceClosed",
@@ -76,7 +146,7 @@ fn assert_exhaustive_variant(error: &TransitionalDruidError, expected_name: &str
         } => {
             assert_eq!(*active_count, 13);
             assert_eq!(*max_active, 12);
-            assert_eq!(*last_error_time_millis, 1_725_678_901_234);
+            assert_eq!(*last_error_time_millis, 0);
             assert_eq!(
                 last_sql.as_ref().map(RdbcString::as_utf16),
                 Some(&[0x0041, 0xD800, 0x0042][..])
@@ -91,250 +161,456 @@ fn assert_exhaustive_variant(error: &TransitionalDruidError, expected_name: &str
         TransitionalDruidError::Other(_) => "Other",
     };
     assert_eq!(actual_name, expected_name);
-    actual_name
 }
 
 #[test]
-fn all_24_variants_keep_bidirectional_identity_and_observable_semantics() {
-    let sql_exception = SqlException::new(
+fn old_and_transitional_paths_are_the_same_type_without_conversion() {
+    assert_eq!(
+        TypeId::of::<OldDruidError>(),
+        TypeId::of::<TransitionalDruidError>()
+    );
+
+    fn old_to_new_to_old(value: OldDruidError) -> OldDruidError {
+        let new: TransitionalDruidError = value;
+        let old: OldDruidError = new;
+        old
+    }
+
+    let identity: fn(OldDruidError) -> OldDruidError = old_to_new_to_old;
+    let old: Option<OldDruidError> = None;
+    let new: Option<TransitionalDruidError> = old;
+    let old_again: Option<OldDruidError> = new;
+    assert!(old_again.is_none());
+    let _ = identity;
+}
+
+#[test]
+fn all_24_variants_match_independently_derived_golden_observables() {
+    let mut sql_exception = SqlException::new(
         1205,
         Some("40001".to_owned()),
         Some("deadlock victim".to_owned()),
     )
     .with_class_name("vendor.DeadlockException")
     .with_assignable_type("vendor.DatabaseException")
+    .recoverable()
+    .with_cause(SqlExceptionCause::SocketTimeout)
     .with_cause(SqlExceptionCause::ClassName("vendor.RootCause".to_owned()));
-    let batch_sql_exception = SqlException::driver(1213, "batch retry");
+    sql_exception.set_next_exception(SqlException::driver(1213, "retry transaction"));
+    sql_exception.set_next_exception(
+        SqlException::new(
+            1214,
+            Some("40002".to_owned()),
+            Some("retry exhausted".to_owned()),
+        )
+        .with_class_name("vendor.RetryExhaustedException")
+        .with_assignable_type("vendor.DatabaseException")
+        .with_cause(SqlExceptionCause::ClassName(
+            "vendor.RetryRootCause".to_owned(),
+        )),
+    );
 
-    let cases: Vec<VariantCase> = vec![
-        ("PoolClosed", OldDruidError::PoolClosed, 0, None, None),
-        (
-            "DataSourceClosed",
-            OldDruidError::DataSourceClosed {
-                close_time_millis: 1_725_678_901_234,
+    let batch_sql_exception = SqlException::new(
+        1213,
+        Some("40001".to_owned()),
+        Some("batch retry".to_owned()),
+    )
+    .with_class_name("vendor.BatchException")
+    .with_assignable_type("vendor.DatabaseException")
+    .with_cause(SqlExceptionCause::SocketTimeout);
+
+    let cases = vec![
+        VariantCase {
+            name: "PoolClosed",
+            value: TransitionalDruidError::PoolClosed,
+            expected: golden(
+                "connection pool is closed",
+                "druid::PoolClosed",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "DataSourceClosed",
+            value: TransitionalDruidError::DataSourceClosed {
+                close_time_millis: u64::MAX,
             },
-            0,
-            None,
-            None,
-        ),
-        (
-            "AcquireTimeout",
-            OldDruidError::AcquireTimeout,
-            0,
-            None,
-            None,
-        ),
-        (
-            "GetConnectionTimeout",
-            OldDruidError::GetConnectionTimeout {
+            expected: golden(
+                "dataSource already closed at 18446744073709551615",
+                "com.alibaba.druid.pool.DataSourceClosedException",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "AcquireTimeout",
+            value: TransitionalDruidError::AcquireTimeout,
+            expected: golden(
+                "acquire connection timed out",
+                "druid::AcquireTimeout",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "GetConnectionTimeout",
+            value: TransitionalDruidError::GetConnectionTimeout {
                 wait_millis: 5_000,
                 active_count: 8,
                 max_active: 8,
                 creating_count: 1,
                 create_elapsed_millis: Some(750),
                 create_error_count: 2,
-                running_sql: vec![(3, "select 1".to_owned())],
-                cause: Some(Box::new(OldDruidError::DriverError(
+                running_sql: vec![(3, "select 1".to_owned()), (2, "select 2".to_owned())],
+                cause: Some(Box::new(TransitionalDruidError::DriverError(
                     "connect refused".to_owned(),
                 ))),
             },
-            1,
-            None,
-            None,
-        ),
-        ("LoginTimeout", OldDruidError::LoginTimeout, 0, None, None),
-        ("PoolExhausted", OldDruidError::PoolExhausted, 0, None, None),
-        (
-            "MaxWaitThreadCountExceeded",
-            OldDruidError::MaxWaitThreadCountExceeded {
+            expected: golden(
+                "wait millis 5000, active 8, maxActive 8, creating 1, createElapseMillis 750, createErrorCount 2, runningSqlCount 3 : select 1\nrunningSqlCount 2 : select 2",
+                "com.alibaba.druid.pool.GetConnectionTimeoutException",
+                None,
+                None,
+                vec![source("driver error: connect refused", "druid::DriverError")],
+            ),
+        },
+        VariantCase {
+            name: "LoginTimeout",
+            value: TransitionalDruidError::LoginTimeout,
+            expected: golden(
+                "physical connection login timed out",
+                "druid::LoginTimeout",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "PoolExhausted",
+            value: TransitionalDruidError::PoolExhausted,
+            expected: golden(
+                "connection pool exhausted",
+                "druid::PoolExhausted",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "MaxWaitThreadCountExceeded",
+            value: TransitionalDruidError::MaxWaitThreadCountExceeded {
                 max: 16,
                 current: 17,
             },
-            0,
-            None,
-            None,
-        ),
-        (
-            "ValidationFailed",
-            OldDruidError::ValidationFailed("validation query failed".to_owned()),
-            0,
-            None,
-            None,
-        ),
-        (
-            "ConnectionLeaked",
-            OldDruidError::ConnectionLeaked {
+            expected: golden(
+                "maxWaitThreadCount 16, current wait task count 17",
+                "druid::MaxWaitThreadCountExceeded",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "ValidationFailed",
+            value: TransitionalDruidError::ValidationFailed("validation query failed".to_owned()),
+            expected: golden(
+                "connection validation failed: validation query failed",
+                "druid::ValidationFailed",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "ConnectionLeaked",
+            value: TransitionalDruidError::ConnectionLeaked {
                 id: 42,
                 held_for: Duration::from_secs(30),
             },
-            0,
-            None,
-            None,
-        ),
-        (
-            "ConnectionDiscarded",
-            OldDruidError::ConnectionDiscarded,
-            0,
-            None,
-            None,
-        ),
-        (
-            "DriverError",
-            OldDruidError::DriverError("driver failed".to_owned()),
-            0,
-            None,
-            None,
-        ),
-        (
-            "SqlException",
-            OldDruidError::SqlException(Box::new(sql_exception.clone())),
-            0,
-            Some(1205),
-            None,
-        ),
-        (
-            "BatchUpdateException",
-            OldDruidError::BatchUpdateException {
+            expected: golden(
+                "connection 42 leaked, held for 30s",
+                "druid::ConnectionLeaked",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "ConnectionDiscarded",
+            value: TransitionalDruidError::ConnectionDiscarded,
+            expected: golden(
+                "connection has been discarded",
+                "druid::ConnectionDiscarded",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "DriverError",
+            value: TransitionalDruidError::DriverError("driver failed".to_owned()),
+            expected: golden(
+                "driver error: driver failed",
+                "druid::DriverError",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "SqlException",
+            value: TransitionalDruidError::SqlException(Box::new(sql_exception)),
+            expected: golden(
+                "SQL exception (code=1205, state=40001): deadlock victim",
+                "vendor.DeadlockException",
+                Some(SqlObservable {
+                    error_code: 1205,
+                    sql_state: Some("40001".to_owned()),
+                    message: Some("deadlock victim".to_owned()),
+                    class_name: "vendor.DeadlockException".to_owned(),
+                    assignable_types: vec![
+                        "vendor.DeadlockException".to_owned(),
+                        "java.sql.SQLException".to_owned(),
+                        "vendor.DatabaseException".to_owned(),
+                    ],
+                    recoverable: true,
+                    causes: vec![
+                        SqlExceptionCause::SocketTimeout,
+                        SqlExceptionCause::ClassName("vendor.RootCause".to_owned()),
+                    ],
+                    next_exceptions: vec![
+                        SqlObservable {
+                            error_code: 1213,
+                            sql_state: None,
+                            message: Some("retry transaction".to_owned()),
+                            class_name: "java.sql.SQLException".to_owned(),
+                            assignable_types: vec!["java.sql.SQLException".to_owned()],
+                            recoverable: false,
+                            causes: vec![],
+                            next_exceptions: vec![],
+                        },
+                        SqlObservable {
+                            error_code: 1214,
+                            sql_state: Some("40002".to_owned()),
+                            message: Some("retry exhausted".to_owned()),
+                            class_name: "vendor.RetryExhaustedException".to_owned(),
+                            assignable_types: vec![
+                                "vendor.RetryExhaustedException".to_owned(),
+                                "java.sql.SQLException".to_owned(),
+                                "vendor.DatabaseException".to_owned(),
+                            ],
+                            recoverable: false,
+                            causes: vec![SqlExceptionCause::ClassName(
+                                "vendor.RetryRootCause".to_owned(),
+                            )],
+                            next_exceptions: vec![],
+                        },
+                    ],
+                }),
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "BatchUpdateException",
+            value: TransitionalDruidError::BatchUpdateException {
                 update_counts: vec![1, -2, -3],
-                cause: Box::new(OldDruidError::SqlException(Box::new(
-                    batch_sql_exception.clone(),
+                cause: Box::new(TransitionalDruidError::SqlException(Box::new(
+                    batch_sql_exception,
                 ))),
             },
-            1,
-            Some(1213),
-            Some(vec![1, -2, -3]),
-        ),
-        (
-            "SqlParseError",
-            OldDruidError::SqlParseError("unexpected token".to_owned()),
-            0,
-            None,
-            None,
-        ),
-        (
-            "WallViolation",
-            OldDruidError::WallViolation("blocked statement".to_owned()),
-            0,
-            None,
-            None,
-        ),
-        (
-            "DataSourceNotFound",
-            OldDruidError::DataSourceNotFound("orders".to_owned()),
-            0,
-            None,
-            None,
-        ),
-        (
-            "DataSourceDisabled",
-            OldDruidError::DataSourceDisabled,
-            0,
-            None,
-            None,
-        ),
-        (
-            "ActiveConnectionsPreventRestart",
-            OldDruidError::ActiveConnectionsPreventRestart { active_count: 5 },
-            0,
-            None,
-            None,
-        ),
-        (
-            "OnFatalError",
-            OldDruidError::OnFatalError {
+            expected: golden(
+                "batch update failed after 3 result(s): SQL exception (code=1213, state=40001): batch retry",
+                "java.sql.BatchUpdateException",
+                Some(SqlObservable {
+                    error_code: 1213,
+                    sql_state: Some("40001".to_owned()),
+                    message: Some("batch retry".to_owned()),
+                    class_name: "vendor.BatchException".to_owned(),
+                    assignable_types: vec![
+                        "vendor.BatchException".to_owned(),
+                        "java.sql.SQLException".to_owned(),
+                        "vendor.DatabaseException".to_owned(),
+                    ],
+                    recoverable: false,
+                    causes: vec![SqlExceptionCause::SocketTimeout],
+                    next_exceptions: vec![],
+                }),
+                Some(vec![1, -2, -3]),
+                vec![source(
+                    "SQL exception (code=1213, state=40001): batch retry",
+                    "vendor.BatchException",
+                )],
+            ),
+        },
+        VariantCase {
+            name: "SqlParseError",
+            value: TransitionalDruidError::SqlParseError("unexpected token".to_owned()),
+            expected: golden(
+                "SQL parse error: unexpected token",
+                "druid::SqlParseError",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "WallViolation",
+            value: TransitionalDruidError::WallViolation("blocked statement".to_owned()),
+            expected: golden(
+                "wall violation: blocked statement",
+                "druid::WallViolation",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "DataSourceNotFound",
+            value: TransitionalDruidError::DataSourceNotFound("orders".to_owned()),
+            expected: golden(
+                "datasource not found: orders",
+                "druid::DataSourceNotFound",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "DataSourceDisabled",
+            value: TransitionalDruidError::DataSourceDisabled,
+            expected: golden(
+                "datasource is disabled",
+                "com.alibaba.druid.pool.DataSourceDisableException",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "ActiveConnectionsPreventRestart",
+            value: TransitionalDruidError::ActiveConnectionsPreventRestart { active_count: 5 },
+            expected: golden(
+                "can not restart, active connection count not zero: 5",
+                "druid::ActiveConnectionsPreventRestart",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "OnFatalError",
+            value: TransitionalDruidError::OnFatalError {
                 active_count: 13,
                 max_active: 12,
-                last_error_time_millis: 1_725_678_901_234,
+                last_error_time_millis: 0,
                 last_sql: Some(RdbcString::from_utf16([0x0041, 0xD800, 0x0042])),
-                cause: Some(Box::new(OldDruidError::DataSourceNotAvailable {
-                    cause: Some(Box::new(OldDruidError::Other(
+                cause: Some(Box::new(TransitionalDruidError::DataSourceNotAvailable {
+                    cause: Some(Box::new(TransitionalDruidError::Other(
                         "nested fatal cause".to_owned(),
                     ))),
                 })),
             },
-            2,
-            None,
-            None,
-        ),
-        (
-            "DataSourceNotAvailable",
-            OldDruidError::DataSourceNotAvailable {
-                cause: Some(Box::new(OldDruidError::Other(
+            expected: golden(
+                "onFatalError, activeCount 13, onFatalErrorMaxActive 12, sql \nA�B",
+                "java.sql.SQLException",
+                None,
+                None,
+                vec![
+                    source(
+                        "nested fatal cause",
+                        "druid::DataSourceNotAvailable",
+                    ),
+                    source("nested fatal cause", "druid::Other"),
+                ],
+            ),
+        },
+        VariantCase {
+            name: "DataSourceNotAvailable",
+            value: TransitionalDruidError::DataSourceNotAvailable {
+                cause: Some(Box::new(TransitionalDruidError::Other(
                     "availability cause".to_owned(),
                 ))),
             },
-            1,
-            None,
-            None,
-        ),
-        (
-            "InvalidArgument",
-            OldDruidError::InvalidArgument("bad argument".to_owned()),
-            0,
-            None,
-            None,
-        ),
-        (
-            "UnsupportedOperation",
-            OldDruidError::UnsupportedOperation { operation: "lob" },
-            0,
-            None,
-            None,
-        ),
-        (
-            "NoDriverExtension",
-            OldDruidError::NoDriverExtension {
+            expected: golden(
+                "availability cause",
+                "druid::DataSourceNotAvailable",
+                None,
+                None,
+                vec![source("availability cause", "druid::Other")],
+            ),
+        },
+        VariantCase {
+            name: "InvalidArgument",
+            value: TransitionalDruidError::InvalidArgument("bad argument".to_owned()),
+            expected: golden(
+                "invalid argument: bad argument",
+                "druid::InvalidArgument",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "UnsupportedOperation",
+            value: TransitionalDruidError::UnsupportedOperation { operation: "lob" },
+            expected: golden(
+                "operation is not supported by the physical connection: lob",
+                "druid::UnsupportedOperation",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "NoDriverExtension",
+            value: TransitionalDruidError::NoDriverExtension {
                 db_type: "postgresql".to_owned(),
             },
-            0,
-            None,
-            None,
-        ),
-        (
-            "Other",
-            OldDruidError::Other("other failure".to_owned()),
-            0,
-            None,
-            None,
-        ),
+            expected: golden(
+                "no driver extension registered for database type: postgresql",
+                "druid::NoDriverExtension",
+                None,
+                None,
+                vec![],
+            ),
+        },
+        VariantCase {
+            name: "Other",
+            value: TransitionalDruidError::Other("other failure".to_owned()),
+            expected: golden("other failure", "druid::Other", None, None, vec![]),
+        },
     ];
 
     assert_eq!(cases.len(), 24);
-    for (expected_name, old, expected_source_depth, expected_sql_code, expected_counts) in cases {
-        let old_before_move: TransitionalDruidError = old;
-        let before = observe(&old_before_move);
-        assert_eq!(
-            before.sql_exception.as_ref().map(SqlException::error_code),
-            expected_sql_code
-        );
-        assert_eq!(before.batch_update_counts, expected_counts);
-        assert_eq!(before.source_chain.len(), expected_source_depth);
-
-        let old_again: OldDruidError = old_before_move;
-        let new_again: TransitionalDruidError = old_again;
-        assert_eq!(observe(&new_again), before);
-        assert_eq!(
-            assert_exhaustive_variant(&new_again, expected_name),
-            expected_name
-        );
+    for case in cases {
+        assert_exhaustive_variant(&case.value, case.name);
+        assert_eq!(observe(&case.value), case.expected, "{}", case.name);
     }
 }
 
 #[test]
-fn string_conversions_keep_other_variant_and_direct_type_identity() {
-    let from_owned_old: OldDruidError = String::from("owned failure").into();
-    let from_owned_new: TransitionalDruidError = from_owned_old;
-    assert_eq!(from_owned_new.to_string(), "owned failure");
+fn string_conversions_match_independent_other_variant_goldens() {
+    let from_owned: TransitionalDruidError = String::from("owned failure").into();
+    assert_eq!(
+        observe(&from_owned),
+        golden("owned failure", "druid::Other", None, None, vec![],)
+    );
     assert!(matches!(
-        from_owned_new,
+        from_owned,
         TransitionalDruidError::Other(ref message) if message == "owned failure"
     ));
 
-    let from_borrowed_new: TransitionalDruidError = "borrowed failure".into();
-    let from_borrowed_old: OldDruidError = from_borrowed_new;
-    assert_eq!(from_borrowed_old.to_string(), "borrowed failure");
+    let from_borrowed: TransitionalDruidError = "borrowed failure".into();
+    assert_eq!(
+        observe(&from_borrowed),
+        golden("borrowed failure", "druid::Other", None, None, vec![],)
+    );
     assert!(matches!(
-        from_borrowed_old,
-        OldDruidError::Other(ref message) if message == "borrowed failure"
+        from_borrowed,
+        TransitionalDruidError::Other(ref message) if message == "borrowed failure"
     ));
 }
