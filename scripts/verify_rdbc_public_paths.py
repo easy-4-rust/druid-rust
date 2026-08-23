@@ -814,6 +814,58 @@ def find_matching_brace(tokens: list[Token], index: int, context: str) -> tuple[
     return index + 1, after - 1
 
 
+def skip_union_macro_invocation(tokens: list[Token], index: int) -> int:
+    """Skip one contextual union! item macro without creating a Rust binding."""
+
+    if index + 1 >= len(tokens) or tokens[index + 1].text != "!":
+        fail("malformed union macro invocation")
+    after = skip_delimited(tokens, index + 2, "union macro invocation")
+    if after < len(tokens) and tokens[after].text == ";":
+        after += 1
+    return after
+
+
+def parse_extern_crate_item(
+    tokens: list[Token], index: int, public: bool
+) -> tuple[TopLevelBinding | None, int]:
+    """Parse an Edition-2021 extern-crate item and return only its bound name."""
+
+    if index >= len(tokens):
+        fail("missing source for top-level extern crate item")
+    source_token = tokens[index]
+    if source_token.text == "self":
+        source_name = "self"
+    else:
+        source_name = canonical_source_identifier(
+            source_token, "top-level extern crate item"
+        )
+        if source_name == "_":
+            fail("unsupported top-level extern crate item")
+    index += 1
+
+    alias: str | None = None
+    if index < len(tokens) and tokens[index].text == "as":
+        index += 1
+        if index >= len(tokens):
+            fail("missing top-level extern crate alias")
+        alias = canonical_source_identifier(
+            tokens[index], "top-level extern crate alias"
+        )
+        index += 1
+    elif source_name == "self":
+        fail("extern crate self requires an alias")
+
+    if index >= len(tokens) or tokens[index].text != ";":
+        fail("unsupported top-level extern crate item")
+    bound_name = alias if alias is not None else source_name
+    binding = (
+        None
+        if bound_name == "_"
+        else TopLevelBinding("extern crate", public, bound_name)
+    )
+    return binding, index + 1
+
+
 def scan_top_level_bindings_tokens(
     tokens: list[Token], start: int = 0, end: int | None = None
 ) -> list[TopLevelBinding]:
@@ -827,7 +879,9 @@ def scan_top_level_bindings_tokens(
         index = consume_outer_attributes(tokens, index)
         if index >= limit:
             break
+        visibility_start = index
         public, index = consume_visibility(tokens, index)
+        has_visibility = index != visibility_start
         if index >= limit:
             fail("missing top-level item after visibility")
 
@@ -851,14 +905,9 @@ def scan_top_level_bindings_tokens(
         if keyword == "extern":
             cursor = index + 1
             if cursor < limit and tokens[cursor].text == "crate":
-                cursor += 1
-                binding = named_binding(tokens, cursor, "extern crate", public)
-                cursor += 1
-                if cursor < limit and tokens[cursor].text == "as":
-                    binding = named_binding(tokens, cursor + 1, "extern crate alias", public)
+                binding, index = parse_extern_crate_item(tokens, cursor + 1, public)
                 if binding is not None:
                     bindings.append(binding)
-                index = skip_complete_item(tokens, item_start, semicolon_terminated=True)
                 continue
             if cursor < limit and tokens[cursor].kind in {"STRING", "BYTE_STRING"}:
                 cursor += 1
@@ -925,6 +974,17 @@ def scan_top_level_bindings_tokens(
             if binding is not None:
                 bindings.append(binding)
             index = skip_complete_item(tokens, item_start)
+            continue
+
+        if (
+            keyword == "union"
+            and keyword_index == index
+            and index + 1 < limit
+            and tokens[index + 1].text == "!"
+        ):
+            if has_visibility:
+                fail("union macro invocation cannot have visibility")
+            index = skip_union_macro_invocation(tokens, index)
             continue
 
         if keyword in {"mod", "struct", "enum", "trait", "type", "union", "fn"}:
@@ -1497,6 +1557,170 @@ class PublicPathVerifierTest(unittest.TestCase):
             verify_source_tree(self.root, load_mapping(mapping_file, False))
         except VerificationError as error:
             self.fail(f"unrelated parent syntax was rejected: {error}")
+
+    def test_real_parent_facade_accepts_contextual_union_macro_invocations(self) -> None:
+        """A real parent facade keeps mapped Value beside unrelated union! item macros."""
+
+        self.prepare_direct_type_facade()
+        source = (
+            repository_root() / "crates" / "druid" / "src" / "core" / "mod.rs"
+        ).read_text(encoding="utf-8")
+        source = source.replace(
+            "pub use value::Value;",
+            "pub use druid_rdbc::types::Value;",
+            1,
+        )
+        source += (
+            "\nmacro_rules! union { ($($tokens:tt)*) => {} }\n"
+            "#[allow(unused)]\n"
+            "union! { brace tokens }\n"
+            "union!(paren tokens);\n"
+            "union![bracket tokens];\n"
+        )
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        parent.write_text(source, encoding="utf-8")
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+
+        try:
+            verify_source_tree(self.root, load_mapping(mapping_file, False))
+        except VerificationError as error:
+            self.fail(f"real core/mod.rs union! invocation was rejected: {error}")
+
+    def test_parent_facade_union_macro_delimiters_fail_closed(self) -> None:
+        """Malformed contextual union! delimiters never bypass parent verification."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        malformed_invocations = (
+            "union!;",
+            "union!({]",
+            "union!{unterminated",
+        )
+        for invocation in malformed_invocations:
+            with self.subTest(invocation=invocation):
+                parent.write_text(
+                    f"pub use druid_rdbc::types::Value;\n{invocation}\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaises(VerificationError):
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_parent_facade_accepts_legal_extern_crate_self_aliases(self) -> None:
+        """Crate-self aliases bind only their alias after attributes and visibility."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        legal_forms = (
+            "extern crate self as Alias;",
+            "#[allow(unused_extern_crates)] pub extern crate self as Alias;",
+            "extern crate self as _;",
+            "extern crate core;",
+            "extern crate core as Alias;",
+            "extern crate core as _;",
+        )
+        for extern_item in legal_forms:
+            with self.subTest(extern_item=extern_item):
+                parent.write_text(
+                    f"pub use druid_rdbc::types::Value;\n{extern_item}\n",
+                    encoding="utf-8",
+                )
+                try:
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+                except VerificationError as error:
+                    self.fail(f"legal extern-crate item was rejected: {error}")
+
+    def test_parent_facade_extern_crate_aliases_conflict_with_mapped_name(self) -> None:
+        """Crate-self and ordinary extern-crate aliases cannot shadow mapped Value."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        for extern_item in (
+            "extern crate self as Value;",
+            "pub extern crate self as Value;",
+            "extern crate core as Value;",
+        ):
+            with self.subTest(extern_item=extern_item):
+                parent.write_text(
+                    f"pub use druid_rdbc::types::Value;\n{extern_item}\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    "mapped export Value has conflicting binding",
+                ):
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_parent_facade_rejects_invalid_union_macro_and_crate_self_forms(self) -> None:
+        """Visibility-qualified union! and unaliased crate-self imports remain fail-closed."""
+
+        self.prepare_direct_type_facade()
+        parent = self.root / "crates" / "druid" / "src" / "core" / "mod.rs"
+        parent.parent.mkdir(parents=True, exist_ok=True)
+        mapping_file = self.write_manifest(
+            [
+                (
+                    "druid::core::Value",
+                    "druid_rdbc::types::Value",
+                    "OWNED",
+                    "crates/druid/src/core/mod.rs",
+                )
+            ]
+        )
+        for invalid_item in (
+            "pub union!{}",
+            "pub(crate) union!{}",
+            "extern crate self;",
+        ):
+            with self.subTest(invalid_item=invalid_item):
+                parent.write_text(
+                    f"pub use druid_rdbc::types::Value;\n{invalid_item}\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaises(VerificationError):
+                    verify_source_tree(self.root, load_mapping(mapping_file, False))
 
     def test_parent_facade_rejects_every_competing_mapped_binding(self) -> None:
         """Private uses, modules, and duplicate public targets cannot bind a mapped alias."""
