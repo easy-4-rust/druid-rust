@@ -452,6 +452,8 @@ modules and old shims are internally closed.
 - Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/spi/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
+- Modify: `crates/druid/tests/rdbc_external_consumer_test.rs`
+- Modify: `scripts/verify_physical_connection_lease_surface.py`
 - Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Test: `crates/druid/tests/physical_connection_contract.rs`
 - Test: `crates/druid/tests/physical_connection_lease_test.rs`
@@ -470,6 +472,17 @@ modules and old shims are internally closed.
   Physical/Prepared/Callable/ResultSet/Metadata/Resource/Wrapper definition
 - Preserves: every old root and module-qualified type/trait object as the exact same definition via
   directional `pub use`; no copied trait, enum, handle, or state machine
+- Verifies: the lease-surface checker reads the canonical trait from `druid-rdbc` and separately
+  rejects a missing, wrong-target, copied-definition, wildcard, or otherwise non-pure old
+  `core::physical_connection` shim. This Task 4 scope expansion was approved after the original
+  verifier's hard-coded old implementation path became unreachable by design.
+- Visibility seam: `ResultSetMetaData::with_mysql8_datetime_compatibility` is the sole approved
+  normalized non-import delta: `pub(crate)` becomes `pub` because its unchanged canonical
+  implementation moved to `druid-rdbc` while the existing MySQL8 filter caller remains in
+  `druid`. Its name, parameters, return type, body, state transition, and call site remain
+  unchanged. Task 6 must record every exact generated `druid` re-export-path API addition for this
+  one method in the additions-only allowlist; it may not use a wildcard or allow any other changed
+  or removed API line.
 
 - [ ] **Step 1: Freeze imports and write SCC identity RED tests**
 
@@ -514,6 +527,7 @@ resource modules. Parent/root exports remain compatibility additions, not replac
 Only after the full SCC is closed, run:
 
 ```bash
+python3 scripts/verify_physical_connection_lease_surface.py --self-test
 python3 scripts/verify_rdbc_dependency_boundary.py
 python3 scripts/verify_rdbc_public_paths.py --source-only
 python3 scripts/verify_physical_connection_lease_surface.py
@@ -542,6 +556,8 @@ include the owning manifest plus `Cargo.lock`, and rerun the dependency and all-
 
 ```bash
 git add crates/druid-rdbc crates/druid crates/druid-wrapper \
+  scripts/verify_physical_connection_lease_surface.py \
+  docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md \
   docs/verification/rdbc-first/rdbc-public-path-map.tsv
 git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 ```
@@ -778,6 +794,13 @@ or wildcard mappings fail.
 
 `druid-public-api.rdbc-first.allowlist.txt` contains exact API additions permitted in P03. Removed or
 changed baseline lines can never be allowlisted.
+
+The sole Task 4 visibility seam is an explicit Task 6 allowlist obligation:
+`ResultSetMetaData::with_mysql8_datetime_compatibility` changed only from `pub(crate)` to `pub` so
+the unchanged `druid` MySQL8 filter can call the implementation now owned by `druid-rdbc`. Task 6
+must enumerate each exact addition emitted for that method through the existing `druid::core` and
+`druid::sql` re-export paths. It must not allowlist a prefix, wildcard, removal, changed signature,
+or any unrelated addition.
 
 The source-only public-path gate is also the privacy gate: before compile/API modes, run
 `python3 scripts/verify_rdbc_public_paths.py --source-only`. It requires only `lib.rs` to expose the

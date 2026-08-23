@@ -1,4 +1,3 @@
-use super::RdbcClobAccess;
+#![allow(unused_imports)] // 私有兼容模块仅保留旧 crate 内路径，不从父门面重导出。
 
-/// Marker access contract for Java `java.sql.NClob`, which extends all `Clob` operations.
-pub trait RdbcNClobAccess: RdbcClobAccess {}
+pub use druid_rdbc::resource::RdbcNClobAccess;

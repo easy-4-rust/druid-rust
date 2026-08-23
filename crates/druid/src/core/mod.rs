@@ -134,14 +134,10 @@ pub mod wrapper;
 pub mod wrapper_adapter;
 pub mod xa;
 
-pub use crate::sql::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
 pub use abstract_oracle_exception_sorter::{
     AbstractOracleExceptionSorter, ORACLE_FATAL_ERROR_CODES_PROPERTY,
 };
 pub use auto_load::AutoLoad;
-pub use callable_input_parameter::CallableInputParameter;
-pub use callable_out_parameter::CallableOutParameter;
-pub use callable_parameter::CallableParameter;
 pub use clob_proxy::ClobProxy;
 pub use clob_proxy_impl::ClobProxyImpl;
 pub use config::{PoolConfig, PoolConfigBuilder};
@@ -151,7 +147,6 @@ pub use connection_event_listener::ConnectionEventListener;
 pub use connection_ext::ConnectionExt;
 pub use connection_recycle_disposition::ConnectionRecycleDisposition;
 pub use database_meta_data_proxy_impl::DatabaseMetaDataProxyImpl;
-pub use database_meta_data_row_id_lifetime::DatabaseMetaDataRowIdLifetime;
 pub use db2_exception_sorter::Db2ExceptionSorter;
 pub use driver::{Driver, DriverProperty};
 pub use druid_connection_holder::{
@@ -169,9 +164,63 @@ pub use druid_pooled_result_set::DruidPooledResultSet;
 pub use druid_pooled_statement::DruidPooledStatement;
 pub use druid_rdbc::compat::DruidError;
 pub use druid_rdbc::error::{SqlException, SqlExceptionCause, SqlExceptionKind, SqlWarning};
+pub use druid_rdbc::resource::RdbcOutputStream;
+pub use druid_rdbc::resource::RdbcXmlRepresentationType;
+pub use druid_rdbc::resource::{PhysicalCharacterReader, RdbcCharacterLength, RdbcReader};
+pub use druid_rdbc::resource::{PhysicalCharacterWriter, RdbcWriter};
+pub use druid_rdbc::resource::{PhysicalXmlResult, RdbcXmlResult};
+pub use druid_rdbc::resource::{PhysicalXmlSource, RdbcXmlSource};
+pub use druid_rdbc::resource::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
+pub use druid_rdbc::resource::{RdbcInputStream, RdbcStreamLength};
+pub use druid_rdbc::spi::CallableInputParameter;
+pub use druid_rdbc::spi::CallableOutParameter;
+pub use druid_rdbc::spi::CallableParameter;
+pub use druid_rdbc::spi::DatabaseMetaDataRowIdLifetime;
+pub use druid_rdbc::spi::ExecResult;
+pub use druid_rdbc::spi::PhysicalCallableStatement;
+pub use druid_rdbc::spi::PhysicalConnection;
+pub use druid_rdbc::spi::PhysicalConnection as Connection;
+pub use druid_rdbc::spi::PhysicalConnectionCapabilities;
+pub use druid_rdbc::spi::PhysicalConnectionFactory;
+pub use druid_rdbc::spi::PhysicalConnectionFactory as ConnectionFactory;
+pub use druid_rdbc::spi::PhysicalConnectionInfo;
+pub use druid_rdbc::spi::PhysicalDatabaseMetaData;
+pub use druid_rdbc::spi::PhysicalResultSetMetaData;
+pub use druid_rdbc::spi::ResultSetColumnMeta;
+pub use druid_rdbc::spi::ResultSetColumnType;
+pub use druid_rdbc::spi::ResultSetMetaData;
+pub use druid_rdbc::spi::ResultSetNullability;
+pub use druid_rdbc::spi::ResultSetUpdate;
+pub use druid_rdbc::spi::{PhysicalPreparedStatement, SqlTextPreparedStatement};
+pub use druid_rdbc::spi::{PhysicalResultSet, RdbcResultSet, RowSetResultSet};
+pub use druid_rdbc::spi::{
+    PhysicalStatement, PhysicalStatementOptions, SqlTextStatement, StatementExecuteResult,
+    StatementGeneratedKeys,
+};
+pub use druid_rdbc::spi::{PreparedInputParameter, PreparedTypeNameArgument};
+pub use druid_rdbc::spi::{PreparedStatementKey, PreparedStatementMethodType};
+pub use druid_rdbc::spi::{Unwrapped, Wrapper, WrapperExt};
+pub use druid_rdbc::types::RdbcParameterDate;
+pub use druid_rdbc::types::RdbcParameterDecimal;
+pub use druid_rdbc::types::RdbcParameterImpl;
+pub use druid_rdbc::types::RdbcParameterInt;
+pub use druid_rdbc::types::RdbcParameterLong;
+pub use druid_rdbc::types::RdbcParameterNull;
+pub use druid_rdbc::types::RdbcParameterString;
+pub use druid_rdbc::types::RdbcParameterTimestamp;
+pub use druid_rdbc::types::RdbcRowId;
+pub use druid_rdbc::types::RdbcTargetType;
+pub use druid_rdbc::types::RdbcTargetType as CallableTargetType;
+pub use druid_rdbc::types::{PhysicalRdbcOpaqueObject, RdbcOpaqueObject};
+pub use druid_rdbc::types::{
+    RdbcCalendar, RdbcCalendar as CallableCalendar, RdbcCalendarArgument,
+    RdbcCalendarArgument as CallableCalendarArgument,
+};
+pub use druid_rdbc::types::{RdbcObject, RdbcObject as CallableOutputValue};
+pub use druid_rdbc::types::{RdbcParameter, RdbcParameterType, RdbcParameterValue};
 pub use druid_rdbc::types::{RdbcString, RdbcUrl, Row, Savepoint, Value};
+pub use druid_rdbc::types::{RdbcTypeMap, RdbcTypeMap as CallableTypeMap};
 pub use exception_sorter::{ExceptionSorter, ExceptionSorterProperties};
-pub use exec_result::ExecResult;
 #[allow(deprecated)]
 pub use filter::config::{ConfigFilter, ConfigTools};
 #[allow(deprecated)]
@@ -211,70 +260,22 @@ pub use oracle_valid_connection_checker::OracleValidConnectionChecker;
 pub use pg_exception_sorter::PgExceptionSorter;
 pub use pg_valid_connection_checker::PgValidConnectionChecker;
 pub use phoenix_exception_sorter::PhoenixExceptionSorter;
-pub use physical_callable_statement::PhysicalCallableStatement;
-pub use physical_connection::PhysicalConnection;
-pub use physical_connection::PhysicalConnection as Connection;
-pub use physical_connection_capabilities::PhysicalConnectionCapabilities;
-pub use physical_connection_factory::PhysicalConnectionFactory;
-pub use physical_connection_factory::PhysicalConnectionFactory as ConnectionFactory;
-pub use physical_connection_info::PhysicalConnectionInfo;
 pub use physical_connection_lease::PhysicalConnectionLease;
-pub use physical_database_meta_data::PhysicalDatabaseMetaData;
-pub use physical_prepared_statement::{PhysicalPreparedStatement, SqlTextPreparedStatement};
-pub use physical_result_set_meta_data::PhysicalResultSetMetaData;
-pub use physical_statement::{
-    PhysicalStatement, PhysicalStatementOptions, SqlTextStatement, StatementExecuteResult,
-    StatementGeneratedKeys,
-};
 pub use pool::Pool;
 pub use pool_state::PoolState;
 pub use poolable_wrapper::PoolableWrapper;
-pub use prepared_input_parameter::{PreparedInputParameter, PreparedTypeNameArgument};
 pub use prepared_statement_cache_stats::PreparedStatementCacheStats;
 pub use prepared_statement_holder::PreparedStatementHolder;
-pub use prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
 pub use prepared_statement_pool::PreparedStatementPool;
 pub use proxy_attributes::{ProxyAttributeValue, ProxyAttributes};
 pub use rdbc4_valid_connection_checker::{PingConnectionChecker, Rdbc4ValidConnectionChecker};
-pub use rdbc_calendar::{
-    RdbcCalendar, RdbcCalendar as CallableCalendar, RdbcCalendarArgument,
-    RdbcCalendarArgument as CallableCalendarArgument,
-};
-pub use rdbc_input_stream::{RdbcInputStream, RdbcStreamLength};
-pub use rdbc_object::{RdbcObject, RdbcObject as CallableOutputValue};
-pub use rdbc_opaque_object::{PhysicalRdbcOpaqueObject, RdbcOpaqueObject};
-pub use rdbc_output_stream::RdbcOutputStream;
-pub use rdbc_parameter::{RdbcParameter, RdbcParameterType, RdbcParameterValue};
-pub use rdbc_parameter_date::RdbcParameterDate;
-pub use rdbc_parameter_decimal::RdbcParameterDecimal;
-pub use rdbc_parameter_impl::RdbcParameterImpl;
-pub use rdbc_parameter_int::RdbcParameterInt;
-pub use rdbc_parameter_long::RdbcParameterLong;
-pub use rdbc_parameter_null::RdbcParameterNull;
-pub use rdbc_parameter_string::RdbcParameterString;
-pub use rdbc_parameter_timestamp::RdbcParameterTimestamp;
-pub use rdbc_reader::{PhysicalCharacterReader, RdbcCharacterLength, RdbcReader};
-pub use rdbc_result_set::{PhysicalResultSet, RdbcResultSet, RowSetResultSet};
-pub use rdbc_row_id::RdbcRowId;
-pub use rdbc_target_type::RdbcTargetType;
-pub use rdbc_target_type::RdbcTargetType as CallableTargetType;
-pub use rdbc_type_map::{RdbcTypeMap, RdbcTypeMap as CallableTypeMap};
-pub use rdbc_writer::{PhysicalCharacterWriter, RdbcWriter};
-pub use rdbc_xml_representation_type::RdbcXmlRepresentationType;
-pub use rdbc_xml_result::{PhysicalXmlResult, RdbcXmlResult};
-pub use rdbc_xml_source::{PhysicalXmlSource, RdbcXmlSource};
-pub use result_set_column_meta::ResultSetColumnMeta;
-pub use result_set_column_type::ResultSetColumnType;
 pub use result_set_filter::ResultSetFilter;
 pub use result_set_filter_chain::ResultSetFilterChain;
 pub use result_set_filter_context::ResultSetFilterContext;
-pub use result_set_meta_data::ResultSetMetaData;
 pub use result_set_meta_data_proxy::ResultSetMetaDataProxy;
 pub use result_set_meta_data_proxy_impl::ResultSetMetaDataProxyImpl;
-pub use result_set_nullability::ResultSetNullability;
 pub use result_set_open_context::ResultSetOpenContext;
 pub use result_set_statement::ResultSetStatement;
-pub use result_set_update::ResultSetUpdate;
 pub use statement_event_listener::StatementEventListener;
 pub use statement_execute_type::StatementExecuteType;
 pub use statement_type::StatementType;
@@ -282,7 +283,6 @@ pub use sybase_exception_sorter::SybaseExceptionSorter;
 pub use transaction_info::TransactionInfo;
 pub use valid_connection_checker::ValidConnectionChecker;
 pub use valid_connection_checker_adapter::ValidConnectionCheckerAdapter;
-pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
 pub use wrapper_adapter::WrapperAdapter;
 pub use xa::{
     flags as xa_flags, XaOperation, XaPrepareResult, XaResource, XaState, XaStateTransitionError,

@@ -62,11 +62,8 @@ pub mod timestamp;
 pub mod types;
 pub mod wrapper;
 
-pub use array::{Array, RdbcArray};
-pub use blob::{Blob, RdbcBlob};
 pub use callable_statement::CallableStatement;
 pub use client_info_status::ClientInfoStatus;
-pub use clob::{Clob, RdbcClob};
 pub use common_data_source::{CommonDataSource, RdbcLogWriter};
 pub use connection::Connection;
 pub use data_source::DataSource;
@@ -87,17 +84,23 @@ pub use druid_rdbc::error::{
 };
 pub use druid_rdbc::error::{SqlException, SqlExceptionKind, SqlWarning};
 pub use druid_rdbc::error::{SqlException as SQLException, SqlWarning as SQLWarning};
+pub use druid_rdbc::resource::SqlXml as SQLXML;
+pub use druid_rdbc::resource::{Array, RdbcArray};
+pub use druid_rdbc::resource::{Blob, RdbcBlob};
+pub use druid_rdbc::resource::{Clob, RdbcClob};
+pub use druid_rdbc::resource::{NClob, RdbcNClob};
+pub use druid_rdbc::resource::{RdbcRef, Ref};
+pub use druid_rdbc::resource::{RdbcSqlXml, SqlXml};
+pub use druid_rdbc::spi::{Unwrapped, Wrapper, WrapperExt};
 pub use druid_rdbc::types::Date;
 pub use druid_rdbc::types::Savepoint;
 pub use druid_rdbc::types::{RdbcString, Time, Timestamp};
 pub use druid_rdbc::types::{RdbcType as RDBCType, SqlType as SQLType};
 pub use druid_rdbc::types::{RdbcType, Types};
-pub use n_clob::{NClob, RdbcNClob};
 pub use parameter_meta_data::{ParameterMetaData, ParameterMode, ParameterNullability};
 pub use prepared_statement::PreparedStatement;
 pub use pseudo_column_usage::PseudoColumnUsage;
 pub use rdbc_url::RdbcUrl;
-pub use ref_value::{RdbcRef, Ref};
 pub use result_set::ResultSet;
 pub use result_set_meta_data::ResultSetMetaData;
 pub use row_id::RowId;
@@ -110,15 +113,12 @@ pub use sql_output::SqlOutput;
 pub use sql_output::SqlOutput as SQLOutput;
 pub use sql_permission::SqlPermission;
 pub use sql_type::SqlType;
-pub use sql_xml::SqlXml as SQLXML;
-pub use sql_xml::{RdbcSqlXml, SqlXml};
 pub use statement::Statement;
 pub use struct_value::Struct;
-pub use wrapper::{Unwrapped, Wrapper, WrapperExt};
 
 // java.sql LOB/stream helpers live in core because pooled statements also consume them,
 // but their canonical public path is `druid::sql::*`.
-pub use crate::core::{
+pub use druid_rdbc::resource::{
     RdbcCharacterLength, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcStreamLength,
     RdbcWriter,
 };
