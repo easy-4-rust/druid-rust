@@ -472,6 +472,7 @@ modules and old shims are internally closed.
 - Modify: `scripts/verify_rdbc_public_paths.py`
 - Modify: `scripts/verify_physical_connection_lease_surface.py`
 - Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
+- Create: `docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256`
 - Test: `crates/druid/tests/physical_connection_contract.rs`
 - Test: `crates/druid/tests/physical_connection_lease_test.rs`
 - Test: `crates/druid/tests/rdbc_blob_test.rs`
@@ -547,6 +548,27 @@ Populate the three `druid-rdbc` facades with directed declarations/re-exports. R
 path named in Files as a thin `pub use` module, including `core::wrapper`, `sql::wrapper`, and all
 resource modules. Parent/root exports remain compatibility additions, not replacements for shims.
 
+After the final 285-row TSV bytes are stable, create the tracked Task 4 freeze record with Python
+`hashlib` so the command is portable across macOS/Linux:
+
+```bash
+python3 - <<'PY'
+import hashlib
+from pathlib import Path
+mapping = Path('docs/verification/rdbc-first/rdbc-public-path-map.tsv')
+digest = hashlib.sha256(mapping.read_bytes()).hexdigest()
+Path('docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256').write_text(
+    f'{digest}  {mapping.as_posix()}\n', encoding='utf-8'
+)
+PY
+```
+
+The hash file is exactly one newline-terminated line: 64 lowercase hexadecimal characters, two
+ASCII spaces, and `docs/verification/rdbc-first/rdbc-public-path-map.tsv`. Default nonempty
+`--source-only` validation verifies the five-column schema, exact 285-row denominator, required
+secondary set, and this digest before it inspects source modes. Its self-test must pass the exact
+bytes and fail after a one-byte mapping mutation.
+
 - [ ] **Step 4: Run the first complete Cargo check and all merged regressions**
 
 Only after the full SCC is closed, run:
@@ -585,7 +607,8 @@ git add crates/druid-rdbc crates/druid crates/druid-wrapper \
   scripts/verify_rdbc_public_paths.py \
   scripts/verify_physical_connection_lease_surface.py \
   docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md \
-  docs/verification/rdbc-first/rdbc-public-path-map.tsv
+  docs/verification/rdbc-first/rdbc-public-path-map.tsv \
+  docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
 git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 ```
 
@@ -597,6 +620,8 @@ git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 - Create: `scripts/verify_wrapper_rdbc_import_boundary.py`
 - Create: `docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv`
 - Create: `docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv`
+- Read/verify unchanged: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
+- Read/verify unchanged: `docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256`
 - Modify: `crates/druid-wrapper/src/prepared_parameter_materializer.rs`
 - Modify: `crates/druid-wrapper/src/prepared_parameter_state.rs`
 - Modify: `crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs`
@@ -658,6 +683,18 @@ git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 
 - [ ] **Step 1: Write the live wrapper-import verifier and tracked denominator manifests**
 
+Before any Task 5 edit, prove that the Task 4 denominator and freeze record are exact and untouched:
+
+```bash
+python3 scripts/verify_rdbc_public_paths.py --source-only
+git diff --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --cached --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
+git diff --cached --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
+```
+
+Any failure stops Task 5. Do not regenerate, stage, or commit either Task 4 denominator file.
+
 `verify_wrapper_rdbc_import_boundary.py` scans every production `.rs` file below
 `crates/druid-wrapper/src` and normalizes multiline/nested `use` trees plus fully-qualified paths. It
 must discover any implementation or use of:
@@ -714,7 +751,7 @@ blessing verifier output.
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
-python3 scripts/verify_rdbc_public_paths.py
+python3 scripts/verify_rdbc_public_paths.py --source-only
 python3 scripts/verify_wrapper_rdbc_import_boundary.py \
   --before docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv \
   --after docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv
@@ -732,6 +769,16 @@ tracked manifests, rejects every moved low-level import from `druid::{core,spi,s
 direct `druid_rdbc` import for each `RDBC_DIRECT` row. Old/new trait objects remain identical and
 Druid product imports remain explicit.
 
+Immediately before staging, rerun the Task 4 freeze and index guards:
+
+```bash
+python3 scripts/verify_rdbc_public_paths.py --source-only
+git diff --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --cached --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
+git diff --cached --quiet -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
+```
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -739,6 +786,9 @@ git add Cargo.lock crates/druid-wrapper scripts/verify_wrapper_rdbc_import_bound
   docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv \
   docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv
 git commit -m "refactor(wrapper): consume rdbc contracts directly"
+python3 scripts/verify_rdbc_public_paths.py --source-only
+git diff --quiet HEAD^..HEAD -- docs/verification/rdbc-first/rdbc-public-path-map.tsv
+git diff --quiet HEAD^..HEAD -- docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256
 ```
 
 ### Task 6: 收口 public API、DAG 和文档
@@ -756,6 +806,7 @@ git commit -m "refactor(wrapper): consume rdbc contracts directly"
 - Create: `api/druid-public-api.rdbc-first.diff.txt`
 - Create: `api/druid-public-api.rdbc-first.allowlist.txt`
 - Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
+- Modify or replace: `docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256`
 - Create: `docs/verification/rdbc-first/rdbc-extraction.md`
 - Modify: `docs/druid-rust-Architecture.zh_CN.md`
 
@@ -840,6 +891,13 @@ secondary aliases for `ExecResult`, PhysicalConnection/Connection,
 PhysicalConnectionFactory/ConnectionFactory, SQL RowId/RowIdLifetime, and ResultSetMetaData. Task 5
 does not change this denominator. Task 6 derives the complete live baseline set and requires exact
 equality with all 285 rows before compile/API comparison; a smaller denominator is never accepted.
+
+The Task 4 SHA-256 record freezes only the exact Task 4 handoff and blocks Task 5 drift. Task 6 is
+explicitly authorized to modify the TSV when its complete live/API comparison proves a required
+change. In that case Task 6 must record the old/new hash-file diff and either regenerate the same
+stable SHA-256 record for its final TSV bytes or replace it with a clearly named final-denominator
+hash artifact and update the verifier atomically. Task 5's no-stage restriction does not prohibit
+this Task 6-owned update; leaving a stale Task 4 digest is forbidden.
 
 `druid-public-api.rdbc-first.allowlist.txt` contains exact API additions permitted in P03. Removed or
 changed baseline lines can never be allowlisted.

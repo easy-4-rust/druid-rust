@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import sys
 import tempfile
 import unittest
@@ -16,7 +17,9 @@ RDBC_MODULES = {"types", "error", "spi", "resource", "compat"}
 MAPPING_HEADER = "old_path\tnew_path\tcompile_mode\told_module_file\tsource_mode"
 COMPILE_MODES = {"OWNED", "DYN_TRAIT", "PATH_ONLY"}
 SOURCE_MODES = {"PURE_SHIM", "FACADE_MEMBERSHIP"}
-MINIMUM_LIVE_MAPPING_ROWS = 285
+EXPECTED_LIVE_MAPPING_ROWS = 285
+TASK4_MAPPING_FILE = Path("docs/verification/rdbc-first/rdbc-public-path-map.tsv")
+TASK4_HASH_FILE = Path("docs/verification/rdbc-first/rdbc-public-path-map.task4.sha256")
 REQUIRED_SECONDARY_ROWS = (
     (
         "druid::core::connection::ExecResult",
@@ -44,21 +47,21 @@ REQUIRED_SECONDARY_ROWS = (
         "druid_rdbc::spi::PhysicalConnectionFactory",
         "DYN_TRAIT",
         "crates/druid/src/core/connection_factory.rs",
-        "FACADE_MEMBERSHIP",
+        "PURE_SHIM",
     ),
     (
         "druid::core::connection_factory::ConnectionFactory",
         "druid_rdbc::spi::PhysicalConnectionFactory",
         "DYN_TRAIT",
         "crates/druid/src/core/connection_factory.rs",
-        "FACADE_MEMBERSHIP",
+        "PURE_SHIM",
     ),
     (
         "druid::sql::row_id::RowId",
         "druid_rdbc::types::RdbcRowId",
         "OWNED",
         "crates/druid/src/sql/row_id.rs",
-        "FACADE_MEMBERSHIP",
+        "PURE_SHIM",
     ),
     (
         "druid::sql::RowId",
@@ -72,7 +75,7 @@ REQUIRED_SECONDARY_ROWS = (
         "druid_rdbc::spi::DatabaseMetaDataRowIdLifetime",
         "OWNED",
         "crates/druid/src/sql/row_id_lifetime.rs",
-        "FACADE_MEMBERSHIP",
+        "PURE_SHIM",
     ),
     (
         "druid::sql::RowIdLifetime",
@@ -86,7 +89,7 @@ REQUIRED_SECONDARY_ROWS = (
         "druid_rdbc::spi::ResultSetMetaData",
         "OWNED",
         "crates/druid/src/sql/result_set_meta_data.rs",
-        "FACADE_MEMBERSHIP",
+        "PURE_SHIM",
     ),
     (
         "druid::sql::ResultSetMetaData",
@@ -672,7 +675,7 @@ def load_mapping(mapping_path: Path, allow_empty_scaffold: bool) -> list[ShimGro
 
 
 def verify_required_secondary_denominator(
-    mappings: list[ShimGroup], minimum_rows: int | None = None
+    mappings: list[ShimGroup], expected_rows: int | None = None
 ) -> None:
     """Require every reviewed secondary facade path with its exact mapping contract."""
 
@@ -693,9 +696,44 @@ def verify_required_secondary_denominator(
             "mapping manifest is missing reviewed secondary public paths: "
             + ", ".join(row[0] for row in missing)
         )
-    if minimum_rows is not None and len(observed) < minimum_rows:
+    if expected_rows is not None and len(observed) != expected_rows:
         fail(
-            f"mapping manifest has {len(observed)} rows; expected at least {minimum_rows}"
+            f"mapping manifest has {len(observed)} rows; expected exactly {expected_rows}"
+        )
+
+
+def verify_task4_hash(root: Path, mapping_path: Path, hash_path: Path) -> None:
+    """Verify the stable lowercase SHA-256 record for the exact Task 4 mapping bytes."""
+
+    if not mapping_path.is_file():
+        fail(f"Task 4 mapping file not found: {mapping_path}")
+    if not hash_path.is_file():
+        fail(f"Task 4 mapping hash file not found: {hash_path}")
+    try:
+        relative = mapping_path.resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        fail(f"Task 4 mapping file is outside repository root: {mapping_path}")
+    try:
+        recorded = hash_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        fail(f"cannot read Task 4 mapping hash file: {error}")
+    if recorded.count("\n") != 1 or not recorded.endswith("\n"):
+        fail("Task 4 mapping hash file has invalid schema")
+    fields = recorded[:-1].split("  ")
+    if len(fields) != 2:
+        fail("Task 4 mapping hash file has invalid schema")
+    digest, recorded_path = fields
+    if (
+        len(digest) != 64
+        or digest != digest.lower()
+        or any(character not in "0123456789abcdef" for character in digest)
+        or recorded_path != relative
+    ):
+        fail("Task 4 mapping hash file has invalid schema")
+    actual = hashlib.sha256(mapping_path.read_bytes()).hexdigest()
+    if digest != actual:
+        fail(
+            f"Task 4 mapping hash mismatch: expected {digest}, actual {actual}"
         )
 
 
@@ -1405,10 +1443,40 @@ class PublicPathVerifierTest(unittest.TestCase):
         mapping_file = self.write_manifest(list(REQUIRED_SECONDARY_ROWS))
         mappings = load_mapping(mapping_file, allow_empty_scaffold=False)
         verify_required_secondary_denominator(mappings)
-        with self.assertRaisesRegex(VerificationError, "expected at least 285"):
+        with self.assertRaisesRegex(VerificationError, "expected exactly 285"):
             verify_required_secondary_denominator(
-                mappings, minimum_rows=MINIMUM_LIVE_MAPPING_ROWS
+                mappings, expected_rows=EXPECTED_LIVE_MAPPING_ROWS
             )
+
+    def test_task4_hash_accepts_exact_bytes_and_rejects_mutation(self) -> None:
+        """The tracked Task 4 digest freezes exact final mapping bytes."""
+
+        mapping = (
+            self.root
+            / "docs"
+            / "verification"
+            / "rdbc-first"
+            / "rdbc-public-path-map.tsv"
+        )
+        digest_file = mapping.with_name("rdbc-public-path-map.task4.sha256")
+        mapping.parent.mkdir(parents=True, exist_ok=True)
+        mapping.write_bytes(b"fixture mapping bytes\n")
+        relative = mapping.relative_to(self.root).as_posix()
+        digest_file.write_text(
+            f"{hashlib.sha256(mapping.read_bytes()).hexdigest()}  {relative}\n",
+            encoding="utf-8",
+        )
+        verify_task4_hash(self.root, mapping, digest_file)
+        mapping.write_bytes(mapping.read_bytes() + b"mutation")
+        with self.assertRaisesRegex(VerificationError, "Task 4 mapping hash mismatch"):
+            verify_task4_hash(self.root, mapping, digest_file)
+        mapping.write_bytes(b"fixture mapping bytes\n")
+        digest_file.write_text(
+            f"{hashlib.sha256(mapping.read_bytes()).hexdigest().upper()}  {relative}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "invalid schema"):
+            verify_task4_hash(self.root, mapping, digest_file)
         with self.assertRaisesRegex(VerificationError, "secondary public paths"):
             verify_required_secondary_denominator(
                 load_mapping(
@@ -1703,6 +1771,42 @@ class PublicPathVerifierTest(unittest.TestCase):
             ]
         )
         verify_source_tree(self.root, load_mapping(mapping_file, False))
+
+    def test_reviewed_secondary_pure_shim_rejects_unrelated_item(self) -> None:
+        """A reviewed one-export secondary file cannot use membership to hide extra syntax."""
+
+        spi_directory = self.root / "crates" / "druid-rdbc" / "src" / "spi"
+        (spi_directory / "physical_connection_factory.rs").write_text(
+            "pub trait PhysicalConnectionFactory {}\n",
+            encoding="utf-8",
+        )
+        (spi_directory / "mod.rs").write_text(
+            "mod physical_connection_factory;\n"
+            "pub use physical_connection_factory::PhysicalConnectionFactory;\n",
+            encoding="utf-8",
+        )
+        old_facade = (
+            self.root
+            / "crates"
+            / "druid"
+            / "src"
+            / "core"
+            / "connection_factory.rs"
+        )
+        old_facade.parent.mkdir(parents=True, exist_ok=True)
+        old_facade.write_text(
+            "pub use druid_rdbc::spi::PhysicalConnectionFactory;\n"
+            "pub struct UnrelatedExtraItem;\n",
+            encoding="utf-8",
+        )
+        reviewed_row = next(
+            row
+            for row in REQUIRED_SECONDARY_ROWS
+            if row[0] == "druid::core::connection_factory::PhysicalConnectionFactory"
+        )
+        mapping_file = self.write_manifest([reviewed_row])
+        with self.assertRaisesRegex(VerificationError, "extra Rust syntax"):
+            verify_source_tree(self.root, load_mapping(mapping_file, False))
 
     def test_parent_facade_rejects_bad_mapped_exports(self) -> None:
         """Parent rows reject wrong, missing, duplicate, and wildcard mapped exports."""
@@ -2223,8 +2327,13 @@ def main() -> int:
         mappings = load_mapping(mapping_path, arguments.allow_empty_scaffold)
         if not arguments.allow_empty_scaffold:
             verify_required_secondary_denominator(
-                mappings, minimum_rows=MINIMUM_LIVE_MAPPING_ROWS
+                mappings, expected_rows=EXPECTED_LIVE_MAPPING_ROWS
             )
+            standard_mapping = repository_root() / TASK4_MAPPING_FILE
+            if mapping_path.resolve() == standard_mapping.resolve():
+                verify_task4_hash(
+                    repository_root(), standard_mapping, repository_root() / TASK4_HASH_FILE
+                )
         verify_source_tree(arguments.root.resolve(), mappings)
     except VerificationError as error:
         print(f"ERROR: {error}", file=sys.stderr)

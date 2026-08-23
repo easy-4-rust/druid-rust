@@ -276,11 +276,11 @@ druid::core::PhysicalConnectionInfo	druid_rdbc::spi::PhysicalConnectionInfo	OWNE
 druid::core::connection::ExecResult	druid_rdbc::spi::ExecResult	OWNED	crates/druid/src/core/connection.rs	FACADE_MEMBERSHIP
 druid::core::connection::PhysicalConnection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/connection.rs	FACADE_MEMBERSHIP
 druid::core::connection::Connection	druid_rdbc::spi::PhysicalConnection	DYN_TRAIT	crates/druid/src/core/connection.rs	FACADE_MEMBERSHIP
-druid::core::connection_factory::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/connection_factory.rs	FACADE_MEMBERSHIP
-druid::core::connection_factory::ConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/connection_factory.rs	FACADE_MEMBERSHIP
-druid::sql::row_id::RowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/sql/row_id.rs	FACADE_MEMBERSHIP
+druid::core::connection_factory::PhysicalConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/connection_factory.rs	PURE_SHIM
+druid::core::connection_factory::ConnectionFactory	druid_rdbc::spi::PhysicalConnectionFactory	DYN_TRAIT	crates/druid/src/core/connection_factory.rs	PURE_SHIM
+druid::sql::row_id::RowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/sql/row_id.rs	PURE_SHIM
 druid::sql::RowId	druid_rdbc::types::RdbcRowId	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
-druid::sql::row_id_lifetime::RowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/sql/row_id_lifetime.rs	FACADE_MEMBERSHIP
+druid::sql::row_id_lifetime::RowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/sql/row_id_lifetime.rs	PURE_SHIM
 druid::sql::RowIdLifetime	druid_rdbc::spi::DatabaseMetaDataRowIdLifetime	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
-druid::sql::result_set_meta_data::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/sql/result_set_meta_data.rs	FACADE_MEMBERSHIP
+druid::sql::result_set_meta_data::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/sql/result_set_meta_data.rs	PURE_SHIM
 druid::sql::ResultSetMetaData	druid_rdbc::spi::ResultSetMetaData	OWNED	crates/druid/src/sql/mod.rs	FACADE_MEMBERSHIP
