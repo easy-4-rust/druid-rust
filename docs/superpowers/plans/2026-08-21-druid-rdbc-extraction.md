@@ -4,7 +4,7 @@
 
 **Goal:** 从当前 `druid` 中无行为抽取独立 `druid-rdbc` crate，集中平台类型、结构化 SQL 错误、Physical driver SPI 和资源 Access SPI，同时保持 `druid::sql::*` 与现有 adapter 行为。
 
-**Architecture:** 先移动无状态平台类型和错误，再移动 driver/resource SPI，最后把 `druid` 旧路径改为薄重导出。`druid` 继续拥有 pooled logical handles、Pool、Filter、Parser、Wall、Stat、Dynamic；本计划不引入 async cursor 或新错误行为。
+**Architecture:** 按 scaffold/boundary → 无 `DruidError` 平台值与 SQL 异常 → `RdbcString`/依赖错误的平台值/完整 24-variant `DruidError` 原子兼容切片 → Physical/Resource/Wrapper 完整 SCC → wrapper import cutover → API/DAG closeout 六个任务执行。P03 临时把现有 `DruidError` 实现放在 `druid_rdbc::compat`，`druid` 旧路径只暴露同一类型；P04 Task 1 必须把 driver-facing 错误切换到 `RdbcError` 并把 Druid 产品错误实现移回 `druid`。
 
 **Tech Stack:** Cargo workspace、Rust 2021、cargo-public-api、cargo-semver-checks、CodeGraph
 
@@ -18,26 +18,36 @@
 - `druid-rdbc` 不得依赖 `druid` 或任何具体数据库/池/HTTP/gRPC crate。
 - 旧公共路径只做类型重导出，不复制实现。
 - `druid::sql::*` external consumer 必须在每个 task 后通过。
+- 用户已批准 P03 过渡豁免：`druid_rdbc::compat::DruidError` 标记为 `TRANSITIONAL_UNTIL_P04`，只服务于无环、无行为变化的机械抽取。
+- P03 的 24 个 `DruidError` variants、字段、`Display`、`Error::source`、分类方法和转换实现不得增删或重分类；不得增加 `#[non_exhaustive]`，不得把任何 SPI 签名改为 `RdbcError`。
+- `RdbcError` 在 P03 只建立 scaffold，不进入任何生产签名；P04 Task 1 是 P03 之后的强制前置，完整 mixed enum 不得成为 P04 完成态。
+- public API baseline 暴露的每个旧 module-qualified path 都必须保留同名 `.rs` 文件并做定向 `pub use`；父模块/root re-export 不能替代模块 shim。
 
 ---
 
-### Task 1: 建立 crate 和依赖边界 RED 门禁
+### Task 1: 建立 crate scaffold 和依赖/API 边界 RED 门禁
 
 **Files:**
 - Create: `crates/druid-rdbc/Cargo.toml`
 - Create: `crates/druid-rdbc/src/lib.rs`
+- Create: `crates/druid-rdbc/src/types/mod.rs`
+- Create: `crates/druid-rdbc/src/error/mod.rs`
+- Create: `crates/druid-rdbc/src/spi/mod.rs`
+- Create: `crates/druid-rdbc/src/resource/mod.rs`
+- Create: `crates/druid-rdbc/src/compat/mod.rs`
 - Create: `scripts/verify_rdbc_dependency_boundary.py`
 - Create: `scripts/verify_rdbc_public_paths.py`
 - Create: `crates/druid/tests/rdbc_external_consumer_test.rs`
 - Modify: root `Cargo.toml`
 
 **Interfaces:**
-- Produces: package `druid-rdbc`, Rust crate `druid_rdbc`, dependency/API boundary scripts
+- Produces: package `druid-rdbc`, Rust crate `druid_rdbc`, five declaration-only module facades, dependency verifier, public-path/source-shim verifier, external-consumer fixture
+- Produces: `python3 scripts/verify_rdbc_public_paths.py --source-only` for checking declared new modules and exact old-module shim targets before the SCC can compile
 
-- [ ] **Step 1: 写目标 topology RED 脚本**
+- [ ] **Step 1: 写 topology RED 脚本**
 
-`verify_rdbc_dependency_boundary.py` must read `cargo metadata --format-version 1`, locate package
-`druid-rdbc`, recursively traverse normal dependencies, and reject:
+`verify_rdbc_dependency_boundary.py` reads `cargo metadata --format-version 1`, locates
+`druid-rdbc`, recursively traverses normal dependencies, and rejects:
 
 ```python
 FORBIDDEN = {
@@ -47,7 +57,10 @@ FORBIDDEN = {
 }
 ```
 
-It exits 1 when the package is absent or any forbidden package is reachable.
+It exits 1 when the package is absent or a forbidden package is reachable. The public-path script
+must also expose a source-only mode that does not invoke Cargo and rejects a missing target module,
+a missing old `.rs` module, wildcard re-export, or a second public type/trait/enum definition in a
+shim.
 
 - [ ] **Step 2: Run RED boundary**
 
@@ -57,7 +70,7 @@ python3 scripts/verify_rdbc_dependency_boundary.py
 
 Expected: FAIL with `package druid-rdbc not found`.
 
-- [ ] **Step 3: 创建最小 package**
+- [ ] **Step 3: 创建最小 package 和五个 module 文件**
 
 Use:
 
@@ -78,16 +91,19 @@ chrono.workspace = true
 jiff.workspace = true
 num-bigint.workspace = true
 parking_lot.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["sync"] }
 url.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
 ```
 
-`src/lib.rs` initially declares empty `types`, `error`, `spi`, `resource`, and `compat` modules;
-these modules contain only declarations and re-exports.
+`lib.rs` declares `pub mod types;`, `pub mod error;`, `pub mod spi;`, `pub mod resource;`, and
+`pub mod compat;`. Create all five listed `mod.rs` files now; each contains declarations/re-exports
+only and no migrated object implementation.
 
 - [ ] **Step 4: 写 external consumer compile fixture**
 
@@ -124,273 +140,460 @@ git add Cargo.toml Cargo.lock crates/druid-rdbc scripts \
 git commit -m "build(rdbc): establish isolated contract crate"
 ```
 
-### Task 2: 移动平台值类型和 SQL 类型
+### Task 2: 只移动无 `DruidError` 平台值和结构化 SQL 异常
 
 **Files:**
-- Move: `crates/druid/src/core/value.rs` → `crates/druid-rdbc/src/types/value.rs`
-- Move: `crates/druid/src/core/row.rs` → `crates/druid-rdbc/src/types/row.rs`
-- Move: `crates/druid/src/core/savepoint.rs` → `crates/druid-rdbc/src/types/savepoint.rs`
-- Move: `crates/druid/src/core/rdbc_string.rs` → `crates/druid-rdbc/src/types/rdbc_string.rs`
-- Move: `crates/druid/src/core/rdbc_url.rs` → `crates/druid-rdbc/src/types/rdbc_url.rs`
-- Move: `crates/druid/src/sql/date.rs` → `crates/druid-rdbc/src/types/date.rs`
-- Move: `crates/druid/src/sql/time.rs` → `crates/druid-rdbc/src/types/time.rs`
-- Move: `crates/druid/src/sql/timestamp.rs` → `crates/druid-rdbc/src/types/timestamp.rs`
-- Move: `crates/druid/src/sql/types.rs` → `crates/druid-rdbc/src/types/types.rs`
-- Move: `crates/druid/src/sql/rdbc_type.rs` → `crates/druid-rdbc/src/types/rdbc_type.rs`
-- Move: `crates/druid/src/sql/rdbc_sql_type.rs` → `crates/druid-rdbc/src/types/rdbc_sql_type.rs`
+- Move and recreate shim: `crates/druid/src/core/value.rs` → `crates/druid-rdbc/src/types/value.rs`
+- Move and recreate shim: `crates/druid/src/core/row.rs` → `crates/druid-rdbc/src/types/row.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_url.rs` → `crates/druid-rdbc/src/types/rdbc_url.rs`
+- Move and recreate shim: `crates/druid/src/sql/types.rs` → `crates/druid-rdbc/src/types/types.rs`
+- Move and recreate shim: `crates/druid/src/sql/rdbc_type.rs` → `crates/druid-rdbc/src/types/rdbc_type.rs`
+- Move and recreate shim: `crates/druid/src/sql/rdbc_sql_type.rs` → `crates/druid-rdbc/src/types/rdbc_sql_type.rs`
+- Move and recreate shim: `crates/druid/src/core/sql_exception.rs` → `crates/druid-rdbc/src/error/sql_exception.rs`
+- Move and recreate shim: `crates/druid/src/core/sql_warning.rs` → `crates/druid-rdbc/src/error/sql_warning.rs`
 - Modify: `crates/druid-rdbc/src/types/mod.rs`
+- Modify: `crates/druid-rdbc/src/error/mod.rs`
+- Modify: `crates/druid/Cargo.toml`
 - Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Test: `crates/druid/tests/rdbc_standard_test.rs`
 - Test: `crates/druid/tests/rdbc_extended_types_test.rs`
 - Test: `crates/druid/tests/rdbc_url_extended_test.rs`
+- Test: `crates/druid/tests/druid_error_test.rs`
+- Test: `crates/druid/tests/exception_sorter_semantics_test.rs`
+- Test: `crates/druid/tests/rdbc_external_consumer_test.rs`
 
 **Interfaces:**
-- Produces: `druid_rdbc::types::{Value, Row, Savepoint, RdbcString, RdbcUrl, Date, Time, Timestamp, Types, RdbcType, SqlType}`
+- Consumes: Task 1 module facades and public-path verifier
+- Produces: `druid_rdbc::types::{Value, Row, RdbcUrl, Types, RdbcType, SqlType}`
+- Produces: `druid_rdbc::error::{SqlException, SqlExceptionCause, SqlExceptionKind, SqlWarning}`
+- Preserves: old module-qualified paths such as `druid::core::value::Value`,
+  `druid::core::sql_exception::SqlException`, and `druid::sql::rdbc_type::RdbcType` as exact type
+  identities through per-file directional `pub use` shims
 
-- [ ] **Step 1: 捕获类型身份 RED/GREEN 基线**
-
-Before moving, run:
+- [ ] **Step 1: 捕获行为与 module-qualified identity 基线**
 
 ```bash
 cargo test -p druid --test rdbc_standard_test
 cargo test -p druid --test rdbc_extended_types_test
 cargo test -p druid --test rdbc_url_extended_test
+cargo test -p druid --test druid_error_test
+cargo test -p druid --test exception_sorter_semantics_test
 ```
 
-Expected: PASS. Save output in `docs/verification/rdbc-first/rdbc-types-before.txt`.
+Expected: PASS. Save output in `docs/verification/rdbc-first/rdbc-types-before.txt`. Extend the
+external consumer with bidirectional assignments between every old module-qualified path and its
+new `druid_rdbc` path; before the move those new imports are RED.
 
-- [ ] **Step 2: 使用 git mv 逐对象移动**
+- [ ] **Step 2: 证明本切片不依赖 `DruidError`**
 
-Run one `git mv` per listed file. Update imports inside moved files to `crate::types::*`; do not combine
-files or rename public types.
+```bash
+rg -n 'DruidError' \
+  crates/druid/src/core/{value,row,rdbc_url,sql_exception,sql_warning}.rs \
+  crates/druid/src/sql/{types,rdbc_type,rdbc_sql_type}.rs
+```
 
-- [ ] **Step 3: 增加旧路径薄重导出**
+Expected: no matches. `Savepoint`, `RdbcString`, `Date`, `Time`, and `Timestamp` are deliberately
+excluded because their current public methods return `DruidError`; they move atomically in Task 3.
 
-Old modules contain only forms such as:
+- [ ] **Step 3: Move implementations and recreate every old module file**
+
+Run one `git mv` per listed object, then recreate the old source path with only a directed re-export,
+for example:
 
 ```rust
 pub use druid_rdbc::types::Value;
 ```
 
-or `core/mod.rs` directly re-exports the new crate type. `sql/mod.rs` continues exposing the same
-names.
+Update `core/mod.rs`/`sql/mod.rs` root exports without removing a baseline name. Do not replace a
+module shim with only a parent re-export.
 
-- [ ] **Step 4: Run type/API regression**
+- [ ] **Step 4: Run GREEN type/error regression**
 
 ```bash
+python3 scripts/verify_rdbc_public_paths.py --source-only
 cargo test -p druid --test rdbc_standard_test
 cargo test -p druid --test rdbc_extended_types_test
 cargo test -p druid --test rdbc_url_extended_test
+cargo test -p druid --test druid_error_test
+cargo test -p druid --test exception_sorter_semantics_test
 cargo test -p druid --test rdbc_external_consumer_test
+cargo test -p druid --test rdbc_external_consumer_test error_identity -- --exact
 cargo check --workspace --all-targets
 ```
 
-Expected: all PASS; no semantic assertion changes.
+Expected: all PASS; no semantic assertion, error classification, or type identity changes.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/druid-rdbc crates/druid docs/verification/rdbc-first
-git commit -m "refactor(rdbc): extract platform value types"
+git commit -m "refactor(rdbc): extract independent types and sql exceptions"
 ```
 
-### Task 3: 移动结构化 SQL 错误
+### Task 3: 原子下沉 `RdbcString`、依赖错误的平台值和 transitional `DruidError`
 
 **Files:**
-- Move: `crates/druid/src/core/sql_exception.rs` → `crates/druid-rdbc/src/error/sql_exception.rs`
-- Move: `crates/druid/src/core/sql_warning.rs` → `crates/druid-rdbc/src/error/sql_warning.rs`
-- Move: `crates/druid/src/sql/exceptions.rs` → `crates/druid-rdbc/src/compat/exceptions.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_string.rs` → `crates/druid-rdbc/src/types/rdbc_string.rs`
+- Move and recreate shim: `crates/druid/src/core/savepoint.rs` → `crates/druid-rdbc/src/types/savepoint.rs`
+- Move and recreate shim: `crates/druid/src/sql/date.rs` → `crates/druid-rdbc/src/types/date.rs`
+- Move and recreate shim: `crates/druid/src/sql/time.rs` → `crates/druid-rdbc/src/types/time.rs`
+- Move and recreate shim: `crates/druid/src/sql/timestamp.rs` → `crates/druid-rdbc/src/types/timestamp.rs`
+- Move and recreate shim: `crates/druid/src/core/error.rs` → `crates/druid-rdbc/src/compat/druid_error.rs`
+- Move and recreate shim: `crates/druid/src/sql/exceptions.rs` → `crates/druid-rdbc/src/compat/exceptions.rs`
 - Create: `crates/druid-rdbc/src/error/rdbc_error.rs`
+- Create: `crates/druid/tests/druid_error_transition_identity_test.rs`
+- Modify: `crates/druid-rdbc/src/types/mod.rs`
 - Modify: `crates/druid-rdbc/src/error/mod.rs`
-- Modify: `crates/druid/src/core/error.rs`
+- Modify: `crates/druid-rdbc/src/compat/mod.rs`
+- Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Test: `crates/druid/tests/druid_error_test.rs`
 - Test: `crates/druid/tests/exception_sorter_semantics_test.rs`
+- Test: `crates/druid/tests/rdbc_standard_test.rs`
+- Test: `crates/druid/tests/rdbc_extended_types_test.rs`
+- Test: `crates/druid/tests/rdbc_external_consumer_test.rs`
 
 **Interfaces:**
-- Produces: `SqlException`/`SqlWarning` in `druid-rdbc`; temporary `DruidError` wrapper remains in `druid`
+- Consumes: Task 2 `SqlException`/`SqlWarning` and independent types
+- Produces: exact type `druid_rdbc::compat::DruidError`; both
+  `druid::core::error::DruidError` and `druid::core::DruidError` are directional `pub use` aliases
+- Produces: `druid_rdbc::types::{RdbcString, Savepoint, Date, Time, Timestamp}` using that same
+  transitional error in their unchanged signatures
+- Produces: scaffold-only `druid_rdbc::error::RdbcError`; no P03 SPI or adapter signature may use it
 
-- [ ] **Step 1: 写错误 identity test**
+- [ ] **Step 1: 写 24-variant exhaustive/identity RED tests**
 
-Assert `druid::sql::SQLException` and `druid_rdbc::error::SqlException` are the same type by assigning
-one to the other without conversion. Repeat for `SQLWarning`.
+The new transition test constructs all 24 variants exactly once:
 
-- [ ] **Step 2: Run RED after moving before re-export**
-
-```bash
-cargo test -p druid --test rdbc_external_consumer_test error_identity -- --exact
+```text
+PoolClosed, DataSourceClosed, AcquireTimeout, GetConnectionTimeout, LoginTimeout,
+PoolExhausted, MaxWaitThreadCountExceeded, ValidationFailed, ConnectionLeaked,
+ConnectionDiscarded, DriverError, SqlException, BatchUpdateException, SqlParseError,
+WallViolation, DataSourceNotFound, DataSourceDisabled, ActiveConnectionsPreventRestart,
+OnFatalError, DataSourceNotAvailable, InvalidArgument, UnsupportedOperation,
+NoDriverExtension, Other
 ```
 
-Expected: compile FAIL until old paths re-export the new types.
+For every value, assign old → new and new → old without `From`/`Into`; exhaustively match without a
+wildcard; compare `Display`, `class_name()`, `sql_exception()`, `batch_update_counts()`, and
+`Error::source()` shape. Include nested causes and `OnFatalError.last_sql`. Before the move, importing
+`druid_rdbc::compat::DruidError` is RED.
 
-- [ ] **Step 3: 完成重导出和 DruidError import**
+- [ ] **Step 2: Move the complete implementation as one compatibility slice**
 
-`DruidError::SqlException(Box<SqlException>)` continues using the exact moved type; do not change
-variants or Display messages in this task.
+Move the full enum, its 24 variants, fields, `Display`, `Error`, classification helpers, and existing
+`From<String>`/`From<&str>` implementations to `compat/druid_error.rs`. Add the exact marker
+`TRANSITIONAL_UNTIL_P04` to its module docs. Do **not** add `#[non_exhaustive]`, a new variant, a new
+conversion, or a wrapper type. Keep the Druid-local `From<XaStateTransitionError>` coherence impl in
+the old `core/error.rs` shim while re-exporting the external type there; its observable conversion
+must remain unchanged.
 
-- [ ] **Step 4: Run GREEN**
+Move `RdbcString`, `Savepoint`, `Date`, `Time`, and `Timestamp` in the same commit and update their
+imports to `crate::compat::DruidError`. `RdbcError` contains only the smallest compilable scaffold
+and is not referenced by those types or any SPI.
+
+- [ ] **Step 3: Recreate all old paths as exact shims**
+
+Recreate `core/error.rs`, `core/rdbc_string.rs`, `core/savepoint.rs`, `sql/date.rs`, `sql/time.rs`,
+`sql/timestamp.rs`, and `sql/exceptions.rs` as directed re-export modules. Preserve both root and
+module-qualified API identities shown by `api/druid-public-api.rdbc-first.before.txt`.
+
+- [ ] **Step 4: Run GREEN error/identity regression**
 
 ```bash
+python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py --source-only
+cargo test -p druid --test druid_error_transition_identity_test
 cargo test -p druid --test druid_error_test
 cargo test -p druid --test exception_sorter_semantics_test
+cargo test -p druid --test rdbc_standard_test
+cargo test -p druid --test rdbc_extended_types_test
 cargo test -p druid --test rdbc_external_consumer_test
+cargo check --workspace --all-targets
 ```
 
-Expected: all PASS.
+Expected: all PASS; the 24 variants and all observable error behaviors are unchanged, and
+`RdbcError` appears in no public production signature.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/druid-rdbc crates/druid
-git commit -m "refactor(rdbc): extract sql exception values"
+git commit -m "refactor(rdbc): establish transitional error seam"
 ```
 
-### Task 4: 移动 Physical Driver SPI
+### Task 4: 原子移动 Physical/Resource/Wrapper 完整 SCC
 
-**Files:**
-- Move: `crates/druid/src/core/physical_connection.rs` → `crates/druid-rdbc/src/spi/physical_connection.rs`
-- Move: `crates/druid/src/core/physical_connection_capabilities.rs` → `crates/druid-rdbc/src/spi/physical_connection_capabilities.rs`
-- Move: `crates/druid/src/core/physical_connection_factory.rs` → `crates/druid-rdbc/src/spi/physical_connection_factory.rs`
-- Move: `crates/druid/src/core/physical_connection_info.rs` → `crates/druid-rdbc/src/spi/physical_connection_info.rs`
-- Move: `crates/druid/src/core/physical_statement.rs` → `crates/druid-rdbc/src/spi/physical_statement.rs`
-- Move: `crates/druid/src/core/physical_prepared_statement.rs` → `crates/druid-rdbc/src/spi/physical_prepared_statement.rs`
-- Move: `crates/druid/src/core/physical_callable_statement.rs` → `crates/druid-rdbc/src/spi/physical_callable_statement.rs`
-- Move: `crates/druid/src/core/physical_database_meta_data.rs` → `crates/druid-rdbc/src/spi/physical_database_meta_data.rs`
-- Move: `crates/druid/src/core/physical_result_set_meta_data.rs` → `crates/druid-rdbc/src/spi/physical_result_set_meta_data.rs`
-- Move: `crates/druid/src/core/rdbc_result_set.rs` → `crates/druid-rdbc/src/spi/rdbc_result_set.rs`
-- Move: `crates/druid/src/core/prepared_input_parameter.rs` → `crates/druid-rdbc/src/spi/prepared_input_parameter.rs`
-- Move: `crates/druid/src/core/prepared_statement_key.rs` → `crates/druid-rdbc/src/spi/prepared_statement_key.rs`
-- Move: `crates/druid/src/core/result_set_meta_data.rs` → `crates/druid-rdbc/src/spi/result_set_meta_data.rs`
-- Move: `crates/druid/src/core/result_set_column_meta.rs` → `crates/druid-rdbc/src/spi/result_set_column_meta.rs`
-- Move: `crates/druid/src/core/result_set_column_type.rs` → `crates/druid-rdbc/src/spi/result_set_column_type.rs`
+Task 4 merges the original Physical Task 4 and Resource Task 5. The files below are one strongly
+connected move unit; do not split them into commits or claim a full `cargo check` before all target
+modules and old shims are internally closed.
+
+**Files — common descriptors and wrapper:**
+- Move and recreate shim: `crates/druid/src/core/exec_result.rs` → `crates/druid-rdbc/src/spi/exec_result.rs`
+- Move and recreate shim: `crates/druid/src/core/wrapper.rs` → `crates/druid-rdbc/src/spi/wrapper.rs`
+- Modify shim: `crates/druid/src/sql/wrapper.rs`
+- Move and recreate shim: `crates/druid/src/core/database_meta_data_row_id_lifetime.rs` → `crates/druid-rdbc/src/spi/database_meta_data_row_id_lifetime.rs`
+- Move and recreate shim: `crates/druid/src/core/result_set_nullability.rs` → `crates/druid-rdbc/src/spi/result_set_nullability.rs`
+- Move and recreate shim: `crates/druid/src/core/callable_input_parameter.rs` → `crates/druid-rdbc/src/spi/callable_input_parameter.rs`
+- Move and recreate shim: `crates/druid/src/core/callable_out_parameter.rs` → `crates/druid-rdbc/src/spi/callable_out_parameter.rs`
+- Move and recreate shim: `crates/druid/src/core/callable_parameter.rs` → `crates/druid-rdbc/src/spi/callable_parameter.rs`
+- Move and recreate shim: `crates/druid/src/core/result_set_update.rs` → `crates/druid-rdbc/src/spi/result_set_update.rs`
+
+**Files — RDBC value/parameter/XML closure:**
+- Move and recreate shim: `crates/druid/src/core/rdbc_calendar.rs` → `crates/druid-rdbc/src/types/rdbc_calendar.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_object.rs` → `crates/druid-rdbc/src/types/rdbc_object.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_opaque_object.rs` → `crates/druid-rdbc/src/types/rdbc_opaque_object.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_row_id.rs` → `crates/druid-rdbc/src/types/rdbc_row_id.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_target_type.rs` → `crates/druid-rdbc/src/types/rdbc_target_type.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_type_map.rs` → `crates/druid-rdbc/src/types/rdbc_type_map.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter.rs` → `crates/druid-rdbc/src/types/rdbc_parameter.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_date.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_date.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_decimal.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_decimal.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_impl.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_impl.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_int.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_int.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_long.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_long.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_null.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_null.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_string.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_string.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_parameter_timestamp.rs` → `crates/druid-rdbc/src/types/rdbc_parameter_timestamp.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_xml_representation_type.rs` → `crates/druid-rdbc/src/resource/rdbc_xml_representation_type.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_xml_result.rs` → `crates/druid-rdbc/src/resource/rdbc_xml_result.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_xml_source.rs` → `crates/druid-rdbc/src/resource/rdbc_xml_source.rs`
+
+**Files — Physical statement/result-set/metadata/connection SPI:**
+- Move and recreate shim: `crates/druid/src/core/physical_connection.rs` → `crates/druid-rdbc/src/spi/physical_connection.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_connection_capabilities.rs` → `crates/druid-rdbc/src/spi/physical_connection_capabilities.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_connection_factory.rs` → `crates/druid-rdbc/src/spi/physical_connection_factory.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_connection_info.rs` → `crates/druid-rdbc/src/spi/physical_connection_info.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_statement.rs` → `crates/druid-rdbc/src/spi/physical_statement.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_prepared_statement.rs` → `crates/druid-rdbc/src/spi/physical_prepared_statement.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_callable_statement.rs` → `crates/druid-rdbc/src/spi/physical_callable_statement.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_database_meta_data.rs` → `crates/druid-rdbc/src/spi/physical_database_meta_data.rs`
+- Move and recreate shim: `crates/druid/src/core/physical_result_set_meta_data.rs` → `crates/druid-rdbc/src/spi/physical_result_set_meta_data.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_result_set.rs` → `crates/druid-rdbc/src/spi/rdbc_result_set.rs`
+- Move and recreate shim: `crates/druid/src/core/prepared_input_parameter.rs` → `crates/druid-rdbc/src/spi/prepared_input_parameter.rs`
+- Move and recreate shim: `crates/druid/src/core/prepared_statement_key.rs` → `crates/druid-rdbc/src/spi/prepared_statement_key.rs`
+- Move and recreate shim: `crates/druid/src/core/result_set_meta_data.rs` → `crates/druid-rdbc/src/spi/result_set_meta_data.rs`
+- Move and recreate shim: `crates/druid/src/core/result_set_column_meta.rs` → `crates/druid-rdbc/src/spi/result_set_column_meta.rs`
+- Move and recreate shim: `crates/druid/src/core/result_set_column_type.rs` → `crates/druid-rdbc/src/spi/result_set_column_type.rs`
+
+**Files — Resource Access/Context/Owner/Factory/state and standard handles:**
+- Move and recreate shim: `crates/druid/src/spi/rdbc_array_access.rs` → `crates/druid-rdbc/src/resource/rdbc_array_access.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_blob_access.rs` → `crates/druid-rdbc/src/resource/rdbc_blob_access.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_clob_access.rs` → `crates/druid-rdbc/src/resource/rdbc_clob_access.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_n_clob_access.rs` → `crates/druid-rdbc/src/resource/rdbc_n_clob_access.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_ref_access.rs` → `crates/druid-rdbc/src/resource/rdbc_ref_access.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_access.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_access.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_capabilities.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_capabilities.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_context.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_context.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_factory.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_factory.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_id.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_id.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_kind.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_kind.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_owner.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_owner.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_resource_state.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_state.rs`
+- Move and recreate shim: `crates/druid/src/spi/rdbc_sql_xml_access.rs` → `crates/druid-rdbc/src/resource/rdbc_sql_xml_access.rs`
+- Move and recreate shim: `crates/druid/src/sql/array.rs` → `crates/druid-rdbc/src/resource/array.rs`
+- Move and recreate shim: `crates/druid/src/sql/blob.rs` → `crates/druid-rdbc/src/resource/blob.rs`
+- Move and recreate shim: `crates/druid/src/sql/clob.rs` → `crates/druid-rdbc/src/resource/clob.rs`
+- Move and recreate shim: `crates/druid/src/sql/n_clob.rs` → `crates/druid-rdbc/src/resource/n_clob.rs`
+- Move and recreate shim: `crates/druid/src/sql/ref_value.rs` → `crates/druid-rdbc/src/resource/ref_value.rs`
+- Move and recreate shim: `crates/druid/src/sql/sql_xml.rs` → `crates/druid-rdbc/src/resource/sql_xml.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_input_stream.rs` → `crates/druid-rdbc/src/resource/rdbc_input_stream.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_output_stream.rs` → `crates/druid-rdbc/src/resource/rdbc_output_stream.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_reader.rs` → `crates/druid-rdbc/src/resource/rdbc_reader.rs`
+- Move and recreate shim: `crates/druid/src/core/rdbc_writer.rs` → `crates/druid-rdbc/src/resource/rdbc_writer.rs`
+- Modify: `crates/druid-rdbc/src/types/mod.rs`
 - Modify: `crates/druid-rdbc/src/spi/mod.rs`
+- Modify: `crates/druid-rdbc/src/resource/mod.rs`
 - Modify: `crates/druid/src/core/mod.rs`
-- Modify: files recorded by Step 1 in `target/rdbc-spi-imports.txt`
+- Modify: `crates/druid/src/spi/mod.rs`
+- Modify: `crates/druid/src/sql/mod.rs`
 - Test: `crates/druid/tests/physical_connection_contract.rs`
 - Test: `crates/druid/tests/physical_connection_lease_test.rs`
+- Test: `crates/druid/tests/rdbc_blob_test.rs`
+- Test: `crates/druid/tests/rdbc_clob_test.rs`
+- Test: `crates/druid/tests/rdbc_resource_context_test.rs`
+- Test: `crates/druid/tests/rdbc_extended_types_test.rs`
 - Test: `crates/druid-wrapper/tests/adapter_boundary_test.rs`
 - Test: `crates/druid-wrapper/tests/sqlx_connection_adapter_test.rs`
 - Test: `crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs`
 - Test: `crates/druid-wrapper/tests/toasty_connection_adapter_test.rs`
 
 **Interfaces:**
-- Produces: `druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory, PhysicalPreparedStatement, PhysicalResultSet, PhysicalDatabaseMetaData, PreparedInputParameter, PreparedStatementKey}`
+- Consumes: Task 3 transitional `DruidError`, platform values, SQL exceptions, and module shims
+- Produces: one internally closed `druid_rdbc::{types, spi, resource}` SCC containing every listed
+  Physical/Prepared/Callable/ResultSet/Metadata/Resource/Wrapper definition
+- Preserves: every old root and module-qualified type/trait object as the exact same definition via
+  directional `pub use`; no copied trait, enum, handle, or state machine
 
-- [ ] **Step 1: 冻结 import 修改集合并写 adapter compile RED test**
-
-Run:
+- [ ] **Step 1: Freeze imports and write SCC identity RED tests**
 
 ```bash
-rg -l 'druid::core::.*(Physical|PreparedInputParameter|PreparedStatementKey)|crate::core::.*(Physical|PreparedInputParameter|PreparedStatementKey)' \
-  crates/druid-wrapper/src > target/rdbc-spi-imports.txt
-test -s target/rdbc-spi-imports.txt
+rg -l 'druid::core::|druid::spi::|druid::sql::' crates/druid-wrapper/src \
+  | sort > target/rdbc-scc-imports.before.txt
+test -s target/rdbc-scc-imports.before.txt
 ```
 
-Review and record every path before editing; the file is evidence only and is not committed.
+Extend the `druid` external-consumer fixture with bidirectional assignments for old/new
+`Arc<dyn PhysicalConnectionFactory>`, `Box<dyn PhysicalConnection>`, statement/result-set/metadata
+trait objects, `Wrapper`/`Unwrapped`, resource Access trait objects, and standard handles. Keep the
+wrapper adapter-boundary tests on old paths in this task; the wrapper crate does not receive its
+direct `druid-rdbc` dependency until Task 5. New paths are RED in the consumer fixture before the
+move.
 
-Add a test importing the SPI from `druid_rdbc::spi` and asserting a SQLx factory can be coerced to
-`Arc<dyn PhysicalConnectionFactory>`.
+- [ ] **Step 2: Move the SCC in internal source slices without false compile claims**
 
-- [ ] **Step 2: Move one dependency slice at a time**
+Within this single task/commit, move in this order: value/parameter/XML descriptors → resource
+Access/state/handles → result-set/metadata → statement/prepared/callable → wrapper/connection/factory.
+After each small source slice run only:
 
-Order:
-
-```text
-capabilities/options/key/value descriptors
-→ statement/prepared/result-set traits
-→ metadata traits
-→ PhysicalConnection
-→ PhysicalConnectionFactory/Info
+```bash
+python3 scripts/verify_rdbc_public_paths.py --source-only
+rg -n 'pub (struct|enum|trait) ' crates/druid/src/core crates/druid/src/spi crates/druid/src/sql
 ```
 
-After each slice run `cargo check -p druid-rdbc -p druid -p druid-wrapper`.
+Review matches against the moved-file ledger to prove old files are shims and imports point toward
+`druid-rdbc`. Do not claim `cargo check` for an incomplete slice.
 
-- [ ] **Step 3: 将 old core path 变为定向重导出**
+- [ ] **Step 3: Close all module declarations and old public shims**
 
-`core/mod.rs` may re-export public compatibility names, but old source files must not contain a
-second trait definition.
+Populate the three `druid-rdbc` facades with directed declarations/re-exports. Recreate every source
+path named in Files as a thin `pub use` module, including `core::wrapper`, `sql::wrapper`, and all
+resource modules. Parent/root exports remain compatibility additions, not replacements for shims.
 
-- [ ] **Step 4: Run complete SPI regression**
+- [ ] **Step 4: Run the first complete Cargo check and all merged regressions**
+
+Only after the full SCC is closed, run:
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py
 python3 scripts/verify_physical_connection_lease_surface.py
+cargo check -p druid-rdbc -p druid -p druid-wrapper --all-targets
 cargo test -p druid --test physical_connection_contract
 cargo test -p druid --test physical_connection_lease_test
-cargo test -p druid-wrapper --tests
+cargo test -p druid --test rdbc_blob_test
+cargo test -p druid --test rdbc_clob_test
+cargo test -p druid --test rdbc_resource_context_test
+cargo test -p druid --test rdbc_extended_types_test
+cargo test -p druid-wrapper --test adapter_boundary_test
+cargo test -p druid-wrapper --test sqlx_connection_adapter_test
+cargo test -p druid-wrapper --test rbdc_connection_adapter_test
+cargo test -p druid-wrapper --test toasty_connection_adapter_test
 ```
 
-Expected: all PASS.
+Expected: all PASS with unchanged resource state, clone/free semantics, SPI signatures, defaults,
+and lease behavior.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/druid-rdbc crates/druid crates/druid-wrapper
-git commit -m "refactor(rdbc): extract physical driver spi"
+git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 ```
 
-### Task 5: 移动资源 Access SPI 和标准句柄
+### Task 5: Cut over concrete wrapper imports to `druid-rdbc`
 
 **Files:**
-- Move: `crates/druid/src/spi/rdbc_array_access.rs` → `crates/druid-rdbc/src/resource/rdbc_array_access.rs`
-- Move: `crates/druid/src/spi/rdbc_blob_access.rs` → `crates/druid-rdbc/src/resource/rdbc_blob_access.rs`
-- Move: `crates/druid/src/spi/rdbc_clob_access.rs` → `crates/druid-rdbc/src/resource/rdbc_clob_access.rs`
-- Move: `crates/druid/src/spi/rdbc_n_clob_access.rs` → `crates/druid-rdbc/src/resource/rdbc_n_clob_access.rs`
-- Move: `crates/druid/src/spi/rdbc_ref_access.rs` → `crates/druid-rdbc/src/resource/rdbc_ref_access.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_access.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_access.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_capabilities.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_capabilities.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_context.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_context.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_factory.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_factory.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_id.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_id.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_kind.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_kind.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_owner.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_owner.rs`
-- Move: `crates/druid/src/spi/rdbc_resource_state.rs` → `crates/druid-rdbc/src/resource/rdbc_resource_state.rs`
-- Move: `crates/druid/src/spi/rdbc_sql_xml_access.rs` → `crates/druid-rdbc/src/resource/rdbc_sql_xml_access.rs`
-- Move: `crates/druid/src/sql/array.rs` → `crates/druid-rdbc/src/resource/array.rs`
-- Move: `crates/druid/src/sql/blob.rs` → `crates/druid-rdbc/src/resource/blob.rs`
-- Move: `crates/druid/src/sql/clob.rs` → `crates/druid-rdbc/src/resource/clob.rs`
-- Move: `crates/druid/src/sql/n_clob.rs` → `crates/druid-rdbc/src/resource/n_clob.rs`
-- Move: `crates/druid/src/sql/ref_value.rs` → `crates/druid-rdbc/src/resource/ref_value.rs`
-- Move: `crates/druid/src/sql/sql_xml.rs` → `crates/druid-rdbc/src/resource/sql_xml.rs`
-- Move: `crates/druid/src/core/rdbc_input_stream.rs` → `crates/druid-rdbc/src/resource/rdbc_input_stream.rs`
-- Move: `crates/druid/src/core/rdbc_output_stream.rs` → `crates/druid-rdbc/src/resource/rdbc_output_stream.rs`
-- Move: `crates/druid/src/core/rdbc_reader.rs` → `crates/druid-rdbc/src/resource/rdbc_reader.rs`
-- Move: `crates/druid/src/core/rdbc_writer.rs` → `crates/druid-rdbc/src/resource/rdbc_writer.rs`
-- Modify: `crates/druid-rdbc/src/resource/mod.rs`
-- Modify: `crates/druid/src/spi/mod.rs`
-- Modify: `crates/druid/src/sql/mod.rs`
-- Test: `rdbc_blob_test.rs`, `rdbc_clob_test.rs`, `rdbc_resource_context_test.rs`, `rdbc_extended_types_test.rs`
+- Modify: `crates/druid-wrapper/Cargo.toml`
+- Modify: `crates/druid-wrapper/src/prepared_parameter_materializer.rs`
+- Modify: `crates/druid-wrapper/src/prepared_parameter_state.rs`
+- Modify: `crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs`
+- Modify: `crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/duckdb/duckdb_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/duckdb/duckdb_prepared_statement.rs`
+- Modify: `crates/druid-wrapper/src/http_sql/http_sql_connection_adapter.rs`
+- Modify: `crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/http_sql/http_sql_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/http_sql/http_sql_prepared_statement.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/agent_error.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/agent_rpc_error.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/agent_runtime.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/agent_runtime_manager.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/agent_value.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/jdbc_agent_client.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/jdbc_agent_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/jdbc_agent/jdbc_agent_prepared_statement.rs`
+- Modify: `crates/druid-wrapper/src/libsql/libsql_connection_adapter.rs`
+- Modify: `crates/druid-wrapper/src/libsql/libsql_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/libsql/libsql_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/libsql/libsql_prepared_statement.rs`
+- Modify: `crates/druid-wrapper/src/rbdc/rbdc_connection_adapter.rs`
+- Modify: `crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/rbdc/rbdc_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/rbdc/rbdc_prepared_statement.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_connection_manager.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/bb8/sqlx_bb8_pool.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_connection_manager.rs`
+- Modify: `crates/druid-wrapper/src/sqlx/deadpool/sqlx_deadpool_pool.rs`
+- Modify: `crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs`
+- Modify: `crates/druid-wrapper/src/toasty/toasty_connection_factory.rs`
+- Modify: `crates/druid-wrapper/src/toasty/toasty_database_meta_data.rs`
+- Modify: `crates/druid-wrapper/src/toasty/toasty_prepared_statement.rs`
+- Modify: exact additional files recorded in `target/rdbc-scc-imports.before.txt` only when they import a moved SPI/type/compat error
+- Test: `crates/druid-wrapper/tests/adapter_boundary_test.rs`
+- Test: `crates/druid-wrapper/tests/sqlx_connection_adapter_test.rs`
+- Test: `crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs`
+- Test: `crates/druid-wrapper/tests/toasty_connection_adapter_test.rs`
+- Test: `crates/druid-wrapper/tests/prepared_statement_semantics_test.rs`
 
 **Interfaces:**
-- Produces: single resource state/access/factory implementation in `druid-rdbc`
+- Consumes: Task 4 canonical `druid_rdbc::{types, spi, resource}` plus
+  `druid_rdbc::compat::DruidError`
+- Produces: concrete adapters that import driver-facing contracts directly from `druid-rdbc`
+- Preserves: imports of `DruidPooledConnection`, logical pooled statements/result sets, `Pool`,
+  `Filter`, driver catalog/product configuration, and Druid lifecycle from `druid`
 
-- [ ] **Step 1: 写 type identity/resource clone contract**
+- [ ] **Step 1: Freeze and classify the exact import set**
 
-Assert old and new paths name the same Blob/Clob/SQLXML types and cloned handles share cursor/free
-state.
+Regenerate `target/rdbc-scc-imports.before.txt`, then produce
+`target/rdbc-scc-import-classification.txt` with one line per file and one of:
+`RDBC_DIRECT` (SPI/type/resource/compat error) or `DRUID_PRODUCT` (logical Pool/Filter/product API).
+Every input file must be classified before editing; neither evidence file is committed.
 
-- [ ] **Step 2: Move resources without state-machine changes**
+- [ ] **Step 2: Write old/new trait-object identity RED tests**
 
-Use `git mv`; adjust crate-local imports only. Do not fix cancellation behavior in this task—that is
-owned by the contract-hardening plan.
+For SQLx, Toasty, RBDC, JDBC Agent, libSQL, HTTP SQL, and DuckDB, compile assignments in both
+directions between the old `druid::core::*`/`druid::spi::*` trait object and the new
+`druid_rdbc::spi::*`/`resource::*` object. Add direct imports of `Value`, prepared/callable
+descriptors, and transitional `DruidError`. The test is RED while adapters still depend only on old
+imports.
 
-- [ ] **Step 3: Run resource regression**
+- [ ] **Step 3: Cut over only RDBC-owned imports**
+
+Add the direct `druid-rdbc` dependency. Concrete adapter, connection factory, prepared statement,
+metadata, result-set, resource and native-error mapping files import `spi`, `types`, `resource`, and
+`compat::DruidError` directly. Keep logical pooled handles, `Pool`, `Filter`, and product behavior on
+`druid`; do not use `druid::core` as an indirect driver-contract facade inside concrete adapters.
+
+- [ ] **Step 4: Run GREEN wrapper/identity regression**
 
 ```bash
-cargo test -p druid --test rdbc_blob_test
-cargo test -p druid --test rdbc_clob_test
-cargo test -p druid --test rdbc_resource_context_test
-cargo test -p druid --test rdbc_extended_types_test
+python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py
+cargo test -p druid-wrapper --test adapter_boundary_test
+cargo test -p druid-wrapper --test sqlx_connection_adapter_test
+cargo test -p druid-wrapper --test rbdc_connection_adapter_test
+cargo test -p druid-wrapper --test toasty_connection_adapter_test
+cargo test -p druid-wrapper --test prepared_statement_semantics_test
+cargo test -p druid-wrapper --tests
 ```
 
-Expected: all PASS with unchanged assertions.
+Expected: all PASS; old/new trait objects are identical, concrete adapters use direct RDBC imports,
+and Druid product imports remain explicit.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid-rdbc crates/druid
-git commit -m "refactor(rdbc): extract resource handles and access spi"
+git add crates/druid-wrapper
+git commit -m "refactor(wrapper): consume rdbc contracts directly"
 ```
 
 ### Task 6: 收口 public API、DAG 和文档
@@ -398,36 +601,45 @@ git commit -m "refactor(rdbc): extract resource handles and access spi"
 **Files:**
 - Modify: `crates/druid-rdbc/src/lib.rs`
 - Modify: `crates/druid/src/lib.rs`
+- Modify: `crates/druid/src/core/mod.rs`
+- Modify: `crates/druid/src/spi/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Modify: `Cargo.toml`
+- Create: `api/druid-public-api.rdbc-first.after.txt`
 - Create: `docs/verification/rdbc-first/rdbc-extraction.md`
 - Modify: `docs/druid-rust-Architecture.zh_CN.md`
 
 **Interfaces:**
-- Produces: final five-product-crate DAG and compatibility report
+- Consumes: Tasks 1–5 complete crate/API/import topology
+- Produces: five-product-crate DAG, exact old-path compatibility evidence, public API snapshot and extraction report
+- Produces: explicit P03 completion state `ERROR_OWNERSHIP_TRANSITIONAL_UNTIL_P04`; P04 Task 1 is the mandatory next plan
 
-- [ ] **Step 1: 收紧 module visibility**
+- [ ] **Step 1: 收紧 module visibility without deleting public paths**
 
 `druid-rdbc` exposes only `types`, `error`, `spi`, `resource`, `compat` and curated root re-exports.
-Implementation modules are private. `druid` exposes logical handles and compatibility re-exports;
-remove ambiguous `core::Connection` aliases from the new canonical documentation, retaining only
-deprecated compatibility if external baseline proves they exist.
+Implementation modules are private. `druid` exposes logical handles plus compatibility re-exports.
+The P03 baseline comparison has a zero-deletion budget for every existing old module-qualified path;
+do not remove an ambiguous public alias in P03 even if new canonical documentation stops recommending
+it.
 
-- [ ] **Step 2: Run topology/API checks**
+- [ ] **Step 2: Run topology, unique-definition and API checks**
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
 python3 scripts/verify_rdbc_public_paths.py
 cargo metadata --format-version 1 --no-deps \
   | jq -r '.packages[].name' | sort
+cargo tree -p druid-rdbc
+cargo tree --invert -p druid-rdbc
 cargo test -p druid --test rdbc_external_consumer_test
 cargo public-api -p druid -sss --all-features \
   > api/druid-public-api.rdbc-first.after.txt
 ```
 
 Expected products: `druid-rdbc`, `druid`, `druid-wrapper`, `druid-metrics`, `druid-admin` plus
-`druid-bench`; consumer test PASS. Public API differences must be only approved re-export/visibility
-changes.
+`druid-bench`; no forbidden reverse dependency; every moved object has one implementation; consumer
+test PASS. The public API diff has no removed old module-qualified path and only approved additions
+or identity-preserving re-export provenance changes.
 
 - [ ] **Step 3: Run workspace gates**
 
@@ -440,10 +652,18 @@ cargo doc --workspace --all-features --no-deps
 
 Expected: all PASS.
 
-- [ ] **Step 4: 写迁移报告**
+- [ ] **Step 4: Write the after snapshot/report and transitional handoff**
 
-Record every moved file, old/new public path, API hash, dependency graph and remaining hardening
-work in `rdbc-extraction.md`.
+Record every moved file, old/new public path, before/after API hashes, dependency graph, unique
+definition evidence, tests, and commands in `rdbc-extraction.md`. State explicitly:
+
+```text
+P03 error ownership: TRANSITIONAL_UNTIL_P04
+P04 mandatory prerequisite: Task 1 must remove the complete compat::DruidError definition,
+switch all driver-facing SPI/Access signatures to RdbcError, and restore DruidError to druid.
+```
+
+Do not describe the P03 transitional error ownership as the accepted final ADR architecture.
 
 - [ ] **Step 5: Commit**
 
