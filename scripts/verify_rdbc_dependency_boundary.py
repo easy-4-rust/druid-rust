@@ -52,6 +52,47 @@ def cargo_metadata(root: Path) -> dict[str, object]:
     return json.loads(completed.stdout)
 
 
+def rdbc_workspace_package_id(
+    metadata: dict[str, object], root: Path
+) -> str:
+    """Return the one workspace member that is the local isolated RDBC contract crate."""
+
+    packages = metadata.get("packages", [])
+    workspace_members = metadata.get("workspace_members", [])
+    if not isinstance(packages, list) or not isinstance(workspace_members, list):
+        raise RuntimeError("cargo metadata has invalid package or workspace member data")
+    package_by_id = {
+        package_id: package
+        for package in packages
+        if isinstance(package, dict)
+        if isinstance((package_id := package.get("id")), str)
+    }
+    candidates = [
+        package_id
+        for package_id in workspace_members
+        if isinstance(package_id, str)
+        if (package := package_by_id.get(package_id)) is not None
+        if package.get("name") == "druid-rdbc"
+    ]
+    if len(candidates) != 1:
+        raise RuntimeError(
+            "expected exactly one druid-rdbc workspace member, "
+            f"found {len(candidates)}"
+        )
+
+    package = package_by_id[candidates[0]]
+    manifest_path = package.get("manifest_path")
+    if not isinstance(manifest_path, str):
+        raise RuntimeError("druid-rdbc workspace member has no manifest_path")
+    expected_manifest = (root / "crates" / "druid-rdbc" / "Cargo.toml").resolve()
+    if Path(manifest_path).resolve() != expected_manifest:
+        raise RuntimeError(
+            "druid-rdbc workspace member manifest_path does not match "
+            "crates/druid-rdbc/Cargo.toml"
+        )
+    return candidates[0]
+
+
 def normal_dependency_ids(node: dict[str, object]) -> Iterable[str]:
     """Yield only dependency edges that Cargo classifies as normal dependencies."""
 
@@ -122,16 +163,10 @@ def main() -> int:
         if isinstance(package, dict)
         if isinstance((package_id := package.get("id")), str)
     }
-    rdbc_id = next(
-        (
-            package_id
-            for package_id, package in package_by_id.items()
-            if package.get("name") == "druid-rdbc"
-        ),
-        None,
-    )
-    if rdbc_id is None:
-        print("ERROR: package druid-rdbc not found", file=sys.stderr)
+    try:
+        rdbc_id = rdbc_workspace_package_id(metadata, workspace_root())
+    except RuntimeError as error:
+        print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
     try:

@@ -39,17 +39,20 @@
 - Create: `crates/druid-rdbc/src/compat/mod.rs`
 - Create: `scripts/verify_rdbc_dependency_boundary.py`
 - Create: `scripts/verify_rdbc_public_paths.py`
+- Create: `scripts/test_verify_rdbc_dependency_boundary.py`
+- Create: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Create: `crates/druid/tests/rdbc_external_consumer_test.rs`
 - Modify: root `Cargo.toml`
 
 **Interfaces:**
 - Produces: package `druid-rdbc`, Rust crate `druid_rdbc`, five declaration-only module facades, dependency verifier, public-path/source-shim verifier, external-consumer fixture
-- Produces: `python3 scripts/verify_rdbc_public_paths.py --source-only` for checking declared new modules and exact old-module shim targets before the SCC can compile
+- Produces: the tracked `rdbc-public-path-map.tsv` denominator and `python3 scripts/verify_rdbc_public_paths.py --source-only` for checking declared new modules and exact old-module shim targets before the SCC can compile
 
 - [ ] **Step 1: 写 topology RED 脚本**
 
-`verify_rdbc_dependency_boundary.py` reads `cargo metadata --format-version 1`, locates
-`druid-rdbc`, recursively traverses normal dependencies, and rejects:
+`verify_rdbc_dependency_boundary.py` reads `cargo metadata --format-version 1`, requires exactly one
+`workspace_members` package named `druid-rdbc` whose resolved `manifest_path` is exactly
+`crates/druid-rdbc/Cargo.toml`, recursively traverses normal dependencies by package ID, and rejects:
 
 ```python
 FORBIDDEN = {
@@ -59,10 +62,11 @@ FORBIDDEN = {
 }
 ```
 
-It exits 1 when the package is absent or a forbidden package is reachable. The public-path script
-must also expose a source-only mode that does not invoke Cargo and rejects a missing target module,
-a missing old `.rs` module, wildcard re-export, or a second public type/trait/enum definition in a
-shim.
+It exits 1 when the unique local workspace member is absent, multiple, mismatched, or reaches a
+forbidden package. The public-path script must use a fail-closed Rust lexical sanitizer: after
+allowed documentation/comments are removed, an old shim is exactly one named `pub use <mapped-path>;`;
+wildcards and every additional item/syntax fail. Facades allow only module declarations and targeted
+re-exports.
 
 - [ ] **Step 2: Run RED boundary**
 
@@ -128,16 +132,23 @@ fn main() {
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/test_verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py --self-test
+python3 scripts/verify_rdbc_public_paths.py --source-only --allow-empty-scaffold
+! python3 scripts/verify_rdbc_public_paths.py --source-only
 cargo test -p druid --test rdbc_external_consumer_test
 cargo check -p druid-rdbc --all-targets
 ```
 
-Expected: all PASS.
+Expected: all positive commands PASS; the final default source-only command exits 1 because the
+Task 1 manifest has the required header and zero rows. `--allow-empty-scaffold` is only valid for
+this scaffold source-only check and is mutually exclusive with compile/API verifier modes.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add Cargo.toml Cargo.lock crates/druid-rdbc scripts \
+  docs/verification/rdbc-first/rdbc-public-path-map.tsv \
   crates/druid/tests/rdbc_external_consumer_test.rs
 git commit -m "build(rdbc): establish isolated contract crate"
 ```
@@ -157,6 +168,7 @@ git commit -m "build(rdbc): establish isolated contract crate"
 - Modify: `crates/druid-rdbc/src/error/mod.rs`
 - Modify: `crates/druid/Cargo.toml`
 - Modify: `Cargo.lock`
+- Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Test: `crates/druid/tests/rdbc_standard_test.rs`
@@ -209,7 +221,9 @@ pub use druid_rdbc::types::Value;
 ```
 
 Update `core/mod.rs`/`sql/mod.rs` root exports without removing a baseline name. Do not replace a
-module shim with only a parent re-export.
+module shim with only a parent re-export. In the same commit append exactly one TSV row for every
+moved public definition; the new path, compile mode, and old module file must describe the exact
+directed shim before the default nonempty source-only gate runs.
 
 - [ ] **Step 4: Run GREEN type/error regression**
 
@@ -251,6 +265,7 @@ git commit -m "refactor(rdbc): extract independent types and sql exceptions"
 - Modify: `crates/druid-rdbc/src/compat/mod.rs`
 - Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
+- Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Test: `crates/druid/tests/druid_error_test.rs`
 - Test: `crates/druid/tests/exception_sorter_semantics_test.rs`
 - Test: `crates/druid/tests/rdbc_standard_test.rs`
@@ -300,7 +315,9 @@ and is not referenced by those types or any SPI.
 
 Recreate `core/error.rs`, `core/rdbc_string.rs`, `core/savepoint.rs`, `sql/date.rs`, `sql/time.rs`,
 `sql/timestamp.rs`, and `sql/exceptions.rs` as directed re-export modules. Preserve both root and
-module-qualified API identities shown by `api/druid-public-api.rdbc-first.before.txt`.
+module-qualified API identities shown by `api/druid-public-api.rdbc-first.before.txt`. In the same
+commit append one exact TSV row for every moved public definition; then run the default nonempty
+source-only verifier.
 
 - [ ] **Step 4: Run GREEN error/identity regression**
 
@@ -416,6 +433,7 @@ modules and old shims are internally closed.
 - Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/spi/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
+- Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Test: `crates/druid/tests/physical_connection_contract.rs`
 - Test: `crates/druid/tests/physical_connection_lease_test.rs`
 - Test: `crates/druid/tests/rdbc_blob_test.rs`
@@ -453,6 +471,8 @@ move.
 
 Within this single task/commit, move in this order: value/parameter/XML descriptors → resource
 Access/state/handles → result-set/metadata → statement/prepared/callable → wrapper/connection/factory.
+Append one exact public-path TSV row with every moved public definition before each default
+source-only invocation; an empty or stale denominator blocks the slice.
 After each small source slice run only:
 
 ```bash
@@ -669,7 +689,7 @@ git commit -m "refactor(wrapper): consume rdbc contracts directly"
 - Create: `api/druid-public-api.rdbc-first.after.txt`
 - Create: `api/druid-public-api.rdbc-first.diff.txt`
 - Create: `api/druid-public-api.rdbc-first.allowlist.txt`
-- Create: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
+- Modify: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Create: `docs/verification/rdbc-first/rdbc-extraction.md`
 - Modify: `docs/druid-rust-Architecture.zh_CN.md`
 
@@ -705,14 +725,16 @@ The P03 baseline comparison has a zero-deletion budget for every existing old mo
 do not remove an ambiguous public alias in P03 even if new canonical documentation stops recommending
 it.
 
-Create `rdbc-public-path-map.tsv` with this schema:
+Update the tracked `rdbc-public-path-map.tsv` from its Task 1 header-only scaffold to this schema:
 
 ```text
 old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file
 ```
 
-`compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. Every moved public definition present in
-`api/druid-public-api.rdbc-first.before.txt` must have exactly one row. `OWNED` generates old→new and
+`compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. The verifier derives the live baseline
+denominator, and every moved public definition present in
+`api/druid-public-api.rdbc-first.before.txt` must have exactly one row: no missing, duplicate, stale,
+or extra mapping row is permitted. `OWNED` generates old→new and
 new→old value assignments; `DYN_TRAIT` generates reference conversions in both directions;
 `PATH_ONLY` is allowed only for non-dyn-compatible traits and still compiles both paths while the
 verifier proves the old module file is an exact directed `pub use` shim. Missing, duplicate, stale,
