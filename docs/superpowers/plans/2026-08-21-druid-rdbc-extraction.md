@@ -22,6 +22,8 @@
 - P03 的 24 个 `DruidError` variants、字段、`Display`、`Error::source`、分类方法和转换实现不得增删或重分类；不得增加 `#[non_exhaustive]`，不得把任何 SPI 签名改为 `RdbcError`。
 - `RdbcError` 在 P03 只建立 scaffold，不进入任何生产签名；P04 Task 1 是 P03 之后的强制前置，完整 mixed enum 不得成为 P04 完成态。
 - public API baseline 暴露的每个旧 module-qualified path 都必须保留同名 `.rs` 文件并做定向 `pub use`；父模块/root re-export 不能替代模块 shim。
+- 任何修改 `Cargo.toml` 或依赖解析的 task 必须同时审查并提交 `Cargo.lock`；Task 3/4 依赖集合应由 Task 1 预声明，若 manifest/lock 出现未计划 diff 必须 STOP 并先扩充该 task 的 Files/验证范围。
+- wrapper import 与 public-path denominator 使用 tracked manifest 绑定实时源码集合；固定文件计数只能作为观察值，不能成为完成真值。
 
 ---
 
@@ -154,6 +156,7 @@ git commit -m "build(rdbc): establish isolated contract crate"
 - Modify: `crates/druid-rdbc/src/types/mod.rs`
 - Modify: `crates/druid-rdbc/src/error/mod.rs`
 - Modify: `crates/druid/Cargo.toml`
+- Modify: `Cargo.lock`
 - Modify: `crates/druid/src/core/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Test: `crates/druid/tests/rdbc_standard_test.rs`
@@ -227,7 +230,7 @@ Expected: all PASS; no semantic assertion, error classification, or type identit
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid-rdbc crates/druid docs/verification/rdbc-first
+git add Cargo.lock crates/druid-rdbc crates/druid docs/verification/rdbc-first
 git commit -m "refactor(rdbc): extract independent types and sql exceptions"
 ```
 
@@ -315,6 +318,11 @@ cargo check --workspace --all-targets
 
 Expected: all PASS; the 24 variants and all observable error behaviors are unchanged, and
 `RdbcError` appears in no public production signature.
+
+Before commit, run `git diff --quiet -- Cargo.toml crates/druid-rdbc/Cargo.toml Cargo.lock`.
+Expected: PASS because Task 1 predeclared Task 3 dependencies. Any manifest/lock diff is an
+unplanned dependency change: STOP, add both the owning `Cargo.toml` and `Cargo.lock` to Task 3 Files,
+then rerun dependency-boundary and workspace checks before staging.
 
 - [ ] **Step 5: Commit**
 
@@ -485,6 +493,11 @@ cargo test -p druid-wrapper --test toasty_connection_adapter_test
 Expected: all PASS with unchanged resource state, clone/free semantics, SPI signatures, defaults,
 and lease behavior.
 
+Before commit, run `git diff --quiet -- Cargo.toml crates/druid-rdbc/Cargo.toml Cargo.lock`.
+Expected: PASS because Task 1 already declared `serde_json`, `uuid`, Tokio and all other SCC
+dependencies. Any manifest/lock diff is an unplanned dependency change: STOP, expand Task 4 Files to
+include the owning manifest plus `Cargo.lock`, and rerun the dependency and all-target checks.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -496,6 +509,10 @@ git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 
 **Files:**
 - Modify: `crates/druid-wrapper/Cargo.toml`
+- Modify: `Cargo.lock`
+- Create: `scripts/verify_wrapper_rdbc_import_boundary.py`
+- Create: `docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv`
+- Create: `docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv`
 - Modify: `crates/druid-wrapper/src/prepared_parameter_materializer.rs`
 - Modify: `crates/druid-wrapper/src/prepared_parameter_state.rs`
 - Modify: `crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs`
@@ -537,7 +554,7 @@ git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 - Modify: `crates/druid-wrapper/src/toasty/toasty_connection_factory.rs`
 - Modify: `crates/druid-wrapper/src/toasty/toasty_database_meta_data.rs`
 - Modify: `crates/druid-wrapper/src/toasty/toasty_prepared_statement.rs`
-- Modify: exact additional files recorded in `target/rdbc-scc-imports.before.txt` only when they import a moved SPI/type/compat error
+- Modify: every additional live production path classified `RDBC_DIRECT` in `docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv`
 - Test: `crates/druid-wrapper/tests/adapter_boundary_test.rs`
 - Test: `crates/druid-wrapper/tests/sqlx_connection_adapter_test.rs`
 - Test: `crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs`
@@ -548,15 +565,46 @@ git commit -m "refactor(rdbc): extract physical resource wrapper scc"
 - Consumes: Task 4 canonical `druid_rdbc::{types, spi, resource}` plus
   `druid_rdbc::compat::DruidError`
 - Produces: concrete adapters that import driver-facing contracts directly from `druid-rdbc`
+- Produces: a live-set verifier plus tracked before/after classification manifests; manifest rows
+  are keyed by production file and moved symbol family, not by a fixed expected file count
 - Preserves: imports of `DruidPooledConnection`, logical pooled statements/result sets, `Pool`,
   `Filter`, driver catalog/product configuration, and Druid lifecycle from `druid`
 
-- [ ] **Step 1: Freeze and classify the exact import set**
+- [ ] **Step 1: Write the live wrapper-import verifier and tracked denominator manifests**
 
-Regenerate `target/rdbc-scc-imports.before.txt`, then produce
-`target/rdbc-scc-import-classification.txt` with one line per file and one of:
-`RDBC_DIRECT` (SPI/type/resource/compat error) or `DRUID_PRODUCT` (logical Pool/Filter/product API).
-Every input file must be classified before editing; neither evidence file is committed.
+`verify_wrapper_rdbc_import_boundary.py` scans every production `.rs` file below
+`crates/druid-wrapper/src` and normalizes multiline/nested `use` trees plus fully-qualified paths. It
+must discover any implementation or use of:
+
+```text
+Physical* traits/descriptors
+Rdbc*Access / RdbcResource* contracts
+all low-level types moved by Tasks 2–4
+compat::DruidError used by those low-level contracts
+```
+
+The TSV schema is:
+
+```text
+path<TAB>symbol_family<TAB>classification<TAB>expected_source
+```
+
+Allowed classifications are `RDBC_DIRECT` and `DRUID_PRODUCT`. The before manifest records the live
+post-Task-4 source set and its current source. The after manifest has the exact same `(path,
+symbol_family)` keys: `RDBC_DIRECT` rows require `druid_rdbc`; `DRUID_PRODUCT` rows allow `druid` for
+logical pooled handles, `Pool`, `Filter`, catalog/configuration, and lifecycle only.
+
+Run the inventory mode and review every row before editing:
+
+```bash
+python3 scripts/verify_wrapper_rdbc_import_boundary.py --emit-live \
+  > target/wrapper-rdbc-import-boundary.live.tsv
+diff -u docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv \
+  target/wrapper-rdbc-import-boundary.live.tsv
+```
+
+Expected: exact match after the tracked before manifest is written. Missing/stale/extra manifest
+rows, wildcard imports, or an unclassified symbol family are RED; do not accept an empty live set.
 
 - [ ] **Step 2: Write old/new trait-object identity RED tests**
 
@@ -564,20 +612,27 @@ For SQLx, Toasty, RBDC, JDBC Agent, libSQL, HTTP SQL, and DuckDB, compile assign
 directions between the old `druid::core::*`/`druid::spi::*` trait object and the new
 `druid_rdbc::spi::*`/`resource::*` object. Add direct imports of `Value`, prepared/callable
 descriptors, and transitional `DruidError`. The test is RED while adapters still depend only on old
-imports.
+imports. This identity test is supplementary: only the live import verifier can prevent a zero-edit
+thin-reexport false green.
 
 - [ ] **Step 3: Cut over only RDBC-owned imports**
 
 Add the direct `druid-rdbc` dependency. Concrete adapter, connection factory, prepared statement,
 metadata, result-set, resource and native-error mapping files import `spi`, `types`, `resource`, and
 `compat::DruidError` directly. Keep logical pooled handles, `Pool`, `Filter`, and product behavior on
-`druid`; do not use `druid::core` as an indirect driver-contract facade inside concrete adapters.
+`druid`; do not use `druid::core`, `druid::spi`, or `druid::sql` as an indirect facade for any moved
+low-level name. Populate the tracked after manifest from the reviewed expected state, not by blindly
+blessing verifier output.
 
 - [ ] **Step 4: Run GREEN wrapper/identity regression**
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
 python3 scripts/verify_rdbc_public_paths.py
+python3 scripts/verify_wrapper_rdbc_import_boundary.py \
+  --before docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv \
+  --after docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv
+cargo check --workspace --all-targets --all-features
 cargo test -p druid-wrapper --test adapter_boundary_test
 cargo test -p druid-wrapper --test sqlx_connection_adapter_test
 cargo test -p druid-wrapper --test rbdc_connection_adapter_test
@@ -586,13 +641,17 @@ cargo test -p druid-wrapper --test prepared_statement_semantics_test
 cargo test -p druid-wrapper --tests
 ```
 
-Expected: all PASS; old/new trait objects are identical, concrete adapters use direct RDBC imports,
-and Druid product imports remain explicit.
+Expected: all PASS. The verifier recomputes the live set, requires exact key equality with both
+tracked manifests, rejects every moved low-level import from `druid::{core,spi,sql}`, and requires a
+direct `druid_rdbc` import for each `RDBC_DIRECT` row. Old/new trait objects remain identical and
+Druid product imports remain explicit.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid-wrapper
+git add Cargo.lock crates/druid-wrapper scripts/verify_wrapper_rdbc_import_boundary.py \
+  docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv \
+  docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv
 git commit -m "refactor(wrapper): consume rdbc contracts directly"
 ```
 
@@ -605,16 +664,40 @@ git commit -m "refactor(wrapper): consume rdbc contracts directly"
 - Modify: `crates/druid/src/spi/mod.rs`
 - Modify: `crates/druid/src/sql/mod.rs`
 - Modify: `Cargo.toml`
+- Modify: `Cargo.lock`
+- Modify: `scripts/verify_rdbc_public_paths.py`
 - Create: `api/druid-public-api.rdbc-first.after.txt`
+- Create: `api/druid-public-api.rdbc-first.diff.txt`
+- Create: `api/druid-public-api.rdbc-first.allowlist.txt`
+- Create: `docs/verification/rdbc-first/rdbc-public-path-map.tsv`
 - Create: `docs/verification/rdbc-first/rdbc-extraction.md`
 - Modify: `docs/druid-rust-Architecture.zh_CN.md`
 
 **Interfaces:**
 - Consumes: Tasks 1–5 complete crate/API/import topology
-- Produces: five-product-crate DAG, exact old-path compatibility evidence, public API snapshot and extraction report
+- Produces: five-product-crate DAG, tracked complete old/new path mapping, generated external-consumer
+  compile evidence, before/after API diff with an exact additions-only allowlist, and extraction report
 - Produces: explicit P03 completion state `ERROR_OWNERSHIP_TRANSITIONAL_UNTIL_P04`; P04 Task 1 is the mandatory next plan
 
-- [ ] **Step 1: 收紧 module visibility without deleting public paths**
+- [ ] **Step 1: Verify API tooling before changing Task 6 files**
+
+Run:
+
+```bash
+cargo public-api --version
+cargo public-api diff --help
+cargo semver-checks --version
+```
+
+`cargo-public-api 0.52.0` is observed in the Task 0 environment, and its help accepts diff options
+after `diff` followed by a single `BASE..HEAD` range. Re-check at execution time. If
+`cargo semver-checks --version` is unavailable, **STOP Task 6**: do not install it, do not claim a
+semver PASS, and do not weaken or remove the independent `cargo public-api diff` gate below. Follow
+the repository tooling rule: inspect current official installation documentation, describe scope
+and affected files, and request explicit user authorization before installation. Resume only after
+the installed version/help and exact invocation are recorded in the verification report.
+
+- [ ] **Step 2: 收紧 visibility and create the complete path/allowlist manifests**
 
 `druid-rdbc` exposes only `types`, `error`, `spi`, `resource`, `compat` and curated root re-exports.
 Implementation modules are private. `druid` exposes logical handles plus compatibility re-exports.
@@ -622,11 +705,29 @@ The P03 baseline comparison has a zero-deletion budget for every existing old mo
 do not remove an ambiguous public alias in P03 even if new canonical documentation stops recommending
 it.
 
-- [ ] **Step 2: Run topology, unique-definition and API checks**
+Create `rdbc-public-path-map.tsv` with this schema:
+
+```text
+old_path<TAB>new_path<TAB>compile_mode<TAB>old_module_file
+```
+
+`compile_mode` is `OWNED`, `DYN_TRAIT`, or `PATH_ONLY`. Every moved public definition present in
+`api/druid-public-api.rdbc-first.before.txt` must have exactly one row. `OWNED` generates old→new and
+new→old value assignments; `DYN_TRAIT` generates reference conversions in both directions;
+`PATH_ONLY` is allowed only for non-dyn-compatible traits and still compiles both paths while the
+verifier proves the old module file is an exact directed `pub use` shim. Missing, duplicate, stale,
+or wildcard mappings fail.
+
+`druid-public-api.rdbc-first.allowlist.txt` contains exact API additions permitted in P03. Removed or
+changed baseline lines can never be allowlisted.
+
+- [ ] **Step 3: Generate/compile every mapping and compare the working-tree snapshot**
 
 ```bash
 python3 scripts/verify_rdbc_dependency_boundary.py
-python3 scripts/verify_rdbc_public_paths.py
+python3 scripts/verify_rdbc_public_paths.py \
+  --mapping docs/verification/rdbc-first/rdbc-public-path-map.tsv \
+  --compile-all-pairs
 cargo metadata --format-version 1 --no-deps \
   | jq -r '.packages[].name' | sort
 cargo tree -p druid-rdbc
@@ -634,14 +735,25 @@ cargo tree --invert -p druid-rdbc
 cargo test -p druid --test rdbc_external_consumer_test
 cargo public-api -p druid -sss --all-features \
   > api/druid-public-api.rdbc-first.after.txt
+diff -u api/druid-public-api.rdbc-first.before.txt \
+  api/druid-public-api.rdbc-first.after.txt \
+  > api/druid-public-api.rdbc-first.diff.txt || test "$?" -eq 1
+python3 scripts/verify_rdbc_public_paths.py \
+  --mapping docs/verification/rdbc-first/rdbc-public-path-map.tsv \
+  --baseline api/druid-public-api.rdbc-first.before.txt \
+  --after api/druid-public-api.rdbc-first.after.txt \
+  --allowlist api/druid-public-api.rdbc-first.allowlist.txt \
+  --api-diff api/druid-public-api.rdbc-first.diff.txt \
+  --compile-all-pairs
 ```
 
 Expected products: `druid-rdbc`, `druid`, `druid-wrapper`, `druid-metrics`, `druid-admin` plus
 `druid-bench`; no forbidden reverse dependency; every moved object has one implementation; consumer
-test PASS. The public API diff has no removed old module-qualified path and only approved additions
-or identity-preserving re-export provenance changes.
+test PASS. The verifier derives the baseline moved-definition set, requires exact equality with the
+mapping manifest, generates/compiles every module-qualified pair, rejects all removed/changed API
+lines, and accepts only exact additions in the tracked allowlist.
 
-- [ ] **Step 3: Run workspace gates**
+- [ ] **Step 4: Run workspace gates**
 
 ```bash
 cargo fmt --all -- --check
@@ -652,10 +764,11 @@ cargo doc --workspace --all-features --no-deps
 
 Expected: all PASS.
 
-- [ ] **Step 4: Write the after snapshot/report and transitional handoff**
+- [ ] **Step 5: Write the after snapshot/report and transitional handoff**
 
 Record every moved file, old/new public path, before/after API hashes, dependency graph, unique
-definition evidence, tests, and commands in `rdbc-extraction.md`. State explicitly:
+definition evidence, generated pair count, allowlist entries, tests, tool versions, and commands in
+`rdbc-extraction.md`. State explicitly:
 
 ```text
 P03 error ownership: TRANSITIONAL_UNTIL_P04
@@ -665,10 +778,27 @@ switch all driver-facing SPI/Access signatures to RdbcError, and restore DruidEr
 
 Do not describe the P03 transitional error ownership as the accepted final ADR architecture.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit the verified working-tree state**
 
 ```bash
 git add Cargo.toml Cargo.lock crates docs api scripts
 git diff --cached --check
 git commit -m "refactor(rdbc): complete isolated contract extraction"
 ```
+
+- [ ] **Step 7: Run the clean post-commit public API gate**
+
+`cargo-public-api diff` performs temporary in-place commit checkouts according to its installed
+help. Run it only with a clean checkout, never pass `--force`, and use the verified option order:
+
+```bash
+test -z "$(git status --porcelain)"
+cargo public-api diff --deny=removed --deny=changed \
+  -p druid -sss --all-features \
+  75b5294eaa6ec886480bac4cec194a0abb485043..HEAD
+```
+
+Expected: PASS and restore the same branch/HEAD. This available gate is mandatory independently of
+`cargo-semver-checks`. If it fails after the local commit, keep the commit recoverable, mark Task 6
+incomplete, make a new corrective commit, and rerun; do not reset, amend, force, push, or describe
+P03 as complete.
