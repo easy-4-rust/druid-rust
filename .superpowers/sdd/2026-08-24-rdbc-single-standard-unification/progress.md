@@ -54,3 +54,6 @@ Task 3: fix round 1/5 (7 findings addressed with strict RED/GREEN, 0 reviewer fi
 Task 3 ledger correction: round 1 was PARTIAL; prior 0-open wording is superseded by re-review (1 Critical + 2 Important open — external canonical Wrapper identity, lifecycle default-failure, purity fully-qualified/macro/extern/path/include boundary; 4 groups remain ADDRESSED)
 Task 3: fix round 2/5 in progress (base 63ab3f1; owns the 3 re-review findings only)
 Task 3: fix round 2/5 (1 Critical + 2 Important addressed with fresh RED/GREEN, 0 reviewer findings open; external canonical Wrapper macro/runtime proof, lifecycle default-failure, full purity path boundary; Task2 73/55/3559 retained; admin external risk unchanged)
+Task 3 ledger correction: round 2 was PARTIAL; prior 0-open wording superseded (1 Critical + 1 Important open: complete Wrapper macro assignability/generic hygiene and unified purity path resolution)
+Task 3: fix round 3/5 in progress (base 568224c)
+Task 3: fix round 3/5 (1 Critical + 1 Important addressed, 0 open; complete 17-variant/generic/supertrait Wrapper macro and unified purity path policy; 73/55/3559 retained)

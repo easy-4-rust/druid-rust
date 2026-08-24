@@ -4,23 +4,28 @@ use std::any::{Any, TypeId};
 
 /// JDBC `Wrapper` 的 object-safe canonical identity 标准。
 pub trait Wrapper: Send {
-    /// 返回实现者唯一的 canonical interface view。
-    fn canonical_unwrap(&self) -> StandardUnwrapped<'_>;
+    /// 返回 canonical Wrapper identity。
+    fn wrapper_view(&self) -> &dyn Wrapper;
+    /// 按目标返回 canonical interface view；由标准 macro 生成 assignability closure。
+    fn canonical_unwrap(&self, target: TypeId) -> Option<StandardUnwrapped<'_>>;
 
     /// 判断对象是否实现目标 canonical interface。
     fn is_wrapper_for(&self, target: Option<TypeId>) -> Result<bool, RdbcError> {
         let target = require_wrapper_target(target)?;
-        Ok(self.canonical_unwrap().type_id() == target)
+        if target == TypeId::of::<dyn Wrapper>() {
+            return Ok(true);
+        }
+        Ok(self.canonical_unwrap(target).is_some())
     }
 
     /// 解包为目标 canonical interface。
     fn unwrap(&self, target: Option<TypeId>) -> Result<StandardUnwrapped<'_>, RdbcError> {
         let target = require_wrapper_target(target)?;
-        let view = self.canonical_unwrap();
-        if view.type_id() == target {
-            return Ok(view);
+        if target == TypeId::of::<dyn Wrapper>() {
+            return Ok(StandardUnwrapped::Wrapper(self.wrapper_view()));
         }
-        Err(RdbcError::feature_not_supported("wrapper_unwrap_target"))
+        self.canonical_unwrap(target)
+            .ok_or_else(|| RdbcError::feature_not_supported("wrapper_unwrap_target"))
     }
 }
 
@@ -55,20 +60,65 @@ impl<T> WrapperExt for T where T: Wrapper + ?Sized {}
 /// 为一个 external implementor 生成单一 canonical Wrapper view。
 #[macro_export]
 macro_rules! impl_standard_wrapper {
-    ($target:ty => Connection) => {
-        impl $crate::wrapper::Wrapper for $target {
-            fn canonical_unwrap(&self) -> $crate::wrapper::StandardUnwrapped<'_> {
-                $crate::wrapper::StandardUnwrapped::Connection(self)
+    (generics [$($generics:tt)*] for $target:ty where [$($where_clause:tt)*] => $kind:ident) => {
+        $crate::impl_standard_wrapper!(@emit [<$($generics)*>] $target where [$($where_clause)*] => $kind);
+    };
+    (impl<$generic:ident : $bound:path> $target:ty => $kind:ident) => {
+        $crate::impl_standard_wrapper!(@emit [<$generic: $bound>] $target => $kind);
+    };
+    ($target:ty => $kind:ident) => {
+        $crate::impl_standard_wrapper!(@emit [] $target => $kind);
+    };
+    (@emit [$($impl_generics:tt)*] $target:ty => Connection) => {
+        impl $($impl_generics)* $crate::wrapper::Wrapper for $target {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                (target == std::any::TypeId::of::<dyn $crate::connection::Connection>())
+                    .then_some($crate::wrapper::StandardUnwrapped::Connection(self))
             }
         }
     };
-    ($target:ty => Statement) => {
-        impl $crate::wrapper::Wrapper for $target {
-            fn canonical_unwrap(&self) -> $crate::wrapper::StandardUnwrapped<'_> {
-                $crate::wrapper::StandardUnwrapped::Statement(self)
+    (@emit [$($impl_generics:tt)*] $target:ty where [$($where_clause:tt)*] => Connection) => {
+        impl $($impl_generics)* $crate::wrapper::Wrapper for $target where $($where_clause)* {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                (target == std::any::TypeId::of::<dyn $crate::connection::Connection>()).then_some($crate::wrapper::StandardUnwrapped::Connection(self))
             }
         }
     };
+    (@emit [$($impl_generics:tt)*] $target:ty => Statement) => {
+        impl $($impl_generics)* $crate::wrapper::Wrapper for $target {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                (target == std::any::TypeId::of::<dyn $crate::statement::Statement>())
+                    .then_some($crate::wrapper::StandardUnwrapped::Statement(self))
+            }
+        }
+    };
+    (@emit [$($impl_generics:tt)*] $target:ty => PreparedStatement) => {
+        impl $($impl_generics)* $crate::wrapper::Wrapper for $target {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::statement::PreparedStatement>() { Some($crate::wrapper::StandardUnwrapped::PreparedStatement(self)) }
+                else if target == std::any::TypeId::of::<dyn $crate::statement::Statement>() { Some($crate::wrapper::StandardUnwrapped::Statement(self)) }
+                else { None }
+            }
+        }
+    };
+    (@emit [$($g:tt)*] $t:ty => ResultSet) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self, x: std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> { (x==std::any::TypeId::of::<dyn $crate::result_set::ResultSet>()).then_some($crate::wrapper::StandardUnwrapped::ResultSet(self)) } } };
+    (@emit [$($g:tt)*] $t:ty => ResultSetMetaData) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self, x: std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> { (x==std::any::TypeId::of::<dyn $crate::metadata::ResultSetMetaData>()).then_some($crate::wrapper::StandardUnwrapped::ResultSetMetaData(self)) } } };
+    (@emit [$($g:tt)*] $t:ty => ParameterMetaData) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self, x: std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> { (x==std::any::TypeId::of::<dyn $crate::metadata::ParameterMetaData>()).then_some($crate::wrapper::StandardUnwrapped::ParameterMetaData(self)) } } };
+    (@emit [$($g:tt)*] $t:ty => DatabaseMetaData) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self, x: std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> { (x==std::any::TypeId::of::<dyn $crate::metadata::DatabaseMetaData>()).then_some($crate::wrapper::StandardUnwrapped::DatabaseMetaData(self)) } } };
+    (@emit [$($g:tt)*] $t:ty => DataSource) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self, x: std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> { (x==std::any::TypeId::of::<dyn $crate::data_source::DataSource>()).then_some($crate::wrapper::StandardUnwrapped::DataSource(self)) } } };
+    (@emit [$($g:tt)*] $t:ty => CallableStatement) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> { if x==std::any::TypeId::of::<dyn $crate::statement::CallableStatement>() {Some($crate::wrapper::StandardUnwrapped::CallableStatement(self))} else if x==std::any::TypeId::of::<dyn $crate::statement::PreparedStatement>() {Some($crate::wrapper::StandardUnwrapped::PreparedStatement(self))} else if x==std::any::TypeId::of::<dyn $crate::statement::Statement>() {Some($crate::wrapper::StandardUnwrapped::Statement(self))} else {None} } } };
+    (@emit [$($g:tt)*] $t:ty => CommonDataSource) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::data_source::CommonDataSource>()).then_some($crate::wrapper::StandardUnwrapped::CommonDataSource(self))} } };
+    (@emit [$($g:tt)*] $t:ty => PooledConnection) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::data_source::PooledConnection>()).then_some($crate::wrapper::StandardUnwrapped::PooledConnection(self))} } };
+    (@emit [$($g:tt)*] $t:ty => ConnectionPoolDataSource) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::data_source::ConnectionPoolDataSource>()).then_some($crate::wrapper::StandardUnwrapped::ConnectionPoolDataSource(self))} } };
+    (@emit [$($g:tt)*] $t:ty => XaConnection) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::data_source::XaConnection>()).then_some($crate::wrapper::StandardUnwrapped::XaConnection(self))} } };
+    (@emit [$($g:tt)*] $t:ty => XaDataSource) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::data_source::XaDataSource>()).then_some($crate::wrapper::StandardUnwrapped::XaDataSource(self))} } };
+    (@emit [$($g:tt)*] $t:ty => Driver) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::driver::Driver>()).then_some($crate::wrapper::StandardUnwrapped::Driver(self))} } };
+    (@emit [$($g:tt)*] $t:ty => ConnectionFactory) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::driver::ConnectionFactory>()).then_some($crate::wrapper::StandardUnwrapped::ConnectionFactory(self))} } };
+    (@emit [$($g:tt)*] $t:ty => Wrapper) => { impl $($g)* $crate::wrapper::Wrapper for $t { fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self } fn canonical_unwrap(&self,x:std::any::TypeId)->Option<$crate::wrapper::StandardUnwrapped<'_>> {(x==std::any::TypeId::of::<dyn $crate::wrapper::Wrapper>()).then_some($crate::wrapper::StandardUnwrapped::Wrapper(self))} } };
     ($target:ty => ResultSet) => {
         impl $crate::wrapper::Wrapper for $target {
             fn canonical_unwrap(&self) -> $crate::wrapper::StandardUnwrapped<'_> {

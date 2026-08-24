@@ -403,3 +403,26 @@ Clippy -D warnings / rustdoc / fmt      PASS
 
 已知 non-RDBC admin supervisor exact failure保持原记录，不重复 broad workspace test；未写
 GREEN。Round 2 reviewer findings open：`0`。
+
+### Round 2 re-review correction
+
+Round 2 状态更正为 **PARTIAL**；先前 0-open 表述由本段 supersede。Re-review 仍有
+`1 Critical + 1 Important open`：Wrapper macro 17 variants/supertrait assignability/generic
+hygiene，以及 purity absolute/crate/relative/cfg_attr path policy。
+
+## Fix round 3/5
+
+- 基线：`568224c22dfdf325b2108c9b0520b881e42d94b8`
+- Re-review：`1 Critical + 1 Important`；结果：`0 open`。
+- Wrapper fresh RED：external macro缺失 `E0433`、Wrapper bounds `E0277`、lifecycle signature
+  `E0308`。GREEN：17 StandardUnwrapped variants均有单次 macro arm；Prepared 自动声明
+  Prepared+Statement assignability，Callable 自动声明 Callable+Prepared+Statement；generic
+  syntax `impl<T: Bound> Type<T> => Connection` 经 external runtime通过；wrong/unknown/null保持
+  structured failure。Core不公开Any/as_any/Object，concrete downcast仅WrapperExt。
+- Purity fresh RED覆盖 fully-qualified/absolute backend、`crate::resource`、extern crate、macro、
+  self backend、`#[path]`、nested cfg_attr path、include。GREEN统一use/non-use allowlist并按真实
+  canonical tree解析 relative paths；合法 `super::Statement`、
+  `super::super::statement::Statement`、std/crate grouped、doc/string/comment controls通过。
+- Gates：druid-rdbc 17/17；purity 9/9/live29；workspace all-feature check PASS；Task2
+  73/55/3559、consumer `b1b420d6...72c59`；Clippy/docs/fmt/diff PASS。Admin known risk未重跑。
+- 未修改 Physical、Task4、Cargo manifests/lock。Round3 reviewer findings open：`0`。

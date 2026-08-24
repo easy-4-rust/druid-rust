@@ -119,10 +119,13 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         source = self.root / "connection/contract.rs"
         for payload in (
             "pub type X = sqlx::Executor;\n",
+            "pub type X = ::sqlx::Executor;\n",
+            "pub type X = crate::resource::Blob;\n",
             "extern crate sqlx as backend;\n",
             'fn query() { let _ = sqlx::query!("select 1"); }\n',
             "mod backend { pub struct Executor; }\nuse self::backend::Executor;\n",
             '#[path = "../hidden.rs"] mod backend;\n',
+            '#[cfg_attr(feature = "x", path = "../hidden.rs")] mod backend;\n',
             'include!("../hidden.rs");\n',
             "use sqlx::{Executor as BackendExecutor};\n",
             "use ::sqlx::Executor;\n",
@@ -141,6 +144,14 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             'const NOTE: &str = "sqlx::query!(backend)";\n'
             "use std::{any::TypeId, sync::Arc};\n"
             "use crate::{error::RdbcError, types::Value};\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+        source.write_text(
+            "use super::Statement;\n"
+            "use super::super::statement::Statement as ParentStatement;\n"
             "pub trait Contract: Send {}\n",
             encoding="utf-8",
         )

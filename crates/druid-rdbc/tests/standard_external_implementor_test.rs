@@ -34,6 +34,7 @@ tokio = {{ version = "1", features = ["macros", "rt"] }}
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{Statement, StatementOptions};
+use druid_rdbc::statement::{CallableStatement, PreparedStatement};
 use druid_rdbc::data_source::PooledConnection;
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper, WrapperExt};
 use std::any::TypeId;
@@ -42,10 +43,16 @@ struct ExternalConnection;
 struct ExternalStatement;
 struct ExternalResultSet;
 struct ExternalPooledConnection;
+struct ExternalCallable;
+struct ExternalGeneric<T>(std::marker::PhantomData<T>);
+trait ExternalMarker: Send + 'static {}
+impl ExternalMarker for u8 {}
 
 druid_rdbc::impl_standard_wrapper!(ExternalConnection => Connection);
 druid_rdbc::impl_standard_wrapper!(ExternalStatement => Statement);
 druid_rdbc::impl_standard_wrapper!(ExternalResultSet => ResultSet);
+druid_rdbc::impl_standard_wrapper!(ExternalCallable => CallableStatement);
+druid_rdbc::impl_standard_wrapper!(impl<T: ExternalMarker> ExternalGeneric<T> => Connection);
 
 #[async_trait::async_trait]
 impl Connection for ExternalConnection {
@@ -68,6 +75,20 @@ impl Statement for ExternalStatement {
 impl ResultSet for ExternalResultSet {
     async fn next(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
+    }
+}
+
+#[async_trait::async_trait]
+impl Statement for ExternalCallable {}
+#[async_trait::async_trait]
+impl PreparedStatement for ExternalCallable {}
+#[async_trait::async_trait]
+impl CallableStatement for ExternalCallable {}
+
+#[async_trait::async_trait]
+impl<T: ExternalMarker> Connection for ExternalGeneric<T> {
+    async fn create_statement(&mut self, _options: StatementOptions) -> Result<Box<dyn Statement>, RdbcError> {
+        Ok(Box::new(ExternalStatement))
     }
 }
 
@@ -115,6 +136,12 @@ async fn main() -> Result<(), RdbcError> {
     assert!(matches!(result_set.is_closed(), Err(RdbcError::SqlException(_))));
     let mut pooled = ExternalPooledConnection;
     assert!(matches!(pooled.close().await, Err(RdbcError::SqlException(_))));
+    let callable = ExternalCallable;
+    assert!(callable.is_wrapper_for(Some(TypeId::of::<dyn CallableStatement>()))?);
+    assert!(callable.is_wrapper_for(Some(TypeId::of::<dyn PreparedStatement>()))?);
+    assert!(callable.is_wrapper_for(Some(TypeId::of::<dyn Statement>()))?);
+    let generic = ExternalGeneric::<u8>(std::marker::PhantomData);
+    assert!(generic.is_wrapper_for(Some(TypeId::of::<dyn Connection>()))?);
     Ok(())
 }
 "#,

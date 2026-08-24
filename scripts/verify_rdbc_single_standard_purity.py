@@ -28,6 +28,7 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "u64", "u128", "usize",
 }
 ALLOWED_CRATE_MODULES = {*REQUIRED_CANONICAL_MODULES, "error", "types"}
+ALLOWED_CRATE_ITEMS = {"impl_standard_wrapper"}
 
 
 class VerificationError(RuntimeError):
@@ -159,12 +160,7 @@ def verify_non_use_paths(
         name = token.text.removeprefix("r#")
         if name == "include" and index + 1 < len(tokens) and tokens[index + 1].text == "!":
             fail(f"include! escapes canonical source discovery in {relative}")
-        if (
-            name == "path"
-            and index >= 2
-            and tokens[index - 1].text == "["
-            and tokens[index - 2].text == "#"
-        ):
+        if name == "path" and index + 1 < len(tokens) and tokens[index + 1].text == "=":
             fail(f"#[path] escapes canonical source discovery in {relative}")
         if (
             name == "extern"
@@ -183,6 +179,14 @@ def verify_non_use_paths(
             if module_name not in local_roots:
                 fail(f"module declaration escapes discovered canonical files in {relative}: {module_name}")
         if (
+            name == "crate"
+            and index + 2 < len(tokens)
+            and tokens[index + 1].text == "::"
+            and tokens[index + 2].text.removeprefix("r#") not in ALLOWED_CRATE_MODULES
+            and tokens[index + 2].text.removeprefix("r#") not in ALLOWED_CRATE_ITEMS
+        ):
+            fail(f"crate path escapes canonical allowlist in {relative}: {tokens[index + 2].text}")
+        if (
             token.kind == "IDENT"
             and name[:1].islower()
             and index + 1 < len(tokens)
@@ -194,13 +198,27 @@ def verify_non_use_paths(
         ):
             fail(f"fully-qualified backend path is forbidden in {relative}: {name}::")
         if (
+            token.kind == "IDENT"
+            and name[:1].islower()
+            and index > 0
+            and tokens[index - 1].text == "::"
+            and (index < 2 or tokens[index - 2].kind != "IDENT")
+            and name not in ALLOWED_EXTERNAL_IMPORT_ROOTS
+        ):
+            fail(f"absolute backend path is forbidden in {relative}: ::{name}")
+        if (
             name in {"self", "super"}
             and index + 2 < len(tokens)
             and tokens[index + 1].text == "::"
             and tokens[index + 2].kind == "IDENT"
         ):
             module_name = tokens[index + 2].text.removeprefix("r#")
-            if module_name not in local_roots:
+            if (
+                module_name != "super"
+                and not module_name[:1].isupper()
+                and module_name not in local_roots
+                and module_name not in REQUIRED_CANONICAL_MODULES
+            ):
                 fail(f"relative module path escapes discovered canonical files in {relative}: {module_name}")
 
 
