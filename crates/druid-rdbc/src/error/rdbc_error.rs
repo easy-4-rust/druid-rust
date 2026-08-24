@@ -350,8 +350,8 @@ impl std::error::Error for RdbcError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::SqlException(exception) => Some(exception.as_ref()),
-            Self::BatchUpdateException { cause, .. } => Some(cause.as_ref()),
-            Self::GetConnectionTimeout {
+            Self::BatchUpdateException { cause, .. }
+            | Self::GetConnectionTimeout {
                 cause: Some(cause), ..
             }
             | Self::DataSourceNotAvailable {

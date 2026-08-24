@@ -39,6 +39,29 @@ SEMANTIC_DISPOSITIONS = {
 ADAPTER_STATES = {"PLANNED", "NOT_APPLICABLE"}
 LOGICAL_STATES = {"PLANNED", "NOT_APPLICABLE"}
 CAPABILITY_STATES = {"PLANNED", "NOT_APPLICABLE"}
+TARGET_STATES = {"PLANNED_TARGET", "DECLARED"}
+TASK3_STANDARD_ENTRIES = {
+    "java.sql.CallableStatement": "druid_rdbc::statement::CallableStatement",
+    "java.sql.Connection": "druid_rdbc::connection::Connection",
+    "java.sql.DatabaseMetaData": "druid_rdbc::metadata::DatabaseMetaData",
+    "java.sql.Driver": "druid_rdbc::driver::Driver",
+    "java.sql.DriverManager": "druid_rdbc::driver::DriverRegistry",
+    "java.sql.DriverPropertyInfo": "druid_rdbc::driver::DriverPropertyInfo",
+    "java.sql.ParameterMetaData": "druid_rdbc::metadata::ParameterMetaData",
+    "java.sql.PreparedStatement": "druid_rdbc::statement::PreparedStatement",
+    "java.sql.ResultSet": "druid_rdbc::result_set::ResultSet",
+    "java.sql.ResultSetMetaData": "druid_rdbc::metadata::ResultSetMetaData",
+    "java.sql.RowIdLifetime": "druid_rdbc::metadata::RowIdLifetime",
+    "java.sql.Savepoint": "druid_rdbc::connection::Savepoint",
+    "java.sql.Statement": "druid_rdbc::statement::Statement",
+    "java.sql.Wrapper": "druid_rdbc::wrapper::Wrapper",
+    "javax.sql.CommonDataSource": "druid_rdbc::data_source::CommonDataSource",
+    "javax.sql.ConnectionPoolDataSource": "druid_rdbc::data_source::ConnectionPoolDataSource",
+    "javax.sql.DataSource": "druid_rdbc::data_source::DataSource",
+    "javax.sql.PooledConnection": "druid_rdbc::data_source::PooledConnection",
+    "javax.sql.XAConnection": "druid_rdbc::data_source::XaConnection",
+    "javax.sql.XADataSource": "druid_rdbc::data_source::XaDataSource",
+}
 ORACLE_KEYS = {
     "schema_version", "oracle_tag", "oracle_commit", "archive_url",
     "archive_sha256", "archive_size", "source_manifest_sha256", "packages",
@@ -234,8 +257,9 @@ def verify_inventory(
     oracle_path: Path,
     *,
     expected_source_manifest_sha256: str = SOURCE_MANIFEST_SHA256,
+    require_standard_entries: bool = False,
 ) -> InventorySummary:
-    """Verify exact source/semantic coverage and Task 2 planned-state honesty."""
+    """Verify exact source coverage and honest planned/declared target phases."""
 
     semantic = resolve_path(root, semantic_path)
     oracle = resolve_path(root, oracle_path)
@@ -253,6 +277,7 @@ def verify_inventory(
     seen_keys: set[str] = set()
     seen_fqcns: set[str] = set()
     counts = {"java.sql": 0, "javax.sql": 0}
+    standard_entries: dict[str, tuple[str, str]] = {}
     for line_number, fields in enumerate(rows, start=2):
         (
             item_key, fqcn, java_member, rust_shape, disposition, canonical,
@@ -279,8 +304,8 @@ def verify_inventory(
             fail(f"semantic row {line_number} has unknown rust_shape {rust_shape}")
         if disposition not in SEMANTIC_DISPOSITIONS:
             fail(f"semantic row {line_number} has unknown disposition {disposition}")
-        if target_state != "PLANNED_TARGET":
-            fail(f"semantic row {line_number} must remain PLANNED_TARGET in Task 2")
+        if target_state not in TARGET_STATES:
+            fail(f"semantic row {line_number} has invalid target state {target_state}")
         if canonical == "-":
             fail(f"semantic row {line_number} has no canonical semantic target")
         if rust_shape == "EXCLUDED_RUNTIME":
@@ -300,6 +325,8 @@ def verify_inventory(
             fail(f"semantic row {line_number} has invalid call_kind")
         if index_null_adapter == "UNKNOWN" or error_adapter == "UNKNOWN" or owner == "UNKNOWN" or notes == "UNKNOWN":
             fail(f"semantic row {line_number} contains UNKNOWN")
+        if fqcn in TASK3_STANDARD_ENTRIES:
+            standard_entries[fqcn] = (canonical, target_state)
     if seen_fqcns != set(records):
         missing = sorted(set(records) - seen_fqcns)
         extra = sorted(seen_fqcns - set(records))
@@ -309,6 +336,17 @@ def verify_inventory(
             "semantic package count drift: "
             f"JAVA_SQL={counts['java.sql']} JAVAX_SQL={counts['javax.sql']}"
         )
+    if require_standard_entries:
+        missing = sorted(set(TASK3_STANDARD_ENTRIES) - set(standard_entries))
+        if missing:
+            fail(f"Task 3 standard entries are missing: {missing}")
+        drift = sorted(
+            fqcn
+            for fqcn, expected in TASK3_STANDARD_ENTRIES.items()
+            if standard_entries[fqcn] != (expected, "DECLARED")
+        )
+        if drift:
+            fail(f"Task 3 standard entries are not DECLARED at canonical paths: {drift}")
     return InventorySummary(counts["java.sql"], counts["javax.sql"], 0, digest)
 
 
@@ -324,6 +362,7 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--semantic", type=Path, default=DEFAULT_SEMANTIC)
     parser.add_argument("--oracle", type=Path, default=DEFAULT_ORACLE)
+    parser.add_argument("--require-standard-entries", action="store_true")
     return parser.parse_args()
 
 
@@ -332,7 +371,12 @@ def main() -> int:
 
     arguments = parse_arguments()
     try:
-        summary = verify_inventory(repository_root(), arguments.semantic, arguments.oracle)
+        summary = verify_inventory(
+            repository_root(),
+            arguments.semantic,
+            arguments.oracle,
+            require_standard_entries=arguments.require_standard_entries,
+        )
     except VerificationError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

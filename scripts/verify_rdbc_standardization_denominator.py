@@ -1018,8 +1018,11 @@ def normalize_type_identity(
     end: int,
     generics: dict[str, str],
     context: tuple[str, ...],
+    imports: dict[str, tuple[str, ...]],
+    local_types: set[str],
+    local_modules: set[str],
 ) -> tuple[str, str] | None:
-    """Normalize a self type as qualified base plus canonical generic arguments."""
+    """Normalize a self type to an absolute or explicitly unresolved identity."""
 
     identity_start = start
     if identity_start >= end:
@@ -1060,12 +1063,19 @@ def normalize_type_identity(
     cursor = identity_start
     while cursor < end:
         token = tokens[cursor]
-        if (
+        path_start = (
             token.kind == "IDENT"
-            and canonical_name(token) in {"crate", "self", "super"}
             and cursor + 1 < end
             and tokens[cursor + 1].text == "::"
-        ):
+            and (cursor == identity_start or tokens[cursor - 1].text != "::")
+        )
+        leading_bare_type = (
+            cursor == identity_start
+            and token.kind == "IDENT"
+            and canonical_name(token) not in generics
+            and canonical_name(token) not in {"dyn", "impl", "mut"}
+        )
+        if path_start or leading_bare_type:
             path = [canonical_name(token)]
             path_end = cursor
             while (
@@ -1075,11 +1085,22 @@ def normalize_type_identity(
             ):
                 path.append(canonical_name(tokens[path_end + 2]))
                 path_end += 2
-            expanded = expanded_path(tuple(path), {}, context)
-            if expanded[: len(context)] == context:
-                expanded = expanded[len(context):]
-            elif expanded and expanded[0] == context[0]:
-                expanded = expanded[1:]
+            raw_path = tuple(path)
+            if raw_path[0] in {"crate", "self", "super"}:
+                expanded = expanded_path(raw_path, {}, context)
+            elif raw_path[0] in imports:
+                expanded = imports[raw_path[0]] + raw_path[1:]
+            elif raw_path[0] in local_types and len(raw_path) == 1:
+                expanded = context + raw_path
+            elif raw_path[0] in local_modules:
+                expanded = context + raw_path
+            elif raw_path[0] in {"druid", "druid_rdbc", "druid_wrapper"}:
+                expanded = raw_path
+            else:
+                # Rust's extern prelude makes a bare path ambiguous without source
+                # proof. Keep it in a disjoint namespace so it cannot impersonate
+                # a repository-relative `crate::...` type.
+                expanded = ("__unresolved__", *raw_path)
             pieces.append("::".join(expanded))
             cursor = path_end + 1
             continue
@@ -1097,8 +1118,28 @@ def derive_impl_scopes(
     brace_pairs: dict[int, int],
     excluded: set[int],
     context: tuple[str, ...],
+    imports: dict[str, tuple[str, ...]],
 ) -> list[ImplScope]:
     """Derive impl ownership so same-named fields/accessors cannot cross impls."""
+
+    brace_depth = 0
+    local_types: set[str] = set()
+    local_modules: set[str] = set()
+    for index in range(len(tokens) - 1):
+        if tokens[index].text == "}":
+            brace_depth = max(0, brace_depth - 1)
+        if (
+            brace_depth == 0
+            and index not in excluded
+            and tokens[index + 1].kind == "IDENT"
+        ):
+            name = canonical_name(tokens[index + 1])
+            if tokens[index].text in {"struct", "enum", "union", "type"}:
+                local_types.add(name)
+            elif tokens[index].text == "mod":
+                local_modules.add(name)
+        if tokens[index].text == "{":
+            brace_depth += 1
 
     scopes: list[ImplScope] = []
     for impl_index, token in enumerate(tokens):
@@ -1142,7 +1183,16 @@ def derive_impl_scopes(
             depth += text in {"<", "(", "["}
             depth -= text in {">", ")", "]"}
             type_end += 1
-        identity = normalize_type_identity(tokens, type_start, type_end, generics, context)
+        identity = normalize_type_identity(
+            tokens,
+            type_start,
+            type_end,
+            generics,
+            context,
+            imports,
+            local_types,
+            local_modules,
+        )
         if identity is None:
             continue
         type_name, base_name = identity
@@ -1447,13 +1497,16 @@ def derive_receiver_proofs(
     proven_paths: dict[str, str],
     trait_paths: set[str],
     excluded: set[int],
+    identity_imports: dict[str, tuple[str, ...]],
 ) -> tuple[list[ReceiverBinding], dict[tuple[str | None, str], str], list[ImplScope]]:
     """Derive lexical field/parameter/local/pattern bindings and scoped accessors."""
 
     brace_pairs = delimiter_pairs(tokens, "{", "}")
     paren_pairs = delimiter_pairs(tokens, "(", ")")
     bracket_pairs = delimiter_pairs(tokens, "[", "]")
-    impl_scopes = derive_impl_scopes(tokens, brace_pairs, excluded, context)
+    impl_scopes = derive_impl_scopes(
+        tokens, brace_pairs, excluded, context, identity_imports
+    )
     functions = derive_function_scopes(tokens, paren_pairs, brace_pairs, impl_scopes, excluded)
     bindings: list[ReceiverBinding] = []
     accessors: dict[tuple[str | None, str], str] = {}
@@ -1946,6 +1999,7 @@ def scan_source_text(
         "druid_rdbc": ("druid_rdbc",),
         "druid": ("druid",),
     }
+    identity_imports: dict[str, tuple[str, ...]] = {}
     bindings: dict[str, str] = {}
     by_name: dict[str, str] = {}
     for old_path in mapping:
@@ -1979,7 +2033,9 @@ def scan_source_text(
         ):
             root_name = canonical_name(tokens[index + 2])
             if root_name in {"druid", "druid_rdbc"}:
-                aliases[canonical_name(tokens[index + 4])] = (root_name,)
+                alias = canonical_name(tokens[index + 4])
+                aliases[alias] = (root_name,)
+                identity_imports[alias] = (root_name,)
                 covered.update(range(index, min(index + 6, len(tokens))))
 
     index = 0
@@ -2011,6 +2067,15 @@ def scan_source_text(
                     fail(f"wildcard import can hide standardized symbols in {path}: {'::'.join(expanded)}")
                 continue
             alias = entry.alias
+            if expanded:
+                bound_identity = alias or expanded[-1]
+                previous_identity = identity_imports.get(bound_identity)
+                if previous_identity is None:
+                    identity_imports[bound_identity] = expanded
+                elif previous_identity != expanded:
+                    # Invalid or cfg-overlapping duplicate imports provide no
+                    # exact identity proof; keep the name deliberately unresolved.
+                    identity_imports.pop(bound_identity, None)
             old_path = proven_old_path(expanded, mapping, proven)
             if old_path is None and expanded and expanded[0] not in {
                 "druid", "druid_rdbc", "druid_wrapper",
@@ -2086,6 +2151,7 @@ def scan_source_text(
         proven,
         current_trait_paths,
         excluded,
+        identity_imports,
     )
     occurrences.extend(
         receiver_call_rows(

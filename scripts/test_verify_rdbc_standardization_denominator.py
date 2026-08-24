@@ -203,7 +203,10 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
             and row.old_path == "druid_rdbc::spi::PhysicalConnection"
             and row.occurrence_kind == "CALL"
             and "@receiver=PhysicalConnection@" in row.symbol
-            and "@binding=accessor:DruidPooledConnection:physical_mut@" in row.symbol
+            and (
+                "@binding=accessor:druid::core::druid_pooled_connection::"
+                "DruidPooledConnection:physical_mut@"
+            ) in row.symbol
         ]
         self.assertEqual(35, len(receiver_calls))
         names = [row.symbol.split("@", 1)[0] for row in receiver_calls]
@@ -245,7 +248,10 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
             if row.source_path == source_path
             and row.old_path == "druid_rdbc::spi::PhysicalConnection"
             and row.occurrence_kind == "CALL"
-            and "@binding=accessor:PhysicalConnectionLease<_G0>:physical_connection" in row.symbol
+            and (
+                "@binding=accessor:druid::core::physical_connection_lease::"
+                "PhysicalConnectionLease<_G0>:physical_connection"
+            ) in row.symbol
         ]
         self.assertEqual(52, len(rows))
 
@@ -346,7 +352,7 @@ fn control_shadow(physical: &dyn PhysicalConnection) {
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 struct Holder<T>(T);
 struct Other<T>(T);
-impl<T> crate::Holder<T> {
+impl<T> self::Holder<T> {
     fn physical(&self) -> &dyn PhysicalConnection { todo!() }
 }
 impl<T> Holder<T> {
@@ -519,6 +525,86 @@ impl<T> Runner for <T as crate::RepeatedAssoc>::Out {
             sorted([(connection, "commit"), (statement, "warnings")]),
             repeated_calls,
         )
+
+    def test_child_local_self_type_does_not_merge_with_crate_root_type(self) -> None:
+        """A child-local self::Holder cannot lend accessors to crate::Holder."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        mapping = {connection: "druid_rdbc::connection::Connection"}
+        source = '''
+use druid_rdbc::spi::PhysicalConnection;
+impl<T> self::Holder<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> crate::Holder<T> {
+    fn run(&self) { self.physical().commit(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/child/mod.rs"),
+            source,
+            mapping,
+            trait_paths={connection},
+            trait_methods={connection: {"commit"}},
+        )
+        receiver_calls = [
+            row for row in occurrences if "@receiver=" in row.symbol
+        ]
+        self.assertEqual([], receiver_calls)
+
+    def test_unresolved_external_type_does_not_merge_with_current_crate_type(self) -> None:
+        """An unproven external::Holder cannot lend accessors to crate::external::Holder."""
+
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {statement: "druid_rdbc::statement::Statement"}
+        source = '''
+use druid_rdbc::spi::PhysicalStatement;
+impl<T> external::Holder<T> {
+    fn physical(&self) -> &dyn PhysicalStatement { todo!() }
+}
+impl<T> crate::external::Holder<T> {
+    fn run(&self) { self.physical().warnings(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/consumer.rs"),
+            source,
+            mapping,
+            trait_paths={statement},
+            trait_methods={statement: {"warnings"}},
+        )
+        receiver_calls = [
+            row for row in occurrences if "@receiver=" in row.symbol
+        ]
+        self.assertEqual([], receiver_calls)
+
+    def test_source_proven_crate_import_keeps_absolute_self_type_identity(self) -> None:
+        """An explicit crate import aliases the same absolute self type."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        mapping = {connection: "druid_rdbc::connection::Connection"}
+        source = '''
+use druid_rdbc::spi::PhysicalConnection;
+use crate::Holder;
+impl<T> Holder<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> crate::Holder<T> {
+    fn run(&self) { self.physical().commit(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/child/mod.rs"),
+            source,
+            mapping,
+            trait_paths={connection},
+            trait_methods={connection: {"commit"}},
+        )
+        receiver_calls = [
+            row for row in occurrences if "@receiver=" in row.symbol
+        ]
+        self.assertEqual(1, len(receiver_calls))
+        self.assertIn("accessor:druid::Holder<_G0>:physical", receiver_calls[0].symbol)
 
     def test_non_block_closure_scope_ignores_nested_call_comma(self) -> None:
         """A nested call comma cannot end an untyped closure's shadow scope early."""

@@ -168,6 +168,32 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         )
         self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
 
+    def test_accepts_declared_target_without_live_implementation_claims(self) -> None:
+        """Task 3 may declare a canonical target while adapter/logical states stay planned."""
+
+        rows = self.rows()
+        rows[0][6] = "DECLARED"
+        self.write_rows(rows)
+        summary = verify_inventory(
+            self.root,
+            self.semantic,
+            self.oracle,
+            expected_source_manifest_sha256=self.source_manifest_sha256,
+        )
+        self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
+
+    def test_require_standard_entries_rejects_task2_only_inventory(self) -> None:
+        """The Task 3 gate fails while every canonical standard remains only planned."""
+
+        with self.assertRaises(VerificationError):
+            verify_inventory(
+                self.root,
+                self.semantic,
+                self.oracle,
+                expected_source_manifest_sha256=self.source_manifest_sha256,
+                require_standard_entries=True,
+            )
+
     def test_rejects_missing_and_duplicate_rows(self) -> None:
         """Removing or duplicating a source object must break the frozen denominator."""
 
