@@ -17,9 +17,10 @@
 3. `druid::sql::*` 保持 Druid logical pooled consumer facade；`druid-rdbc` 不拥有
    池化 logical handle。
 4. `druid-wrapper` 实现具体数据库、外部连接池和可选 XA/driver bridge。
-5. 标准分母必须完整，但实现能力可以分期。未实现项必须声明
-   `EXPLICIT_UNSUPPORTED`，并稳定返回 JDBC `SQLFeatureNotSupportedException` 语义及
-   `SQLState=0A000`；不得通过缺少 API、伪造 capability 或模糊错误隐藏缺口。
+5. 标准分母必须完整，但实现能力可以分期。未实现项必须区分
+   `SQL_FEATURE_UNSUPPORTED_0A000` 与 Java default 的
+   `JAVA_DEFAULT_UNSUPPORTED_TYPED`；不得通过缺少 API、伪造 capability 或模糊错误
+   隐藏缺口。
 
 本决策不声明 JDBC TCK 合规。完成本规格只能声明：
 
@@ -35,7 +36,10 @@
 | :--- | :--- |
 | JDBC 规范 | JSR 221 JDBC 4.2 Maintenance Release 2 |
 | Java API | Java SE 8 `java.sql` + `javax.sql` |
-| Java 源码校验 | OpenJDK 8 / Corretto 8 `src.zip` |
+| Java 源码主 oracle | Amazon Corretto `8.504.01.1`, build `1.8.0_504-b01` |
+| 主 oracle `src.zip` SHA-256 | `78382879ce27027519f752906d205e6136bf99e7dc9bcd9c0addf4d189ffc1af` |
+| 主 oracle archive size | `52,674,842` bytes |
+| API 文档交叉校验 | Oracle Java SE 8 `java.sql` / `javax.sql` API |
 | Druid 语义基线 | Alibaba Druid `1.2.28` |
 | Druid commit | `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
 | 本规格 Rust 审计基线 | `401bf26b867b46dcec4ed8900fc44678c2ba6cd6` |
@@ -44,8 +48,10 @@
 | Edition / resolver | `2021` / `2` |
 | unsafe policy | `forbid` |
 
-执行时必须重新记录实际 HEAD、工作树、Cargo metadata、工具版本和 CodeGraph 状态；上表
-不是使用陈旧结果宣称完成的许可。
+生成 inventory 前必须校验主 oracle 的版本、字节数和 SHA-256。若归档不可得或 hash
+不匹配，inventory gate 必须失败；OpenJDK 8 其他发行版只能作为交叉验证来源。执行时还
+必须重新记录实际 HEAD、工作树、Cargo metadata、工具版本和 CodeGraph 状态；上表不是
+使用陈旧结果宣称完成的许可。
 
 ## 3. 当前事实
 
@@ -56,6 +62,8 @@
 - `druid::sql::Connection/Statement/PreparedStatement/CallableStatement/ResultSet` 是
   Druid 池化 concrete handle，不是 driver SPI trait。
 - `druid-rdbc::spi::Physical*` 是 pool 到 concrete adapter 的真实驱动边界。
+- 当前 `DruidPooledConnection` 仍公开实现 `PhysicalConnection`；这与目标 logical/physical
+  边界冲突，必须作为有兼容性影响的显式迁移项处理。
 - `Types` 的 39 个 JDBC 4.2 code 和 `RdbcType` 的 39 个 JDBC type variant 已存在。
 - `RdbcError` 仍是 scaffold；driver-facing fallible API 仍依赖过渡
   `druid_rdbc::compat::DruidError`。
@@ -106,11 +114,11 @@ flowchart TB
     RESOURCE --> SPI
     COMPAT --> TYPES
     COMPAT --> ERROR
-    SPI --> SQLX
-    SPI --> DB
-    SPI --> RUSTDB
-    SPI --> AGENT
-    SPI --> EXTERNAL
+    SQLX -->|implements| SPI
+    DB -->|implements| SPI
+    RUSTDB -->|implements| SPI
+    AGENT -->|implements| SPI
+    EXTERNAL -->|implements / leases| SPI
 ```
 
 ### 4.1 依赖方向
@@ -174,12 +182,18 @@ sequenceDiagram
 4. native pool 与 bb8/deadpool 不能形成双池。
 5. `CallableStatement → PreparedStatement → Statement` 使用组合和显式接口，不使用
    `Deref` 模拟继承。
+6. 最终态禁止 `DruidPooledConnection`、`DruidPooledStatement` 或其他 logical handle
+   实现任何 `Physical*` trait。迁移使用独立 logical forwarding API，并以 compile-fail
+   fixture 证明 logical handle 不满足 Physical trait bound。
+7. 移除既有 public trait impl 前必须记录 public API diff、external consumer 影响、迁移
+   指南和兼容窗口；不能把 trait-impl removal 当成内部重构。
 
 ## 6. JDBC 4.2 标准分母
 
 ### 6.1 `java.sql`：52 个对象
 
-以下每个对象必须在机器可读 inventory 中有唯一处置：
+以下每个对象必须在机器可读 inventory 中有唯一 Java key，并按第 6.3 节分别记录所有权、
+语义处置、证据和能力状态：
 
 | 家族 | Java 8 对象 | 默认 Rust 所有者 |
 | :--- | :--- | :--- |
@@ -207,39 +221,60 @@ sequenceDiagram
 | row set | `RowSet`, `RowSetEvent`, `RowSetInternal`, `RowSetListener`, `RowSetMetaData`, `RowSetReader`, `RowSetWriter` | compatibility facade 在 `druid`；buffer/cursor primitive 在 `druid-rdbc` |
 | XA | `XAConnection`, `XADataSource` | orchestration 在 `druid`；concrete bridge 在 wrapper |
 
-### 6.3 inventory 状态
+### 6.3 inventory schema
 
-每个对象、常量、声明方法、继承方法、default 方法和 overload 必须恰好处于一种状态：
+对象、常量、声明方法、继承方法、default 方法和 overload 的机器清单必须把不同维度拆成
+独立列，不能把所有权、行为、证据和能力压成一个互斥状态：
 
-| 状态 | 含义 |
+| 列 | 允许值 |
 | :--- | :--- |
-| `MATCH` | 已实现且可观察行为与 Java 8 基线一致 |
-| `EXPLICIT_UNSUPPORTED` | API 存在、capability=false、调用稳定返回 `0A000` |
-| `OWNED_BY_DRUID` | logical/pool 行为在 `druid` 实现并由 cross-crate gate 验证 |
-| `OWNED_BY_WRAPPER` | concrete driver/XA 行为在 wrapper 实现并由 adapter gate 验证 |
-| `JAVA_RUNTIME_ONLY` | Java reflection/JNDI/SecurityManager/PrintWriter 等不迁移的运行时形状 |
-| `RUST_EXTENSION` | async/capability/Drop 等 Rust 扩展，不计入 JDBC parity 分母 |
+| `java_fqcn` / `java_member` | Java 8 主 oracle 中的唯一对象与 member signature |
+| `owner` | `DRUID_RDBC`, `DRUID`, `WRAPPER`, `JAVA_RUNTIME` |
+| `semantic_disposition` | `MATCH`, `SQL_FEATURE_UNSUPPORTED_0A000`, `JAVA_DEFAULT_UNSUPPORTED_TYPED`, `JAVA_RUNTIME_ONLY`, `RUST_EXTENSION` |
+| `evidence_level` | `DECLARED`, `IMPLEMENTED`, `TESTED`, `REAL_DB` |
+| `capability_state` | `NOT_APPLICABLE`, `DECLARED_FALSE`, `IMPLEMENTED_UNTESTED`, `TESTED`, `REAL_DB_VERIFIED` |
+| `rust_entry_point` | 唯一 module-qualified Rust path；Java-only 项为 `-` |
+| `notes` | 默认行为、兼容转换或标准外部依赖说明 |
 
-禁止 `MISSING`、`UNKNOWN`、空 disposition 或一个 Java item 映射到多个互相冲突的状态。
+其中：
+
+- `SQL_FEATURE_UNSUPPORTED_0A000` 表示 JDBC 标准可选能力未实现，返回
+  `SQLFeatureNotSupportedException` taxonomy 与 `SQLState=0A000`。
+- `JAVA_DEFAULT_UNSUPPORTED_TYPED` 表示 Java 8 default 本身规定
+  `UnsupportedOperationException`；Rust 使用独立 typed error kind 保留该 default 语义，
+  不伪装成 `0A000`。
+- `RUST_EXTENSION` 不进入 JDBC parity 分母，但仍必须有 owner、entry point 与独立测试。
+
+禁止 `MISSING`、`UNKNOWN`、空列、重复 Java key 或一个 Java key 出现两个互相冲突的
+`owner`/`semantic_disposition`。同一行可以合法表达
+`owner=DRUID + semantic_disposition=SQL_FEATURE_UNSUPPORTED_0A000 + evidence_level=TESTED`。
 
 ## 7. 标准语义合同
 
 ### 7.1 索引、NULL 和参数
 
 - JDBC column、parameter、LOB position 和 Array slice index 保持 1-based。
-- 0、负数和越界索引返回结构化 `RdbcError`，不得 panic。
-- 对象读取使用 `Option<Value>` 表达 SQL NULL。
+- `Value::Null` 是 SQL NULL 的唯一规范表示；不得同时使用 `None` 与
+  `Some(Value::Null)` 表示同一 SQL NULL。`Option<T>` 只表达 metadata/application
+  属性本身可缺失，不包裹 `Value` 形成第二种 NULL。
+- public Rust entry point 使用已验证的 `ColumnIndex`、`ParameterIndex`、`LobPosition`
+  和 `ArrayIndex` newtype。compat/FFI/配置边界从 signed integer 执行 `TryFrom`，因此 0、
+  负数和越界值都可达且返回结构化 `RdbcError`；内部 0-based offset 只能由 newtype 的
+  checked conversion 产生。
 - primitive compatibility getter 必须维护 per-cursor `was_null` 状态。
 - label lookup 与 index lookup 共享同一列解析结果；重复 label 遵循 JDBC first-match 语义。
 - Prepared/Callable 参数不得在绑定时把 stream、LOB 或 opaque value 提前有损压成标量。
-- Callable indexed/named、IN/OUT/INOUT 和 REF_CURSOR 均进入 inventory；未实现时为
-  `EXPLICIT_UNSUPPORTED`。
+- Callable indexed/named、IN/OUT/INOUT 和 REF_CURSOR 均进入 inventory；未实现的标准
+  可选能力使用 `SQL_FEATURE_UNSUPPORTED_0A000`。
 
 ### 7.2 Statement 和 ResultSet
 
 - Statement 默认只有一个 current ResultSet；重新执行时按合同关闭旧 current ResultSet。
 - query、update、generic execute、batch、generated keys 和 large counts 必须分别建模。
-- batch 保持输入顺序，并区分成功、`SUCCESS_NO_INFO=-2`、`EXECUTE_FAILED=-3` 与 partial counts。
+- batch 保持输入顺序，并使用无损 `i64` 存储或等价 `BatchUpdateCounts` 类型，区分成功、
+  `SUCCESS_NO_INFO=-2`、`EXECUTE_FAILED=-3` 与 partial counts。JDBC `int[]` 兼容视图是
+  checked projection；超过 `i32::MAX` 时不得截断，必须保留 `getLargeUpdateCounts` 等价
+  结果并返回可诊断的窄化错误。
 - ResultSet 初始在 before-first；forward-only/read-only 是最低必选能力。
 - scrollable/updatable 是可选能力，但不能伪报支持。
 - buffered result 与 async cursor 使用两个显式类型；`Vec<Row>` 结果不得命名为 streaming。
@@ -271,6 +306,9 @@ Java default interface method 的代码形状不迁移，但其默认返回或�
   SQLInput/SQLOutput SQLType overload和 DatabaseMetaData defaults 必须进入 inventory。
 - 默认不支持项区分 Java 的 `UnsupportedOperationException` 与
   `SQLFeatureNotSupportedException` 语义，并在 Rust 侧形成稳定、文档化映射。
+- Java default 的 `UnsupportedOperationException` 映射为
+  `JAVA_DEFAULT_UNSUPPORTED_TYPED`，标准可选 SQL 能力映射为
+  `SQL_FEATURE_UNSUPPORTED_0A000`；两者不得共享一个含糊的 unsupported variant。
 - Rust API 可以用 descriptor 或具名方法代替 Java overload，但每个 overload 必须可追溯到
   唯一 Rust entry point。
 
@@ -290,7 +328,9 @@ flowchart LR
   错误。
 - `DruidError` 只在 `druid` 拥有实际定义，聚合 Pool/Wall/HA/Dynamic 与显式 RDBC wrapper。
 - driver/resource/types/metadata SPI 禁止返回 `DruidError`。
-- `compat::DruidError` 的完整 mixed enum 仅允许存在到 P04 Task 1 开始。
+- `compat::DruidError` waiver 在 P04 Task 1 内继续有效，仅用于冻结、比对和迁移 24-variant
+  基线；当且仅当 `WAIVER_EXIT_GATE_1..6` 全部通过时失效。Task 1 开始本身不使 waiver
+  失效。
 
 ### 8.2 SQL exception fidelity
 
@@ -304,22 +344,38 @@ flowchart LR
 - warning chain；
 - exception taxonomy；
 - batch partial/large update counts；
-- DataTruncation read=`01004`、write=`22001`。
+- `SQLClientInfoException.failed_properties: Map<String, ClientInfoStatus>`；
+- DataTruncation 的 index、parameter/read flag、data size、transfer size，以及
+  read=`01004` warning、write=`22001` exception 区分。
 
-`unsupported` 的唯一标准出口是 SQL feature-not-supported taxonomy 与 `0A000`。直接构造
-无 SQLState 的通用 `UnsupportedOperation` 不能作为最终 driver-facing 行为。
+Java exception 的 `cause` descriptor 与 Rust `std::error::Error::source()` 必须分别建模：
+可拥有、`'static` 且构成 Rust source chain 的 cause 必须由 `source()` 返回；跨进程、不可
+拥有或仅有 Java descriptor 的 cause 保存在结构化字段中并明确 `source() == None` 的原因。
+禁止在计划中无条件规定所有 `SqlException::source() == None`。
+
+标准 SQL feature unsupported 的唯一出口是 feature-not-supported taxonomy 与 `0A000`。
+Java default 明确规定的 `UnsupportedOperationException` 使用独立 typed mapping。直接构造
+无 disposition、无 SQLState 的通用 `UnsupportedOperation` 不能作为最终 driver-facing
+行为。
 
 ### 8.3 P04 Task 1 六项硬门禁
 
-P04 Task 1 只有同时满足以下条件才可完成：
+以下标识是 P04 Task 1 的唯一 waiver-exit 定义；P04 plan、verifier、report 和后续计划必须
+逐字引用同一组 gate ID，不得维护第二套近似条件：
 
-1. `druid-rdbc::compat` 不再定义或重导出完整 `DruidError`。
-2. `druid-rdbc::{types,error,spi,resource,compat}` 的生产 fallible signature 不含
+1. `WAIVER_EXIT_GATE_1_COMPAT_REMOVED`：`druid-rdbc::compat` 不再定义或重导出完整
    `DruidError`。
-3. concrete adapter 的 driver-facing boundary 使用 `RdbcError`。
-4. `druid` 中存在唯一产品 `DruidError` 实现，并显式包装 `RdbcError`。
-5. 24-variant 过渡基线的每个 variant 都有迁移 disposition 和行为证据。
-6. public API diff、外部消费者、错误转换、sorter 与 all-features gate 全部通过。
+2. `WAIVER_EXIT_GATE_2_SIGNATURES_CLEAN`：
+   `druid-rdbc::{types,error,spi,resource,compat}` 的全部生产 fallible signature、import、
+   fully-qualified path 和 construction 均不含 `DruidError`。
+3. `WAIVER_EXIT_GATE_3_ADAPTERS_CLEAN`：所有 concrete adapter 与 external lease 的
+   driver-facing boundary 使用 `RdbcError`，并有动态分母扫描；固定文件数不能代替扫描。
+4. `WAIVER_EXIT_GATE_4_PRODUCT_OWNER_UNIQUE`：`druid` 中存在唯一产品 `DruidError`
+   实现，显式包装 `RdbcError`；Pool/Wall/HA/Dynamic 不反向进入 `druid-rdbc`。
+5. `WAIVER_EXIT_GATE_5_BASELINE_DISPOSED`：24-variant 过渡基线的每个 variant、字段、
+   Display/source/classification/conversion 都有唯一迁移 disposition 和行为证据。
+6. `WAIVER_EXIT_GATE_6_COMPAT_VERIFIED`：public API diff、external consumer、错误转换、
+   exception sorter、workspace/all-features、MSRV 与迁移文档全部通过。
 
 任一门禁失败时，P04 Task 2 及后续 JDBC alignment 实施任务不得开始。
 
@@ -330,21 +386,31 @@ P04 Task 1 只有同时满足以下条件才可完成：
 ```mermaid
 stateDiagram-v2
     [*] --> Open
-    Open --> Releasing: free / close / owner invalidation
-    Releasing --> Released: driver release success
-    Releasing --> ReleaseFailed: driver or owner failure
-    ReleaseFailed --> Releasing: documented retry policy
+    Open --> ReleaseScheduled: free / close / owner invalidation
+    ReleaseScheduled --> DriverReleasing: arbiter starts owned task
+    DriverReleasing --> DriverReleasedOwnerPending: driver confirms release
+    DriverReleasing --> DriverReleaseFailedRetryable: driver guarantees no release
+    DriverReleasing --> DriverOutcomeUnknown: cancellation / transport ambiguity
+    DriverReleaseFailedRetryable --> ReleaseScheduled: retry with same resource id
+    DriverReleasedOwnerPending --> Released: owner bookkeeping confirms
+    DriverReleasedOwnerPending --> DriverReleasedOwnerPending: retry owner notification only
+    DriverOutcomeUnknown --> Released: driver reconciliation proves released
+    DriverOutcomeUnknown --> ReleaseScheduled: reconciliation proves not released
     Released --> Released: repeated free is no-op
-    Open --> Invalidated: owner connection discarded
-    Invalidated --> Released: cleanup completion
 ```
 
 要求：
 
 - `free`/`close` 重复调用 no-op 或返回相同完成状态。
-- 释放 future 被取消不能永久遗留 `Releasing` 并阻塞 waiters。
+- caller future 只等待结果，不拥有 release operation；实际释放由 arbiter/supervised task
+  持有，因此 caller cancellation 不能取消 driver release 或永久阻塞 waiters。
 - owner failure、explicit free、Drop 和 connection invalidation 共享一个 exactly-once release
   arbiter。
+- 每次释放携带稳定 resource ID/idempotency key。只有 driver 明确保证“未发生释放”时才可
+  重试 driver call；结果未知时必须先 reconcile，不能盲目 double-free。
+- driver 已释放而 owner bookkeeping 未完成时，只重试 owner notification，不再调用 driver。
+- waiters 只在 `Released`、可重试失败或 outcome-unknown 三种可诊断终态被唤醒，不能观察
+  伪成功。
 - Array/Blob/Clob position 保持 1-based；free 后除 repeated free 外的操作返回 closed error。
 - SQLXML 的 readable/writable/initialized/freed 状态必须显式。
 - capability=false 时不得先改变资源状态再返回 unsupported。
@@ -359,6 +425,23 @@ stateDiagram-v2
   或新版本 trait。
 - dyn 使用路径必须 object-safe；泛型 helper 放入 `*Ext` trait。
 - 不使用 `Deref` 模拟 JDBC 继承。
+
+每个公开 trait 必须在机器清单中标记 `DYN_REQUIRED`、`PATH_ONLY` 或 `GENERIC_ONLY`。
+`DYN_REQUIRED` 由 `Box<dyn Trait>` 与 `Arc<dyn Trait>` external compile fixture 证明；
+`PATH_ONLY` 必须有 path/associated-item compile fixture；泛型 helper 只能位于
+`GENERIC_ONLY` 的 `*Ext` trait。
+
+`Wrapper` 的 object-safe core 必须保留 Java 的失败语义：
+
+```rust
+fn is_wrapper_for(&self, iface: Option<TypeId>) -> Result<bool, RdbcError>;
+fn unwrap(&self, iface: Option<TypeId>) -> Result<Unwrapped<'_>, RdbcError>;
+```
+
+`None` 或无法 unwrap 不能静默变成成功 `None`；它们映射到结构化 SQL exception。
+`WrapperExt::unwrap_ref<T>()` 等泛型便捷方法可以返回 `Result<&T, RdbcError>`，但不能进入
+object-safe core。若为 Druid 历史行为保留 permissive lookup，必须使用不同方法名并标记
+`RUST_EXTENSION`，不能冒充 JDBC `unwrap`。
 
 ### 10.2 类型策略
 
@@ -402,9 +485,17 @@ stateDiagram-v2
 ### 11.3 Event 与 XA
 
 - Connection/Statement event 的顺序、次数和 error payload 进入 inventory。
-- XA orchestration 与 `XAResource` ownership 在 `druid`；concrete bridge 在 wrapper。
-- XA、StatementEvent 和高级 RowSet 可以 `EXPLICIT_UNSUPPORTED`，但不能省略标准处置或
-  宣称支持。
+- XA orchestration 在 `druid`；driver-neutral XA resource port 属于 `druid-rdbc::spi`，
+  concrete bridge 属于 wrapper。该 port 返回 `RdbcError`，并仅在 `druid` coordinator
+  边界转换为 `DruidError`。
+- `javax.transaction.xa::{XAResource,Xid,XAException}` 不计入 52+17，但作为 XA 的
+  `EXTERNAL_STANDARD_DEPENDENCY` 进入配套 inventory，覆盖常量、recover flags、result
+  codes、Xid 格式和错误映射。XA capability 保持 false 时可以不实现 port 行为；一旦返回
+  true，配套 inventory 和 conformance suite 必须先通过。
+- 当前 `druid::core::XaResource` 返回 `DruidError` 的 open trait 不是最终边界；计划必须
+  明确迁移、兼容 shim 或经批准的例外，P04 动态 verifier 必须覆盖该路径。
+- XA、StatementEvent 和高级 RowSet 可以
+  `semantic_disposition=SQL_FEATURE_UNSUPPORTED_0A000`，但不能省略标准处置或宣称支持。
 
 ## 12. RowSet 与 async cursor
 
@@ -412,10 +503,16 @@ stateDiagram-v2
 
 - `BufferedRowSet` 表示 eager、可脱离连接的行集合。
 - `QueryCursor` 表示有背压、持有明确 owner 的 async stream。
-- Java RowSet facade 在 `druid` 暴露标准兼容行为，并可组合 `BufferedRowSet`。
+- Java RowSet facade 在 `druid` 暴露标准兼容行为，并可组合 `BufferedRowSet`。本 ADR 排除
+  JavaBeans introspection、serialization 和 design-time runtime，但保留 RowSet 的可观察
+  property、command、credential-redaction、reader/writer 和 listener/event 语义。
 - `RowSetResultSet` 或任何 `Vec<Row>` 类型不得用于证明 `javax.sql.RowSet` 已实现。
 - Rust async cursor 是 `RUST_EXTENSION`，其取消、背压和 owner release 单独验证，不计入
   JDBC 方法覆盖率。
+- 本 ADR 的 69 对象分母只覆盖 `javax.sql` 根包中的 7 个 RowSet 对象；
+  `javax.sql.rowset`、`javax.sql.rowset.serial`、`javax.sql.rowset.spi` 不属于当前分母。
+  若产品声明 `JdbcRowSet`、`CachedRowSet`、`WebRowSet`、`FilteredRowSet` 或 `JoinRowSet`
+  兼容，必须先建立独立扩展规格和新增分母，不能从 `BufferedRowSet` 推断完成。
 
 ## 13. 验证模型
 
@@ -434,14 +531,17 @@ stateDiagram-v2
 
 | Gate | 证据 |
 | :--- | :--- |
-| API inventory | 52 + 17 对象、常量、方法、继承/default/overload 的唯一 disposition |
+| API inventory | 52 + 17 对象、常量、方法、继承/default/overload 的完整多列 schema 与唯一 Java key |
 | constants/defaults | 39 type code、Statement/ResultSet/metadata constants 和 Java 8 defaults 逐项差分 |
-| index/null | parameter/column/LOB/Array 1-based；NULL/primitive/`was_null` 测试 |
+| index/null | index newtype 的 signed/0/1/boundary 转换；`Value::Null` 唯一表示；primitive/`was_null` 测试 |
 | lifecycle | logical recycle、physical close、ResultSet cascade、resource cancellation 和 exactly-once |
-| errors | SQLState/vendor/kind/cause/next/warning/batch counts 逐字段测试 |
+| errors | SQLState/vendor/kind/cause/next/warning、client-info payload、DataTruncation 和 i64 batch counts 逐字段测试 |
 | metadata | capability 与真实实现一致；null/empty/pattern 不混淆 |
 | adapter | direct SQLx、bb8、deadpool、Toasty、RBDC、DuckDB/libSQL、JDBC Agent 共用 suite |
 | pool | native/external ownership一致，无双池、泄漏和重复归还 |
+| logical/physical | compile-fail 证明 logical handles 不实现 `Physical*`；public trait-impl removal 有 migration evidence |
+| trait surface | `DYN_REQUIRED/PATH_ONLY/GENERIC_ONLY` 清单及对应 compile fixture |
+| XA companion | XA=true 时 `XAResource/Xid/XAException` 配套 inventory 与 conformance 通过 |
 | differential | Java 1.2.28 与 Rust 对相同输入的输出、错误、状态、副作用和清理差分 |
 | real DB | 每个宣称支持的 adapter/database/version 有新鲜执行报告 |
 | compatibility | `druid::sql::*` external consumer、public API、semver、MSRV 通过 |
@@ -486,6 +586,8 @@ flowchart LR
 ### 14.2 P04
 
 - Task 1 是绝对前置：先退出 waiver，再修改任何标准行为。
+- P04 plan 的 Task 1 必须逐字采用本规格的 `WAIVER_EXIT_GATE_1..6`；现有扫描范围、步骤和
+  report 若与 gate ID 不一致，先修订计划和 verifier，不能让“计划 GREEN、规格失败”。
 - Task 1 后新增 JDBC 4.2 inventory/disposition gate，冻结对象、方法、常量和 owner。
 - 现有 capability、resource cleanup、BufferedRowSet/QueryCursor 任务必须引用本规格并以
   inventory 为分母。
@@ -508,6 +610,8 @@ flowchart LR
   证明，不能以未发布为由无约束变化。
 - P03 对现有 `druid` module-qualified public path 保持零删除预算。
 - P04 的错误分层是有意 API 变化，必须提供 migration guide 和 exact public API diff。
+- `DruidPooledConnection: PhysicalConnection` 等 public trait impl 的移除也是有意 API 变化，
+  必须单独 snapshot、external-consumer/compile-fail 验证并提供替代 logical API。
 - 旧路径只能定向重导出同一类型，不能复制实现。
 - `#[doc(hidden)]` 不消除 semver 影响；实验 API 必须 private 或 feature-gated。
 - 不向已公开、第三方可实现的 Physical trait 增加无默认 required method。
@@ -516,7 +620,8 @@ flowchart LR
 
 - 不实现数据库 wire protocol。
 - 不复制 Java checked exception、reflection、`Class<T>`、JNDI、SecurityManager、
-  `SQLPermission` 执行机制、PrintWriter、Executor、JavaBeans 或 serialization UID。
+  `SQLPermission` 执行机制、PrintWriter、Executor、JavaBeans introspection/runtime 或
+  serialization UID；RowSet 的 property/event 可观察语义仍在范围内。
 - 不复制 Java interface inheritance 或 Druid Java 中 `PooledConnection implements Connection`
   的类型合并。
 - 不把 Java 9 JDBC 4.3 的 request boundary、sharding key、builder 和 `enquote*` 纳入本轮。
@@ -528,12 +633,17 @@ flowchart LR
 
 只有以下全部满足，才能把 ADR-RDBC-004 标记为 IMPLEMENTED：
 
-1. 52 个 `java.sql` 和 17 个 `javax.sql` 对象均有机器可读唯一 disposition。
-2. 每个标准常量、声明/继承/default 方法和 overload 都有唯一 Rust owner/entry point。
+1. 52 个 `java.sql` 和 17 个 `javax.sql` 对象均有机器可读 inventory row；主 oracle 的
+   version/size/SHA-256 校验通过。
+2. 每个标准常量、声明/继承/default 方法和 overload 都有唯一 Java key、owner、
+   semantic disposition、evidence、capability state 和 Rust entry point。
 3. P04 Task 1 六项 waiver-exit gate 全部通过。
-4. `RdbcError` 保留 SQL exception fidelity，unsupported 统一为 `0A000`。
+4. `RdbcError` 保留 SQL exception fidelity、client-info/DataTruncation payload 和 i64 large
+   batch counts；SQL feature unsupported 为 `0A000`，Java default unsupported 使用独立
+   typed mapping。
 5. index/null/transaction/statement/result/resource/metadata lifecycle gate 通过。
-6. logical/physical ownership、native/external pool 和 exactly-once release gate 通过。
+6. logical/physical ownership、logical-not-Physical compile-fail、native/external pool 和
+   cancellation-safe exactly-once release gate 通过。
 7. capability=true 的每一项都有同 adapter 的测试证据。
 8. `druid::sql::*` compatibility、DAG、public API、semver、MSRV、fmt/check/clippy/test/doc 通过。
 9. Java/Rust differential 和真实数据库矩阵对所有“已支持”声明提供新鲜证据。
