@@ -98,11 +98,11 @@ pub trait ResultSet: Wrapper + Send + 'static {
 
     /// 关闭游标并释放其 owned actor/native handle。
     async fn close(&mut self) -> Result<(), RdbcError> {
-        Ok(())
+        Err(RdbcError::feature_not_supported("result_set_close"))
     }
 
     /// 返回游标是否已经关闭。
-    fn is_closed(&self) -> bool {
-        false
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::feature_not_supported("result_set_is_closed"))
     }
 }

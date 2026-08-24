@@ -9,6 +9,6 @@ pub trait PooledConnection: Send {
 
     /// 关闭该 pooled connection owner。
     async fn close(&mut self) -> Result<(), RdbcError> {
-        Ok(())
+        Err(RdbcError::feature_not_supported("pooled_connection_close"))
     }
 }

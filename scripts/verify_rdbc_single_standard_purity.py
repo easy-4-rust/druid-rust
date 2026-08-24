@@ -22,7 +22,11 @@ REQUIRED_CANONICAL_MODULES = (
     "wrapper",
 )
 TRANSITIONAL_ROOT_MODULES = {"compat", "error", "resource", "spi", "types"}
-ALLOWED_EXTERNAL_IMPORT_ROOTS = {"alloc", "async_trait", "core", "std"}
+ALLOWED_EXTERNAL_IMPORT_ROOTS = {
+    "alloc", "async_trait", "bool", "char", "clippy", "core", "f32", "f64", "i8",
+    "i16", "i32", "i64", "i128", "isize", "str", "std", "u8", "u16", "u32",
+    "u64", "u128", "usize",
+}
 ALLOWED_CRATE_MODULES = {*REQUIRED_CANONICAL_MODULES, "error", "types"}
 
 
@@ -109,9 +113,10 @@ def discover_standard_files(root: Path) -> tuple[Path, ...]:
     return tuple(sorted(path.relative_to(root) for path in files))
 
 
-def verify_imports(relative: Path, tokens: list[object], local_roots: set[str]) -> None:
+def verify_imports(relative: Path, tokens: list[object], local_roots: set[str]) -> set[int]:
     """Reject imports outside the canonical crate/std allowlist."""
 
+    covered: set[int] = set()
     index = 0
     while index < len(tokens):
         if tokens[index].text != "use":
@@ -135,7 +140,68 @@ def verify_imports(relative: Path, tokens: list[object], local_roots: set[str]) 
                 continue
             elif root_name not in ALLOWED_EXTERNAL_IMPORT_ROOTS and root_name not in local_roots:
                 fail(f"backend/external import is forbidden in {relative}: {'::'.join(path)}")
+        covered.update(range(index, min(end + 1, len(tokens))))
         index = max(index + 1, end + 1)
+    return covered
+
+
+def verify_non_use_paths(
+    relative: Path,
+    tokens: list[object],
+    local_roots: set[str],
+    import_indexes: set[int],
+) -> None:
+    """Reject backend paths, extern crates, macros and source-tree escape edges."""
+
+    for index, token in enumerate(tokens):
+        if index in import_indexes:
+            continue
+        name = token.text.removeprefix("r#")
+        if name == "include" and index + 1 < len(tokens) and tokens[index + 1].text == "!":
+            fail(f"include! escapes canonical source discovery in {relative}")
+        if (
+            name == "path"
+            and index >= 2
+            and tokens[index - 1].text == "["
+            and tokens[index - 2].text == "#"
+        ):
+            fail(f"#[path] escapes canonical source discovery in {relative}")
+        if (
+            name == "extern"
+            and index + 2 < len(tokens)
+            and tokens[index + 1].text == "crate"
+        ):
+            crate_name = tokens[index + 2].text.removeprefix("r#")
+            if crate_name not in ALLOWED_EXTERNAL_IMPORT_ROOTS:
+                fail(f"extern crate is forbidden in {relative}: {crate_name}")
+        if (
+            name == "mod"
+            and index + 1 < len(tokens)
+            and tokens[index + 1].kind == "IDENT"
+        ):
+            module_name = tokens[index + 1].text.removeprefix("r#")
+            if module_name not in local_roots:
+                fail(f"module declaration escapes discovered canonical files in {relative}: {module_name}")
+        if (
+            token.kind == "IDENT"
+            and name[:1].islower()
+            and index + 1 < len(tokens)
+            and tokens[index + 1].text == "::"
+            and (index == 0 or tokens[index - 1].text not in {"::", "."})
+            and name not in {"crate", "self", "super"}
+            and name not in ALLOWED_EXTERNAL_IMPORT_ROOTS
+            and name not in local_roots
+        ):
+            fail(f"fully-qualified backend path is forbidden in {relative}: {name}::")
+        if (
+            name in {"self", "super"}
+            and index + 2 < len(tokens)
+            and tokens[index + 1].text == "::"
+            and tokens[index + 2].kind == "IDENT"
+        ):
+            module_name = tokens[index + 2].text.removeprefix("r#")
+            if module_name not in local_roots:
+                fail(f"relative module path escapes discovered canonical files in {relative}: {module_name}")
 
 
 def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
@@ -169,7 +235,8 @@ def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
         local_roots.update(
             child.name for child in path.parent.iterdir() if child.is_dir()
         )
-        verify_imports(relative, tokens, local_roots)
+        import_indexes = verify_imports(relative, tokens, local_roots)
+        verify_non_use_paths(relative, tokens, local_roots, import_indexes)
         if relative.name == "mod.rs":
             verify_module_root(relative, token_texts)
     return standard_files

@@ -3,8 +3,6 @@ use druid_rdbc::error::RdbcError;
 use druid_rdbc::metadata::{DatabaseMetaData, ParameterMetaData, ResultSetMetaData, TablesQuery};
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{PreparedStatement, Statement, StatementOptions};
-use druid_rdbc::wrapper::Wrapper;
-use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -24,26 +22,12 @@ struct MockPreparedStatement {
     parameter_meta_data: Arc<dyn ParameterMetaData>,
 }
 
-macro_rules! impl_wrapper {
-    ($($target:ty),+ $(,)?) => {
-        $(
-            impl Wrapper for $target {
-                fn as_any(&self) -> &dyn Any {
-                    self
-                }
-            }
-        )+
-    };
-}
-
-impl_wrapper!(
-    MockConnection,
-    MockDatabaseMetaData,
-    MockResultSet,
-    MockResultSetMetaData,
-    MockParameterMetaData,
-    MockPreparedStatement,
-);
+druid_rdbc::impl_standard_wrapper!(MockConnection => Connection);
+druid_rdbc::impl_standard_wrapper!(MockDatabaseMetaData => DatabaseMetaData);
+druid_rdbc::impl_standard_wrapper!(MockResultSet => ResultSet);
+druid_rdbc::impl_standard_wrapper!(MockResultSetMetaData => ResultSetMetaData);
+druid_rdbc::impl_standard_wrapper!(MockParameterMetaData => ParameterMetaData);
+druid_rdbc::impl_standard_wrapper!(MockPreparedStatement => PreparedStatement);
 
 impl ResultSetMetaData for MockResultSetMetaData {
     fn column_count(&self) -> usize {

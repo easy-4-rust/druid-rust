@@ -17,7 +17,7 @@ use druid_rdbc::statement::{
     StatementExecuteResult, StatementOptions,
 };
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper, WrapperExt};
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 
 fn assert_send_static<T: Send + 'static + ?Sized>() {}
 
@@ -33,40 +33,7 @@ struct SurfaceResultSet;
 struct GeneratedKeysStatement;
 struct SurfaceParameterMetaData;
 
-impl Wrapper for CanonicalConnection {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn is_wrapper_for(&self, target: Option<TypeId>) -> Result<bool, druid_rdbc::error::RdbcError> {
-        let target = target.ok_or_else(|| {
-            druid_rdbc::error::RdbcError::InvalidArgument(
-                "wrapper target must not be null".to_string(),
-            )
-        })?;
-        Ok(target == TypeId::of::<dyn Connection>() || target == self.as_any().type_id())
-    }
-
-    fn unwrap(
-        &self,
-        target: Option<TypeId>,
-    ) -> Result<StandardUnwrapped<'_>, druid_rdbc::error::RdbcError> {
-        let target = target.ok_or_else(|| {
-            druid_rdbc::error::RdbcError::InvalidArgument(
-                "wrapper target must not be null".to_string(),
-            )
-        })?;
-        if target == TypeId::of::<dyn Connection>() {
-            return Ok(StandardUnwrapped::Connection(self));
-        }
-        if target == self.as_any().type_id() {
-            return Ok(StandardUnwrapped::Object(self));
-        }
-        Err(druid_rdbc::error::RdbcError::feature_not_supported(
-            "wrapper_unwrap_target",
-        ))
-    }
-}
+druid_rdbc::impl_standard_wrapper!(CanonicalConnection => Connection);
 
 #[async_trait::async_trait]
 impl Connection for CanonicalConnection {
@@ -80,23 +47,9 @@ impl Connection for CanonicalConnection {
     }
 }
 
-impl Wrapper for SurfaceResultSet {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Wrapper for GeneratedKeysStatement {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl Wrapper for SurfaceParameterMetaData {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+druid_rdbc::impl_standard_wrapper!(SurfaceResultSet => ResultSet);
+druid_rdbc::impl_standard_wrapper!(GeneratedKeysStatement => Statement);
+druid_rdbc::impl_standard_wrapper!(SurfaceParameterMetaData => ParameterMetaData);
 
 #[async_trait::async_trait]
 impl ResultSet for SurfaceResultSet {
@@ -129,11 +82,7 @@ impl ParameterMetaData for SurfaceParameterMetaData {
     }
 }
 
-impl Wrapper for CredentialAwareDataSource {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+druid_rdbc::impl_standard_wrapper!(CredentialAwareDataSource => DataSource);
 
 impl CommonDataSource for CredentialAwareDataSource {}
 impl CommonDataSource for CredentialAwareConnectionPoolDataSource {}

@@ -352,3 +352,54 @@ GREEN。
 - Cargo manifests/lockfile未修改；未引入依赖。
 - 仍不宣称 adapter/logical LIVE、Task 4 cutover、JDBC compliance 或 Task 6 removal。
 - 原报告已记录的 `rdbc_error.rs` scope Minor 保持 deferred；本 fix round 不扩散处理。
+
+### Round 1 re-review correction
+
+Round 1 状态更正为 **PARTIAL**。先前“2 Critical + 5 Important 全部关闭 / open finding 0”
+由本段明确 supersede。Re-review 仍有 `1 Critical + 2 Important open`：external implementor
+canonical Wrapper identity、Statement/ResultSet/PooledConnection lifecycle default-failure、
+以及 purity fully-qualified/macro/extern/path/include fail-closed boundary。其余 capabilities、
+credentials/Connection lifecycle、indexes/generated keys/metadata、DruidError/RdbcError external
+fixture 四组保持 ADDRESSED。
+
+## Fix round 2/5：external canonical identity 与完整 purity boundary
+
+- 修复基线：`63ab3f1e36bd8c7344cfa192b9ce77344e9e3bfe`
+- Re-review：`1 Critical + 2 Important`
+- 结果：三项均以 fresh RED→GREEN 关闭；未进入 Task 4，未修改 Physical/Cargo。
+
+### RED / GREEN
+
+1. **External Wrapper identity Critical**：真实 temp crate 首次 RED 为 macro 缺失 `E0433`、
+   Connection/Statement/ResultSet 未满足 Wrapper `E0277`、canonical methods 缺失 `E0599`。
+   GREEN 后 external implementor 只需单行
+   `impl_standard_wrapper!(Type => CanonicalTrait)`；类型判断表只存在于 druid-rdbc macro，
+   下游不复制。Wrapper core移除 `Any/as_any`；StandardUnwrapped 移除 `Object`；concrete
+   downcast 仅在 `WrapperExt` 的 `Self: Sized + Any` 方法内。External binary实际运行并证明
+   Connection canonical is/unwrap、unknown false/unsupported error、null InvalidArgument、具体
+   downcast仅经 WrapperExt。
+2. **Lifecycle Important**：external fixture 对 Statement/ResultSet `close/is_closed` 与
+   PooledConnection `close` 的 desired Result contract产生 `E0308` RED；GREEN defaults全部返回
+   typed feature-not-supported，不再 Ok/false 矛盾。
+3. **Purity Important**：adversarial fixture 对 fully-qualified type path、extern crate、macro
+   path、self backend module、`#[path]`、`include!` 六项在旧 verifier 下 assertion RED；grouped/
+   alias/absolute use已由旧 gate拒绝。GREEN verifier tokenizes而不扫描doc/string/comment，动态
+   tree一致扫描所有 files；覆盖 use ranges、普通qualified/macro paths、extern、relative module、
+   path/include edge。正向 std grouped、crate grouped、doc/string controls通过。
+
+### Fresh gates
+
+```text
+purity self-tests                       9/9
+live purity                             STANDARD_FILES=29
+druid-rdbc all-target/all-feature tests 17/17
+semantic                               52/17/UNKNOWN=0
+live denominator                        73/55/3559
+consumer SHA-256                        b1b420d61a8c...1c72c59
+workspace all-target/all-feature check PASS
+external DruidError/RdbcError tests     PASS
+Clippy -D warnings / rustdoc / fmt      PASS
+```
+
+已知 non-RDBC admin supervisor exact failure保持原记录，不重复 broad workspace test；未写
+GREEN。Round 2 reviewer findings open：`0`。

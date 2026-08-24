@@ -2,8 +2,6 @@ use druid_rdbc::connection::Connection;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{Statement, StatementOptions};
-use druid_rdbc::wrapper::Wrapper;
-use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -23,19 +21,9 @@ struct MockResultSet {
     advanced: bool,
 }
 
-macro_rules! impl_wrapper {
-    ($($target:ty),+ $(,)?) => {
-        $(
-            impl Wrapper for $target {
-                fn as_any(&self) -> &dyn Any {
-                    self
-                }
-            }
-        )+
-    };
-}
-
-impl_wrapper!(MockConnection, MockStatement, MockResultSet);
+druid_rdbc::impl_standard_wrapper!(MockConnection => Connection);
+druid_rdbc::impl_standard_wrapper!(MockStatement => Statement);
+druid_rdbc::impl_standard_wrapper!(MockResultSet => ResultSet);
 
 #[async_trait::async_trait]
 impl Connection for MockConnection {

@@ -1,7 +1,6 @@
 use crate::error::RdbcError;
 use crate::result_set::ColumnIndex;
 use crate::wrapper::Wrapper;
-use std::any::Any;
 
 /// JDBC column nullability descriptor。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -123,11 +122,7 @@ impl ResultSetMetaData for ResultSetMetaDataSnapshot {
     }
 }
 
-impl Wrapper for ResultSetMetaDataSnapshot {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+crate::impl_standard_wrapper!(ResultSetMetaDataSnapshot => ResultSetMetaData);
 
 impl ColumnDescriptor {
     /// 创建 column snapshot。

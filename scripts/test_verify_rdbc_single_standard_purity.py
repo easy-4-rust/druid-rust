@@ -113,6 +113,39 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaises(VerificationError):
             verify_tree(self.root, phase="transitional")
 
+    def test_rejects_backend_paths_macros_extern_and_tree_escape_edges(self) -> None:
+        """Non-use paths and source-tree escape mechanisms fail closed."""
+
+        source = self.root / "connection/contract.rs"
+        for payload in (
+            "pub type X = sqlx::Executor;\n",
+            "extern crate sqlx as backend;\n",
+            'fn query() { let _ = sqlx::query!("select 1"); }\n',
+            "mod backend { pub struct Executor; }\nuse self::backend::Executor;\n",
+            '#[path = "../hidden.rs"] mod backend;\n',
+            'include!("../hidden.rs");\n',
+            "use sqlx::{Executor as BackendExecutor};\n",
+            "use ::sqlx::Executor;\n",
+        ):
+            source.write_text(payload, encoding="utf-8")
+            with self.subTest(payload=payload), self.assertRaises(VerificationError):
+                verify_tree(self.root, phase="transitional")
+
+    def test_allows_documentation_strings_and_grouped_standard_imports(self) -> None:
+        """Token analysis ignores prose/literals and accepts grouped std/crate imports."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "/// sqlx::Executor is prose only.\n"
+            "// backend_driver::Pool is a comment.\n"
+            'const NOTE: &str = "sqlx::query!(backend)";\n'
+            "use std::{any::TypeId, sync::Arc};\n"
+            "use crate::{error::RdbcError, types::Value};\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

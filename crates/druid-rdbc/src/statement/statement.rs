@@ -181,12 +181,12 @@ pub trait Statement: Wrapper + Send + 'static {
 
     /// 关闭 statement handle。
     async fn close(&mut self) -> Result<(), RdbcError> {
-        Ok(())
+        Err(RdbcError::feature_not_supported("statement_close"))
     }
 
     /// 返回 statement 是否关闭。
-    fn is_closed(&self) -> bool {
-        false
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::feature_not_supported("statement_is_closed"))
     }
 
     /// 返回当前 statement warnings 的标准值视图。
