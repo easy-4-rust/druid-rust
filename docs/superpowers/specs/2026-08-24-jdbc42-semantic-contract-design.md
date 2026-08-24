@@ -36,9 +36,10 @@
 | :--- | :--- |
 | JDBC 规范 | JSR 221 JDBC 4.2 Maintenance Release 2 |
 | Java API | Java SE 8 `java.sql` + `javax.sql` |
-| Java 源码主 oracle | Amazon Corretto `8.504.01.1`, build `1.8.0_504-b01` |
-| 主 oracle `src.zip` SHA-256 | `78382879ce27027519f752906d205e6136bf99e7dc9bcd9c0addf4d189ffc1af` |
-| 主 oracle archive size | `52,674,842` bytes |
+| Java 源码主 oracle | OpenJDK 8 tag `jdk8u502-b07`，peeled commit `7373384725418fa645fb4508ec05a869bc7fc3e7` |
+| 主 oracle archive | `https://github.com/openjdk/jdk8u/archive/7373384725418fa645fb4508ec05a869bc7fc3e7.tar.gz` |
+| 主 oracle archive SHA-256 / size | `5f9c0657c534319a272751431a1f5919cfdcd4e0ac4e0fb9b7e181bc27fa489b` / `94,004,963` bytes |
+| 本机交叉校验 | Corretto build `1.8.0_504-b01` 的 `src.zip`；仅作交叉验证，不作为可下载主 oracle |
 | API 文档交叉校验 | Oracle Java SE 8 `java.sql` / `javax.sql` API |
 | Druid 语义基线 | Alibaba Druid `1.2.28` |
 | Druid commit | `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
@@ -48,10 +49,12 @@
 | Edition / resolver | `2021` / `2` |
 | unsafe policy | `forbid` |
 
-生成 inventory 前必须校验主 oracle 的版本、字节数和 SHA-256。若归档不可得或 hash
-不匹配，inventory gate 必须失败；OpenJDK 8 其他发行版只能作为交叉验证来源。执行时还
-必须重新记录实际 HEAD、工作树、Cargo metadata、工具版本和 CodeGraph 状态；上表不是
-使用陈旧结果宣称完成的许可。
+生成 inventory 前必须校验主 oracle 的 tag peeled commit、archive 字节数和 SHA-256。
+若归档不可得或 hash 不匹配，inventory gate 必须失败；其他 OpenJDK 8 发行版只能作为
+交叉验证来源。本机 Corretto `src.zip` 下 `java/sql/**/*.java` 与
+`javax/sql/**/*.java` 已与该 commit 逐文件比较一致，差异只存在于未打包进 `src.zip` 的
+`package.html`、properties 和 XSD 资源。执行时还必须重新记录实际 HEAD、工作树、Cargo
+metadata、工具版本和 CodeGraph 状态；上表不是使用陈旧结果宣称完成的许可。
 
 ## 3. 当前事实
 
@@ -228,7 +231,8 @@ sequenceDiagram
 
 | 列 | 允许值 |
 | :--- | :--- |
-| `java_fqcn` / `java_member` | Java 8 主 oracle 中的唯一对象与 member signature |
+| `item_key` | 唯一 key：标准项为 `java:<fqcn>#<signature>`，Rust 扩展为 `rust:<module-path>` |
+| `java_fqcn` / `java_member` | Java 8 主 oracle 中的对象/member；Rust 扩展两列均为 `-` |
 | `owner` | `DRUID_RDBC`, `DRUID`, `WRAPPER`, `JAVA_RUNTIME` |
 | `semantic_disposition` | `MATCH`, `SQL_FEATURE_UNSUPPORTED_0A000`, `JAVA_DEFAULT_UNSUPPORTED_TYPED`, `JAVA_RUNTIME_ONLY`, `RUST_EXTENSION` |
 | `evidence_level` | `DECLARED`, `IMPLEMENTED`, `TESTED`, `REAL_DB` |
@@ -245,8 +249,9 @@ sequenceDiagram
   不伪装成 `0A000`。
 - `RUST_EXTENSION` 不进入 JDBC parity 分母，但仍必须有 owner、entry point 与独立测试。
 
-禁止 `MISSING`、`UNKNOWN`、空列、重复 Java key 或一个 Java key 出现两个互相冲突的
-`owner`/`semantic_disposition`。同一行可以合法表达
+禁止 `MISSING`、`UNKNOWN`、空列、重复 `item_key` 或一个标准 Java key 出现两个互相冲突的
+`owner`/`semantic_disposition`。Rust extension 必须使用独立 `rust:` key，不能伪造 Java
+member。同一行可以合法表达
 `owner=DRUID + semantic_disposition=SQL_FEATURE_UNSUPPORTED_0A000 + evidence_level=TESTED`。
 
 ## 7. 标准语义合同
@@ -273,8 +278,10 @@ sequenceDiagram
 - query、update、generic execute、batch、generated keys 和 large counts 必须分别建模。
 - batch 保持输入顺序，并使用无损 `i64` 存储或等价 `BatchUpdateCounts` 类型，区分成功、
   `SUCCESS_NO_INFO=-2`、`EXECUTE_FAILED=-3` 与 partial counts。JDBC `int[]` 兼容视图是
-  checked projection；超过 `i32::MAX` 时不得截断，必须保留 `getLargeUpdateCounts` 等价
-  结果并返回可诊断的窄化错误。
+  Java-compatible projection：逐项执行与 Java `(int) longValue` 相同的低 32-bit two's
+  complement 窄化，不抛新增错误；`getLargeUpdateCounts` 等价入口始终返回无损 `i64`
+  clone。Rust 另提供不同名称的 checked projection（例如 `try_update_counts_i32`），溢出时
+  返回结构化错误并标记 `RUST_EXTENSION`，不能改变 JDBC compatibility entry point。
 - ResultSet 初始在 before-first；forward-only/read-only 是最低必选能力。
 - scrollable/updatable 是可选能力，但不能伪报支持。
 - buffered result 与 async cursor 使用两个显式类型；`Vec<Row>` 结果不得命名为 streaming。
@@ -393,10 +400,12 @@ stateDiagram-v2
     DriverReleasing --> DriverOutcomeUnknown: cancellation / transport ambiguity
     DriverReleaseFailedRetryable --> ReleaseScheduled: retry with same resource id
     DriverReleasedOwnerPending --> Released: owner bookkeeping confirms
-    DriverReleasedOwnerPending --> DriverReleasedOwnerPending: retry owner notification only
+    DriverReleasedOwnerPending --> DriverReleasedOwnerPending: bounded owner retry only
+    DriverReleasedOwnerPending --> ReleasedOwnerNotificationFailed: attempts/deadline exhausted
     DriverOutcomeUnknown --> Released: driver reconciliation proves released
     DriverOutcomeUnknown --> ReleaseScheduled: reconciliation proves not released
     Released --> Released: repeated free is no-op
+    ReleasedOwnerNotificationFailed --> ReleasedOwnerNotificationFailed: repeated free returns same diagnostic
 ```
 
 要求：
@@ -409,8 +418,11 @@ stateDiagram-v2
 - 每次释放携带稳定 resource ID/idempotency key。只有 driver 明确保证“未发生释放”时才可
   重试 driver call；结果未知时必须先 reconcile，不能盲目 double-free。
 - driver 已释放而 owner bookkeeping 未完成时，只重试 owner notification，不再调用 driver。
-- waiters 只在 `Released`、可重试失败或 outcome-unknown 三种可诊断终态被唤醒，不能观察
-  伪成功。
+- owner notification policy 必须有界且可配置；默认最多 3 次尝试（初次 + 2 次重试），
+  backoff 为 10ms、50ms，总 deadline 为 1s。测试使用 paused time。deadline、shutdown 或
+  最大次数到达时进入 `ReleasedOwnerNotificationFailed`，物理资源仍保持 released。
+- waiters 在 `Released`、`ReleasedOwnerNotificationFailed`、可重试 driver failure 或
+  `DriverOutcomeUnknown` 被唤醒并获得可诊断结果，不能永久等待或观察伪成功。
 - Array/Blob/Clob position 保持 1-based；free 后除 repeated free 外的操作返回 closed error。
 - SQLXML 的 readable/writable/initialized/freed 状态必须显式。
 - capability=false 时不得先改变资源状态再返回 unsupported。
@@ -635,7 +647,7 @@ flowchart LR
 
 1. 52 个 `java.sql` 和 17 个 `javax.sql` 对象均有机器可读 inventory row；主 oracle 的
    version/size/SHA-256 校验通过。
-2. 每个标准常量、声明/继承/default 方法和 overload 都有唯一 Java key、owner、
+2. 每个标准常量、声明/继承/default 方法和 overload 都有唯一 `java:` item key、owner、
    semantic disposition、evidence、capability state 和 Rust entry point。
 3. P04 Task 1 六项 waiver-exit gate 全部通过。
 4. `RdbcError` 保留 SQL exception fidelity、client-info/DataTruncation payload 和 i64 large
