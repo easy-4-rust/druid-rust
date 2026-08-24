@@ -2,13 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 从当前 `druid` 中无行为抽取独立 `druid-rdbc` crate，集中平台类型、结构化 SQL 错误、Physical driver SPI 和资源 Access SPI，同时保持 `druid::sql::*` 与现有 adapter 行为。
+**Goal:** 保留 Tasks 1–5 已执行抽取的可恢复证据，冻结错误 bridge-owner 过渡态，并把最终分层交给新的 P04；本计划不再把 `druid-rdbc::spi/Physical*` 视为目标架构。
 
-**Architecture:** 按 scaffold/boundary → 无 `DruidError` 平台值与 SQL 异常 → `RdbcString`/依赖错误的平台值/完整 24-variant `DruidError` 原子兼容切片 → Physical/Resource/Wrapper 完整 SCC → wrapper import cutover → API/DAG closeout 六个任务执行。P03 临时把现有 `DruidError` 实现放在 `druid_rdbc::compat`，`druid` 旧路径只暴露同一类型；P04 Task 1 必须把 driver-facing 错误切换到 `RdbcError` 并把 Druid 产品错误实现移回 `druid`。
+**Architecture:** Tasks 1–5 是已经执行的 transitional extraction：Physical/Resource/Wrapper SCC 曾被临时移入 `druid-rdbc` 并让 wrapper direct-import。用户复核后批准 ADR-RDBC-005：最终 `druid-rdbc` 只拥有 JDBC 4.2 standard contract，Druid bridge 移入 `druid::bridge`。Task 6 只做 recovery freeze/handoff；P04 Task 1 先退出 error waiver，后续再以 additive seam + atomic owner swap 修正 owner。
 
 **Tech Stack:** Cargo workspace、Rust 2021、cargo-public-api、cargo-semver-checks、CodeGraph
 
-**Spec:** `docs/superpowers/specs/2026-08-21-rdbc-first-five-crate-architecture.md`
+**Spec:** `docs/superpowers/specs/2026-08-24-jdbc42-standard-bridge-layering.md`
+
+## Architecture correction — binding
+
+- ADR-RDBC-005 取代本计划原始 Physical-SPI-in-rdbc 目标。
+- Tasks 1–5 的历史任务文本保留为已执行证据，不再作为最终 owner 决策。
+- 原 Task 6 已退休，禁止执行其“公开 `druid-rdbc::spi`”和“完成 isolated contract
+  extraction”步骤。
+- 当前 P03 完成态只能是 `TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04`。
+- 新 P04 的 Task 1 必须强制退出 `compat::DruidError` waiver；之后才允许 bridge owner
+  correction。
 
 ## Global Constraints
 
@@ -801,7 +811,10 @@ The postcommit hook fails for a late working-tree mutation, an accidentally stag
 or a Task 5 commit that changed either frozen file; source/hash validation runs before all six Git
 diff guards.
 
-### Task 6: 收口 public API、DAG 和文档
+### Historical Task 6 (RETIRED): 收口旧 public API、DAG 和文档
+
+> **DO NOT EXECUTE.** 本节保留用于解释旧 Task 6 为什么曾被 `cargo-semver-checks`
+> 阻塞。其目标 `druid-rdbc::spi` 已被 ADR-RDBC-005 否决，由文件末尾的新 Task 6 取代。
 
 **Files:**
 - Modify: `crates/druid-rdbc/src/lib.rs`
@@ -1009,3 +1022,112 @@ Expected: PASS and restore the same branch/HEAD. This available gate is mandator
 `cargo-semver-checks`. If it fails after the local commit, keep the commit recoverable, mark Task 6
 incomplete, make a new corrective commit, and rerun; do not reset, amend, force, push, or describe
 P03 as complete.
+
+### Task 6: 冻结过渡态并交接 bridge owner correction
+
+**Files:**
+- Modify: `.superpowers/sdd/2026-08-21-druid-rdbc-extraction/progress.md`
+- Create: `docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md`
+- Create: `docs/verification/rdbc-first/rdbc-bridge-breaking-inventory.tsv`
+- Create: `api/druid-rdbc-spi.transitional.txt`
+- Modify: `docs/verification/rdbc-first/status.md`
+- Modify: `crates/druid-rdbc/src/lib.rs`
+- Test: `crates/druid/tests/rdbc_external_consumer_test.rs`
+
+**Interfaces:**
+- Consumes: Tasks 1–5 current HEAD, 285-row old/new path denominator, wrapper direct-import
+  manifest and transitional `compat::DruidError`.
+- Produces: recovery status `TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04`、every public
+  `druid_rdbc::spi/resource-runtime` item 的 target disposition、P04 owner-swap input。
+- Does not produce: final `druid-rdbc` API、final bridge owner、semver compatibility claim。
+
+- [ ] **Step 1: Freeze current evidence without installing tools**
+
+Run:
+
+```bash
+git status --short --branch
+git rev-parse HEAD
+python3 scripts/verify_rdbc_dependency_boundary.py
+python3 scripts/verify_rdbc_public_paths.py --source-only
+python3 scripts/verify_wrapper_rdbc_import_boundary.py
+cargo check --workspace --all-targets --all-features
+cargo test -p druid --test rdbc_external_consumer_test
+```
+
+Expected: current transitional state compiles and existing source/path/import gates pass. Do not
+install `cargo-semver-checks`; unavailable semver tooling is recorded `NOT_RUN`, not PASS。
+
+- [ ] **Step 2: Capture transitional public surface**
+
+```bash
+cargo public-api -p druid-rdbc -sss --all-features \
+  > api/druid-rdbc-spi.transitional.txt
+test -s api/druid-rdbc-spi.transitional.txt
+```
+
+`rdbc-bridge-breaking-inventory.tsv` uses exact columns：
+
+```text
+old_path<TAB>classification<TAB>target_owner<TAB>target_path<TAB>compatibility<TAB>evidence
+```
+
+Every current `druid_rdbc::spi::*` and runtime `resource::{Rdbc*Access,Context,Factory,Owner,
+State,Id,Kind,Capabilities}` public item has exactly one row。`classification` is
+`STANDARD_DTO`、`BRIDGE_PORT`、`BRIDGE_RUNTIME`、`SPLIT_REQUIRED` or `CONCRETE_FALLBACK`；
+`target_owner` is `DRUID_RDBC_STANDARD` or `DRUID_BRIDGE`。No `UNKNOWN`/empty/duplicate row。
+
+- [ ] **Step 3: Write executable P04 handoff**
+
+`rdbc-transitional-owner-handoff.md` records：
+
+- exact HEAD and API snapshot SHA-256；
+- Tasks 1–5 commits and review state；
+- the three parked P03 verification issues；
+- transitional `DruidError` waiver；
+- current wrapper import denominator；
+- the breaking inventory row count/hash；
+- mandatory next plan
+  `docs/superpowers/plans/2026-08-24-rdbc-standard-bridge-realignment.md` Task 1。
+
+It must state exactly：
+
+```text
+P03 status: TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04
+P03 is not the accepted final ADR-RDBC-005 architecture.
+P04 Task 1 must exit the DruidError waiver before the bridge owner swap.
+```
+
+- [ ] **Step 4: Update docs without changing production ownership**
+
+Update `druid-rdbc/src/lib.rs` crate docs to label `spi` and runtime resource access as transitional
+until P04。Do not add standard traits, move files, change manifests or modify behavior in P03。
+
+- [ ] **Step 5: Verify the recovery handoff**
+
+```bash
+git diff --check
+test -s docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md
+test -s docs/verification/rdbc-first/rdbc-bridge-breaking-inventory.tsv
+rg -n 'TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04' \
+  docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md \
+  docs/verification/rdbc-first/status.md crates/druid-rdbc/src/lib.rs
+```
+
+Expected: all checks PASS and no production `.rs` file except crate docs changed。
+
+- [ ] **Step 6: Commit**
+
+The SDD `progress.md` is deliberately Git-ignored controller state and is not staged；verify its
+Ruling/status lines before staging, then stage only tracked recovery evidence。
+
+```bash
+rg -n 'Task 6 Ruling|TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04' \
+  .superpowers/sdd/2026-08-21-druid-rdbc-extraction/progress.md
+git add api/druid-rdbc-spi.transitional.txt \
+  docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md \
+  docs/verification/rdbc-first/rdbc-bridge-breaking-inventory.tsv \
+  docs/verification/rdbc-first/status.md crates/druid-rdbc/src/lib.rs
+git diff --cached --check
+git commit -m "docs(rdbc): freeze transitional bridge owner handoff"
+```

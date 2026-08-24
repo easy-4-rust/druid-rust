@@ -4,7 +4,7 @@
 
 **Goal:** 将当前 workspace 演进为 `druid-rdbc + druid + druid-wrapper + druid-metrics + druid-admin` 五产品 Crate，并以 `druid-bench` 统一承载合同、差分和性能验证。
 
-**Architecture:** 先修复会污染迁移基线的 P0 行为缺陷，再无行为抽取 `druid-rdbc`，随后强化错误、能力、异步游标、driver registry、feature 和运行时门禁。`druid` 保留核心产品身份和 `druid::sql::*` canonical 路径，不再执行已回滚的 `druid-core + facade` 拆分。
+**Architecture:** 先修复 P0 行为缺陷；P03 冻结已执行但 owner 错置的 transitional extraction；P04 把 `druid-rdbc` 收敛为 JDBC 4.2 standard contract，把完整 Physical hierarchy 原子迁到 `druid::bridge::physical`，由 wrapper 实现。随后执行 registry/feature/runtime/release 门禁。
 
 **Tech Stack:** Rust 2021、Cargo workspace、Tokio、Tonic/Prost、SQLx、Toasty、RBDC、bb8、deadpool、CodeGraph、cargo-public-api、cargo-semver-checks、Criterion
 
@@ -29,8 +29,8 @@
 flowchart LR
     P01["01 External Pool RDBC Conformance"]
     P02["02 Metrics/Admin Single Protocol"]
-    P03["03 druid-rdbc Extraction"]
-    P04["04 RDBC Contract Hardening"]
+    P03["03 Transitional Extraction Recovery"]
+    P04["04 JDBC Standard + Druid Bridge Realignment"]
     P05["05 Driver Registry & Feature Boundaries"]
     P06["06 Runtime Production Hardening"]
     P07["07 Verification & Release Gates"]
@@ -38,7 +38,7 @@ flowchart LR
     P01 --> P03
     P02 --> P06
     P03 --> P04
-    P03 --> P05
+    P04 --> P05
     P04 --> P06
     P05 --> P07
     P06 --> P07
@@ -55,9 +55,9 @@ P01 与 P02 可并行；P03 必须在 external pool 合同修复后开始，避�
 | :---: | :--- | :--- | :--- | :--- |
 | 01 | [External Pool RDBC Conformance](2026-08-21-external-pool-rdbc-conformance.md) | bb8/deadpool 与 direct SQLx 能力等价 | 当前 default suite 可运行 | 同一 conformance suite 全通过 |
 | 02 | [Metrics/Admin Single Protocol](2026-08-21-metrics-admin-single-protocol.md) | 唯一 proto、真实 payload、真实 gRPC、secure default | 当前两个 proto 已冻结为失败证据 | 双进程网络 E2E 通过 |
-| 03 | [druid-rdbc Extraction](2026-08-21-druid-rdbc-extraction.md) | 新低层 crate 与兼容重导出 | P01 完成；API baseline 已捕获 | DAG、外部消费者和 workspace 门禁通过 |
-| 04 | [RDBC Contract Hardening](2026-08-21-rdbc-contract-hardening.md) | 分层错误、能力、cancellation-safe resource、async cursor | P03 完成 | direct/external adapter 新合同通过 |
-| 05 | [Driver Registry and Feature Boundaries](2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional features | P03 完成 | feature powerset 与 forbidden deps 通过 |
+| 03 | [druid-rdbc Transitional Extraction Recovery](2026-08-21-druid-rdbc-extraction.md) | 冻结 Tasks 1–5 过渡态、breaking inventory 与 P04 handoff | P01 完成；当前已执行到 Task 5 | `TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04` 有完整证据 |
+| 04 | [JDBC Standard Contract and Druid Bridge Realignment](2026-08-24-rdbc-standard-bridge-realignment.md) | 69 对象标准合同、完整 Physical hierarchy、logical/raw standard adapters、runtime hardening | P03 recovery handoff | standard purity、Physical owner/method map、adapter/differential/semver gates 通过 |
+| 05 | [Driver Registry and Feature Boundaries](2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional features | P04 bridge owner 稳定 | feature powerset 与 forbidden deps 通过 |
 | 06 | [Runtime Production Hardening](2026-08-21-runtime-production-hardening.md) | 有界队列、supervisor、shutdown、TTL、认证 | P02 完成；P04 稳定 | 故障、过载、安全门禁通过 |
 | 07 | [Verification and Release Readiness](2026-08-21-rdbc-first-verification.md) | 最终依赖、API、语义、NFR、发布报告 | P01-P06 完成 | 规格第 10 节全部有证据 |
 
@@ -67,15 +67,17 @@ P01 与 P02 可并行；P03 必须在 external pool 合同修复后开始，避�
 stateDiagram-v2
     [*] --> BaselineFrozen
     BaselineFrozen --> P0Stabilized
-    P0Stabilized --> RdbcExtracted
-    RdbcExtracted --> ContractHardened
+    P0Stabilized --> TransitionalExtractionFrozen
+    TransitionalExtractionFrozen --> StandardBridgeRealigned
+    StandardBridgeRealigned --> ContractHardened
     ContractHardened --> RuntimeHardened
     RuntimeHardened --> ReleaseVerified
     ReleaseVerified --> [*]
 
     P0Stabilized --> BaselineFrozen: parity regression
-    RdbcExtracted --> P0Stabilized: public API or DAG regression
-    ContractHardened --> RdbcExtracted: adapter contract regression
+    TransitionalExtractionFrozen --> P0Stabilized: recovery evidence regression
+    StandardBridgeRealigned --> TransitionalExtractionFrozen: owner/DAG regression
+    ContractHardened --> StandardBridgeRealigned: adapter contract regression
     RuntimeHardened --> ContractHardened: loss / security / shutdown regression
 ```
 
@@ -130,8 +132,8 @@ Create `docs/verification/rdbc-first/status.md` with exact rows:
 | external-pool-rdbc-conformance | NOT_STARTED | -- |
 | metrics-admin-single-protocol | NOT_STARTED | -- |
 | druid-rdbc-extraction | BLOCKED_BY_P01 | -- |
-| rdbc-contract-hardening | BLOCKED_BY_P03 | -- |
-| driver-registry-feature-boundaries | BLOCKED_BY_P03 | -- |
+| rdbc-standard-bridge-realignment | BLOCKED_BY_P03_RECOVERY | -- |
+| driver-registry-feature-boundaries | BLOCKED_BY_P04 | -- |
 | runtime-production-hardening | BLOCKED_BY_P02_P04 | -- |
 | rdbc-first-verification | BLOCKED_BY_P01_P06 | -- |
 ```
@@ -193,27 +195,29 @@ git add docs/verification/rdbc-first/status.md
 git commit -m "docs(verification): record rdbc-first p0 evidence"
 ```
 
-### Task 3: 抽取并强化 RDBC 合同
+### Task 3: 冻结过渡抽取并完成标准/bridge 重分层
 
 **Files:**
 - Execute: `docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md`
-- Execute: `docs/superpowers/plans/2026-08-21-rdbc-contract-hardening.md`
+- Execute: `docs/superpowers/plans/2026-08-24-rdbc-standard-bridge-realignment.md`
 - Execute: `docs/superpowers/plans/2026-08-21-driver-registry-feature-boundaries.md`
 - Modify: `docs/verification/rdbc-first/status.md`
 
 **Interfaces:**
 - Consumes: P01 conformance seam、old/new public API baseline
-- Produces: `druid-rdbc` package、`RdbcError`、capability contracts、async cursor、single registry
+- Produces: pure `druid-rdbc` standard contract、public `druid::bridge`、logical standard
+  implementations、capability/lifecycle/cursor and single registry
 
-- [ ] **Step 1: 执行无行为抽取计划**
+- [ ] **Step 1: 执行 P03 recovery closeout**
 
-Expected: `druid-rdbc` 不含 forbidden dependencies，`druid::sql::*` 外部消费者仍编译，
-default/all-features suite 不因目录移动改变行为。
+Expected: 冻结 Tasks 1–5 transitional owner、285-row denominator、breaking inventory and exact
+P04 handoff；不得声明旧 `druid-rdbc::spi` 为最终架构。
 
 - [ ] **Step 2: 执行合同强化计划**
 
-Expected: unsupported 统一 `0A000`；resource cancellation test、async cursor SQLite
-integration 和 buffered-row-set compatibility tests 全部通过。
+Expected: `druid-rdbc` 无 `spi/Physical*`/Druid runtime；`druid::bridge` 是唯一 wrapper
+port；SQL feature unsupported 为 `0A000`、Java default unsupported 单独建模；resource
+cancellation、async cursor、standard compatibility tests 全部通过。
 
 - [ ] **Step 3: 执行 registry/feature 计划**
 
@@ -303,8 +307,10 @@ git commit -m "docs(architecture): complete rdbc-first verification record"
 | external bb8/deadpool Prepared/Metadata/LOB 等价 | P01 | external-pool-conformance report |
 | Metrics/Admin 单一 proto、真实 payload、ACK/resend/reset/full snapshot | P02 | grpc network E2E + runtime security report |
 | Admin loopback/TLS/auth 和管理信息脱敏 | P02 + P06 | security E2E + threat model |
-| `druid-rdbc` 独立合同和 `druid::sql::*` 兼容 | P03 | DAG + external consumer + public API snapshot |
-| RDBC/Pool/Wall 错误分层与 0A000 | P04 | error contract + sorter regression |
+| P03 过渡抽取可恢复且不冒充最终架构 | P03 | handoff + breaking inventory + transitional API snapshot |
+| `druid-rdbc` JDBC standard purity 和 `druid::sql::*` 兼容 | P04 | 69-object inventory + purity + external consumer |
+| `druid::bridge::physical` 完整 Physical hierarchy、wrapper 实现 Physical | P04 | owner/import/method-map verifier + external implementor |
+| RDBC/Pool/Wall 错误分层与双 unsupported disposition | P04 | six waiver gates + error/sorter regression |
 | capability 声明可执行、direct/external 同合同 | P01 + P04 | adapter matrix |
 | cancellation-safe resource lifecycle | P04 | cancellation/owner failure tests |
 | async cursor 与 buffered row set 显式分型 | P04 | cursor test + ResultSet compatibility + benchmark |

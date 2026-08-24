@@ -78,7 +78,7 @@
 | 01 | [External Pool RDBC Conformance](plans/2026-08-21-external-pool-rdbc-conformance.md) | direct SQLx / bb8 / deadpool 统一合同 | 待执行 |
 | 02 | [Metrics/Admin Single Protocol](plans/2026-08-21-metrics-admin-single-protocol.md) | 唯一 proto、真实 payload/gRPC、安全默认值 | 待执行 |
 | 03 | [druid-rdbc Extraction](plans/2026-08-21-druid-rdbc-extraction.md) | 无行为抽取低层合同 crate、保持旧路径 | 待执行 |
-| 04 | [RDBC Contract Hardening](plans/2026-08-21-rdbc-contract-hardening.md) | 错误、能力、resource cancellation、async cursor | 待执行 |
+| 04 | [JDBC Standard Contract and Druid Bridge Realignment](plans/2026-08-24-rdbc-standard-bridge-realignment.md) | 69 对象标准合同、完整 Physical hierarchy、logical/raw adapters | 待执行 |
 | 05 | [Driver Registry and Feature Boundaries](plans/2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional dependencies、发布边界 | 待执行 |
 | 06 | [Runtime Production Hardening](plans/2026-08-21-runtime-production-hardening.md) | 有界队列、supervisor、shutdown、TTL、认证 | 待执行 |
 | 07 | [RDBC-First Verification](plans/2026-08-21-rdbc-first-verification.md) | 依赖、API、语义、可靠性、安全、性能和发布门禁 | 待执行 |

@@ -4,7 +4,7 @@
 
 **Goal:** 将 DriverManager、inventory extension 和 80 产品 registry 收敛为一条 canonical 建池路径，并让 Cargo feature 真正隔离 SQLx、Toasty、RBDC、外部池和管理工具依赖。
 
-**Architecture:** `druid-rdbc::spi::DriverProviderRegistry` 成为唯一 provider lookup；
+**Architecture:** `druid::bridge::DriverProviderRegistry` 成为唯一 provider lookup；
 `DruidDriverRegistry + DruidDatabasePoolBuilder` 在 Wrapper 中负责产品 profile 到 provider
 的解析；Java-compatible DriverManager 使用同一 provider registry 的显式注册 overlay，
 不让 `druid` 反向依赖 Wrapper。具体 driver dependencies 全部 optional，feature 名表示
@@ -12,11 +12,12 @@
 
 **Tech Stack:** Cargo features、inventory removal、async factory、cargo-hack、cargo tree
 
-**Spec:** `docs/superpowers/specs/2026-08-21-rdbc-first-five-crate-architecture.md`
+**Spec:** `docs/superpowers/specs/2026-08-24-jdbc42-standard-bridge-layering.md`
 
 ## Global Constraints
 
-- 前置：`druid-rdbc` extraction 完成。
+- 前置：P04 已完成 standard/bridge owner realignment；`druid::bridge` 是 canonical
+  adapter API，`druid-rdbc` 已无 SPI。
 - 80 产品 catalog 数量不是支持数量；只有 verified/certified 证据计入支持。
 - Registry 不得在 Tokio runtime 内调用 `Handle::current().block_on`。
 - 禁用 feature 时不得编译或链接对应依赖。
@@ -66,8 +67,8 @@ git commit -m "test(driver): freeze registry resolution differences"
 ### Task 2: 移除同步 inventory factory 陷阱
 
 **Files:**
-- Modify/Delete: `crates/druid-rdbc/src/spi/driver_extension_descriptor.rs`
-- Modify/Delete: `crates/druid-rdbc/src/spi/driver_extension_registry.rs`
+- Modify/Delete: `crates/druid/src/bridge/driver_extension_descriptor.rs`
+- Modify/Delete: `crates/druid/src/bridge/driver_extension_registry.rs`
 - Modify/Delete: `crates/druid-wrapper/src/driver/extensions.rs`
 - Modify: `crates/druid-wrapper/src/driver/druid_driver_registry.rs`
 - Modify: `crates/druid-wrapper/src/lib.rs`
@@ -94,7 +95,7 @@ Expected: FAIL/panic at `Handle::current().block_on`.
 - [ ] **Step 3: 改为显式 provider registration**
 
 Prefer deleting inventory and registering provider constructors in
-`druid_rdbc::spi::DriverProviderRegistry`; `DruidDriverRegistry::builtin` installs the Wrapper-owned
+`druid::bridge::DriverProviderRegistry`; `DruidDriverRegistry::builtin` installs the Wrapper-owned
 providers and profile mappings. A constructor only captures configuration synchronously; actual I/O
 occurs in `PhysicalConnectionFactory::create().await`.
 
@@ -114,7 +115,7 @@ Expected: all PASS and one canonical resolution path.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid-rdbc crates/druid-wrapper
+git add crates/druid/src/bridge crates/druid-wrapper
 git commit -m "refactor(driver): unify async-safe provider registry"
 ```
 
@@ -128,7 +129,7 @@ git commit -m "refactor(driver): unify async-safe provider registry"
 - Test: `crates/druid-wrapper/tests/driver_resolution_path_test.rs`
 
 **Interfaces:**
-- Consumes: `druid_rdbc::spi::DriverProviderRegistry`
+- Consumes: `druid::bridge::DriverProviderRegistry`
 - Produces: Java-compatible register/order/deregister overlay without duplicate provider metadata
 
 - [ ] **Step 1: 写 reentrancy 和 default acceptance RED test**
