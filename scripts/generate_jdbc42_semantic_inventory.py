@@ -415,7 +415,7 @@ def lifecycle_owner(record: JavaRecord) -> str:
 def render_semantic(records: list[JavaRecord]) -> bytes:
     """Render deterministic Task 2 semantic TSV bytes."""
 
-    from verify_jdbc42_semantic_inventory import SEMANTIC_HEADER
+    from verify_jdbc42_semantic_inventory import SEMANTIC_HEADER, parse_semantic_payload
 
     lines = [SEMANTIC_HEADER]
     for record in records:
@@ -452,7 +452,9 @@ def render_semantic(records: list[JavaRecord]) -> bytes:
                 )
             )
         )
-    return ("\n".join(lines) + "\n").encode("utf-8")
+    payload = ("\n".join(lines) + "\n").encode("utf-8")
+    parse_semantic_payload(payload)
+    return payload
 
 
 def render_oracle(records: list[JavaRecord], semantic_payload: bytes) -> bytes:

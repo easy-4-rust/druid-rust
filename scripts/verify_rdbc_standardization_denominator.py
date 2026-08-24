@@ -7,7 +7,8 @@ import argparse
 import hashlib
 import subprocess
 import sys
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, fields as dataclass_fields
 from pathlib import Path
 from typing import NoReturn
 
@@ -128,10 +129,7 @@ def run_git(root: Path, arguments: list[str]) -> bytes:
 def parse_physical_payload(payload: bytes, *, allow_legacy: bool) -> list[PhysicalRow]:
     """Parse one strict physical manifest; legacy evidence becomes a derived target task."""
 
-    try:
-        lines = payload.decode("utf-8").splitlines()
-    except UnicodeDecodeError as error:
-        fail(f"physical manifest is not UTF-8: {error}")
+    lines = canonical_tsv_lines(payload, "physical")
     if not lines:
         fail("physical manifest is empty")
     legacy = allow_legacy and lines[0] == LEGACY_PHYSICAL_HEADER
@@ -161,6 +159,94 @@ def parse_physical_payload(payload: bytes, *, allow_legacy: bool) -> list[Physic
                 target_task,
             )
         )
+    if not legacy:
+        require_sorted_unique_rows(rows, "physical")
+        if payload != render_physical_rows(tuple(rows)):
+            fail("physical manifest is not canonically serialized")
+    return rows
+
+
+def validate_tsv_field(value: str, label: str) -> None:
+    """Reject delimiters and control data before one value reaches a TSV artifact."""
+
+    if not value:
+        fail(f"{label} is empty")
+    if any(unicodedata.category(character) == "Cc" for character in value):
+        fail(f"{label} contains a TSV delimiter or control character")
+
+
+def canonical_tsv_lines(payload: bytes, label: str) -> list[str]:
+    """Decode a canonical TSV payload without normalizing CRLF or blank records."""
+
+    if not payload.endswith(b"\n") or payload.endswith(b"\n\n"):
+        fail(f"{label} manifest must have exactly one final newline")
+    if b"\r" in payload or any(
+        (byte < 0x20 and byte not in {0x09, 0x0A}) or byte == 0x7F
+        for byte in payload
+    ):
+        fail(f"{label} manifest contains a forbidden control byte")
+    try:
+        return payload.decode("utf-8").split("\n")[:-1]
+    except UnicodeDecodeError as error:
+        fail(f"{label} manifest is not UTF-8: {error}")
+
+
+def require_sorted_unique_rows(rows: list[object], label: str) -> None:
+    """Require one deterministic row order and reject exact duplicates."""
+
+    if rows != sorted(rows):
+        fail(f"{label} manifest rows are not sorted")
+    if len(rows) != len(set(rows)):
+        fail(f"{label} manifest contains duplicate rows")
+
+
+def parse_dataclass_tsv(
+    payload: bytes,
+    header: str,
+    row_type: type[object],
+    label: str,
+) -> list[object]:
+    """Parse one exact schema into immutable rows before live comparison."""
+
+    lines = canonical_tsv_lines(payload, label)
+    if not lines or lines[0] != header:
+        fail(f"{label} manifest header drift")
+    expected_fields = len(dataclass_fields(row_type))
+    rows: list[object] = []
+    for line_number, line in enumerate(lines[1:], start=2):
+        values = line.split("\t")
+        if len(values) != expected_fields:
+            fail(f"{label} row {line_number} must have {expected_fields} fields")
+        for field_number, value in enumerate(values, start=1):
+            validate_tsv_field(value, f"{label} row {line_number} field {field_number}")
+        rows.append(row_type(*values))
+    require_sorted_unique_rows(rows, label)
+    return rows
+
+
+def parse_adapter_payload(payload: bytes) -> list[AdapterRow]:
+    """Parse and validate the adapter table independently of the live scanner."""
+
+    rows = parse_dataclass_tsv(payload, ADAPTER_HEADER, AdapterRow, "adapter")
+    for row in rows:
+        if row.state != "CURRENT_IMPL_TARGET_PLANNED":
+            fail(f"adapter row has unknown state: {row.state}")
+    if payload != render_adapter_rows(tuple(rows)):
+        fail("adapter manifest is not canonically serialized")
+    return rows
+
+
+def parse_consumer_payload(payload: bytes) -> list[ConsumerRow]:
+    """Parse and validate the consumer table independently of the live scanner."""
+
+    rows = parse_dataclass_tsv(payload, CONSUMER_HEADER, ConsumerRow, "consumer")
+    for row in rows:
+        if row.occurrence_kind not in OCCURRENCE_KINDS:
+            fail(f"consumer row has unknown occurrence kind: {row.occurrence_kind}")
+        if row.state != "CURRENT_REFERENCE_TARGET_PLANNED":
+            fail(f"consumer row has unknown state: {row.state}")
+    if payload != render_consumer_rows(tuple(rows)):
+        fail("consumer manifest is not canonically serialized")
     return rows
 
 
@@ -204,6 +290,38 @@ def rust_tokens(source: str) -> list[object]:
         return tokenize(source)
     except RustLexError as error:
         fail(f"cannot tokenize Rust production source: {error}")
+
+
+def cfg_test_indexes(tokens: list[object]) -> set[int]:
+    """Return token indexes owned by exact ``#[cfg(test)]`` items."""
+
+    excluded: set[int] = set()
+    index = 0
+    marker = ("#", "[", "cfg", "(", "test", ")", "]")
+    while index + len(marker) <= len(tokens):
+        if tuple(token.text for token in tokens[index:index + len(marker)]) != marker:
+            index += 1
+            continue
+        cursor = index + len(marker)
+        while cursor < len(tokens) and tokens[cursor].text not in {"{", ";"}:
+            cursor += 1
+        if cursor >= len(tokens):
+            fail("cfg(test) item has no body or semicolon")
+        end = cursor
+        if tokens[cursor].text == "{":
+            depth = 1
+            end += 1
+            while end < len(tokens) and depth:
+                depth += tokens[end].text == "{"
+                depth -= tokens[end].text == "}"
+                end += 1
+            if depth:
+                fail("cfg(test) item has an unterminated body")
+        else:
+            end += 1
+        excluded.update(range(index, end))
+        index = end
+    return excluded
 
 
 def scan_public_items(root: Path) -> dict[str, tuple[str, str]]:
@@ -313,12 +431,63 @@ def module_prefixes(mapping: dict[str, str]) -> set[tuple[str, ...]]:
     return prefixes
 
 
-def expanded_path(path: tuple[str, ...], aliases: dict[str, tuple[str, ...]]) -> tuple[str, ...]:
-    """Expand a crate/module alias at the start of a parsed use or qualified path."""
+def module_context(path: Path) -> tuple[str, ...]:
+    """Derive the Rust module containing one production source file."""
+
+    parts = path.parts
+    try:
+        crates_index = parts.index("crates")
+        source_index = parts.index("src", crates_index + 2)
+    except ValueError:
+        fail(f"production path has no crates/<name>/src module context: {path}")
+    crate_name = parts[crates_index + 1].replace("-", "_")
+    relative = list(parts[source_index + 1:])
+    if not relative:
+        fail(f"production source path has no file name: {path}")
+    file_name = relative.pop()
+    if file_name not in {"lib.rs", "main.rs", "mod.rs"}:
+        relative.append(Path(file_name).stem)
+    return (crate_name, *relative)
+
+
+def expanded_path(
+    path: tuple[str, ...],
+    aliases: dict[str, tuple[str, ...]],
+    context: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Expand aliases and Rust ``crate/self/super`` paths from one module context."""
 
     if path and path[0] in aliases:
         return aliases[path[0]] + path[1:]
+    if path and path[0] == "crate":
+        return (context[0], *path[1:])
+    if path and path[0] == "self":
+        return context + path[1:]
+    if path and path[0] == "super":
+        cursor = 0
+        base = list(context)
+        while cursor < len(path) and path[cursor] == "super":
+            if len(base) <= 1:
+                fail("super path escapes the crate root")
+            base.pop()
+            cursor += 1
+        return (*base, *path[cursor:])
     return path
+
+
+def proven_old_path(
+    parts: tuple[str, ...],
+    mapping: dict[str, str],
+    proven_paths: dict[str, str],
+) -> str | None:
+    """Resolve only an old path or a source-proven facade/re-export prefix."""
+
+    candidates: list[tuple[int, str]] = []
+    for qualified, old_path in {**{old: old for old in mapping}, **proven_paths}.items():
+        qualified_parts = tuple(qualified.split("::"))
+        if qualified_parts == parts[: len(qualified_parts)]:
+            candidates.append((len(qualified_parts), old_path))
+    return max(candidates)[1] if candidates else None
 
 
 def classify_occurrence(tokens: list[object], index: int) -> str:
@@ -333,13 +502,18 @@ def classify_occurrence(tokens: list[object], index: int) -> str:
         boundary -= 1
     if boundary >= 0 and tokens[boundary].text == "impl":
         return "IMPL"
-    if (
-        following == "::"
-        and index + 3 < len(tokens)
-        and tokens[index + 2].kind == "IDENT"
-        and tokens[index + 3].text == "("
-    ):
-        return "CALL"
+    if following == "::":
+        cursor = index
+        traversed = False
+        while (
+            cursor + 2 < len(tokens)
+            and tokens[cursor + 1].text == "::"
+            and tokens[cursor + 2].kind == "IDENT"
+        ):
+            traversed = True
+            cursor += 2
+        if traversed and cursor + 1 < len(tokens) and tokens[cursor + 1].text == "(":
+            return "CALL"
     return "TYPE"
 
 
@@ -355,6 +529,8 @@ def old_path_from_tokens(
     aliases: dict[str, tuple[str, ...]],
     bindings: dict[str, str],
     mapping: dict[str, str],
+    context: tuple[str, ...],
+    proven_paths: dict[str, str],
 ) -> tuple[str | None, int]:
     """Resolve one bare or qualified token path to a standardized old path."""
 
@@ -368,11 +544,267 @@ def old_path_from_tokens(
     while cursor + 2 < len(tokens) and tokens[cursor + 1].text == "::" and tokens[cursor + 2].kind == "IDENT":
         parts += (canonical_name(tokens[cursor + 2]),)
         cursor += 2
-    parts = expanded_path(parts, aliases)
-    candidates = [old for old in mapping if tuple(old.split("::")) == parts[: len(old.split("::"))]]
-    if candidates:
-        return max(candidates, key=lambda old: len(old.split("::"))), cursor
-    return None, cursor
+    parts = expanded_path(parts, aliases, context)
+    old_path = proven_old_path(parts, mapping, proven_paths)
+    if old_path is None and parts and parts[0] not in {"druid", "druid_rdbc", "druid_wrapper"}:
+        old_path = proven_old_path(context + parts, mapping, proven_paths)
+    return old_path, cursor
+
+
+def build_proven_reexports(
+    root: Path,
+    mapping: dict[str, str],
+    declaration_paths: dict[str, str],
+) -> dict[str, str]:
+    """Build a source-proven qualified-path graph without same-leaf guessing."""
+
+    proven: dict[str, str] = {old_path: old_path for old_path in mapping}
+    for old_path, source_path in declaration_paths.items():
+        context = module_context(Path(source_path))
+        qualified = "::".join((*context, old_path.rsplit("::", 1)[1]))
+        proven[qualified] = old_path
+
+    sources = [
+        (path, rust_tokens((root / path).read_text(encoding="utf-8")))
+        for path in production_files(root)
+    ]
+    for _ in range(len(sources) + 1):
+        changed = False
+        for path, tokens in sources:
+            context = module_context(path)
+            excluded = cfg_test_indexes(tokens)
+            aliases: dict[str, tuple[str, ...]] = {
+                "druid_rdbc": ("druid_rdbc",),
+                "druid": ("druid",),
+            }
+            index = 0
+            while index < len(tokens):
+                if (
+                    index in excluded
+                    or tokens[index].kind != "IDENT"
+                    or tokens[index].text != "use"
+                ):
+                    index += 1
+                    continue
+                public = index > 0 and tokens[index - 1].text == "pub"
+                try:
+                    entries, end = parse_use_tree(tokens, index + 1)
+                except Exception as error:
+                    fail(f"cannot parse re-export use tree in {path}: {error}")
+                if end >= len(tokens) or tokens[end].text != ";":
+                    fail(f"re-export use item does not end in semicolon in {path}")
+                index = end + 1
+                for entry in entries:
+                    expanded = expanded_path(entry.path, aliases, context)
+                    if expanded and expanded[-1] == "*":
+                        prefix = "::".join(expanded[:-1])
+                        if public and any(key == prefix or key.startswith(prefix + "::") for key in proven):
+                            fail(f"wildcard re-export can hide standardized symbols in {path}")
+                        continue
+                    old_path = proven_old_path(expanded, mapping, proven)
+                    if old_path is None and expanded and expanded[0] not in {
+                        "druid", "druid_rdbc", "druid_wrapper",
+                    }:
+                        old_path = proven_old_path(context + expanded, mapping, proven)
+                    bound = entry.alias or (expanded[-1] if expanded else "")
+                    if old_path is not None and public:
+                        exported = "::".join((*context, bound))
+                        existing = proven.get(exported)
+                        if existing is not None and existing != old_path:
+                            fail(f"conflicting RDBC re-export proof for {exported}")
+                        if existing is None:
+                            proven[exported] = old_path
+                            changed = True
+                    elif expanded and entry.alias is not None:
+                        aliases[entry.alias] = expanded
+        if not changed:
+            return proven
+    fail("RDBC re-export proof graph did not converge")
+
+
+def derive_trait_methods(
+    root: Path,
+    physical: tuple[PhysicalRow, ...],
+) -> dict[str, set[str]]:
+    """Derive each standardized current trait's declared receiver-method names."""
+
+    methods: dict[str, set[str]] = {}
+    for row in physical:
+        if not row.normalized_signature.startswith("trait "):
+            continue
+        name = row.old_path.rsplit("::", 1)[1]
+        tokens = rust_tokens((root / row.source_file).read_text(encoding="utf-8"))
+        trait_index = next(
+            (
+                index for index in range(len(tokens) - 1)
+                if tokens[index].text == "trait"
+                and tokens[index + 1].kind == "IDENT"
+                and canonical_name(tokens[index + 1]) == name
+            ),
+            None,
+        )
+        if trait_index is None:
+            fail(f"cannot find declared trait body for {row.old_path}")
+        opening = trait_index + 2
+        while opening < len(tokens) and tokens[opening].text != "{":
+            opening += 1
+        if opening >= len(tokens):
+            fail(f"trait body has no opening brace for {row.old_path}")
+        depth = 1
+        cursor = opening + 1
+        declared: set[str] = set()
+        while cursor < len(tokens) and depth:
+            if tokens[cursor].text == "{":
+                depth += 1
+            elif tokens[cursor].text == "}":
+                depth -= 1
+            elif (
+                depth == 1
+                and tokens[cursor].text == "fn"
+                and cursor + 1 < len(tokens)
+                and tokens[cursor + 1].kind == "IDENT"
+            ):
+                declared.add(canonical_name(tokens[cursor + 1]))
+            cursor += 1
+        if depth:
+            fail(f"trait body has no closing brace for {row.old_path}")
+        methods[row.old_path] = declared
+    return methods
+
+
+def signature_trait_paths(
+    tokens: list[object],
+    start: int,
+    end: int,
+    aliases: dict[str, tuple[str, ...]],
+    bindings: dict[str, str],
+    mapping: dict[str, str],
+    context: tuple[str, ...],
+    proven_paths: dict[str, str],
+    trait_paths: set[str],
+) -> set[str]:
+    """Resolve every source-proven standardized trait mentioned in a signature slice."""
+
+    found: set[str] = set()
+    cursor = start
+    while cursor < end:
+        old_path, path_end = old_path_from_tokens(
+            tokens, cursor, aliases, bindings, mapping, context, proven_paths
+        )
+        if old_path in trait_paths:
+            found.add(old_path)
+        cursor = max(cursor + 1, path_end + 1)
+    return found
+
+
+def typed_receiver_proofs(
+    tokens: list[object],
+    aliases: dict[str, tuple[str, ...]],
+    bindings: dict[str, str],
+    mapping: dict[str, str],
+    context: tuple[str, ...],
+    proven_paths: dict[str, str],
+    trait_paths: set[str],
+    excluded: set[int],
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Derive typed variables/fields and accessor return types from explicit signatures."""
+
+    typed_names: dict[str, str] = {}
+    accessors: dict[str, str] = {}
+    for index in range(len(tokens) - 2):
+        if index in excluded:
+            continue
+        if tokens[index].kind == "IDENT" and tokens[index + 1].text == ":":
+            end = index + 2
+            while end < len(tokens) and tokens[end].text not in {",", ")", "=", ";", "{"}:
+                end += 1
+            resolved = signature_trait_paths(
+                tokens, index + 2, end, aliases, bindings, mapping, context,
+                proven_paths, trait_paths,
+            )
+            if len(resolved) == 1:
+                typed_names[canonical_name(tokens[index])] = next(iter(resolved))
+        if tokens[index].text != "fn" or tokens[index + 1].kind != "IDENT":
+            continue
+        arrow = index + 2
+        while arrow + 1 < len(tokens) and tokens[arrow].text not in {"{", ";"}:
+            if tokens[arrow].text == "-" and tokens[arrow + 1].text == ">":
+                break
+            arrow += 1
+        if arrow + 1 >= len(tokens) or tokens[arrow].text != "-":
+            continue
+        end = arrow + 2
+        while end < len(tokens) and tokens[end].text not in {"{", ";"}:
+            end += 1
+        resolved = signature_trait_paths(
+            tokens, arrow + 2, end, aliases, bindings, mapping, context,
+            proven_paths, trait_paths,
+        )
+        if len(resolved) == 1:
+            accessors[canonical_name(tokens[index + 1])] = next(iter(resolved))
+    return typed_names, accessors
+
+
+def receiver_call_rows(
+    path: Path,
+    tokens: list[object],
+    typed_names: dict[str, str],
+    accessors: dict[str, str],
+    trait_methods: dict[str, set[str]],
+    mapping: dict[str, str],
+    tasks: dict[str, str],
+    excluded: set[int],
+) -> list[ConsumerRow]:
+    """Inventory method syntax only when an explicit receiver type proof exists."""
+
+    rows: list[ConsumerRow] = []
+    for method_index in range(1, len(tokens) - 1):
+        if method_index in excluded:
+            continue
+        if (
+            tokens[method_index].kind != "IDENT"
+            or tokens[method_index - 1].text != "."
+            or tokens[method_index + 1].text != "("
+        ):
+            continue
+        trait_path: str | None = None
+        receiver_index = method_index - 2
+        if receiver_index >= 0 and tokens[receiver_index].kind == "IDENT":
+            trait_path = typed_names.get(canonical_name(tokens[receiver_index]))
+        cursor = method_index - 2
+        while cursor >= 0 and tokens[cursor].text == "?":
+            cursor -= 1
+        if trait_path is None and cursor >= 0 and tokens[cursor].text == ")":
+            depth = 1
+            opening = cursor - 1
+            while opening >= 0 and depth:
+                depth += tokens[opening].text == ")"
+                depth -= tokens[opening].text == "("
+                opening -= 1
+            accessor_index = opening
+            if (
+                depth == 0
+                and accessor_index >= 0
+                and tokens[accessor_index].kind == "IDENT"
+            ):
+                trait_path = accessors.get(canonical_name(tokens[accessor_index]))
+        if trait_path is None:
+            continue
+        method = canonical_name(tokens[method_index])
+        if method not in trait_methods.get(trait_path, set()):
+            continue
+        rows.append(
+            ConsumerRow(
+                path.as_posix(),
+                "CALL",
+                f"{method}@receiver={trait_path.rsplit('::', 1)[1]}@token={method_index}",
+                trait_path,
+                mapping[trait_path],
+                tasks.get(trait_path, "PLANNED_TARGET"),
+                "CURRENT_REFERENCE_TARGET_PLANNED",
+            )
+        )
+    return rows
 
 
 def implementation_rows(
@@ -383,11 +815,16 @@ def implementation_rows(
     mapping: dict[str, str],
     trait_paths: set[str],
     tasks: dict[str, str],
+    context: tuple[str, ...],
+    proven_paths: dict[str, str],
+    excluded: set[int],
 ) -> list[AdapterRow]:
     """Enumerate real trait impl headers and bind them to planned canonical traits."""
 
     rows: list[AdapterRow] = []
     for impl_index, token in enumerate(tokens):
+        if impl_index in excluded:
+            continue
         if token.kind != "IDENT" or token.text != "impl":
             continue
         index = impl_index + 1
@@ -400,7 +837,9 @@ def implementation_rows(
                 index += 1
             if depth:
                 fail(f"unterminated impl generic parameters in {path}")
-        trait_path, trait_end = old_path_from_tokens(tokens, index, aliases, bindings, mapping)
+        trait_path, trait_end = old_path_from_tokens(
+            tokens, index, aliases, bindings, mapping, context, proven_paths
+        )
         if trait_path is None or trait_path not in trait_paths:
             continue
         cursor = trait_end + 1
@@ -456,10 +895,19 @@ def scan_source_text(
     *,
     trait_paths: set[str] | None = None,
     tasks: dict[str, str] | None = None,
+    proven_paths: dict[str, str] | None = None,
+    declaration_paths: dict[str, str] | None = None,
+    trait_methods: dict[str, set[str]] | None = None,
 ) -> tuple[list[ConsumerRow], list[AdapterRow]]:
     """Scan one Rust source without allowing literals, aliases, or use trees to hide rows."""
 
     tokens = rust_tokens(source)
+    excluded = cfg_test_indexes(tokens)
+    context = module_context(path)
+    proven = proven_paths or {old_path: old_path for old_path in mapping}
+    declarations = declaration_paths or {}
+    current_trait_paths = trait_paths or set(mapping)
+    current_tasks = tasks or {old: "PLANNED_TARGET" for old in mapping}
     aliases: dict[str, tuple[str, ...]] = {
         "druid_rdbc": ("druid_rdbc",),
         "druid": ("druid",),
@@ -471,9 +919,9 @@ def scan_source_text(
         if name in by_name:
             fail(f"ambiguous standardized symbol name: {name}")
         by_name[name] = old_path
-    # Declarations in their owning source file bind local names even without a use item.
+    # Only the physical table's exact declaration file may bind a same-leaf local name.
     for old_path in mapping:
-        if old_path.rsplit("::", 1)[1] in by_name:
+        if declarations.get(old_path) == path.as_posix():
             name = old_path.rsplit("::", 1)[1]
             if any(
                 token.kind == "IDENT" and canonical_name(token) == name
@@ -482,12 +930,14 @@ def scan_source_text(
             ):
                 bindings[name] = old_path
 
-    covered: set[int] = set()
+    covered: set[int] = set(excluded)
     occurrences: list[ConsumerRow] = []
     prefixes = module_prefixes(mapping)
 
     # Rust 2015-style crate aliases remain legal syntax and must not evade the scan.
     for index in range(len(tokens) - 4):
+        if index in excluded:
+            continue
         if (
             tokens[index].text == "extern" and tokens[index + 1].text == "crate"
             and tokens[index + 2].kind == "IDENT" and tokens[index + 3].text == "as"
@@ -500,7 +950,11 @@ def scan_source_text(
 
     index = 0
     while index < len(tokens):
-        if tokens[index].kind != "IDENT" or tokens[index].text != "use":
+        if (
+            index in excluded
+            or tokens[index].kind != "IDENT"
+            or tokens[index].text != "use"
+        ):
             index += 1
             continue
         start = index
@@ -513,7 +967,7 @@ def scan_source_text(
         index += 1
         covered.update(range(start, index))
         for entry in entries:
-            expanded = expanded_path(entry.path, aliases)
+            expanded = expanded_path(entry.path, aliases, context)
             if expanded and expanded[-1] == "*":
                 wildcard_prefix = expanded[:-1]
                 if wildcard_prefix in prefixes or any(
@@ -523,13 +977,11 @@ def scan_source_text(
                     fail(f"wildcard import can hide standardized symbols in {path}: {'::'.join(expanded)}")
                 continue
             alias = entry.alias
-            exact = "::".join(expanded)
-            old_path = exact if exact in mapping else None
-            # The druid facade uses relative ``super::{...}`` imports for these exact public
-            # names. The physical table guarantees name uniqueness, so the final imported
-            # identifier is sufficient even when the crate/module prefix is relative.
-            if old_path is None and expanded:
-                old_path = by_name.get(expanded[-1])
+            old_path = proven_old_path(expanded, mapping, proven)
+            if old_path is None and expanded and expanded[0] not in {
+                "druid", "druid_rdbc", "druid_wrapper",
+            }:
+                old_path = proven_old_path(context + expanded, mapping, proven)
             if old_path is not None:
                 bound = alias or expanded[-1]
                 bindings[bound] = old_path
@@ -545,26 +997,33 @@ def scan_source_text(
                     )
                 )
                 continue
-            is_module = any(tuple(old.split("::"))[: len(expanded)] == expanded for old in mapping)
+            is_module = any(
+                tuple(qualified.split("::"))[: len(expanded)] == expanded
+                for qualified in proven
+            )
             if expanded and (alias is not None or is_module):
                 aliases[alias or expanded[-1]] = expanded
 
     for token_index, token in enumerate(tokens):
         if token_index in covered or token.kind != "IDENT" or declaration_name(tokens, token_index):
             continue
-        old_path, end = old_path_from_tokens(tokens, token_index, aliases, bindings, mapping)
+        old_path, end = old_path_from_tokens(
+            tokens, token_index, aliases, bindings, mapping, context, proven
+        )
         if old_path is None:
             continue
         # Only the first identifier of a qualified path owns the occurrence.
         if token_index > 1 and tokens[token_index - 1].text == "::":
             continue
         kind = classify_occurrence(tokens, token_index)
-        symbol = canonical_name(token)
+        qualified = canonical_name(token) in {"self", "super", "crate"}
+        symbol = old_path.rsplit("::", 1)[1] if qualified else canonical_name(token)
+        anchor = "qualified-token" if qualified else "token"
         occurrences.append(
             ConsumerRow(
                 path.as_posix(),
                 kind,
-                f"{symbol}@token={token_index}",
+                f"{symbol}@{anchor}={token_index}",
                 old_path,
                 mapping[old_path],
                 (tasks or {}).get(old_path, "PLANNED_TARGET"),
@@ -578,8 +1037,33 @@ def scan_source_text(
         aliases,
         bindings,
         mapping,
-        trait_paths or set(mapping),
-        tasks or {old: "PLANNED_TARGET" for old in mapping},
+        current_trait_paths,
+        current_tasks,
+        context,
+        proven,
+        excluded,
+    )
+    typed_names, accessors = typed_receiver_proofs(
+        tokens,
+        aliases,
+        bindings,
+        mapping,
+        context,
+        proven,
+        current_trait_paths,
+        excluded,
+    )
+    occurrences.extend(
+        receiver_call_rows(
+            path,
+            tokens,
+            typed_names,
+            accessors,
+            trait_methods or {},
+            mapping,
+            current_tasks,
+            excluded,
+        )
     )
     return sorted(set(occurrences)), sorted(set(implementations))
 
@@ -605,9 +1089,12 @@ def derive_live_manifests(root: Path, legacy_physical: Path = P03_MANIFEST) -> L
     physical = derive_physical_rows(root)
     mapping = {row.old_path: row.target_path for row in physical}
     tasks = {row.old_path: row.target_task for row in physical}
+    declaration_paths = {row.old_path: row.source_file for row in physical}
     trait_paths = {
         row.old_path for row in physical if row.normalized_signature.startswith("trait ")
     }
+    proven_paths = build_proven_reexports(root, mapping, declaration_paths)
+    trait_methods = derive_trait_methods(root, physical)
     consumers: list[ConsumerRow] = []
     adapters: list[AdapterRow] = []
     for path in production_files(root):
@@ -618,6 +1105,9 @@ def derive_live_manifests(root: Path, legacy_physical: Path = P03_MANIFEST) -> L
             mapping,
             trait_paths=trait_paths,
             tasks=tasks,
+            proven_paths=proven_paths,
+            declaration_paths=declaration_paths,
+            trait_methods=trait_methods,
         )
         consumers.extend(file_consumers)
         adapters.extend(file_adapters)
@@ -636,7 +1126,11 @@ def render_rows(header: str, rows: tuple[object, ...]) -> bytes:
     """Render dataclass rows in field order with stable sorting and final newline."""
 
     lines = [header]
-    lines.extend("\t".join(str(value) for value in row.__dict__.values()) for row in rows)
+    for row_number, row in enumerate(rows, start=1):
+        values = [str(value) for value in row.__dict__.values()]
+        for field_number, value in enumerate(values, start=1):
+            validate_tsv_field(value, f"render row {row_number} field {field_number}")
+        lines.append("\t".join(values))
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
@@ -658,12 +1152,21 @@ def render_consumer_rows(rows: tuple[ConsumerRow, ...]) -> bytes:
     return render_rows(CONSUMER_HEADER, rows)
 
 
-def require_checked_payload(path: Path, expected: bytes, label: str) -> None:
+def require_checked_payload(
+    path: Path,
+    expected: bytes,
+    expected_rows: tuple[object, ...],
+    parser,
+    label: str,
+) -> None:
     """Reject a missing, reordered, duplicate, extra, or otherwise changed manifest."""
 
     if not path.is_file():
         fail(f"{label} manifest not found: {path}")
     payload = path.read_bytes()
+    parsed = tuple(parser(payload))
+    if parsed != expected_rows:
+        fail(f"{label} manifest rows do not match the live denominator")
     if payload != expected:
         fail(
             f"{label} manifest does not match the live denominator: "
@@ -686,9 +1189,27 @@ def verify_denominator(
     physical = physical_path if physical_path.is_absolute() else root / physical_path
     adapters = adapter_path if adapter_path.is_absolute() else root / adapter_path
     consumers = consumer_path if consumer_path.is_absolute() else root / consumer_path
-    require_checked_payload(physical, render_physical_rows(live.physical), "physical")
-    require_checked_payload(adapters, render_adapter_rows(live.adapters), "adapter")
-    require_checked_payload(consumers, render_consumer_rows(live.consumers), "consumer")
+    require_checked_payload(
+        physical,
+        render_physical_rows(live.physical),
+        live.physical,
+        lambda payload: parse_physical_payload(payload, allow_legacy=False),
+        "physical",
+    )
+    require_checked_payload(
+        adapters,
+        render_adapter_rows(live.adapters),
+        live.adapters,
+        parse_adapter_payload,
+        "adapter",
+    )
+    require_checked_payload(
+        consumers,
+        render_consumer_rows(live.consumers),
+        live.consumers,
+        parse_consumer_payload,
+        "consumer",
+    )
     return live
 
 

@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import sys
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -38,6 +39,11 @@ SEMANTIC_DISPOSITIONS = {
 ADAPTER_STATES = {"PLANNED", "NOT_APPLICABLE"}
 LOGICAL_STATES = {"PLANNED", "NOT_APPLICABLE"}
 CAPABILITY_STATES = {"PLANNED", "NOT_APPLICABLE"}
+ORACLE_KEYS = {
+    "schema_version", "oracle_tag", "oracle_commit", "archive_url",
+    "archive_sha256", "archive_size", "source_manifest_sha256", "packages",
+    "semantic_sha256",
+}
 
 
 class VerificationError(RuntimeError):
@@ -74,6 +80,63 @@ def require_sha256(value: object, label: str) -> str:
     return value
 
 
+def reject_duplicate_json_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    """Build one JSON object while rejecting duplicate keys at every nesting level."""
+
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            fail(f"JDBC oracle duplicates JSON key {key!r}")
+        result[key] = value
+    return result
+
+
+def canonical_json_bytes(payload: object) -> bytes:
+    """Return the one accepted deterministic JSON representation."""
+
+    return (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def parse_semantic_payload(payload: bytes) -> list[list[str]]:
+    """Parse the exact canonical TSV schema independently of semantic validation."""
+
+    if not payload.endswith(b"\n") or payload.endswith(b"\n\n"):
+        fail("semantic inventory must have exactly one final newline")
+    if b"\r" in payload or any(
+        (byte < 0x20 and byte not in {0x09, 0x0A}) or byte == 0x7F
+        for byte in payload
+    ):
+        fail("semantic inventory contains a forbidden control byte")
+    try:
+        lines = payload.decode("utf-8").split("\n")[:-1]
+    except UnicodeDecodeError as error:
+        fail(f"semantic inventory is not UTF-8: {error}")
+    if not lines or lines[0] != SEMANTIC_HEADER:
+        fail("semantic inventory header drift")
+    rows = [line.split("\t") for line in lines[1:]]
+    for line_number, fields in enumerate(rows, start=2):
+        if len(fields) != 19:
+            fail(f"semantic row {line_number} must have 19 fields")
+        if any(not field for field in fields):
+            fail(f"semantic row {line_number} contains an empty field")
+        if any(
+            unicodedata.category(character) == "Cc"
+            for field in fields
+            for character in field
+        ):
+            fail(f"semantic row {line_number} contains a Unicode control character")
+    if rows != sorted(rows, key=lambda fields: fields[0]):
+        fail("semantic inventory rows are not sorted by item_key")
+    canonical = (
+        SEMANTIC_HEADER + "\n"
+        + "\n".join("\t".join(fields) for fields in rows)
+        + "\n"
+    ).encode("utf-8")
+    if payload != canonical:
+        fail("semantic inventory is not canonically serialized")
+    return rows
+
+
 def load_oracle(
     path: Path,
     expected_source_manifest_sha256: str,
@@ -83,9 +146,15 @@ def load_oracle(
     if not path.is_file():
         fail(f"JDBC oracle not found: {path}")
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        text = raw.decode("utf-8")
+        payload = json.loads(text, object_pairs_hook=reject_duplicate_json_keys)
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         fail(f"cannot read JDBC oracle: {error}")
+    if not isinstance(payload, dict) or set(payload) != ORACLE_KEYS:
+        fail("JDBC oracle top-level schema drift")
+    if raw != canonical_json_bytes(payload):
+        fail("JDBC oracle is not canonically serialized")
     expected_scalars = {
         "schema_version": 1,
         "oracle_tag": ORACLE_TAG,
@@ -113,6 +182,8 @@ def load_oracle(
         package_record = packages.get(package)
         if not isinstance(package_record, dict):
             fail(f"JDBC oracle package is not an object: {package}")
+        if set(package_record) != {"object_count", "objects"}:
+            fail(f"JDBC oracle package schema drift: {package}")
         objects = package_record.get("objects")
         if package_record.get("object_count") != expected_count or not isinstance(objects, list) or len(objects) != expected_count:
             fail(f"JDBC oracle {package} count drift")
@@ -178,27 +249,17 @@ def verify_inventory(
     digest = hashlib.sha256(payload).hexdigest()
     if digest not in expected_semantic_hashes:
         fail("semantic inventory bytes do not match the source oracle digest")
-    try:
-        lines = payload.decode("utf-8").splitlines()
-    except UnicodeDecodeError as error:
-        fail(f"semantic inventory is not UTF-8: {error}")
-    if not lines or lines[0] != SEMANTIC_HEADER:
-        fail("semantic inventory header drift")
+    rows = parse_semantic_payload(payload)
     seen_keys: set[str] = set()
     seen_fqcns: set[str] = set()
     counts = {"java.sql": 0, "javax.sql": 0}
-    for line_number, line in enumerate(lines[1:], start=2):
-        fields = line.split("\t")
-        if len(fields) != 19:
-            fail(f"semantic row {line_number} must have 19 fields")
+    for line_number, fields in enumerate(rows, start=2):
         (
             item_key, fqcn, java_member, rust_shape, disposition, canonical,
             target_state, signature, call_kind, index_null_adapter, error_adapter,
             owner, adapter_implementation, adapter_state, logical_implementation,
             logical_state, evidence_level, capability_state, notes,
         ) = fields
-        if any(not field for field in fields):
-            fail(f"semantic row {line_number} contains an empty field")
         if item_key in seen_keys:
             fail(f"semantic row {line_number} duplicates item key {item_key}")
         if fqcn in seen_fqcns:

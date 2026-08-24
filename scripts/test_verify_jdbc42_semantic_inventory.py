@@ -220,6 +220,59 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         self.assert_rejected()
 
+    def test_rejects_extra_and_duplicate_json_keys(self) -> None:
+        """Every JSON object layer has an exact schema and duplicate keys are invalid."""
+
+        original = self.oracle.read_text(encoding="utf-8")
+        payload = json.loads(original)
+        payload["extra"] = "not part of the oracle schema"
+        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.assert_rejected()
+
+        self.oracle.write_text(
+            original.replace("{\n", "{\n  \"archive_size\": 94004963,\n", 1),
+            encoding="utf-8",
+        )
+        self.assert_rejected()
+
+    def test_rejects_noncanonical_json_serialization(self) -> None:
+        """Semantically equal JSON with alternate whitespace is not canonical oracle evidence."""
+
+        payload = json.loads(self.oracle.read_text(encoding="utf-8"))
+        self.oracle.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        self.assert_rejected()
+
+    def test_rejects_noncanonical_or_control_bearing_semantic_tsv(self) -> None:
+        """CRLF and embedded control data cannot become canonical semantic rows."""
+
+        canonical = self.semantic.read_bytes()
+        self.semantic.write_bytes(canonical.replace(b"\n", b"\r\n"))
+        payload = json.loads(self.oracle.read_text(encoding="utf-8"))
+        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
+        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.assert_rejected()
+
+        self.semantic.write_bytes(canonical.replace(b"synthetic verifier fixture", b"synthetic\x01fixture", 1))
+        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
+        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.assert_rejected()
+
+        self.semantic.write_bytes(canonical.replace(b"synthetic verifier fixture", b"synthetic\x7ffixture", 1))
+        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
+        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.assert_rejected()
+
+        self.semantic.write_bytes(
+            canonical.replace(
+                b"synthetic verifier fixture",
+                "synthetic\u0085fixture".encode("utf-8"),
+                1,
+            )
+        )
+        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
+        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.assert_rejected()
+
     def test_archive_discovery_uses_source_entries_not_a_manual_object_list(self) -> None:
         """Adding a Java source file changes the discovered denominator without code edits."""
 

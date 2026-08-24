@@ -146,3 +146,70 @@ git diff --check
 - consumer scanner 使用仓库既有 Rust 2021 lexer；注释和 literal 不进入 identifier denominator。occurrence 的真实文件保存在 `source_path`，token ordinal 写入 `symbol` anchor，以区分同文件同 kind/symbol 的重复真实 occurrence。
 - 该 inventory 证明当前 authored production source 的静态分母，不证明 macro expansion、编译器 name resolution、adapter behavior、logical lifecycle、真实数据库或 Java/Rust differential；这些仍由 Tasks 3–8 验证。
 - `jdbc42-oracle.json` 被仓库全局 `*.json` ignore；提交时必须仅对这一明确目标文件使用 `git add -f`，不能修改 `.gitignore` 或漏提交 oracle。
+
+## Fix round 1/5: scanner 与 canonical schema hardening
+
+- 日期：2026-08-25
+- 修复基线：`317e5997ab472ebca4aa444d73aeeaeba20a9284`
+- 范围：Task 2 scripts/self-tests、重新生成的 inventory、本文追加；未修改 production Rust/Cargo，未进入 Task 3。
+- Minor report tracking：按 review 指令 deferred。
+
+### Root causes
+
+1. 原 scanner 只展开显式 crate/use alias，不知道文件所属 module，因此 `self/super/crate` qualified path 无法绑定；为补相对 import 而加入的 same-leaf fallback 又会把 unrelated import 和 local shadow 误绑定为 RDBC。
+2. receiver method syntax 不含 trait identifier。原 scanner 没有从字段/参数类型或 accessor return type 建立保守类型证明，因此 `physical_mut()?.commit()/rollback()` 等调用完全缺席。
+3. JSON 使用普通 `json.loads`，重复 key 会被覆盖；top/package schema 与 canonical bytes 未严格检查。TSV renderer 未拒绝 delimiter/control，checked manifests 也缺少独立 canonical parser。
+4. `src/*.rs` 内的 `#[cfg(test)]` body 若不排除，会把测试引用混入 production denominator；receiver 扫描会放大该误计。
+
+### RED evidence
+
+新增测试在修复前稳定复现：
+
+```text
+python3 scripts/test_verify_jdbc42_semantic_inventory.py
+→ 3 failures:
+  extra/duplicate JSON key accepted
+  noncanonical JSON accepted
+  CRLF/control-bearing semantic TSV accepted
+
+python3 scripts/test_verify_rdbc_standardization_denominator.py
+→ UFCS expected 19, found 0
+→ typed physical_mut receiver expected, found 0
+→ unrelated same-leaf import/local shadow produced false rows
+→ delimiter-bearing source_path rendered successfully
+→ parse_consumer_payload absent
+
+cfg(test) focused RED
+→ expected production receiver methods [commit], found [commit, rollback]
+```
+
+Review 提到 17 个 `super::PhysicalStatement::*`；fresh current-source token inventory 实际发现 19 个。修复不缩减当前源码，19/19 全部冻结。
+
+### GREEN behavior
+
+- module context 从 `crates/<crate>/src/...` 推导，并按 Rust 语义解析 repeated `super`、`self`、`crate`。
+- source-proven re-export graph 从 exact physical declarations 和 `pub use` 闭包建立；relative path 只有命中该 graph 才绑定，完全移除 by-name leaf fallback。
+- local declaration只有 `rdbc-physical-standardization.tsv` 记录的 exact `source_file` 可以绑定；unrelated import/local shadow 为 0 rows。
+- trait method names从真实 trait body 动态派生。Receiver CALL 只有在显式 field/parameter type 或 accessor return type 唯一指向该 trait，且 method 属于该 trait时计入；不使用 method-name-only 推断。
+- 当前真实专项门禁：19 个 `super::PhysicalStatement::*` UFCS、5 个 `dyn super::PhysicalPreparedStatement`、35 个 `physical_mut()` receiver calls（`commit=1`、`rollback=2`）。
+- `#[cfg(test)]` item token ranges从 production denominator 排除；production fixture 保留 `commit`，test-only `rollback` 不计。
+- JSON 每层 duplicate-key rejection、top/package/object exact key sets、canonical `indent=2 + sort_keys + final newline` bytes。
+- Semantic/physical/adapter/consumer TSV 使用独立 parser；严格 header、field count、sort、duplicate、canonical bytes，并拒绝 tab/CR/LF、Unicode `Cc` controls（含 C0 与 DEL）。
+
+### Regenerated denominator
+
+| Artifact | Rows | SHA-256 | Change |
+| :--- | ---: | :--- | :--- |
+| `jdbc42-semantic-inventory.tsv` | 69 | `3a44c4e77259a667da11d228d1db78075a32af93bee691d2fc61ddcfbe64c2b6` | bytes unchanged; parser stricter |
+| `jdbc42-oracle.json` | 69 source objects | `f0f0349d3894f583e0f75d30b199774dddc65b9611f0d7eb88716104f16a760f` | bytes unchanged; parser stricter |
+| `rdbc-physical-standardization.tsv` | 73 | `523db9479457a4c4a59eb9a3b783a5d76267c4835de7b9c063c6f7965b97fec1` | unchanged; P03 48/48 retained |
+| `rdbc-adapter-implementations.tsv` | 55 | `c7b581cbc90ca201e6f5f692ed7b7a4993a9f047a91cdd0c2ade93faccfb2b66` | unchanged |
+| `rdbc-production-consumers.tsv` | 3661 | `7ba19b461dd7417c25505096e6b677efd397ad5439d646db2f457792db6ec388` | source-proven relative/receiver rows; cfg(test) excluded |
+
+Consumer kinds：`IMPORT=835`、`TYPE=1303`、`TRAIT_OBJECT=487`、`IMPL=153`、`CALL=883`。crate 分布：`druid-rdbc=1138`、`druid=1871`、`druid-wrapper=652`。其中 qualified anchors 37、typed receiver CALL 541。
+
+Final gates：semantic self-tests `11/11`、standardization self-tests `16/16`、live semantic `52/17/UNKNOWN=0`、live denominator `73/55/3661`、Python compile `PASS`、emit/verify/emit `BYTE_STABLE=PASS`、P03 old paths `48/48`、`git diff --check` PASS。
+
+### Remaining boundary
+
+该修复仍是 `V0_STATIC / PLANNED_TARGET`。宏展开、编译器完整 name resolution、动态 dispatch runtime target、真实数据库行为与 Java/Rust differential 仍由后续 Tasks 验证；receiver inference 遇到无唯一显式类型证明时不猜测、不生成 row。
