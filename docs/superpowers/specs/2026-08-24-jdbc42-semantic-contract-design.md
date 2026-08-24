@@ -547,4 +547,3 @@ flowchart LR
 | ADR-RDBC-002 | logical handle 使用具体类型；不复制 Java trait 继承 | ACCEPTED |
 | ADR-RDBC-003 | buffered row set 与 async cursor 显式分型 | ACCEPTED |
 | ADR-RDBC-004 | JDBC 4.2 标准语义内核 + Rust Physical SPI 双层合同 | PROPOSED_FOR_WRITTEN_REVIEW |
-
