@@ -425,3 +425,63 @@ git diff --check                            → PASS
 ```
 
 Round 4 仍只证明 `V0_STATIC / PLANNED_TARGET`；完整 rustc name/type resolution、macro expansion、runtime dispatch、真实数据库行为与 Java/Rust differential 不在 Task 2 静态 inventory 的证明范围内。
+
+## Fix round 5/5: module-context impl identity 与 turbofish closure boundary
+
+- 日期：2026-08-25
+- 修复基线：`5f4874f49d5669e1ba3458f38793c4ee98ba3433`
+- 范围：Task 2 standardization verifier/self-tests、consumer inventory 再生、本文追加；未处理已 clear cfg、production Rust/Cargo、Task 3 或 deferred Minors。
+- 轮次边界：这是 receiver Critical 的最终第 5 轮；本轮后不继续扩展修复范围。
+
+### Root causes and RED
+
+1. Round 4 虽保留 qualified type token，却在不知道 source file module context 的情况下直接剥离 leading `crate::` / `self::`。因此位于 `crates/druid/src/child/mod.rs` 的 `super::Holder<T>` 与 `crate::Holder<T>`、`self::LocalHolder<T>` 与 `crate::child::LocalHolder<T>` 不能形成同一 accessor owner；associated qualified self 的 `super::Assoc` / `crate::Assoc` 同样失配。
+2. non-block closure boundary 只跟踪 `()` / `[]` / `{}`。`dispatch::<Left, Right>(...)` 的 turbofish comma 被误当成 closure expression 顶层 comma，使 untyped closure parameter shadow 提前结束；tuple 和 macro 内的 receiver 随后错误继承外层 typed binding。
+
+实现修改前新增 2 个行为测试并实跑：
+
+```text
+python3 scripts/test_verify_rdbc_standardization_denominator.py
+→ 34 tests / FAILED (failures=2)
+→ module-context impl owners: expected 3 receiver rows, found 0
+→ turbofish closure: expected only outer rollback, found commit + commit + rollback
+→ previous 32 tests all passed in the same RED run
+```
+
+### GREEN behavior
+
+- `derive_impl_scopes` 接收由 production path 派生的 module context，并把它传入 self type normalization。
+- self type token renderer 复用既有 `expanded_path`：展开 leading `crate`、`self` 与任意合法 repeated `super`；再优先移除当前 module prefix，否则移除 crate root，以统一同一 source-relative owner。
+- contextual normalization 同时作用于 `<T as qualified::Assoc>::Out` 内的 qualified trait path；generic parameter 仍按声明位置映射为 `_G0...`。
+- fixture 同时覆盖 `crates/druid/src/child/mod.rs` 的 nominal/associated owner，以及 `child/grandchild/mod.rs` 中 nominal/associated `super::super` 与 `crate::` 的等价性。
+- 非关键字 qualification 不走 contextual root 折叠，既有 `a::Holder<T>` / `b::Holder<T>` 和 `<T as a::Assoc>::Out` / `<T as b::Assoc>::Out` distinct gates 保持通过。
+- `expression_scope_end` 复用 `generic_angle_closing` 判断可靠的 generic/turbofish `<...>`；只有所有可靠 delimiter depth 都为零时，comma/semicolon 才结束 non-block closure shadow。tuple 与 macro 嵌套 comma 因此不会泄漏外层 receiver proof。
+
+全量 standardization self-tests 首次 GREEN 时发现并修正一个既有 regression：绝对 contextual path 需要先相对化到当前 module/crate，才能继续保持 `self::Other<T>` 与同作用域 `Other<T>` 的 owner 等价。修正后原 32 项与新增 2 项全部通过。
+
+### Regenerated denominator and final gates
+
+consumer manifest 已从当前 production source 重新生成；本轮仅修 scanner 的 synthetic receiver 边界，五项 frozen artifact 均 byte-identical：
+
+| Artifact | Rows | SHA-256 | Change |
+| :--- | ---: | :--- | :--- |
+| semantic TSV | 69 | `3a44c4e77259a667da11d228d1db78075a32af93bee691d2fc61ddcfbe64c2b6` | unchanged |
+| oracle JSON | 69 | `f0f0349d3894f583e0f75d30b199774dddc65b9611f0d7eb88716104f16a760f` | unchanged |
+| physical TSV | 73 | `523db9479457a4c4a59eb9a3b783a5d76267c4835de7b9c063c6f7965b97fec1` | unchanged; P03 48/48 |
+| adapter TSV | 55 | `c7b581cbc90ca201e6f5f692ed7b7a4993a9f047a91cdd0c2ade93faccfb2b66` | unchanged |
+| consumer TSV | 3559 | `add1a61b90cfea2cff26d7ca632b651233d0efdd6e57df81f5404976cdf70729` | unchanged bytes |
+
+```text
+semantic self-tests                         → 11/11
+standardization self-tests                  → 34/34 (32 retained + 2 new)
+live semantic                               → JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0
+live denominator                            → PHYSICAL=73 / ADAPTER=55 / CONSUMER=3559
+five Task 2 scripts py_compile              → PASS
+checked artifacts vs emit/verify/emit       → BYTE_STABLE=PASS
+P03 immutable required old paths            → 48/48
+PhysicalConnectionLease receiver calls      → 52/52
+filter_chain_impl receiver matrix           → 10/10
+DruidPooledConnection::physical_mut calls   → 35/35 (commit=1 / rollback=2)
+```
+
+Round 5 仍只证明 `V0_STATIC / PLANNED_TARGET`。完整 rustc name/type resolution、macro expansion、runtime dispatch、真实数据库行为与 Java/Rust differential 不在 Task 2 静态 inventory 的证明范围内；本轮未进入 Task 3。

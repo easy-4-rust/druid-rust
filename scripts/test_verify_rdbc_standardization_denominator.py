@@ -432,6 +432,94 @@ impl<T> Runner for <T as b::Assoc>::Out {
         )
         self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
 
+    def test_impl_self_paths_expand_from_source_module_context(self) -> None:
+        """crate/self/super impl owners share their source-relative canonical identity."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+impl<T> super::Holder<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> crate::Holder<T> {
+    fn run(&self) { self.physical().commit(); }
+}
+impl<T> self::LocalHolder<T> {
+    fn physical(&self) -> &dyn PhysicalStatement { todo!() }
+}
+impl<T> crate::child::LocalHolder<T> {
+    fn run(&self) { self.physical().warnings(); }
+}
+impl<T> Accessor for <T as super::Assoc>::Out {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> Runner for <T as crate::Assoc>::Out {
+    fn run(&self) { self.physical().rollback(); }
+}
+impl<T> a::Other<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> b::Other<T> {
+    fn run(&self) { self.physical().commit(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/child/mod.rs"), source, mapping,
+            trait_paths={connection, statement},
+            trait_methods={
+                connection: {"commit", "rollback"},
+                statement: {"warnings"},
+            },
+        )
+        calls = sorted(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(
+            sorted([
+                (connection, "commit"),
+                (connection, "rollback"),
+                (statement, "warnings"),
+            ]),
+            calls,
+        )
+
+        repeated_source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+impl<T> super::super::RepeatedHolder<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> crate::RepeatedHolder<T> {
+    fn run(&self) { self.physical().commit(); }
+}
+impl<T> Accessor for <T as super::super::RepeatedAssoc>::Out {
+    fn physical(&self) -> &dyn PhysicalStatement { todo!() }
+}
+impl<T> Runner for <T as crate::RepeatedAssoc>::Out {
+    fn run(&self) { self.physical().warnings(); }
+}
+'''
+        repeated_occurrences, _ = scan_source_text(
+            Path("crates/druid/src/child/grandchild/mod.rs"),
+            repeated_source,
+            mapping,
+            trait_paths={connection, statement},
+            trait_methods={connection: {"commit"}, statement: {"warnings"}},
+        )
+        repeated_calls = sorted(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in repeated_occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(
+            sorted([(connection, "commit"), (statement, "warnings")]),
+            repeated_calls,
+        )
+
     def test_non_block_closure_scope_ignores_nested_call_comma(self) -> None:
         """A nested call comma cannot end an untyped closure's shadow scope early."""
 
@@ -446,6 +534,31 @@ fn run(physical: &dyn PhysicalConnection) {
 '''
         occurrences, _ = scan_source_text(
             Path("crates/druid/src/non_block_closure.rs"), source, mapping,
+            trait_paths={connection},
+            trait_methods={connection: {"commit", "rollback"}},
+        )
+        methods = [
+            row.symbol.split("@", 1)[0]
+            for row in occurrences if "@receiver=" in row.symbol
+        ]
+        self.assertEqual(["rollback"], methods)
+
+    def test_non_block_closure_scope_ignores_turbofish_and_nested_delimiters(self) -> None:
+        """Turbofish, tuple, and macro commas remain inside an untyped closure shadow."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        mapping = {connection: "druid_rdbc::connection::Connection"}
+        source = '''
+use druid_rdbc::spi::PhysicalConnection;
+fn run(physical: &dyn PhysicalConnection) {
+    let closure = |physical| dispatch::<Left, Right>(
+        (physical.commit(), nested!(physical.commit(), (left, right))),
+    );
+    physical.rollback();
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/non_block_closure_turbofish.rs"), source, mapping,
             trait_paths={connection},
             trait_methods={connection: {"commit", "rollback"}},
         )

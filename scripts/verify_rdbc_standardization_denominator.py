@@ -1017,17 +1017,11 @@ def normalize_type_identity(
     start: int,
     end: int,
     generics: dict[str, str],
+    context: tuple[str, ...],
 ) -> tuple[str, str] | None:
     """Normalize a self type as qualified base plus canonical generic arguments."""
 
     identity_start = start
-    while (
-        identity_start + 1 < end
-        and tokens[identity_start].kind == "IDENT"
-        and canonical_name(tokens[identity_start]) in {"crate", "self"}
-        and tokens[identity_start + 1].text == "::"
-    ):
-        identity_start += 2
     if identity_start >= end:
         return None
 
@@ -1063,12 +1057,38 @@ def normalize_type_identity(
         return None
     base_name = canonical_name(tokens[base_index])
     pieces: list[str] = []
-    for token in tokens[identity_start:end]:
+    cursor = identity_start
+    while cursor < end:
+        token = tokens[cursor]
+        if (
+            token.kind == "IDENT"
+            and canonical_name(token) in {"crate", "self", "super"}
+            and cursor + 1 < end
+            and tokens[cursor + 1].text == "::"
+        ):
+            path = [canonical_name(token)]
+            path_end = cursor
+            while (
+                path_end + 2 < end
+                and tokens[path_end + 1].text == "::"
+                and tokens[path_end + 2].kind == "IDENT"
+            ):
+                path.append(canonical_name(tokens[path_end + 2]))
+                path_end += 2
+            expanded = expanded_path(tuple(path), {}, context)
+            if expanded[: len(context)] == context:
+                expanded = expanded[len(context):]
+            elif expanded and expanded[0] == context[0]:
+                expanded = expanded[1:]
+            pieces.append("::".join(expanded))
+            cursor = path_end + 1
+            continue
         text = token.text
         if token.kind == "IDENT":
             text = canonical_name(token)
         text = generics.get(text, text)
         pieces.append(text)
+        cursor += 1
     return "".join(pieces), base_name
 
 
@@ -1076,6 +1096,7 @@ def derive_impl_scopes(
     tokens: list[object],
     brace_pairs: dict[int, int],
     excluded: set[int],
+    context: tuple[str, ...],
 ) -> list[ImplScope]:
     """Derive impl ownership so same-named fields/accessors cannot cross impls."""
 
@@ -1121,7 +1142,7 @@ def derive_impl_scopes(
             depth += text in {"<", "(", "["}
             depth -= text in {">", ")", "]"}
             type_end += 1
-        identity = normalize_type_identity(tokens, type_start, type_end, generics)
+        identity = normalize_type_identity(tokens, type_start, type_end, generics, context)
         if identity is None:
             continue
         type_name, base_name = identity
@@ -1266,7 +1287,7 @@ def top_level_token_index(
 def expression_scope_end(tokens: list[object], start: int, end: int) -> int:
     """Find a comma/semicolon or parent close outside nested expression delimiters."""
 
-    paren = bracket = brace = 0
+    paren = bracket = brace = angle = 0
     for index in range(start, end):
         text = tokens[index].text
         if text == "(":
@@ -1287,7 +1308,12 @@ def expression_scope_end(tokens: list[object], start: int, end: int) -> int:
             if brace == 0:
                 return index
             brace -= 1
-        elif text in {",", ";"} and paren == bracket == brace == 0:
+        elif text == "<" and paren == bracket == brace == 0:
+            if angle > 0 or generic_angle_closing(tokens, index) is not None:
+                angle += 1
+        elif text == ">" and paren == bracket == brace == 0 and angle > 0:
+            angle -= 1
+        elif text in {",", ";"} and paren == bracket == brace == angle == 0:
             return index
     return end
 
@@ -1427,7 +1453,7 @@ def derive_receiver_proofs(
     brace_pairs = delimiter_pairs(tokens, "{", "}")
     paren_pairs = delimiter_pairs(tokens, "(", ")")
     bracket_pairs = delimiter_pairs(tokens, "[", "]")
-    impl_scopes = derive_impl_scopes(tokens, brace_pairs, excluded)
+    impl_scopes = derive_impl_scopes(tokens, brace_pairs, excluded, context)
     functions = derive_function_scopes(tokens, paren_pairs, brace_pairs, impl_scopes, excluded)
     bindings: list[ReceiverBinding] = []
     accessors: dict[tuple[str | None, str], str] = {}
