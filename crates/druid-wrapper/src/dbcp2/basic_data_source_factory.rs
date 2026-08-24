@@ -1,7 +1,8 @@
 use crate::toasty::ToastyConnectionFactory;
-use druid::core::{DruidError, PhysicalConnectionFactory};
 use druid::pool::{DruidDataSource, DruidDataSourceFactory};
 use druid::sql::RdbcUtils;
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
 

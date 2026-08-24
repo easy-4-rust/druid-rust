@@ -3,11 +3,14 @@
 use super::rbdc_prepared_statement::RbdcPreparedStatement;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
-    PreparedStatementKey, Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::{SqlException, SqlWarning};
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
+    RowSetResultSet,
 };
+use druid_rdbc::types::{Row, Savepoint, Value};
 use futures::StreamExt;
 use std::sync::Arc;
 

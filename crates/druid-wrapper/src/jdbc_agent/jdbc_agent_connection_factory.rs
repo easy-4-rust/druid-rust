@@ -1,5 +1,6 @@
 use super::{JdbcAgentConnection, JdbcAgentOptions};
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 
 /// 每次创建一个未池化 JDBC Agent 物理连接的 Druid 工厂。
@@ -120,12 +121,12 @@ impl PhysicalConnectionFactory for JdbcAgentConnectionFactory {
     async fn create_info_with_properties(
         &self,
         properties: &HashMap<String, String>,
-    ) -> Result<druid::core::PhysicalConnectionInfo, DruidError> {
+    ) -> Result<druid_rdbc::spi::PhysicalConnectionInfo, DruidError> {
         let started_at = std::time::Instant::now();
         let connection = self
             .create_with_properties(self.merged_properties(Some(properties)))
             .await?;
-        Ok(druid::core::PhysicalConnectionInfo::connected(
+        Ok(druid_rdbc::spi::PhysicalConnectionInfo::connected(
             connection, started_at,
         ))
     }

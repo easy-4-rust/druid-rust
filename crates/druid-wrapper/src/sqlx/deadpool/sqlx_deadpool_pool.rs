@@ -3,9 +3,10 @@
 use super::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager;
 use deadpool::managed::{Pool as DeadpoolPool, PoolError, Timeouts};
 use druid::core::{
-    ConnectionRecycleDisposition, DruidError, DruidPooledConnection, FilterChain,
-    PhysicalConnectionLease, Pool as DruidPool, PoolState,
+    ConnectionRecycleDisposition, DruidPooledConnection, FilterChain, PhysicalConnectionLease,
+    Pool as DruidPool, PoolState,
 };
+use druid_rdbc::compat::DruidError;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

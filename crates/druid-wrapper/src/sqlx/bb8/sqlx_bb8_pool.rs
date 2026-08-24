@@ -2,9 +2,10 @@
 
 use super::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager;
 use druid::core::{
-    ConnectionRecycleDisposition, DruidError, DruidPooledConnection, FilterChain,
-    PhysicalConnectionLease, Pool, PoolState,
+    ConnectionRecycleDisposition, DruidPooledConnection, FilterChain, PhysicalConnectionLease,
+    Pool, PoolState,
 };
+use druid_rdbc::compat::DruidError;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;

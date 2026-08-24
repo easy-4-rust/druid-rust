@@ -1,5 +1,6 @@
 use super::LibSqlConnectionAdapter;
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 
 /// Turso/libSQL 原生远程未池化物理连接工厂。

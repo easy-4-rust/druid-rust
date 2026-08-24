@@ -1,7 +1,8 @@
 //! `DuckDB` 原生预编译语句句柄。
 
-use druid::core::{
-    DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, SqlTextPreparedStatement,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{
+    PhysicalPreparedStatement, PhysicalStatementOptions, SqlTextPreparedStatement,
 };
 use duckdb::InterruptHandle;
 use std::any::Any;

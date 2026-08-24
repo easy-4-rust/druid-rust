@@ -1,8 +1,9 @@
 //! 扩展 Adapter 共用的 Prepared 参数物化策略。
 
-use druid::core::{
-    DruidError, PreparedInputParameter, RdbcCharacterLength, RdbcObject, RdbcStreamLength, Value,
-};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::resource::{RdbcCharacterLength, RdbcStreamLength};
+use druid_rdbc::spi::PreparedInputParameter;
+use druid_rdbc::types::{RdbcObject, Value};
 
 /// 将标准 RDBC 参数资源转换成扩展驱动可绑定的通用值。
 ///
@@ -41,7 +42,7 @@ impl PreparedParameterMaterializer {
     }
 
     fn read_stream(
-        stream: &druid::core::RdbcInputStream,
+        stream: &druid_rdbc::resource::RdbcInputStream,
         length: RdbcStreamLength,
     ) -> Result<Vec<u8>, DruidError> {
         let Some(length) = Self::stream_length(length)? else {
@@ -62,7 +63,7 @@ impl PreparedParameterMaterializer {
     }
 
     fn read_reader(
-        reader: &druid::core::RdbcReader,
+        reader: &druid_rdbc::resource::RdbcReader,
         length: RdbcCharacterLength,
     ) -> Result<String, DruidError> {
         let Some(length) = Self::character_length(length)? else {
@@ -244,10 +245,11 @@ impl PreparedParameterMaterializer {
 #[cfg(test)]
 mod tests {
     use super::PreparedParameterMaterializer;
-    use druid::core::{
-        PreparedInputParameter, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,
-        RdbcRowId, RdbcStreamLength, Value,
+    use druid_rdbc::resource::{
+        RdbcCharacterLength, RdbcInputStream, RdbcReader, RdbcStreamLength,
     };
+    use druid_rdbc::spi::PreparedInputParameter;
+    use druid_rdbc::types::{RdbcObject, RdbcRowId, Value};
 
     #[tokio::test]
     async fn materializes_stream_reader_object_and_null_families_at_execution_time() {

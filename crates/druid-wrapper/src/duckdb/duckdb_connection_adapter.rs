@@ -3,12 +3,14 @@
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
-    Row, RowSetResultSet, SqlException, SqlWarning, StatementExecuteResult, StatementGeneratedKeys,
-    Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::{SqlException, SqlWarning};
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
+    StatementExecuteResult, StatementGeneratedKeys,
 };
+use druid_rdbc::types::{Row, Value};
 use duckdb::types::{
     Decimal as DuckDbDecimal, FromSql as DuckDbFromSql, Null, ValueRef as DuckDbValueRef,
 };

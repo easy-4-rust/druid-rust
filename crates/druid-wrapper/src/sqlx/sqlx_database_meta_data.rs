@@ -1,8 +1,8 @@
 //! `SQLx` 数据库元数据 Adapter。
 
-use druid::core::{
-    DruidError, PhysicalDatabaseMetaData, PhysicalResultSet, Row, RowSetResultSet, Value,
-};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{PhysicalDatabaseMetaData, PhysicalResultSet, RowSetResultSet};
+use druid_rdbc::types::{Row, Value};
 use sqlx::{
     Any, AnyConnection, MySql, MySqlConnection, PgConnection, Postgres, Row as SqlxRow, Sqlite,
     SqliteConnection,

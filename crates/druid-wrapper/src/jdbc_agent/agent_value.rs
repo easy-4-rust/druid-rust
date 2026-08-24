@@ -1,7 +1,8 @@
 use base64::Engine;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{DruidError, Value};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::types::Value;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 

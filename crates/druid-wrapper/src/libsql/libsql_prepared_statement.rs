@@ -1,8 +1,10 @@
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid::core::{
-    DruidError, PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions,
-    PreparedInputParameter, SqlTextStatement, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{
+    PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
+    SqlTextStatement,
 };
+use druid_rdbc::types::Value;
 use std::any::Any;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};

@@ -1838,6 +1838,7 @@ dependencies = [
  "chrono",
  "deadpool 0.12.3",
  "druid",
+ "druid-rdbc",
  "duckdb",
  "fs2",
  "futures",

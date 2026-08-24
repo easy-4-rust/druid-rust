@@ -1,7 +1,8 @@
 //! `DuckDB` 原生物理连接工厂。
 
 use super::DuckDbConnectionAdapter;
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
 /// `DuckDB` 原生未池化物理连接工厂。
 ///

@@ -35,6 +35,7 @@ bigdecimal.workspace = true
 chrono.workspace = true
 deadpool.workspace = true
 druid = { version = "0.0.0-design", path = "../druid" }
+druid-rdbc = { version = "0.0.0-design", path = "../druid-rdbc" }
 duckdb = { workspace = true, optional = true }
 fs2 = { workspace = true, optional = true }
 futures.workspace = true

@@ -1,7 +1,9 @@
 //! RBDC 物理连接工厂。
 
 use super::rbdc_connection_adapter::RbdcConnectionAdapter;
-use druid::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory, SqlException};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::SqlException;
+use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::Arc;
 
 /// RBDC 物理连接工厂。

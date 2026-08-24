@@ -2,13 +2,15 @@
 
 use super::ToastyPreparedStatement;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
-    PreparedStatementKey, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader,
-    RdbcStreamLength, Row, RowSetResultSet, Savepoint, SqlException, SqlWarning,
-    StatementExecuteResult, StatementGeneratedKeys, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::{SqlException, SqlWarning};
+use druid_rdbc::resource::{RdbcCharacterLength, RdbcInputStream, RdbcReader, RdbcStreamLength};
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
+    RowSetResultSet, StatementExecuteResult, StatementGeneratedKeys,
 };
+use druid_rdbc::types::{RdbcObject, Row, Savepoint, Value};
 use std::sync::Arc;
 use toasty_core::{
     driver::{

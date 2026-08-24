@@ -2,12 +2,14 @@ use super::{
     libsql_prepared_statement::LibSqlStatementExecutionError, LibSqlDatabaseMetaData,
     LibSqlPreparedStatement,
 };
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
-    Row, RowSetResultSet, Savepoint, SqlException, SqlWarning, StatementExecuteResult,
-    StatementGeneratedKeys, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::{SqlException, SqlWarning};
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
+    StatementExecuteResult, StatementGeneratedKeys,
 };
+use druid_rdbc::types::{Row, Savepoint, Value};
 use std::sync::Arc;
 
 struct LibSqlResult {

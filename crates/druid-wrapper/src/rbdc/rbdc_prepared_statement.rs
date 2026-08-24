@@ -1,10 +1,13 @@
 //! RBDC 物理预编译语句。
 
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid::core::{
-    DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
-    SqlTextPreparedStatement, SqlWarning, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::SqlWarning;
+use druid_rdbc::spi::{
+    PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
+    SqlTextPreparedStatement,
 };
+use druid_rdbc::types::Value;
 use std::any::Any;
 
 /// 为 RBDC `Connection::exec` 保存物理参数槽的 Prepared 句柄。
@@ -162,7 +165,8 @@ impl PhysicalPreparedStatement for RbdcPreparedStatement {
 #[cfg(test)]
 mod tests {
     use super::RbdcPreparedStatement;
-    use druid::core::{PhysicalPreparedStatement, PreparedInputParameter, Value};
+    use druid_rdbc::spi::{PhysicalPreparedStatement, PreparedInputParameter};
+    use druid_rdbc::types::Value;
 
     #[tokio::test]
     async fn delegates_statement_state_and_owns_parameter_lifecycle() {

@@ -2,11 +2,13 @@ use super::{
     AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions,
     JdbcAgentPreparedStatement,
 };
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
-    Row, RowSetResultSet, Savepoint, StatementExecuteResult, StatementGeneratedKeys, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
+    StatementExecuteResult, StatementGeneratedKeys,
 };
+use druid_rdbc::types::{Row, Savepoint, Value};
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -293,7 +295,7 @@ impl JdbcAgentConnection {
 
     fn protocol_error(message: impl Into<String>) -> DruidError {
         DruidError::SqlException(Box::new(
-            druid::core::SqlException::new(
+            druid_rdbc::error::SqlException::new(
                 0,
                 Some("08006".to_owned()),
                 Some(format!("invalid JDBC Agent response: {}", message.into())),

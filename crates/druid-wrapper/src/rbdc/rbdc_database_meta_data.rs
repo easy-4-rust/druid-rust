@@ -1,6 +1,7 @@
 //! RBDC 数据库元数据 Adapter。
 
-use druid::core::{DruidError, PhysicalDatabaseMetaData};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::PhysicalDatabaseMetaData;
 
 /// RBDC driver identity 的数据库元数据视图。
 ///

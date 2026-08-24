@@ -3,11 +3,14 @@ use super::{
     HttpSqlPreparedStatement, HttpSqlProvider,
 };
 use base64::Engine;
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey,
-    Row, RowSetResultSet, SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::SqlWarning;
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
+    StatementExecuteResult, StatementGeneratedKeys,
 };
+use druid_rdbc::types::{Row, Value};
 use reqwest::{RequestBuilder, StatusCode, Url};
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
@@ -181,7 +184,7 @@ impl HttpSqlConnectionAdapter {
         } else {
             "HY000"
         };
-        let exception = druid::core::SqlException::new(
+        let exception = druid_rdbc::error::SqlException::new(
             i32::from(status.as_u16()),
             Some(sql_state.to_owned()),
             Some(message.into()),
@@ -375,7 +378,7 @@ impl HttpSqlConnectionAdapter {
             Err(HttpSqlStatementExecutionError::TimedOut) => {
                 self.discarded = true;
                 Err(DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_rdbc::error::SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
                         Some("HTTP SQL request timed out".to_owned()),
@@ -386,7 +389,7 @@ impl HttpSqlConnectionAdapter {
             Err(HttpSqlStatementExecutionError::Cancelled) => {
                 self.discarded = true;
                 Err(DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_rdbc::error::SqlException::new(
                         0,
                         Some("HY008".to_owned()),
                         Some("HTTP SQL request was cancelled".to_owned()),

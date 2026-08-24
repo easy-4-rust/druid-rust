@@ -2,10 +2,12 @@
 
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid::core::{
-    DruidError, PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions,
-    PreparedInputParameter, SqlTextStatement, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{
+    PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
+    SqlTextStatement,
 };
+use druid_rdbc::types::Value;
 use sqlx::any::AnyStatement;
 use sqlx::mysql::MySqlStatement;
 use sqlx::postgres::PgStatement;
@@ -290,7 +292,7 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
         Ok(())
     }
 
-    fn warnings(&self) -> Result<Option<druid::core::SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, DruidError> {
         self.statement.warnings()
     }
 

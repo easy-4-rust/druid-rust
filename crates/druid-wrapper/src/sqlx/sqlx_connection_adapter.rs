@@ -4,12 +4,14 @@ use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecuti
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter,
-    PreparedStatementKey, Row, Savepoint, SqlWarning, StatementExecuteResult,
-    StatementGeneratedKeys, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::SqlWarning;
+use druid_rdbc::spi::{
+    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
+    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
+    StatementExecuteResult, StatementGeneratedKeys,
 };
+use druid_rdbc::types::{Row, Savepoint, Value};
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
 use sqlx::mysql::{MySqlArguments, MySqlConnection, MySqlRow, MySqlTransactionManager};
 use sqlx::postgres::{PgArguments, PgConnection, PgRow, PgTransactionManager};
@@ -133,7 +135,7 @@ impl SqlxConnectionAdapter {
                     .and_then(|code| code.parse::<i32>().ok())
                     .unwrap_or_default();
                 DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_rdbc::error::SqlException::new(
                         error_code,
                         sql_state,
                         Some(database_error.message().to_string()),
@@ -142,7 +144,7 @@ impl SqlxConnectionAdapter {
                 ))
             }
             sqlx::Error::Io(error) => DruidError::SqlException(Box::new(
-                druid::core::SqlException::new(
+                druid_rdbc::error::SqlException::new(
                     0,
                     Some("08006".to_owned()),
                     Some(error.to_string()),
@@ -151,7 +153,7 @@ impl SqlxConnectionAdapter {
                 .recoverable(),
             )),
             sqlx::Error::Tls(error) => DruidError::SqlException(Box::new(
-                druid::core::SqlException::new(
+                druid_rdbc::error::SqlException::new(
                     0,
                     Some("08006".to_owned()),
                     Some(error.to_string()),
@@ -160,14 +162,14 @@ impl SqlxConnectionAdapter {
                 .recoverable(),
             )),
             sqlx::Error::Protocol(message) => DruidError::SqlException(Box::new(
-                druid::core::SqlException::new(0, Some("08006".to_owned()), Some(message))
+                druid_rdbc::error::SqlException::new(0, Some("08006".to_owned()), Some(message))
                     .with_class_name("sqlx::error::ProtocolError")
                     .recoverable(),
             )),
             error @ (sqlx::Error::PoolTimedOut
             | sqlx::Error::PoolClosed
             | sqlx::Error::WorkerCrashed) => DruidError::SqlException(Box::new(
-                druid::core::SqlException::new(
+                druid_rdbc::error::SqlException::new(
                     0,
                     Some("08006".to_owned()),
                     Some(error.to_string()),
@@ -190,7 +192,7 @@ impl SqlxConnectionAdapter {
                 self.discarded = true;
                 self.connection.take();
                 Err(DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_rdbc::error::SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
                         Some("SQLx prepared statement query timed out".to_owned()),
@@ -202,7 +204,7 @@ impl SqlxConnectionAdapter {
                 self.discarded = true;
                 self.connection.take();
                 Err(DruidError::SqlException(Box::new(
-                    druid::core::SqlException::new(
+                    druid_rdbc::error::SqlException::new(
                         0,
                         Some("HY008".to_owned()),
                         Some("SQLx prepared statement execution was cancelled".to_owned()),

@@ -1,6 +1,7 @@
 use super::AgentRequestHandle;
-use druid::core::{
-    DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedStatementKey,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::{
+    PhysicalPreparedStatement, PhysicalStatementOptions, PreparedStatementKey,
     StatementGeneratedKeys,
 };
 use serde_json::json;

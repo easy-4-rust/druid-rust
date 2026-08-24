@@ -1,4 +1,5 @@
-use druid::core::{DruidError, PhysicalDatabaseMetaData};
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::spi::PhysicalDatabaseMetaData;
 
 /// JDBC Agent 建立 session 时从真实 `DatabaseMetaData` 捕获的稳定快照。
 #[derive(Debug, Clone)]

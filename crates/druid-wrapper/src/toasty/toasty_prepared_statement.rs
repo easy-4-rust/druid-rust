@@ -3,10 +3,13 @@
 //! 对应 Java：`java.sql.PreparedStatement` 的驱动句柄职责。
 
 use super::toasty_connection_adapter::ToastyConnectionAdapter;
-use druid::core::{
-    DruidError, PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
-    SqlTextPreparedStatement, SqlWarning, Value,
+use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::SqlWarning;
+use druid_rdbc::spi::{
+    PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
+    SqlTextPreparedStatement,
 };
+use druid_rdbc::types::Value;
 use std::any::Any;
 use std::sync::Mutex;
 
