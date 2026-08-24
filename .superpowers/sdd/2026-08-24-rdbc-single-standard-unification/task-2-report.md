@@ -362,3 +362,66 @@ Consumer kinds：`IMPORT=835`、`TYPE=1303`、`TRAIT_OBJECT=487`、`IMPL=153`、
 Round 3 仍只证明 `V0_STATIC / PLANNED_TARGET`；完整 rustc type inference、macro expansion、runtime dispatch、真实数据库与 Java/Rust differential 不由此静态 inventory 声明。
 
 Round 3 final gates：semantic self-tests `11/11`、standardization self-tests `26/26`、Python compile PASS、live semantic `52/17/UNKNOWN=0`、live denominator `73/55/3559`、emit/verify/emit `BYTE_STABLE=PASS`、P03 `48/48`、真实 lease receiver `52/52`、`filter_chain_impl` receiver `10/10`、`git diff --check` PASS。
+
+## Fix round 4/5: qualified receiver identity 与递归 cfg 边界
+
+- 日期：2026-08-25
+- 修复基线：`b2962fafa08a7c92f5f72733b3b9943c8b613285`
+- 范围：Task 2 standardization verifier/self-tests、consumer inventory 再生、本文追加；未处理 deferred Minors，未修改 production Rust/Cargo，未进入 Task 3。
+
+### Root causes and RED
+
+1. `normalize_type_identity` 只保留 nominal leaf 和 generic arguments，导致 `a::Holder<T>` 与 `b::Holder<T>` 都归一化为 `Holder<_G0>`；self type 以 `<` 开头时又无法取得 base，因此 `<T as a::Assoc>::Out` / `<T as b::Assoc>::Out` 的 impl owner 都退化为 `None`。
+2. non-block closure 的 scope 遇到任意 comma 就结束；嵌套调用的 argument comma 会让 untyped closure shadow 提前失效，并把后续 receiver 错归给外层 binding。
+3. match variant payload binding 从 `=>` 后才开始可见，guard 中的 receiver call 缺失。
+4. `cfg_attr` 只把直接 child `cfg(...)` 转为 implication，nested `cfg_attr` 被跳过；next-node walker 又把每个 `<` 都当 generic opener，comparison 会吞掉 semicolon 或后续 live sibling。
+
+新增 6 个行为测试在实现修改前实跑：
+
+```text
+python3 scripts/test_verify_rdbc_standardization_denominator.py
+→ 32 tests / FAILED (failures=5, errors=1)
+→ qualified same-base: expected 2 receiver rows, found 0
+→ qualified associated self: expected 2 receiver rows, found 0
+→ nested-comma closure: false Connection#commit row survived
+→ match guard: Connection#commit missing; arm rollback present
+→ nested cfg_attr: NestedOnly not excluded
+→ comparison node: VerificationError(attribute has no following Rust node boundary)
+```
+
+原 26 个测试在同一次 RED 中全部通过，失败均来自新增 contract，不是 fixture 语法或既有回归。
+
+### GREEN behavior
+
+- impl identity 现在规范化完整 qualified type token slice；只去除等价 root `crate::` / `self::`，保留 `a::` / `b::` 等实际 qualification，并继续按声明位置把 generic 参数映射为 `_G0...`。
+- associated self 从 matched leading `<...>` 后取得 nominal associated type，同时完整保留 `<_G0 as qualified::Assoc>::Out` identity；不同 qualified associated owner 不再共用 accessor key。
+- non-block closure expression 用 `()` / `[]` / `{}` 深度寻找 top-level comma/semicolon/parent close；nested call comma 不结束 closure shadow。
+- match arm arrow 与 body end 都使用 delimiter-aware boundary；payload binding 从 pattern close 后开始，覆盖 guard 和 arm body，直到 arm 结束。
+- cfg meta 递归把每层 `cfg_attr(condition, nested)` 转成 `!condition || nested_constraint`；多个 nested cfg constraints 仍以 conjunction 合并并在 `test=false` 下求可满足性。
+- Rust node walker 只有在 `<...>` 可闭合且 `>` 后继符合 generic/type path 语法时才维护 angle depth；const、macro 和 statement comparison 按自己的 semicolon 结束，并保留 live sibling。
+
+### Regenerated denominator and gates
+
+consumer manifest 已从当前 production source 重新生成，结果 byte-identical：
+
+| Artifact | Rows | SHA-256 | Change |
+| :--- | ---: | :--- | :--- |
+| `rdbc-production-consumers.tsv` | 3559 | `add1a61b90cfea2cff26d7ca632b651233d0efdd6e57df81f5404976cdf70729` | unchanged bytes; parser/scope fixtures hardened |
+
+Consumer kinds：`IMPORT=835`、`TYPE=1303`、`TRAIT_OBJECT=487`、`IMPL=153`、`CALL=781`。crate 分布：`druid-rdbc=1132`、`druid=1793`、`druid-wrapper=634`；receiver CALL `439`。
+
+```text
+semantic self-tests                         → 11/11
+standardization self-tests                  → 32/32 (26 retained + 6 new)
+live semantic                               → JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0
+live denominator                            → PHYSICAL=73 / ADAPTER=55 / CONSUMER=3559
+five Task 2 scripts py_compile              → PASS
+checked artifacts vs emit/verify/emit       → BYTE_STABLE=PASS
+P03 immutable required old paths            → 48/48
+PhysicalConnectionLease receiver calls      → 52/52
+filter_chain_impl receiver matrix           → 10/10
+DruidPooledConnection::physical_mut calls   → 35/35 (commit=1 / rollback=2)
+git diff --check                            → PASS
+```
+
+Round 4 仍只证明 `V0_STATIC / PLANNED_TARGET`；完整 rustc name/type resolution、macro expansion、runtime dispatch、真实数据库行为与 Java/Rust differential 不在 Task 2 静态 inventory 的证明范围内。

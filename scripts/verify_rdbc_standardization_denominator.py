@@ -420,33 +420,79 @@ def parse_cfg_attribute(
 ) -> list[CfgExpr]:
     """Return effective constraints contributed by cfg/cfg_attr."""
 
-    if start + 3 >= bracket_end or tokens[start + 2].kind != "IDENT":
+    return parse_cfg_meta(tokens, start + 2, bracket_end)
+
+
+def parse_cfg_meta(
+    tokens: list[object],
+    start: int,
+    end: int,
+) -> list[CfgExpr]:
+    """Recursively convert one cfg/cfg_attr meta item into effective constraints."""
+
+    if start + 2 >= end or tokens[start].kind != "IDENT":
         return []
-    name = canonical_name(tokens[start + 2])
-    if tokens[start + 3].text != "(":
+    name = canonical_name(tokens[start])
+    if tokens[start + 1].text != "(" or tokens[end - 1].text != ")":
         return []
     if name == "cfg":
-        expression, _ = parse_cfg_expression(tokens, start + 4, bracket_end - 1)
+        expression, _ = parse_cfg_expression(tokens, start + 2, end - 1)
         return [expression]
     if name != "cfg_attr":
         return []
-    condition, cursor = parse_cfg_expression(tokens, start + 4, bracket_end - 1)
+    arguments = split_top_level_ranges(tokens, start + 2, end - 1)
+    if not arguments:
+        return []
+    condition, _ = parse_cfg_expression(tokens, *arguments[0])
     constraints: list[CfgExpr] = []
-    while cursor < bracket_end - 1:
-        if tokens[cursor].text == ",":
-            cursor += 1
-            continue
-        if (
-            tokens[cursor].kind == "IDENT"
-            and canonical_name(tokens[cursor]) == "cfg"
-            and cursor + 1 < bracket_end
-            and tokens[cursor + 1].text == "("
-        ):
-            nested, cursor = parse_cfg_expression(tokens, cursor + 2, bracket_end - 1)
+    for nested_start, nested_end in arguments[1:]:
+        for nested in parse_cfg_meta(tokens, nested_start, nested_end):
             constraints.append(("any", (("not", condition), nested)))
-            continue
-        _, cursor = parse_cfg_expression(tokens, cursor, bracket_end - 1)
     return constraints
+
+
+def generic_angle_closing(tokens: list[object], start: int) -> int | None:
+    """Return a plausible generic ``>``; comparisons are not generic delimiters."""
+
+    depth = 1
+    paren = bracket = brace = 0
+    cursor = start + 1
+    while cursor < len(tokens):
+        text = tokens[cursor].text
+        if text == "(":
+            paren += 1
+        elif text == ")":
+            if paren == 0:
+                return None
+            paren -= 1
+        elif text == "[":
+            bracket += 1
+        elif text == "]":
+            if bracket == 0:
+                return None
+            bracket -= 1
+        elif text == "{":
+            brace += 1
+        elif text == "}":
+            if brace == 0:
+                return None
+            brace -= 1
+        elif paren == bracket == brace == 0 and text == "<":
+            depth += 1
+        elif paren == bracket == brace == 0 and text == ">":
+            depth -= 1
+            if depth == 0:
+                follower = tokens[cursor + 1].text if cursor + 1 < len(tokens) else "<eof>"
+                if follower in {
+                    "::", "(", ")", "[", "]", "{", "}", ",", ";", "+", ":", "=",
+                    "where", "for", "as", "<eof>",
+                }:
+                    return cursor
+                return None
+        elif paren == bracket == brace == 0 and text == ";":
+            return None
+        cursor += 1
+    return None
 
 
 def next_rust_node_end(tokens: list[object], start: int) -> int:
@@ -464,10 +510,11 @@ def next_rust_node_end(tokens: list[object], start: int) -> int:
             bracket += 1
         elif text == "]":
             bracket = max(0, bracket - 1)
-        elif text == "<":
-            angle += 1
-        elif text == ">":
-            angle = max(0, angle - 1)
+        elif text == "<" and paren == bracket == 0:
+            if angle > 0 or generic_angle_closing(tokens, cursor) is not None:
+                angle += 1
+        elif text == ">" and angle > 0:
+            angle -= 1
         elif paren == bracket == angle == 0 and text in {",", ";"}:
             return cursor + 1
         elif paren == bracket == angle == 0 and text == "{":
@@ -973,15 +1020,40 @@ def normalize_type_identity(
 ) -> tuple[str, str] | None:
     """Normalize a self type as qualified base plus canonical generic arguments."""
 
-    angle_start: int | None = None
-    for index in range(start, end):
-        if tokens[index].text == "<":
-            angle_start = index
-            break
-    prefix_end = angle_start if angle_start is not None else end
+    identity_start = start
+    while (
+        identity_start + 1 < end
+        and tokens[identity_start].kind == "IDENT"
+        and canonical_name(tokens[identity_start]) in {"crate", "self"}
+        and tokens[identity_start + 1].text == "::"
+    ):
+        identity_start += 2
+    if identity_start >= end:
+        return None
+
+    base_search_start = identity_start
+    base_search_end = end
+    if tokens[identity_start].text == "<":
+        depth = 1
+        associated_end = identity_start + 1
+        while associated_end < end and depth:
+            depth += tokens[associated_end].text == "<"
+            depth -= tokens[associated_end].text == ">"
+            associated_end += 1
+        if depth:
+            return None
+        if associated_end < end:
+            base_search_start = associated_end
+    else:
+        angle_start = next(
+            (index for index in range(identity_start, end) if tokens[index].text == "<"),
+            None,
+        )
+        if angle_start is not None:
+            base_search_end = angle_start
     base_index = next(
         (
-            index for index in range(prefix_end - 1, start - 1, -1)
+            index for index in range(base_search_end - 1, base_search_start - 1, -1)
             if tokens[index].kind == "IDENT"
             and canonical_name(tokens[index]) not in {"mut", "dyn", "crate", "self", "super"}
         ),
@@ -990,8 +1062,8 @@ def normalize_type_identity(
     if base_index is None:
         return None
     base_name = canonical_name(tokens[base_index])
-    pieces: list[str] = [base_name]
-    for token in tokens[angle_start or end:end]:
+    pieces: list[str] = []
+    for token in tokens[identity_start:end]:
         text = token.text
         if token.kind == "IDENT":
             text = canonical_name(token)
@@ -1188,6 +1260,63 @@ def top_level_token_index(
             angle -= 1
         elif text == target and paren == bracket == brace == angle == 0:
             return index
+    return None
+
+
+def expression_scope_end(tokens: list[object], start: int, end: int) -> int:
+    """Find a comma/semicolon or parent close outside nested expression delimiters."""
+
+    paren = bracket = brace = 0
+    for index in range(start, end):
+        text = tokens[index].text
+        if text == "(":
+            paren += 1
+        elif text == ")":
+            if paren == 0:
+                return index
+            paren -= 1
+        elif text == "[":
+            bracket += 1
+        elif text == "]":
+            if bracket == 0:
+                return index
+            bracket -= 1
+        elif text == "{":
+            brace += 1
+        elif text == "}":
+            if brace == 0:
+                return index
+            brace -= 1
+        elif text in {",", ";"} and paren == bracket == brace == 0:
+            return index
+    return end
+
+
+def match_arm_arrow(tokens: list[object], start: int, end: int) -> int | None:
+    """Find a match arm arrow without confusing delimiters inside its guard."""
+
+    paren = bracket = brace = 0
+    index = start
+    while index + 1 < end:
+        text = tokens[index].text
+        if paren == bracket == brace == 0:
+            if text == "=" and tokens[index + 1].text == ">":
+                return index
+            if text in {",", "}"}:
+                return None
+        if text == "(":
+            paren += 1
+        elif text == ")":
+            paren = max(0, paren - 1)
+        elif text == "[":
+            bracket += 1
+        elif text == "]":
+            bracket = max(0, bracket - 1)
+        elif text == "{":
+            brace += 1
+        elif text == "}":
+            brace = max(0, brace - 1)
+        index += 1
     return None
 
 
@@ -1460,9 +1589,7 @@ def derive_receiver_proofs(
                 closure_end = brace_pairs.get(body_token, function.body_end)
             else:
                 closure_start = body_token
-                closure_end = body_token
-                while closure_end < function.body_end and tokens[closure_end].text not in {",", ";"}:
-                    closure_end += 1
+                closure_end = expression_scope_end(tokens, body_token, function.body_end)
             for param_start, param_end in split_top_level_ranges(tokens, cursor + 1, closing_pipe):
                 colon = top_level_token_index(tokens, param_start, param_end, ":")
                 closure_bindings = (
@@ -1539,27 +1666,14 @@ def derive_receiver_proofs(
                         )
                     )
             continue
-        arrow = closing + 1
-        while arrow + 1 < len(tokens) and not (
-            tokens[arrow].text == "=" and tokens[arrow + 1].text == ">"
-        ):
-            if tokens[arrow].text in {",", "}"}:
-                break
-            arrow += 1
-        if arrow + 1 >= len(tokens) or tokens[arrow].text != "=":
+        arrow = match_arm_arrow(tokens, closing + 1, len(tokens))
+        if arrow is None:
             continue
-        arm_end = arrow + 2
-        nested = 0
-        while arm_end < len(tokens):
-            nested += tokens[arm_end].text in {"(", "[", "{"}
-            nested -= tokens[arm_end].text in {")", "]", "}"}
-            if nested <= 0 and tokens[arm_end].text in {",", "}"}:
-                break
-            arm_end += 1
+        arm_end = expression_scope_end(tokens, arrow + 2, len(tokens))
         for binding_index, name in pattern_names:
             bindings.append(
                 ReceiverBinding(
-                    name, trait_path, binding_index, arrow + 2, arm_end,
+                    name, trait_path, binding_index, closing + 1, arm_end,
                     f"pattern:{key[0]}::{key[1]}:{name}:{binding_index}",
                 )
             )

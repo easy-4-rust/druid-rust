@@ -370,6 +370,116 @@ impl<T> Other<T> {
         )
         self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
 
+    def test_qualified_same_base_impls_keep_distinct_accessor_owners(self) -> None:
+        """a::Holder<T> and b::Holder<T> cannot collapse to one Holder<T> identity."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+impl<T> a::Holder<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+    fn run(&self) { self.physical().commit(); }
+}
+impl<T> b::Holder<T> {
+    fn physical(&self) -> &dyn PhysicalStatement { todo!() }
+    fn run(&self) { self.physical().warnings(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/qualified_same_base.rs"), source, mapping,
+            trait_paths={connection, statement},
+            trait_methods={connection: {"commit"}, statement: {"warnings"}},
+        )
+        calls = sorted(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+
+    def test_qualified_associated_self_impls_keep_distinct_accessor_owners(self) -> None:
+        """Qualified <T as Assoc>::Out self types retain their complete identity."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+impl<T> Runner for <T as a::Assoc>::Out {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+    fn run(&self) { self.physical().commit(); }
+}
+impl<T> Runner for <T as b::Assoc>::Out {
+    fn physical(&self) -> &dyn PhysicalStatement { todo!() }
+    fn run(&self) { self.physical().warnings(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/qualified_associated_self.rs"), source, mapping,
+            trait_paths={connection, statement},
+            trait_methods={connection: {"commit"}, statement: {"warnings"}},
+        )
+        calls = sorted(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+
+    def test_non_block_closure_scope_ignores_nested_call_comma(self) -> None:
+        """A nested call comma cannot end an untyped closure's shadow scope early."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        mapping = {connection: "druid_rdbc::connection::Connection"}
+        source = '''
+use druid_rdbc::spi::PhysicalConnection;
+fn run(physical: &dyn PhysicalConnection) {
+    let closure = |physical| dispatch(unrelated(), physical.commit());
+    physical.rollback();
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/non_block_closure.rs"), source, mapping,
+            trait_paths={connection},
+            trait_methods={connection: {"commit", "rollback"}},
+        )
+        methods = [
+            row.symbol.split("@", 1)[0]
+            for row in occurrences if "@receiver=" in row.symbol
+        ]
+        self.assertEqual(["rollback"], methods)
+
+    def test_match_pattern_binding_is_visible_in_guard_and_body(self) -> None:
+        """A match payload binding starts at the guard and remains through the arm body."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        mapping = {connection: "druid_rdbc::connection::Connection"}
+        source = '''
+use druid_rdbc::spi::PhysicalConnection;
+enum Target<'a> { Connection(&'a dyn PhysicalConnection) }
+fn run(target: Target<'_>) {
+    match target {
+        Target::Connection(physical) if physical.commit() => physical.rollback(),
+    }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/match_guard.rs"), source, mapping,
+            trait_paths={connection},
+            trait_methods={connection: {"commit", "rollback"}},
+        )
+        methods = sorted(
+            row.symbol.split("@", 1)[0]
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(["commit", "rollback"], methods)
+
     def test_unrelated_same_leaf_import_is_not_bound_to_rdbc(self) -> None:
         """An unrelated module exporting the same leaf name is not RDBC evidence."""
 
@@ -517,6 +627,49 @@ fn ConjunctionOnly() {}
         self.assertIn(positions["CfgAttrOnly"], excluded)
         self.assertNotIn(positions["CfgAttrVisible"], excluded)
         self.assertIn(positions["ConjunctionOnly"], excluded)
+
+    def test_nested_cfg_attr_is_recursively_converted_to_effective_constraint(self) -> None:
+        """Nested cfg_attr implications exclude test-only nodes without consuming a live sibling."""
+
+        source = '''
+#[cfg_attr(all(), cfg_attr(not(test), cfg(test)))] fn NestedOnly() {}
+fn LiveSibling() {}
+'''
+        tokens = standardizer.rust_tokens(source)
+        excluded = standardizer.production_excluded_indexes(tokens)
+        positions = {
+            token.text: index for index, token in enumerate(tokens)
+            if token.kind == "IDENT" and token.text in {"NestedOnly", "LiveSibling"}
+        }
+        self.assertIn(positions["NestedOnly"], excluded)
+        self.assertNotIn(positions["LiveSibling"], excluded)
+
+    def test_cfg_node_boundaries_distinguish_comparisons_from_generic_arguments(self) -> None:
+        """Const, macro and statement comparisons end at their own node boundaries."""
+
+        source = '''
+#[cfg(test)] const CHECK: bool = 1 < 2;
+fn live_after_const() {}
+fn run() {
+    #[cfg(test)] check!(1 < 2);
+    live_after_macro();
+    #[cfg(test)] left < right;
+    live_after_statement();
+}
+'''
+        tokens = standardizer.rust_tokens(source)
+        excluded = standardizer.production_excluded_indexes(tokens)
+        positions = {
+            token.text: index for index, token in enumerate(tokens)
+            if token.kind == "IDENT" and token.text in {
+                "CHECK", "live_after_const", "check", "live_after_macro",
+                "left", "right", "live_after_statement",
+            }
+        }
+        for name in ("CHECK", "check", "left", "right"):
+            self.assertIn(positions[name], excluded)
+        for name in ("live_after_const", "live_after_macro", "live_after_statement"):
+            self.assertNotIn(positions[name], excluded)
 
     def test_cfg_attribute_binds_only_comma_terminated_field_or_variant_node(self) -> None:
         """A test-only field/variant cannot consume its live sibling or following function."""
