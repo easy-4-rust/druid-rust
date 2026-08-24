@@ -442,3 +442,36 @@ Round 3 状态更正为 **PARTIAL**；先前 0-open 表述由本段 supersede。
 - Purity改用mod.rs真实声明索引，不按物理file/uppercase放行；absolute/crate/cfg_attr/include
   与合法super controls永久测试。
 - druid-rdbc 17/17、purity9/9/live29、Clippy/fmt/diff PASS；Task2 bytes保持；admin未重跑。
+
+### Round 4 re-review correction
+
+Round 4 状态更正为 **PARTIAL**；先前 `open 0` 表述由本段 supersede。独立 re-review
+确认 Wrapper 运行时行为已满足 17 exact variants、6 组 inheritance closure、非 Connection
+multi-type/const/where generic 与 wrong-variant `E0277`，但这些关键合同没有全部固化到仓库永久
+fixture。Purity 仍未建立从 crate root 递归可达的真实 `ModuleScopeIndex`：inline/nested/
+conventional modules、显式 re-export、任意 `self/super` 与 attribute-scoped `path` 解析仍存在
+可复现漏检或误杀。当前开放为 `2 Important + 1 Minor`。
+
+## Fix round 5/5 breaker
+
+- 基线：`b345ad07bee0e4acd3dd16ab675d81d35c3434ce`。
+- 实现者没有提交 partial 修复；HEAD 与工作树保持 clean，未 push。
+- 原因：剩余工作要求递归 Rust module graph、独立可失败 purity fixtures、17-variant external
+  runtime、精确 wrong-variant/dyn-core compile-fail 与完整门禁，无法在本轮执行窗口内安全完成。
+- 最终状态：**TASK3_FIX_REQUIRED_BREAKER**。
+
+开放 blocker：
+
+1. **Important — purity ModuleScopeIndex**：从 crate root 递归解析 external/inline/conventional
+   modules、声明子模块、显式 re-export 与当前 module stack；缺失/歧义/越 root fail-closed；
+   `path` 仅在 attribute token range 中解释；永久覆盖 hidden sibling、parent transitional root、
+   over-root、ordinary assignment、nested `cfg_attr(path)` 与 qualified `include!`。
+2. **Important — Wrapper permanent evidence**：把 17 exact variants + Wrapper、6 组 inheritance
+   closure、unknown/None、非 Connection multi-type/const/where generic、concrete WrapperExt、dyn
+   core 与 wrong-variant 精确 compile-fail 纳入常规仓库门禁。
+3. **Minor — Wrapper hygiene**：删除失效旧 macro arms，并明确 implementor-only hook和“每个 concrete
+   type只声明一个最具体 leaf”的公共文档。
+
+Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均修复且独立 re-review 返回
+`REVIEW CLEAR`。已知 `druid-admin` supervisor exact failure继续作为非 RDBC 外部风险记录，不能
+把 workspace broad tests伪报为 GREEN。
