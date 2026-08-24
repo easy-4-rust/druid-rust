@@ -57,3 +57,6 @@ Task 3: fix round 2/5 (1 Critical + 2 Important addressed with fresh RED/GREEN, 
 Task 3 ledger correction: round 2 was PARTIAL; prior 0-open wording superseded (1 Critical + 1 Important open: complete Wrapper macro assignability/generic hygiene and unified purity path resolution)
 Task 3: fix round 3/5 in progress (base 568224c)
 Task 3: fix round 3/5 (1 Critical + 1 Important addressed, 0 open; complete 17-variant/generic/supertrait Wrapper macro and unified purity path policy; 73/55/3559 retained)
+Task 3 ledger correction: round 3 was PARTIAL; prior 0-open wording superseded (1 Critical + 1 Important open: permanent complete Wrapper matrix and real purity ModuleScopeIndex)
+Task 3: fix round 4/5 in progress (base 84791d7)
+Task 3: fix round 4/5 (1 Critical + 1 Important addressed, 0 open; complete Wrapper inheritance/generic dispatcher and declared-module purity index; Task2 bytes retained)

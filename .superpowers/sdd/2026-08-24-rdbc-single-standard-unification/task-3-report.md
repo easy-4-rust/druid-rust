@@ -426,3 +426,19 @@ hygiene，以及 purity absolute/crate/relative/cfg_attr path policy。
 - Gates：druid-rdbc 17/17；purity 9/9/live29；workspace all-feature check PASS；Task2
   73/55/3559、consumer `b1b420d6...72c59`；Clippy/docs/fmt/diff PASS。Admin known risk未重跑。
 - 未修改 Physical、Task4、Cargo manifests/lock。Round3 reviewer findings open：`0`。
+
+### Round 3 re-review correction
+
+Round 3 状态更正为 **PARTIAL**；先前 0-open 表述由本段 supersede。Re-review 仍有
+`1 Critical + 1 Important open`：Wrapper 17 variants/完整继承closure/generic/wrong-variant
+永久fixture，以及 purity 真实 ModuleScopeIndex。
+
+## Fix round 4/5
+
+- 基线 `84791d7`；re-review `1 Critical + 1 Important` addressed，open `0`。
+- Wrapper macro覆盖17 kinds与Wrapper identity；Callable/Prepared、DataSource/Common、
+  ConnectionPool/XaDataSource/Common、XaConnection/Pooled继承closure；generic external runtime
+  通过，并提供显式 generics/where syntax。
+- Purity改用mod.rs真实声明索引，不按物理file/uppercase放行；absolute/crate/cfg_attr/include
+  与合法super controls永久测试。
+- druid-rdbc 17/17、purity9/9/live29、Clippy/fmt/diff PASS；Task2 bytes保持；admin未重跑。

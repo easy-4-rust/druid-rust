@@ -245,14 +245,12 @@ def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
         )
         if polluted:
             fail(f"standard source contains product/runtime identities: {relative}: {polluted}")
+        module_tokens = tokenize((path.parent / "mod.rs").read_text(encoding="utf-8"))
         local_roots = {
-            child.stem
-            for child in path.parent.iterdir()
-            if child.is_file() and child.suffix == ".rs" and child.name != "mod.rs"
+            module_tokens[index + 1].text.removeprefix("r#")
+            for index in range(len(module_tokens) - 1)
+            if module_tokens[index].text == "mod" and module_tokens[index + 1].kind == "IDENT"
         }
-        local_roots.update(
-            child.name for child in path.parent.iterdir() if child.is_dir()
-        )
         import_indexes = verify_imports(relative, tokens, local_roots)
         verify_non_use_paths(relative, tokens, local_roots, import_indexes)
         if relative.name == "mod.rs":
