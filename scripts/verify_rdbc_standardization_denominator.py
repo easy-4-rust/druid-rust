@@ -115,6 +115,7 @@ class ImplScope:
     """One impl body and the concrete/inherent self type that owns it."""
 
     type_name: str
+    base_name: str
     start: int
     end: int
 
@@ -325,88 +326,198 @@ def rust_tokens(source: str) -> list[object]:
         fail(f"cannot tokenize Rust production source: {error}")
 
 
-def cfg_predicate_requires_test(tokens: list[object], start: int, end: int) -> bool:
-    """Return whether a cfg predicate cannot be true when ``test`` is false."""
+CfgExpr = tuple[object, ...]
 
-    def parse_expression(index: int, limit: int) -> tuple[bool, int]:
-        if index >= limit or tokens[index].kind != "IDENT":
-            return False, index + 1
-        name = canonical_name(tokens[index])
-        index += 1
-        if index >= limit or tokens[index].text != "(":
-            while index < limit and tokens[index].text not in {",", ")"}:
-                index += 1
-            return name == "test", index
-        index += 1
-        children: list[bool] = []
-        while index < limit and tokens[index].text != ")":
-            child, index = parse_expression(index, limit)
-            children.append(child)
-            if index < limit and tokens[index].text == ",":
-                index += 1
-        if index < limit and tokens[index].text == ")":
-            index += 1
-        if name == "all":
-            return any(children), index
-        if name == "any":
-            return bool(children) and all(children), index
-        # ``not(test)`` and unknown predicates can be active without test; keep them.
-        return False, index
 
-    required, _ = parse_expression(start, end)
-    return required
+def parse_cfg_expression(
+    tokens: list[object],
+    start: int,
+    end: int,
+) -> tuple[CfgExpr, int]:
+    """Parse one cfg predicate into a small boolean AST."""
+
+    if start >= end or tokens[start].kind != "IDENT":
+        return ("atom", f"unknown@{start}"), min(start + 1, end)
+    name = canonical_name(tokens[start])
+    cursor = start + 1
+    if cursor < end and tokens[cursor].text == "=":
+        value = tokens[cursor + 1].text if cursor + 1 < end else "<missing>"
+        return ("atom", f"{name}={value}"), min(cursor + 2, end)
+    if cursor >= end or tokens[cursor].text != "(":
+        return (("test",) if name == "test" else ("atom", name)), cursor
+    cursor += 1
+    children: list[CfgExpr] = []
+    while cursor < end and tokens[cursor].text != ")":
+        child, cursor = parse_cfg_expression(tokens, cursor, end)
+        children.append(child)
+        if cursor < end and tokens[cursor].text == ",":
+            cursor += 1
+    if cursor < end and tokens[cursor].text == ")":
+        cursor += 1
+    if name in {"all", "any"}:
+        return (name, tuple(children)), cursor
+    if name == "not" and len(children) == 1:
+        return ("not", children[0]), cursor
+    return ("atom", f"unknown-call:{name}@{start}"), cursor
+
+
+def cfg_atoms(expression: CfgExpr) -> set[str]:
+    """Collect non-test atoms used by one cfg expression."""
+
+    kind = expression[0]
+    if kind == "atom":
+        return {str(expression[1])}
+    if kind == "test":
+        return set()
+    if kind == "not":
+        return cfg_atoms(expression[1])
+    return set().union(*(cfg_atoms(child) for child in expression[1]))
+
+
+def evaluate_cfg(
+    expression: CfgExpr,
+    assignment: dict[str, bool],
+) -> bool | None:
+    """Evaluate a cfg AST with ``test=false`` and partial atom assignments."""
+
+    kind = expression[0]
+    if kind == "test":
+        return False
+    if kind == "atom":
+        return assignment.get(str(expression[1]))
+    if kind == "not":
+        value = evaluate_cfg(expression[1], assignment)
+        return None if value is None else not value
+    values = [evaluate_cfg(child, assignment) for child in expression[1]]
+    if kind == "all":
+        if any(value is False for value in values):
+            return False
+        return True if all(value is True for value in values) else None
+    if any(value is True for value in values):
+        return True
+    return False if all(value is False for value in values) else None
+
+
+def cfg_satisfiable_without_test(expression: CfgExpr) -> bool:
+    """Use a small DPLL search to decide whether an item can exist with test=false."""
+
+    atoms = sorted(cfg_atoms(expression))
+
+    def search(assignment: dict[str, bool]) -> bool:
+        value = evaluate_cfg(expression, assignment)
+        if value is not None:
+            return value
+        atom = next(atom for atom in atoms if atom not in assignment)
+        return search({**assignment, atom: False}) or search({**assignment, atom: True})
+
+    return search({})
+
+
+def parse_cfg_attribute(
+    tokens: list[object],
+    start: int,
+    bracket_end: int,
+) -> list[CfgExpr]:
+    """Return effective constraints contributed by cfg/cfg_attr."""
+
+    if start + 3 >= bracket_end or tokens[start + 2].kind != "IDENT":
+        return []
+    name = canonical_name(tokens[start + 2])
+    if tokens[start + 3].text != "(":
+        return []
+    if name == "cfg":
+        expression, _ = parse_cfg_expression(tokens, start + 4, bracket_end - 1)
+        return [expression]
+    if name != "cfg_attr":
+        return []
+    condition, cursor = parse_cfg_expression(tokens, start + 4, bracket_end - 1)
+    constraints: list[CfgExpr] = []
+    while cursor < bracket_end - 1:
+        if tokens[cursor].text == ",":
+            cursor += 1
+            continue
+        if (
+            tokens[cursor].kind == "IDENT"
+            and canonical_name(tokens[cursor]) == "cfg"
+            and cursor + 1 < bracket_end
+            and tokens[cursor + 1].text == "("
+        ):
+            nested, cursor = parse_cfg_expression(tokens, cursor + 2, bracket_end - 1)
+            constraints.append(("any", (("not", condition), nested)))
+            continue
+        _, cursor = parse_cfg_expression(tokens, cursor, bracket_end - 1)
+    return constraints
+
+
+def next_rust_node_end(tokens: list[object], start: int) -> int:
+    """Return the exact comma/semicolon/body boundary of the next Rust node."""
+
+    paren = bracket = angle = 0
+    cursor = start
+    while cursor < len(tokens):
+        text = tokens[cursor].text
+        if text == "(" :
+            paren += 1
+        elif text == ")":
+            paren = max(0, paren - 1)
+        elif text == "[":
+            bracket += 1
+        elif text == "]":
+            bracket = max(0, bracket - 1)
+        elif text == "<":
+            angle += 1
+        elif text == ">":
+            angle = max(0, angle - 1)
+        elif paren == bracket == angle == 0 and text in {",", ";"}:
+            return cursor + 1
+        elif paren == bracket == angle == 0 and text == "{":
+            depth = 1
+            cursor += 1
+            while cursor < len(tokens) and depth:
+                depth += tokens[cursor].text == "{"
+                depth -= tokens[cursor].text == "}"
+                cursor += 1
+            if depth:
+                fail("attribute target has an unterminated body")
+            if cursor < len(tokens) and tokens[cursor].text in {",", ";"}:
+                cursor += 1
+            return cursor
+        cursor += 1
+    fail("attribute has no following Rust node boundary")
 
 
 def production_excluded_indexes(tokens: list[object]) -> set[int]:
-    """Return item ranges whose cfg predicate necessarily depends on ``test``."""
+    """Return exact next-node ranges unsatisfiable when ``test=false``."""
 
     excluded: set[int] = set()
     index = 0
-    while index + 4 < len(tokens):
-        if not (
-            tokens[index].text == "#"
-            and tokens[index + 1].text == "["
-            and tokens[index + 2].text == "cfg"
-            and tokens[index + 3].text == "("
-        ):
+    while index + 1 < len(tokens):
+        if tokens[index].text != "#" or tokens[index + 1].text != "[":
             index += 1
             continue
-        depth = 1
-        predicate_end = index + 4
-        while predicate_end < len(tokens) and depth:
-            depth += tokens[predicate_end].text == "("
-            depth -= tokens[predicate_end].text == ")"
-            predicate_end += 1
-        if depth or predicate_end >= len(tokens) or tokens[predicate_end].text != "]":
-            fail("cfg attribute is not closed")
-        requires_test = cfg_predicate_requires_test(
-            tokens,
-            index + 4,
-            predicate_end - 1,
-        )
-        attribute_end = predicate_end + 1
-        if not requires_test:
-            index = attribute_end
-            continue
-        cursor = attribute_end
-        while cursor < len(tokens) and tokens[cursor].text not in {"{", ";"}:
-            cursor += 1
-        if cursor >= len(tokens):
-            fail("test-dependent cfg item has no body or semicolon")
-        end = cursor
-        if tokens[cursor].text == "{":
-            body_depth = 1
-            end += 1
-            while end < len(tokens) and body_depth:
-                body_depth += tokens[end].text == "{"
-                body_depth -= tokens[end].text == "}"
-                end += 1
-            if body_depth:
-                fail("test-dependent cfg item has an unterminated body")
-        else:
-            end += 1
-        excluded.update(range(index, end))
-        index = end
+        group_start = index
+        constraints: list[CfgExpr] = []
+        while index + 1 < len(tokens) and tokens[index].text == "#" and tokens[index + 1].text == "[":
+            depth = 1
+            bracket_end = index + 2
+            while bracket_end < len(tokens) and depth:
+                depth += tokens[bracket_end].text == "["
+                depth -= tokens[bracket_end].text == "]"
+                bracket_end += 1
+            if depth:
+                fail("outer attribute is not closed")
+            constraints.extend(parse_cfg_attribute(tokens, index, bracket_end - 1))
+            index = bracket_end
+        attributes_end = index
+        node_end = next_rust_node_end(tokens, attributes_end)
+        excluded_node = False
+        if constraints:
+            conjunction: CfgExpr = ("all", tuple(constraints))
+            if not cfg_satisfiable_without_test(conjunction):
+                excluded.update(range(group_start, node_end))
+                excluded_node = True
+        # A live attributed parent may contain nested cfg fields/variants/statements.
+        index = node_end if excluded_node else attributes_end
     return excluded
 
 
@@ -815,6 +926,80 @@ def first_identifier(tokens: list[object], start: int, end: int) -> str | None:
     return None
 
 
+def generic_parameter_map(
+    tokens: list[object],
+    start: int,
+    end: int,
+) -> dict[str, str]:
+    """Normalize declared type/lifetime/const parameter names by position."""
+
+    mapping: dict[str, str] = {}
+    if start >= end or tokens[start].text != "<":
+        return mapping
+    depth = 0
+    slot = 0
+    cursor = start + 1
+    segment_start = cursor
+    while cursor < end:
+        text = tokens[cursor].text
+        depth += text in {"<", "(", "["}
+        depth -= text in {">", ")", "]"}
+        if (text == "," and depth == 0) or (text == ">" and depth < 0):
+            segment = tokens[segment_start:cursor]
+            candidate = next(
+                (
+                    token.text
+                    for token in segment
+                    if token.kind in {"IDENT", "LIFETIME"}
+                    and token.text not in {"const", "where"}
+                ),
+                None,
+            )
+            if candidate is not None:
+                mapping[candidate] = f"_G{slot}"
+                slot += 1
+            segment_start = cursor + 1
+        if text == ">" and depth < 0:
+            break
+        cursor += 1
+    return mapping
+
+
+def normalize_type_identity(
+    tokens: list[object],
+    start: int,
+    end: int,
+    generics: dict[str, str],
+) -> tuple[str, str] | None:
+    """Normalize a self type as qualified base plus canonical generic arguments."""
+
+    angle_start: int | None = None
+    for index in range(start, end):
+        if tokens[index].text == "<":
+            angle_start = index
+            break
+    prefix_end = angle_start if angle_start is not None else end
+    base_index = next(
+        (
+            index for index in range(prefix_end - 1, start - 1, -1)
+            if tokens[index].kind == "IDENT"
+            and canonical_name(tokens[index]) not in {"mut", "dyn", "crate", "self", "super"}
+        ),
+        None,
+    )
+    if base_index is None:
+        return None
+    base_name = canonical_name(tokens[base_index])
+    pieces: list[str] = [base_name]
+    for token in tokens[angle_start or end:end]:
+        text = token.text
+        if token.kind == "IDENT":
+            text = canonical_name(token)
+        text = generics.get(text, text)
+        pieces.append(text)
+    return "".join(pieces), base_name
+
+
 def derive_impl_scopes(
     tokens: list[object],
     brace_pairs: dict[int, int],
@@ -831,13 +1016,44 @@ def derive_impl_scopes(
             opening += 1
         if opening >= len(tokens) or tokens[opening].text != "{":
             continue
-        header = tokens[impl_index + 1:opening]
-        for_offset = next((i for i, item in enumerate(header) if item.text == "for"), None)
-        type_start = impl_index + 1 + (for_offset + 1 if for_offset is not None else 0)
-        type_name = first_identifier(tokens, type_start, opening)
-        if type_name is None:
+        cursor = impl_index + 1
+        generics: dict[str, str] = {}
+        if cursor < opening and tokens[cursor].text == "<":
+            depth = 1
+            generic_end = cursor + 1
+            while generic_end < opening and depth:
+                depth += tokens[generic_end].text == "<"
+                depth -= tokens[generic_end].text == ">"
+                generic_end += 1
+            if depth:
+                fail("impl generic declaration is not closed")
+            generics = generic_parameter_map(tokens, cursor, generic_end)
+            cursor = generic_end
+        depth = 0
+        for_index: int | None = None
+        scan = cursor
+        while scan < opening:
+            depth += tokens[scan].text in {"<", "(", "["}
+            depth -= tokens[scan].text in {">", ")", "]"}
+            if depth == 0 and tokens[scan].text == "for":
+                for_index = scan
+                break
+            scan += 1
+        type_start = for_index + 1 if for_index is not None else cursor
+        type_end = type_start
+        depth = 0
+        while type_end < opening:
+            text = tokens[type_end].text
+            if depth == 0 and text == "where":
+                break
+            depth += text in {"<", "(", "["}
+            depth -= text in {">", ")", "]"}
+            type_end += 1
+        identity = normalize_type_identity(tokens, type_start, type_end, generics)
+        if identity is None:
             continue
-        scopes.append(ImplScope(type_name, opening + 1, brace_pairs[opening]))
+        type_name, base_name = identity
+        scopes.append(ImplScope(type_name, base_name, opening + 1, brace_pairs[opening]))
     return scopes
 
 
@@ -907,6 +1123,166 @@ def unique_trait_or_none(paths: set[str]) -> str | None:
     return next(iter(paths)) if len(paths) == 1 else None
 
 
+def split_top_level_ranges(
+    tokens: list[object],
+    start: int,
+    end: int,
+) -> list[tuple[int, int]]:
+    """Split a comma-separated token slice without crossing nested delimiters."""
+
+    ranges: list[tuple[int, int]] = []
+    segment_start = start
+    paren = bracket = brace = angle = 0
+    for index in range(start, end):
+        text = tokens[index].text
+        if text == "(":
+            paren += 1
+        elif text == ")":
+            paren -= 1
+        elif text == "[":
+            bracket += 1
+        elif text == "]":
+            bracket -= 1
+        elif text == "{":
+            brace += 1
+        elif text == "}":
+            brace -= 1
+        elif text == "<":
+            angle += 1
+        elif text == ">":
+            angle -= 1
+        elif text == "," and paren == bracket == brace == angle == 0:
+            ranges.append((segment_start, index))
+            segment_start = index + 1
+    if segment_start < end:
+        ranges.append((segment_start, end))
+    return [(left, right) for left, right in ranges if left < right]
+
+
+def top_level_token_index(
+    tokens: list[object],
+    start: int,
+    end: int,
+    target: str,
+) -> int | None:
+    """Find one token outside nested (), [], {}, and <> delimiters."""
+
+    paren = bracket = brace = angle = 0
+    for index in range(start, end):
+        text = tokens[index].text
+        if text == "(":
+            paren += 1
+        elif text == ")":
+            paren -= 1
+        elif text == "[":
+            bracket += 1
+        elif text == "]":
+            bracket -= 1
+        elif text == "{":
+            brace += 1
+        elif text == "}":
+            brace -= 1
+        elif text == "<":
+            angle += 1
+        elif text == ">":
+            angle -= 1
+        elif text == target and paren == bracket == brace == angle == 0:
+            return index
+    return None
+
+
+def outer_pair(
+    tokens: list[object],
+    start: int,
+    end: int,
+    pairs: dict[int, int],
+    opening: str,
+) -> tuple[int, int] | None:
+    """Strip an outer delimiter only when it encloses the complete slice."""
+
+    if start < end and tokens[start].text == opening and pairs.get(start) == end - 1:
+        return start + 1, end - 1
+    return None
+
+
+def pattern_identifiers(tokens: list[object], start: int, end: int) -> list[tuple[int, str]]:
+    """Return binding identifiers from a simple/tuple pattern, excluding paths and keywords."""
+
+    ignored = {"mut", "ref", "self", "Self", "crate", "super", "_"}
+    result: list[tuple[int, str]] = []
+    for index in range(start, end):
+        if tokens[index].kind != "IDENT":
+            continue
+        name = canonical_name(tokens[index])
+        if name in ignored:
+            continue
+        if index + 1 < end and tokens[index + 1].text == "::":
+            continue
+        if index > start and tokens[index - 1].text == "::":
+            continue
+        result.append((index, name))
+    return result
+
+
+def typed_pattern_bindings(
+    tokens: list[object],
+    pattern_start: int,
+    pattern_end: int,
+    type_start: int,
+    type_end: int,
+    paren_pairs: dict[int, int],
+    bracket_pairs: dict[int, int],
+    aliases: dict[str, tuple[str, ...]],
+    imports: dict[str, str],
+    mapping: dict[str, str],
+    context: tuple[str, ...],
+    proven_paths: dict[str, str],
+    trait_paths: set[str],
+) -> list[tuple[int, str, str | None]]:
+    """Map simple or tuple-destructured pattern leaves to their matching type leaves."""
+
+    pattern_outer = outer_pair(tokens, pattern_start, pattern_end, paren_pairs, "(")
+    type_outer = outer_pair(tokens, type_start, type_end, paren_pairs, "(")
+    if pattern_outer and type_outer:
+        patterns = split_top_level_ranges(tokens, *pattern_outer)
+        types = split_top_level_ranges(tokens, *type_outer)
+        if len(patterns) == len(types):
+            result: list[tuple[int, str, str | None]] = []
+            for pattern_range, type_range in zip(patterns, types, strict=True):
+                result.extend(
+                    typed_pattern_bindings(
+                        tokens, *pattern_range, *type_range, paren_pairs, bracket_pairs,
+                        aliases, imports, mapping, context, proven_paths, trait_paths,
+                    )
+                )
+            return result
+    pattern_outer = outer_pair(tokens, pattern_start, pattern_end, bracket_pairs, "[")
+    type_outer = outer_pair(tokens, type_start, type_end, bracket_pairs, "[")
+    if pattern_outer and type_outer:
+        patterns = split_top_level_ranges(tokens, *pattern_outer)
+        types = split_top_level_ranges(tokens, *type_outer)
+        if len(patterns) == len(types):
+            result = []
+            for pattern_range, type_range in zip(patterns, types, strict=True):
+                result.extend(
+                    typed_pattern_bindings(
+                        tokens, *pattern_range, *type_range, paren_pairs, bracket_pairs,
+                        aliases, imports, mapping, context, proven_paths, trait_paths,
+                    )
+                )
+            return result
+    trait_path = unique_trait_or_none(
+        signature_trait_paths(
+            tokens, type_start, type_end, aliases, imports, mapping, context,
+            proven_paths, trait_paths,
+        )
+    )
+    return [
+        (index, name, trait_path)
+        for index, name in pattern_identifiers(tokens, pattern_start, pattern_end)
+    ]
+
+
 def derive_receiver_proofs(
     tokens: list[object],
     aliases: dict[str, tuple[str, ...]],
@@ -921,6 +1297,7 @@ def derive_receiver_proofs(
 
     brace_pairs = delimiter_pairs(tokens, "{", "}")
     paren_pairs = delimiter_pairs(tokens, "(", ")")
+    bracket_pairs = delimiter_pairs(tokens, "[", "]")
     impl_scopes = derive_impl_scopes(tokens, brace_pairs, excluded)
     functions = derive_function_scopes(tokens, paren_pairs, brace_pairs, impl_scopes, excluded)
     bindings: list[ReceiverBinding] = []
@@ -962,7 +1339,7 @@ def derive_receiver_proofs(
             cursor += 1
         struct_fields[name] = fields
     for scope in impl_scopes:
-        for field_name, trait_path, declaration in struct_fields.get(scope.type_name, []):
+        for field_name, trait_path, declaration in struct_fields.get(scope.base_name, []):
             bindings.append(
                 ReceiverBinding(
                     field_name, trait_path, declaration, scope.start, scope.end,
@@ -972,31 +1349,24 @@ def derive_receiver_proofs(
 
     # Parameters, accessor return types, and local shadows are function-scoped.
     for function in functions:
-        cursor = function.params_start
-        while cursor < function.params_end:
-            if tokens[cursor].kind == "IDENT" and cursor + 1 < function.params_end and tokens[cursor + 1].text == ":":
-                end = cursor + 2
-                depth = 0
-                while end < function.params_end:
-                    depth += tokens[end].text in {"(", "[", "<"}
-                    depth -= tokens[end].text in {")", "]", ">"}
-                    if depth == 0 and tokens[end].text == ",":
-                        break
-                    end += 1
-                resolved = signature_trait_paths(
-                    tokens, cursor + 2, end, aliases, imports, mapping, context,
-                    proven_paths, trait_paths,
-                )
-                name = canonical_name(tokens[cursor])
+        for param_start, param_end in split_top_level_ranges(
+            tokens, function.params_start, function.params_end
+        ):
+            colon = top_level_token_index(tokens, param_start, param_end, ":")
+            if colon is None:
+                continue
+            for declaration, name, trait_path in typed_pattern_bindings(
+                tokens, param_start, colon, colon + 1, param_end,
+                paren_pairs, bracket_pairs, aliases, imports, mapping, context,
+                proven_paths, trait_paths,
+            ):
                 bindings.append(
                     ReceiverBinding(
-                        name, unique_trait_or_none(resolved), cursor,
+                        name, trait_path, declaration,
                         function.body_start, function.body_end,
-                        f"parameter:{function.name}:{name}:{cursor}",
+                        f"parameter:{function.name}:{name}:{declaration}",
                     )
                 )
-                cursor = end
-            cursor += 1
 
         # Resolve this method's return type into an impl-qualified accessor identity.
         arrow = function.params_end + 1
@@ -1023,6 +1393,9 @@ def derive_receiver_proofs(
             if cursor in excluded or tokens[cursor].text != "let":
                 cursor += 1
                 continue
+            if cursor > function.body_start and tokens[cursor - 1].text in {"if", "while"}:
+                cursor += 1
+                continue
             pattern_start = cursor + 1
             equals = pattern_start
             colon: int | None = None
@@ -1031,22 +1404,20 @@ def derive_receiver_proofs(
                     colon = equals
                 equals += 1
             pattern_end = colon if colon is not None else equals
-            names = [
-                (index, canonical_name(tokens[index]))
-                for index in range(pattern_start, pattern_end)
-                if tokens[index].kind == "IDENT"
-                and canonical_name(tokens[index]) not in {"let", "mut", "ref", "_"}
-                and not (index > pattern_start and tokens[index - 1].text == "::")
-            ]
-            trait_path: str | None = None
+            local_bindings: list[tuple[int, str, str | None]]
             if colon is not None:
-                trait_path = unique_trait_or_none(
-                    signature_trait_paths(
-                        tokens, colon + 1, equals, aliases, imports, mapping,
-                        context, proven_paths, trait_paths,
-                    )
+                local_bindings = typed_pattern_bindings(
+                    tokens, pattern_start, colon, colon + 1, equals,
+                    paren_pairs, bracket_pairs, aliases, imports, mapping,
+                    context, proven_paths, trait_paths,
                 )
-            elif equals < function.body_end and tokens[equals].text == "=":
+            else:
+                local_bindings = [
+                    (index, name, None)
+                    for index, name in pattern_identifiers(tokens, pattern_start, pattern_end)
+                ]
+            inferred_trait: str | None = None
+            if colon is None and equals < function.body_end and tokens[equals].text == "=":
                 rhs_end = equals + 1
                 while rhs_end < function.body_end and tokens[rhs_end].text != ";":
                     rhs_end += 1
@@ -1055,17 +1426,65 @@ def derive_receiver_proofs(
                         continue
                     key = (function.impl_type, canonical_name(tokens[rhs_index]))
                     if key in accessors:
-                        trait_path = accessors[key]
+                        inferred_trait = accessors[key]
                         break
             scope_start, scope_end = innermost_brace_scope(cursor, brace_pairs, function.body_end)
-            for declaration, name in names:
+            for declaration, name, trait_path in local_bindings:
                 bindings.append(
                     ReceiverBinding(
-                        name, trait_path, declaration, max(scope_start, declaration), scope_end,
+                        name, trait_path or inferred_trait, declaration,
+                        max(scope_start, declaration), scope_end,
                         f"local:{function.name}:{name}:{declaration}",
                     )
                 )
             cursor = max(cursor + 1, equals + 1)
+
+        # Closure parameters own their expression/body scope and may shadow method bindings.
+        cursor = function.body_start
+        while cursor < function.body_end:
+            if tokens[cursor].text != "|" or cursor in excluded:
+                cursor += 1
+                continue
+            previous = tokens[cursor - 1].text if cursor > function.body_start else "{"
+            if previous not in {"=", "(", ",", "{", "move", "return", ">"}:
+                cursor += 1
+                continue
+            closing_pipe = cursor + 1
+            while closing_pipe < function.body_end and tokens[closing_pipe].text != "|":
+                closing_pipe += 1
+            if closing_pipe >= function.body_end:
+                break
+            body_token = closing_pipe + 1
+            if body_token < function.body_end and tokens[body_token].text == "{":
+                closure_start = body_token + 1
+                closure_end = brace_pairs.get(body_token, function.body_end)
+            else:
+                closure_start = body_token
+                closure_end = body_token
+                while closure_end < function.body_end and tokens[closure_end].text not in {",", ";"}:
+                    closure_end += 1
+            for param_start, param_end in split_top_level_ranges(tokens, cursor + 1, closing_pipe):
+                colon = top_level_token_index(tokens, param_start, param_end, ":")
+                closure_bindings = (
+                    typed_pattern_bindings(
+                        tokens, param_start, colon, colon + 1, param_end,
+                        paren_pairs, bracket_pairs, aliases, imports, mapping, context,
+                        proven_paths, trait_paths,
+                    )
+                    if colon is not None
+                    else [
+                        (index, name, None)
+                        for index, name in pattern_identifiers(tokens, param_start, param_end)
+                    ]
+                )
+                for declaration, name, trait_path in closure_bindings:
+                    bindings.append(
+                        ReceiverBinding(
+                            name, trait_path, declaration, closure_start, closure_end,
+                            f"closure:{function.name}:{name}:{declaration}",
+                        )
+                    )
+            cursor = max(closing_pipe + 1, closure_end)
 
     # Enum variant patterns carry their payload trait into one match arm.
     variant_traits: dict[tuple[str, str], str] = {}
@@ -1096,14 +1515,30 @@ def derive_receiver_proofs(
         if (
             tokens[index].kind != "IDENT" or tokens[index + 1].text != "::"
             or tokens[index + 2].kind != "IDENT" or tokens[index + 3].text != "("
-            or tokens[index + 3].text not in {"("}
         ):
             continue
         key = (canonical_name(tokens[index]), canonical_name(tokens[index + 2]))
         trait_path = variant_traits.get(key)
-        if trait_path is None or index + 3 not in paren_pairs:
+        if index + 3 not in paren_pairs:
             continue
         closing = paren_pairs[index + 3]
+        pattern_names = pattern_identifiers(tokens, index + 4, closing)
+        if index >= 2 and tokens[index - 1].text == "let" and tokens[index - 2].text in {"if", "while"}:
+            body = closing + 1
+            while body < len(tokens) and tokens[body].text != "{":
+                if tokens[body].text == ";":
+                    break
+                body += 1
+            if body in brace_pairs:
+                for binding_index, name in pattern_names:
+                    bindings.append(
+                        ReceiverBinding(
+                            name, trait_path, binding_index, body + 1, brace_pairs[body],
+                            f"control-pattern:{tokens[index - 2].text}:{key[0]}::{key[1]}"
+                            f":{name}:{binding_index}",
+                        )
+                    )
+            continue
         arrow = closing + 1
         while arrow + 1 < len(tokens) and not (
             tokens[arrow].text == "=" and tokens[arrow + 1].text == ">"
@@ -1121,15 +1556,13 @@ def derive_receiver_proofs(
             if nested <= 0 and tokens[arm_end].text in {",", "}"}:
                 break
             arm_end += 1
-        for binding_index in range(index + 4, closing):
-            if tokens[binding_index].kind == "IDENT":
-                name = canonical_name(tokens[binding_index])
-                bindings.append(
-                    ReceiverBinding(
-                        name, trait_path, binding_index, arrow + 2, arm_end,
-                        f"pattern:{key[0]}::{key[1]}:{name}:{binding_index}",
-                    )
+        for binding_index, name in pattern_names:
+            bindings.append(
+                ReceiverBinding(
+                    name, trait_path, binding_index, arrow + 2, arm_end,
+                    f"pattern:{key[0]}::{key[1]}:{name}:{binding_index}",
                 )
+            )
     return bindings, accessors, impl_scopes
 
 
@@ -1137,6 +1570,8 @@ def receiver_binding_at(
     name: str,
     call_index: int,
     bindings: list[ReceiverBinding],
+    *,
+    field_owner: str | None = None,
 ) -> ReceiverBinding | None:
     """Resolve the nearest lexical declaration; unrelated shadow blocks outer proofs."""
 
@@ -1145,6 +1580,11 @@ def receiver_binding_at(
         if binding.name == name
         and binding.declaration_index < call_index
         and binding.scope_start <= call_index < binding.scope_end
+        and (
+            binding.identity.startswith(f"field:{field_owner}:")
+            if field_owner is not None
+            else not binding.identity.startswith("field:")
+        )
     ]
     if not candidates:
         return None
@@ -1192,11 +1632,27 @@ def receiver_call_rows(
         proof_identity: str | None = None
         receiver_index = method_index - 2
         if receiver_index >= 0 and tokens[receiver_index].kind == "IDENT":
-            binding = receiver_binding_at(
-                canonical_name(tokens[receiver_index]),
-                method_index,
-                lexical_bindings,
+            owner = enclosing_impl(method_index, impl_scopes)
+            is_self_field = (
+                receiver_index >= 2
+                and tokens[receiver_index - 1].text == "."
+                and tokens[receiver_index - 2].text == "self"
             )
+            is_bare_receiver = receiver_index == 0 or tokens[receiver_index - 1].text != "."
+            binding = None
+            if is_self_field and owner is not None:
+                binding = receiver_binding_at(
+                    canonical_name(tokens[receiver_index]),
+                    method_index,
+                    lexical_bindings,
+                    field_owner=owner.type_name,
+                )
+            elif is_bare_receiver:
+                binding = receiver_binding_at(
+                    canonical_name(tokens[receiver_index]),
+                    method_index,
+                    lexical_bindings,
+                )
             if binding is not None:
                 trait_path = binding.trait_path
                 proof_identity = binding.identity

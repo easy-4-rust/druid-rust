@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
@@ -235,6 +236,140 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
         self.assertEqual(1, observed.get((prepared, "warnings"), 0))
         self.assertEqual(1, observed.get((prepared, "clear_warnings"), 0))
 
+    def test_physical_connection_lease_generic_impl_accessors_cover_all_calls(self) -> None:
+        """Inherent and trait impls of PhysicalConnectionLease<L> share one normalized identity."""
+
+        source_path = "crates/druid/src/core/physical_connection_lease.rs"
+        rows = [
+            row for row in self.live.consumers
+            if row.source_path == source_path
+            and row.old_path == "druid_rdbc::spi::PhysicalConnection"
+            and row.occurrence_kind == "CALL"
+            and "@binding=accessor:PhysicalConnectionLease<_G0>:physical_connection" in row.symbol
+        ]
+        self.assertEqual(52, len(rows))
+
+    def test_receiver_expression_distinguishes_self_field_from_parameter(self) -> None:
+        """self.physical resolves the field; bare physical resolves the parameter."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+struct Holder<'a> { physical: &'a dyn PhysicalConnection }
+impl<'a> Holder<'a> {
+    fn run(&self, physical: &dyn PhysicalStatement) {
+        self.physical.commit();
+        physical.warnings();
+    }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/field_vs_parameter.rs"), source, mapping,
+            trait_paths={connection, statement},
+            trait_methods={connection: {"commit"}, statement: {"warnings"}},
+        )
+        calls = sorted(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+
+    def test_destructuring_closure_and_control_flow_patterns_are_scoped(self) -> None:
+        """Destructured params, closure params, if/while-let and match arms retain identities."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+enum Target<'a> {
+    Connection(&'a dyn PhysicalConnection),
+    Statement(&'a dyn PhysicalStatement),
+}
+struct Unrelated;
+enum UnrelatedTarget { Other(Unrelated) }
+fn destructured((connection, statement): (&dyn PhysicalConnection, &dyn PhysicalStatement)) {
+    connection.commit();
+    statement.warnings();
+    let closure = |physical: &dyn PhysicalConnection| physical.rollback();
+    if let Target::Connection(physical) = next_target() { physical.commit(); }
+    while let Target::Statement(physical) = next_target() { physical.clear_warnings(); }
+    match next_target() {
+        Target::Connection(physical) => physical.rollback(),
+        Target::Statement(physical) => physical.warnings(),
+    }
+}
+fn closure_shadow(physical: &dyn PhysicalConnection) {
+    let closure = |physical| physical.commit();
+    physical.rollback();
+}
+fn control_shadow(physical: &dyn PhysicalConnection) {
+    if let UnrelatedTarget::Other(physical) = unrelated_target() { physical.commit(); }
+    physical.rollback();
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/pattern_scopes.rs"), source, mapping,
+            trait_paths={connection, statement},
+            trait_methods={
+                connection: {"commit", "rollback"},
+                statement: {"warnings", "clear_warnings"},
+            },
+        )
+        observed = Counter(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(2, observed[(connection, "commit")])
+        self.assertEqual(4, observed[(connection, "rollback")])
+        self.assertEqual(2, observed[(statement, "warnings")])
+        self.assertEqual(1, observed[(statement, "clear_warnings")])
+
+    def test_two_generic_impls_keep_same_named_accessor_owners_distinct(self) -> None:
+        """Generic declarations do not collapse Holder<T> and Other<T> to impl owner T."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+struct Holder<T>(T);
+struct Other<T>(T);
+impl<T> crate::Holder<T> {
+    fn physical(&self) -> &dyn PhysicalConnection { todo!() }
+}
+impl<T> Holder<T> {
+    fn run(&self) { self.physical().commit(); }
+}
+impl<T> self::Other<T> {
+    fn physical(&self) -> &dyn PhysicalStatement { todo!() }
+}
+impl<T> Other<T> {
+    fn run(&self) { self.physical().warnings(); }
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/generic_impl_accessors.rs"), source, mapping,
+            trait_paths={connection, statement},
+            trait_methods={connection: {"commit"}, statement: {"warnings"}},
+        )
+        calls = sorted(
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences if "@receiver=" in row.symbol
+        )
+        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+
     def test_unrelated_same_leaf_import_is_not_bound_to_rdbc(self) -> None:
         """An unrelated module exporting the same leaf name is not RDBC evidence."""
 
@@ -358,6 +493,58 @@ fn statement_path(physical: &dyn PhysicalStatement) {
         self.assertIn(positions["ExactOnly"], excluded)
         self.assertIn(positions["AllOnly"], excluded)
         self.assertNotIn(positions["AnyVisible"], excluded)
+
+    def test_cfg_test_false_satisfiability_handles_not_cfg_attr_and_conjunctions(self) -> None:
+        """Double-not, cfg_attr and multiple cfg constraints use test=false satisfiability."""
+
+        source = '''
+#[cfg(not(test))] fn NotTestVisible() {}
+#[cfg(not(not(test)))] fn DoubleNotOnly() {}
+#[cfg_attr(not(test), cfg(test))] fn CfgAttrOnly() {}
+#[cfg_attr(test, cfg(feature = "x"))] fn CfgAttrVisible() {}
+#[cfg(any(test, feature = "x"))]
+#[cfg(not(feature = "x"))]
+fn ConjunctionOnly() {}
+'''
+        tokens = standardizer.rust_tokens(source)
+        excluded = standardizer.production_excluded_indexes(tokens)
+        positions = {
+            token.text: index for index, token in enumerate(tokens)
+            if token.kind == "IDENT" and token.text.endswith(("Visible", "Only"))
+        }
+        self.assertNotIn(positions["NotTestVisible"], excluded)
+        self.assertIn(positions["DoubleNotOnly"], excluded)
+        self.assertIn(positions["CfgAttrOnly"], excluded)
+        self.assertNotIn(positions["CfgAttrVisible"], excluded)
+        self.assertIn(positions["ConjunctionOnly"], excluded)
+
+    def test_cfg_attribute_binds_only_comma_terminated_field_or_variant_node(self) -> None:
+        """A test-only field/variant cannot consume its live sibling or following function."""
+
+        source = '''
+#[derive(Clone)]
+struct Fields {
+    #[cfg(test)] hidden: u8,
+    live: u8,
+}
+#[derive(Clone)]
+enum Variants {
+    #[cfg(all(test, feature = "x"))] Hidden(u8),
+    Live(u8),
+}
+fn following() {}
+'''
+        tokens = standardizer.rust_tokens(source)
+        excluded = standardizer.production_excluded_indexes(tokens)
+        positions = {
+            token.text: index for index, token in enumerate(tokens)
+            if token.kind == "IDENT" and token.text in {"hidden", "live", "Hidden", "Live", "following"}
+        }
+        self.assertIn(positions["hidden"], excluded)
+        self.assertNotIn(positions["live"], excluded)
+        self.assertIn(positions["Hidden"], excluded)
+        self.assertNotIn(positions["Live"], excluded)
+        self.assertNotIn(positions["following"], excluded)
 
     def test_public_item_and_trait_method_derivation_share_cfg_model(self) -> None:
         """Test-only public types/methods are absent while cfg(any(...)) stays visible."""

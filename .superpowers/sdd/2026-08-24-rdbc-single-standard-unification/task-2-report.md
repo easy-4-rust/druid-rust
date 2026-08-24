@@ -288,3 +288,77 @@ Consumer kinds：`IMPORT=835`、`TYPE=1303`、`TRAIT_OBJECT=487`、`IMPL=153`、
 Round 2 仍只证明 `V0_STATIC / PLANNED_TARGET`。无法在 lexical callsite 唯一证明 declaration identity 或 trait 的 receiver 不生成 row，不用 method-name 或 whole-file leaf fallback 猜测。
 
 Round 2 final gates：semantic self-tests `11/11`、standardization self-tests `20/20`、Python compile PASS、live semantic `52/17/UNKNOWN=0`、live denominator `73/55/3507`、emit/verify/emit `BYTE_STABLE=PASS`、P03 `48/48`、独立 `filter_chain_impl` receiver gate `10/10`、`git diff --check` PASS。
+
+## Fix round 3/5: complete receiver scopes 与 cfg node satisfiability
+
+- 日期：2026-08-25
+- 修复基线：`b542fab8e13d7653afe9c9ed47fb8ead039d2fae`
+- 范围：Task 2 standardization verifier/self-tests、consumer inventory、本文追加；未处理 deferred Minors，未修改 production Rust/Cargo，未进入 Task 3。
+
+### RED evidence
+
+```text
+PhysicalConnectionLease<L> real gate
+→ expected accessor receiver rows 52, found 0
+
+self.field vs bare parameter
+→ field Connection#commit missing; parameter Statement#warnings survived
+
+destructuring/closure/control-flow fixture
+→ expected Connection commit=2, found 0
+
+two generic impl accessors
+→ expected Holder commit + Other warnings, found 0
+
+cfg double-not/cfg_attr/conjunction
+→ DoubleNotOnly not excluded
+
+cfg comma node
+→ test-only field exclusion swallowed live sibling through later body boundary
+```
+
+后续防御性 RED 还证明：live parent 的 outer `#[derive]` 会让旧 walker 跳过 nested cfg field；untyped closure/control pattern 若不建立 `None` shadow，会继承 outer trait 产生伪 receiver row。
+
+### Generic impl identity and receiver expression
+
+- impl parser 先跳过 generic declaration；trait impl 从 top-level `for` 后取 self type，inherent impl 从 generics 后取 self type。
+- self type 保留 qualified base + concrete/generic args；声明 generic 参数按位置标准化为 `_G0...`，因此 inherent `impl<L> PhysicalConnectionLease<L>` 与 trait `impl<L> ... for PhysicalConnectionLease<L>` 统一为 `PhysicalConnectionLease<_G0>`，不同 generic base 不合并。
+- callsite receiver expression 区分 `self.field`、bare parameter/local/pattern 与 `self.accessor()`；field 只能命中当前 normalized impl identity，bare name 不回退到 field。
+- parameter/local 支持 tuple/array destructuring；closure parameter 支持 typed proof 与 untyped `None` shadow。
+- `if let`/`while let` body、match arm pattern 均拥有精确 lexical range；unknown payload 也产生 `None` shadow，避免借用 outer 同名 proof。
+- accessor 以 `(normalized impl self type, accessor name)` 为 identity；无法唯一匹配 return trait 时不猜。
+
+真实门禁：
+
+| Gate | Result |
+| :--- | :--- |
+| `PhysicalConnectionLease<_G0>::physical_connection(_mut)` | `52/52` CALL rows |
+| `DruidPooledConnection::physical_mut` | `35/35` retained |
+| `filter_chain_impl` Connection/Statement/Prepared | `10/10` retained |
+| generic Holder/Other same accessor | distinct Connection/Statement rows |
+| nested `&Other` / untyped closure / unknown control pattern | inner false rows `0`; outer rows retained |
+
+### cfg AST, satisfiability and node binding
+
+- cfg predicate 解析为 `atom/test/all/any/not` AST；固定 `test=false`，通过 partial-evaluation DPLL 搜索其他 atoms，只有不可满足时才标 test-only。
+- 正确处理 `not(test)` 保留、`not(not(test))` 排除、nested all/any 与多个 cfg attributes 的 conjunction；同一 feature atom 在多个 attributes 中共享赋值，可发现矛盾。
+- `cfg_attr(cond, cfg(expr))` 转换为有效条件 `!cond || expr`；`cfg_attr(not(test), cfg(test))` 因 test=false 不可满足而排除。
+- attribute group 绑定真实 next Rust node；按 top-level comma、semicolon 或 matched body 结束，field/variant/match-arm/statement 不吞 live sibling/following function。
+- live attributed parent 不跳过 body，继续发现 nested cfg fields/variants；只有 parent 整体 test-only 时才跳过完整 node。
+- public item、re-export、trait method、consumer、adapter 与 receiver derivation 全部复用同一 excluded token ranges。
+
+### Round 3 regenerated denominator
+
+| Artifact | Rows | SHA-256 | Change |
+| :--- | ---: | :--- | :--- |
+| semantic TSV | 69 | `3a44c4e77259a667da11d228d1db78075a32af93bee691d2fc61ddcfbe64c2b6` | unchanged |
+| oracle JSON | 69 | `f0f0349d3894f583e0f75d30b199774dddc65b9611f0d7eb88716104f16a760f` | unchanged |
+| physical TSV | 73 | `523db9479457a4c4a59eb9a3b783a5d76267c4835de7b9c063c6f7965b97fec1` | unchanged; P03 48/48 |
+| adapter TSV | 55 | `c7b581cbc90ca201e6f5f692ed7b7a4993a9f047a91cdd0c2ade93faccfb2b66` | unchanged |
+| consumer TSV | 3559 | `add1a61b90cfea2cff26d7ca632b651233d0efdd6e57df81f5404976cdf70729` | +52 real lease calls; corrected scopes |
+
+Consumer kinds：`IMPORT=835`、`TYPE=1303`、`TRAIT_OBJECT=487`、`IMPL=153`、`CALL=781`。crate 分布：`druid-rdbc=1132`、`druid=1793`、`druid-wrapper=634`。receiver CALL `439`。
+
+Round 3 仍只证明 `V0_STATIC / PLANNED_TARGET`；完整 rustc type inference、macro expansion、runtime dispatch、真实数据库与 Java/Rust differential 不由此静态 inventory 声明。
+
+Round 3 final gates：semantic self-tests `11/11`、standardization self-tests `26/26`、Python compile PASS、live semantic `52/17/UNKNOWN=0`、live denominator `73/55/3559`、emit/verify/emit `BYTE_STABLE=PASS`、P03 `48/48`、真实 lease receiver `52/52`、`filter_chain_impl` receiver `10/10`、`git diff --check` PASS。
