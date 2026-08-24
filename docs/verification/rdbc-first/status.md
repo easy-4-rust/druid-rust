@@ -6,4 +6,4 @@
 | rdbc-single-standard-unification | READY_FOR_P04_TASK1_DruidError_WAIVER_EXIT | Canonical plan `docs/superpowers/plans/2026-08-24-rdbc-single-standard-unification.md`; P03 has frozen the transitional Physical/resource/adapter input, and Task 1 must exit the DruidError waiver before standard unification begins. |
 | driver-registry-feature-boundaries | BLOCKED_BY_P04 | Registry must use final `druid_rdbc::driver::DriverRegistry`, not transitional SPI/bridge paths. |
 | runtime-production-hardening | BLOCKED_BY_P04 | P02 prerequisite is complete at `80c534f`; P04 remains outstanding. |
-| rdbc-first-verification | BLOCKED_BY_P06 | P01/P02 complete; P03 recovery and P04-P06 remain. |
+| rdbc-first-verification | BLOCKED_BY_P06 | P01/P02 complete; P03 recovery handoff is frozen in transitional state; P04-P06 remain. |
