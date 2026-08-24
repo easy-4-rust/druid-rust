@@ -244,3 +244,111 @@ workspace test 明确记录为 external pre-existing gate，不能列为 GREEN�
 6. Full workspace tests 尚受上述 stale `compat::DruidError` external-consumer fixture 阻断；
    这不是 standard trait 的 compile/object-safety/ownership failure，仍需 Task 1 owner 单独修正
    fixture 或提供兼容性裁决。
+
+## Fix round 1/5：canonical error semantics 与 fail-closed surface
+
+- 日期：2026-08-25
+- 修复基线：`26fdcabbd40951094410ec9c5581421e76a83934`
+- Reviewer findings：`2 Critical + 5 Important`
+- 范围：Task 3 canonical traits/tests/purity verifier，以及 Task 1 已批准错误边界的 stale
+  external/test fixtures；未进入 Task 4，未修改、迁移或删除 `Physical*` hierarchy。
+
+### A. Strict TDD RED
+
+| Finding | Fresh RED evidence |
+| :--- | :--- |
+| Wrapper canonical unwrap/error | desired `Result` signatures 与当前 `bool/Option` 产生 `E0053/E0308`；`StandardUnwrapped::Connection/Object` 缺失产生 `E0599` |
+| Capability truthful defaults | `typed_standard_descriptors_have_neutral_defaults` 因 `transactions=true` assertion failure |
+| Credential/close defaults | desired `Connection::is_closed -> Result` 与旧 bool 产生 `E0308`；mutation checks 依次证明 DataSource、ConnectionPoolDataSource、XaDataSource 各自会错误调用 credentialless path |
+| 1-based/generated keys | signed `TryFrom<i64/i128>` 缺失、`ColumnIndexes(Vec<usize>)` type mismatch、`Statement::generated_keys` 缺失，共产生 `E0277/E0308/E0407/E0599` |
+| Metadata value contracts | typed metadata index mismatch `E0053/E0308`；`ParameterNullability`、`RowIdLifetime::ValidOther/jdbc_name/TryFrom` 缺失 |
+| Dynamic purity/import allowlist | extra `connection/hidden_backend.rs` 与 `use sqlx::Executor` 在固定 29-file verifier 下均未被拒绝，两个 adversarial assertions failure |
+| Task 1 external consumer | focused test稳定复现 `druid_rdbc::compat::DruidError` 缺失 `E0425`；改用 root owner paths 后进一步证明 `druid::DruidError` / `druid_rdbc::RdbcError` 尚未 root-export `E0425/E0433` |
+
+Credential mutation RED 使用同一行为 fixture 分三次逐个恢复错误实现，分别停在 DataSource、
+ConnectionPoolDataSource、XaDataSource assertion；恢复正确实现后同一测试 GREEN，避免一个首个
+assertion 隐藏后两个 overload。
+
+### B. GREEN contracts
+
+1. `Wrapper::is_wrapper_for(Option<TypeId>) -> Result<bool, RdbcError>`：`None` 为
+   `InvalidArgument`，unknown target 为 `Ok(false)`。
+2. `Wrapper::unwrap(Option<TypeId>) -> Result<StandardUnwrapped, RdbcError>`：`None` 为
+   `InvalidArgument`，unsupported target 为 `SQLFeatureNotSupportedException` mapping；不再用
+   `Option::None` 吞掉失败。
+3. `StandardUnwrapped` 现在显式包含 Connection、Statement、PreparedStatement、
+   CallableStatement、ResultSet、DatabaseMetaData、ResultSetMetaData、ParameterMetaData、
+   Common/DataSource、Pooled/ConnectionPool/XA、Driver/ConnectionFactory、Wrapper canonical
+   trait-object variants。具体 `Any` downcast 仅由 `WrapperExt::unwrap_ref` 暴露。
+4. `ConnectionCapabilities::default()` 五项全部 false；doctest 同步。
+5. 三个 credential overload 默认返回 typed feature-not-supported，不再丢弃 user/password；
+   `Connection::close/is_closed` 默认返回 typed feature-not-supported，失败可观察。
+6. `ColumnIndex` / `ParameterIndex` 提供 `TryFrom<i64>` 与 `TryFrom<i128>`，拒绝负数、0 和
+   platform overflow；GeneratedKeys 使用 `Vec<ColumnIndex>`；ResultSetMetaData/
+   ParameterMetaData APIs 使用 typed indexes；Statement 返回 owned
+   `Box<dyn ResultSet>` generated keys。
+7. `ParameterNullability` 完整表达 NoNulls/Nullable/Unknown；RowIdLifetime 包含五个 JDBC
+   4.2 values（含 `ROWID_VALID_OTHER`），并提供 exact JDBC name 双向转换。
+8. Purity verifier 从 `lib.rs` public canonical roots 动态发现 module tree，并对每个 root
+   `rglob("*.rs")`；新增 file/module 自动受检。Import gate 使用 tokenized use-tree 与
+   std/core/alloc/async-trait、canonical crate module allowlist；拒绝 backend root、spi/compat/
+   resource implementation import 与 wildcard，不扫描 doc text。
+9. External consumer 现在实际 `cargo run`：证明 `TypeId` 不同、RdbcError 到
+   `DruidError::Rdbc` exactly-once wrap、再 round-trip 回 RdbcError；未恢复 waiver/alias。
+
+### C. Task 1 stale fixture convergence
+
+Full all-feature workspace gate继续运行后发现四处旧测试仍期待 `DruidError::DriverError` 或
+`DruidError::UnsupportedOperation`，而 Task 1 已冻结实际边界为
+`DruidError::Rdbc(RdbcError::...)`。调用链从 Physical RdbcError 通过
+`impl From<RdbcError> for DruidError` exactly-once wrap，生产实现正确；仅修正：
+
+- `recycle_semantics_test::initialization_failure_closes_connection_and_releases_capacity`；
+- `result_set_filter_semantics_test` 的 close/warnings/clear-warnings 三个行为测试。
+
+Focused all-feature tests全部 GREEN；未修改 Physical trait/impl。
+
+### D. Verification evidence
+
+```text
+Task 3 purity self-tests                    -> 7/7
+live dynamic purity                         -> STANDARD_FILES=29 / PASS
+semantic verifier                           -> 13/13; 52/17/UNKNOWN=0
+Task 2 identity/denominator self-tests       -> 37/37
+live denominator                            -> PHYSICAL=73 / ADAPTER=55 / CONSUMER=3559
+consumer SHA-256                            -> b1b420d61a8c...1c72c59 (unchanged)
+druid-rdbc all targets                      -> 17/17
+druid-rdbc doctest                          -> 1/1
+external consumer focused/full              -> PASS
+workspace all-target/all-feature check      -> PASS
+druid-rdbc all-feature Clippy -D warnings    -> PASS
+RUSTDOCFLAGS=-D warnings cargo doc           -> PASS
+fmt / diff check                            -> PASS
+```
+
+`cargo test --workspace --all-targets --all-features` 已三次用于收敛：所有 Druid/RDBC tests
+在 stale fixture 修正后通过；最终仍被一个与本 diff 无调用关系的 admin supervisor test 阻断。
+
+### E. Non-RDBC residual risk：admin supervisor
+
+保留完整失败证据且未修改 admin/timeout：
+
+1. workspace all-feature parallel run：`admin_binary_test` 4/15 deadline failures；
+2. `cargo test -p druid-admin --all-features --test admin_binary_test -- --test-threads=1
+   --nocapture`：14/15，仍失败 `grpc_bind_failure_cancels_http_sibling_and_exits_immediately`；
+3. exact single-thread run：0/1，2.01s 稳定失败。
+
+数据流是测试占用 gRPC address，spawn admin，预期 gRPC bind error 在 2 秒内取消 HTTP sibling
+并退出；实际 child 保持运行且 stderr 为空。`git diff -- crates/druid-admin Cargo.toml
+Cargo.lock` 为空；因此 workspace parallel load 只解释部分症状，不是唯一根因。这是既有、
+可复现的非 RDBC admin supervisor 风险，不属于本 Task 授权修复范围；workspace test 不能伪报
+GREEN。
+
+### F. Fix-round self-review
+
+- Reviewer 的 2 Critical + 5 Important 均有 RED/GREEN，当前 open finding：`0`。
+- `Physical*` production files/traits/impl 未修改，Task 2 absolute current-crate identity ruling
+  与 consumer bytes保持。
+- Cargo manifests/lockfile未修改；未引入依赖。
+- 仍不宣称 adapter/logical LIVE、Task 4 cutover、JDBC compliance 或 Task 6 removal。
+- 原报告已记录的 `rdbc_error.rs` scope Minor 保持 deferred；本 fix round 不扩散处理。

@@ -13,6 +13,8 @@ pub trait ConnectionPoolDataSource: CommonDataSource {
         _user: &str,
         _password: &str,
     ) -> Result<Box<dyn PooledConnection>, RdbcError> {
-        self.pooled_connection().await
+        Err(RdbcError::feature_not_supported(
+            "connection_pool_data_source_pooled_connection_with_credentials",
+        ))
     }
 }

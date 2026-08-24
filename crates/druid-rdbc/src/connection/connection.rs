@@ -95,11 +95,11 @@ pub trait Connection: Wrapper + Send + 'static {
 
     /// 关闭 raw 或 logical connection handle。
     async fn close(&mut self) -> Result<(), RdbcError> {
-        Ok(())
+        Err(RdbcError::feature_not_supported("connection_close"))
     }
 
     /// 返回 connection 是否已经关闭。
-    fn is_closed(&self) -> bool {
-        false
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::feature_not_supported("connection_is_closed"))
     }
 }

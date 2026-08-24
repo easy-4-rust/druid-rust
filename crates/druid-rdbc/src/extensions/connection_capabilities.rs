@@ -7,10 +7,10 @@
 /// ```
 /// use druid_rdbc::extensions::ConnectionCapabilities;
 /// let capabilities = ConnectionCapabilities::default();
-/// assert!(capabilities.transactions);
+/// assert!(!capabilities.transactions);
 /// assert!(!capabilities.savepoints);
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ConnectionCapabilities {
     /// 是否支持事务。
     pub transactions: bool,
@@ -22,16 +22,4 @@ pub struct ConnectionCapabilities {
     pub schemas: bool,
     /// 是否支持 callable statements。
     pub callable_statements: bool,
-}
-
-impl Default for ConnectionCapabilities {
-    fn default() -> Self {
-        Self {
-            transactions: true,
-            savepoints: false,
-            catalogs: false,
-            schemas: false,
-            callable_statements: false,
-        }
-    }
 }

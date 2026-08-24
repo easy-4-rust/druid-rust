@@ -13,6 +13,8 @@ pub trait XaDataSource: CommonDataSource {
         _user: &str,
         _password: &str,
     ) -> Result<Box<dyn XaConnection>, RdbcError> {
-        self.xa_connection().await
+        Err(RdbcError::feature_not_supported(
+            "xa_data_source_xa_connection_with_credentials",
+        ))
     }
 }

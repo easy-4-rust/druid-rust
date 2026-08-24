@@ -39,3 +39,5 @@ pub mod resource;
 pub mod spi;
 /// 平台值、SQL 类型与日期时间合同。
 pub mod types;
+
+pub use error::RdbcError;

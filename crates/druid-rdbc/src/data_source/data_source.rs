@@ -15,6 +15,8 @@ pub trait DataSource: CommonDataSource + Wrapper + Sync {
         _user: &str,
         _password: &str,
     ) -> Result<Box<dyn Connection>, RdbcError> {
-        self.connection().await
+        Err(RdbcError::feature_not_supported(
+            "data_source_connection_with_credentials",
+        ))
     }
 }

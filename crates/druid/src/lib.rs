@@ -25,3 +25,5 @@ pub mod spi;
 pub mod sql;
 /// Druid 统计实现。
 pub mod stats;
+
+pub use core::DruidError;

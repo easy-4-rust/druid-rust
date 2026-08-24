@@ -8,39 +8,22 @@ from pathlib import Path
 from typing import NoReturn
 
 from verify_rdbc_public_paths import tokenize
+from verify_wrapper_rdbc_import_boundary import parse_use_tree
 
 
-EXPECTED_STANDARD_FILES = (
-    Path("connection/mod.rs"),
-    Path("connection/connection.rs"),
-    Path("statement/mod.rs"),
-    Path("statement/statement.rs"),
-    Path("statement/prepared_statement.rs"),
-    Path("statement/callable_statement.rs"),
-    Path("result_set/mod.rs"),
-    Path("result_set/result_set.rs"),
-    Path("metadata/mod.rs"),
-    Path("metadata/database_meta_data.rs"),
-    Path("metadata/result_set_meta_data.rs"),
-    Path("metadata/parameter_meta_data.rs"),
-    Path("driver/mod.rs"),
-    Path("driver/driver.rs"),
-    Path("driver/connection_factory.rs"),
-    Path("driver/driver_extension_descriptor.rs"),
-    Path("driver/driver_registry.rs"),
-    Path("data_source/mod.rs"),
-    Path("data_source/common_data_source.rs"),
-    Path("data_source/data_source.rs"),
-    Path("data_source/pooled_connection.rs"),
-    Path("data_source/connection_pool_data_source.rs"),
-    Path("data_source/xa_connection.rs"),
-    Path("data_source/xa_data_source.rs"),
-    Path("wrapper/mod.rs"),
-    Path("wrapper/wrapper.rs"),
-    Path("wrapper/standard_unwrapped.rs"),
-    Path("extensions/mod.rs"),
-    Path("extensions/connection_capabilities.rs"),
+REQUIRED_CANONICAL_MODULES = (
+    "connection",
+    "data_source",
+    "driver",
+    "extensions",
+    "metadata",
+    "result_set",
+    "statement",
+    "wrapper",
 )
+TRANSITIONAL_ROOT_MODULES = {"compat", "error", "resource", "spi", "types"}
+ALLOWED_EXTERNAL_IMPORT_ROOTS = {"alloc", "async_trait", "core", "std"}
+ALLOWED_CRATE_MODULES = {*REQUIRED_CANONICAL_MODULES, "error", "types"}
 
 
 class VerificationError(RuntimeError):
@@ -86,15 +69,82 @@ def verify_module_root(path: Path, token_texts: list[str]) -> None:
         fail(f"module root defines items instead of declaring/re-exporting modules: {path}: {present}")
 
 
-def verify_tree(root: Path, *, phase: str) -> None:
+def discover_canonical_modules(root: Path) -> tuple[str, ...]:
+    """Discover every canonical public root module, retaining required Task 3 roots."""
+
+    modules = set(REQUIRED_CANONICAL_MODULES)
+    crate_root = root / "lib.rs"
+    if crate_root.is_file():
+        tokens = tokenize(crate_root.read_text(encoding="utf-8"))
+        for index in range(len(tokens) - 2):
+            if (
+                tokens[index].text == "pub"
+                and tokens[index + 1].text == "mod"
+                and tokens[index + 2].kind == "IDENT"
+            ):
+                name = tokens[index + 2].text.removeprefix("r#")
+                if name not in TRANSITIONAL_ROOT_MODULES:
+                    modules.add(name)
+    return tuple(sorted(modules))
+
+
+def discover_standard_files(root: Path) -> tuple[Path, ...]:
+    """Dynamically enumerate every Rust file under the canonical public module tree."""
+
+    files: list[Path] = []
+    missing: list[str] = []
+    for module in discover_canonical_modules(root):
+        directory = root / module
+        module_root = directory / "mod.rs"
+        if not module_root.is_file():
+            missing.append(module_root.relative_to(root).as_posix())
+            continue
+        discovered = sorted(path for path in directory.rglob("*.rs") if path.is_file())
+        if len(discovered) < 2:
+            missing.append(f"{module}/<canonical-object>.rs")
+            continue
+        files.extend(discovered)
+    if missing:
+        fail(f"standard scaffold is incomplete: {missing}")
+    return tuple(sorted(path.relative_to(root) for path in files))
+
+
+def verify_imports(relative: Path, tokens: list[object], local_roots: set[str]) -> None:
+    """Reject imports outside the canonical crate/std allowlist."""
+
+    index = 0
+    while index < len(tokens):
+        if tokens[index].text != "use":
+            index += 1
+            continue
+        try:
+            entries, end = parse_use_tree(tokens, index + 1)
+        except Exception as error:
+            fail(f"cannot parse canonical import in {relative}: {error}")
+        for entry in entries:
+            path = tuple(part.removeprefix("r#") for part in entry.path)
+            if not path:
+                fail(f"empty canonical import in {relative}")
+            if path[-1] == "*":
+                fail(f"wildcard import is forbidden in canonical source: {relative}")
+            root_name = path[0]
+            if root_name == "crate":
+                if len(path) < 2 or path[1] not in ALLOWED_CRATE_MODULES:
+                    fail(f"crate import escapes canonical allowlist in {relative}: {'::'.join(path)}")
+            elif root_name in {"self", "super"}:
+                continue
+            elif root_name not in ALLOWED_EXTERNAL_IMPORT_ROOTS and root_name not in local_roots:
+                fail(f"backend/external import is forbidden in {relative}: {'::'.join(path)}")
+        index = max(index + 1, end + 1)
+
+
+def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
     """Verify one source tree for the requested migration phase."""
 
     if phase not in {"scaffold", "transitional"}:
         fail(f"unknown purity phase: {phase}")
-    missing = [relative.as_posix() for relative in EXPECTED_STANDARD_FILES if not (root / relative).is_file()]
-    if missing:
-        fail(f"standard scaffold is incomplete: {missing}")
-    for relative in EXPECTED_STANDARD_FILES:
+    standard_files = discover_standard_files(root)
+    for relative in standard_files:
         path = root / relative
         try:
             source = path.read_text(encoding="utf-8")
@@ -111,8 +161,18 @@ def verify_tree(root: Path, *, phase: str) -> None:
         )
         if polluted:
             fail(f"standard source contains product/runtime identities: {relative}: {polluted}")
+        local_roots = {
+            child.stem
+            for child in path.parent.iterdir()
+            if child.is_file() and child.suffix == ".rs" and child.name != "mod.rs"
+        }
+        local_roots.update(
+            child.name for child in path.parent.iterdir() if child.is_dir()
+        )
+        verify_imports(relative, tokens, local_roots)
         if relative.name == "mod.rs":
             verify_module_root(relative, token_texts)
+    return standard_files
 
 
 def main() -> int:
@@ -123,11 +183,11 @@ def main() -> int:
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parent.parent / "crates/druid-rdbc/src"
     try:
-        verify_tree(root, phase=arguments.phase)
+        standard_files = verify_tree(root, phase=arguments.phase)
     except VerificationError as error:
         print(f"ERROR: {error}")
         return 1
-    print(f"STANDARD_FILES={len(EXPECTED_STANDARD_FILES)}")
+    print(f"STANDARD_FILES={len(standard_files)}")
     print(f"PURITY_PHASE={arguments.phase}")
     return 0
 

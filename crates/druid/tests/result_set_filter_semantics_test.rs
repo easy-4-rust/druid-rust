@@ -2171,7 +2171,9 @@ fn result_set_filter_chain_preserves_java_order_short_circuit_and_error_unwind()
 
     assert_eq!(
         chain.result_set_close(&physical, &context),
-        Err(DruidError::DriverError("close failed".to_string()))
+        Err(DruidError::Rdbc(RdbcError::DriverError(
+            "close failed".to_string()
+        )))
     );
     assert_eq!(
         &calls(&call_log)[7..],
@@ -2523,15 +2525,15 @@ fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
     );
     assert_eq!(
         chain.result_set_warnings(&physical, &context),
-        Err(DruidError::UnsupportedOperation {
+        Err(DruidError::Rdbc(RdbcError::UnsupportedOperation {
             operation: "result_set_warnings"
-        })
+        }))
     );
     assert_eq!(
         chain.result_set_clear_warnings(&physical, &context),
-        Err(DruidError::UnsupportedOperation {
+        Err(DruidError::Rdbc(RdbcError::UnsupportedOperation {
             operation: "result_set_clear_warnings"
-        })
+        }))
     );
     chain.result_set_close(&physical, &context).unwrap();
     context.increment_close_count();
@@ -3048,7 +3050,9 @@ fn stat_filter_commits_close_statistics_before_downstream_close_error() {
     assert_eq!(collector.result_set_stat().opening_count(), 1);
     assert_eq!(
         chain.result_set_close(&physical, &context),
-        Err(DruidError::DriverError("close failed".to_string()))
+        Err(DruidError::Rdbc(RdbcError::DriverError(
+            "close failed".to_string()
+        )))
     );
 
     let stat = collector.result_set_stat();

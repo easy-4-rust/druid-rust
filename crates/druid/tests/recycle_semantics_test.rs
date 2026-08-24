@@ -684,7 +684,7 @@ async fn initialization_failure_closes_connection_and_releases_capacity() {
         .init()
         .await
         .expect_err("default initialization must fail");
-    assert!(matches!(error, DruidError::DriverError(_)));
+    assert!(matches!(error, DruidError::Rdbc(RdbcError::DriverError(_))));
     let pool_state = pool.state();
     assert_eq!(pool_state.create_count, 1);
     // init 失败属于物理创建阶段，不是一次公共 get 的逻辑获取失败。

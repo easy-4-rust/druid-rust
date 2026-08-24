@@ -1,4 +1,5 @@
 use crate::error::RdbcError;
+use crate::statement::ParameterIndex;
 use crate::wrapper::Wrapper;
 
 /// JDBC parameter mode descriptor。
@@ -15,21 +16,37 @@ pub enum ParameterMode {
     Unknown,
 }
 
+/// JDBC parameter nullability descriptor。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ParameterNullability {
+    /// Parameter 不允许 SQL NULL。
+    NoNulls,
+    /// Parameter 允许 SQL NULL。
+    Nullable,
+    /// 驱动无法确定。
+    Unknown,
+}
+
 /// 一个 immutable prepared parameter snapshot。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParameterDescriptor {
     type_name: String,
     mode: ParameterMode,
-    nullable: bool,
+    nullability: ParameterNullability,
 }
 
 impl ParameterDescriptor {
     /// 创建 parameter snapshot。
-    pub fn new(type_name: impl Into<String>, mode: ParameterMode, nullable: bool) -> Self {
+    pub fn new(
+        type_name: impl Into<String>,
+        mode: ParameterMode,
+        nullability: ParameterNullability,
+    ) -> Self {
         Self {
             type_name: type_name.into(),
             mode,
-            nullable,
+            nullability,
         }
     }
 
@@ -44,8 +61,8 @@ impl ParameterDescriptor {
     }
 
     /// 返回参数是否允许 SQL NULL。
-    pub const fn nullable(&self) -> bool {
-        self.nullable
+    pub const fn nullability(&self) -> ParameterNullability {
+        self.nullability
     }
 }
 
@@ -55,7 +72,10 @@ pub trait ParameterMetaData: Wrapper + Send + Sync + 'static {
     fn parameter_count(&self) -> usize;
 
     /// 返回一个 1-based parameter descriptor。
-    fn parameter(&self, _parameter_index: usize) -> Result<ParameterDescriptor, RdbcError> {
+    fn parameter(
+        &self,
+        _parameter_index: ParameterIndex,
+    ) -> Result<ParameterDescriptor, RdbcError> {
         Err(RdbcError::UnsupportedOperation {
             operation: "parameter_meta_data_parameter",
         })

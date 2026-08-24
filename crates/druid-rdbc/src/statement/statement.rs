@@ -1,5 +1,5 @@
 use crate::error::RdbcError;
-use crate::result_set::ResultSet;
+use crate::result_set::{ColumnIndex, ResultSet};
 use crate::types::Value;
 use crate::wrapper::Wrapper;
 
@@ -86,7 +86,7 @@ pub enum GeneratedKeys {
     /// 请求驱动默认 generated keys。
     ReturnGeneratedKeys,
     /// 按 1-based column indexes 请求。
-    ColumnIndexes(Vec<usize>),
+    ColumnIndexes(Vec<ColumnIndex>),
     /// 按 column names 请求。
     ColumnNames(Vec<String>),
 }
@@ -172,6 +172,11 @@ pub trait Statement: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "statement_execute_batch",
         })
+    }
+
+    /// 返回本 statement 最近一次执行产生的 owned generated-keys result set。
+    async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Err(RdbcError::feature_not_supported("statement_generated_keys"))
     }
 
     /// 关闭 statement handle。

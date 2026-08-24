@@ -26,6 +26,30 @@ impl ParameterIndex {
     }
 }
 
+impl TryFrom<i64> for ParameterIndex {
+    type Error = RdbcError;
+
+    fn try_from(index: i64) -> Result<Self, Self::Error> {
+        Self::try_from(i128::from(index))
+    }
+}
+
+impl TryFrom<i128> for ParameterIndex {
+    type Error = RdbcError;
+
+    fn try_from(index: i128) -> Result<Self, Self::Error> {
+        if index <= 0 {
+            return Err(RdbcError::InvalidArgument(
+                "parameter index is 1-based".to_string(),
+            ));
+        }
+        let index = usize::try_from(index).map_err(|_| {
+            RdbcError::InvalidArgument("parameter index exceeds platform usize".to_string())
+        })?;
+        Self::new(index)
+    }
+}
+
 /// 一个 prepared input parameter snapshot。
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreparedParameter {

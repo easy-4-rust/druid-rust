@@ -25,6 +25,30 @@ impl ColumnIndex {
     }
 }
 
+impl TryFrom<i64> for ColumnIndex {
+    type Error = RdbcError;
+
+    fn try_from(index: i64) -> Result<Self, Self::Error> {
+        Self::try_from(i128::from(index))
+    }
+}
+
+impl TryFrom<i128> for ColumnIndex {
+    type Error = RdbcError;
+
+    fn try_from(index: i128) -> Result<Self, Self::Error> {
+        if index <= 0 {
+            return Err(RdbcError::InvalidArgument(
+                "column index is 1-based".to_string(),
+            ));
+        }
+        let index = usize::try_from(index).map_err(|_| {
+            RdbcError::InvalidArgument("column index exceeds platform usize".to_string())
+        })?;
+        Self::new(index)
+    }
+}
+
 /// Result-set update operation descriptor。
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]

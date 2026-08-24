@@ -52,7 +52,7 @@ fn external_consumer_retains_druid_sql_public_contract() -> Result<(), Box<dyn E
         toml_path(&druid_path)?,
         toml_path(&druid_rdbc_path)?,
     );
-    let source = r"use druid::sql::{Connection, DataSource, Date, ResultSet, SQLException, Statement};
+    let source = r#"use druid::sql::{Connection, DataSource, Date, ResultSet, SQLException, Statement};
 
 macro_rules! bidirectional_owned_identity {
     ($old:path, $new:path) => {{
@@ -244,11 +244,18 @@ fn main() {
     bidirectional_owned_identity!(druid::sql::SqlWarning, druid_rdbc::error::SqlWarning);
     bidirectional_owned_identity!(druid::sql::SQLWarning, druid_rdbc::error::SqlWarning);
 
-    bidirectional_owned_identity!(
-        druid::core::error::DruidError,
-        druid_rdbc::compat::DruidError
+    assert_ne!(
+        std::any::TypeId::of::<druid::DruidError>(),
+        std::any::TypeId::of::<druid_rdbc::RdbcError>()
     );
-    bidirectional_owned_identity!(druid::core::DruidError, druid_rdbc::compat::DruidError);
+    let canonical_error = druid_rdbc::RdbcError::Other("driver boundary".to_string());
+    let product_error: druid::DruidError = canonical_error.clone().into();
+    match &product_error {
+        druid::DruidError::Rdbc(wrapped) => assert_eq!(wrapped, &canonical_error),
+        other => panic!("expected one explicit DruidError::Rdbc wrapper, got {other:?}"),
+    }
+    let recovered: druid_rdbc::RdbcError = product_error.into();
+    assert_eq!(recovered, canonical_error);
     bidirectional_owned_identity!(
         druid::core::rdbc_string::RdbcString,
         druid_rdbc::types::RdbcString
@@ -560,13 +567,13 @@ fn main() {
     }
     let _ = sql_glob_contract::proves_glob_alias_identity(None, None, None, None);
 }
-";
+"#;
     fs::write(package.path.join("Cargo.toml"), manifest)?;
     fs::create_dir(package.path.join("src"))?;
     fs::write(package.path.join("src/main.rs"), source)?;
 
     let output = Command::new(env!("CARGO"))
-        .arg("check")
+        .arg("run")
         .arg("--quiet")
         .current_dir(&package.path)
         .env("CARGO_TARGET_DIR", package.path.join("target"))
