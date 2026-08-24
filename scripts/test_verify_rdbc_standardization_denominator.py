@@ -202,11 +202,38 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
             and row.old_path == "druid_rdbc::spi::PhysicalConnection"
             and row.occurrence_kind == "CALL"
             and "@receiver=PhysicalConnection@" in row.symbol
+            and "@binding=accessor:DruidPooledConnection:physical_mut@" in row.symbol
         ]
         self.assertEqual(35, len(receiver_calls))
         names = [row.symbol.split("@", 1)[0] for row in receiver_calls]
         self.assertEqual(1, names.count("commit"))
         self.assertEqual(2, names.count("rollback"))
+
+    def test_filter_chain_same_name_receivers_keep_lexical_trait_identity(self) -> None:
+        """Each real filter-chain physical binding keeps its own Connection/Statement trait."""
+
+        source_path = "crates/druid/src/core/filter_chain_impl.rs"
+        rows = [
+            row for row in self.live.consumers
+            if row.source_path == source_path and "@receiver=" in row.symbol
+        ]
+        observed = {}
+        for row in rows:
+            method = row.symbol.split("@", 1)[0]
+            observed[(row.old_path, method)] = observed.get((row.old_path, method), 0) + 1
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        prepared = "druid_rdbc::spi::PhysicalPreparedStatement"
+        self.assertEqual(1, observed.get((connection, "create_blob"), 0))
+        self.assertEqual(1, observed.get((connection, "create_clob"), 0))
+        self.assertEqual(1, observed.get((connection, "create_n_clob"), 0))
+        self.assertEqual(1, observed.get((connection, "database_meta_data"), 0))
+        self.assertEqual(1, observed.get((connection, "warnings"), 0))
+        self.assertEqual(1, observed.get((connection, "clear_warnings"), 0))
+        self.assertEqual(1, observed.get((statement, "warnings"), 0))
+        self.assertEqual(1, observed.get((statement, "clear_warnings"), 0))
+        self.assertEqual(1, observed.get((prepared, "warnings"), 0))
+        self.assertEqual(1, observed.get((prepared, "clear_warnings"), 0))
 
     def test_unrelated_same_leaf_import_is_not_bound_to_rdbc(self) -> None:
         """An unrelated module exporting the same leaf name is not RDBC evidence."""
@@ -262,6 +289,116 @@ mod tests {
             if "@receiver=PhysicalConnection@" in row.symbol
         ]
         self.assertEqual(["commit"], receiver_methods)
+
+    def test_receiver_bindings_follow_method_and_nested_shadow_scopes(self) -> None:
+        """Same-name parameters and a nested unrelated local cannot overwrite each other."""
+
+        connection = "druid_rdbc::spi::PhysicalConnection"
+        statement = "druid_rdbc::spi::PhysicalStatement"
+        mapping = {
+            connection: "druid_rdbc::connection::Connection",
+            statement: "druid_rdbc::statement::Statement",
+        }
+        source = '''
+use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
+struct Other;
+fn connection_path(physical: &dyn PhysicalConnection) {
+    physical.commit();
+    {
+        let physical: &Other = unrelated();
+        physical.commit();
+    }
+    physical.rollback();
+}
+fn statement_path(physical: &dyn PhysicalStatement) {
+    physical.warnings();
+}
+'''
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/scoped_receivers.rs"),
+            source,
+            mapping,
+            trait_paths={connection, statement},
+            trait_methods={
+                connection: {"commit", "rollback"},
+                statement: {"warnings"},
+            },
+        )
+        calls = [
+            (row.old_path, row.symbol.split("@", 1)[0])
+            for row in occurrences
+            if "@receiver=" in row.symbol
+        ]
+        self.assertEqual(
+            sorted(
+                [
+                    (connection, "commit"),
+                    (connection, "rollback"),
+                    (statement, "warnings"),
+                ]
+            ),
+            sorted(calls),
+        )
+
+    def test_cfg_predicates_share_exact_all_any_production_model(self) -> None:
+        """test and all(test, ...) are excluded; any(test, feature) remains production-capable."""
+
+        source = '''
+#[cfg(test)] pub struct ExactOnly;
+#[cfg(all(test, feature = "x"))] pub struct AllOnly;
+#[cfg(any(test, feature = "x"))] pub struct AnyVisible;
+'''
+        tokens = standardizer.rust_tokens(source)
+        excluded = standardizer.production_excluded_indexes(tokens)
+        positions = {
+            token.text: index
+            for index, token in enumerate(tokens)
+            if token.kind == "IDENT" and token.text in {"ExactOnly", "AllOnly", "AnyVisible"}
+        }
+        self.assertIn(positions["ExactOnly"], excluded)
+        self.assertIn(positions["AllOnly"], excluded)
+        self.assertNotIn(positions["AnyVisible"], excluded)
+
+    def test_public_item_and_trait_method_derivation_share_cfg_model(self) -> None:
+        """Test-only public types/methods are absent while cfg(any(...)) stays visible."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            spi = root / "crates/druid-rdbc/src/spi"
+            resource = root / "crates/druid-rdbc/src/resource"
+            spi.mkdir(parents=True)
+            resource.mkdir(parents=True)
+            source_path = spi / "fixture.rs"
+            source_path.write_text(
+                '''
+#[cfg(test)] pub struct TestOnly;
+#[cfg(all(test, feature = "x"))] pub struct AllOnly;
+#[cfg(any(test, feature = "x"))] pub struct AnyVisible;
+pub trait VisibleTrait {
+    fn live(&self);
+    #[cfg(test)] fn hidden_exact(&self);
+    #[cfg(all(test, feature = "x"))] fn hidden_all(&self);
+    #[cfg(any(test, feature = "x"))] fn visible_any(&self);
+}
+''',
+                encoding="utf-8",
+            )
+            public = standardizer.scan_public_items(root)
+            self.assertNotIn("druid_rdbc::spi::TestOnly", public)
+            self.assertNotIn("druid_rdbc::spi::AllOnly", public)
+            self.assertIn("druid_rdbc::spi::AnyVisible", public)
+            trait_path = "druid_rdbc::spi::VisibleTrait"
+            row = standardizer.PhysicalRow(
+                trait_path,
+                "MERGE_STANDARD",
+                "druid_rdbc::visible::VisibleTrait",
+                "PLANNED",
+                "crates/druid-rdbc/src/spi/fixture.rs",
+                "trait VisibleTrait",
+                "P04_TASK_3_STANDARD_TRAITS",
+            )
+            methods = standardizer.derive_trait_methods(root, (row,))[trait_path]
+            self.assertEqual({"live", "visible_any"}, methods)
 
     def test_wildcard_imports_fail_closed_instead_of_hiding_symbols(self) -> None:
         """A wildcard over a standardized module is ambiguous and must be rejected."""

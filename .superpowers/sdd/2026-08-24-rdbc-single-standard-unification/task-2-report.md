@@ -213,3 +213,78 @@ Final gates：semantic self-tests `11/11`、standardization self-tests `16/16`�
 ### Remaining boundary
 
 该修复仍是 `V0_STATIC / PLANNED_TARGET`。宏展开、编译器完整 name resolution、动态 dispatch runtime target、真实数据库行为与 Java/Rust differential 仍由后续 Tasks 验证；receiver inference 遇到无唯一显式类型证明时不猜测、不生成 row。
+
+## Fix round 2/5: lexical receiver identity 与 shared cfg model
+
+- 日期：2026-08-25
+- 修复基线：`4628c17d273bfb3e5a0baa32972f9a0411a59b42`
+- 范围：Task 2 standardization verifier/self-tests、consumer inventory、本文追加；未修改 production Rust/Cargo，未进入 Task 3。
+- Deferred Minors：本轮不处理。
+
+### Root causes and RED
+
+原 `typed_receiver_proofs` 把整文件所有 field/parameter/local/accessor 压成一个 `name -> trait` 字典。不同 impl、method、match arm 与 nested block 中的同名 `physical` 相互覆盖。真实 `filter_chain_impl.rs` 因最后一个 Prepared proof 获胜，Connection 的 `create_blob/create_clob/create_n_clob/database_meta_data/warnings/clear_warnings` 和 Statement warning 分支缺失，Statement/Connection warning 又被误标为 Prepared。
+
+新增 RED：
+
+```text
+filter_chain_impl real gate
+→ Connection#create_blob expected 1, found 0
+
+nested shadow fixture
+→ expected Connection commit+rollback and Statement warnings;
+  only Statement warnings survived whole-file overwrite
+
+cfg predicate API
+→ production_excluded_indexes absent
+
+test-only public derivation
+→ #[cfg(test)] TestOnly and #[cfg(all(test,...))] AllOnly entered public denominator
+```
+
+### Lexical receiver proof
+
+- 每个 binding 记录 name、optional trait、declaration token、lexical start/end 与 declaration identity。
+- field 只在 exact self-type impl scope 可见；parameter 只在 method body 可见；local/pattern binding 只在最内层 block/match arm 可见。
+- unrelated/ambiguous binding 保留为 `trait_path=None` shadow，阻断外层同名 proof，而不是回退猜测。
+- accessor 使用 `(impl self type, method name)` identity；callsite 仅接受 `self.<accessor>()` 且 return signature 唯一指向一个 current trait。
+- enum variant payload 从定义派生，并把 match-arm pattern binding 分别绑定 Statement/PreparedStatement。
+- 每个 receiver CALL 的 symbol anchor 写入 `binding=<field|parameter|local|pattern|accessor identity>`，使误归因可审计。
+
+真实 `filter_chain_impl.rs` receiver gate：
+
+| Trait | Required methods/count | Result |
+| :--- | :--- | :--- |
+| `PhysicalConnection` | blob/clob/nclob/metadata/warnings/clear = 6 | PASS |
+| `PhysicalStatement` | warnings/clear = 2 | PASS |
+| `PhysicalPreparedStatement` | warnings/clear = 2 | PASS |
+| `PhysicalConnectionFactory` | existing create/create/close = 3 | PASS |
+
+`DruidPooledConnection::physical_mut` 仍保留 35/35 exact accessor calls，含 `commit=1`、`rollback=2`。合成 `&Other` nested shadow 的内层 commit 为 0，外层 Connection commit/rollback 与独立 Statement warnings 均保留。
+
+### Shared production cfg model
+
+`production_excluded_indexes` 现由 public-item scan、re-export graph、trait-method derivation、consumer scan、adapter scan 与 receiver scan 共享：
+
+- `cfg(test)`：必然依赖 test，排除；
+- `cfg(all(test, ...))`：任一 all 条件必需 test，排除；
+- `cfg(any(test, feature = ...))`：可由非-test 分支成立，不排除；
+- nested all/any 使用“test=false 时是否仍可能成立”的保守递归规则；unknown/not predicate 不误排。
+
+Test-only public type 和 trait method 不再进入 production derivation；`cfg(any(test, feature))` public type/method 保留。
+
+### Round 2 regenerated denominator
+
+| Artifact | Rows | SHA-256 | Change |
+| :--- | ---: | :--- | :--- |
+| semantic TSV | 69 | `3a44c4e77259a667da11d228d1db78075a32af93bee691d2fc61ddcfbe64c2b6` | unchanged |
+| oracle JSON | 69 | `f0f0349d3894f583e0f75d30b199774dddc65b9611f0d7eb88716104f16a760f` | unchanged |
+| physical TSV | 73 | `523db9479457a4c4a59eb9a3b783a5d76267c4835de7b9c063c6f7965b97fec1` | unchanged; P03 48/48 |
+| adapter TSV | 55 | `c7b581cbc90ca201e6f5f692ed7b7a4993a9f047a91cdd0c2ade93faccfb2b66` | unchanged |
+| consumer TSV | 3507 | `93aee0e466d1d736ee033a099ef3ae8d19d9640f4d86d4e3f460587a033e7651` | lexical receiver correction |
+
+Consumer kinds：`IMPORT=835`、`TYPE=1303`、`TRAIT_OBJECT=487`、`IMPL=153`、`CALL=729`。crate 分布：`druid-rdbc=1132`、`druid=1743`、`druid-wrapper=632`。typed receiver CALL 从 whole-file 误合并的 541 收敛为 lexical proof 387。
+
+Round 2 仍只证明 `V0_STATIC / PLANNED_TARGET`。无法在 lexical callsite 唯一证明 declaration identity 或 trait 的 receiver 不生成 row，不用 method-name 或 whole-file leaf fallback 猜测。
+
+Round 2 final gates：semantic self-tests `11/11`、standardization self-tests `20/20`、Python compile PASS、live semantic `52/17/UNKNOWN=0`、live denominator `73/55/3507`、emit/verify/emit `BYTE_STABLE=PASS`、P03 `48/48`、独立 `filter_chain_impl` receiver gate `10/10`、`git diff --check` PASS。

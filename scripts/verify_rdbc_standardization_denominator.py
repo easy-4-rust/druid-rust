@@ -98,6 +98,39 @@ class LiveManifests:
     consumers: tuple[ConsumerRow, ...]
 
 
+@dataclass(frozen=True)
+class ReceiverBinding:
+    """One lexical receiver declaration, including unrelated shadow declarations."""
+
+    name: str
+    trait_path: str | None
+    declaration_index: int
+    scope_start: int
+    scope_end: int
+    identity: str
+
+
+@dataclass(frozen=True)
+class ImplScope:
+    """One impl body and the concrete/inherent self type that owns it."""
+
+    type_name: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class FunctionScope:
+    """One function/method body with parameter and owning impl boundaries."""
+
+    name: str
+    params_start: int
+    params_end: int
+    body_start: int
+    body_end: int
+    impl_type: str | None
+
+
 def fail(message: str) -> NoReturn:
     """Stop with one stable fail-closed diagnostic."""
 
@@ -292,31 +325,84 @@ def rust_tokens(source: str) -> list[object]:
         fail(f"cannot tokenize Rust production source: {error}")
 
 
-def cfg_test_indexes(tokens: list[object]) -> set[int]:
-    """Return token indexes owned by exact ``#[cfg(test)]`` items."""
+def cfg_predicate_requires_test(tokens: list[object], start: int, end: int) -> bool:
+    """Return whether a cfg predicate cannot be true when ``test`` is false."""
+
+    def parse_expression(index: int, limit: int) -> tuple[bool, int]:
+        if index >= limit or tokens[index].kind != "IDENT":
+            return False, index + 1
+        name = canonical_name(tokens[index])
+        index += 1
+        if index >= limit or tokens[index].text != "(":
+            while index < limit and tokens[index].text not in {",", ")"}:
+                index += 1
+            return name == "test", index
+        index += 1
+        children: list[bool] = []
+        while index < limit and tokens[index].text != ")":
+            child, index = parse_expression(index, limit)
+            children.append(child)
+            if index < limit and tokens[index].text == ",":
+                index += 1
+        if index < limit and tokens[index].text == ")":
+            index += 1
+        if name == "all":
+            return any(children), index
+        if name == "any":
+            return bool(children) and all(children), index
+        # ``not(test)`` and unknown predicates can be active without test; keep them.
+        return False, index
+
+    required, _ = parse_expression(start, end)
+    return required
+
+
+def production_excluded_indexes(tokens: list[object]) -> set[int]:
+    """Return item ranges whose cfg predicate necessarily depends on ``test``."""
 
     excluded: set[int] = set()
     index = 0
-    marker = ("#", "[", "cfg", "(", "test", ")", "]")
-    while index + len(marker) <= len(tokens):
-        if tuple(token.text for token in tokens[index:index + len(marker)]) != marker:
+    while index + 4 < len(tokens):
+        if not (
+            tokens[index].text == "#"
+            and tokens[index + 1].text == "["
+            and tokens[index + 2].text == "cfg"
+            and tokens[index + 3].text == "("
+        ):
             index += 1
             continue
-        cursor = index + len(marker)
+        depth = 1
+        predicate_end = index + 4
+        while predicate_end < len(tokens) and depth:
+            depth += tokens[predicate_end].text == "("
+            depth -= tokens[predicate_end].text == ")"
+            predicate_end += 1
+        if depth or predicate_end >= len(tokens) or tokens[predicate_end].text != "]":
+            fail("cfg attribute is not closed")
+        requires_test = cfg_predicate_requires_test(
+            tokens,
+            index + 4,
+            predicate_end - 1,
+        )
+        attribute_end = predicate_end + 1
+        if not requires_test:
+            index = attribute_end
+            continue
+        cursor = attribute_end
         while cursor < len(tokens) and tokens[cursor].text not in {"{", ";"}:
             cursor += 1
         if cursor >= len(tokens):
-            fail("cfg(test) item has no body or semicolon")
+            fail("test-dependent cfg item has no body or semicolon")
         end = cursor
         if tokens[cursor].text == "{":
-            depth = 1
+            body_depth = 1
             end += 1
-            while end < len(tokens) and depth:
-                depth += tokens[end].text == "{"
-                depth -= tokens[end].text == "}"
+            while end < len(tokens) and body_depth:
+                body_depth += tokens[end].text == "{"
+                body_depth -= tokens[end].text == "}"
                 end += 1
-            if depth:
-                fail("cfg(test) item has an unterminated body")
+            if body_depth:
+                fail("test-dependent cfg item has an unterminated body")
         else:
             end += 1
         excluded.update(range(index, end))
@@ -335,7 +421,10 @@ def scan_public_items(root: Path) -> dict[str, tuple[str, str]]:
         for source_file in sorted(source_root.rglob("*.rs")):
             relative = source_file.relative_to(root)
             tokens = rust_tokens(source_file.read_text(encoding="utf-8"))
+            excluded = production_excluded_indexes(tokens)
             for index in range(len(tokens) - 2):
+                if index in excluded:
+                    continue
                 if tokens[index].kind != "IDENT" or tokens[index].text != "pub":
                     continue
                 kind_token = tokens[index + 1]
@@ -572,7 +661,7 @@ def build_proven_reexports(
         changed = False
         for path, tokens in sources:
             context = module_context(path)
-            excluded = cfg_test_indexes(tokens)
+            excluded = production_excluded_indexes(tokens)
             aliases: dict[str, tuple[str, ...]] = {
                 "druid_rdbc": ("druid_rdbc",),
                 "druid": ("druid",),
@@ -634,6 +723,7 @@ def derive_trait_methods(
             continue
         name = row.old_path.rsplit("::", 1)[1]
         tokens = rust_tokens((root / row.source_file).read_text(encoding="utf-8"))
+        excluded = production_excluded_indexes(tokens)
         trait_index = next(
             (
                 index for index in range(len(tokens) - 1)
@@ -660,6 +750,7 @@ def derive_trait_methods(
                 depth -= 1
             elif (
                 depth == 1
+                and cursor not in excluded
                 and tokens[cursor].text == "fn"
                 and cursor + 1 < len(tokens)
                 and tokens[cursor + 1].kind == "IDENT"
@@ -697,59 +788,389 @@ def signature_trait_paths(
     return found
 
 
-def typed_receiver_proofs(
+def delimiter_pairs(tokens: list[object], opening: str, closing: str) -> dict[int, int]:
+    """Return exact opening-to-closing delimiter indexes."""
+
+    stack: list[int] = []
+    pairs: dict[int, int] = {}
+    for index, token in enumerate(tokens):
+        if token.text == opening:
+            stack.append(index)
+        elif token.text == closing:
+            if not stack:
+                fail(f"unmatched {closing} in Rust source")
+            pairs[stack.pop()] = index
+    if stack:
+        fail(f"unmatched {opening} in Rust source")
+    return pairs
+
+
+def first_identifier(tokens: list[object], start: int, end: int) -> str | None:
+    """Return the first non-keyword identifier in a type/pattern slice."""
+
+    ignored = {"mut", "ref", "dyn", "where", "for", "impl", "pub", "crate", "self"}
+    for token in tokens[start:end]:
+        if token.kind == "IDENT" and canonical_name(token) not in ignored:
+            return canonical_name(token)
+    return None
+
+
+def derive_impl_scopes(
+    tokens: list[object],
+    brace_pairs: dict[int, int],
+    excluded: set[int],
+) -> list[ImplScope]:
+    """Derive impl ownership so same-named fields/accessors cannot cross impls."""
+
+    scopes: list[ImplScope] = []
+    for impl_index, token in enumerate(tokens):
+        if impl_index in excluded or token.text != "impl":
+            continue
+        opening = impl_index + 1
+        while opening < len(tokens) and tokens[opening].text not in {"{", ";"}:
+            opening += 1
+        if opening >= len(tokens) or tokens[opening].text != "{":
+            continue
+        header = tokens[impl_index + 1:opening]
+        for_offset = next((i for i, item in enumerate(header) if item.text == "for"), None)
+        type_start = impl_index + 1 + (for_offset + 1 if for_offset is not None else 0)
+        type_name = first_identifier(tokens, type_start, opening)
+        if type_name is None:
+            continue
+        scopes.append(ImplScope(type_name, opening + 1, brace_pairs[opening]))
+    return scopes
+
+
+def enclosing_impl(index: int, impl_scopes: list[ImplScope]) -> ImplScope | None:
+    """Return the narrowest impl containing one token index."""
+
+    candidates = [scope for scope in impl_scopes if scope.start <= index < scope.end]
+    return min(candidates, key=lambda scope: scope.end - scope.start) if candidates else None
+
+
+def derive_function_scopes(
+    tokens: list[object],
+    paren_pairs: dict[int, int],
+    brace_pairs: dict[int, int],
+    impl_scopes: list[ImplScope],
+    excluded: set[int],
+) -> list[FunctionScope]:
+    """Derive each function body and its owning impl/method identity."""
+
+    scopes: list[FunctionScope] = []
+    for fn_index in range(len(tokens) - 1):
+        if fn_index in excluded or tokens[fn_index].text != "fn" or tokens[fn_index + 1].kind != "IDENT":
+            continue
+        params_start = fn_index + 2
+        while params_start < len(tokens) and tokens[params_start].text != "(":
+            params_start += 1
+        if params_start not in paren_pairs:
+            continue
+        params_end = paren_pairs[params_start]
+        body_start = params_end + 1
+        while body_start < len(tokens) and tokens[body_start].text not in {"{", ";"}:
+            body_start += 1
+        if body_start not in brace_pairs:
+            continue
+        owner = enclosing_impl(fn_index, impl_scopes)
+        scopes.append(
+            FunctionScope(
+                canonical_name(tokens[fn_index + 1]),
+                params_start + 1,
+                params_end,
+                body_start + 1,
+                brace_pairs[body_start],
+                owner.type_name if owner else None,
+            )
+        )
+    return scopes
+
+
+def innermost_brace_scope(
+    index: int,
+    brace_pairs: dict[int, int],
+    fallback_end: int,
+) -> tuple[int, int]:
+    """Return the smallest lexical block containing one declaration."""
+
+    candidates = [
+        (opening + 1, closing)
+        for opening, closing in brace_pairs.items()
+        if opening < index < closing
+    ]
+    return min(candidates, key=lambda pair: pair[1] - pair[0]) if candidates else (index, fallback_end)
+
+
+def unique_trait_or_none(paths: set[str]) -> str | None:
+    """Return a unique trait proof; ambiguity deliberately yields no proof."""
+
+    return next(iter(paths)) if len(paths) == 1 else None
+
+
+def derive_receiver_proofs(
     tokens: list[object],
     aliases: dict[str, tuple[str, ...]],
-    bindings: dict[str, str],
+    imports: dict[str, str],
     mapping: dict[str, str],
     context: tuple[str, ...],
     proven_paths: dict[str, str],
     trait_paths: set[str],
     excluded: set[int],
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Derive typed variables/fields and accessor return types from explicit signatures."""
+) -> tuple[list[ReceiverBinding], dict[tuple[str | None, str], str], list[ImplScope]]:
+    """Derive lexical field/parameter/local/pattern bindings and scoped accessors."""
 
-    typed_names: dict[str, str] = {}
-    accessors: dict[str, str] = {}
-    for index in range(len(tokens) - 2):
-        if index in excluded:
+    brace_pairs = delimiter_pairs(tokens, "{", "}")
+    paren_pairs = delimiter_pairs(tokens, "(", ")")
+    impl_scopes = derive_impl_scopes(tokens, brace_pairs, excluded)
+    functions = derive_function_scopes(tokens, paren_pairs, brace_pairs, impl_scopes, excluded)
+    bindings: list[ReceiverBinding] = []
+    accessors: dict[tuple[str | None, str], str] = {}
+
+    # Struct fields are visible only in impls of that exact self type.
+    struct_fields: dict[str, list[tuple[str, str | None, int]]] = {}
+    for index in range(len(tokens) - 1):
+        if index in excluded or tokens[index].text != "struct" or tokens[index + 1].kind != "IDENT":
             continue
-        if tokens[index].kind == "IDENT" and tokens[index + 1].text == ":":
-            end = index + 2
-            while end < len(tokens) and tokens[end].text not in {",", ")", "=", ";", "{"}:
-                end += 1
-            resolved = signature_trait_paths(
-                tokens, index + 2, end, aliases, bindings, mapping, context,
-                proven_paths, trait_paths,
+        name = canonical_name(tokens[index + 1])
+        opening = index + 2
+        while opening < len(tokens) and tokens[opening].text not in {"{", ";", "("}:
+            opening += 1
+        if opening not in brace_pairs:
+            continue
+        closing = brace_pairs[opening]
+        depth = 1
+        cursor = opening + 1
+        fields: list[tuple[str, str | None, int]] = []
+        while cursor < closing:
+            depth += tokens[cursor].text == "{"
+            depth -= tokens[cursor].text == "}"
+            if (
+                depth == 1
+                and tokens[cursor].kind == "IDENT"
+                and cursor + 1 < closing
+                and tokens[cursor + 1].text == ":"
+            ):
+                end = cursor + 2
+                while end < closing and tokens[end].text != ",":
+                    end += 1
+                resolved = signature_trait_paths(
+                    tokens, cursor + 2, end, aliases, imports, mapping, context,
+                    proven_paths, trait_paths,
+                )
+                fields.append((canonical_name(tokens[cursor]), unique_trait_or_none(resolved), cursor))
+                cursor = end
+            cursor += 1
+        struct_fields[name] = fields
+    for scope in impl_scopes:
+        for field_name, trait_path, declaration in struct_fields.get(scope.type_name, []):
+            bindings.append(
+                ReceiverBinding(
+                    field_name, trait_path, declaration, scope.start, scope.end,
+                    f"field:{scope.type_name}:{field_name}",
+                )
             )
-            if len(resolved) == 1:
-                typed_names[canonical_name(tokens[index])] = next(iter(resolved))
-        if tokens[index].text != "fn" or tokens[index + 1].kind != "IDENT":
+
+    # Parameters, accessor return types, and local shadows are function-scoped.
+    for function in functions:
+        cursor = function.params_start
+        while cursor < function.params_end:
+            if tokens[cursor].kind == "IDENT" and cursor + 1 < function.params_end and tokens[cursor + 1].text == ":":
+                end = cursor + 2
+                depth = 0
+                while end < function.params_end:
+                    depth += tokens[end].text in {"(", "[", "<"}
+                    depth -= tokens[end].text in {")", "]", ">"}
+                    if depth == 0 and tokens[end].text == ",":
+                        break
+                    end += 1
+                resolved = signature_trait_paths(
+                    tokens, cursor + 2, end, aliases, imports, mapping, context,
+                    proven_paths, trait_paths,
+                )
+                name = canonical_name(tokens[cursor])
+                bindings.append(
+                    ReceiverBinding(
+                        name, unique_trait_or_none(resolved), cursor,
+                        function.body_start, function.body_end,
+                        f"parameter:{function.name}:{name}:{cursor}",
+                    )
+                )
+                cursor = end
+            cursor += 1
+
+        # Resolve this method's return type into an impl-qualified accessor identity.
+        arrow = function.params_end + 1
+        while arrow + 1 < function.body_start and not (
+            tokens[arrow].text == "-" and tokens[arrow + 1].text == ">"
+        ):
+            arrow += 1
+        if arrow + 1 < function.body_start:
+            resolved = signature_trait_paths(
+                tokens, arrow + 2, function.body_start - 1, aliases, imports,
+                mapping, context, proven_paths, trait_paths,
+            )
+            trait_path = unique_trait_or_none(resolved)
+            if trait_path is not None:
+                key = (function.impl_type, function.name)
+                previous = accessors.get(key)
+                if previous is not None and previous != trait_path:
+                    accessors.pop(key, None)
+                elif previous is None:
+                    accessors[key] = trait_path
+
+        cursor = function.body_start
+        while cursor < function.body_end:
+            if cursor in excluded or tokens[cursor].text != "let":
+                cursor += 1
+                continue
+            pattern_start = cursor + 1
+            equals = pattern_start
+            colon: int | None = None
+            while equals < function.body_end and tokens[equals].text not in {"=", ";"}:
+                if tokens[equals].text == ":" and colon is None:
+                    colon = equals
+                equals += 1
+            pattern_end = colon if colon is not None else equals
+            names = [
+                (index, canonical_name(tokens[index]))
+                for index in range(pattern_start, pattern_end)
+                if tokens[index].kind == "IDENT"
+                and canonical_name(tokens[index]) not in {"let", "mut", "ref", "_"}
+                and not (index > pattern_start and tokens[index - 1].text == "::")
+            ]
+            trait_path: str | None = None
+            if colon is not None:
+                trait_path = unique_trait_or_none(
+                    signature_trait_paths(
+                        tokens, colon + 1, equals, aliases, imports, mapping,
+                        context, proven_paths, trait_paths,
+                    )
+                )
+            elif equals < function.body_end and tokens[equals].text == "=":
+                rhs_end = equals + 1
+                while rhs_end < function.body_end and tokens[rhs_end].text != ";":
+                    rhs_end += 1
+                for rhs_index in range(equals + 1, rhs_end - 1):
+                    if tokens[rhs_index].kind != "IDENT" or tokens[rhs_index + 1].text != "(":
+                        continue
+                    key = (function.impl_type, canonical_name(tokens[rhs_index]))
+                    if key in accessors:
+                        trait_path = accessors[key]
+                        break
+            scope_start, scope_end = innermost_brace_scope(cursor, brace_pairs, function.body_end)
+            for declaration, name in names:
+                bindings.append(
+                    ReceiverBinding(
+                        name, trait_path, declaration, max(scope_start, declaration), scope_end,
+                        f"local:{function.name}:{name}:{declaration}",
+                    )
+                )
+            cursor = max(cursor + 1, equals + 1)
+
+    # Enum variant patterns carry their payload trait into one match arm.
+    variant_traits: dict[tuple[str, str], str] = {}
+    for index in range(len(tokens) - 2):
+        if index in excluded or tokens[index].text != "enum" or tokens[index + 1].kind != "IDENT":
             continue
-        arrow = index + 2
-        while arrow + 1 < len(tokens) and tokens[arrow].text not in {"{", ";"}:
-            if tokens[arrow].text == "-" and tokens[arrow + 1].text == ">":
+        enum_name = canonical_name(tokens[index + 1])
+        opening = index + 2
+        while opening < len(tokens) and tokens[opening].text != "{":
+            opening += 1
+        if opening not in brace_pairs:
+            continue
+        closing = brace_pairs[opening]
+        cursor = opening + 1
+        while cursor + 1 < closing:
+            if tokens[cursor].kind == "IDENT" and tokens[cursor + 1].text == "(" and cursor + 1 in paren_pairs:
+                end = paren_pairs[cursor + 1]
+                resolved = signature_trait_paths(
+                    tokens, cursor + 2, end, aliases, imports, mapping, context,
+                    proven_paths, trait_paths,
+                )
+                trait_path = unique_trait_or_none(resolved)
+                if trait_path is not None:
+                    variant_traits[(enum_name, canonical_name(tokens[cursor]))] = trait_path
+                cursor = end
+            cursor += 1
+    for index in range(len(tokens) - 5):
+        if (
+            tokens[index].kind != "IDENT" or tokens[index + 1].text != "::"
+            or tokens[index + 2].kind != "IDENT" or tokens[index + 3].text != "("
+            or tokens[index + 3].text not in {"("}
+        ):
+            continue
+        key = (canonical_name(tokens[index]), canonical_name(tokens[index + 2]))
+        trait_path = variant_traits.get(key)
+        if trait_path is None or index + 3 not in paren_pairs:
+            continue
+        closing = paren_pairs[index + 3]
+        arrow = closing + 1
+        while arrow + 1 < len(tokens) and not (
+            tokens[arrow].text == "=" and tokens[arrow + 1].text == ">"
+        ):
+            if tokens[arrow].text in {",", "}"}:
                 break
             arrow += 1
-        if arrow + 1 >= len(tokens) or tokens[arrow].text != "-":
+        if arrow + 1 >= len(tokens) or tokens[arrow].text != "=":
             continue
-        end = arrow + 2
-        while end < len(tokens) and tokens[end].text not in {"{", ";"}:
-            end += 1
-        resolved = signature_trait_paths(
-            tokens, arrow + 2, end, aliases, bindings, mapping, context,
-            proven_paths, trait_paths,
+        arm_end = arrow + 2
+        nested = 0
+        while arm_end < len(tokens):
+            nested += tokens[arm_end].text in {"(", "[", "{"}
+            nested -= tokens[arm_end].text in {")", "]", "}"}
+            if nested <= 0 and tokens[arm_end].text in {",", "}"}:
+                break
+            arm_end += 1
+        for binding_index in range(index + 4, closing):
+            if tokens[binding_index].kind == "IDENT":
+                name = canonical_name(tokens[binding_index])
+                bindings.append(
+                    ReceiverBinding(
+                        name, trait_path, binding_index, arrow + 2, arm_end,
+                        f"pattern:{key[0]}::{key[1]}:{name}:{binding_index}",
+                    )
+                )
+    return bindings, accessors, impl_scopes
+
+
+def receiver_binding_at(
+    name: str,
+    call_index: int,
+    bindings: list[ReceiverBinding],
+) -> ReceiverBinding | None:
+    """Resolve the nearest lexical declaration; unrelated shadow blocks outer proofs."""
+
+    candidates = [
+        binding for binding in bindings
+        if binding.name == name
+        and binding.declaration_index < call_index
+        and binding.scope_start <= call_index < binding.scope_end
+    ]
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda binding: (
+            binding.scope_end - binding.scope_start,
+            -binding.declaration_index,
         )
-        if len(resolved) == 1:
-            accessors[canonical_name(tokens[index + 1])] = next(iter(resolved))
-    return typed_names, accessors
+    )
+    best = candidates[0]
+    best_key = (best.scope_end - best.scope_start, best.declaration_index)
+    tied = [
+        binding for binding in candidates
+        if (binding.scope_end - binding.scope_start, binding.declaration_index) == best_key
+    ]
+    if len({binding.trait_path for binding in tied}) > 1:
+        return None
+    return best
 
 
 def receiver_call_rows(
     path: Path,
     tokens: list[object],
-    typed_names: dict[str, str],
-    accessors: dict[str, str],
+    lexical_bindings: list[ReceiverBinding],
+    accessors: dict[tuple[str | None, str], str],
+    impl_scopes: list[ImplScope],
     trait_methods: dict[str, set[str]],
     mapping: dict[str, str],
     tasks: dict[str, str],
@@ -768,9 +1189,17 @@ def receiver_call_rows(
         ):
             continue
         trait_path: str | None = None
+        proof_identity: str | None = None
         receiver_index = method_index - 2
         if receiver_index >= 0 and tokens[receiver_index].kind == "IDENT":
-            trait_path = typed_names.get(canonical_name(tokens[receiver_index]))
+            binding = receiver_binding_at(
+                canonical_name(tokens[receiver_index]),
+                method_index,
+                lexical_bindings,
+            )
+            if binding is not None:
+                trait_path = binding.trait_path
+                proof_identity = binding.identity
         cursor = method_index - 2
         while cursor >= 0 and tokens[cursor].text == "?":
             cursor -= 1
@@ -786,8 +1215,16 @@ def receiver_call_rows(
                 depth == 0
                 and accessor_index >= 0
                 and tokens[accessor_index].kind == "IDENT"
+                and accessor_index >= 2
+                and tokens[accessor_index - 1].text == "."
+                and tokens[accessor_index - 2].text == "self"
             ):
-                trait_path = accessors.get(canonical_name(tokens[accessor_index]))
+                owner = enclosing_impl(method_index, impl_scopes)
+                owner_name = owner.type_name if owner else None
+                accessor_name = canonical_name(tokens[accessor_index])
+                trait_path = accessors.get((owner_name, accessor_name))
+                if trait_path is not None:
+                    proof_identity = f"accessor:{owner_name or '<module>'}:{accessor_name}"
         if trait_path is None:
             continue
         method = canonical_name(tokens[method_index])
@@ -797,7 +1234,8 @@ def receiver_call_rows(
             ConsumerRow(
                 path.as_posix(),
                 "CALL",
-                f"{method}@receiver={trait_path.rsplit('::', 1)[1]}@token={method_index}",
+                f"{method}@receiver={trait_path.rsplit('::', 1)[1]}"
+                f"@binding={proof_identity}@token={method_index}",
                 trait_path,
                 mapping[trait_path],
                 tasks.get(trait_path, "PLANNED_TARGET"),
@@ -902,7 +1340,7 @@ def scan_source_text(
     """Scan one Rust source without allowing literals, aliases, or use trees to hide rows."""
 
     tokens = rust_tokens(source)
-    excluded = cfg_test_indexes(tokens)
+    excluded = production_excluded_indexes(tokens)
     context = module_context(path)
     proven = proven_paths or {old_path: old_path for old_path in mapping}
     declarations = declaration_paths or {}
@@ -1043,7 +1481,7 @@ def scan_source_text(
         proven,
         excluded,
     )
-    typed_names, accessors = typed_receiver_proofs(
+    lexical_bindings, accessors, impl_scopes = derive_receiver_proofs(
         tokens,
         aliases,
         bindings,
@@ -1057,8 +1495,9 @@ def scan_source_text(
         receiver_call_rows(
             path,
             tokens,
-            typed_names,
+            lexical_bindings,
             accessors,
+            impl_scopes,
             trait_methods or {},
             mapping,
             current_tasks,
