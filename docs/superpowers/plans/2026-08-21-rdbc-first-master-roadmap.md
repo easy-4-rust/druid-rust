@@ -4,7 +4,7 @@
 
 **Goal:** 将当前 workspace 演进为 `druid-rdbc + druid + druid-wrapper + druid-metrics + druid-admin` 五产品 Crate，并以 `druid-bench` 统一承载合同、差分和性能验证。
 
-**Architecture:** 先修复 P0 行为缺陷；P03 冻结已执行但 owner 错置的 transitional extraction；P04 把 `druid-rdbc` 收敛为 JDBC 4.2 standard contract，把完整 Physical hierarchy 原子迁到 `druid::bridge::physical`，由 wrapper 实现。随后执行 registry/feature/runtime/release 门禁。
+**Architecture:** 先修复 P0 行为缺陷；P03 冻结已执行的 transitional Physical/resource/adapter 分母；P04 建立唯一 `druid-rdbc` JDBC-like standard trait tree，让 wrapper integrations 与 Druid pooled proxies 直接实现，并在 merge 完成后删除 `Physical*`。随后执行 registry/feature/runtime/release 门禁。
 
 **Tech Stack:** Rust 2021、Cargo workspace、Tokio、Tonic/Prost、SQLx、Toasty、RBDC、bb8、deadpool、CodeGraph、cargo-public-api、cargo-semver-checks、Criterion
 
@@ -30,7 +30,7 @@ flowchart LR
     P01["01 External Pool RDBC Conformance"]
     P02["02 Metrics/Admin Single Protocol"]
     P03["03 Transitional Extraction Recovery"]
-    P04["04 JDBC Standard + Druid Bridge Realignment"]
+    P04["04 Single RDBC Standard Unification"]
     P05["05 Driver Registry & Feature Boundaries"]
     P06["06 Runtime Production Hardening"]
     P07["07 Verification & Release Gates"]
@@ -55,9 +55,9 @@ P01 与 P02 可并行；P03 必须在 external pool 合同修复后开始，避�
 | :---: | :--- | :--- | :--- | :--- |
 | 01 | [External Pool RDBC Conformance](2026-08-21-external-pool-rdbc-conformance.md) | bb8/deadpool 与 direct SQLx 能力等价 | 当前 default suite 可运行 | 同一 conformance suite 全通过 |
 | 02 | [Metrics/Admin Single Protocol](2026-08-21-metrics-admin-single-protocol.md) | 唯一 proto、真实 payload、真实 gRPC、secure default | 当前两个 proto 已冻结为失败证据 | 双进程网络 E2E 通过 |
-| 03 | [druid-rdbc Transitional Extraction Recovery](2026-08-21-druid-rdbc-extraction.md) | 冻结 Tasks 1–5 过渡态、breaking inventory 与 P04 handoff | P01 完成；当前已执行到 Task 5 | `TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04` 有完整证据 |
-| 04 | [JDBC Standard Contract and Druid Bridge Realignment](2026-08-24-rdbc-standard-bridge-realignment.md) | 69 对象标准合同、完整 Physical hierarchy、logical/raw standard adapters、runtime hardening | P03 recovery handoff | standard purity、Physical owner/method map、adapter/differential/semver gates 通过 |
-| 05 | [Driver Registry and Feature Boundaries](2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional features | P04 bridge owner 稳定 | feature powerset 与 forbidden deps 通过 |
+| 03 | [druid-rdbc Transitional Extraction Recovery](2026-08-21-druid-rdbc-extraction.md) | 冻结 Tasks 1–5 过渡态、Physical standardization inventory 与 P04 handoff | P01 完成；当前已执行到 Task 5 | `TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION` 有完整证据 |
+| 04 | [Single RDBC Standard Unification](2026-08-24-rdbc-single-standard-unification.md) | 单一 standard traits、wrapper/Druid direct impl、Druid runtime internalization、Physical deletion | P03 recovery handoff | zero Physical public names、shared conformance、differential/semver gates 通过 |
+| 05 | [Driver Registry and Feature Boundaries](2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional features | P04 single standard 稳定 | feature powerset 与 forbidden deps 通过 |
 | 06 | [Runtime Production Hardening](2026-08-21-runtime-production-hardening.md) | 有界队列、supervisor、shutdown、TTL、认证 | P02 完成；P04 稳定 | 故障、过载、安全门禁通过 |
 | 07 | [Verification and Release Readiness](2026-08-21-rdbc-first-verification.md) | 最终依赖、API、语义、NFR、发布报告 | P01-P06 完成 | 规格第 10 节全部有证据 |
 
@@ -132,7 +132,7 @@ Create `docs/verification/rdbc-first/status.md` with exact rows:
 | external-pool-rdbc-conformance | NOT_STARTED | -- |
 | metrics-admin-single-protocol | NOT_STARTED | -- |
 | druid-rdbc-extraction | BLOCKED_BY_P01 | -- |
-| rdbc-standard-bridge-realignment | BLOCKED_BY_P03_RECOVERY | -- |
+| rdbc-single-standard-unification | BLOCKED_BY_P03_RECOVERY | -- |
 | driver-registry-feature-boundaries | BLOCKED_BY_P04 | -- |
 | runtime-production-hardening | BLOCKED_BY_P02_P04 | -- |
 | rdbc-first-verification | BLOCKED_BY_P01_P06 | -- |
@@ -195,28 +195,28 @@ git add docs/verification/rdbc-first/status.md
 git commit -m "docs(verification): record rdbc-first p0 evidence"
 ```
 
-### Task 3: 冻结过渡抽取并完成标准/bridge 重分层
+### Task 3: 冻结过渡抽取并完成单一 standard 统一
 
 **Files:**
 - Execute: `docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md`
-- Execute: `docs/superpowers/plans/2026-08-24-rdbc-standard-bridge-realignment.md`
+- Execute: `docs/superpowers/plans/2026-08-24-rdbc-single-standard-unification.md`
 - Execute: `docs/superpowers/plans/2026-08-21-driver-registry-feature-boundaries.md`
 - Modify: `docs/verification/rdbc-first/status.md`
 
 **Interfaces:**
 - Consumes: P01 conformance seam、old/new public API baseline
-- Produces: pure `druid-rdbc` standard contract、public `druid::bridge`、logical standard
-  implementations、capability/lifecycle/cursor and single registry
+- Produces: single `druid-rdbc` standard contract、wrapper/Druid direct implementations、
+  internalized Druid ownership policy、zero Physical canonical surface and single registry
 
 - [ ] **Step 1: 执行 P03 recovery closeout**
 
-Expected: 冻结 Tasks 1–5 transitional owner、285-row denominator、breaking inventory and exact
+Expected: 冻结 Tasks 1–5 transitional surface、285-row denominator、standardization inventory and exact
 P04 handoff；不得声明旧 `druid-rdbc::spi` 为最终架构。
 
 - [ ] **Step 2: 执行合同强化计划**
 
-Expected: `druid-rdbc` 无 `spi/Physical*`/Druid runtime；`druid::bridge` 是唯一 wrapper
-port；SQL feature unsupported 为 `0A000`、Java default unsupported 单独建模；resource
+Expected: `druid-rdbc` 无 `Physical*`/Druid runtime；wrapper 与 Druid pooled proxies 直接实现
+同一 standard；SQL feature unsupported 为 `0A000`、Java default unsupported 单独建模；resource
 cancellation、async cursor、standard compatibility tests 全部通过。
 
 - [ ] **Step 3: 执行 registry/feature 计划**
@@ -307,9 +307,9 @@ git commit -m "docs(architecture): complete rdbc-first verification record"
 | external bb8/deadpool Prepared/Metadata/LOB 等价 | P01 | external-pool-conformance report |
 | Metrics/Admin 单一 proto、真实 payload、ACK/resend/reset/full snapshot | P02 | grpc network E2E + runtime security report |
 | Admin loopback/TLS/auth 和管理信息脱敏 | P02 + P06 | security E2E + threat model |
-| P03 过渡抽取可恢复且不冒充最终架构 | P03 | handoff + breaking inventory + transitional API snapshot |
+| P03 过渡抽取可恢复且不冒充最终架构 | P03 | handoff + standardization inventory + transitional API snapshot |
 | `druid-rdbc` JDBC standard purity 和 `druid::sql::*` 兼容 | P04 | 69-object inventory + purity + external consumer |
-| `druid::bridge::physical` 完整 Physical hierarchy、wrapper 实现 Physical | P04 | owner/import/method-map verifier + external implementor |
+| wrapper integrations 与 Druid proxies 直接实现单一 standard；Physical 删除 | P04 | standard-impl/purity/no-Physical verifier + external implementor |
 | RDBC/Pool/Wall 错误分层与双 unsupported disposition | P04 | six waiver gates + error/sorter regression |
 | capability 声明可执行、direct/external 同合同 | P01 + P04 | adapter matrix |
 | cancellation-safe resource lifecycle | P04 | cancellation/owner failure tests |

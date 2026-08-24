@@ -43,10 +43,11 @@ Axum 等生态组件。组件替换只改变实现机制，不改变 Druid 结�
 | 字段 | 值 |
 | :--- | :--- |
 | Java 基线 | Druid `1.2.28`，提交 `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
-| 产品模块（当前源码） | `druid`、`druid-admin`、`druid-wrapper`（三 Crate） |
-| 产品模块（已批准目标） | `druid-core`、`druid`（facade）、`druid-wrapper`、`druid-metrics`、`druid-admin`（五 Crate；ADR-CRATE-001） |
+| 产品模块（当前源码） | `druid-rdbc`、`druid`、`druid-wrapper`、`druid-metrics`、`druid-admin`；`druid-bench` 为验证成员 |
+| 已批准架构 | ADR-CRATE-002 + ADR-RDBC-006：wrapper 与 Druid proxy 实现同一 `druid-rdbc` standard |
 | 对外连接 | `DruidPooledConnection` |
-| 内部物理 SPI | `PhysicalConnection` / `PhysicalConnectionFactory` |
+| 当前过渡 raw 合同 | `PhysicalConnection*`，按 ADR-RDBC-006 等待 merge/delete |
+| 已批准 integration 合同 | `druid-rdbc::Connection/Statement/ResultSet/...` 单一 standard trait tree |
 | Native pool | `DruidPool` |
 | 内置标准数据源 | Toasty 0.9，默认 SQLite |
 | 当前版本 | `0.0.0-design` |
@@ -361,10 +362,12 @@ cargo check -p druid --all-features
 ### 7.3 依赖拓扑
 
 ```text
-druid (facade)
-├── druid-core (始终)
-├── druid-metrics (可选，feature = "metrics")
-└── druid-wrapper (可选，feature = "wrapper")
+druid-rdbc <- druid <- druid-wrapper
+      ^                    |
+      +--------------------+
+
+druid-metrics -> druid
+druid-admin   -> druid-metrics
 ```
 
 `druid-wrapper` 的 SQLx/RBDC/bb8/deadpool feature 也必须在 wrapper 模块统一
@@ -373,14 +376,16 @@ druid (facade)
 
 ## 8. 核心 API 与用法
 
-当前 canonical 对象关系：
+ADR-RDBC-006 已批准对象关系：
 
 ```text
-DruidPool::get/get_timeout
-    → DruidPooledConnection
-        → DruidConnectionHolder
-            → dyn PhysicalConnection
+Driver / ConnectionFactory
+    → Box<dyn druid_rdbc::Connection>
+        → DruidConnectionHolder（raw owner slot）
+            → DruidPooledConnection（实现同一 Connection）
 ```
+
+当前 `Physical*` 名称仅为迁移输入，不是第二套已批准标准。
 
 核心 trait/对象：
 

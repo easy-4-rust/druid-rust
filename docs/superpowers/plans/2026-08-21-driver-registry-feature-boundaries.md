@@ -4,7 +4,7 @@
 
 **Goal:** 将 DriverManager、inventory extension 和 80 产品 registry 收敛为一条 canonical 建池路径，并让 Cargo feature 真正隔离 SQLx、Toasty、RBDC、外部池和管理工具依赖。
 
-**Architecture:** `druid::bridge::DriverProviderRegistry` 成为唯一 provider lookup；
+**Architecture:** `druid_rdbc::driver::DriverRegistry` 成为唯一 standard provider lookup；
 `DruidDriverRegistry + DruidDatabasePoolBuilder` 在 Wrapper 中负责产品 profile 到 provider
 的解析；Java-compatible DriverManager 使用同一 provider registry 的显式注册 overlay，
 不让 `druid` 反向依赖 Wrapper。具体 driver dependencies 全部 optional，feature 名表示
@@ -12,12 +12,12 @@
 
 **Tech Stack:** Cargo features、inventory removal、async factory、cargo-hack、cargo tree
 
-**Spec:** `docs/superpowers/specs/2026-08-24-jdbc42-standard-bridge-layering.md`
+**Spec:** `docs/superpowers/specs/2026-08-24-rdbc-single-standard-trait-tree.md`
 
 ## Global Constraints
 
-- 前置：P04 已完成 standard/bridge owner realignment；`druid::bridge` 是 canonical
-  adapter API，`druid-rdbc` 已无 SPI。
+- 前置：P04 已完成 single-standard unification；wrapper/Druid 均实现 standard，
+  `Physical*` 已删除。
 - 80 产品 catalog 数量不是支持数量；只有 verified/certified 证据计入支持。
 - Registry 不得在 Tokio runtime 内调用 `Handle::current().block_on`。
 - 禁用 feature 时不得编译或链接对应依赖。
@@ -33,7 +33,7 @@
 - Modify: `docs/rdbc/contract-v1.md`
 
 **Interfaces:**
-- Produces: canonical `DriverProviderRegistry` lookup、`DruidDriverRegistry::resolve` product
+- Produces: canonical `DriverRegistry` lookup、`DruidDriverRegistry::resolve` product
   mapping and compatibility delegation map
 
 - [ ] **Step 1: 写路径 RED test**
@@ -41,7 +41,7 @@
 For the same SQLite URL, resolve through DriverManager, inventory lookup and
 `DruidDatabasePoolBuilder`; record driver name, URL, checker, sorter, factory type and errors. Assert
 product profile mapping uses `DruidDatabasePoolBuilder`, while both product and compatibility paths
-obtain factories from the same `DriverProviderRegistry`.
+obtain factories from the same `DriverRegistry`.
 
 - [ ] **Step 2: Run RED**
 
@@ -67,8 +67,8 @@ git commit -m "test(driver): freeze registry resolution differences"
 ### Task 2: 移除同步 inventory factory 陷阱
 
 **Files:**
-- Modify/Delete: `crates/druid/src/bridge/driver_extension_descriptor.rs`
-- Modify/Delete: `crates/druid/src/bridge/driver_extension_registry.rs`
+- Modify/Delete: `crates/druid-rdbc/src/driver/driver_extension_descriptor.rs`
+- Modify: `crates/druid-rdbc/src/driver/driver_registry.rs`
 - Modify/Delete: `crates/druid-wrapper/src/driver/extensions.rs`
 - Modify: `crates/druid-wrapper/src/driver/druid_driver_registry.rs`
 - Modify: `crates/druid-wrapper/src/lib.rs`
@@ -95,9 +95,12 @@ Expected: FAIL/panic at `Handle::current().block_on`.
 - [ ] **Step 3: 改为显式 provider registration**
 
 Prefer deleting inventory and registering provider constructors in
-`druid::bridge::DriverProviderRegistry`; `DruidDriverRegistry::builtin` installs the Wrapper-owned
+`druid_rdbc::driver::DriverRegistry`; `DruidDriverRegistry::builtin` installs the Wrapper-owned
 providers and profile mappings. A constructor only captures configuration synchronously; actual I/O
-occurs in `PhysicalConnectionFactory::create().await`.
+occurs in standard `ConnectionFactory::create().await`.
+
+Delete only the old synchronous inventory registration path/descriptor when no compatibility row
+requires it；the canonical `DriverRegistry` definition and file must remain。
 
 If inventory remains for third-party linkage, use an async factory signature returning a boxed Send
 future; no `block_on` is permitted.
@@ -115,7 +118,7 @@ Expected: all PASS and one canonical resolution path.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/druid/src/bridge crates/druid-wrapper
+git add crates/druid-rdbc/src/driver crates/druid-wrapper
 git commit -m "refactor(driver): unify async-safe provider registry"
 ```
 
@@ -129,7 +132,7 @@ git commit -m "refactor(driver): unify async-safe provider registry"
 - Test: `crates/druid-wrapper/tests/driver_resolution_path_test.rs`
 
 **Interfaces:**
-- Consumes: `druid::bridge::DriverProviderRegistry`
+- Consumes: `druid_rdbc::driver::DriverRegistry`
 - Produces: Java-compatible register/order/deregister overlay without duplicate provider metadata
 
 - [ ] **Step 1: 写 reentrancy 和 default acceptance RED test**
@@ -151,7 +154,7 @@ Expected: current implementation times out/deadlocks or default-accepts the URL.
 
 Clone the ordered driver Arc list while holding the registry lock, release the lock, then call
 external `accepts_url`. Change the trait default to `false`. Product profile resolution and explicit
-runtime registrations share `DriverProviderRegistry`; the latter remain an ordered Java compatibility
+runtime registrations share `DriverRegistry`; the latter remain an ordered Java compatibility
 overlay. `druid` must not add a dependency on `druid-wrapper`.
 
 - [ ] **Step 4: Run GREEN**

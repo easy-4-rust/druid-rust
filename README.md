@@ -48,10 +48,11 @@ the obligation to migrate Druid result semantics.
 | Field | Value |
 | :--- | :--- |
 | Java baseline | Druid `1.2.28`, commit `33824c3dec1612711f9bb4e409319bcab2e4cd0e` |
-| Product modules (current source) | `druid`, `druid-admin`, and `druid-wrapper` (three crates) |
-| Product modules (approved target) | `druid-core`, `druid` (facade), `druid-wrapper`, `druid-metrics`, `druid-admin` (five crates; ADR-CRATE-001) |
+| Product modules (current source) | `druid-rdbc`, `druid`, `druid-wrapper`, `druid-metrics`, `druid-admin`; `druid-bench` is a verification member |
+| Approved architecture | ADR-CRATE-002 + ADR-RDBC-006: one `druid-rdbc` standard implemented by wrappers and Druid proxies |
 | Public connection | `DruidPooledConnection` |
-| Internal physical SPI | `PhysicalConnection` / `PhysicalConnectionFactory` |
+| Current transitional raw contract | `PhysicalConnection*`, pending merge/delete under ADR-RDBC-006 |
+| Approved integration contract | `druid-rdbc::Connection/Statement/ResultSet/...` single standard trait tree |
 | Native pool | `DruidPool` |
 | Built-in standard data source | Toasty 0.9, SQLite by default |
 | Current version | `0.0.0-design` |
@@ -375,10 +376,12 @@ cargo check -p druid --all-features
 ### 7.3 Dependency topology
 
 ```text
-druid (facade)
-├── druid-core (always)
-├── druid-metrics (optional, feature = "metrics")
-└── druid-wrapper (optional, feature = "wrapper")
+druid-rdbc <- druid <- druid-wrapper
+      ^                    |
+      +--------------------+
+
+druid-metrics -> druid
+druid-admin   -> druid-metrics
 ```
 
 SQLx/RBDC/bb8/deadpool features are unified under `druid-wrapper`, not
@@ -388,14 +391,16 @@ notes.
 
 ## 8. Core API and Usage
 
-The canonical object relationship is:
+The approved ADR-RDBC-006 relationship is:
 
 ```text
-DruidPool::get/get_timeout
-    → DruidPooledConnection
-        → DruidConnectionHolder
-            → dyn PhysicalConnection
+Driver / ConnectionFactory
+    → Box<dyn druid_rdbc::Connection>
+        → DruidConnectionHolder (raw owner slot)
+            → DruidPooledConnection (implements the same Connection)
 ```
+
+The current `Physical*` names are transitional migration inputs, not a second approved standard.
 
 Core traits and objects:
 

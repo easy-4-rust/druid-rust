@@ -35,7 +35,7 @@
 
 | 目标 Crate | 职责 | 依赖 |
 | :--- | :--- | :--- |
-| `druid-rdbc` | Types、Errors、Physical Driver SPI、Resources、Java compatibility | -- |
+| `druid-rdbc` | 唯一 JDBC-like standard traits、Types、Errors、Resources、Rust extensions | -- |
 | `druid` | Pool、Filter、SQL Parser、Wall、Stat、Dynamic；保留 `druid::sql::*` | druid-rdbc |
 | `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent、bb8/deadpool、driver tooling | druid-rdbc + druid |
 | `druid-metrics` | registry、sampler、bounded aggregator、timeline、唯一 gRPC protocol/runtime | druid |
@@ -47,13 +47,14 @@
 
 | 日期 | 文件 | 主题 | 状态 |
 |---|---|---|---|
-| 2026-08-12 | [migration-governance.md](specs/2026-08-12-migration-governance.md) | 迁移治理（状态定义、差分流水线、SEM-NFR-*、命名规则、门禁） | 设计完成 |
-| 2026-08-12 | [connection-abstraction-design.md](specs/2026-08-12-connection-abstraction-design.md) | 连接抽象与驱动适配架构（PhysicalConnection SPI、ADR-CONN-*） | 设计完成 |
-| 2026-08-12 | [toasty-builtin-datasource.md](specs/2026-08-12-toasty-builtin-datasource.md) | Toasty 内置数据源标准实现 | 设计完成 |
-| 2026-08-12 | [driver-integration-matrix.md](specs/2026-08-12-driver-integration-matrix.md) | 数据库驱动集成矩阵（D0-D5 验证级别、80 产品目录） | 设计完成 |
-| 2026-08-12 | [object-and-semantic-mapping.md](specs/2026-08-12-object-and-semantic-mapping.md) | 对象级与语义迁移对照聚合（3 模块 × 对象级 + 语义表） | 设计完成 |
-| 2026-08-12 | [object-naming-audit.md](specs/2026-08-12-object-naming-audit.md) | 对象名称一致性审计聚合（3 模块） | 设计完成 |
+| 2026-08-12 | [migration-governance.md](specs/2026-08-12-migration-governance.md) | 迁移治理（状态、差分、门禁） | ACTIVE_WITH_ADR-RDBC-006_OVERRIDE |
+| 2026-08-12 | [connection-abstraction-design.md](specs/2026-08-12-connection-abstraction-design.md) | 历史 PhysicalConnection SPI 设计 | SUPERSEDED_BY ADR-RDBC-006 |
+| 2026-08-12 | [toasty-builtin-datasource.md](specs/2026-08-12-toasty-builtin-datasource.md) | Toasty 内置数据源历史设计 | TRANSITIONAL_INPUT_TO_ADR-RDBC-006 |
+| 2026-08-12 | [driver-integration-matrix.md](specs/2026-08-12-driver-integration-matrix.md) | 数据库驱动集成矩阵（D0-D5、80 产品目录） | TRANSITIONAL_INPUT_TO_ADR-RDBC-006 |
+| 2026-08-12 | [object-and-semantic-mapping.md](specs/2026-08-12-object-and-semantic-mapping.md) | 对象级与语义迁移对照聚合 | TRANSITIONAL_INPUT_TO_ADR-RDBC-006 |
+| 2026-08-12 | [object-naming-audit.md](specs/2026-08-12-object-naming-audit.md) | 对象名称一致性审计聚合 | TRANSITIONAL_INPUT_TO_ADR-RDBC-006 |
 | 2026-08-21 | [rdbc-first-five-crate-architecture.md](specs/2026-08-21-rdbc-first-five-crate-architecture.md) | ADR-CRATE-002、RDBC 合同、目标 DAG、运行时与完成门禁 | **ACCEPTED / 当前架构事实源** |
+| 2026-08-24 | [rdbc-single-standard-trait-tree.md](specs/2026-08-24-rdbc-single-standard-trait-tree.md) | ADR-RDBC-006：单一 standard trait tree、all integrations/proxies direct impl、Physical 删除 | **PROPOSED / 当前 RDBC 事实源** |
 
 ---
 
@@ -74,11 +75,11 @@
 
 | 顺序 | plan 文件 | 交付物 | 状态 |
 |---:|---|---|---|
-| 00 | [RDBC-First Master Roadmap](plans/2026-08-21-rdbc-first-master-roadmap.md) | 跨计划顺序、依赖、状态和最终同步 | 待执行 |
-| 01 | [External Pool RDBC Conformance](plans/2026-08-21-external-pool-rdbc-conformance.md) | direct SQLx / bb8 / deadpool 统一合同 | 待执行 |
-| 02 | [Metrics/Admin Single Protocol](plans/2026-08-21-metrics-admin-single-protocol.md) | 唯一 proto、真实 payload/gRPC、安全默认值 | 待执行 |
-| 03 | [druid-rdbc Extraction](plans/2026-08-21-druid-rdbc-extraction.md) | 无行为抽取低层合同 crate、保持旧路径 | 待执行 |
-| 04 | [JDBC Standard Contract and Druid Bridge Realignment](plans/2026-08-24-rdbc-standard-bridge-realignment.md) | 69 对象标准合同、完整 Physical hierarchy、logical/raw adapters | 待执行 |
+| 00 | [RDBC-First Master Roadmap](plans/2026-08-21-rdbc-first-master-roadmap.md) | 跨计划顺序、依赖、状态和最终同步 | IN_PROGRESS |
+| 01 | [External Pool RDBC Conformance](plans/2026-08-21-external-pool-rdbc-conformance.md) | direct SQLx / bb8 / deadpool 统一合同 | COMPLETE |
+| 02 | [Metrics/Admin Single Protocol](plans/2026-08-21-metrics-admin-single-protocol.md) | 唯一 proto、真实 payload/gRPC、安全默认值 | COMPLETE |
+| 03 | [druid-rdbc Extraction](plans/2026-08-21-druid-rdbc-extraction.md) | 冻结已执行过渡抽取并交接标准化 | TASK5_COMPLETE_TASK6_RECOVERY_PENDING |
+| 04 | [Single RDBC Standard Unification](plans/2026-08-24-rdbc-single-standard-unification.md) | 单一 standard、all integrations/proxies direct impl、Physical 删除 | 待执行 |
 | 05 | [Driver Registry and Feature Boundaries](plans/2026-08-21-driver-registry-feature-boundaries.md) | 单一 registry、真实 optional dependencies、发布边界 | 待执行 |
 | 06 | [Runtime Production Hardening](plans/2026-08-21-runtime-production-hardening.md) | 有界队列、supervisor、shutdown、TTL、认证 | 待执行 |
 | 07 | [RDBC-First Verification](plans/2026-08-21-rdbc-first-verification.md) | 依赖、API、语义、可靠性、安全、性能和发布门禁 | 待执行 |

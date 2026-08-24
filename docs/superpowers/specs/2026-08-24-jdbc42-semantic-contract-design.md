@@ -1,10 +1,10 @@
 # druid-rdbc JDBC 4.2 语义合同设计规格（已取代）
 
-> **状态：SUPERSEDED_BY ADR-RDBC-005**
+> **状态：SUPERSEDED_BY ADR-RDBC-006（经 ADR-RDBC-005 过渡）**
 >
 > 本文保留为第一次双层方案的审计记录。用户复核后否决了把 `Physical*` SPI 放在
 > `druid-rdbc` 的设计。当前事实源为
-> [`2026-08-24-jdbc42-standard-bridge-layering.md`](2026-08-24-jdbc42-standard-bridge-layering.md)。
+> [`2026-08-24-rdbc-single-standard-trait-tree.md`](2026-08-24-rdbc-single-standard-trait-tree.md)。
 >
 > **决策编号：ADR-RDBC-004**
 >

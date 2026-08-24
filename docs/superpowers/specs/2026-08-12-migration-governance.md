@@ -1,8 +1,9 @@
 # 迁移治理规格
 
-> **架构覆盖说明（2026-08-21）：** 迁移状态、差分和完成门禁继续有效；目标 crate
-> 归属由 [`ADR-CRATE-002`](2026-08-21-rdbc-first-five-crate-architecture.md) 取代
-> 旧 ADR-CRATE-001。
+> **架构覆盖说明（2026-08-24）：** 迁移状态、差分和完成门禁继续有效；crate 拓扑由
+> ADR-CRATE-002 管理，数据库接口命名/归属由
+> [`ADR-RDBC-006`](2026-08-24-rdbc-single-standard-trait-tree.md) 管理。本文任何
+> `Physical*` 稳定 SPI 表述仅为迁移输入，不得恢复为第二套 canonical hierarchy。
 
 > 日期：2026-08-12  来源：原 docs/README.md 全局治理段
 

@@ -10,9 +10,9 @@
 ## 1. 目标
 
 在不丢失 Alibaba Druid 1.2.28 可观察语义的前提下，把 Java 8 JDBC 4.2 标准合同
-收敛为独立 `druid-rdbc` crate；Druid 专用 Physical/factory/resource-owner bridge
-归 `druid::bridge`，由 `druid-wrapper` 实现。`druid` 保留池化、Filter、SQL Parser、
-Wall、Stat、Dynamic 与 logical standard-contract implementation。
+收敛为独立 `druid-rdbc` crate，并作为所有 wrapper integrations 与 Druid proxies 的唯一
+standard trait tree。现有 `Physical*` 行为 merge 后删除；Druid-only holder/cache/
+resource-owner 回到内部。`druid` 保留池化、Filter、SQL Parser、Wall、Stat、Dynamic。
 
 本规格只定义目标、职责、不变量和验收标准；实现必须按
 [`2026-08-21-rdbc-first-master-roadmap.md`](../plans/2026-08-21-rdbc-first-master-roadmap.md)
@@ -72,8 +72,8 @@ Wall、Stat、Dynamic 与 logical standard-contract implementation。
 ```mermaid
 flowchart BT
     RDBC["druid-rdbc<br/>JDBC 4.2 Standard Contract"]
-    DRUID["druid<br/>Logical Standard Impl + public bridge<br/>Pool / Filter / SQL Parser / Wall / Stat"]
-    WRAPPER["druid-wrapper<br/>implements druid::bridge<br/>SQLx / Toasty / RBDC / JDBC Agent"]
+    DRUID["druid<br/>Pool / Filter / logical proxies<br/>implements standard"]
+    WRAPPER["druid-wrapper<br/>all integrations implement standard<br/>SQLx / Toasty / RBDC / JDBC Agent"]
     METRICS["druid-metrics<br/>Snapshot / Aggregator / Single gRPC Protocol"]
     ADMIN["druid-admin<br/>Authenticated HTTP + gRPC / Repository / UI"]
     BENCH["druid-bench<br/>Contracts / Differential / Benchmarks"]
@@ -131,9 +131,8 @@ druid-rdbc/src/
 ### 5.2 `druid`
 
 保留当前产品身份和主要实现：Pool、logical handles、Filter、SQL Parser、Wall、Stat、
-Dynamic、XA、Druid lifecycle。它依赖 `druid-rdbc`，logical handles 实现标准合同，并
-公开 `druid::bridge::physical` 完整 Physical hierarchy 作为唯一 adapter-author API。公共
-兼容入口继续暴露为：
+Dynamic、XA、Druid lifecycle。它依赖 `druid-rdbc`，holder 保存 standard Connection trait
+object，logical handles 实现同一标准合同。公共兼容入口继续暴露为：
 
 ```rust
 pub mod sql {
@@ -162,10 +161,8 @@ pub mod sql {
 
 ### 5.3 `druid-wrapper`
 
-只拥有具体 driver、外部 pool 和 driver tooling，并实现完整
-`druid::bridge::physical::{PhysicalConnection,PhysicalStatement,PhysicalPreparedStatement,
-PhysicalCallableStatement,PhysicalResultSet,PhysicalMetadata,PhysicalResource}` hierarchy：
-SQLx、Toasty、RBDC、DuckDB、libSQL、HTTP SQL、JDBC Agent、bb8、deadpool、driver
+只拥有具体 driver、外部 pool 和 driver tooling；SQLx、Toasty、RBDC、DuckDB、libSQL、
+HTTP SQL、JDBC Agent、bb8、deadpool 直接实现 `druid-rdbc` standard traits，并拥有 driver
 catalog/installer/diagnostics。
 
 Direct adapter 与 external pool 的差异只能是 resource owner；两者对外返回的
@@ -192,15 +189,15 @@ powerset、故障注入和性能/NFR 证据。
 
 1. `DruidPooledConnection` 是消费者唯一 logical pooled connection，并实现
    `druid-rdbc` 标准 Connection 合同。
-2. `druid::bridge::physical::PhysicalConnection` 只表示一条未池化 raw driver connection；
-   `DruidPooledConnection` 禁止实现它。
+2. raw adapter connection 与 `DruidPooledConnection` 都实现同一 standard Connection；raw/
+   logical 差异只由 holder/owner/close policy 表达。
 3. Native 模式只由 `DruidPool` 池化；external 模式只由 bb8/deadpool 池化。
-4. external bridge lease 必须透明委托底层已声明能力。
+4. external lease wrapper 必须透明实现同一 standard contract。
 5. 能力声明必须由同一 adapter conformance suite 证明。
 6. 显式 close/free、Drop、取消和 owner failure 都必须有确定状态迁移。
 7. 同一资源只能释放或归还一次；错误不得让等待者观察到伪成功。
 8. buffered row set 与 async cursor 是两个显式类型，名称不得暗示不存在的流式能力。
-9. Java parity surface 与 Druid bridge 共用同一业务状态，不复制标准语义实现。
+9. wrapper integrations 与 Druid proxies 共用同一 standard conformance，不复制第二套 trait。
 10. Java 继承只迁移可观察语义，不机械制造 Rust trait 继承树。
 
 ## 7. Metrics/Admin 线协议不变量
@@ -239,8 +236,8 @@ powerset、故障注入和性能/NFR 证据。
 2. 依赖 DAG 与第 4 节完全一致，没有禁止反向边。
 3. `druid-rdbc` forbidden dependency 检查通过。
 4. `druid-rdbc` standard purity 通过：无 `spi`、`Physical*` 或 Druid runtime owner。
-5. `druid::bridge::physical` 是唯一 adapter-author port，保留完整 Physical hierarchy；
-   wrapper 全部实现 Physical，logical/raw facades 实现 standard traits 且不实现 Physical。
+5. wrapper integrations 与 Druid logical proxies 全部直接实现唯一 standard traits；public
+   API、生产 imports/impls 与 rustdoc 中无 `Physical*` canonical names。
 6. `druid::sql::*` 外部消费者 API compatibility 检查通过。
 7. direct SQLx、bb8、deadpool、Toasty、RBDC、JDBC Agent 通过统一合同。
 8. Metrics/Admin 使用同一生成 proto，并通过真实网络 E2E。
@@ -263,11 +260,12 @@ powerset、故障注入和性能/NFR 证据。
 | :--- | :--- | :--- |
 | ADR-CRATE-001 | `druid-core + druid facade + wrapper + metrics + admin` | SUPERSEDED_BY ADR-CRATE-002 |
 | ADR-CRATE-002 | `druid-rdbc + druid + wrapper + metrics + admin`；`druid-bench` 为验证成员 | ACCEPTED |
-| ADR-RDBC-001 | `druid::sql::*` 保持消费者 canonical 路径；原 driver-SPI-owner 子决策已被 ADR-RDBC-005 取代 | ACCEPTED_WITH_OWNER_SUPERSEDED |
+| ADR-RDBC-001 | `druid::sql::*` 保持消费者 canonical 路径；原 driver-SPI-owner 子决策已被 ADR-RDBC-006 取代 | ACCEPTED_WITH_OWNER_SUPERSEDED |
 | ADR-RDBC-002 | logical handle 使用具体类型；不机械复制 Java trait 继承 | ACCEPTED |
 | ADR-RDBC-003 | buffered row set 与 async cursor 显式分型 | ACCEPTED |
-| ADR-RDBC-004 | JDBC 标准语义内核 + `druid-rdbc::spi` | SUPERSEDED_BY ADR-RDBC-005 |
-| [ADR-RDBC-005](2026-08-24-jdbc42-standard-bridge-layering.md) | `druid-rdbc` 标准合同；Druid 完整 Physical hierarchy；wrapper 实现 Physical | PROPOSED_FOR_WRITTEN_REVIEW |
+| ADR-RDBC-004 | JDBC 标准语义内核 + `druid-rdbc::spi` | SUPERSEDED |
+| ADR-RDBC-005 | Druid 拥有第二套 Physical hierarchy | SUPERSEDED_BY ADR-RDBC-006 |
+| [ADR-RDBC-006](2026-08-24-rdbc-single-standard-trait-tree.md) | single rdbc standard；all integrations/proxies implement；Physical deleted | PROPOSED_FOR_WRITTEN_REVIEW |
 | ADR-RUNTIME-001 | 队列有界、任务受监管、shutdown 可证明 | ACCEPTED |
 | ADR-TRANSPORT-002 | Metrics/Admin 共享唯一 bidi gRPC proto | ACCEPTED |
 | ADR-ADMIN-002 | Admin 默认 loopback；远程监听要求 TLS+认证 | ACCEPTED |

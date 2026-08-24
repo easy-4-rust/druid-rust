@@ -1,9 +1,10 @@
 # 连接抽象与驱动适配架构设计
 
-> **架构覆盖说明（2026-08-21）：** 本文的连接生命周期和 Java/Rust 语义账本继续
-> 有效；其中 `ADR-CRATE-001`、`druid-core + druid facade` 和“当前三 Crate”段落
-> 已由 [`ADR-CRATE-002`](2026-08-21-rdbc-first-five-crate-architecture.md) 取代，
-> 只保留为历史决策记录。
+> **架构覆盖说明（2026-08-24）：** 本文的连接生命周期和 Java/Rust 语义账本继续
+> 有效；`ADR-CRATE-001` 与三 Crate 目标已由 ADR-CRATE-002 取代，独立
+> `PhysicalConnection` canonical SPI 已由
+> [`ADR-RDBC-006`](2026-08-24-rdbc-single-standard-trait-tree.md) 取代。当前只保留为历史
+> 决策记录，不得据此建立第二套 trait tree。
 
 > 日期：2026-08-12  来源：原 docs/连接抽象与驱动适配架构.md
 

@@ -2,23 +2,23 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 保留 Tasks 1–5 已执行抽取的可恢复证据，冻结错误 bridge-owner 过渡态，并把最终分层交给新的 P04；本计划不再把 `druid-rdbc::spi/Physical*` 视为目标架构。
+**Goal:** 保留 Tasks 1–5 已执行抽取的可恢复证据，冻结现有 `Physical*`/resource/adapter 分母，并把 rename/merge/delete 标准化交给 P04；本计划不把当前 `Physical*` 名称视为最终 API。
 
-**Architecture:** Tasks 1–5 是已经执行的 transitional extraction：Physical/Resource/Wrapper SCC 曾被临时移入 `druid-rdbc` 并让 wrapper direct-import。用户复核后批准 ADR-RDBC-005：最终 `druid-rdbc` 只拥有 JDBC 4.2 standard contract，Druid bridge 移入 `druid::bridge`。Task 6 只做 recovery freeze/handoff；P04 Task 1 先退出 error waiver，后续再以 additive seam + atomic owner swap 修正 owner。
+**Architecture:** Tasks 1–5 是已经执行的 transitional extraction：Physical/Resource/Wrapper SCC 被移入 `druid-rdbc` 并让 wrapper direct-import。ADR-RDBC-006 将这些实现视为唯一 standard trait tree 的迁移输入：JDBC 行为 rename/merge 到标准名称，Druid-only runtime internalize，concrete helpers move，最终删除 `Physical*`。Task 6 只冻结 denominator/disposition/handoff；P04 Task 1 先退出 error waiver。
 
 **Tech Stack:** Cargo workspace、Rust 2021、cargo-public-api、cargo-semver-checks、CodeGraph
 
-**Spec:** `docs/superpowers/specs/2026-08-24-jdbc42-standard-bridge-layering.md`
+**Spec:** `docs/superpowers/specs/2026-08-24-rdbc-single-standard-trait-tree.md`
 
 ## Architecture correction — binding
 
-- ADR-RDBC-005 取代本计划原始 Physical-SPI-in-rdbc 目标。
+- ADR-RDBC-006 取代 ADR-RDBC-005 与本计划原始 Physical-SPI 目标。
 - Tasks 1–5 的历史任务文本保留为已执行证据，不再作为最终 owner 决策。
 - 原 Task 6 已退休，禁止执行其“公开 `druid-rdbc::spi`”和“完成 isolated contract
   extraction”步骤。
-- 当前 P03 完成态只能是 `TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04`。
-- 新 P04 的 Task 1 必须强制退出 `compat::DruidError` waiver；之后才允许 bridge owner
-  correction。
+- 当前 P03 完成态只能是 `TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION`。
+- 新 P04 的 Task 1 必须强制退出 `compat::DruidError` waiver；之后才允许 standard trait
+  unification。
 
 ## Global Constraints
 
@@ -814,7 +814,8 @@ diff guards.
 ### Historical Task 6 (RETIRED): 收口旧 public API、DAG 和文档
 
 > **DO NOT EXECUTE.** 本节保留用于解释旧 Task 6 为什么曾被 `cargo-semver-checks`
-> 阻塞。其目标 `druid-rdbc::spi` 已被 ADR-RDBC-005 否决，由文件末尾的新 Task 6 取代。
+> 阻塞。其目标 `druid-rdbc::spi::Physical*` 已被 ADR-RDBC-006 取代，由文件末尾的新
+> Task 6 冻结为标准化输入。
 
 **Files:**
 - Modify: `crates/druid-rdbc/src/lib.rs`
@@ -1023,12 +1024,12 @@ Expected: PASS and restore the same branch/HEAD. This available gate is mandator
 incomplete, make a new corrective commit, and rerun; do not reset, amend, force, push, or describe
 P03 as complete.
 
-### Task 6: 冻结过渡态并交接 bridge owner correction
+### Task 6: 冻结过渡态并交接 single-standard merge
 
 **Files:**
 - Modify: `.superpowers/sdd/2026-08-21-druid-rdbc-extraction/progress.md`
-- Create: `docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md`
-- Create: `docs/verification/rdbc-first/rdbc-bridge-breaking-inventory.tsv`
+- Create: `docs/verification/rdbc-first/rdbc-transitional-standardization-handoff.md`
+- Create: `docs/verification/rdbc-first/rdbc-physical-standardization.tsv`
 - Create: `api/druid-rdbc-spi.transitional.txt`
 - Modify: `docs/verification/rdbc-first/status.md`
 - Modify: `crates/druid-rdbc/src/lib.rs`
@@ -1037,9 +1038,10 @@ P03 as complete.
 **Interfaces:**
 - Consumes: Tasks 1–5 current HEAD, 285-row old/new path denominator, wrapper direct-import
   manifest and transitional `compat::DruidError`.
-- Produces: recovery status `TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04`、every public
-  `druid_rdbc::spi/resource-runtime` item 的 target disposition、P04 owner-swap input。
-- Does not produce: final `druid-rdbc` API、final bridge owner、semver compatibility claim。
+- Produces: recovery status `TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION`、every public
+  `druid_rdbc::spi/resource-runtime` item 的 merge/internalize/move/delete disposition、P04
+  single-standard input。
+- Does not produce: final standard API、Physical alias deletion、semver compatibility claim。
 
 - [ ] **Step 1: Freeze current evidence without installing tools**
 
@@ -1066,51 +1068,52 @@ cargo public-api -p druid-rdbc -sss --all-features \
 test -s api/druid-rdbc-spi.transitional.txt
 ```
 
-`rdbc-bridge-breaking-inventory.tsv` uses exact columns：
+`rdbc-physical-standardization.tsv` uses exact columns：
 
 ```text
-old_path<TAB>classification<TAB>target_owner<TAB>target_path<TAB>compatibility<TAB>evidence
+old_path<TAB>classification<TAB>target_path<TAB>compatibility<TAB>source_file<TAB>normalized_signature<TAB>evidence
 ```
 
 Every current `druid_rdbc::spi::*` and runtime `resource::{Rdbc*Access,Context,Factory,Owner,
 State,Id,Kind,Capabilities}` public item has exactly one row。`classification` is
-`STANDARD_DTO`、`BRIDGE_PORT`、`BRIDGE_RUNTIME`、`SPLIT_REQUIRED` or `CONCRETE_FALLBACK`；
-`target_owner` is `DRUID_RDBC_STANDARD` or `DRUID_BRIDGE`。No `UNKNOWN`/empty/duplicate row。
+`MERGE_STANDARD`、`RDBC_EXTENSION`、`DRUID_INTERNAL` or `CONCRETE_IMPL`。No
+`UNKNOWN`/empty/duplicate row。
 
 - [ ] **Step 3: Write executable P04 handoff**
 
-`rdbc-transitional-owner-handoff.md` records：
+`rdbc-transitional-standardization-handoff.md` records：
 
 - exact HEAD and API snapshot SHA-256；
 - Tasks 1–5 commits and review state；
 - the three parked P03 verification issues；
 - transitional `DruidError` waiver；
 - current wrapper import denominator；
-- the breaking inventory row count/hash；
+- the standardization inventory row count/hash；
 - mandatory next plan
-  `docs/superpowers/plans/2026-08-24-rdbc-standard-bridge-realignment.md` Task 1。
+  `docs/superpowers/plans/2026-08-24-rdbc-single-standard-unification.md` Task 1。
 
 It must state exactly：
 
 ```text
-P03 status: TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04
-P03 is not the accepted final ADR-RDBC-005 architecture.
-P04 Task 1 must exit the DruidError waiver before the bridge owner swap.
+P03 status: TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION
+P03 is not the accepted final ADR-RDBC-006 architecture.
+P04 Task 1 must exit the DruidError waiver before standard trait unification.
 ```
 
 - [ ] **Step 4: Update docs without changing production ownership**
 
-Update `druid-rdbc/src/lib.rs` crate docs to label `spi` and runtime resource access as transitional
-until P04。Do not add standard traits, move files, change manifests or modify behavior in P03。
+Update `druid-rdbc/src/lib.rs` crate docs to label `Physical*` and runtime resource access as
+standardization inputs until P04。Do not rename traits、move files、change manifests or modify
+behavior in P03。
 
 - [ ] **Step 5: Verify the recovery handoff**
 
 ```bash
 git diff --check
-test -s docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md
-test -s docs/verification/rdbc-first/rdbc-bridge-breaking-inventory.tsv
-rg -n 'TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04' \
-  docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md \
+test -s docs/verification/rdbc-first/rdbc-transitional-standardization-handoff.md
+test -s docs/verification/rdbc-first/rdbc-physical-standardization.tsv
+rg -n 'TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION' \
+  docs/verification/rdbc-first/rdbc-transitional-standardization-handoff.md \
   docs/verification/rdbc-first/status.md crates/druid-rdbc/src/lib.rs
 ```
 
@@ -1122,12 +1125,12 @@ The SDD `progress.md` is deliberately Git-ignored controller state and is not st
 Ruling/status lines before staging, then stage only tracked recovery evidence。
 
 ```bash
-rg -n 'Task 6 Ruling|TRANSITIONAL_BRIDGE_OWNER_MISPLACED_UNTIL_P04' \
+rg -n 'Task 6 Ruling|TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION' \
   .superpowers/sdd/2026-08-21-druid-rdbc-extraction/progress.md
 git add api/druid-rdbc-spi.transitional.txt \
-  docs/verification/rdbc-first/rdbc-transitional-owner-handoff.md \
-  docs/verification/rdbc-first/rdbc-bridge-breaking-inventory.tsv \
+  docs/verification/rdbc-first/rdbc-transitional-standardization-handoff.md \
+  docs/verification/rdbc-first/rdbc-physical-standardization.tsv \
   docs/verification/rdbc-first/status.md crates/druid-rdbc/src/lib.rs
 git diff --cached --check
-git commit -m "docs(rdbc): freeze transitional bridge owner handoff"
+git commit -m "docs(rdbc): freeze transitional standardization handoff"
 ```

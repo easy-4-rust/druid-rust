@@ -1,6 +1,9 @@
-# JDBC 4.2 标准合同与 Druid Bridge 分层规格
+# JDBC 4.2 标准合同与 Druid Bridge 分层规格（已取代）
 
-> **状态：PROPOSED — 用户已批准调整方向，书面规格待复核**
+> **状态：SUPERSEDED_BY ADR-RDBC-006**
+>
+> 用户否决了完整 `druid::bridge::physical` 第二套 canonical hierarchy。当前事实源为
+> [`2026-08-24-rdbc-single-standard-trait-tree.md`](2026-08-24-rdbc-single-standard-trait-tree.md)。
 >
 > **决策编号：ADR-RDBC-005**
 >
@@ -324,4 +327,4 @@ denominator、breaking inventory 和 P04 handoff，状态为
 | ADR-RDBC-002 | logical concrete handles，不复制 Java trait 继承 | ACCEPTED |
 | ADR-RDBC-003 | buffered row set / async cursor 分型 | ACCEPTED |
 | ADR-RDBC-004 | `druid-rdbc::spi` 双层方案 | SUPERSEDED |
-| ADR-RDBC-005 | rdbc 标准合同；Druid 保留完整 Physical hierarchy；wrapper 实现 Physical | PROPOSED_FOR_WRITTEN_REVIEW |
+| ADR-RDBC-005 | rdbc 标准合同；Druid 保留完整 Physical hierarchy；wrapper 实现 Physical | SUPERSEDED_BY ADR-RDBC-006 |

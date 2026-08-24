@@ -1,8 +1,9 @@
 # 对象级与语义迁移对照聚合规格
 
-> **架构覆盖说明（2026-08-21）：** 对象/语义完成状态继续有效；目标 crate 归属以
-> [`ADR-CRATE-002`](2026-08-21-rdbc-first-five-crate-architecture.md) 为准。
-> 本文 `ADR-CRATE-001` 的 `druid-core + facade` 表格为历史记录，不得恢复执行。
+> **架构覆盖说明（2026-08-24）：** 对象/语义分母继续有效；crate 拓扑以
+> ADR-CRATE-002 为准，数据库接口归属以
+> [`ADR-RDBC-006`](2026-08-24-rdbc-single-standard-trait-tree.md) 为准。本文
+> `druid-core + facade` 与 `Physical*` canonical 表格为历史/标准化输入，不得恢复执行。
 
 > 日期：2026-08-12  来源：聚合 3 模块 × (对象级对照表 + 语义迁移对照表)
 

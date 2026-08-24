@@ -1,8 +1,9 @@
 # 对象名称一致性审计聚合规格
 
-> **架构覆盖说明（2026-08-21）：** 名称审计规则继续有效；crate 名称和目标拓扑
-> 已由 [`ADR-CRATE-002`](2026-08-21-rdbc-first-five-crate-architecture.md) 更新为
-> `druid-rdbc + druid + wrapper + metrics + admin`。旧 `druid-core + facade` 结论只作历史记录。
+> **架构覆盖说明（2026-08-24）：** 名称审计方法继续有效；crate 拓扑由
+> ADR-CRATE-002 管理。数据库 canonical names 由
+> [`ADR-RDBC-006`](2026-08-24-rdbc-single-standard-trait-tree.md) 冻结为
+> `Connection/Statement/ResultSet/...`；本文把 `Physical*` 判为稳定 SPI 的旧结论已取代。
 
 > 日期：2026-08-12  来源：聚合 3 模块 × 对象名称一致性检查
 
