@@ -51,6 +51,8 @@ pub enum RdbcErrorKind {
     NoDriverExtension,
     /// Java JDBC 默认方法的 `UnsupportedOperationException` 映射。
     UnsupportedOperation,
+    /// 来自上层产品边界的结构化错误，不在 RDBC 中复制产品 taxonomy。
+    ProductBoundary,
     /// 未能进一步分类的 adapter 错误。
     Other,
 }

@@ -279,6 +279,31 @@ def contains_sequence(source: bytes, sequence: tuple[str, ...]) -> bool:
     return any(tuple(texts[index:index + width]) == sequence for index in range(len(texts) - width + 1))
 
 
+def exports_named_item(source: bytes, module: str, item: str) -> bool:
+    """Recognize direct or grouped public re-exports of one named Rust item."""
+
+    try:
+        texts = [token.text for token in tokenize(source.decode("utf-8"))]
+    except (UnicodeError, RustLexError) as error:
+        fail(f"cannot tokenize Rust source: {error}")
+    direct = ("pub", "use", module, "::", item)
+    if any(
+        tuple(texts[index:index + len(direct)]) == direct
+        for index in range(len(texts) - len(direct) + 1)
+    ):
+        return True
+    grouped = ("pub", "use", module, "::", "{")
+    for index in range(len(texts) - len(grouped) + 1):
+        if tuple(texts[index:index + len(grouped)]) != grouped:
+            continue
+        cursor = index + len(grouped)
+        while cursor < len(texts) and texts[cursor] != "}":
+            if texts[cursor] == item:
+                return True
+            cursor += 1
+    return False
+
+
 def gate_compat_removed(root: Path) -> GateResult:
     """Require deletion of the transitional definition and export."""
 
@@ -308,8 +333,8 @@ def gate_standard_clean(root: Path) -> GateResult:
         error_source.read_bytes(), ("pub", "enum", "RdbcError")
     ):
         failures.append("RdbcError is not a public enum in error/rdbc_error.rs")
-    if not facade_source.is_file() or not contains_sequence(
-        facade_source.read_bytes(), ("pub", "use", "rdbc_error", "::", "RdbcError")
+    if not facade_source.is_file() or not exports_named_item(
+        facade_source.read_bytes(), "rdbc_error", "RdbcError"
     ):
         failures.append("error/mod.rs does not export RdbcError")
     return GateResult(

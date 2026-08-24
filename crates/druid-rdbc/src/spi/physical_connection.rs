@@ -1,7 +1,7 @@
 //! druid-rust 内部物理连接 SPI。
 
 use crate::compat::SqlWarning;
-use crate::error::RdbcError;
+use crate::error::{BatchUpdateCounts, RdbcError};
 use crate::resource::{RdbcBlob, RdbcClob, RdbcNClob};
 use crate::spi::{
     ExecResult, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -60,21 +60,26 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         batch: Vec<(String, Vec<Value>)>,
     ) -> Result<Vec<i32>, RdbcError> {
-        let mut update_counts = Vec::with_capacity(batch.len());
+        let mut update_counts = BatchUpdateCounts::default();
         for (sql, params) in batch {
             match self.exec(&sql, params).await {
                 Ok(result) => {
-                    update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
+                    if let Err(cause) = update_counts.try_push_rows_affected(result.rows_affected) {
+                        return Err(RdbcError::BatchUpdateException {
+                            update_counts,
+                            cause: Box::new(cause),
+                        });
+                    }
                 }
                 Err(error) => {
                     return Err(RdbcError::BatchUpdateException {
-                        update_counts: update_counts.into(),
+                        update_counts,
                         cause: Box::new(error),
                     });
                 }
             }
         }
-        Ok(update_counts)
+        Ok(update_counts.jdbc_i32())
     }
 
     /// 执行查询类 SQL。
@@ -200,21 +205,26 @@ pub trait PhysicalConnection: Any + Send {
             return Err(RdbcError::ConnectionDiscarded);
         }
 
-        let mut update_counts = Vec::with_capacity(parameter_sets.len());
+        let mut update_counts = BatchUpdateCounts::default();
         for params in parameter_sets {
             match self.exec_prepared(statement, params).await {
                 Ok(result) => {
-                    update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
+                    if let Err(cause) = update_counts.try_push_rows_affected(result.rows_affected) {
+                        return Err(RdbcError::BatchUpdateException {
+                            update_counts,
+                            cause: Box::new(cause),
+                        });
+                    }
                 }
                 Err(error) => {
                     return Err(RdbcError::BatchUpdateException {
-                        update_counts: update_counts.into(),
+                        update_counts,
                         cause: Box::new(error),
                     });
                 }
             }
         }
-        Ok(update_counts)
+        Ok(update_counts.jdbc_i32())
     }
 
     /// 使用完整 RDBC setter 描述符执行 `PreparedStatement` 参数批次。

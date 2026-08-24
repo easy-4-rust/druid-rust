@@ -162,7 +162,7 @@ fn error_display_sql_exception() {
 #[test]
 fn error_display_batch_update() {
     let e = DruidError::BatchUpdateException {
-        update_counts: vec![1, 2, 3],
+        update_counts: vec![1_i32, 2, 3].into(),
         cause: Box::new(DruidError::Other("fail".to_owned())),
     };
     let s = format!("{e}");
@@ -408,10 +408,13 @@ fn error_batch_update_counts_none() {
 #[test]
 fn error_batch_update_counts_some() {
     let e = DruidError::BatchUpdateException {
-        update_counts: vec![1, -3, 2],
+        update_counts: vec![1_i32, -3, 2].into(),
         cause: Box::new(DruidError::Other("fail".to_owned())),
     };
-    assert_eq!(e.batch_update_counts(), Some([1, -3, 2].as_slice()));
+    assert_eq!(
+        e.batch_update_counts().map(|counts| counts.jdbc_i32()),
+        Some(vec![1, -3, 2])
+    );
 }
 
 // ── Error trait source ─────────────────────────────────────────
@@ -427,7 +430,7 @@ fn error_source_none() {
 fn error_source_batch_update() {
     use std::error::Error;
     let e = DruidError::BatchUpdateException {
-        update_counts: vec![],
+        update_counts: Vec::<i32>::new().into(),
         cause: Box::new(DruidError::Other("cause".to_owned())),
     };
     assert!(e.source().is_some());

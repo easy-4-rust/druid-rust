@@ -86,7 +86,7 @@ fn observe(error: &ProductDruidError) -> ObservableError {
             );
             observe_sql(&cloned)
         }),
-        batch_update_counts: error.batch_update_counts().map(<[i32]>::to_vec),
+        batch_update_counts: error.batch_update_counts().map(|counts| counts.jdbc_i32()),
         source_chain: observe_source_chain(error),
     }
 }
@@ -174,6 +174,22 @@ fn product_error_is_distinct_and_wraps_rdbc_once() {
         ProductDruidError::Rdbc(RdbcError::DriverError(ref message))
             if message == "driver boundary failed"
     ));
+}
+
+#[test]
+fn wrapped_rdbc_batch_counts_delegate_all_three_views() {
+    let large = i64::from(i32::MAX) + 7;
+    let product = ProductDruidError::Rdbc(RdbcError::BatchUpdateException {
+        update_counts: vec![1_i64, large, -2, -3].into(),
+        cause: Box::new(RdbcError::DriverError("batch failed".to_owned())),
+    });
+
+    let counts = product
+        .batch_update_counts()
+        .expect("DruidError::Rdbc must expose wrapped batch counts");
+    assert_eq!(counts.large(), &[1, large, -2, -3]);
+    assert_eq!(counts.jdbc_i32(), vec![1, large as i32, -2, -3]);
+    assert!(counts.try_i32().is_err());
 }
 
 #[test]
@@ -409,7 +425,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         VariantCase {
             name: "BatchUpdateException",
             value: ProductDruidError::BatchUpdateException {
-                update_counts: vec![1, -2, -3],
+                update_counts: vec![1_i32, -2, -3].into(),
                 cause: Box::new(ProductDruidError::SqlException(Box::new(
                     batch_sql_exception,
                 ))),

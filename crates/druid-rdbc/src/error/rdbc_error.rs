@@ -5,6 +5,51 @@ use std::time::Duration;
 
 use super::{BatchUpdateCounts, RdbcErrorKind, SqlException};
 
+/// 上层产品错误跨越 RDBC 获取边界时的通用结构化表示。
+///
+/// 该对象只保存可观察 class、message 和 typed source，不在 `druid-rdbc` 中复制 Druid
+/// 产品错误枚举。具体产品 taxonomy 仍由产品 crate 独占。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProductErrorBoundary {
+    class_name: String,
+    message: String,
+    source: Option<Box<RdbcError>>,
+}
+
+impl ProductErrorBoundary {
+    /// 创建一个产品边界错误快照。
+    #[must_use]
+    pub fn new(
+        class_name: impl Into<String>,
+        message: impl Into<String>,
+        source: Option<RdbcError>,
+    ) -> Self {
+        Self {
+            class_name: class_name.into(),
+            message: message.into(),
+            source: source.map(Box::new),
+        }
+    }
+
+    /// 返回产品公开的稳定错误类名。
+    #[must_use]
+    pub fn class_name(&self) -> &str {
+        &self.class_name
+    }
+
+    /// 返回产品公开的错误文本。
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// 返回转换后仍可 downcast 的 typed source。
+    #[must_use]
+    pub fn source_error(&self) -> Option<&RdbcError> {
+        self.source.as_deref()
+    }
+}
+
 /// RDBC standard 与 adapter 边界的统一错误类型。
 ///
 /// 对应 Java：`java.sql.SQLException` 谱系、JDBC 默认方法的
@@ -80,6 +125,8 @@ pub enum RdbcError {
         /// 不受支持的 JDBC/RDBC 操作名称。
         operation: &'static str,
     },
+    /// 不复制产品 taxonomy 的结构化上层错误。
+    ProductBoundary(ProductErrorBoundary),
     /// 未能进一步分类的 adapter 错误。
     Other(String),
 }
@@ -145,6 +192,7 @@ impl RdbcError {
             Self::WallViolation(_) => RdbcErrorKind::WallViolation,
             Self::NoDriverExtension { .. } => RdbcErrorKind::NoDriverExtension,
             Self::UnsupportedOperation { .. } => RdbcErrorKind::UnsupportedOperation,
+            Self::ProductBoundary(_) => RdbcErrorKind::ProductBoundary,
             Self::Other(_) => RdbcErrorKind::Other,
         }
     }
@@ -155,6 +203,9 @@ impl RdbcError {
         match self {
             Self::SqlException(exception) => Some(exception),
             Self::BatchUpdateException { cause, .. } => cause.sql_exception(),
+            Self::ProductBoundary(boundary) => {
+                boundary.source_error().and_then(Self::sql_exception)
+            }
             _ => None,
         }
     }
@@ -164,6 +215,9 @@ impl RdbcError {
     pub fn batch_update_counts(&self) -> Option<&BatchUpdateCounts> {
         match self {
             Self::BatchUpdateException { update_counts, .. } => Some(update_counts),
+            Self::ProductBoundary(boundary) => {
+                boundary.source_error().and_then(Self::batch_update_counts)
+            }
             _ => None,
         }
     }
@@ -195,6 +249,7 @@ impl RdbcError {
             Self::WallViolation(_) => "rdbc::WallViolation",
             Self::NoDriverExtension { .. } => "rdbc::NoDriverExtension",
             Self::UnsupportedOperation { .. } => "java.lang.UnsupportedOperationException",
+            Self::ProductBoundary(boundary) => boundary.class_name(),
             Self::Other(_) => "rdbc::Other",
         }
     }
@@ -285,6 +340,7 @@ impl fmt::Display for RdbcError {
             Self::UnsupportedOperation { operation } => {
                 write!(formatter, "operation is not supported: {operation}")
             }
+            Self::ProductBoundary(boundary) => write!(formatter, "{}", boundary.message()),
             Self::Other(message) => write!(formatter, "{message}"),
         }
     }
@@ -301,6 +357,7 @@ impl std::error::Error for RdbcError {
             | Self::DataSourceNotAvailable {
                 cause: Some(cause), ..
             } => Some(cause.as_ref()),
+            Self::ProductBoundary(boundary) => boundary.source_error().map(|source| source as _),
             _ => None,
         }
     }

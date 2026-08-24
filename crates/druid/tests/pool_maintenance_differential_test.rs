@@ -16,6 +16,7 @@ use druid::core::{
     RdbcError, Row, ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
+use std::error::Error as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -530,4 +531,61 @@ async fn on_fatal_error_max_active_gates_onset() {
         pool.is_on_fatal_error(),
         "increment above onFatalErrorMaxActive sets onFatalError"
     );
+}
+
+#[tokio::test]
+async fn pool_trait_get_preserves_fatal_product_class_and_typed_source() {
+    let factory = Arc::new(DifferentialFactory::new());
+    let pool = DruidPool::builder()
+        .name("fatal-product-boundary")
+        .driver_name("maintenance-diff")
+        .factory(factory)
+        .max_open(8)
+        .max_idle(8)
+        .on_fatal_error_max_active(2)
+        .exception_sorter(Arc::new(MySqlExceptionSorter))
+        .build()
+        .await
+        .expect("fatal-boundary pool must build");
+
+    for _ in 0..2 {
+        let mut connection = pool.get().await.expect("pre-threshold borrow must succeed");
+        let fatal = RdbcError::SqlException(Box::new(druid::core::SqlException::driver(
+            1042,
+            "fatal connection error".to_owned(),
+        )));
+        assert!(connection.handle_exception(&fatal));
+        let _ = connection.close().await;
+    }
+
+    let mut held_one = pool.get().await.expect("first held borrow must succeed");
+    let mut held_two = pool.get().await.expect("second held borrow must succeed");
+    let mut trigger = pool.get().await.expect("fatal trigger borrow must succeed");
+    let fatal = RdbcError::SqlException(Box::new(druid::core::SqlException::driver(
+        1042,
+        "fatal connection error".to_owned(),
+    )));
+    assert!(trigger.handle_exception(&fatal));
+    let _ = trigger.close().await;
+    assert!(pool.is_on_fatal_error());
+
+    let error = <DruidPool as druid::core::Pool>::get(&pool)
+        .await
+        .expect_err("Pool trait boundary must reject at the fatal active threshold");
+    assert_eq!(error.class_name(), "java.sql.SQLException");
+    assert!(error.to_string().contains("onFatalError"));
+    let source = error
+        .source()
+        .and_then(|source| source.downcast_ref::<RdbcError>())
+        .expect("product boundary must retain a typed RDBC source");
+    assert_eq!(source.class_name(), "java.sql.SQLException");
+    assert_eq!(
+        source
+            .sql_exception()
+            .map(druid::core::SqlException::error_code),
+        Some(1042)
+    );
+
+    let _ = held_one.close().await;
+    let _ = held_two.close().await;
 }

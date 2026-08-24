@@ -4,9 +4,9 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     ConnectionFactory, DruidPooledConnection, DruidPooledPreparedStatement, PhysicalConnection,
-    PreparedStatementKey, PreparedStatementMethodType, RdbcBlob, RdbcClob, RdbcError,
-    RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRowId, RdbcString, RdbcUrl,
-    RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
+    PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, RdbcBlob, RdbcClob,
+    RdbcError, RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRowId, RdbcString,
+    RdbcUrl, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
 use druid::spi::{
     RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
@@ -129,6 +129,7 @@ impl rbdc::db::Connection for FakeRbdcConnection {
         sql: &str,
         params: Vec<rbs::Value>,
     ) -> BoxFuture<'_, Result<rbdc::db::ExecResult, rbdc::Error>> {
+        let batch_command = params.first().and_then(rbs::Value::as_i64);
         *self.observed_params.lock().expect("params lock poisoned") = params;
         self.observed_history
             .lock()
@@ -139,12 +140,17 @@ impl rbdc::db::Connection for FakeRbdcConnection {
                     .expect("params lock poisoned")
                     .clone(),
             );
-        if sql == "FAIL" {
+        if sql == "FAIL" || batch_command == Some(2) {
             return Box::pin(async { Err(rbdc::Error::from("vendor database failure")) });
         }
-        Box::pin(async {
+        let rows_affected = if batch_command == Some(1) {
+            u64::try_from(i64::from(i32::MAX) + 7).expect("fixture count fits u64")
+        } else {
+            1
+        };
+        Box::pin(async move {
             Ok(rbdc::db::ExecResult {
-                rows_affected: 1,
+                rows_affected,
                 last_insert_id: rbs::Value::I64(9),
             })
         })
@@ -700,6 +706,61 @@ async fn rbdc_adapter_maps_prepared_statement_to_driver_exec_contract() {
         .exec_prepared(statement.as_ref(), vec![])
         .await
         .is_err());
+}
+
+#[tokio::test]
+async fn rbdc_adapter_batch_path_preserves_large_failure_counts_and_java_success_view() {
+    let observed_params = Arc::new(Mutex::new(Vec::new()));
+    let factory = factory(observed_params);
+    let mut connection = factory.create().await.expect("factory create must succeed");
+    let key = PreparedStatementKey::new(
+        Some("UPDATE batch_item SET value = ?".to_owned()),
+        None,
+        PreparedStatementMethodType::M1,
+    )
+    .expect("prepared key must build");
+    let statement = connection
+        .prepare_physical_statement(&key)
+        .await
+        .expect("RBDC prepared token must build");
+    let large = i64::from(i32::MAX) + 7;
+
+    statement
+        .add_batch(&[Value::Int(1)])
+        .expect("large batch snapshot must be accepted");
+    statement
+        .add_batch(&[Value::Int(2)])
+        .expect("failing batch snapshot must be accepted");
+    let error = connection
+        .exec_prepared_parameter_batch(
+            statement.as_ref(),
+            vec![
+                vec![PreparedInputParameter::Int(1)],
+                vec![PreparedInputParameter::Int(2)],
+            ],
+        )
+        .await
+        .expect_err("second adapter batch item must fail");
+    let counts = error
+        .batch_update_counts()
+        .expect("adapter failure must retain the first large count");
+    assert_eq!(counts.large(), &[large]);
+    assert_eq!(counts.jdbc_i32(), vec![large as i32]);
+    assert!(counts.try_i32().is_err());
+
+    statement
+        .add_batch(&[Value::Int(1)])
+        .expect("success batch snapshot must be accepted");
+    assert_eq!(
+        connection
+            .exec_prepared_parameter_batch(
+                statement.as_ref(),
+                vec![vec![PreparedInputParameter::Int(1)]],
+            )
+            .await
+            .expect("single large adapter batch item must succeed"),
+        vec![large as i32]
+    );
 }
 
 #[tokio::test]

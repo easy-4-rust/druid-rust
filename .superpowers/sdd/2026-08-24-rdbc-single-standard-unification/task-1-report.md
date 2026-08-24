@@ -181,3 +181,143 @@ Before the report was added, the tracked diff was 192 paths with 6,431 additions
 - Unfinished inside Task 1: none.
 - Current specification state: Task 1 executable evidence is GREEN; later P04 standard trait merge/delete tasks remain untouched.
 - Next action: independent review/fix loop, then P04 Task 2 only after this commit is accepted.
+
+## Fix round 1/5 — three Important findings
+
+Review baseline: `0d83f229275301f0e81736e4b6d8f82dc799a11d`.
+
+This round remained inside P04 Task 1. It did not rename standard traits, remove `Physical*`,
+start Task 2, install tools, switch branches, create a worktree, or push/publish.
+
+### RED evidence
+
+#### Important 1 — real batch paths lost large counts
+
+Default standard path:
+
+```bash
+cargo test -p druid-rdbc --test error_contract_test \
+  default_batch_path_preserves_large_failure_counts_and_java_success_view -- --exact
+```
+
+Observed exit `101`, runtime assertion:
+
+```text
+left:  [2147483647]
+right: [2147483654]
+0 passed; 1 failed
+```
+
+Real RBDC adapter path:
+
+```bash
+cargo test -p druid-wrapper --test rbdc_connection_adapter_test \
+  rbdc_adapter_batch_path_preserves_large_failure_counts_and_java_success_view -- --exact
+```
+
+After correcting the fixture to use the adapter's real `add_batch` state path, the observed target
+failure was:
+
+```text
+left:  [2147483647]
+right: [2147483654]
+0 passed; 1 failed
+```
+
+Both failures occurred only after a real successful execution returned `i32::MAX + 7` and the next
+batch item failed. They did not rely on manually constructing `BatchUpdateCounts`.
+
+#### Important 2 — product errors collapsed to `Other`
+
+```bash
+cargo test -p druid --test pool_maintenance_differential_test \
+  pool_trait_get_preserves_fatal_product_class_and_typed_source -- --exact
+```
+
+Observed exit `101`, runtime assertion:
+
+```text
+left:  "rdbc::Other"
+right: "java.sql.SQLException"
+0 passed; 1 failed
+```
+
+The test executes the real `onFatalErrorMaxActive` transition, keeps two active borrows, and calls
+`<DruidPool as Pool>::get`; it therefore covers the actual product-to-RDBC pool boundary.
+
+#### Important 3 — wrapped batch accessor was opaque
+
+```bash
+cargo test -p druid --test druid_error_transition_test \
+  wrapped_rdbc_batch_counts_delegate_all_three_views -- --exact
+```
+
+Observed exit `101`, expected contract compilation failures:
+
+```text
+no method named `large` found for reference `&[i32]`
+no method named `jdbc_i32` found for reference `&[i32]`
+no method named `try_i32` found for reference `&[i32]`
+```
+
+The failure showed that the old accessor shape could neither delegate `DruidError::Rdbc` nor expose
+the three required views.
+
+### Fix implementation
+
+1. `BatchUpdateCounts::try_push_rows_affected` now converts driver `u64` counts to JDBC signed
+   `i64` with a checked upper bound. Default `exec_batch` / `exec_prepared_batch` and the Toasty,
+   SQLx, and RBDC adapter batch loops accumulate `BatchUpdateCounts` directly. Failure paths retain
+   the original `i64`; successful APIs still return `jdbc_i32()` narrowing-cast compatibility.
+2. Added generic `ProductErrorBoundary { class_name, message, typed source }` under `RdbcError`.
+   `From<DruidError> for RdbcError` uses it for product-only errors instead of `Other`; the type does
+   not copy Druid product variants into the RDBC taxonomy. `Display`, `class_name`, `Error::source`,
+   SQL exception lookup, and batch lookup delegate through the typed boundary.
+3. Druid product batch payloads now use `BatchUpdateCounts`. `DruidError::batch_update_counts`
+   transparently returns the product payload or delegates `DruidError::Rdbc`, allowing `large()`,
+   `jdbc_i32()`, and `try_i32()` on the same accessor result.
+4. The waiver verifier now recognizes both direct and grouped named re-exports, so exporting
+   `ProductErrorBoundary` beside `RdbcError` does not create a false gate failure.
+
+### GREEN evidence
+
+| Command | Result | Tests |
+| --- | --- | ---: |
+| `cargo test -p druid-rdbc --test error_contract_test` | PASS | 6 passed |
+| `cargo test -p druid --test druid_error_transition_test` | PASS | 4 passed, including all 24 P03 goldens |
+| `cargo test -p druid --test exception_sorter_semantics_test` | PASS | 10 passed |
+| `cargo test -p druid-wrapper --test adapter_boundary_test` | PASS | 4 passed |
+| `cargo test -p druid-wrapper --test rbdc_connection_adapter_test` | PASS | 10 passed |
+| `cargo test -p druid --test pool_maintenance_differential_test` | PASS | 10 passed |
+| **Executed focused total** | **PASS** | **44 passed, 0 failed, 0 ignored** |
+| waiver verifier | PASS | all six exact gates; internally reruns the 6 + 4 error tests |
+| `cargo check --workspace --all-targets --all-features` | PASS | compile-only; 0 tests |
+| `cargo fmt --all -- --check` | PASS | format-only; 0 tests |
+
+Final live denominator remains `90` rows with SHA-256
+`7f19e173dcadd1ea6b55cf24e4be61ee3de2ab8cca650399617a773823762603`.
+
+### Fix-round files
+
+- `crates/druid-rdbc/src/error/{batch_update_counts.rs,rdbc_error.rs,rdbc_error_kind.rs,mod.rs}`
+- `crates/druid-rdbc/src/spi/physical_connection.rs`
+- `crates/druid-rdbc/tests/error_contract_test.rs`
+- `crates/druid/src/core/error.rs`
+- `crates/druid/tests/{druid_error_transition_test.rs,pool_maintenance_differential_test.rs,druid_error_test.rs}`
+- `crates/druid-wrapper/src/{toasty/toasty_connection_adapter.rs,sqlx/sqlx_connection_adapter.rs,rbdc/rbdc_connection_adapter.rs}`
+- `crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs`
+- `scripts/verify_rdbc_error_waiver_exit.py`
+- `docs/verification/rdbc-first/rdbc-error-waiver-exit.md`
+- this report
+
+### Deferred Minor findings
+
+The two reviewer Minor findings remain intentionally deferred in the authoritative SDD ledger and
+were not changed in this round:
+
+1. `compat/exceptions.rs` still describes Java narrowing as saturation; final review owns the
+   wording decision.
+2. This report remains force-tracked despite the SDD workspace ignore rule; final review owns the
+   tracked-history decision.
+
+They do not weaken the three Important regressions or the executable gates above.

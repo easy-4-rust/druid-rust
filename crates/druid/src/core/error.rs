@@ -6,7 +6,7 @@ use std::fmt;
 use std::time::Duration;
 
 pub use druid_rdbc::error::RdbcError;
-use druid_rdbc::error::SqlException;
+use druid_rdbc::error::{BatchUpdateCounts, ProductErrorBoundary, SqlException};
 use druid_rdbc::types::RdbcString;
 
 /// druid-rust 统一错误类型。
@@ -63,7 +63,7 @@ pub enum DruidError {
     /// `Statement::SUCCESS_NO_INFO(-2)` 与 `Statement::EXECUTE_FAILED(-3)`；
     /// `cause` 保留原始驱动错误，供异常分类器判断连接是否应丢弃。
     BatchUpdateException {
-        update_counts: Vec<i32>,
+        update_counts: BatchUpdateCounts,
         cause: Box<DruidError>,
     },
     SqlParseError(String),
@@ -342,9 +342,10 @@ impl DruidError {
     }
 
     /// 返回批处理失败前已经得到的 RDBC 更新计数。
-    pub fn batch_update_counts(&self) -> Option<&[i32]> {
+    pub fn batch_update_counts(&self) -> Option<&BatchUpdateCounts> {
         match self {
             Self::BatchUpdateException { update_counts, .. } => Some(update_counts),
+            Self::Rdbc(error) => error.batch_update_counts(),
             _ => None,
         }
     }
@@ -416,7 +417,7 @@ impl From<DruidError> for RdbcError {
                 update_counts,
                 cause,
             } => Self::BatchUpdateException {
-                update_counts: update_counts.into(),
+                update_counts,
                 cause: Box::new(Self::from(*cause)),
             },
             DruidError::InvalidArgument(message) => Self::InvalidArgument(message),
@@ -427,7 +428,20 @@ impl From<DruidError> for RdbcError {
                 Self::UnsupportedOperation { operation }
             }
             DruidError::Other(message) => Self::Other(message),
-            product_error => Self::Other(product_error.to_string()),
+            product_error => {
+                let source = std::error::Error::source(&product_error).and_then(|source| {
+                    source
+                        .downcast_ref::<DruidError>()
+                        .cloned()
+                        .map(Self::from)
+                        .or_else(|| source.downcast_ref::<RdbcError>().cloned())
+                });
+                Self::ProductBoundary(ProductErrorBoundary::new(
+                    product_error.class_name(),
+                    product_error.to_string(),
+                    source,
+                ))
+            }
         }
     }
 }

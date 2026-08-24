@@ -4,8 +4,8 @@ use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecuti
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
+use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
     PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
@@ -1146,21 +1146,26 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 materialized_sets
             };
 
-        let mut update_counts = Vec::with_capacity(parameter_sets.len());
+        let mut update_counts = BatchUpdateCounts::default();
         for params in parameter_sets {
             match self.exec_prepared(statement, params).await {
                 Ok(result) => {
-                    update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
+                    if let Err(cause) = update_counts.try_push_rows_affected(result.rows_affected) {
+                        return Err(RdbcError::BatchUpdateException {
+                            update_counts,
+                            cause: Box::new(cause),
+                        });
+                    }
                 }
                 Err(error) => {
                     return Err(RdbcError::BatchUpdateException {
-                        update_counts: update_counts.into(),
+                        update_counts,
                         cause: Box::new(error),
                     });
                 }
             }
         }
-        Ok(update_counts)
+        Ok(update_counts.jdbc_i32())
     }
 
     async fn fetch_prepared(

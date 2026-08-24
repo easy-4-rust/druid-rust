@@ -7,7 +7,7 @@ mod sql_exception;
 mod sql_warning;
 
 pub use batch_update_counts::BatchUpdateCounts;
-pub use rdbc_error::RdbcError;
+pub use rdbc_error::{ProductErrorBoundary, RdbcError};
 pub use rdbc_error_kind::RdbcErrorKind;
 pub use sql_exception::SqlException;
 pub use sql_exception::SqlExceptionCause;

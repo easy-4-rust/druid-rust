@@ -40,6 +40,24 @@ impl BatchUpdateCounts {
         self.large.is_empty()
     }
 
+    /// 追加驱动返回的受影响行数，同时保持 JDBC `long` 取值域。
+    ///
+    /// # 参数
+    /// - `rows_affected`：底层 Rust 驱动返回的无符号受影响行数。
+    ///
+    /// # 错误
+    /// `rows_affected` 超出 JDBC signed `long` / Rust `i64` 范围时返回
+    /// [`RdbcError::InvalidArgument`]，不会静默饱和或截断。
+    pub fn try_push_rows_affected(&mut self, rows_affected: u64) -> Result<(), RdbcError> {
+        let rows_affected = i64::try_from(rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument(format!(
+                "batch update count exceeds JDBC i64: {rows_affected}"
+            ))
+        })?;
+        self.large.push(rows_affected);
+        Ok(())
+    }
+
     /// 返回模拟 Java `long` 到 `int` 强制转换的计数视图。
     ///
     /// 超出 `i32` 范围的高位会像 Java narrowing conversion 一样被截断；需要拒绝溢出的
