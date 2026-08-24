@@ -321,3 +321,82 @@ were not changed in this round:
    tracked-history decision.
 
 They do not weaken the three Important regressions or the executable gates above.
+
+## Fix round 2/5 — canonical export verifier fail-closed
+
+Review baseline: `743632143965b13dce55a7ca9a6e2f17daf43797`.
+
+This round changed only `scripts/verify_rdbc_error_waiver_exit.py` and this report. No production
+Rust file, generated verification report schema, Task 2 artifact, `Physical*` name, dependency, or
+Cargo configuration changed. The force-tracked report Minor remains deferred as instructed.
+
+### RED evidence
+
+Self-test command:
+
+```bash
+python3 scripts/verify_rdbc_error_waiver_exit.py --self-test
+```
+
+Before the parser fix, the command exited `1`. Exact direct and simple grouped positive cases
+passed, while the nested-depth positive and every adversarial target form exposed the fail-open:
+
+```text
+test_accepts_exact_direct_export ... ok
+test_accepts_exact_grouped_export (nested unrelated group before canonical item) ... FAIL
+test_rejects_direct_alias ... FAIL
+test_rejects_direct_and_grouped_child_paths (direct) ... FAIL
+test_rejects_direct_and_grouped_child_paths (grouped) ... FAIL
+test_rejects_grouped_alias_and_underscore (Hidden) ... FAIL
+test_rejects_grouped_alias_and_underscore (_) ... FAIL
+test_rejects_nested_grouped_export ... FAIL
+Ran 6 tests
+FAILED (failures=7)
+```
+
+All negative failures were `AssertionError: True is not false`, proving the verifier accepted a
+non-canonical target rather than merely failing on unrelated syntax.
+
+### Parser correction
+
+- Direct exports now require the full token entry `pub use rdbc_error::RdbcError;`; any token after
+  `RdbcError` other than `;` rejects the occurrence, including `as`, `_`, and `::Child`.
+- Grouped exports are split only on commas at the outer group depth. Nested brace depth is tracked
+  until the matching outer `}` and the complete grouped item must end in `;`.
+- A canonical grouped entry must be exactly `[RdbcError]`. Alias, underscore, child, or nested
+  entries containing the target mark the source invalid even if a separate accepted occurrence is
+  present, keeping Gate2 fail-closed.
+- An unrelated nested group before an exact top-level `RdbcError` entry is accepted, proving the
+  parser does not stop at the first nested closing brace.
+
+### GREEN evidence
+
+```bash
+python3 scripts/verify_rdbc_error_waiver_exit.py --self-test
+```
+
+```text
+test_accepts_exact_direct_export ... ok
+test_accepts_exact_grouped_export ... ok
+test_rejects_direct_alias ... ok
+test_rejects_direct_and_grouped_child_paths ... ok
+test_rejects_grouped_alias_and_underscore ... ok
+test_rejects_nested_grouped_export ... ok
+Ran 6 tests in 0.000s
+OK
+```
+
+Canonical waiver command:
+
+```bash
+python3 scripts/verify_rdbc_error_waiver_exit.py \
+  --disposition docs/verification/rdbc-first/rdbc-error-disposition.tsv \
+  --exit-report docs/verification/rdbc-first/rdbc-error-waiver-exit.md
+```
+
+Final result: all six exact `WAIVER_EXIT_GATE_*` values `PASS`; Gate6 internally reran
+`error_contract_test` and `druid_error_transition_test`; live rows remained `90` and manifest
+SHA-256 remained `7f19e173dcadd1ea6b55cf24e4be61ee3de2ab8cca650399617a773823762603`.
+
+Per the fix-round instruction, no workspace broad check was required because no production or
+generated-schema input changed.

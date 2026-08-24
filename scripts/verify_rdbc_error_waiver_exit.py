@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import subprocess
 import sys
+import unittest
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -280,28 +281,133 @@ def contains_sequence(source: bytes, sequence: tuple[str, ...]) -> bool:
 
 
 def exports_named_item(source: bytes, module: str, item: str) -> bool:
-    """Recognize direct or grouped public re-exports of one named Rust item."""
+    """Require an exact direct or top-level grouped public re-export."""
 
     try:
         texts = [token.text for token in tokenize(source.decode("utf-8"))]
     except (UnicodeError, RustLexError) as error:
         fail(f"cannot tokenize Rust source: {error}")
-    direct = ("pub", "use", module, "::", item)
-    if any(
-        tuple(texts[index:index + len(direct)]) == direct
-        for index in range(len(texts) - len(direct) + 1)
-    ):
-        return True
-    grouped = ("pub", "use", module, "::", "{")
-    for index in range(len(texts) - len(grouped) + 1):
-        if tuple(texts[index:index + len(grouped)]) != grouped:
+    prefix = ("pub", "use", module, "::")
+    accepted = False
+    invalid_target = False
+    for index in range(len(texts) - len(prefix) + 1):
+        if tuple(texts[index:index + len(prefix)]) != prefix:
             continue
-        cursor = index + len(grouped)
-        while cursor < len(texts) and texts[cursor] != "}":
-            if texts[cursor] == item:
-                return True
+        cursor = index + len(prefix)
+        if cursor >= len(texts):
+            continue
+        if texts[cursor] == item:
+            following = texts[cursor + 1] if cursor + 1 < len(texts) else None
+            if following == ";":
+                accepted = True
+            else:
+                # `as`, `_`, `::Child`, or any other suffix changes the exported name/path.
+                invalid_target = True
+            continue
+        if texts[cursor] != "{":
+            continue
+
+        depth = 1
+        cursor += 1
+        entry: list[str] = []
+        group_entries: list[list[str]] = []
+        while cursor < len(texts) and depth:
+            token = texts[cursor]
+            if token == "{":
+                depth += 1
+                entry.append(token)
+            elif token == "}":
+                depth -= 1
+                if depth == 0:
+                    group_entries.append(entry)
+                    cursor += 1
+                    break
+                entry.append(token)
+            elif token == "," and depth == 1:
+                group_entries.append(entry)
+                entry = []
+            else:
+                entry.append(token)
             cursor += 1
-    return False
+        if depth != 0 or cursor >= len(texts) or texts[cursor] != ";":
+            continue
+        for grouped_entry in group_entries:
+            if grouped_entry == [item]:
+                accepted = True
+            elif item in grouped_entry:
+                # Alias, child path, or nested path is not the canonical top-level item.
+                invalid_target = True
+    return accepted and not invalid_target
+
+
+class CanonicalExportSelfTests(unittest.TestCase):
+    """Adversarial contracts for canonical Rust re-export recognition."""
+
+    def test_accepts_exact_direct_export(self) -> None:
+        self.assertTrue(
+            exports_named_item(
+                b"pub use rdbc_error::RdbcError;", "rdbc_error", "RdbcError"
+            )
+        )
+
+    def test_accepts_exact_grouped_export(self) -> None:
+        for source in (
+            b"pub use rdbc_error::{ProductErrorBoundary, RdbcError};",
+            b"pub use rdbc_error::{nested::{Other}, RdbcError};",
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(
+                    exports_named_item(
+                        source,
+                        "rdbc_error",
+                        "RdbcError",
+                    )
+                )
+
+    def test_rejects_direct_alias(self) -> None:
+        self.assertFalse(
+            exports_named_item(
+                b"pub use rdbc_error::RdbcError as Hidden;",
+                "rdbc_error",
+                "RdbcError",
+            )
+        )
+
+    def test_rejects_grouped_alias_and_underscore(self) -> None:
+        for alias in (b"Hidden", b"_"):
+            with self.subTest(alias=alias):
+                self.assertFalse(
+                    exports_named_item(
+                        b"pub use rdbc_error::{RdbcError as " + alias + b"};",
+                        "rdbc_error",
+                        "RdbcError",
+                    )
+                )
+
+    def test_rejects_direct_and_grouped_child_paths(self) -> None:
+        for source in (
+            b"pub use rdbc_error::RdbcError::Child;",
+            b"pub use rdbc_error::{RdbcError::Child};",
+        ):
+            with self.subTest(source=source):
+                self.assertFalse(exports_named_item(source, "rdbc_error", "RdbcError"))
+
+    def test_rejects_nested_grouped_export(self) -> None:
+        self.assertFalse(
+            exports_named_item(
+                b"pub use rdbc_error::{nested::{RdbcError}};",
+                "rdbc_error",
+                "RdbcError",
+            )
+        )
+
+
+def run_self_tests() -> bool:
+    """Run only this verifier's deterministic parser contracts."""
+
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(CanonicalExportSelfTests)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    return result.wasSuccessful()
 
 
 def gate_compat_removed(root: Path) -> GateResult:
@@ -547,9 +653,17 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="write the canonical report after all gates pass",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="run deterministic adversarial verifier self-tests",
+    )
     args = parser.parse_args()
-    if (args.emit_live is None) == (args.disposition is None):
-        parser.error("choose exactly one of --emit-live or --disposition")
+    selected_modes = sum(
+        (args.emit_live is not None, args.disposition is not None, args.self_test)
+    )
+    if selected_modes != 1:
+        parser.error("choose exactly one of --emit-live, --disposition, or --self-test")
     if args.exit_report is not None and args.disposition is None:
         parser.error("--exit-report requires --disposition")
     return args
@@ -561,6 +675,8 @@ def main() -> int:
     args = parse_args()
     root = repository_root()
     try:
+        if args.self_test:
+            return 0 if run_self_tests() else 1
         if args.emit_live is not None:
             emit_live(root, args.emit_live)
             return 0
