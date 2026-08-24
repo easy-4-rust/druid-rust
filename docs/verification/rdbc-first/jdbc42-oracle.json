@@ -1,0 +1,574 @@
+{
+  "archive_sha256": "5f9c0657c534319a272751431a1f5919cfdcd4e0ac4e0fb9b7e181bc27fa489b",
+  "archive_size": 94004963,
+  "archive_url": "https://github.com/openjdk/jdk8u/archive/7373384725418fa645fb4508ec05a869bc7fc3e7.tar.gz",
+  "oracle_commit": "7373384725418fa645fb4508ec05a869bc7fc3e7",
+  "oracle_tag": "jdk8u502-b07",
+  "packages": {
+    "java.sql": {
+      "object_count": 52,
+      "objects": [
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Array",
+          "normalized_signature": "public interface Array",
+          "object_name": "Array",
+          "source_path": "jdk/src/share/classes/java/sql/Array.java",
+          "source_sha256": "0fc65aee638e01e25b9c3ede155d14cac708926154f75419f05e67508ac1f536"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.BatchUpdateException",
+          "normalized_signature": "public class BatchUpdateException extends SQLException",
+          "object_name": "BatchUpdateException",
+          "source_path": "jdk/src/share/classes/java/sql/BatchUpdateException.java",
+          "source_sha256": "b25625160ee703fd47693fdf24cf9849cc6b8794babbaf1466471f922ad8007a"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Blob",
+          "normalized_signature": "public interface Blob",
+          "object_name": "Blob",
+          "source_path": "jdk/src/share/classes/java/sql/Blob.java",
+          "source_sha256": "6602719b09315b4b9d2c1866291a97660f188d85e0b907faa58643756465ae10"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.CallableStatement",
+          "normalized_signature": "public interface CallableStatement extends PreparedStatement",
+          "object_name": "CallableStatement",
+          "source_path": "jdk/src/share/classes/java/sql/CallableStatement.java",
+          "source_sha256": "15120a93cb6b976c89791393d099cede47bfd9e392bb09ddd36f4f4841aed532"
+        },
+        {
+          "declaration_kind": "enum",
+          "fqcn": "java.sql.ClientInfoStatus",
+          "normalized_signature": "public enum ClientInfoStatus",
+          "object_name": "ClientInfoStatus",
+          "source_path": "jdk/src/share/classes/java/sql/ClientInfoStatus.java",
+          "source_sha256": "838ff349a94046594aade64e3967f01ad319d9f39796774ecc8626384fa41162"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Clob",
+          "normalized_signature": "public interface Clob",
+          "object_name": "Clob",
+          "source_path": "jdk/src/share/classes/java/sql/Clob.java",
+          "source_sha256": "285a6d1b3d60e8bb8980a5481716f2a7553e9b3b93c93f33233a015a5ddcc915"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Connection",
+          "normalized_signature": "public interface Connection extends Wrapper, AutoCloseable",
+          "object_name": "Connection",
+          "source_path": "jdk/src/share/classes/java/sql/Connection.java",
+          "source_sha256": "8a32a4d96ce64c90a900e660370d99fd47c1905e47db432a41a8ea94e931ac64"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.DataTruncation",
+          "normalized_signature": "public class DataTruncation extends SQLWarning",
+          "object_name": "DataTruncation",
+          "source_path": "jdk/src/share/classes/java/sql/DataTruncation.java",
+          "source_sha256": "8f5d62965ec0a98f1b3fa21b7e18d5175967f11a1bdeb7a107b6e5448132da6e"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.DatabaseMetaData",
+          "normalized_signature": "public interface DatabaseMetaData extends Wrapper",
+          "object_name": "DatabaseMetaData",
+          "source_path": "jdk/src/share/classes/java/sql/DatabaseMetaData.java",
+          "source_sha256": "eeba4fa742de27bb25dfe19ced2ce9aefdb67f87c04c6794ee3fc48f53ad01b4"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.Date",
+          "normalized_signature": "public class Date extends java.util.Date",
+          "object_name": "Date",
+          "source_path": "jdk/src/share/classes/java/sql/Date.java",
+          "source_sha256": "2e42025c9aaa4ed676a709252deb661fa3fda834bf6411fc2ce74da8cccbee13"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Driver",
+          "normalized_signature": "public interface Driver",
+          "object_name": "Driver",
+          "source_path": "jdk/src/share/classes/java/sql/Driver.java",
+          "source_sha256": "7ca92fc448944116bfbc1de07b9aea6b49b4a1acbfef59e49f778973fade3570"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.DriverAction",
+          "normalized_signature": "public interface DriverAction",
+          "object_name": "DriverAction",
+          "source_path": "jdk/src/share/classes/java/sql/DriverAction.java",
+          "source_sha256": "e07e6fd6ceb14d76cd754cd5fb451f48a89a5d6cbc750ed223bb2155c3ca870a"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.DriverManager",
+          "normalized_signature": "public class DriverManager",
+          "object_name": "DriverManager",
+          "source_path": "jdk/src/share/classes/java/sql/DriverManager.java",
+          "source_sha256": "b4b2e140b04fcd21d4cff37e7e225f35d360ad4b84dd4029b61c6f482d6dfbc4"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.DriverPropertyInfo",
+          "normalized_signature": "public class DriverPropertyInfo",
+          "object_name": "DriverPropertyInfo",
+          "source_path": "jdk/src/share/classes/java/sql/DriverPropertyInfo.java",
+          "source_sha256": "52007d35c18d96f82e708a321f25ffa15ff69fd3d81d853287d0b66d8789a492"
+        },
+        {
+          "declaration_kind": "enum",
+          "fqcn": "java.sql.JDBCType",
+          "normalized_signature": "public enum JDBCType implements SQLType",
+          "object_name": "JDBCType",
+          "source_path": "jdk/src/share/classes/java/sql/JDBCType.java",
+          "source_sha256": "066ea8d690db0532037ad47b1db418bc176c43d322ab3752a1bf98bd8f5e203d"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.NClob",
+          "normalized_signature": "public interface NClob extends Clob",
+          "object_name": "NClob",
+          "source_path": "jdk/src/share/classes/java/sql/NClob.java",
+          "source_sha256": "055f613f4848fac6f4a05d5b7a77fcac260c00e6bdffe69d377a4c580c1831cb"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.ParameterMetaData",
+          "normalized_signature": "public interface ParameterMetaData extends Wrapper",
+          "object_name": "ParameterMetaData",
+          "source_path": "jdk/src/share/classes/java/sql/ParameterMetaData.java",
+          "source_sha256": "d7870db8464efac21c28dd71ca843c53320c15cb681b54e73fcd15830128d248"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.PreparedStatement",
+          "normalized_signature": "public interface PreparedStatement extends Statement",
+          "object_name": "PreparedStatement",
+          "source_path": "jdk/src/share/classes/java/sql/PreparedStatement.java",
+          "source_sha256": "9430d3271bf49bb66e36e3b8f4429d726b042080961d6c2dff92e391b3d00a0d"
+        },
+        {
+          "declaration_kind": "enum",
+          "fqcn": "java.sql.PseudoColumnUsage",
+          "normalized_signature": "public enum PseudoColumnUsage",
+          "object_name": "PseudoColumnUsage",
+          "source_path": "jdk/src/share/classes/java/sql/PseudoColumnUsage.java",
+          "source_sha256": "7d5fe72edc3146d995106aec81e4ec75ed84e0946d8c3831cd31945f7ed2b846"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Ref",
+          "normalized_signature": "public interface Ref",
+          "object_name": "Ref",
+          "source_path": "jdk/src/share/classes/java/sql/Ref.java",
+          "source_sha256": "386860b5dd4e45dd288db3593197dde5770dfc3857cf2d25ae09e64410df0917"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.ResultSet",
+          "normalized_signature": "public interface ResultSet extends Wrapper, AutoCloseable",
+          "object_name": "ResultSet",
+          "source_path": "jdk/src/share/classes/java/sql/ResultSet.java",
+          "source_sha256": "42718dec5d2fe53fd994c5cb9b5521729e8070f5f6461064d79908a521d3c2d6"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.ResultSetMetaData",
+          "normalized_signature": "public interface ResultSetMetaData extends Wrapper",
+          "object_name": "ResultSetMetaData",
+          "source_path": "jdk/src/share/classes/java/sql/ResultSetMetaData.java",
+          "source_sha256": "07446bbb5828b41ff2f1e52f949ae82826c39e86d9671807c2b909ae2e68e91e"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.RowId",
+          "normalized_signature": "public interface RowId",
+          "object_name": "RowId",
+          "source_path": "jdk/src/share/classes/java/sql/RowId.java",
+          "source_sha256": "abcb8229e417d73f04d55aa584795c0325bfaa81f5ed9b59760f6e53fa3e53ac"
+        },
+        {
+          "declaration_kind": "enum",
+          "fqcn": "java.sql.RowIdLifetime",
+          "normalized_signature": "public enum RowIdLifetime",
+          "object_name": "RowIdLifetime",
+          "source_path": "jdk/src/share/classes/java/sql/RowIdLifetime.java",
+          "source_sha256": "1389fc9e776fe1ddc740d3a1690130f4a196f28e0545de179c3218ed01ca0f6f"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLClientInfoException",
+          "normalized_signature": "public class SQLClientInfoException extends SQLException",
+          "object_name": "SQLClientInfoException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLClientInfoException.java",
+          "source_sha256": "10f195c7ef62596260bc6061da5e5bd0bf0a47cb8bcd998521ec7c2988d3590c"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.SQLData",
+          "normalized_signature": "public interface SQLData",
+          "object_name": "SQLData",
+          "source_path": "jdk/src/share/classes/java/sql/SQLData.java",
+          "source_sha256": "5ac13e450aea702340aa4542cb01e2fa323f600511fb152b57f81fa297e19abb"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLDataException",
+          "normalized_signature": "public class SQLDataException extends SQLNonTransientException",
+          "object_name": "SQLDataException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLDataException.java",
+          "source_sha256": "f83d26c4198bd5a7e9d87cacf60ca781b503a12c637dfe3b685c9a9b112dcef2"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLException",
+          "normalized_signature": "public class SQLException extends java.lang.Exception implements Iterable<Throwable>",
+          "object_name": "SQLException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLException.java",
+          "source_sha256": "de740aefd6ddc88ef6f01bd75a8d1dc5cf7779a13231c5bfc787566315ff8423"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLFeatureNotSupportedException",
+          "normalized_signature": "public class SQLFeatureNotSupportedException extends SQLNonTransientException",
+          "object_name": "SQLFeatureNotSupportedException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLFeatureNotSupportedException.java",
+          "source_sha256": "ab1accdf0f02aba6c9c46a7447c067d0213025f07f0f01d72cfa64d93041ad12"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.SQLInput",
+          "normalized_signature": "public interface SQLInput",
+          "object_name": "SQLInput",
+          "source_path": "jdk/src/share/classes/java/sql/SQLInput.java",
+          "source_sha256": "efd9da1a8b066fe3b236e9174aa6cb7998132339a50683d0e2c1d2201eb7c012"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLIntegrityConstraintViolationException",
+          "normalized_signature": "public class SQLIntegrityConstraintViolationException extends SQLNonTransientException",
+          "object_name": "SQLIntegrityConstraintViolationException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLIntegrityConstraintViolationException.java",
+          "source_sha256": "c11e8f948a59e94c0adb8876c55ba7548f43ebc58c0c6bdb6a6315c35ff468ac"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLInvalidAuthorizationSpecException",
+          "normalized_signature": "public class SQLInvalidAuthorizationSpecException extends SQLNonTransientException",
+          "object_name": "SQLInvalidAuthorizationSpecException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLInvalidAuthorizationSpecException.java",
+          "source_sha256": "0d177213ec3065de6bdf67673a1195698fd3a94b3e0df50e346e0479aa0f6879"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLNonTransientConnectionException",
+          "normalized_signature": "public class SQLNonTransientConnectionException extends java.sql.SQLNonTransientException",
+          "object_name": "SQLNonTransientConnectionException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLNonTransientConnectionException.java",
+          "source_sha256": "7b7335eba4643555869fbac47d43896f4891b66d2c5efaac8d69b2b31b13cc94"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLNonTransientException",
+          "normalized_signature": "public class SQLNonTransientException extends java.sql.SQLException",
+          "object_name": "SQLNonTransientException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLNonTransientException.java",
+          "source_sha256": "194d420b1a6fa3dda8f3a6005ffdba1771049f0560be39bc60e91e93fb5b6141"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.SQLOutput",
+          "normalized_signature": "public interface SQLOutput",
+          "object_name": "SQLOutput",
+          "source_path": "jdk/src/share/classes/java/sql/SQLOutput.java",
+          "source_sha256": "b008af30cc5bd93b00bb404835c4b46df6feeaa2065dd52431de93a761e6209e"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLPermission",
+          "normalized_signature": "public final class SQLPermission extends BasicPermission",
+          "object_name": "SQLPermission",
+          "source_path": "jdk/src/share/classes/java/sql/SQLPermission.java",
+          "source_sha256": "8ecba079ddce793f91cb84407a041f8ae8cf7d30020d2aa9f014d0876d594949"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLRecoverableException",
+          "normalized_signature": "public class SQLRecoverableException extends java.sql.SQLException",
+          "object_name": "SQLRecoverableException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLRecoverableException.java",
+          "source_sha256": "6574d53c720d6a1c0cbf614d086bb6307d0b41caac74a542e10793963a70f545"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLSyntaxErrorException",
+          "normalized_signature": "public class SQLSyntaxErrorException extends SQLNonTransientException",
+          "object_name": "SQLSyntaxErrorException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLSyntaxErrorException.java",
+          "source_sha256": "2841acd106afee18b7a4bf0e43e56bc2ca7076d8a03527080e00365f95f1b27f"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLTimeoutException",
+          "normalized_signature": "public class SQLTimeoutException extends SQLTransientException",
+          "object_name": "SQLTimeoutException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLTimeoutException.java",
+          "source_sha256": "5352c691ce531fdf2c65313f255dfa6a9c533427039ac3fde446872a40ee6357"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLTransactionRollbackException",
+          "normalized_signature": "public class SQLTransactionRollbackException extends SQLTransientException",
+          "object_name": "SQLTransactionRollbackException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLTransactionRollbackException.java",
+          "source_sha256": "779f511af37484162b264b0d3493833ad4fd512f96807e1f48d6f3b10802576a"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLTransientConnectionException",
+          "normalized_signature": "public class SQLTransientConnectionException extends java.sql.SQLTransientException",
+          "object_name": "SQLTransientConnectionException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLTransientConnectionException.java",
+          "source_sha256": "6721712f346bd4a72a65899ae6ecc5bd83ac1f3a785f7d12a007849ceb8affff"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLTransientException",
+          "normalized_signature": "public class SQLTransientException extends java.sql.SQLException",
+          "object_name": "SQLTransientException",
+          "source_path": "jdk/src/share/classes/java/sql/SQLTransientException.java",
+          "source_sha256": "bb50e64bedcba9c5a61998295b01fb57ce079da7a1a10943261b7b96c3d24319"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.SQLType",
+          "normalized_signature": "public interface SQLType",
+          "object_name": "SQLType",
+          "source_path": "jdk/src/share/classes/java/sql/SQLType.java",
+          "source_sha256": "556d791de6ecc62b9fd8f277750a903ec86c4e4733d825a106ddc52be84ff6b4"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.SQLWarning",
+          "normalized_signature": "public class SQLWarning extends SQLException",
+          "object_name": "SQLWarning",
+          "source_path": "jdk/src/share/classes/java/sql/SQLWarning.java",
+          "source_sha256": "63da9dc3a56d1c357b0252f20635ee2055b198c30bd87a25a0d00f0756e92242"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.SQLXML",
+          "normalized_signature": "public interface SQLXML",
+          "object_name": "SQLXML",
+          "source_path": "jdk/src/share/classes/java/sql/SQLXML.java",
+          "source_sha256": "f261795c70afbf99fc46f050e92618f6662d3038882c769be6890e1e1d998ae0"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Savepoint",
+          "normalized_signature": "public interface Savepoint",
+          "object_name": "Savepoint",
+          "source_path": "jdk/src/share/classes/java/sql/Savepoint.java",
+          "source_sha256": "5f89dbe29b8450aef6c018f378fd867304cdbfda5398f30189834dead70653be"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Statement",
+          "normalized_signature": "public interface Statement extends Wrapper, AutoCloseable",
+          "object_name": "Statement",
+          "source_path": "jdk/src/share/classes/java/sql/Statement.java",
+          "source_sha256": "2fc29518ffffd284562acf7fd1c0e3ee51fd4b7718f603f24d11698b147eb93e"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Struct",
+          "normalized_signature": "public interface Struct",
+          "object_name": "Struct",
+          "source_path": "jdk/src/share/classes/java/sql/Struct.java",
+          "source_sha256": "29bd3f6343bbc648aa32a6f6dbf397ac46ea15afd392237b2fd76588234f49ac"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.Time",
+          "normalized_signature": "public class Time extends java.util.Date",
+          "object_name": "Time",
+          "source_path": "jdk/src/share/classes/java/sql/Time.java",
+          "source_sha256": "0b02344fcb0821e2936391bd5e3f0b8f54f26d223c5e56c01b68f65cd4ab95d3"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.Timestamp",
+          "normalized_signature": "public class Timestamp extends java.util.Date",
+          "object_name": "Timestamp",
+          "source_path": "jdk/src/share/classes/java/sql/Timestamp.java",
+          "source_sha256": "207185c1fd946a59e4ef8829872a9077a0c8aa74d98d505e1618f131f02158fa"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "java.sql.Types",
+          "normalized_signature": "public class Types",
+          "object_name": "Types",
+          "source_path": "jdk/src/share/classes/java/sql/Types.java",
+          "source_sha256": "2a5ff9533de29aa9da9fd5a088839f8e641c3a0cbc257055a2192d066175cad7"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "java.sql.Wrapper",
+          "normalized_signature": "public interface Wrapper",
+          "object_name": "Wrapper",
+          "source_path": "jdk/src/share/classes/java/sql/Wrapper.java",
+          "source_sha256": "0f2946929c52f0247d522e348f90d8a1496f8c8fceb8ab4f7ded190ebb48c07d"
+        }
+      ]
+    },
+    "javax.sql": {
+      "object_count": 17,
+      "objects": [
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.CommonDataSource",
+          "normalized_signature": "public interface CommonDataSource",
+          "object_name": "CommonDataSource",
+          "source_path": "jdk/src/share/classes/javax/sql/CommonDataSource.java",
+          "source_sha256": "76b9f788d59e35931ecd326c7b4baf40c8ab4ab0cc39504e2ee6f5b8a9406099"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "javax.sql.ConnectionEvent",
+          "normalized_signature": "public class ConnectionEvent extends java.util.EventObject",
+          "object_name": "ConnectionEvent",
+          "source_path": "jdk/src/share/classes/javax/sql/ConnectionEvent.java",
+          "source_sha256": "064c792a1239c17ef94abca5d6de9eded80cebea5eead1a1be5897a4b95152ec"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.ConnectionEventListener",
+          "normalized_signature": "public interface ConnectionEventListener extends java.util.EventListener",
+          "object_name": "ConnectionEventListener",
+          "source_path": "jdk/src/share/classes/javax/sql/ConnectionEventListener.java",
+          "source_sha256": "02405caaadc81a7152af3191f4fd77968c08cadaa68be46fc80d84e7ecc4f210"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.ConnectionPoolDataSource",
+          "normalized_signature": "public interface ConnectionPoolDataSource extends CommonDataSource",
+          "object_name": "ConnectionPoolDataSource",
+          "source_path": "jdk/src/share/classes/javax/sql/ConnectionPoolDataSource.java",
+          "source_sha256": "1b0b4ae2580c642cc4699d8d13df77144af16edf702d3640958f62b9c153fba5"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.DataSource",
+          "normalized_signature": "public interface DataSource extends CommonDataSource, Wrapper",
+          "object_name": "DataSource",
+          "source_path": "jdk/src/share/classes/javax/sql/DataSource.java",
+          "source_sha256": "b6b55e1dc3f8a99cf9994836778fc505944491904bbd7d23817957672e64941b"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.PooledConnection",
+          "normalized_signature": "public interface PooledConnection",
+          "object_name": "PooledConnection",
+          "source_path": "jdk/src/share/classes/javax/sql/PooledConnection.java",
+          "source_sha256": "2f0e95760408089cb69845264c1ff92312e0e4a69ccdde4c7a28a0719755820e"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.RowSet",
+          "normalized_signature": "public interface RowSet extends ResultSet",
+          "object_name": "RowSet",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSet.java",
+          "source_sha256": "e291f57cb492eaa457977611a1556e4cfe73304c79517ef9dfb7783bf1132aa0"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "javax.sql.RowSetEvent",
+          "normalized_signature": "public class RowSetEvent extends java.util.EventObject",
+          "object_name": "RowSetEvent",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSetEvent.java",
+          "source_sha256": "c07c85765dc06e176057412cbc217539e384897c2e5e95c9e7f96bd2d9136b29"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.RowSetInternal",
+          "normalized_signature": "public interface RowSetInternal",
+          "object_name": "RowSetInternal",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSetInternal.java",
+          "source_sha256": "449e59f1c4cbff09b7c488715d89706367c5c06d1a5e3ac0d22f5a8211acd192"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.RowSetListener",
+          "normalized_signature": "public interface RowSetListener extends java.util.EventListener",
+          "object_name": "RowSetListener",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSetListener.java",
+          "source_sha256": "c1196ccbdddf6762943af0d519d414a8b28f329987c1baf390363db3990e851f"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.RowSetMetaData",
+          "normalized_signature": "public interface RowSetMetaData extends ResultSetMetaData",
+          "object_name": "RowSetMetaData",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSetMetaData.java",
+          "source_sha256": "ecc70e1b3b0663036b8e4b1881c04b4bcec6d99092ffbbd1596f31bc0cd8ed24"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.RowSetReader",
+          "normalized_signature": "public interface RowSetReader",
+          "object_name": "RowSetReader",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSetReader.java",
+          "source_sha256": "f9e9ebd08b2eaf8f0ae61f1604a1707bd43d222c4665e6a975dfa74bb91f5b60"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.RowSetWriter",
+          "normalized_signature": "public interface RowSetWriter",
+          "object_name": "RowSetWriter",
+          "source_path": "jdk/src/share/classes/javax/sql/RowSetWriter.java",
+          "source_sha256": "76f1d8029e3ae9fa94a5ae6ed7fb3fa34181be903ee84359ab329a6e05391dec"
+        },
+        {
+          "declaration_kind": "class",
+          "fqcn": "javax.sql.StatementEvent",
+          "normalized_signature": "public class StatementEvent extends EventObject",
+          "object_name": "StatementEvent",
+          "source_path": "jdk/src/share/classes/javax/sql/StatementEvent.java",
+          "source_sha256": "0f3fd242b33f0ed5747c28fd467203a490683fc61f9b3af73bfa1cefb8a92dbe"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.StatementEventListener",
+          "normalized_signature": "public interface StatementEventListener extends java.util.EventListener",
+          "object_name": "StatementEventListener",
+          "source_path": "jdk/src/share/classes/javax/sql/StatementEventListener.java",
+          "source_sha256": "e2ce6fd5d98e88bb0f650a00dde6887e0de66f038a2f917d9d6a58605d7f2da5"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.XAConnection",
+          "normalized_signature": "public interface XAConnection extends PooledConnection",
+          "object_name": "XAConnection",
+          "source_path": "jdk/src/share/classes/javax/sql/XAConnection.java",
+          "source_sha256": "4eedc1db4116ad3783694fad4836926aef380df0edbc72e91d8205c9c4144cc8"
+        },
+        {
+          "declaration_kind": "interface",
+          "fqcn": "javax.sql.XADataSource",
+          "normalized_signature": "public interface XADataSource extends CommonDataSource",
+          "object_name": "XADataSource",
+          "source_path": "jdk/src/share/classes/javax/sql/XADataSource.java",
+          "source_sha256": "16ee739a19564a19622ba6f66b51f5b6d07eeb166b18fc0aac6c1c1657f3a03d"
+        }
+      ]
+    }
+  },
+  "schema_version": 1,
+  "semantic_sha256": "3a44c4e77259a667da11d228d1db78075a32af93bee691d2fc61ddcfbe64c2b6",
+  "source_manifest_sha256": "94c4bcaeebd1681f0f2de0048ae4d95f77a96ef8d03ee4453c71358825b0d1e5"
+}
