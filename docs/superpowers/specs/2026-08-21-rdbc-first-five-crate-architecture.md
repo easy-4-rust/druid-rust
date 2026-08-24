@@ -250,6 +250,7 @@ powerset、故障注入和性能/NFR 证据。
 | ADR-RDBC-001 | `druid::sql::*` 保持消费者 canonical 路径；driver SPI 归 `druid-rdbc` | ACCEPTED |
 | ADR-RDBC-002 | logical handle 使用具体类型；不机械复制 Java trait 继承 | ACCEPTED |
 | ADR-RDBC-003 | buffered row set 与 async cursor 显式分型 | ACCEPTED |
+| [ADR-RDBC-004](2026-08-24-jdbc42-semantic-contract-design.md) | JDBC 4.2 标准语义内核 + Rust Physical SPI 双层合同 | PROPOSED_FOR_WRITTEN_REVIEW |
 | ADR-RUNTIME-001 | 队列有界、任务受监管、shutdown 可证明 | ACCEPTED |
 | ADR-TRANSPORT-002 | Metrics/Admin 共享唯一 bidi gRPC proto | ACCEPTED |
 | ADR-ADMIN-002 | Admin 默认 loopback；远程监听要求 TLS+认证 | ACCEPTED |
