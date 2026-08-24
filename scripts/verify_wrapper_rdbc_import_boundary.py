@@ -45,6 +45,14 @@ class SymbolUse:
     source: str
 
 
+@dataclass(frozen=True)
+class UsePath:
+    """One fully expanded Rust use-tree path and its optional bound alias."""
+
+    path: tuple[str, ...]
+    alias: str | None
+
+
 def repository_root() -> Path:
     """Return the repository root regardless of the caller's current directory."""
 
@@ -90,7 +98,9 @@ def load_public_paths(root: Path) -> tuple[dict[tuple[str, ...], tuple[str, ...]
     return old_to_new, canonical_paths
 
 
-def parse_use_tree(tokens: list[object], index: int, prefix: tuple[str, ...] = ()) -> tuple[list[tuple[str, ...]], int]:
+def parse_use_tree(
+    tokens: list[object], index: int, prefix: tuple[str, ...] = ()
+) -> tuple[list[UsePath], int]:
     """Expand one Rust use tree into named paths, retaining wildcard markers."""
 
     if index < len(tokens) and tokens[index].text == "::":
@@ -100,7 +110,7 @@ def parse_use_tree(tokens: list[object], index: int, prefix: tuple[str, ...] = (
 
     if tokens[index].text == "{":
         index += 1
-        paths: list[tuple[str, ...]] = []
+        paths: list[UsePath] = []
         while index < len(tokens) and tokens[index].text != "}":
             nested, index = parse_use_tree(tokens, index, prefix)
             paths.extend(nested)
@@ -113,7 +123,7 @@ def parse_use_tree(tokens: list[object], index: int, prefix: tuple[str, ...] = (
         return paths, index + 1
 
     if tokens[index].text == "*":
-        return [prefix + ("*",)], index + 1
+        return [UsePath(prefix + ("*",), None)], index + 1
     if tokens[index].kind != "IDENT":
         fail("use tree requires a named path")
 
@@ -127,21 +137,41 @@ def parse_use_tree(tokens: list[object], index: int, prefix: tuple[str, ...] = (
         if tokens[index].text == "{":
             return parse_use_tree(tokens, index, path)
         if tokens[index].text == "*":
-            return [path + ("*",)], index + 1
+            return [UsePath(path + ("*",), None)], index + 1
         if tokens[index].kind != "IDENT":
             fail("use path requires an identifier after ::")
         path += (tokens[index].text,)
         index += 1
 
+    alias: str | None = None
     if index < len(tokens) and tokens[index].text == "as":
         if index + 1 >= len(tokens) or tokens[index + 1].kind != "IDENT":
             fail("use alias requires an identifier")
+        alias = tokens[index + 1].text
         index += 2
-    return [path], index
+    return [UsePath(path, alias)], index
+
+
+def reject_extern_target_crate_aliases(tokens: list[object]) -> None:
+    """Reject renamed extern-crate bindings that could hide later RDBC paths."""
+
+    for index in range(len(tokens) - 4):
+        if (
+            tokens[index].text == "extern"
+            and tokens[index + 1].text == "crate"
+            and tokens[index + 2].kind == "IDENT"
+            and tokens[index + 2].text in SOURCES
+            and tokens[index + 3].text == "as"
+            and tokens[index + 4].kind == "IDENT"
+        ):
+            fail(
+                "target crate alias is forbidden: "
+                f"extern crate {tokens[index + 2].text} as {tokens[index + 4].text}"
+            )
 
 
 def target_use_paths(tokens: list[object]) -> tuple[list[tuple[str, ...]], set[int]]:
-    """Expand all druid/druid_rdbc use items and return their token ranges."""
+    """Expand every use tree, then select druid/druid_rdbc paths and token ranges."""
 
     paths: list[tuple[str, ...]] = []
     covered: set[int] = set()
@@ -151,26 +181,25 @@ def target_use_paths(tokens: list[object]) -> tuple[list[tuple[str, ...]], set[i
             index += 1
             continue
         start = index
-        probe = index + 1
-        if probe < len(tokens) and tokens[probe].text == "::":
-            probe += 1
-        is_target = (
-            probe < len(tokens)
-            and tokens[probe].kind == "IDENT"
-            and tokens[probe].text in SOURCES
-        )
-        if not is_target:
-            while index < len(tokens) and tokens[index].text != ";":
-                index += 1
-            index += 1
-            covered.update(range(start, index))
-            continue
         expanded, index = parse_use_tree(tokens, index + 1)
         if index >= len(tokens) or tokens[index].text != ";":
-            fail("target use item must end with a semicolon")
+            fail("use item must end with a semicolon")
         index += 1
         covered.update(range(start, index))
-        paths.extend(expanded)
+        for use_path in expanded:
+            path = use_path.path
+            if not path or path[0] not in SOURCES:
+                continue
+            if len(path) == 1:
+                if use_path.alias is not None:
+                    fail(
+                        "target crate alias is forbidden: "
+                        f"use {path[0]} as {use_path.alias}"
+                    )
+                # A bare non-aliased crate import keeps the canonical crate name and creates no
+                # low-level symbol-family row. Later canonical paths remain visible to the scan.
+                continue
+            paths.append(path)
     return paths, covered
 
 
@@ -317,6 +346,7 @@ def scan_live_rows(root: Path) -> list[BoundaryRow]:
             tokens = tokenize(source_file.read_text(encoding="utf-8"))
         except RustLexError as error:
             fail(f"cannot tokenize {relative}: {error}")
+        reject_extern_target_crate_aliases(tokens)
         use_paths, covered = target_use_paths(tokens)
         paths = use_paths + fully_qualified_paths(tokens, covered)
         for path in paths:
@@ -557,6 +587,86 @@ class WrapperBoundaryVerifierTest(unittest.TestCase):
             self.fail(f"local names must be ignored: {error}")
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0].symbol_family, "RDBC_SPI")
+
+    def test_root_group_expands_leading_nested_aliased_and_self_paths(self) -> None:
+        fixtures = (
+            (
+                "use {druid::core::PhysicalConnection, std::sync::Arc};\n",
+                [("RDBC_SPI", "RDBC_DIRECT", "druid")],
+            ),
+            (
+                "use {\n"
+                "    ::druid::{self, core::{PhysicalConnection as RawConnection, Value}},\n"
+                "    std::sync::Arc,\n"
+                "};\n",
+                [
+                    ("RDBC_SPI", "RDBC_DIRECT", "druid"),
+                    ("RDBC_TYPES", "RDBC_DIRECT", "druid"),
+                ],
+            ),
+        )
+        for source, expected in fixtures:
+            with self.subTest(source=source):
+                self.write_source("adapter.rs", source)
+                try:
+                    rows = scan_live_rows(self.root)
+                except VerificationError as error:
+                    self.fail(f"root-group target paths must remain live: {error}")
+                self.assertEqual(
+                    [
+                        (row.symbol_family, row.classification, row.expected_source)
+                        for row in rows
+                    ],
+                    expected,
+                )
+
+    def test_root_target_crate_aliases_are_rejected_fail_closed(self) -> None:
+        for source in (
+            "use druid as legacy;\n",
+            "use ::druid as legacy;\n",
+            "use {druid as legacy, std::sync::Arc};\n",
+            "use druid::{self as legacy, core::PhysicalConnection};\n",
+            "use druid_rdbc as canonical;\n",
+            "use ::druid_rdbc as canonical;\n",
+            "use {druid_rdbc as canonical, std::sync::Arc};\n",
+        ):
+            with self.subTest(source=source):
+                self.write_source("adapter.rs", source)
+                with self.assertRaisesRegex(VerificationError, "target crate alias"):
+                    scan_live_rows(self.root)
+
+    def test_extern_target_crate_aliases_are_rejected_fail_closed(self) -> None:
+        for source in (
+            "extern crate druid as legacy;\n",
+            "extern crate druid_rdbc as canonical;\n",
+        ):
+            with self.subTest(source=source):
+                self.write_source("adapter.rs", source)
+                with self.assertRaisesRegex(VerificationError, "target crate alias"):
+                    scan_live_rows(self.root)
+
+    def test_root_group_target_wildcard_is_rejected(self) -> None:
+        for source in (
+            "use {druid::core::*, std::sync::Arc};\n",
+            "use {druid::{core::*}, std::sync::Arc};\n",
+        ):
+            with self.subTest(source=source):
+                self.write_source("adapter.rs", source)
+                with self.assertRaisesRegex(VerificationError, "wildcard"):
+                    scan_live_rows(self.root)
+
+    def test_ordinary_std_and_local_use_trees_do_not_add_rows(self) -> None:
+        self.write_source(
+            "adapter.rs",
+            "use druid::core::PhysicalConnection;\n",
+        )
+        self.write_source(
+            "ordinary.rs",
+            "use {crate::helpers::{self, Local as Renamed}, std::sync::Arc};\n",
+        )
+        rows = scan_live_rows(self.root)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].path, "crates/druid-wrapper/src/adapter.rs")
 
 
 def parse_args() -> argparse.Namespace:
