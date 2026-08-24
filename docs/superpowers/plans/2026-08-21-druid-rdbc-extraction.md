@@ -1027,6 +1027,7 @@ P03 as complete.
 ### Task 6: 冻结过渡态并交接 single-standard merge
 
 **Files:**
+- Modify: `docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md`（修正本 Task 的 verifier 参数）
 - Modify: `.superpowers/sdd/2026-08-21-druid-rdbc-extraction/progress.md`
 - Create: `docs/verification/rdbc-first/rdbc-transitional-standardization-handoff.md`
 - Create: `docs/verification/rdbc-first/rdbc-physical-standardization.tsv`
@@ -1052,7 +1053,9 @@ git status --short --branch
 git rev-parse HEAD
 python3 scripts/verify_rdbc_dependency_boundary.py
 python3 scripts/verify_rdbc_public_paths.py --source-only
-python3 scripts/verify_wrapper_rdbc_import_boundary.py
+python3 scripts/verify_wrapper_rdbc_import_boundary.py \
+  --before docs/verification/rdbc-first/wrapper-rdbc-import-boundary.before.tsv \
+  --after docs/verification/rdbc-first/wrapper-rdbc-import-boundary.after.tsv
 cargo check --workspace --all-targets --all-features
 cargo test -p druid --test rdbc_external_consumer_test
 ```
@@ -1063,7 +1066,8 @@ install `cargo-semver-checks`; unavailable semver tooling is recorded `NOT_RUN`,
 - [ ] **Step 2: Capture transitional public surface**
 
 ```bash
-cargo public-api -p druid-rdbc -sss --all-features \
+RUSTUP_TOOLCHAIN=nightly-2026-08-07-aarch64-apple-darwin \
+  cargo public-api --manifest-path crates/druid-rdbc/Cargo.toml -sss --all-features \
   > api/druid-rdbc-spi.transitional.txt
 test -s api/druid-rdbc-spi.transitional.txt
 ```
@@ -1128,6 +1132,7 @@ Ruling/status lines before staging, then stage only tracked recovery evidence。
 rg -n 'Task 6 Ruling|TRANSITIONAL_PHYSICAL_SURFACE_PENDING_STANDARDIZATION' \
   .superpowers/sdd/2026-08-21-druid-rdbc-extraction/progress.md
 git add api/druid-rdbc-spi.transitional.txt \
+  docs/superpowers/plans/2026-08-21-druid-rdbc-extraction.md \
   docs/verification/rdbc-first/rdbc-transitional-standardization-handoff.md \
   docs/verification/rdbc-first/rdbc-physical-standardization.tsv \
   docs/verification/rdbc-first/status.md crates/druid-rdbc/src/lib.rs
