@@ -65,6 +65,14 @@ def fail(message: str) -> NoReturn:
     raise VerificationError(message)
 
 
+def canonical_identifier(token: object) -> str:
+    """Return one Rust identifier's semantic name without conflating literal tokens."""
+
+    if token.kind != "IDENT":
+        fail(f"internal verifier error: expected identifier token, found {token.kind}")
+    return token.text[2:] if token.text.startswith("r#") else token.text
+
+
 def load_public_paths(root: Path) -> tuple[dict[tuple[str, ...], tuple[str, ...]], set[tuple[str, ...]]]:
     """Load the frozen old-to-canonical public paths used to recognize moved names."""
 
@@ -127,7 +135,7 @@ def parse_use_tree(
     if tokens[index].kind != "IDENT":
         fail("use tree requires a named path")
 
-    segment = tokens[index].text
+    segment = canonical_identifier(tokens[index])
     path = prefix if segment == "self" and prefix else prefix + (segment,)
     index += 1
     while index < len(tokens) and tokens[index].text == "::":
@@ -140,14 +148,14 @@ def parse_use_tree(
             return [UsePath(path + ("*",), None)], index + 1
         if tokens[index].kind != "IDENT":
             fail("use path requires an identifier after ::")
-        path += (tokens[index].text,)
+        path += (canonical_identifier(tokens[index]),)
         index += 1
 
     alias: str | None = None
     if index < len(tokens) and tokens[index].text == "as":
         if index + 1 >= len(tokens) or tokens[index + 1].kind != "IDENT":
             fail("use alias requires an identifier")
-        alias = tokens[index + 1].text
+        alias = canonical_identifier(tokens[index + 1])
         index += 2
     return [UsePath(path, alias)], index
 
@@ -157,17 +165,21 @@ def reject_extern_target_crate_aliases(tokens: list[object]) -> None:
 
     for index in range(len(tokens) - 4):
         if (
-            tokens[index].text == "extern"
-            and tokens[index + 1].text == "crate"
-            and tokens[index + 2].kind == "IDENT"
-            and tokens[index + 2].text in SOURCES
-            and tokens[index + 3].text == "as"
-            and tokens[index + 4].kind == "IDENT"
+            tokens[index].text != "extern"
+            or tokens[index + 1].text != "crate"
+            or tokens[index + 2].kind != "IDENT"
+            or tokens[index + 3].text != "as"
+            or tokens[index + 4].kind != "IDENT"
         ):
-            fail(
-                "target crate alias is forbidden: "
-                f"extern crate {tokens[index + 2].text} as {tokens[index + 4].text}"
-            )
+            continue
+        root = canonical_identifier(tokens[index + 2])
+        if root not in SOURCES:
+            continue
+        alias = canonical_identifier(tokens[index + 4])
+        fail(
+            "target crate alias is forbidden: "
+            f"extern crate {root} as {alias}"
+        )
 
 
 def target_use_paths(tokens: list[object]) -> tuple[list[tuple[str, ...]], set[int]]:
@@ -213,13 +225,16 @@ def fully_qualified_paths(tokens: list[object], covered: set[int]) -> list[tuple
         if (
             index in covered
             or token.kind != "IDENT"
-            or token.text not in SOURCES
             or index + 1 >= len(tokens)
             or tokens[index + 1].text != "::"
         ):
             index += 1
             continue
-        path = (token.text,)
+        root = canonical_identifier(token)
+        if root not in SOURCES:
+            index += 1
+            continue
+        path = (root,)
         cursor = index + 1
         while (
             cursor + 1 < len(tokens)
@@ -227,7 +242,7 @@ def fully_qualified_paths(tokens: list[object], covered: set[int]) -> list[tuple
             and tokens[cursor].text == "::"
             and tokens[cursor + 1].kind == "IDENT"
         ):
-            path += (tokens[cursor + 1].text,)
+            path += (canonical_identifier(tokens[cursor + 1]),)
             cursor += 2
         paths.append(path)
         index = cursor
@@ -663,6 +678,68 @@ class WrapperBoundaryVerifierTest(unittest.TestCase):
         self.write_source(
             "ordinary.rs",
             "use {crate::helpers::{self, Local as Renamed}, std::sync::Arc};\n",
+        )
+        rows = scan_live_rows(self.root)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].path, "crates/druid-wrapper/src/adapter.rs")
+
+    def test_direct_raw_target_and_alias_are_rejected_with_canonical_names(self) -> None:
+        for source in (
+            "use r#druid as r#legacy;\n",
+            "use druid as r#legacy;\n",
+            "use r#druid_rdbc as r#legacy;\n",
+        ):
+            with self.subTest(source=source):
+                self.write_source("adapter.rs", source)
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    r"target crate alias is forbidden: use (druid|druid_rdbc) as legacy",
+                ):
+                    scan_live_rows(self.root)
+
+    def test_extern_raw_target_and_alias_are_rejected_with_canonical_names(self) -> None:
+        for source in (
+            "extern crate r#druid as r#legacy;\n",
+            "extern crate r#druid_rdbc as r#legacy;\n",
+        ):
+            with self.subTest(source=source):
+                self.write_source("adapter.rs", source)
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    r"target crate alias is forbidden: extern crate "
+                    r"(druid|druid_rdbc) as legacy",
+                ):
+                    scan_live_rows(self.root)
+
+    def test_root_group_raw_target_wildcard_is_rejected(self) -> None:
+        self.write_source(
+            "adapter.rs",
+            "use {r#druid::core::*, std::sync::Arc};\n",
+        )
+        with self.assertRaisesRegex(VerificationError, "wildcard"):
+            scan_live_rows(self.root)
+
+    def test_raw_fully_qualified_target_is_inventoried(self) -> None:
+        self.write_source(
+            "adapter.rs",
+            "fn check(_: &dyn r#druid::core::PhysicalConnection) {}\n",
+        )
+        try:
+            rows = scan_live_rows(self.root)
+        except VerificationError as error:
+            self.fail(f"raw dependency root must be canonicalized: {error}")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].symbol_family, "RDBC_SPI")
+
+    def test_non_target_raw_identifier_and_raw_string_do_not_add_rows(self) -> None:
+        self.write_source(
+            "adapter.rs",
+            "use druid::core::PhysicalConnection;\n",
+        )
+        self.write_source(
+            "ordinary.rs",
+            "use r#domain::Thing;\n"
+            "const TEXT: &str = r#\"r#druid::core::*\"#;\n",
         )
         rows = scan_live_rows(self.root)
         self.assertEqual(len(rows), 1)
