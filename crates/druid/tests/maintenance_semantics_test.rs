@@ -5,7 +5,7 @@
 //! 对照测试：`DruidDataSourceShrinkTest`、`MaxPhyTimeMillisTest`。
 
 use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, RdbcError, Row,
     ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
@@ -21,31 +21,31 @@ struct MaintenanceConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for MaintenanceConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.closed = true;
             self.closed_count.fetch_add(1, Ordering::Relaxed);
@@ -115,7 +115,7 @@ impl ValidConnectionChecker for MaintenanceChecker {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for MaintenanceFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.create_count.fetch_add(1, Ordering::Relaxed);
         Ok(Box::new(MaintenanceConnection {
             closed_count: self.closed_count.clone(),
@@ -127,12 +127,12 @@ impl PhysicalConnectionFactory for MaintenanceFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.validate_count.fetch_add(1, Ordering::Relaxed);
         if self.validation_succeeds.load(Ordering::Relaxed) {
             connection.ping().await
         } else {
-            Err(DruidError::ValidationFailed(
+            Err(RdbcError::ValidationFailed(
                 "maintenance validation failed".to_string(),
             ))
         }

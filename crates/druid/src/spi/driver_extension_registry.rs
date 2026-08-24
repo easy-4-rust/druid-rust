@@ -5,7 +5,7 @@
 //! resolve by database type.
 
 use super::driver_extension_descriptor::DriverExtensionDescriptor;
-use crate::core::DruidError;
+use crate::core::RdbcError;
 
 inventory::collect!(DriverExtensionDescriptor);
 
@@ -15,11 +15,11 @@ inventory::collect!(DriverExtensionDescriptor);
 /// for the given `db_type`.
 pub fn lookup_driver_extension(
     db_type: &str,
-) -> Result<&'static DriverExtensionDescriptor, DruidError> {
+) -> Result<&'static DriverExtensionDescriptor, RdbcError> {
     inventory::iter::<DriverExtensionDescriptor>
         .into_iter()
         .find(|ext| ext.db_type.eq_ignore_ascii_case(db_type))
-        .ok_or_else(|| DruidError::NoDriverExtension {
+        .ok_or_else(|| RdbcError::NoDriverExtension {
             db_type: db_type.to_owned(),
         })
 }

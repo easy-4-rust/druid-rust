@@ -2,6 +2,7 @@
 
 use druid::core::{
     DruidError, DruidPooledConnection, FilterChain, PhysicalConnection, PhysicalConnectionFactory,
+    RdbcError,
 };
 use druid::stats::{
     StatFilter, StatFilterContext, StatFilterContextListener, StatFilterContextListenerAdapter,
@@ -464,7 +465,12 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
         .add_batch(&mut connection, invalid_batch_sql)
         .unwrap();
     let batch_error = statement.execute_batch(&mut connection).await.unwrap_err();
-    assert_eq!(batch_error.batch_update_counts(), Some([1].as_slice()));
+    assert_eq!(
+        batch_error
+            .batch_update_counts()
+            .map(|counts| counts.large()),
+        Some([1_i64].as_slice())
+    );
     assert!(batch_error.sql_exception().is_some());
     statement.clear_batch(&mut connection).unwrap();
 
@@ -489,7 +495,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     let batch_after_error = statement.execute_batch(&mut connection).await.unwrap_err();
     assert_eq!(
         batch_after_error,
-        DruidError::Other("batch-after-failure failed".to_string())
+        RdbcError::Other("batch-after-failure failed".to_string())
     );
     assert!(StatFilterContext::global().remove_context_listener(&batch_after_failure));
     statement.clear_batch(&mut connection).unwrap();
@@ -533,7 +539,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
         .unwrap_err();
     assert!(matches!(
         invalid_error,
-        DruidError::SqlException(_) | DruidError::DriverError(_)
+        RdbcError::SqlException(_) | RdbcError::DriverError(_)
     ));
 
     assert!(StatFilterContext::global().remove_context_listener(&listener));
@@ -637,7 +643,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     assert!(StatFilterContext::global().remove_context_listener(&before_failure));
     assert_eq!(
         before_error,
-        DruidError::Other("before-failure failed".to_string())
+        RdbcError::Other("before-failure failed".to_string())
     );
 
     let after_failure: Arc<dyn StatFilterContextListener> = Arc::new(RecordingListener {
@@ -656,7 +662,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     assert!(StatFilterContext::global().remove_context_listener(&after_failure));
     assert_eq!(
         after_error,
-        DruidError::Other("after-failure failed".to_string())
+        RdbcError::Other("after-failure failed".to_string())
     );
 
     connection.begin().await.unwrap();
@@ -677,7 +683,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     assert!(StatFilterContext::global().remove_context_listener(&commit_failure));
     assert_eq!(
         commit_error,
-        DruidError::Other("commit-failure failed".to_string())
+        RdbcError::Other("commit-failure failed".to_string())
     );
 
     connection.begin().await.unwrap();
@@ -698,7 +704,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     assert!(StatFilterContext::global().remove_context_listener(&rollback_failure));
     assert_eq!(
         rollback_error,
-        DruidError::Other("rollback-failure failed".to_string())
+        RdbcError::Other("rollback-failure failed".to_string())
     );
 
     let rows = statement
@@ -738,6 +744,6 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
         .await
         .expect_err("listener 异常必须中止 ResultSet 构造");
     assert!(StatFilterContext::global().remove_context_listener(&failing));
-    assert_eq!(error, DruidError::Other("failing failed".to_string()));
+    assert_eq!(error, RdbcError::Other("failing failed".to_string()));
     assert_eq!(collector.result_set_stat().opening_count(), 1);
 }

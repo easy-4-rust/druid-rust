@@ -1,7 +1,7 @@
 //! Toasty 未池化物理连接工厂。
 
 use super::ToastyConnectionAdapter;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::Arc;
@@ -43,7 +43,7 @@ impl ToastyConnectionFactory {
     ///
     /// URL scheme 必须启用对应 feature。Druid 是 SQL 数据源，因此 `DynamoDB`
     /// 等非 SQL Toasty driver 会被明确拒绝。
-    pub async fn new(url: impl Into<String>) -> Result<Self, DruidError> {
+    pub async fn new(url: impl Into<String>) -> Result<Self, RdbcError> {
         let url = url.into();
         if url
             .split_once(':')
@@ -51,7 +51,7 @@ impl ToastyConnectionFactory {
         {
             // DynamoDB Driver 初始化会读取 AWS 环境；Druid SQL 边界在执行任何
             // 外部初始化前拒绝它，Toasty ORM 本身仍可独立使用该 driver。
-            return Err(DruidError::UnsupportedOperation {
+            return Err(RdbcError::UnsupportedOperation {
                 operation: "toasty_non_sql_physical_connection",
             });
         }
@@ -65,13 +65,13 @@ impl ToastyConnectionFactory {
     ///
     /// 该入口用于 `SQLite` 内存驱动或需要厂商参数的 Toasty driver；返回类型不
     /// 暴露第三方连接对象。
-    pub fn from_driver(driver: impl Driver) -> Result<Self, DruidError> {
+    pub fn from_driver(driver: impl Driver) -> Result<Self, RdbcError> {
         let capability = driver.capability();
         capability
             .validate()
             .map_err(|error| Self::driver_error(&error))?;
         if !capability.sql {
-            return Err(DruidError::UnsupportedOperation {
+            return Err(RdbcError::UnsupportedOperation {
                 operation: "toasty_non_sql_physical_connection",
             });
         }
@@ -118,16 +118,16 @@ impl ToastyConnectionFactory {
         self.max_connections
     }
 
-    fn driver_error(error: &toasty_core::Error) -> DruidError {
+    fn driver_error(error: &toasty_core::Error) -> RdbcError {
         if error.is_connection_lost() {
-            DruidError::ConnectionDiscarded
+            RdbcError::ConnectionDiscarded
         } else if error.is_driver_operation_failed() {
-            DruidError::SqlException(Box::new(
+            RdbcError::SqlException(Box::new(
                 SqlException::driver(0, error.to_string())
                     .with_class_name("toasty_core::error::DriverOperationFailed"),
             ))
         } else {
-            DruidError::DriverError(error.to_string())
+            RdbcError::DriverError(error.to_string())
         }
     }
 }
@@ -138,14 +138,14 @@ impl PhysicalConnectionFactory for ToastyConnectionFactory {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let connection = self
             .driver
             .connect(&self.connect_context)
             .await
             .map_err(|error| Self::driver_error(&error))?;
         if !connection.is_valid() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(Box::new(ToastyConnectionAdapter::new(
             connection,
@@ -158,7 +158,7 @@ impl PhysicalConnectionFactory for ToastyConnectionFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

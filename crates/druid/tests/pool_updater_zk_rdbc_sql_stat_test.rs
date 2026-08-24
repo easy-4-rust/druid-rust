@@ -2,7 +2,7 @@
 //!
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState, RdbcError};
 use druid::dynamic::node::{
     NodeEvent, NodeEventTypeEnum, ZookeeperNodeInfo, ZookeeperNodeListener, ZookeeperNodeRegister,
 };
@@ -40,11 +40,11 @@ impl MockPool {
 
 #[async_trait::async_trait]
 impl Pool for MockPool {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        Err(DruidError::Other("mock".to_owned()))
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
+        Err(RdbcError::Other("mock".to_owned()))
     }
-    async fn get_timeout(&self, _: Duration) -> Result<DruidPooledConnection, DruidError> {
-        Err(DruidError::Other("mock".to_owned()))
+    async fn get_timeout(&self, _: Duration) -> Result<DruidPooledConnection, RdbcError> {
+        Err(RdbcError::Other("mock".to_owned()))
     }
     fn state(&self) -> PoolState {
         PoolState {
@@ -60,7 +60,7 @@ impl Pool for MockPool {
     fn name(&self) -> &str {
         self.name
     }
-    async fn close_for_removal_if_idle(&self) -> Result<bool, DruidError> {
+    async fn close_for_removal_if_idle(&self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 }

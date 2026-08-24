@@ -1,6 +1,6 @@
 use chrono::NaiveTime;
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::types::Value;
 
 /// Thin time wrapper that lets RDBC identify an SQL `TIME` value.
@@ -15,11 +15,11 @@ impl Time {
     ///
     /// Invalid syntax or fields return `InvalidArgument`. Corresponds to Java:
     /// `Time#valueOf(String)`.
-    pub fn value_of(value: &str) -> Result<Self, DruidError> {
+    pub fn value_of(value: &str) -> Result<Self, RdbcError> {
         NaiveTime::parse_from_str(value, "%H:%M:%S")
             .map(Self)
             .map_err(|error| {
-                DruidError::InvalidArgument(format!("invalid RDBC TIME '{value}': {error}"))
+                RdbcError::InvalidArgument(format!("invalid RDBC TIME '{value}': {error}"))
             })
     }
 

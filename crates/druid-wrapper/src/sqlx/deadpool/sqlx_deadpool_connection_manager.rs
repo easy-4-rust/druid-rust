@@ -2,7 +2,7 @@
 
 use crate::sqlx::SqlxConnectionFactory;
 use deadpool::managed::{Manager, Metrics, RecycleResult};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -40,7 +40,7 @@ impl SqlxDeadpoolConnectionManager {
 
 impl Manager for SqlxDeadpoolConnectionManager {
     type Type = Box<dyn PhysicalConnection>;
-    type Error = DruidError;
+    type Error = RdbcError;
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
         let connection = self.factory.create().await?;
@@ -55,7 +55,7 @@ impl Manager for SqlxDeadpoolConnectionManager {
     ) -> RecycleResult<Self::Error> {
         if connection.is_discarded() {
             return Err(deadpool::managed::RecycleError::Backend(
-                DruidError::ConnectionDiscarded,
+                RdbcError::ConnectionDiscarded,
             ));
         }
         self.factory

@@ -7,11 +7,11 @@
 
 use super::druid_pooled_statement::DruidPooledStatementInner;
 use super::{
-    ClobProxyImpl, DruidError, DruidPooledCallableStatementHandle, DruidPooledConnection,
+    ClobProxyImpl, DruidPooledCallableStatementHandle, DruidPooledConnection,
     DruidPooledPreparedStatementHandle, DruidPooledStatement, FilterChain, NClobProxyImpl,
     PhysicalResultSet, RdbcArray, RdbcBlob, RdbcCalendar, RdbcCalendarArgument,
-    RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader, RdbcRef,
-    RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl,
+    RdbcCharacterLength, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader,
+    RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl,
     ResultSetFilterContext, ResultSetMetaData, ResultSetStatement, ResultSetUpdate, SqlWarning,
     Unwrapped, Value, Wrapper,
 };
@@ -30,15 +30,17 @@ macro_rules! scalar_update_pair {
             connection: &mut DruidPooledConnection,
             column_index: usize,
             value: $value_type,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_index(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    value,
-                )
+                chain
+                    .$chain_index(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        value,
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical
                     .update_value(column_index, &ResultSetUpdate::$variant(value))
@@ -52,15 +54,17 @@ macro_rules! scalar_update_pair {
             connection: &mut DruidPooledConnection,
             column_label: &str,
             value: $value_type,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    value,
-                )
+                chain
+                    .$chain_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        value,
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical
                     .update_value_by_label(column_label, &ResultSetUpdate::$variant(value))
@@ -85,7 +89,7 @@ macro_rules! resource_update_pair {
             connection: &mut DruidPooledConnection,
             column_index: usize,
             value: Option<&$value_type>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_index(
@@ -94,6 +98,7 @@ macro_rules! resource_update_pair {
                     column_index,
                     value.cloned(),
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.$index_method(column_index, value)
             };
@@ -106,7 +111,7 @@ macro_rules! resource_update_pair {
             connection: &mut DruidPooledConnection,
             column_label: &str,
             value: Option<&$value_type>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_label(
@@ -115,6 +120,7 @@ macro_rules! resource_update_pair {
                     column_label,
                     value.cloned(),
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.$label_method(column_label, value)
             };
@@ -139,7 +145,7 @@ macro_rules! input_stream_update_family {
             connection: &mut DruidPooledConnection,
             column_index: usize,
             stream: Option<&RdbcInputStream>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_plain_index(
@@ -148,6 +154,7 @@ macro_rules! input_stream_update_family {
                     column_index,
                     stream.cloned(),
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.update_value(
                     column_index,
@@ -166,7 +173,7 @@ macro_rules! input_stream_update_family {
             connection: &mut DruidPooledConnection,
             column_label: &str,
             stream: Option<&RdbcInputStream>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_plain_label(
@@ -175,6 +182,7 @@ macro_rules! input_stream_update_family {
                     column_label,
                     stream.cloned(),
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.update_value_by_label(
                     column_label,
@@ -194,7 +202,7 @@ macro_rules! input_stream_update_family {
             column_index: usize,
             stream: Option<&RdbcInputStream>,
             length: i32,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_int_index(
@@ -204,6 +212,7 @@ macro_rules! input_stream_update_family {
                     stream.cloned(),
                     length,
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.update_value(
                     column_index,
@@ -223,7 +232,7 @@ macro_rules! input_stream_update_family {
             column_label: &str,
             stream: Option<&RdbcInputStream>,
             length: i32,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_int_label(
@@ -233,6 +242,7 @@ macro_rules! input_stream_update_family {
                     stream.cloned(),
                     length,
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.update_value_by_label(
                     column_label,
@@ -252,7 +262,7 @@ macro_rules! input_stream_update_family {
             column_index: usize,
             stream: Option<&RdbcInputStream>,
             length: i64,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_long_index(
@@ -262,6 +272,7 @@ macro_rules! input_stream_update_family {
                     stream.cloned(),
                     length,
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.update_value(
                     column_index,
@@ -281,7 +292,7 @@ macro_rules! input_stream_update_family {
             column_label: &str,
             stream: Option<&RdbcInputStream>,
             length: i64,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
                 chain.$chain_long_label(
@@ -291,6 +302,7 @@ macro_rules! input_stream_update_family {
                     stream.cloned(),
                     length,
                 )
+                .map_err(RdbcError::from)
             } else {
                 self.physical.update_value_by_label(
                     column_label,
@@ -321,15 +333,17 @@ macro_rules! reader_update_family {
             connection: &mut DruidPooledConnection,
             column_index: usize,
             reader: Option<&RdbcReader>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_plain_index(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    reader.cloned(),
-                )
+                chain
+                    .$chain_plain_index(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical.update_value(
                     column_index,
@@ -348,15 +362,17 @@ macro_rules! reader_update_family {
             connection: &mut DruidPooledConnection,
             column_label: &str,
             reader: Option<&RdbcReader>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_plain_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    reader.cloned(),
-                )
+                chain
+                    .$chain_plain_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical.update_value_by_label(
                     column_label,
@@ -376,16 +392,18 @@ macro_rules! reader_update_family {
             column_index: usize,
             reader: Option<&RdbcReader>,
             length: i32,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_int_index(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    reader.cloned(),
-                    length,
-                )
+                chain
+                    .$chain_int_index(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                        length,
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical.update_value(
                     column_index,
@@ -405,16 +423,18 @@ macro_rules! reader_update_family {
             column_label: &str,
             reader: Option<&RdbcReader>,
             length: i32,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_int_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    reader.cloned(),
-                    length,
-                )
+                chain
+                    .$chain_int_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                        length,
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical.update_value_by_label(
                     column_label,
@@ -434,16 +454,18 @@ macro_rules! reader_update_family {
             column_index: usize,
             reader: Option<&RdbcReader>,
             length: i64,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_long_index(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    reader.cloned(),
-                    length,
-                )
+                chain
+                    .$chain_long_index(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                        length,
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical.update_value(
                     column_index,
@@ -463,16 +485,18 @@ macro_rules! reader_update_family {
             column_label: &str,
             reader: Option<&RdbcReader>,
             length: i64,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.ensure_open_for(connection)?;
             let result = if let Some(chain) = self.filter_chain.as_ref() {
-                chain.$chain_long_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    reader.cloned(),
-                    length,
-                )
+                chain
+                    .$chain_long_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                        length,
+                    )
+                    .map_err(RdbcError::from)
             } else {
                 self.physical.update_value_by_label(
                     column_label,
@@ -514,7 +538,11 @@ impl DruidPooledResultSetTrace {
         if let Some(result_set) = self.physical.upgrade() {
             let result = self.filter_chain.as_ref().map_or_else(
                 || result_set.close(),
-                |chain| chain.result_set_close(result_set.as_ref(), &self.filter_context),
+                |chain| {
+                    chain
+                        .result_set_close(result_set.as_ref(), &self.filter_context)
+                        .map_err(RdbcError::from)
+                },
             );
             if result.is_ok() {
                 self.filter_context.increment_close_count();
@@ -570,7 +598,7 @@ impl DruidPooledResultSet {
     pub(crate) fn new(
         statement: Arc<DruidPooledStatementInner>,
         physical: Arc<dyn PhysicalResultSet>,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         let filter_chain = statement.filter_chain.clone();
         let statement_handle = DruidPooledStatement::from_inner(Arc::clone(&statement));
         let result_set_id = statement.result_set_id_seed.fetch_add(1, Ordering::AcqRel);
@@ -603,7 +631,9 @@ impl DruidPooledResultSet {
                 &result_set.filter_context,
                 result_set.physical.as_ref(),
             );
-            filter_chain.result_set_open_after_with_proxy(&mut open_context)?;
+            filter_chain
+                .result_set_open_after_with_proxy(&mut open_context)
+                .map_err(RdbcError::from)?;
             let (logic_column_map, physical_column_map, hidden_columns) =
                 open_context.into_column_mappings();
             result_set.logic_column_map = logic_column_map;
@@ -810,7 +840,7 @@ impl DruidPooledResultSet {
     pub fn statement_object(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<ResultSetStatement, DruidError> {
+    ) -> Result<ResultSetStatement, RdbcError> {
         self.ensure_open_for(connection)?;
         let statement = if let Some(callable) = &self.callable_statement {
             ResultSetStatement::Callable(callable.clone())
@@ -822,11 +852,13 @@ impl DruidPooledResultSet {
         let result = self.filter_chain.as_ref().map_or_else(
             || Ok(statement.clone()),
             |chain| {
-                chain.result_set_get_statement(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    &statement,
-                )
+                chain
+                    .result_set_get_statement(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        &statement,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -853,11 +885,15 @@ impl DruidPooledResultSet {
     ///
     /// 对应 Java：`DruidPooledResultSet#next()`；只有成功移动时才增加
     /// `cursorIndex` 和 `fetchRowCount`。
-    pub fn next(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn next(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.next(),
-            |chain| chain.result_set_next(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_next(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         let more_rows = self.classify(connection, result)?;
         if more_rows {
@@ -876,11 +912,15 @@ impl DruidPooledResultSet {
     /// 移到上一行。
     ///
     /// 对应 Java：`DruidPooledResultSet#previous()`。
-    pub fn previous(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn previous(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.previous(),
-            |chain| chain.result_set_previous(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_previous(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         let more_rows = self.classify(connection, result)?;
         if more_rows {
@@ -900,12 +940,16 @@ impl DruidPooledResultSet {
     pub fn close_with_connection(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_same_lease(connection)?;
         self.closed.store(true, Ordering::Release);
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.close(),
-            |chain| chain.result_set_close(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_close(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)?;
         self.filter_context.increment_close_count();
@@ -926,11 +970,15 @@ impl DruidPooledResultSet {
     pub fn is_closed_with_connection(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_same_lease(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || Ok(self.physical.is_closed()),
-            |chain| chain.result_set_is_closed(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_is_closed(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -943,11 +991,15 @@ impl DruidPooledResultSet {
     }
 
     /// 返回最近一次 getter 是否读取 SQL NULL。
-    pub fn was_null(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn was_null(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.was_null(),
-            |chain| chain.result_set_was_null(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_was_null(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -957,7 +1009,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Value, RdbcError> {
         self.value(connection, column_index)
     }
 
@@ -966,16 +1018,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Value, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.value_by_label(column_label),
             |chain| {
-                chain.result_set_get_object_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_object_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -990,17 +1044,19 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.object_with_type_map(column_index, type_map),
             |chain| {
-                chain.result_set_get_object_with_type_map(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    type_map,
-                )
+                chain
+                    .result_set_get_object_with_type_map(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        type_map,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1018,7 +1074,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || {
@@ -1026,12 +1082,14 @@ impl DruidPooledResultSet {
                     .object_by_label_with_type_map(column_label, type_map)
             },
             |chain| {
-                chain.result_set_get_object_by_label_with_type_map(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    type_map,
-                )
+                chain
+                    .result_set_get_object_by_label_with_type_map(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        type_map,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1050,17 +1108,19 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.object_as(column_index, target_type),
             |chain| {
-                chain.result_set_get_object_typed(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    target_type,
-                )
+                chain
+                    .result_set_get_object_typed(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        target_type,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1078,17 +1138,19 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.object_by_label_as(column_label, target_type),
             |chain| {
-                chain.result_set_get_object_typed_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    target_type,
-                )
+                chain
+                    .result_set_get_object_typed_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        target_type,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1103,16 +1165,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<String>, DruidError> {
+    ) -> Result<Option<String>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.string(column_index),
             |chain| {
-                chain.result_set_get_string(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_string(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1127,16 +1191,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<String>, DruidError> {
+    ) -> Result<Option<String>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.string_by_label(column_label),
             |chain| {
-                chain.result_set_get_string_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_string_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1151,16 +1217,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.boolean(column_index),
             |chain| {
-                chain.result_set_get_boolean(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_boolean(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1171,16 +1239,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.boolean_by_label(column_label),
             |chain| {
-                chain.result_set_get_boolean_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_boolean_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1191,16 +1261,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<i64, DruidError> {
+    ) -> Result<i64, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.long(column_index),
             |chain| {
-                chain.result_set_get_long(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_long(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1211,16 +1279,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<i64, DruidError> {
+    ) -> Result<i64, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.long_by_label(column_label),
             |chain| {
-                chain.result_set_get_long_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_long_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1231,12 +1301,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.int(column_index),
             |chain| {
-                chain.result_set_get_int(self.physical.as_ref(), &self.filter_context, column_index)
+                chain
+                    .result_set_get_int(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1247,16 +1319,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.int_by_label(column_label),
             |chain| {
-                chain.result_set_get_int_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_int_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1267,16 +1341,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<i16, DruidError> {
+    ) -> Result<i16, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.short(column_index),
             |chain| {
-                chain.result_set_get_short(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_short(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1287,16 +1363,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<i16, DruidError> {
+    ) -> Result<i16, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.short_by_label(column_label),
             |chain| {
-                chain.result_set_get_short_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_short_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1307,16 +1385,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<i8, DruidError> {
+    ) -> Result<i8, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.byte(column_index),
             |chain| {
-                chain.result_set_get_byte(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_byte(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1327,16 +1403,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<i8, DruidError> {
+    ) -> Result<i8, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.byte_by_label(column_label),
             |chain| {
-                chain.result_set_get_byte_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_byte_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1347,16 +1425,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<f64, DruidError> {
+    ) -> Result<f64, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.double(column_index),
             |chain| {
-                chain.result_set_get_double(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_double(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1367,16 +1447,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<f64, DruidError> {
+    ) -> Result<f64, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.double_by_label(column_label),
             |chain| {
-                chain.result_set_get_double_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_double_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1387,16 +1469,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<f32, DruidError> {
+    ) -> Result<f32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.float(column_index),
             |chain| {
-                chain.result_set_get_float(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_float(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1407,16 +1491,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<f32, DruidError> {
+    ) -> Result<f32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.float_by_label(column_label),
             |chain| {
-                chain.result_set_get_float_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_float_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1427,16 +1513,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<Vec<u8>>, DruidError> {
+    ) -> Result<Option<Vec<u8>>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.bytes(column_index),
             |chain| {
-                chain.result_set_get_bytes(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_bytes(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1451,16 +1539,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<Vec<u8>>, DruidError> {
+    ) -> Result<Option<Vec<u8>>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.bytes_by_label(column_label),
             |chain| {
-                chain.result_set_get_bytes_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_bytes_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1478,16 +1568,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.big_decimal(column_index, None),
             |chain| {
-                chain.result_set_get_big_decimal(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_big_decimal(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1500,16 +1592,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.big_decimal_by_label(column_label, None),
             |chain| {
-                chain.result_set_get_big_decimal_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_big_decimal_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1523,17 +1617,19 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         scale: i32,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.big_decimal(column_index, Some(scale)),
             |chain| {
-                chain.result_set_get_big_decimal_with_scale(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    scale,
-                )
+                chain
+                    .result_set_get_big_decimal_with_scale(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        scale,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1547,7 +1643,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         scale: i32,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || {
@@ -1555,12 +1651,14 @@ impl DruidPooledResultSet {
                     .big_decimal_by_label(column_label, Some(scale))
             },
             |chain| {
-                chain.result_set_get_big_decimal_by_label_with_scale(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    scale,
-                )
+                chain
+                    .result_set_get_big_decimal_by_label_with_scale(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        scale,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1573,7 +1671,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.date_argument(
             connection,
             column_index,
@@ -1586,7 +1684,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.date_by_label_argument(
             connection,
             column_label,
@@ -1602,7 +1700,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.date_argument(
             connection,
             column_index,
@@ -1616,7 +1714,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.date_by_label_argument(
             connection,
             column_label,
@@ -1629,7 +1727,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.time_argument(
             connection,
             column_index,
@@ -1642,7 +1740,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.time_by_label_argument(
             connection,
             column_label,
@@ -1656,7 +1754,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.time_argument(
             connection,
             column_index,
@@ -1670,7 +1768,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.time_by_label_argument(
             connection,
             column_label,
@@ -1683,7 +1781,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.timestamp_argument(
             connection,
             column_index,
@@ -1696,7 +1794,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.timestamp_by_label_argument(
             connection,
             column_label,
@@ -1710,7 +1808,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.timestamp_argument(
             connection,
             column_index,
@@ -1724,7 +1822,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.timestamp_by_label_argument(
             connection,
             column_label,
@@ -1739,12 +1837,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcRef>, DruidError> {
+    ) -> Result<Option<RdbcRef>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.reference(column_index),
             |chain| {
-                chain.result_set_get_ref(self.physical.as_ref(), &self.filter_context, column_index)
+                chain
+                    .result_set_get_ref(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1755,16 +1855,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcRef>, DruidError> {
+    ) -> Result<Option<RdbcRef>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.reference_by_label(column_label),
             |chain| {
-                chain.result_set_get_ref_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_ref_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1775,16 +1877,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcBlob>, DruidError> {
+    ) -> Result<Option<RdbcBlob>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.blob(column_index),
             |chain| {
-                chain.result_set_get_blob(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_blob(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1799,16 +1899,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcBlob>, DruidError> {
+    ) -> Result<Option<RdbcBlob>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.blob_by_label(column_label),
             |chain| {
-                chain.result_set_get_blob_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_blob_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1823,16 +1925,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcClob>, DruidError> {
+    ) -> Result<Option<RdbcClob>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.clob(column_index),
             |chain| {
-                chain.result_set_get_clob(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_clob(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1847,16 +1947,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcClob>, DruidError> {
+    ) -> Result<Option<RdbcClob>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.clob_by_label(column_label),
             |chain| {
-                chain.result_set_get_clob_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_clob_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -1874,7 +1976,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<ClobProxyImpl>, DruidError> {
+    ) -> Result<Option<ClobProxyImpl>, RdbcError> {
         let connection_id = connection.id();
         let filter_chain = self
             .filter_chain
@@ -1889,7 +1991,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<ClobProxyImpl>, DruidError> {
+    ) -> Result<Option<ClobProxyImpl>, RdbcError> {
         let connection_id = connection.id();
         let filter_chain = self
             .filter_chain
@@ -1904,16 +2006,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.array(column_index),
             |chain| {
-                chain.result_set_get_array(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_array(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1924,16 +2028,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.array_by_label(column_label),
             |chain| {
-                chain.result_set_get_array_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_array_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1944,12 +2050,14 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcUrl>, DruidError> {
+    ) -> Result<Option<RdbcUrl>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.url(column_index),
             |chain| {
-                chain.result_set_get_url(self.physical.as_ref(), &self.filter_context, column_index)
+                chain
+                    .result_set_get_url(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1960,16 +2068,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcUrl>, DruidError> {
+    ) -> Result<Option<RdbcUrl>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.url_by_label(column_label),
             |chain| {
-                chain.result_set_get_url_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_url_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -1980,16 +2090,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_id(column_index),
             |chain| {
-                chain.result_set_get_row_id(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_row_id(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2000,16 +2112,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_id_by_label(column_label),
             |chain| {
-                chain.result_set_get_row_id_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_row_id_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2020,16 +2134,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_clob(column_index),
             |chain| {
-                chain.result_set_get_n_clob(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_n_clob(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2040,16 +2156,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_clob_by_label(column_label),
             |chain| {
-                chain.result_set_get_n_clob_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_n_clob_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2060,7 +2178,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<NClobProxyImpl>, DruidError> {
+    ) -> Result<Option<NClobProxyImpl>, RdbcError> {
         let connection_id = connection.id();
         let filter_chain = self
             .filter_chain
@@ -2076,7 +2194,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<NClobProxyImpl>, DruidError> {
+    ) -> Result<Option<NClobProxyImpl>, RdbcError> {
         let connection_id = connection.id();
         let filter_chain = self
             .filter_chain
@@ -2093,16 +2211,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.sql_xml(column_index),
             |chain| {
-                chain.result_set_get_sql_xml(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_sql_xml(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2113,16 +2233,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.sql_xml_by_label(column_label),
             |chain| {
-                chain.result_set_get_sql_xml_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_sql_xml_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2133,7 +2255,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || {
@@ -2141,11 +2263,13 @@ impl DruidPooledResultSet {
                     .update_value(column_index, &ResultSetUpdate::Null)
             },
             |chain| {
-                chain.result_set_update_null(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_update_null(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2156,7 +2280,7 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || {
@@ -2164,11 +2288,13 @@ impl DruidPooledResultSet {
                     .update_value_by_label(column_label, &ResultSetUpdate::Null)
             },
             |chain| {
-                chain.result_set_update_null_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_update_null_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2298,15 +2424,17 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         value: RdbcObject,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_object(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_index,
-                value,
-            )
+            chain
+                .result_set_update_object(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    value,
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical
                 .update_value(column_index, &ResultSetUpdate::Object(value))
@@ -2320,15 +2448,17 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         value: RdbcObject,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_object_by_label(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_label,
-                value,
-            )
+            chain
+                .result_set_update_object_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    value,
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical
                 .update_value_by_label(column_label, &ResultSetUpdate::Object(value))
@@ -2343,16 +2473,18 @@ impl DruidPooledResultSet {
         column_index: usize,
         value: RdbcObject,
         scale_or_length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_object_with_scale_or_length(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_index,
-                value,
-                scale_or_length,
-            )
+            chain
+                .result_set_update_object_with_scale_or_length(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    value,
+                    scale_or_length,
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical.update_value(
                 column_index,
@@ -2372,16 +2504,18 @@ impl DruidPooledResultSet {
         column_label: &str,
         value: RdbcObject,
         scale_or_length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_object_by_label_with_scale_or_length(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_label,
-                value,
-                scale_or_length,
-            )
+            chain
+                .result_set_update_object_by_label_with_scale_or_length(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    value,
+                    scale_or_length,
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical.update_value_by_label(
                 column_label,
@@ -2459,15 +2593,17 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         reader: Option<&RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_n_character_stream(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_index,
-                reader.cloned(),
-            )
+            chain
+                .result_set_update_n_character_stream(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical.update_value(
                 column_index,
@@ -2486,15 +2622,17 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         reader: Option<&RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_n_character_stream_by_label(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_label,
-                reader.cloned(),
-            )
+            chain
+                .result_set_update_n_character_stream_by_label(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical.update_value_by_label(
                 column_label,
@@ -2514,16 +2652,18 @@ impl DruidPooledResultSet {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_n_character_stream_with_length(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_index,
-                reader.cloned(),
-                length,
-            )
+            chain
+                .result_set_update_n_character_stream_with_length(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_index,
+                    reader.cloned(),
+                    length,
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical.update_value(
                 column_index,
@@ -2543,16 +2683,18 @@ impl DruidPooledResultSet {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
-            chain.result_set_update_n_character_stream_by_label_with_length(
-                self.physical.as_ref(),
-                &self.filter_context,
-                column_label,
-                reader.cloned(),
-                length,
-            )
+            chain
+                .result_set_update_n_character_stream_by_label_with_length(
+                    self.physical.as_ref(),
+                    &self.filter_context,
+                    column_label,
+                    reader.cloned(),
+                    length,
+                )
+                .map_err(RdbcError::from)
         } else {
             self.physical.update_value_by_label(
                 column_label,
@@ -2628,7 +2770,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         stream: Option<&RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_blob_stream_argument(
             connection,
             column_index,
@@ -2643,7 +2785,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         stream: Option<&RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_blob_stream_by_label_argument(
             connection,
             column_label,
@@ -2659,7 +2801,7 @@ impl DruidPooledResultSet {
         column_index: usize,
         stream: Option<&RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_blob_stream_argument(
             connection,
             column_index,
@@ -2675,7 +2817,7 @@ impl DruidPooledResultSet {
         column_label: &str,
         stream: Option<&RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_blob_stream_by_label_argument(
             connection,
             column_label,
@@ -2690,7 +2832,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         reader: Option<&RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_clob_reader_argument(
             connection,
             column_index,
@@ -2705,7 +2847,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         reader: Option<&RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_clob_reader_by_label_argument(
             connection,
             column_label,
@@ -2721,7 +2863,7 @@ impl DruidPooledResultSet {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_clob_reader_argument(
             connection,
             column_index,
@@ -2737,7 +2879,7 @@ impl DruidPooledResultSet {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_clob_reader_by_label_argument(
             connection,
             column_label,
@@ -2752,7 +2894,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         reader: Option<&RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_n_clob_reader_argument(
             connection,
             column_index,
@@ -2767,7 +2909,7 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         reader: Option<&RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_n_clob_reader_by_label_argument(
             connection,
             column_label,
@@ -2783,7 +2925,7 @@ impl DruidPooledResultSet {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_n_clob_reader_argument(
             connection,
             column_index,
@@ -2799,7 +2941,7 @@ impl DruidPooledResultSet {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.update_n_clob_reader_by_label_argument(
             connection,
             column_label,
@@ -2816,16 +2958,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<String>, DruidError> {
+    ) -> Result<Option<String>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_string(column_index),
             |chain| {
-                chain.result_set_get_n_string(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_n_string(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2836,16 +2980,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<String>, DruidError> {
+    ) -> Result<Option<String>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_string_by_label(column_label),
             |chain| {
-                chain.result_set_get_n_string_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_n_string_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2856,16 +3002,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.ascii_stream(column_index),
             |chain| {
-                chain.result_set_get_ascii_stream(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_ascii_stream(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -2880,16 +3028,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.ascii_stream_by_label(column_label),
             |chain| {
-                chain.result_set_get_ascii_stream_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_ascii_stream_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -2904,16 +3054,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.unicode_stream(column_index),
             |chain| {
-                chain.result_set_get_unicode_stream(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_unicode_stream(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2924,16 +3076,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.unicode_stream_by_label(column_label),
             |chain| {
-                chain.result_set_get_unicode_stream_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_unicode_stream_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -2944,16 +3098,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.binary_stream(column_index),
             |chain| {
-                chain.result_set_get_binary_stream(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_binary_stream(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -2968,16 +3124,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.binary_stream_by_label(column_label),
             |chain| {
-                chain.result_set_get_binary_stream_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_binary_stream_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -2992,16 +3150,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.character_stream(column_index),
             |chain| {
-                chain.result_set_get_character_stream(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_character_stream(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -3016,16 +3176,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.character_stream_by_label(column_label),
             |chain| {
-                chain.result_set_get_character_stream_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_character_stream_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         let result = self.classify(connection, result);
@@ -3040,16 +3202,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_character_stream(column_index),
             |chain| {
-                chain.result_set_get_n_character_stream(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_n_character_stream(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3060,16 +3224,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.n_character_stream_by_label(column_label),
             |chain| {
-                chain.result_set_get_n_character_stream_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_get_n_character_stream_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3080,16 +3246,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_label: &str,
-    ) -> Result<usize, DruidError> {
+    ) -> Result<usize, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.find_column(column_label),
             |chain| {
-                chain.result_set_find_column(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                )
+                chain
+                    .result_set_find_column(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3099,11 +3267,15 @@ impl DruidPooledResultSet {
     pub fn is_before_first(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.is_before_first(),
-            |chain| chain.result_set_is_before_first(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_is_before_first(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3112,31 +3284,43 @@ impl DruidPooledResultSet {
     pub fn is_after_last(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.is_after_last(),
-            |chain| chain.result_set_is_after_last(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_is_after_last(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 返回是否位于第一行。
-    pub fn is_first(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn is_first(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.is_first(),
-            |chain| chain.result_set_is_first(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_is_first(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 返回是否位于最后一行。
-    pub fn is_last(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn is_last(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.is_last(),
-            |chain| chain.result_set_is_last(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_is_last(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3145,51 +3329,71 @@ impl DruidPooledResultSet {
     pub fn before_first(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.before_first(),
-            |chain| chain.result_set_before_first(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_before_first(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 移到最后一行之后。
-    pub fn after_last(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
+    pub fn after_last(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.after_last(),
-            |chain| chain.result_set_after_last(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_after_last(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 移到第一行。
-    pub fn first(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn first(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.first(),
-            |chain| chain.result_set_first(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_first(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 移到最后一行。
-    pub fn last(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, DruidError> {
+    pub fn last(&mut self, connection: &mut DruidPooledConnection) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.last(),
-            |chain| chain.result_set_last(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_last(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 返回当前 RDBC 行号。
-    pub fn row(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, DruidError> {
+    pub fn row(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row(),
-            |chain| chain.result_set_get_row(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3199,11 +3403,15 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         row: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.absolute(row),
-            |chain| chain.result_set_absolute(self.physical.as_ref(), &self.filter_context, row),
+            |chain| {
+                chain
+                    .result_set_absolute(self.physical.as_ref(), &self.filter_context, row)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3213,11 +3421,15 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         rows: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.relative(rows),
-            |chain| chain.result_set_relative(self.physical.as_ref(), &self.filter_context, rows),
+            |chain| {
+                chain
+                    .result_set_relative(self.physical.as_ref(), &self.filter_context, rows)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3227,16 +3439,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         direction: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.set_fetch_direction(direction),
             |chain| {
-                chain.result_set_set_fetch_direction(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    direction,
-                )
+                chain
+                    .result_set_set_fetch_direction(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        direction,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3246,12 +3460,14 @@ impl DruidPooledResultSet {
     pub fn fetch_direction(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.fetch_direction(),
             |chain| {
-                chain.result_set_get_fetch_direction(self.physical.as_ref(), &self.filter_context)
+                chain
+                    .result_set_get_fetch_direction(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3262,26 +3478,29 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         rows: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.set_fetch_size(rows),
             |chain| {
-                chain.result_set_set_fetch_size(self.physical.as_ref(), &self.filter_context, rows)
+                chain
+                    .result_set_set_fetch_size(self.physical.as_ref(), &self.filter_context, rows)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
     }
 
     /// 返回抓取大小。
-    pub fn fetch_size(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    pub fn fetch_size(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.fetch_size(),
-            |chain| chain.result_set_get_fetch_size(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_fetch_size(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3290,11 +3509,15 @@ impl DruidPooledResultSet {
     pub fn result_set_type(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.result_set_type(),
-            |chain| chain.result_set_get_type(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_type(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3303,11 +3526,15 @@ impl DruidPooledResultSet {
     pub fn concurrency(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.concurrency(),
-            |chain| chain.result_set_get_concurrency(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_concurrency(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3316,11 +3543,15 @@ impl DruidPooledResultSet {
     pub fn holdability(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.holdability(),
-            |chain| chain.result_set_get_holdability(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_holdability(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3331,11 +3562,15 @@ impl DruidPooledResultSet {
     pub fn warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<SqlWarning>, DruidError> {
+    ) -> Result<Option<SqlWarning>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.warnings(),
-            |chain| chain.result_set_warnings(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_warnings(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3346,11 +3581,15 @@ impl DruidPooledResultSet {
     pub fn clear_warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.clear_warnings(),
-            |chain| chain.result_set_clear_warnings(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_clear_warnings(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3361,11 +3600,15 @@ impl DruidPooledResultSet {
     pub fn cursor_name(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<String>, DruidError> {
+    ) -> Result<Option<String>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.cursor_name(),
-            |chain| chain.result_set_get_cursor_name(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_cursor_name(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3376,11 +3619,15 @@ impl DruidPooledResultSet {
     pub fn meta_data(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<ResultSetMetaData, DruidError> {
+    ) -> Result<ResultSetMetaData, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.meta_data(),
-            |chain| chain.result_set_get_meta_data(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_get_meta_data(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3393,7 +3640,7 @@ impl DruidPooledResultSet {
     pub fn meta_data_proxy(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<super::ResultSetMetaDataProxyImpl, DruidError> {
+    ) -> Result<super::ResultSetMetaDataProxyImpl, RdbcError> {
         let raw = self.meta_data(connection)?;
         let metadata_id = self
             .statement
@@ -3411,11 +3658,15 @@ impl DruidPooledResultSet {
     pub fn row_updated(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_updated(),
-            |chain| chain.result_set_row_updated(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_row_updated(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3424,11 +3675,15 @@ impl DruidPooledResultSet {
     pub fn row_inserted(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_inserted(),
-            |chain| chain.result_set_row_inserted(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_row_inserted(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3437,54 +3692,71 @@ impl DruidPooledResultSet {
     pub fn row_deleted(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.row_deleted(),
-            |chain| chain.result_set_row_deleted(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_row_deleted(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 提交插入行。
-    pub fn insert_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
+    pub fn insert_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.insert_row(),
-            |chain| chain.result_set_insert_row(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_insert_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 提交当前行更新。
-    pub fn update_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
+    pub fn update_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.update_row(),
-            |chain| chain.result_set_update_row(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_update_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 删除当前行。
-    pub fn delete_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
+    pub fn delete_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.delete_row(),
-            |chain| chain.result_set_delete_row(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_delete_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
 
     /// 刷新当前行。
-    pub fn refresh_row(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    pub fn refresh_row(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.refresh_row(),
-            |chain| chain.result_set_refresh_row(self.physical.as_ref(), &self.filter_context),
+            |chain| {
+                chain
+                    .result_set_refresh_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
+            },
         );
         self.classify(connection, result)
     }
@@ -3493,12 +3765,14 @@ impl DruidPooledResultSet {
     pub fn cancel_row_updates(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.cancel_row_updates(),
             |chain| {
-                chain.result_set_cancel_row_updates(self.physical.as_ref(), &self.filter_context)
+                chain
+                    .result_set_cancel_row_updates(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3508,12 +3782,14 @@ impl DruidPooledResultSet {
     pub fn move_to_insert_row(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.move_to_insert_row(),
             |chain| {
-                chain.result_set_move_to_insert_row(self.physical.as_ref(), &self.filter_context)
+                chain
+                    .result_set_move_to_insert_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3523,12 +3799,14 @@ impl DruidPooledResultSet {
     pub fn move_to_current_row(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.move_to_current_row(),
             |chain| {
-                chain.result_set_move_to_current_row(self.physical.as_ref(), &self.filter_context)
+                chain
+                    .result_set_move_to_current_row(self.physical.as_ref(), &self.filter_context)
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3538,16 +3816,18 @@ impl DruidPooledResultSet {
         &mut self,
         connection: &mut DruidPooledConnection,
         column_index: usize,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Value, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.value(column_index),
             |chain| {
-                chain.result_set_get_object(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                )
+                chain
+                    .result_set_get_object(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from)
             },
         );
         self.classify(connection, result)
@@ -3558,22 +3838,22 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         calendar: RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.date(column_index, &calendar),
             |chain| match &calendar {
-                RdbcCalendarArgument::Unspecified => chain.result_set_get_date(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                ),
-                RdbcCalendarArgument::Specified(_) => chain.result_set_get_date_with_calendar(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    &calendar,
-                ),
+                RdbcCalendarArgument::Unspecified => chain
+                    .result_set_get_date(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from),
+                RdbcCalendarArgument::Specified(_) => chain
+                    .result_set_get_date_with_calendar(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        &calendar,
+                    )
+                    .map_err(RdbcError::from),
             },
         );
         self.classify(connection, result)
@@ -3584,23 +3864,26 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         calendar: RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.date_by_label(column_label, &calendar),
             |chain| match &calendar {
-                RdbcCalendarArgument::Unspecified => chain.result_set_get_date_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                ),
+                RdbcCalendarArgument::Unspecified => chain
+                    .result_set_get_date_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCalendarArgument::Specified(_) => chain
                     .result_set_get_date_by_label_with_calendar(
                         self.physical.as_ref(),
                         &self.filter_context,
                         column_label,
                         &calendar,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
             },
         );
         self.classify(connection, result)
@@ -3611,22 +3894,22 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         calendar: RdbcCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.time(column_index, &calendar),
             |chain| match &calendar {
-                RdbcCalendarArgument::Unspecified => chain.result_set_get_time(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                ),
-                RdbcCalendarArgument::Specified(_) => chain.result_set_get_time_with_calendar(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    &calendar,
-                ),
+                RdbcCalendarArgument::Unspecified => chain
+                    .result_set_get_time(self.physical.as_ref(), &self.filter_context, column_index)
+                    .map_err(RdbcError::from),
+                RdbcCalendarArgument::Specified(_) => chain
+                    .result_set_get_time_with_calendar(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        &calendar,
+                    )
+                    .map_err(RdbcError::from),
             },
         );
         self.classify(connection, result)
@@ -3637,23 +3920,26 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         calendar: RdbcCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.time_by_label(column_label, &calendar),
             |chain| match &calendar {
-                RdbcCalendarArgument::Unspecified => chain.result_set_get_time_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                ),
+                RdbcCalendarArgument::Unspecified => chain
+                    .result_set_get_time_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCalendarArgument::Specified(_) => chain
                     .result_set_get_time_by_label_with_calendar(
                         self.physical.as_ref(),
                         &self.filter_context,
                         column_label,
                         &calendar,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
             },
         );
         self.classify(connection, result)
@@ -3664,22 +3950,26 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_index: usize,
         calendar: RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.timestamp(column_index, &calendar),
             |chain| match &calendar {
-                RdbcCalendarArgument::Unspecified => chain.result_set_get_timestamp(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                ),
-                RdbcCalendarArgument::Specified(_) => chain.result_set_get_timestamp_with_calendar(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    &calendar,
-                ),
+                RdbcCalendarArgument::Unspecified => chain
+                    .result_set_get_timestamp(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                    )
+                    .map_err(RdbcError::from),
+                RdbcCalendarArgument::Specified(_) => chain
+                    .result_set_get_timestamp_with_calendar(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        &calendar,
+                    )
+                    .map_err(RdbcError::from),
             },
         );
         self.classify(connection, result)
@@ -3690,23 +3980,26 @@ impl DruidPooledResultSet {
         connection: &mut DruidPooledConnection,
         column_label: &str,
         calendar: RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.filter_chain.as_ref().map_or_else(
             || self.physical.timestamp_by_label(column_label, &calendar),
             |chain| match &calendar {
-                RdbcCalendarArgument::Unspecified => chain.result_set_get_timestamp_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                ),
+                RdbcCalendarArgument::Unspecified => chain
+                    .result_set_get_timestamp_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCalendarArgument::Specified(_) => chain
                     .result_set_get_timestamp_by_label_with_calendar(
                         self.physical.as_ref(),
                         &self.filter_context,
                         column_label,
                         &calendar,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
             },
         );
         self.classify(connection, result)
@@ -3718,23 +4011,27 @@ impl DruidPooledResultSet {
         column_index: usize,
         stream: Option<&RdbcInputStream>,
         length: RdbcStreamLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                RdbcStreamLength::Unspecified => chain.result_set_update_blob_stream(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    stream.cloned(),
-                ),
-                RdbcStreamLength::Long(length) => chain.result_set_update_blob_stream_with_length(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    stream.cloned(),
-                    length,
-                ),
+                RdbcStreamLength::Unspecified => chain
+                    .result_set_update_blob_stream(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        stream.cloned(),
+                    )
+                    .map_err(RdbcError::from),
+                RdbcStreamLength::Long(length) => chain
+                    .result_set_update_blob_stream_with_length(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        stream.cloned(),
+                        length,
+                    )
+                    .map_err(RdbcError::from),
                 RdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
             }
         } else {
@@ -3750,16 +4047,18 @@ impl DruidPooledResultSet {
         column_label: &str,
         stream: Option<&RdbcInputStream>,
         length: RdbcStreamLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                RdbcStreamLength::Unspecified => chain.result_set_update_blob_stream_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    stream.cloned(),
-                ),
+                RdbcStreamLength::Unspecified => chain
+                    .result_set_update_blob_stream_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        stream.cloned(),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcStreamLength::Long(length) => chain
                     .result_set_update_blob_stream_by_label_with_length(
                         self.physical.as_ref(),
@@ -3767,7 +4066,8 @@ impl DruidPooledResultSet {
                         column_label,
                         stream.cloned(),
                         length,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcStreamLength::Int(_) => unreachable!("Blob 不存在 int 长度重载"),
             }
         } else {
@@ -3783,16 +4083,18 @@ impl DruidPooledResultSet {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                RdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    reader.cloned(),
-                ),
+                RdbcCharacterLength::Unspecified => chain
+                    .result_set_update_clob_reader(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Long(length) => chain
                     .result_set_update_clob_reader_with_length(
                         self.physical.as_ref(),
@@ -3800,7 +4102,8 @@ impl DruidPooledResultSet {
                         column_index,
                         reader.cloned(),
                         length,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
             }
         } else {
@@ -3816,16 +4119,18 @@ impl DruidPooledResultSet {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                RdbcCharacterLength::Unspecified => chain.result_set_update_clob_reader_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    reader.cloned(),
-                ),
+                RdbcCharacterLength::Unspecified => chain
+                    .result_set_update_clob_reader_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Long(length) => chain
                     .result_set_update_clob_reader_by_label_with_length(
                         self.physical.as_ref(),
@@ -3833,7 +4138,8 @@ impl DruidPooledResultSet {
                         column_label,
                         reader.cloned(),
                         length,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Int(_) => unreachable!("Clob 不存在 int 长度重载"),
             }
         } else {
@@ -3849,16 +4155,18 @@ impl DruidPooledResultSet {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                RdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_index,
-                    reader.cloned(),
-                ),
+                RdbcCharacterLength::Unspecified => chain
+                    .result_set_update_n_clob_reader(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_index,
+                        reader.cloned(),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Long(length) => chain
                     .result_set_update_n_clob_reader_with_length(
                         self.physical.as_ref(),
@@ -3866,7 +4174,8 @@ impl DruidPooledResultSet {
                         column_index,
                         reader.cloned(),
                         length,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
             }
         } else {
@@ -3882,16 +4191,18 @@ impl DruidPooledResultSet {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = if let Some(chain) = self.filter_chain.as_ref() {
             match length {
-                RdbcCharacterLength::Unspecified => chain.result_set_update_n_clob_reader_by_label(
-                    self.physical.as_ref(),
-                    &self.filter_context,
-                    column_label,
-                    reader.cloned(),
-                ),
+                RdbcCharacterLength::Unspecified => chain
+                    .result_set_update_n_clob_reader_by_label(
+                        self.physical.as_ref(),
+                        &self.filter_context,
+                        column_label,
+                        reader.cloned(),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Long(length) => chain
                     .result_set_update_n_clob_reader_by_label_with_length(
                         self.physical.as_ref(),
@@ -3899,7 +4210,8 @@ impl DruidPooledResultSet {
                         column_label,
                         reader.cloned(),
                         length,
-                    ),
+                    )
+                    .map_err(RdbcError::from),
                 RdbcCharacterLength::Int(_) => unreachable!("NClob 不存在 int 长度重载"),
             }
         } else {
@@ -3909,18 +4221,18 @@ impl DruidPooledResultSet {
         self.classify(connection, result)
     }
 
-    fn ensure_same_lease(&self, connection: &DruidPooledConnection) -> Result<(), DruidError> {
+    fn ensure_same_lease(&self, connection: &DruidPooledConnection) -> Result<(), RdbcError> {
         if connection.is_same_open_lease(&self.statement.inner.lease_active) {
             Ok(())
         } else {
-            Err(DruidError::ConnectionDiscarded)
+            Err(RdbcError::ConnectionDiscarded)
         }
     }
 
-    fn ensure_open_for(&self, connection: &DruidPooledConnection) -> Result<(), DruidError> {
+    fn ensure_open_for(&self, connection: &DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_same_lease(connection)?;
         if self.is_closed() || self.physical.is_closed() || self.statement.is_closed() {
-            Err(DruidError::Other("result set is closed".to_string()))
+            Err(RdbcError::Other("result set is closed".to_string()))
         } else {
             Ok(())
         }
@@ -3929,8 +4241,8 @@ impl DruidPooledResultSet {
     fn classify<T>(
         &mut self,
         connection: &mut DruidPooledConnection,
-        result: Result<T, DruidError>,
-    ) -> Result<T, DruidError> {
+        result: Result<T, RdbcError>,
+    ) -> Result<T, RdbcError> {
         // Java `DruidPooledStatement#checkException` 只为 Prepared/Callable
         // Statement 传入固定 SQL；普通 Statement 的 ResultSet 错误传 null。
         let sql = (self.prepared_statement.is_some() || self.callable_statement.is_some())

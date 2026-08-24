@@ -1,4 +1,4 @@
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcClob, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcResourceAccess, RdbcWriter,
 };
@@ -8,24 +8,24 @@ use crate::types::RdbcString;
 #[async_trait::async_trait]
 pub trait RdbcClobAccess: RdbcResourceAccess {
     /// Returns the character length.
-    async fn length(&self) -> Result<i64, DruidError>;
+    async fn length(&self) -> Result<i64, RdbcError>;
     /// Returns a substring.
-    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError>;
+    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, RdbcError>;
     /// Opens the character stream.
-    async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
-        Err(DruidError::feature_not_supported("Clob#getCharacterStream"))
+    async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#getCharacterStream"))
     }
     /// Opens the ASCII stream.
-    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
-        Err(DruidError::feature_not_supported("Clob#getAsciiStream"))
+    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#getAsciiStream"))
     }
     /// Finds a string.
     async fn position_string(
         &self,
         _pattern: &RdbcString,
         _start: i64,
-    ) -> Result<Option<i64>, DruidError> {
-        Err(DruidError::feature_not_supported(
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
             "Clob#position(String,long)",
         ))
     }
@@ -34,14 +34,12 @@ pub trait RdbcClobAccess: RdbcResourceAccess {
         &self,
         _pattern: &RdbcClob,
         _start: i64,
-    ) -> Result<Option<i64>, DruidError> {
-        Err(DruidError::feature_not_supported(
-            "Clob#position(Clob,long)",
-        ))
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#position(Clob,long)"))
     }
     /// Writes a string.
-    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
-        Err(DruidError::feature_not_supported("Clob#setString"))
+    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#setString"))
     }
     /// Writes a string range.
     async fn set_string_range(
@@ -50,30 +48,30 @@ pub trait RdbcClobAccess: RdbcResourceAccess {
         _value: &RdbcString,
         _offset: i32,
         _length: i32,
-    ) -> Result<i32, DruidError> {
-        Err(DruidError::feature_not_supported(
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported(
             "Clob#setString(long,String,int,int)",
         ))
     }
     /// Opens a positioned ASCII output stream.
-    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
-        Err(DruidError::feature_not_supported("Clob#setAsciiStream"))
+    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#setAsciiStream"))
     }
     /// Opens a positioned character writer.
-    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
-        Err(DruidError::feature_not_supported("Clob#setCharacterStream"))
+    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#setCharacterStream"))
     }
     /// Truncates the Clob.
-    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
-        Err(DruidError::feature_not_supported("Clob#truncate"))
+    async fn truncate(&self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#truncate"))
     }
     /// Opens a character stream over a range.
     async fn get_character_stream_range(
         &self,
         _position: i64,
         _length: i64,
-    ) -> Result<RdbcReader, DruidError> {
-        Err(DruidError::feature_not_supported(
+    ) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported(
             "Clob#getCharacterStream(long,long)",
         ))
     }

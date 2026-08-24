@@ -3,7 +3,7 @@
 //! 本测试只验收 `SQLite` 真实支持的连接池、参数绑定、PreparedStatement、
 //! 事务和回收语义。SQLite 没有存储过程，因此 `CallableStatement` 必须明确报错。
 
-use druid::core::{DruidError, PhysicalConnection, Value};
+use druid::core::{PhysicalConnection, RdbcError, Value};
 use druid::pool::DruidPool;
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::Arc;
@@ -120,7 +120,7 @@ async fn sqlite_proves_pool_prepared_transaction_and_recycle_semantics() {
         .expect_err("SQLite 不得伪造 CallableStatement");
     assert_eq!(
         callable_error,
-        DruidError::UnsupportedOperation {
+        RdbcError::UnsupportedOperation {
             operation: "prepare_physical_call"
         }
     );

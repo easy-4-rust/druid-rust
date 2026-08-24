@@ -12,7 +12,7 @@ use druid::core::{
     DruidPooledPreparedStatement, DruidPooledPreparedStatementHandle, ExecContext, ExecOperation,
     ExecResult, FilterChain, PhysicalConnection, PhysicalConnectionFactory,
     PhysicalPreparedStatement, PreparedInputParameter, PreparedStatementKey,
-    PreparedTypeNameArgument, RdbcCalendar, RdbcCalendarArgument, RdbcCharacterLength,
+    PreparedTypeNameArgument, RdbcCalendar, RdbcCalendarArgument, RdbcCharacterLength, RdbcError,
     RdbcInputStream, RdbcObject, RdbcReader, RdbcRowId, RdbcStreamLength, RdbcUrl,
     ResultSetStatement, Row, SqlTextPreparedStatement, StatementExecuteResult,
     StatementGeneratedKeys, Value, Wrapper, WrapperExt,
@@ -91,9 +91,9 @@ struct PreparedConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for PreparedConnection {
-    async fn exec(&mut self, sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         if sql == "FAIL" {
-            return Err(DruidError::DriverError("expected failure".to_string()));
+            return Err(RdbcError::DriverError("expected failure".to_string()));
         }
         Ok(ExecResult {
             rows_affected: 1,
@@ -102,7 +102,7 @@ impl PhysicalConnection for PreparedConnection {
         })
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
 
@@ -111,7 +111,7 @@ impl PhysicalConnection for PreparedConnection {
         sql: &str,
         _params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         match sql {
             "MULTI" => Ok(vec![
                 StatementExecuteResult::ResultSet(vec![Row::new(vec![Value::Int(10)])]),
@@ -122,7 +122,7 @@ impl PhysicalConnection for PreparedConnection {
                 }),
                 StatementExecuteResult::ResultSet(vec![Row::new(vec![Value::Int(20)])]),
             ]),
-            "FAIL" => Err(DruidError::DriverError("expected failure".to_string())),
+            "FAIL" => Err(RdbcError::DriverError("expected failure".to_string())),
             _ => Ok(vec![StatementExecuteResult::Update(ExecResult {
                 rows_affected: 1,
                 last_insert_id: None,
@@ -134,28 +134,28 @@ impl PhysicalConnection for PreparedConnection {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         self.prepare_count.fetch_add(1, Ordering::Relaxed);
         Ok(Arc::new(SqlTextPreparedStatement::new(key.sql())))
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -168,7 +168,7 @@ impl PhysicalConnection for PreparedConnection {
         Some(&self.schema)
     }
 
-    async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
+    async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
         self.schema = schema.to_string();
         Ok(())
     }
@@ -237,7 +237,7 @@ struct PreparedFactory {
 
 #[async_trait::async_trait]
 impl druid::core::PhysicalConnectionFactory for PreparedFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(PreparedConnection {
             prepare_count: self.prepare_count.clone(),
             schema: "main".to_string(),
@@ -248,11 +248,11 @@ impl druid::core::PhysicalConnectionFactory for PreparedFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 
-    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), DruidError> {
+    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), RdbcError> {
         connection.close().await
     }
 }
@@ -317,7 +317,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
         self
     }
 
-    fn max_field_size(&self) -> Result<i32, DruidError> {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
         self.probe.record("get_max_field_size");
         Ok(self
             .probe
@@ -327,7 +327,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
             .max_field_size)
     }
 
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError> {
         self.probe.record(format!("set_max_field_size:{max}"));
         self.probe
             .values
@@ -337,7 +337,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
         Ok(())
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         self.probe.record("get_max_rows");
         Ok(self
             .probe
@@ -347,7 +347,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
             .max_rows)
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         self.probe.record(format!("set_max_rows:{max}"));
         if max == 12
             && self
@@ -355,7 +355,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
                 .fail_restore_max_rows_once
                 .swap(false, Ordering::AcqRel)
         {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "restore max rows failed".to_string(),
             ));
         }
@@ -367,7 +367,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
         Ok(())
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.probe.record("get_query_timeout");
         Ok(self
             .probe
@@ -377,7 +377,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
             .query_timeout)
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         self.probe.record(format!("set_query_timeout:{seconds}"));
         self.probe
             .values
@@ -387,7 +387,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
         Ok(())
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         self.probe.record("get_fetch_direction");
         Ok(self
             .probe
@@ -397,7 +397,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
             .fetch_direction)
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         self.probe
             .record(format!("set_fetch_direction:{direction}"));
         self.probe
@@ -408,7 +408,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
         Ok(())
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         self.probe.record("get_fetch_size");
         Ok(self
             .probe
@@ -418,7 +418,7 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
             .fetch_size)
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         self.probe.record(format!("set_fetch_size:{rows}"));
         self.probe
             .values
@@ -428,17 +428,17 @@ impl PhysicalPreparedStatement for PreparedPropertyStatement {
         Ok(())
     }
 
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         self.probe.record("clear_parameters");
         Ok(())
     }
 
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         self.probe.record("clear_batch");
         Ok(())
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.probe.record("close");
         self.probe.closed.store(true, Ordering::Release);
         Ok(())
@@ -457,41 +457,41 @@ struct PreparedPropertyConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for PreparedPropertyConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
     async fn prepare_physical_statement(
         &mut self,
         _key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         self.prepare_count.fetch_add(1, Ordering::Relaxed);
         Ok(Arc::new(PreparedPropertyStatement {
             probe: Arc::clone(&self.probe),
         }))
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -508,7 +508,7 @@ struct PreparedPropertyFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for PreparedPropertyFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(PreparedPropertyConnection {
             probe: Arc::clone(&self.probe),
             prepare_count: Arc::clone(&self.prepare_count),
@@ -519,7 +519,7 @@ impl PhysicalConnectionFactory for PreparedPropertyFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }
@@ -585,7 +585,7 @@ async fn prepared_close_restores_properties_in_java_order_and_stops_on_first_err
         .expect_err("Java close 必须在首个属性恢复错误处停止");
     assert_eq!(
         error,
-        DruidError::DriverError("restore max rows failed".to_string())
+        RdbcError::DriverError("restore max rows failed".to_string())
     );
     assert!(!statement.is_closed());
     assert_eq!(
@@ -666,7 +666,7 @@ async fn pooled_prepared_statement_forwards_statement_properties_and_restores_re
     assert!(!statement.is_poolable());
     assert_eq!(
         statement.set_poolable(&mut connection, false).unwrap_err(),
-        DruidError::UnsupportedOperation {
+        RdbcError::UnsupportedOperation {
             operation: "statement_set_poolable_false"
         }
     );
@@ -902,7 +902,7 @@ async fn prepared_setter_overloads_preserve_exact_descriptor_identity() {
     assert_eq!(statement.parameter_slot_count(), 0);
     assert!(statement.parameter(1).is_none());
     let error = statement.set_int(&mut connection, 0, 1).unwrap_err();
-    assert!(matches!(error, DruidError::InvalidArgument(_)));
+    assert!(matches!(error, RdbcError::InvalidArgument(_)));
     assert_eq!(statement.parameter_slot_count(), 0);
 
     drop(statement);
@@ -1092,7 +1092,7 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
         .unwrap_err();
     assert_eq!(
         object_error,
-        DruidError::UnsupportedOperation {
+        RdbcError::UnsupportedOperation {
             operation: "prepared_object_requires_native_adapter"
         }
     );
@@ -1104,7 +1104,7 @@ fn prepared_input_parameter_converts_every_scalar_family_without_losing_type() {
     .unwrap_err();
     assert_eq!(
         stream_error,
-        DruidError::UnsupportedOperation {
+        RdbcError::UnsupportedOperation {
             operation: "prepared_parameter_requires_native_adapter"
         }
     );
@@ -1128,8 +1128,8 @@ struct CleanupFailingStatement {
 }
 
 impl CleanupFailingStatement {
-    fn fatal_error() -> DruidError {
-        DruidError::SqlException(Box::new(
+    fn fatal_error() -> RdbcError {
+        RdbcError::SqlException(Box::new(
             druid::core::SqlException::driver(1040, "too many connections").with_class_name(
                 "com.mysql.cj.rdbc.exceptions.MySQLNonTransientConnectionException",
             ),
@@ -1150,14 +1150,14 @@ impl PhysicalPreparedStatement for CleanupFailingStatement {
         &self,
         _parameter_index: usize,
         _parameter: &PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::SetParameter => Err(Self::fatal_error()),
             _ => Ok(()),
         }
     }
 
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::ClearParameters => Err(Self::fatal_error()),
             CleanupFailure::SetParameter
@@ -1170,7 +1170,7 @@ impl PhysicalPreparedStatement for CleanupFailingStatement {
         }
     }
 
-    fn add_batch(&self, _params: &[Value]) -> Result<(), DruidError> {
+    fn add_batch(&self, _params: &[Value]) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::AddBatch => Err(Self::fatal_error()),
             CleanupFailure::SetParameter
@@ -1183,7 +1183,7 @@ impl PhysicalPreparedStatement for CleanupFailingStatement {
         }
     }
 
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::SetParameter
             | CleanupFailure::AddBatch
@@ -1196,35 +1196,35 @@ impl PhysicalPreparedStatement for CleanupFailingStatement {
         }
     }
 
-    fn get_result_set(&self) -> Result<(), DruidError> {
+    fn get_result_set(&self) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::GetResultSet => Err(Self::fatal_error()),
             _ => Ok(()),
         }
     }
 
-    fn get_update_count(&self) -> Result<(), DruidError> {
+    fn get_update_count(&self) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::GetUpdateCount => Err(Self::fatal_error()),
             _ => Ok(()),
         }
     }
 
-    fn get_generated_keys(&self) -> Result<(), DruidError> {
+    fn get_generated_keys(&self) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::GetGeneratedKeys => Err(Self::fatal_error()),
             _ => Ok(()),
         }
     }
 
-    fn get_more_results(&self, _current: Option<i32>) -> Result<(), DruidError> {
+    fn get_more_results(&self, _current: Option<i32>) -> Result<(), RdbcError> {
         match self.failure {
             CleanupFailure::GetMoreResults => Err(Self::fatal_error()),
             _ => Ok(()),
         }
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
@@ -1241,41 +1241,41 @@ struct CleanupFailingConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for CleanupFailingConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
 
     async fn prepare_physical_statement(
         &mut self,
         _key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         Ok(Arc::new(CleanupFailingStatement {
             failure: self.failure,
             closed: AtomicBool::new(false),
         }))
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -1299,7 +1299,7 @@ struct CleanupFailingFactory {
 
 #[async_trait::async_trait]
 impl druid::core::PhysicalConnectionFactory for CleanupFailingFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(CleanupFailingConnection {
             failure: self.failure,
             discarded: Arc::clone(&self.discarded),
@@ -1309,7 +1309,7 @@ impl druid::core::PhysicalConnectionFactory for CleanupFailingFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }
@@ -1339,7 +1339,7 @@ async fn assert_cleanup_failure_discards_connection(failure: CleanupFailure) {
     let error = statement
         .close_with_connection(&mut connection)
         .expect_err("fatal cleanup error must be returned");
-    assert!(matches!(error, DruidError::SqlException(_)));
+    assert!(matches!(error, RdbcError::SqlException(_)));
     assert!(connection.is_discarded());
     assert!(discarded.load(Ordering::Acquire));
 
@@ -1394,7 +1394,7 @@ async fn assert_result_set_statement_handle_reports_cleanup_failure(failure: Cle
     let error = handle
         .close()
         .expect_err("physical cleanup failure must be returned");
-    assert!(matches!(error, DruidError::SqlException(_)));
+    assert!(matches!(error, RdbcError::SqlException(_)));
     assert!(!handle.is_closed());
 
     drop(result_set);
@@ -1448,7 +1448,7 @@ async fn assert_direct_prepared_method_failure_discards_connection(failure: Clea
         | CleanupFailure::GetGeneratedKeys
         | CleanupFailure::GetMoreResults => unreachable!("getter variants use a dedicated test"),
     };
-    assert!(matches!(error, DruidError::SqlException(_)));
+    assert!(matches!(error, RdbcError::SqlException(_)));
     assert!(connection.is_discarded());
     assert!(discarded.load(Ordering::Acquire));
     assert_eq!(statement.batch_size(), 0);
@@ -1520,7 +1520,7 @@ async fn assert_prepared_getter_failure_discards_connection(failure: CleanupFail
             unreachable!("cleanup variants use dedicated tests")
         }
     };
-    assert!(matches!(error, DruidError::SqlException(_)));
+    assert!(matches!(error, RdbcError::SqlException(_)));
     assert!(connection.is_discarded());
     assert!(discarded.load(Ordering::Acquire));
 
@@ -1845,7 +1845,12 @@ async fn prepared_batch_snapshots_parameters_and_executes_against_real_sqlite() 
         .execute_batch(&mut connection)
         .await
         .expect_err("唯一键冲突必须保留部分成功信息");
-    assert_eq!(partial_error.batch_update_counts(), Some([1].as_slice()));
+    assert_eq!(
+        partial_error
+            .batch_update_counts()
+            .map(|counts| counts.large()),
+        Some([1_i64].as_slice())
+    );
     assert!(partial_error.sql_exception().is_some());
     assert_eq!(statement.batch_size(), 0);
 
@@ -1858,7 +1863,7 @@ async fn prepared_batch_snapshots_parameters_and_executes_against_real_sqlite() 
     reject_filter.reject_next.store(true, Ordering::Release);
     assert_eq!(
         statement.execute_batch(&mut connection).await.unwrap_err(),
-        DruidError::Other("prepared batch rejected before physical execution".to_string())
+        RdbcError::Other("prepared batch rejected before physical execution".to_string())
     );
     assert_eq!(
         statement.batch_size(),
@@ -2369,7 +2374,7 @@ async fn prepared_bound_setters_execute_and_batch_against_real_sqlite() {
     gap.set_int(&mut connection, 2, 2).unwrap();
     assert!(matches!(
         gap.execute_update_bound(&mut connection).await.unwrap_err(),
-        DruidError::InvalidArgument(_)
+        RdbcError::InvalidArgument(_)
     ));
 
     let stream = RdbcInputStream::from_bytes(b"not-eagerly-read".to_vec());
@@ -2483,7 +2488,7 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
             Some(short_stream.clone()),
             3,
         ),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(short_stream.read_to_end().unwrap().is_empty());
     assert!(matches!(
@@ -2493,7 +2498,7 @@ async fn prepared_stream_reader_lob_url_rowid_and_null_bind_against_real_sqlite(
             Some(RdbcInputStream::from_bytes(vec![1])),
             -1,
         ),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     invalid.close_with_connection(&mut connection).unwrap();
 

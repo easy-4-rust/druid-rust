@@ -11,7 +11,7 @@
 
 use druid::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
-    ExecContext, ExecOperation, ExecResult, PhysicalResultSet, ResultSetFilter,
+    ExecContext, ExecOperation, ExecResult, PhysicalResultSet, RdbcError, ResultSetFilter,
     ResultSetFilterChain, ResultSetFilterContext, Value,
 };
 use druid::stats::{StatFilter, StatsCollector};
@@ -65,13 +65,13 @@ fn make_batch_context<'a>(
 struct EmptyResultSet;
 
 impl PhysicalResultSet for EmptyResultSet {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn is_closed(&self) -> bool {
         false
     }
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 }

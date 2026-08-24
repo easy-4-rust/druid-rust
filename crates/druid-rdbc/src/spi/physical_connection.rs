@@ -1,6 +1,7 @@
 //! druid-rust 内部物理连接 SPI。
 
-use crate::compat::{DruidError, SqlWarning};
+use crate::compat::SqlWarning;
+use crate::error::RdbcError;
 use crate::resource::{RdbcBlob, RdbcClob, RdbcNClob};
 use crate::spi::{
     ExecResult, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -26,14 +27,14 @@ pub trait PhysicalConnection: Any + Send {
     async fn create_physical_statement(
         &mut self,
         options: PhysicalStatementOptions,
-    ) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalStatement>, RdbcError> {
         Ok(Arc::new(SqlTextStatement::new(options)))
     }
 
     /// 执行更新类 SQL。
     ///
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回执行结果。
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError>;
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError>;
 
     /// 执行 RDBC `Statement#execute(...)` 并返回有序结果。
     ///
@@ -44,8 +45,8 @@ pub trait PhysicalConnection: Any + Send {
         _sql: &str,
         _params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "statement_execute",
         })
     }
@@ -58,7 +59,7 @@ pub trait PhysicalConnection: Any + Send {
     async fn exec_batch(
         &mut self,
         batch: Vec<(String, Vec<Value>)>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let mut update_counts = Vec::with_capacity(batch.len());
         for (sql, params) in batch {
             match self.exec(&sql, params).await {
@@ -66,8 +67,8 @@ pub trait PhysicalConnection: Any + Send {
                     update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
                 }
                 Err(error) => {
-                    return Err(DruidError::BatchUpdateException {
-                        update_counts,
+                    return Err(RdbcError::BatchUpdateException {
+                        update_counts: update_counts.into(),
                         cause: Box::new(error),
                     });
                 }
@@ -79,7 +80,7 @@ pub trait PhysicalConnection: Any + Send {
     /// 执行查询类 SQL。
     ///
     /// 参数 `sql` 为 SQL 文本，`params` 为绑定参数；返回结果行。
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError>;
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError>;
 
     /// 执行查询并返回物理 `ResultSet` 对象。
     ///
@@ -90,7 +91,7 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let rows = self.fetch(sql, params).await?;
         Ok(Arc::new(RowSetResultSet::new(rows)))
     }
@@ -102,8 +103,8 @@ pub trait PhysicalConnection: Any + Send {
     async fn prepare_physical_statement(
         &mut self,
         _key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepare_physical_statement",
         })
     }
@@ -114,8 +115,8 @@ pub trait PhysicalConnection: Any + Send {
     async fn prepare_physical_call(
         &mut self,
         _key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepare_physical_call",
         })
     }
@@ -129,9 +130,9 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.exec(statement.sql(), params).await
     }
@@ -145,7 +146,7 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let params = parameters
             .iter()
             .map(PreparedInputParameter::scalar_value)
@@ -163,9 +164,9 @@ pub trait PhysicalConnection: Any + Send {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.execute(statement.sql(), params, generated_keys).await
     }
@@ -176,7 +177,7 @@ pub trait PhysicalConnection: Any + Send {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let params = parameters
             .iter()
             .map(PreparedInputParameter::scalar_value)
@@ -194,9 +195,9 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<Value>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
 
         let mut update_counts = Vec::with_capacity(parameter_sets.len());
@@ -206,8 +207,8 @@ pub trait PhysicalConnection: Any + Send {
                     update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
                 }
                 Err(error) => {
-                    return Err(DruidError::BatchUpdateException {
-                        update_counts,
+                    return Err(RdbcError::BatchUpdateException {
+                        update_counts: update_counts.into(),
                         cause: Box::new(error),
                     });
                 }
@@ -221,7 +222,7 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let parameter_sets = parameter_sets
             .iter()
             .map(|parameters| {
@@ -239,9 +240,9 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.fetch(statement.sql(), params).await
     }
@@ -251,7 +252,7 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let params = parameters
             .iter()
             .map(PreparedInputParameter::scalar_value)
@@ -264,7 +265,7 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let rows = self.fetch_prepared(statement, params).await?;
         Ok(Arc::new(RowSetResultSet::new(rows)))
     }
@@ -274,7 +275,7 @@ pub trait PhysicalConnection: Any + Send {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let params = parameters
             .iter()
             .map(PreparedInputParameter::scalar_value)
@@ -286,43 +287,43 @@ pub trait PhysicalConnection: Any + Send {
     async fn close_prepared_statement(
         &mut self,
         statement: Arc<dyn PhysicalPreparedStatement>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         statement.close()
     }
 
     /// 开始事务。
-    async fn begin(&mut self) -> Result<(), DruidError>;
+    async fn begin(&mut self) -> Result<(), RdbcError>;
 
     /// 提交事务。
-    async fn commit(&mut self) -> Result<(), DruidError>;
+    async fn commit(&mut self) -> Result<(), RdbcError>;
 
     /// 回滚事务。
-    async fn rollback(&mut self) -> Result<(), DruidError>;
+    async fn rollback(&mut self) -> Result<(), RdbcError>;
 
     /// 回滚到指定保存点。
-    async fn rollback_to(&mut self, _savepoint: &Savepoint) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn rollback_to(&mut self, _savepoint: &Savepoint) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "rollback_to",
         })
     }
 
     /// 创建匿名保存点。
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_savepoint",
         })
     }
 
     /// 创建命名保存点。
-    async fn set_savepoint_named(&mut self, _name: &str) -> Result<Savepoint, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_savepoint_named(&mut self, _name: &str) -> Result<Savepoint, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_savepoint_named",
         })
     }
 
     /// 释放指定保存点。
-    async fn release_savepoint(&mut self, _savepoint: &Savepoint) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn release_savepoint(&mut self, _savepoint: &Savepoint) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "release_savepoint",
         })
     }
@@ -331,8 +332,8 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#createBlob()`。默认实现明确报告驱动能力缺失；
     /// Adapter 不得用内存 `Vec<u8>` 冒充数据库 LOB。
-    async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_create_blob",
         })
     }
@@ -341,8 +342,8 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#createClob()`。返回 raw 句柄，由 Druid 连接
     /// `FilterChain` 在池化边界包装为 `ClobProxyImpl`。
-    async fn create_clob(&mut self) -> Result<RdbcClob, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn create_clob(&mut self) -> Result<RdbcClob, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_create_clob",
         })
     }
@@ -351,22 +352,22 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#createNClob()`。`NClob` 必须保持独立类型身份，
     /// 不能降级成普通 Clob。
-    async fn create_n_clob(&mut self) -> Result<RdbcNClob, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn create_n_clob(&mut self) -> Result<RdbcNClob, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_create_n_clob",
         })
     }
 
     /// 强制中止物理连接。
-    async fn abort(&mut self) -> Result<(), DruidError> {
+    async fn abort(&mut self) -> Result<(), RdbcError> {
         self.close().await
     }
 
     /// 验证物理连接是否存活。
-    async fn ping(&mut self) -> Result<(), DruidError>;
+    async fn ping(&mut self) -> Result<(), RdbcError>;
 
     /// 关闭物理连接。
-    async fn close(&mut self) -> Result<(), DruidError>;
+    async fn close(&mut self) -> Result<(), RdbcError>;
 
     /// 返回物理连接是否已关闭。
     fn is_closed(&self) -> bool {
@@ -383,8 +384,8 @@ pub trait PhysicalConnection: Any + Send {
     /// 对应 Java：`Connection#getMetaData()`。返回对象的生命周期受当前可变
     /// 连接借用约束，不会复制连接或创建嵌套池。Adapter 必须返回真实实现；
     /// 未支持时保持明确 capability error。
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_get_meta_data",
         })
     }
@@ -395,8 +396,8 @@ pub trait PhysicalConnection: Any + Send {
     }
 
     /// 设置自动提交状态。
-    async fn set_auto_commit(&mut self, _auto_commit: bool) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_auto_commit(&mut self, _auto_commit: bool) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_auto_commit",
         })
     }
@@ -407,8 +408,8 @@ pub trait PhysicalConnection: Any + Send {
     }
 
     /// 设置只读状态。
-    async fn set_read_only(&mut self, _read_only: bool) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_read_only(&mut self, _read_only: bool) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_read_only",
         })
     }
@@ -419,8 +420,8 @@ pub trait PhysicalConnection: Any + Send {
     }
 
     /// 设置事务隔离级别。
-    async fn set_transaction_isolation(&mut self, _level: u8) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_transaction_isolation(&mut self, _level: u8) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_transaction_isolation",
         })
     }
@@ -431,8 +432,8 @@ pub trait PhysicalConnection: Any + Send {
     }
 
     /// 设置 `ResultSet` 保持性。
-    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_holdability",
         })
     }
@@ -441,15 +442,15 @@ pub trait PhysicalConnection: Any + Send {
     ///
     /// 对应 Java：`Connection#getWarnings()`。不支持的 Adapter 必须明确返回
     /// unsupported，不能用 `None` 冒充驱动没有警告。
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_get_warnings",
         })
     }
 
     /// 清理连接上的 `SQLWarning`。
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "clear_warnings",
         })
     }
@@ -471,8 +472,8 @@ pub trait PhysicalConnection: Any + Send {
     }
 
     /// 设置 catalog。
-    async fn set_catalog(&mut self, _catalog: &str) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_catalog(&mut self, _catalog: &str) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_catalog",
         })
     }
@@ -483,8 +484,8 @@ pub trait PhysicalConnection: Any + Send {
     }
 
     /// 设置 schema。
-    async fn set_schema(&mut self, _schema: &str) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_schema(&mut self, _schema: &str) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_schema",
         })
     }

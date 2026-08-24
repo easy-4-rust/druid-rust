@@ -4,7 +4,8 @@
 //! 批次与关闭生命周期；SQL 的实际执行仍由创建它的 `PhysicalConnection`
 //! 完成，避免 Adapter 再持有第二个连接或连接池租约。
 
-use crate::compat::{DruidError, SqlWarning};
+use crate::compat::SqlWarning;
+use crate::error::RdbcError;
 use crate::spi::ExecResult;
 use crate::types::Row;
 use std::any::Any;
@@ -83,7 +84,7 @@ pub trait PhysicalStatement: Any + Send + Sync {
     fn as_any(&self) -> &dyn Any;
 
     /// 关闭物理语句。
-    fn close(&self) -> Result<(), DruidError>;
+    fn close(&self) -> Result<(), RdbcError>;
 
     /// 返回物理语句是否关闭。
     fn is_closed(&self) -> bool;
@@ -92,84 +93,84 @@ pub trait PhysicalStatement: Any + Send + Sync {
     fn options(&self) -> PhysicalStatementOptions;
 
     /// 返回最大字段字节数。
-    fn max_field_size(&self) -> Result<i32, DruidError>;
+    fn max_field_size(&self) -> Result<i32, RdbcError>;
 
     /// 设置最大字段字节数。
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError>;
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError>;
 
     /// 返回最大结果行数。
-    fn max_rows(&self) -> Result<i32, DruidError>;
+    fn max_rows(&self) -> Result<i32, RdbcError>;
 
     /// 设置最大结果行数。
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError>;
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError>;
 
     /// 设置 RDBC escape 处理开关。
-    fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError>;
+    fn set_escape_processing(&self, enabled: bool) -> Result<(), RdbcError>;
 
     /// 返回查询超时秒数。
-    fn query_timeout(&self) -> Result<i32, DruidError>;
+    fn query_timeout(&self) -> Result<i32, RdbcError>;
 
     /// 设置查询超时秒数。
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError>;
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError>;
 
     /// 取消当前执行。
-    fn cancel(&self) -> Result<(), DruidError>;
+    fn cancel(&self) -> Result<(), RdbcError>;
 
     /// 返回语句警告链。
     ///
     /// 对应 Java：`Statement#getWarnings()`。
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "statement_get_warnings",
         })
     }
 
     /// 清除警告。
-    fn clear_warnings(&self) -> Result<(), DruidError>;
+    fn clear_warnings(&self) -> Result<(), RdbcError>;
 
     /// 设置游标名称。
-    fn set_cursor_name(&self, name: &str) -> Result<(), DruidError>;
+    fn set_cursor_name(&self, name: &str) -> Result<(), RdbcError>;
 
     /// 设置抓取方向。
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError>;
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError>;
 
     /// 返回抓取方向。
-    fn fetch_direction(&self) -> Result<i32, DruidError>;
+    fn fetch_direction(&self) -> Result<i32, RdbcError>;
 
     /// 设置抓取行数。
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError>;
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError>;
 
     /// 返回抓取行数。
-    fn fetch_size(&self) -> Result<i32, DruidError>;
+    fn fetch_size(&self) -> Result<i32, RdbcError>;
 
     /// 添加一条批处理 SQL。
-    fn add_batch(&self, sql: &str) -> Result<(), DruidError>;
+    fn add_batch(&self, sql: &str) -> Result<(), RdbcError>;
 
     /// 清空批处理 SQL。
-    fn clear_batch(&self) -> Result<(), DruidError>;
+    fn clear_batch(&self) -> Result<(), RdbcError>;
 
     /// 返回当前批处理快照。
-    fn batch(&self) -> Result<Vec<String>, DruidError>;
+    fn batch(&self) -> Result<Vec<String>, RdbcError>;
 
     /// 访问当前 `ResultSet` 前执行驱动 getter。
     ///
     /// 对应 Java：`Statement#getResultSet()`。把 getter 保留在物理 SPI，确保
     /// 驱动可在该时点报告错误并进入池化连接 `ExceptionSorter`。
-    fn get_result_set(&self) -> Result<(), DruidError> {
+    fn get_result_set(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
     /// 访问当前更新计数前执行驱动 getter。
     ///
     /// 对应 Java：`Statement#getUpdateCount()`。
-    fn get_update_count(&self) -> Result<(), DruidError> {
+    fn get_update_count(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
     /// 访问生成键 `ResultSet` 前执行驱动 getter。
     ///
     /// 对应 Java：`Statement#getGeneratedKeys()`。
-    fn get_generated_keys(&self) -> Result<(), DruidError> {
+    fn get_generated_keys(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -177,9 +178,9 @@ pub trait PhysicalStatement: Any + Send + Sync {
     ///
     /// 对应 Java：`Statement#getMoreResults()` 与 `getMoreResults(int)`。默认
     /// 文本 Statement 没有额外驱动状态，但仍精确校验 RDBC current 常量。
-    fn get_more_results(&self, current: Option<i32>) -> Result<(), DruidError> {
+    fn get_more_results(&self, current: Option<i32>) -> Result<(), RdbcError> {
         if current.is_some_and(|value| !matches!(value, 1..=3)) {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "current must be CLOSE_CURRENT_RESULT(1), KEEP_CURRENT_RESULT(2), or CLOSE_ALL_RESULTS(3)"
                     .to_string(),
             ))
@@ -189,7 +190,7 @@ pub trait PhysicalStatement: Any + Send + Sync {
     }
 
     /// 设置 poolable。与 Java Druid 一致，仅 `true` 被接受，但对象仍不池化。
-    fn set_poolable(&self, poolable: bool) -> Result<(), DruidError>;
+    fn set_poolable(&self, poolable: bool) -> Result<(), RdbcError>;
 
     /// Java Druid 的普通 Statement 始终返回 `false`。
     fn is_poolable(&self) -> bool {
@@ -197,10 +198,10 @@ pub trait PhysicalStatement: Any + Send + Sync {
     }
 
     /// 设置完成后自动关闭。
-    fn close_on_completion(&self) -> Result<(), DruidError>;
+    fn close_on_completion(&self) -> Result<(), RdbcError>;
 
     /// 返回完成后自动关闭状态。
-    fn is_close_on_completion(&self) -> Result<bool, DruidError>;
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError>;
 }
 
 #[derive(Debug)]
@@ -252,13 +253,13 @@ impl SqlTextStatement {
     fn with_open<T>(
         &self,
         operation: impl FnOnce(&mut SqlTextStatementState) -> T,
-    ) -> Result<T, DruidError> {
+    ) -> Result<T, RdbcError> {
         let mut state = self
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         if state.closed {
-            return Err(DruidError::Other("statement is closed".to_string()));
+            return Err(RdbcError::Other("statement is closed".to_string()));
         }
         Ok(operation(&mut state))
     }
@@ -269,7 +270,7 @@ impl PhysicalStatement for SqlTextStatement {
         self
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -288,113 +289,113 @@ impl PhysicalStatement for SqlTextStatement {
         self.options
     }
 
-    fn max_field_size(&self) -> Result<i32, DruidError> {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
         self.with_open(|state| state.max_field_size)
     }
 
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError> {
         if max < 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "max_field_size must not be negative".to_string(),
             ));
         }
         self.with_open(|state| state.max_field_size = max)
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         self.with_open(|state| state.max_rows)
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         if max < 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "max_rows must not be negative".to_string(),
             ));
         }
         self.with_open(|state| state.max_rows = max)
     }
 
-    fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError> {
+    fn set_escape_processing(&self, enabled: bool) -> Result<(), RdbcError> {
         self.with_open(|state| state.escape_processing = enabled)
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.with_open(|state| state.query_timeout)
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         if seconds < 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "query_timeout must not be negative".to_string(),
             ));
         }
         self.with_open(|state| state.query_timeout = seconds)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         self.with_open(|_| ())
     }
 
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
         self.with_open(|state| state.warnings.clone())
     }
 
-    fn clear_warnings(&self) -> Result<(), DruidError> {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
         self.with_open(|state| state.warnings = None)
     }
 
-    fn set_cursor_name(&self, name: &str) -> Result<(), DruidError> {
+    fn set_cursor_name(&self, name: &str) -> Result<(), RdbcError> {
         self.with_open(|state| state.cursor_name = Some(name.to_string()))
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         self.with_open(|state| state.fetch_direction = direction)
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         self.with_open(|state| state.fetch_direction)
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         if rows < 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "fetch_size must not be negative".to_string(),
             ));
         }
         self.with_open(|state| state.fetch_size = rows)
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         self.with_open(|state| state.fetch_size)
     }
 
-    fn add_batch(&self, sql: &str) -> Result<(), DruidError> {
+    fn add_batch(&self, sql: &str) -> Result<(), RdbcError> {
         self.with_open(|state| state.batch.push(sql.to_string()))
     }
 
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         self.with_open(|state| state.batch.clear())
     }
 
-    fn batch(&self) -> Result<Vec<String>, DruidError> {
+    fn batch(&self) -> Result<Vec<String>, RdbcError> {
         self.with_open(|state| state.batch.clone())
     }
 
-    fn set_poolable(&self, poolable: bool) -> Result<(), DruidError> {
+    fn set_poolable(&self, poolable: bool) -> Result<(), RdbcError> {
         if poolable {
             self.with_open(|_| ())
         } else {
-            Err(DruidError::UnsupportedOperation {
+            Err(RdbcError::UnsupportedOperation {
                 operation: "statement_set_poolable_false",
             })
         }
     }
 
-    fn close_on_completion(&self) -> Result<(), DruidError> {
+    fn close_on_completion(&self) -> Result<(), RdbcError> {
         self.with_open(|state| state.close_on_completion = true)
     }
 
-    fn is_close_on_completion(&self) -> Result<bool, DruidError> {
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
         self.with_open(|state| state.close_on_completion)
     }
 }

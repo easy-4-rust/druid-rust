@@ -5,7 +5,8 @@
 //! `connection_close_worker.rs`, and spi/ modules.
 
 use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, SqlException, Value,
+    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, RdbcError, Row,
+    SqlException, Value,
 };
 use druid::pool::{DruidDataSourceFactory, DruidPool, DruidPoolBuilder};
 use druid::spi::{
@@ -43,25 +44,25 @@ struct FaultConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for FaultConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.closed = true;
             self.close_count.fetch_add(1, Ordering::Relaxed);
@@ -99,14 +100,14 @@ impl FailingFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for FailingFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.fail_count.fetch_add(1, Ordering::Relaxed);
-        Err(DruidError::Other(self.error_message.clone()))
+        Err(RdbcError::Other(self.error_message.clone()))
     }
     async fn validate(
         &self,
         _connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -127,7 +128,7 @@ impl SuccessFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for SuccessFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.create_count.fetch_add(1, Ordering::Relaxed);
         Ok(Box::new(FaultConnection {
             closed: false,
@@ -138,7 +139,7 @@ impl PhysicalConnectionFactory for SuccessFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }
@@ -265,7 +266,7 @@ async fn on_fatal_error_detected_by_exception_sorter() {
 
     // Trigger fatal error on first connection.
     let mut conn1 = pool.get().await.unwrap();
-    let fatal = DruidError::SqlException(Box::new(
+    let fatal = RdbcError::SqlException(Box::new(
         SqlException::driver(1042, "fatal connection error".to_owned())
             .with_class_name("com.alibaba.druid.mock.MockConnectionClosedException"),
     ));
@@ -273,7 +274,7 @@ async fn on_fatal_error_detected_by_exception_sorter() {
 
     // Trigger fatal error on second connection to exceed on_fatal_error_max_active=1.
     let mut conn2 = pool.get().await.unwrap();
-    let fatal2 = DruidError::SqlException(Box::new(
+    let fatal2 = RdbcError::SqlException(Box::new(
         SqlException::driver(1042, "fatal connection error 2".to_owned())
             .with_class_name("com.alibaba.druid.mock.MockConnectionClosedException"),
     ));
@@ -329,10 +330,10 @@ struct FailThenSucceedFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for FailThenSucceedFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let attempt = self.attempt.fetch_add(1, Ordering::Relaxed) + 1;
         if attempt <= self.fail_until {
-            return Err(DruidError::Other(format!("fail attempt {attempt}")));
+            return Err(RdbcError::Other(format!("fail attempt {attempt}")));
         }
         Ok(Box::new(FaultConnection {
             closed: false,
@@ -343,7 +344,7 @@ impl PhysicalConnectionFactory for FailThenSucceedFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }
@@ -1220,7 +1221,7 @@ impl RdbcResourceOwner for MockOwner {
         &self,
         _resource_id: &RdbcResourceId,
         _kind: RdbcResourceKind,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.released.store(true, Ordering::Relaxed);
         Ok(())
     }
@@ -1228,7 +1229,7 @@ impl RdbcResourceOwner for MockOwner {
         &self,
         _resource_id: &RdbcResourceId,
         _kind: RdbcResourceKind,
-        _error: &DruidError,
+        _error: &RdbcError,
     ) {
         self.failed.store(true, Ordering::Relaxed);
     }
@@ -1262,7 +1263,7 @@ impl RdbcResourceAccess for MockAccess {
     fn capabilities(&self) -> RdbcResourceCapabilities {
         self.capabilities
     }
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         self.free_called.store(true, Ordering::Relaxed);
         Ok(())
     }
@@ -1334,7 +1335,7 @@ async fn spi_resource_context_observe_notifies_owner_on_error() {
         RdbcResourceCapabilities::blob(),
         Arc::clone(&owner) as Arc<dyn RdbcResourceOwner>,
     );
-    let result: Result<(), DruidError> = Err(DruidError::Other("test error".to_owned()));
+    let result: Result<(), RdbcError> = Err(RdbcError::Other("test error".to_owned()));
     let _ = ctx.observe(result);
     assert!(owner.failed.load(Ordering::Relaxed));
 }
@@ -1448,13 +1449,13 @@ impl RdbcResourceAccess for StubArrayAccess {
 
 #[async_trait::async_trait]
 impl RdbcArrayAccess for StubArrayAccess {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         Ok("VARCHAR".to_owned())
     }
-    async fn base_type(&self) -> Result<i32, DruidError> {
+    async fn base_type(&self) -> Result<i32, RdbcError> {
         Ok(12)
     }
-    async fn values(&self) -> Result<Vec<druid::core::RdbcObject>, DruidError> {
+    async fn values(&self) -> Result<Vec<druid::core::RdbcObject>, RdbcError> {
         Ok(Vec::new())
     }
 }
@@ -1476,10 +1477,10 @@ impl RdbcResourceAccess for StubBlobAccess {
 
 #[async_trait::async_trait]
 impl RdbcBlobAccess for StubBlobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         Ok(0)
     }
-    async fn get_bytes(&self, _position: i64, _length: i32) -> Result<Vec<u8>, DruidError> {
+    async fn get_bytes(&self, _position: i64, _length: i32) -> Result<Vec<u8>, RdbcError> {
         Ok(Vec::new())
     }
 }
@@ -1501,14 +1502,14 @@ impl RdbcResourceAccess for StubClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcClobAccess for StubClobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         Ok(0)
     }
     async fn get_sub_string(
         &self,
         _position: i64,
         _length: i32,
-    ) -> Result<druid::core::RdbcString, DruidError> {
+    ) -> Result<druid::core::RdbcString, RdbcError> {
         Ok("".into())
     }
 }
@@ -1530,14 +1531,14 @@ impl RdbcResourceAccess for StubNClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcClobAccess for StubNClobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         Ok(0)
     }
     async fn get_sub_string(
         &self,
         _position: i64,
         _length: i32,
-    ) -> Result<druid::core::RdbcString, DruidError> {
+    ) -> Result<druid::core::RdbcString, RdbcError> {
         Ok("".into())
     }
 }
@@ -1561,10 +1562,10 @@ impl RdbcResourceAccess for StubRefAccess {
 
 #[async_trait::async_trait]
 impl RdbcRefAccess for StubRefAccess {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         Ok("REF".to_owned())
     }
-    async fn object(&self) -> Result<druid::core::RdbcObject, DruidError> {
+    async fn object(&self) -> Result<druid::core::RdbcObject, RdbcError> {
         Ok(druid::core::RdbcObject::Scalar(druid::core::Value::Null))
     }
 }
@@ -1586,7 +1587,7 @@ impl RdbcResourceAccess for StubSqlXmlAccess {
 
 #[async_trait::async_trait]
 impl RdbcSqlXmlAccess for StubSqlXmlAccess {
-    async fn string(&self) -> Result<druid::core::RdbcString, DruidError> {
+    async fn string(&self) -> Result<druid::core::RdbcString, RdbcError> {
         Ok("<root/>".into())
     }
 }

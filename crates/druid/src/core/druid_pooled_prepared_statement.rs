@@ -8,12 +8,12 @@
 use super::druid_pooled_statement::DruidPooledStatementInner;
 use super::prepared_statement_physical_statement::PreparedStatementPhysicalStatement;
 use super::{
-    DruidError, DruidPooledConnection, DruidPooledResultSet, DruidPooledStatement, ExecResult,
-    FilterChain, PhysicalResultSet, PhysicalStatement, PhysicalStatementOptions,
-    PreparedInputParameter, PreparedStatementCacheStats, PreparedStatementHolder,
-    PreparedStatementKey, PreparedStatementPool, RdbcArray, RdbcBlob, RdbcCalendar,
-    RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject,
-    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcUrl, Row, SqlWarning,
+    DruidPooledConnection, DruidPooledResultSet, DruidPooledStatement, ExecResult, FilterChain,
+    PhysicalResultSet, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
+    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementKey,
+    PreparedStatementPool, RdbcArray, RdbcBlob, RdbcCalendar, RdbcCalendarArgument,
+    RdbcCharacterLength, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader,
+    RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcUrl, Row, SqlWarning,
     StatementExecuteType, Unwrapped, Value, Wrapper,
 };
 use crate::stats::StatsCollector;
@@ -54,7 +54,7 @@ macro_rules! prepared_value_setter {
             connection: &mut DruidPooledConnection,
             parameter_index: usize,
             value: $value_type,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.set_parameter(
                 connection,
                 parameter_index,
@@ -90,7 +90,7 @@ impl DruidPooledPreparedStatementShared {
         state.exception_count = state.exception_count.saturating_add(1);
     }
 
-    fn restore_statement_defaults(&self) -> Result<(), DruidError> {
+    fn restore_statement_defaults(&self) -> Result<(), RdbcError> {
         if !self.pooled || !self.lease_active.load(Ordering::Acquire) {
             return Ok(());
         }
@@ -251,7 +251,7 @@ impl DruidPooledPreparedStatementHandle {
     }
 
     /// 通过 `ResultSet` 返回的句柄关闭原逻辑 `PreparedStatement`。
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         if self.shared.is_closed() {
             return Ok(());
         }
@@ -485,7 +485,7 @@ impl DruidPooledPreparedStatement {
     }
 
     /// 返回 `ResultSet` 类型。对应 Java：`Statement#getResultSetType()`。
-    pub fn result_set_type(&self, connection: &DruidPooledConnection) -> Result<i32, DruidError> {
+    pub fn result_set_type(&self, connection: &DruidPooledConnection) -> Result<i32, RdbcError> {
         self.statement_base.result_set_type(connection)
     }
 
@@ -493,7 +493,7 @@ impl DruidPooledPreparedStatement {
     pub fn result_set_concurrency(
         &self,
         connection: &DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.statement_base.result_set_concurrency(connection)
     }
 
@@ -501,7 +501,7 @@ impl DruidPooledPreparedStatement {
     pub fn result_set_holdability(
         &self,
         connection: &DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.statement_base.result_set_holdability(connection)
     }
 
@@ -509,7 +509,7 @@ impl DruidPooledPreparedStatement {
     pub fn max_field_size(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.statement_base.max_field_size(connection)
     }
 
@@ -518,7 +518,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         max: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.shared
             .state
             .lock()
@@ -528,7 +528,7 @@ impl DruidPooledPreparedStatement {
     }
 
     /// 返回最大结果行数。对应 Java：`Statement#getMaxRows()`。
-    pub fn max_rows(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, DruidError> {
+    pub fn max_rows(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, RdbcError> {
         self.statement_base.max_rows(connection)
     }
 
@@ -537,7 +537,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         max: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.shared
             .state
             .lock()
@@ -551,7 +551,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         enabled: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.statement_base
             .set_escape_processing(connection, enabled)
     }
@@ -560,7 +560,7 @@ impl DruidPooledPreparedStatement {
     pub fn query_timeout(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.statement_base.query_timeout(connection)
     }
 
@@ -569,7 +569,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         seconds: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.shared
             .state
             .lock()
@@ -579,7 +579,7 @@ impl DruidPooledPreparedStatement {
     }
 
     /// 取消当前执行。对应 Java：`Statement#cancel()`。
-    pub fn cancel(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
+    pub fn cancel(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.statement_base.cancel(connection)
     }
 
@@ -588,7 +588,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         name: &str,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.statement_base.set_cursor_name(connection, name)
     }
 
@@ -597,7 +597,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         direction: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.shared
             .state
             .lock()
@@ -611,7 +611,7 @@ impl DruidPooledPreparedStatement {
     pub fn fetch_direction(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.statement_base.fetch_direction(connection)
     }
 
@@ -620,7 +620,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         rows: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.shared
             .state
             .lock()
@@ -630,10 +630,7 @@ impl DruidPooledPreparedStatement {
     }
 
     /// 返回抓取行数。对应 Java：`Statement#getFetchSize()`。
-    pub fn fetch_size(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    pub fn fetch_size(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, RdbcError> {
         self.statement_base.fetch_size(connection)
     }
 
@@ -642,7 +639,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         poolable: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.statement_base.set_poolable(connection, poolable)
     }
 
@@ -655,7 +652,7 @@ impl DruidPooledPreparedStatement {
     pub fn close_on_completion(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.statement_base.close_on_completion(connection)
     }
 
@@ -663,7 +660,7 @@ impl DruidPooledPreparedStatement {
     pub fn is_close_on_completion(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.statement_base.is_close_on_completion(connection)
     }
 
@@ -728,7 +725,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         sql_type: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -743,7 +740,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         sql_type: i32,
         type_name: Option<String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -782,7 +779,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveDate>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_date_with_calendar_argument(
             connection,
             parameter_index,
@@ -798,7 +795,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<NaiveDate>,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_date_with_calendar_argument(
             connection,
             parameter_index,
@@ -813,7 +810,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveTime>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_time_with_calendar_argument(
             connection,
             parameter_index,
@@ -829,7 +826,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<NaiveTime>,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_time_with_calendar_argument(
             connection,
             parameter_index,
@@ -844,7 +841,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<NaiveDateTime>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_timestamp_with_calendar_argument(
             connection,
             parameter_index,
@@ -860,7 +857,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<NaiveDateTime>,
         calendar: Option<RdbcCalendar>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_timestamp_with_calendar_argument(
             connection,
             parameter_index,
@@ -875,7 +872,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         value: Option<RdbcObject>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -890,7 +887,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<RdbcObject>,
         target_sql_type: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -906,7 +903,7 @@ impl DruidPooledPreparedStatement {
         value: Option<RdbcObject>,
         target_sql_type: i32,
         scale_or_length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -924,7 +921,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
@@ -941,7 +938,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
@@ -958,7 +955,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
@@ -975,7 +972,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -989,7 +986,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
@@ -1006,7 +1003,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
@@ -1023,7 +1020,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_stream_parameter(
             connection,
             parameter_index,
@@ -1039,7 +1036,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_character_parameter(
             connection,
             parameter_index,
@@ -1056,7 +1053,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         reader: Option<RdbcReader>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_character_parameter(
             connection,
             parameter_index,
@@ -1073,7 +1070,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_character_parameter(
             connection,
             parameter_index,
@@ -1089,7 +1086,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_character_parameter(
             connection,
             parameter_index,
@@ -1106,7 +1103,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_character_parameter(
             connection,
             parameter_index,
@@ -1122,7 +1119,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1140,7 +1137,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         stream: Option<RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1157,7 +1154,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1175,7 +1172,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1192,7 +1189,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1210,7 +1207,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1237,16 +1234,15 @@ impl DruidPooledPreparedStatement {
     pub async fn warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<SqlWarning>, DruidError> {
+    ) -> Result<Option<SqlWarning>, RdbcError> {
         self.ensure_open_for(connection)?;
         let filter_chain = self.statement_base.inner.filter_chain.clone();
         let physical = self.shared.holder.statement().clone();
         let result = match filter_chain {
-            Some(filter_chain) => {
-                filter_chain
-                    .prepared_statement_warnings(physical.as_ref())
-                    .await
-            }
+            Some(filter_chain) => filter_chain
+                .prepared_statement_warnings(physical.as_ref())
+                .await
+                .map_err(RdbcError::from),
             None => physical.warnings(),
         };
         match connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql())) {
@@ -1264,16 +1260,15 @@ impl DruidPooledPreparedStatement {
     pub async fn clear_warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let filter_chain = self.statement_base.inner.filter_chain.clone();
         let physical = self.shared.holder.statement().clone();
         let result = match filter_chain {
-            Some(filter_chain) => {
-                filter_chain
-                    .prepared_statement_clear_warnings(physical.as_ref())
-                    .await
-            }
+            Some(filter_chain) => filter_chain
+                .prepared_statement_clear_warnings(physical.as_ref())
+                .await
+                .map_err(RdbcError::from),
             None => physical.clear_warnings(),
         };
         match connection.classify_result_with_sql(result, Some(self.shared.holder.key().sql())) {
@@ -1289,7 +1284,7 @@ impl DruidPooledPreparedStatement {
     pub async fn execute_update_bound(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let parameters = self.bound_parameters_or_record_error()?;
         self.exec_parameters(connection, parameters).await
     }
@@ -1298,7 +1293,7 @@ impl DruidPooledPreparedStatement {
     pub async fn execute_query_bound(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         let parameters = self.bound_parameters_or_record_error()?;
         self.fetch_parameters_result_set(connection, parameters)
             .await
@@ -1308,7 +1303,7 @@ impl DruidPooledPreparedStatement {
     pub async fn execute_bound(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         let parameters = self.bound_parameters_or_record_error()?;
         self.execute_parameters(connection, parameters).await
     }
@@ -1319,7 +1314,7 @@ impl DruidPooledPreparedStatement {
     pub async fn fetch_bound(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let parameters = self.bound_parameters_or_record_error()?;
         self.fetch_parameters(connection, parameters).await
     }
@@ -1328,7 +1323,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1352,7 +1347,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1386,7 +1381,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1416,7 +1411,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1451,7 +1446,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1476,7 +1471,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1514,7 +1509,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1539,7 +1534,7 @@ impl DruidPooledPreparedStatement {
     fn complete_physical_query_result_set(
         &self,
         physical: Arc<dyn PhysicalResultSet>,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.statement_base
             .complete_external_query_result_set(Arc::clone(&physical));
         self.statement_base
@@ -1557,7 +1552,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_external_execution(
             self.shared.holder.key().sql(),
@@ -1589,7 +1584,7 @@ impl DruidPooledPreparedStatement {
     pub fn result_set(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<DruidPooledResultSet>, DruidError> {
+    ) -> Result<Option<DruidPooledResultSet>, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_result_set();
         if let Err(error) =
@@ -1611,7 +1606,7 @@ impl DruidPooledPreparedStatement {
     pub fn update_count(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i64, DruidError> {
+    ) -> Result<i64, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_update_count();
         if let Err(error) =
@@ -1627,7 +1622,7 @@ impl DruidPooledPreparedStatement {
     pub fn generated_keys(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_generated_keys();
         if let Err(error) =
@@ -1647,7 +1642,7 @@ impl DruidPooledPreparedStatement {
     pub fn more_results(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.more_results_internal(connection, None)
     }
 
@@ -1656,7 +1651,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         current: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.more_results_internal(connection, Some(current))
     }
 
@@ -1669,7 +1664,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.shared.holder.statement().add_batch(&params);
         if let Err(error) =
@@ -1695,7 +1690,7 @@ impl DruidPooledPreparedStatement {
     pub fn add_bound_batch(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let params = self.bound_parameters_or_record_error()?;
         let result = self.shared.holder.statement().add_parameter_batch(&params);
@@ -1720,7 +1715,7 @@ impl DruidPooledPreparedStatement {
     pub fn clear_parameters(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.shared.holder.statement().clear_parameters();
         if let Err(error) =
@@ -1739,10 +1734,7 @@ impl DruidPooledPreparedStatement {
     }
 
     /// 清空 `PreparedStatement` 参数批次；关闭后与 Java `clearBatch()` 一样无操作。
-    pub fn clear_batch(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    pub fn clear_batch(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         if self.is_closed() {
             return Ok(());
         }
@@ -1772,7 +1764,7 @@ impl DruidPooledPreparedStatement {
     pub async fn execute_batch(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         self.ensure_open_for(connection)?;
         self.statement_base.begin_batch_execution();
         let execute_start = Instant::now();
@@ -1817,7 +1809,7 @@ impl DruidPooledPreparedStatement {
     }
 
     /// 关闭逻辑语句并按 Java 分支放回缓存或删除物理语句。
-    pub fn close(&mut self) -> Result<(), DruidError> {
+    pub fn close(&mut self) -> Result<(), RdbcError> {
         if self.is_closed() {
             return Ok(());
         }
@@ -1852,7 +1844,7 @@ impl DruidPooledPreparedStatement {
     pub fn close_with_connection(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if self.is_closed() {
             return Ok(());
         }
@@ -1883,9 +1875,9 @@ impl DruidPooledPreparedStatement {
         Ok(())
     }
 
-    pub(crate) fn ensure_open(&self) -> Result<(), DruidError> {
+    pub(crate) fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.is_closed() || !self.shared.lease_active.load(Ordering::Acquire) {
-            Err(DruidError::ConnectionDiscarded)
+            Err(RdbcError::ConnectionDiscarded)
         } else {
             Ok(())
         }
@@ -1905,7 +1897,7 @@ impl DruidPooledPreparedStatement {
         connection: &mut DruidPooledConnection,
         parameter_index: usize,
         parameter: PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self
             .shared
@@ -1920,7 +1912,7 @@ impl DruidPooledPreparedStatement {
         }
         let Some(index) = parameter_index.checked_sub(1) else {
             self.record_exception();
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "parameterIndex must be at least 1".to_string(),
             ));
         };
@@ -1942,7 +1934,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<NaiveDate>,
         calendar: RdbcCalendarArgument,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1956,7 +1948,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<NaiveTime>,
         calendar: RdbcCalendarArgument,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1970,7 +1962,7 @@ impl DruidPooledPreparedStatement {
         parameter_index: usize,
         value: Option<NaiveDateTime>,
         calendar: RdbcCalendarArgument,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_parameter(
             connection,
             parameter_index,
@@ -1985,7 +1977,7 @@ impl DruidPooledPreparedStatement {
         stream: Option<RdbcInputStream>,
         length: RdbcStreamLength,
         ascii: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = if ascii {
             PreparedInputParameter::AsciiStream { stream, length }
         } else {
@@ -2001,7 +1993,7 @@ impl DruidPooledPreparedStatement {
         reader: Option<RdbcReader>,
         length: RdbcCharacterLength,
         national: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = if national {
             PreparedInputParameter::NCharacterStream { reader, length }
         } else {
@@ -2010,7 +2002,7 @@ impl DruidPooledPreparedStatement {
         self.set_parameter(connection, parameter_index, parameter)
     }
 
-    fn bound_parameters_or_record_error(&self) -> Result<Vec<PreparedInputParameter>, DruidError> {
+    fn bound_parameters_or_record_error(&self) -> Result<Vec<PreparedInputParameter>, RdbcError> {
         let parameters = self
             .shared
             .state
@@ -2023,7 +2015,7 @@ impl DruidPooledPreparedStatement {
             .enumerate()
             .map(|(index, parameter)| {
                 parameter.ok_or_else(|| {
-                    DruidError::InvalidArgument(format!(
+                    RdbcError::InvalidArgument(format!(
                         "parameter {} has not been bound",
                         index + 1
                     ))
@@ -2036,12 +2028,12 @@ impl DruidPooledPreparedStatement {
         parameters
     }
 
-    fn ensure_open_for(&self, connection: &DruidPooledConnection) -> Result<(), DruidError> {
+    fn ensure_open_for(&self, connection: &DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open()?;
         if connection.is_same_open_lease(&self.shared.lease_active) {
             Ok(())
         } else {
-            Err(DruidError::ConnectionDiscarded)
+            Err(RdbcError::ConnectionDiscarded)
         }
     }
 
@@ -2049,7 +2041,7 @@ impl DruidPooledPreparedStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         current: Option<i32>,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter = self.shared.holder.statement().get_more_results(current);
         if let Err(error) =

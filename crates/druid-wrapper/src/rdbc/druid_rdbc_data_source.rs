@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use druid::core::DruidPooledConnection;
 use druid::pool::DruidDataSource;
 use druid::sql::{CommonDataSource, DataSource};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
 use druid_rdbc::spi::Wrapper;
 
@@ -56,8 +56,8 @@ impl DruidRdbcDataSource {
         &self.inner
     }
 
-    fn authorization_error() -> DruidError {
-        DruidError::SqlException(Box::new(
+    fn authorization_error() -> RdbcError {
+        RdbcError::SqlException(Box::new(
             SqlException::new(
                 0,
                 Some("28000".to_owned()),
@@ -83,15 +83,15 @@ impl CommonDataSource for DruidRdbcDataSource {
 
 #[async_trait]
 impl DataSource for DruidRdbcDataSource {
-    async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
-        self.inner.get_connection().await
+    async fn get_connection(&self) -> Result<DruidPooledConnection, RdbcError> {
+        self.inner.get_connection().await.map_err(RdbcError::from)
     }
 
     async fn get_connection_with_credentials(
         &self,
         username: &str,
         password: &str,
-    ) -> Result<DruidPooledConnection, DruidError> {
+    ) -> Result<DruidPooledConnection, RdbcError> {
         match &self.credentials {
             Some((expected_username, expected_password))
                 if expected_username == username && expected_password == password =>

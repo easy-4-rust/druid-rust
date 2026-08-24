@@ -1,4 +1,4 @@
-use crate::core::DruidError;
+use crate::core::RdbcError;
 use std::io::Write;
 use std::sync::Arc;
 
@@ -32,8 +32,8 @@ pub trait CommonDataSource: Send + Sync {
     /// source returns `UnsupportedOperation` instead of changing only a cosmetic value.
     ///
     /// Druid pool configuration is immutable after initialization.
-    fn set_login_timeout(&self, _seconds: u64) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_login_timeout(&self, _seconds: u64) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_login_timeout_after_build",
         })
     }
@@ -50,8 +50,8 @@ pub trait CommonDataSource: Send + Sync {
     ///
     /// Corresponds to Java: `CommonDataSource#setLogWriter`. Immutable implementations return
     /// `UnsupportedOperation` for runtime changes.
-    fn set_log_writer(&self, _writer: Option<RdbcLogWriter>) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_log_writer(&self, _writer: Option<RdbcLogWriter>) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_log_writer_after_build",
         })
     }

@@ -1,7 +1,7 @@
 //! `SQLx` 物理连接工厂。
 
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
 /// `SQLx` 物理连接工厂。
@@ -51,7 +51,7 @@ impl PhysicalConnectionFactory for SqlxConnectionFactory {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let connection = SqlxConnectionAdapter::connect(&self.url).await?;
         Ok(Box::new(connection))
     }
@@ -59,7 +59,7 @@ impl PhysicalConnectionFactory for SqlxConnectionFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

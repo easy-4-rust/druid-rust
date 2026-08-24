@@ -1,4 +1,4 @@
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlExceptionCause};
 use serde::Deserialize;
 
@@ -35,13 +35,13 @@ pub struct AgentError {
 impl AgentError {
     /// 转换为 Druid 统一 SQL 异常，保留 JDBC 分类字段。
     #[must_use]
-    pub fn into_druid_error(self) -> DruidError {
+    pub fn into_druid_error(self) -> RdbcError {
         let update_counts = self.update_counts.clone();
         let exception = self.into_sql_exception(true);
-        let cause = DruidError::SqlException(Box::new(exception));
+        let cause = RdbcError::SqlException(Box::new(exception));
         update_counts.map_or(cause.clone(), |update_counts| {
-            DruidError::BatchUpdateException {
-                update_counts,
+            RdbcError::BatchUpdateException {
+                update_counts: update_counts.into(),
                 cause: Box::new(cause),
             }
         })
@@ -89,7 +89,7 @@ impl AgentError {
 #[cfg(test)]
 mod tests {
     use super::AgentError;
-    use druid_rdbc::compat::DruidError;
+    use druid_rdbc::error::RdbcError;
     use druid_rdbc::error::SqlExceptionCause;
     use serde_json::json;
 
@@ -130,7 +130,7 @@ mod tests {
         }))
         .expect("the structured Agent error must deserialize");
 
-        let DruidError::SqlException(exception) = error.into_druid_error() else {
+        let RdbcError::SqlException(exception) = error.into_druid_error() else {
             panic!("expected SqlException");
         };
         assert!(exception.is_instance_of("java.sql.SQLTransientException"));

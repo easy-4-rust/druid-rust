@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use druid::core::{DruidError, PhysicalConnection, Pool};
+use druid::core::{PhysicalConnection, Pool, RdbcError};
 use druid::dynamic::{DataSourceGroup, RoundRobinBalancer, SqlHint};
 use druid::sql::DataSource;
 use druid_wrapper::driver::DruidDatabasePoolBuilder;
@@ -25,7 +25,7 @@ async fn catalog_builder_creates_canonical_druid_data_source() {
 
     assert!(matches!(
         wrapped.get_connection_with_credentials("druid", "wrong").await,
-        Err(DruidError::SqlException(exception))
+        Err(RdbcError::SqlException(exception))
             if exception.sql_state() == Some("28000")
                 && exception.class_name() == "java.sql.SQLInvalidAuthorizationSpecException"
     ));

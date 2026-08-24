@@ -43,7 +43,7 @@ impl DynamicDataSource {
         &self,
         hint: SqlHint,
     ) -> Result<DruidPooledConnection, DruidError> {
-        self.route(hint).get().await
+        self.route(hint).get().await.map_err(DruidError::from)
     }
 
     /// 从当前默认写节点取得连接。对应 Java: `DataSource#getConnection()`。

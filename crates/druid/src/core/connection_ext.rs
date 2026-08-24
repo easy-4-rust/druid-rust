@@ -1,6 +1,6 @@
 //! 物理连接扩展能力。
 
-use super::error::DruidError;
+use super::error::RdbcError;
 use super::meta_data::MetaData;
 use super::physical_connection::PhysicalConnection;
 use super::physical_prepared_statement::PhysicalPreparedStatement;
@@ -18,7 +18,7 @@ use std::time::Duration;
 #[async_trait::async_trait]
 pub trait ConnectionExt: PhysicalConnection {
     /// 创建普通 Statement 对象。
-    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
+    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, RdbcError> {
         self.create_physical_statement(PhysicalStatementOptions::default())
             .await
     }
@@ -27,7 +27,7 @@ pub trait ConnectionExt: PhysicalConnection {
     async fn prepare_statement(
         &mut self,
         sql: &str,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let key = PreparedStatementKey::new(
             Some(sql.to_string()),
             self.catalog().map(ToOwned::to_owned),
@@ -40,7 +40,7 @@ pub trait ConnectionExt: PhysicalConnection {
     async fn prepare_call(
         &mut self,
         sql: &str,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let key = PreparedStatementKey::new(
             Some(sql.to_string()),
             self.catalog().map(ToOwned::to_owned),
@@ -80,15 +80,15 @@ pub trait ConnectionExt: PhysicalConnection {
     }
 
     /// 设置结果集保持性。
-    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_holdability",
         })
     }
 
     /// 设置客户端属性。
-    async fn set_client_info(&mut self, _name: &str, _value: &str) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_client_info(&mut self, _name: &str, _value: &str) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_client_info",
         })
     }
@@ -99,23 +99,23 @@ pub trait ConnectionExt: PhysicalConnection {
     }
 
     /// 返回驱动警告链。
-    async fn get_warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn get_warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.warnings().await
     }
 
     /// 清除驱动警告。
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         PhysicalConnection::clear_warnings(self).await
     }
 
     /// 将 SQL 转换为驱动原生 SQL。
-    async fn native_sql(&self, sql: &str) -> Result<String, DruidError> {
+    async fn native_sql(&self, sql: &str) -> Result<String, RdbcError> {
         Ok(sql.to_string())
     }
 
     /// 设置网络超时。
-    async fn set_network_timeout(&mut self, _timeout: Duration) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_network_timeout(&mut self, _timeout: Duration) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_network_timeout",
         })
     }
@@ -131,8 +131,8 @@ pub trait ConnectionExt: PhysicalConnection {
     }
 
     /// 设置驱动类型映射。
-    async fn set_type_map(&mut self, _map: HashMap<String, String>) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_type_map(&mut self, _map: HashMap<String, String>) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_type_map",
         })
     }

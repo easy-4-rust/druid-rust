@@ -65,9 +65,7 @@ impl BatchUpdateException {
     pub fn update_counts(&self) -> Vec<i32> {
         self.update_counts
             .iter()
-            .map(|value| {
-                i32::try_from(*value).unwrap_or(if *value < 0 { i32::MIN } else { i32::MAX })
-            })
+            .map(|value| *value as i32)
             .collect()
     }
 

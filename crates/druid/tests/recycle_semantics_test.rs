@@ -16,7 +16,7 @@
 
 use druid::core::{
     DruidError, ExecResult, PhysicalConnection, PhysicalConnectionCapabilities,
-    PhysicalConnectionFactory, Row, ValidConnectionChecker, Value,
+    PhysicalConnectionFactory, RdbcError, Row, ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -57,11 +57,11 @@ struct TrackingConnection {
 }
 
 impl TrackingConnection {
-    fn operation(&self, operation: &'static str) -> Result<(), DruidError> {
+    fn operation(&self, operation: &'static str) -> Result<(), RdbcError> {
         let mut state = self.state.lock().expect("tracking state poisoned");
         state.events.push(operation);
         if state.fail_operation == Some(operation) {
-            Err(DruidError::DriverError(format!("{operation} failed")))
+            Err(RdbcError::DriverError(format!("{operation} failed")))
         } else {
             Ok(())
         }
@@ -70,15 +70,15 @@ impl TrackingConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for TrackingConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         self.operation("begin")?;
         self.state
             .lock()
@@ -87,20 +87,20 @@ impl PhysicalConnection for TrackingConnection {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         self.operation("commit")
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         // RDBC rollback 不改变 autoCommit，随后 holder.reset 再恢复默认值。
         self.operation("rollback")
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         self.operation("ping")
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         let mut state = self.state.lock().expect("tracking state poisoned");
         if !state.closed {
             state.events.push("close");
@@ -134,7 +134,7 @@ impl PhysicalConnection for TrackingConnection {
             .auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         self.operation("set_auto_commit")?;
         self.state
             .lock()
@@ -150,7 +150,7 @@ impl PhysicalConnection for TrackingConnection {
             .read_only
     }
 
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         self.operation("set_read_only")?;
         self.state
             .lock()
@@ -166,7 +166,7 @@ impl PhysicalConnection for TrackingConnection {
             .transaction_isolation
     }
 
-    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
+    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), RdbcError> {
         self.operation("set_transaction_isolation")?;
         self.state
             .lock()
@@ -182,7 +182,7 @@ impl PhysicalConnection for TrackingConnection {
             .holdability
     }
 
-    async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {
+    async fn set_holdability(&mut self, holdability: i32) -> Result<(), RdbcError> {
         self.operation("set_holdability")?;
         self.state
             .lock()
@@ -191,11 +191,11 @@ impl PhysicalConnection for TrackingConnection {
         Ok(())
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.operation("clear_warnings")
     }
 
-    async fn set_catalog(&mut self, catalog: &str) -> Result<(), DruidError> {
+    async fn set_catalog(&mut self, catalog: &str) -> Result<(), RdbcError> {
         self.operation("set_catalog")?;
         self.state.lock().expect("tracking state poisoned").catalog = Some(catalog.to_string());
         Ok(())
@@ -275,7 +275,7 @@ impl TrackingFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for TrackingFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.sequence.fetch_add(1, Ordering::Relaxed);
         let initial_state = self
             .initial_state
@@ -294,12 +294,12 @@ impl PhysicalConnectionFactory for TrackingFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.validation_count.fetch_add(1, Ordering::Relaxed);
         if self.validation_succeeds.load(Ordering::Relaxed) {
             connection.ping().await
         } else {
-            Err(DruidError::ValidationFailed(
+            Err(RdbcError::ValidationFailed(
                 "tracking validation failed".to_string(),
             ))
         }

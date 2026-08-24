@@ -1,8 +1,8 @@
 //! Java `FilterAdapter` 默认适配语义与真实 Toasty `SQLite` 验证。
 
 use druid::core::{
-    AfterFilter, BeforeFilter, DruidError, DruidPooledConnection, ExtendedFilter, FilterAdapter,
-    FilterChain, PhysicalConnectionFactory, Wrapper, WrapperExt,
+    AfterFilter, BeforeFilter, DruidPooledConnection, ExtendedFilter, FilterAdapter, FilterChain,
+    PhysicalConnectionFactory, RdbcError, Wrapper, WrapperExt,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::{type_name, TypeId};
@@ -92,7 +92,7 @@ async fn filter_adapter_passes_all_registered_views_through_real_toasty_sqlite()
     // 默认 ResultSet 委托也不能吞掉真实只读 RowSet 的 capability error。
     assert_eq!(
         result_set.update_n_string(&mut connection, 1, Some("更新".to_string())),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value",
         })
     );

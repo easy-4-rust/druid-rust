@@ -1,4 +1,4 @@
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcArray, RdbcArrayAccess, RdbcBlob, RdbcBlobAccess, RdbcClob, RdbcClobAccess, RdbcNClob,
     RdbcNClobAccess, RdbcRef, RdbcRefAccess, RdbcResourceAccess, RdbcResourceContext,
@@ -22,7 +22,7 @@ impl RdbcResourceFactory {
     pub fn array_with_context(
         context: Arc<RdbcResourceContext>,
         access: Arc<dyn RdbcArrayAccess>,
-    ) -> Result<RdbcArray, DruidError> {
+    ) -> Result<RdbcArray, RdbcError> {
         Self::validate_context(&context, RdbcResourceKind::Array, access.as_ref())?;
         Ok(RdbcArray::from_parts(access, context))
     }
@@ -38,7 +38,7 @@ impl RdbcResourceFactory {
     pub fn blob_with_context(
         context: Arc<RdbcResourceContext>,
         access: Arc<dyn RdbcBlobAccess>,
-    ) -> Result<RdbcBlob, DruidError> {
+    ) -> Result<RdbcBlob, RdbcError> {
         Self::validate_context(&context, RdbcResourceKind::Blob, access.as_ref())?;
         Ok(RdbcBlob::from_parts(access, context))
     }
@@ -54,7 +54,7 @@ impl RdbcResourceFactory {
     pub fn clob_with_context(
         context: Arc<RdbcResourceContext>,
         access: Arc<dyn RdbcClobAccess>,
-    ) -> Result<RdbcClob, DruidError> {
+    ) -> Result<RdbcClob, RdbcError> {
         Self::validate_context(&context, RdbcResourceKind::Clob, access.as_ref())?;
         Ok(RdbcClob::from_parts(access, context))
     }
@@ -70,7 +70,7 @@ impl RdbcResourceFactory {
     pub fn n_clob_with_context(
         context: Arc<RdbcResourceContext>,
         access: Arc<dyn RdbcNClobAccess>,
-    ) -> Result<RdbcNClob, DruidError> {
+    ) -> Result<RdbcNClob, RdbcError> {
         Self::validate_context(&context, RdbcResourceKind::NClob, access.as_ref())?;
         Ok(RdbcNClob::from_parts(access, context))
     }
@@ -86,7 +86,7 @@ impl RdbcResourceFactory {
     pub fn reference_with_context(
         context: Arc<RdbcResourceContext>,
         access: Arc<dyn RdbcRefAccess>,
-    ) -> Result<RdbcRef, DruidError> {
+    ) -> Result<RdbcRef, RdbcError> {
         Self::validate_context(&context, RdbcResourceKind::Ref, access.as_ref())?;
         Ok(RdbcRef::from_parts(access, context))
     }
@@ -102,7 +102,7 @@ impl RdbcResourceFactory {
     pub fn sql_xml_with_context(
         context: Arc<RdbcResourceContext>,
         access: Arc<dyn RdbcSqlXmlAccess>,
-    ) -> Result<RdbcSqlXml, DruidError> {
+    ) -> Result<RdbcSqlXml, RdbcError> {
         Self::validate_context(&context, RdbcResourceKind::SqlXml, access.as_ref())?;
         Ok(RdbcSqlXml::from_parts(access, context))
     }
@@ -118,19 +118,19 @@ impl RdbcResourceFactory {
         context: &RdbcResourceContext,
         expected_kind: RdbcResourceKind,
         access: &A,
-    ) -> Result<(), DruidError>
+    ) -> Result<(), RdbcError>
     where
         A: RdbcResourceAccess + ?Sized,
     {
         if context.kind() != expected_kind {
-            return Err(DruidError::InvalidArgument(format!(
+            return Err(RdbcError::InvalidArgument(format!(
                 "{} resource context cannot create a {} handle",
                 context.kind().standard_name(),
                 expected_kind.standard_name()
             )));
         }
         if !access.capabilities().contains(context.capabilities()) {
-            return Err(DruidError::InvalidArgument(format!(
+            return Err(RdbcError::InvalidArgument(format!(
                 "{} resource context enables operations that its access implementation does not support",
                 expected_kind.standard_name()
             )));

@@ -13,7 +13,7 @@
 
 use druid::core::{
     DruidError, ExecResult, MySqlExceptionSorter, PhysicalConnection, PhysicalConnectionFactory,
-    Row, ValidConnectionChecker, Value,
+    RdbcError, Row, ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -28,31 +28,31 @@ struct MaintenanceConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for MaintenanceConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.closed = true;
             self.closed_count.fetch_add(1, Ordering::Relaxed);
@@ -97,7 +97,7 @@ impl DifferentialFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for DifferentialFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.create_count.fetch_add(1, Ordering::Relaxed);
         Ok(Box::new(MaintenanceConnection {
             closed_count: self.closed_count.clone(),
@@ -109,12 +109,12 @@ impl PhysicalConnectionFactory for DifferentialFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.validate_count.fetch_add(1, Ordering::Relaxed);
         if self.validation_succeeds.load(Ordering::Relaxed) {
             connection.ping().await
         } else {
-            Err(DruidError::ValidationFailed(
+            Err(RdbcError::ValidationFailed(
                 "differential validation failed".to_string(),
             ))
         }
@@ -185,31 +185,27 @@ async fn remove_abandoned_skips_running_execution() {
     }
     #[async_trait::async_trait]
     impl PhysicalConnection for BlockingConnection {
-        async fn exec(
-            &mut self,
-            _sql: &str,
-            _params: Vec<Value>,
-        ) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
             let notified = self.release.notified();
             notified.await;
             Ok(ExecResult::default())
         }
-        async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(Vec::new())
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
         fn driver_name(&self) -> &'static str {
@@ -221,7 +217,7 @@ async fn remove_abandoned_skips_running_execution() {
     }
     #[async_trait::async_trait]
     impl PhysicalConnectionFactory for BlockingFactory {
-        async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+        async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
             Ok(Box::new(BlockingConnection {
                 release: self.release.clone(),
             }))
@@ -229,7 +225,7 @@ async fn remove_abandoned_skips_running_execution() {
         async fn validate(
             &self,
             _connection: &mut Box<dyn PhysicalConnection>,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -419,7 +415,7 @@ async fn successful_validation_clears_on_fatal_error() {
     // 借出连接并注入 fatal SQL 异常（MySql sorter 判 1042 为 fatal）。
     let mut connection = pool.get().await.unwrap();
     assert!(!pool.is_on_fatal_error());
-    let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+    let fatal = RdbcError::SqlException(Box::new(druid::core::SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));
@@ -470,7 +466,7 @@ async fn failing_validation_keeps_on_fatal_error() {
 
     // 初始验证成功：正常借出。
     let mut connection = pool.get_timeout(Duration::from_millis(200)).await.unwrap();
-    let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+    let fatal = RdbcError::SqlException(Box::new(druid::core::SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));
@@ -513,7 +509,7 @@ async fn on_fatal_error_max_active_gates_onset() {
     // 第 1、2 个 fatal：increment(1,2) <= 2 → 不置位。
     for _ in 0..2 {
         let mut connection = pool.get().await.unwrap();
-        let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+        let fatal = RdbcError::SqlException(Box::new(druid::core::SqlException::driver(
             1042,
             "fatal connection error".to_owned(),
         )));
@@ -524,7 +520,7 @@ async fn on_fatal_error_max_active_gates_onset() {
 
     // 第 3 个 fatal：increment(3) > 2 → 置位。
     let mut connection = pool.get().await.unwrap();
-    let fatal = DruidError::SqlException(Box::new(druid::core::SqlException::driver(
+    let fatal = RdbcError::SqlException(Box::new(druid::core::SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));

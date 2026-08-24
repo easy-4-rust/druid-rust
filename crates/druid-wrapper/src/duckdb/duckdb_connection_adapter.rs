@@ -3,7 +3,7 @@
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlWarning};
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -41,7 +41,7 @@ impl DuckDbConnectionAdapter {
     /// 打开一个 `DuckDB` 原生未池化连接。
     ///
     /// 参数 `url` 使用 `duckdb:` scheme；`duckdb::memory:` 创建独立内存库。
-    pub async fn connect(url: &str) -> Result<Self, DruidError> {
+    pub async fn connect(url: &str) -> Result<Self, RdbcError> {
         let target = Self::parse_target(url)?;
         let connection = tokio::task::spawn_blocking(move || match target {
             None => Connection::open_in_memory(),
@@ -61,12 +61,12 @@ impl DuckDbConnectionAdapter {
         })
     }
 
-    fn parse_target(url: &str) -> Result<Option<PathBuf>, DruidError> {
+    fn parse_target(url: &str) -> Result<Option<PathBuf>, RdbcError> {
         if url == "duckdb::memory:" || url == "duckdb:///:memory:" {
             return Ok(None);
         }
         let value = url.strip_prefix("duckdb:").ok_or_else(|| {
-            DruidError::InvalidArgument("DuckDB URL must start with `duckdb:`".to_string())
+            RdbcError::InvalidArgument("DuckDB URL must start with `duckdb:`".to_string())
         })?;
         let value = value.strip_prefix("//").unwrap_or(value);
         if value.is_empty()
@@ -75,7 +75,7 @@ impl DuckDbConnectionAdapter {
             || value.contains('#')
             || value.contains('%')
         {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "DuckDB file URL must contain a non-empty literal path without query, fragment, NUL or percent encoding"
                     .to_string(),
             ));
@@ -87,27 +87,27 @@ impl DuckDbConnectionAdapter {
             std::env::current_dir()
                 .map(|current_dir| Some(current_dir.join(path)))
                 .map_err(|error| {
-                    DruidError::DriverError(format!(
+                    RdbcError::DriverError(format!(
                         "DuckDB cannot resolve relative database path `{value}`: {error}"
                     ))
                 })
         }
     }
 
-    fn connection_ref(&self) -> Result<Arc<Mutex<Connection>>, DruidError> {
+    fn connection_ref(&self) -> Result<Arc<Mutex<Connection>>, RdbcError> {
         if self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.connection
             .as_ref()
             .map(Arc::clone)
-            .ok_or(DruidError::ConnectionDiscarded)
+            .ok_or(RdbcError::ConnectionDiscarded)
     }
 
-    async fn run_blocking<T, F>(&self, operation: F) -> Result<T, DruidError>
+    async fn run_blocking<T, F>(&self, operation: F) -> Result<T, RdbcError>
     where
         T: Send + 'static,
-        F: FnOnce(&Connection) -> Result<T, DruidError> + Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, RdbcError> + Send + 'static,
     {
         let connection = self.connection_ref()?;
         tokio::task::spawn_blocking(move || operation(&connection.lock()))
@@ -119,10 +119,10 @@ impl DuckDbConnectionAdapter {
         &self,
         statement: &DuckDbPreparedStatement,
         operation: F,
-    ) -> Result<T, DruidError>
+    ) -> Result<T, RdbcError>
     where
         T: Send + 'static,
-        F: FnOnce(&Connection) -> Result<T, DruidError> + Send + 'static,
+        F: FnOnce(&Connection) -> Result<T, RdbcError> + Send + 'static,
     {
         let timeout_seconds = statement.query_timeout()?;
         let connection = self.connection_ref()?;
@@ -136,7 +136,7 @@ impl DuckDbConnectionAdapter {
             () = tokio::time::sleep(Duration::from_secs(timeout_seconds as u64)) => {
                 self.interrupt_handle.interrupt();
                 let _ = worker.await.map_err(Self::worker_error)?;
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
@@ -148,17 +148,17 @@ impl DuckDbConnectionAdapter {
         }
     }
 
-    fn worker_error(error: tokio::task::JoinError) -> DruidError {
-        DruidError::DriverError(format!("DuckDB blocking worker failed: {error}"))
+    fn worker_error(error: tokio::task::JoinError) -> RdbcError {
+        RdbcError::DriverError(format!("DuckDB blocking worker failed: {error}"))
     }
 
-    pub(super) fn driver_error(error: duckdb::Error) -> DruidError {
+    pub(super) fn driver_error(error: duckdb::Error) -> RdbcError {
         match error {
             duckdb::Error::DuckDBFailure(error, message) => {
                 let error_code = i32::try_from(error.extended_code).unwrap_or_default();
                 let message = message.unwrap_or_else(|| error.to_string());
                 let interrupted = message.to_ascii_lowercase().contains("interrupt");
-                DruidError::SqlException(Box::new(
+                RdbcError::SqlException(Box::new(
                     SqlException::new(
                         error_code,
                         Some(if interrupted { "HY008" } else { "HY000" }.to_owned()),
@@ -171,7 +171,7 @@ impl DuckDbConnectionAdapter {
                     }),
                 ))
             }
-            error => DruidError::SqlException(Box::new(
+            error => RdbcError::SqlException(Box::new(
                 SqlException::driver(0, error.to_string())
                     .with_sql_state("HY000")
                     .with_class_name("duckdb::Error"),
@@ -179,27 +179,27 @@ impl DuckDbConnectionAdapter {
         }
     }
 
-    fn decimal_parameter(value: &BigDecimal) -> Result<DuckDbDecimal, DruidError> {
+    fn decimal_parameter(value: &BigDecimal) -> Result<DuckDbDecimal, RdbcError> {
         let (coefficient, exponent) = value.as_bigint_and_exponent();
         let mut scaled = i128::try_from(coefficient).map_err(|_| {
-            DruidError::DriverError(format!(
+            RdbcError::DriverError(format!(
                 "DuckDB DECIMAL cannot represent coefficient of `{value}`"
             ))
         })?;
         let scale = if exponent < 0 {
             let power = u32::try_from(-exponent).map_err(|error| {
-                DruidError::DriverError(format!("invalid decimal exponent: {error}"))
+                RdbcError::DriverError(format!("invalid decimal exponent: {error}"))
             })?;
             let multiplier = 10_i128.checked_pow(power).ok_or_else(|| {
-                DruidError::DriverError(format!("DuckDB DECIMAL exponent is too large: {exponent}"))
+                RdbcError::DriverError(format!("DuckDB DECIMAL exponent is too large: {exponent}"))
             })?;
             scaled = scaled.checked_mul(multiplier).ok_or_else(|| {
-                DruidError::DriverError(format!("DuckDB DECIMAL value is too large: {value}"))
+                RdbcError::DriverError(format!("DuckDB DECIMAL value is too large: {value}"))
             })?;
             0
         } else {
             u8::try_from(exponent).map_err(|_| {
-                DruidError::DriverError(format!("DuckDB DECIMAL scale is too large: {exponent}"))
+                RdbcError::DriverError(format!("DuckDB DECIMAL scale is too large: {exponent}"))
             })?
         };
         let digits = scaled
@@ -208,10 +208,10 @@ impl DuckDbConnectionAdapter {
             .map_or(1, |value| value.saturating_add(1));
         let width = u8::try_from(digits).unwrap_or(u8::MAX).max(scale).max(1);
         DuckDbDecimal::new(width, scale, scaled)
-            .map_err(|error| DruidError::DriverError(error.to_string()))
+            .map_err(|error| RdbcError::DriverError(error.to_string()))
     }
 
-    fn bind_parameters(statement: &mut Statement<'_>, params: &[Value]) -> Result<(), DruidError> {
+    fn bind_parameters(statement: &mut Statement<'_>, params: &[Value]) -> Result<(), RdbcError> {
         for (index, value) in params.iter().enumerate() {
             let index = index + 1;
             let result = match value {
@@ -233,19 +233,19 @@ impl DuckDbConnectionAdapter {
         Ok(())
     }
 
-    fn checked_i64<T>(value: T, type_name: &str) -> Result<i64, DruidError>
+    fn checked_i64<T>(value: T, type_name: &str) -> Result<i64, RdbcError>
     where
         i64: TryFrom<T>,
         <i64 as TryFrom<T>>::Error: std::fmt::Display,
     {
         i64::try_from(value).map_err(|error| {
-            DruidError::DriverError(format!(
+            RdbcError::DriverError(format!(
                 "DuckDB {type_name} value cannot fit JDBC signed BIGINT: {error}"
             ))
         })
     }
 
-    fn row_value(value: DuckDbValueRef<'_>) -> Result<Value, DruidError> {
+    fn row_value(value: DuckDbValueRef<'_>) -> Result<Value, RdbcError> {
         match value {
             DuckDbValueRef::Null => Ok(Value::Null),
             DuckDbValueRef::Boolean(value) => Ok(Value::Bool(value)),
@@ -267,32 +267,32 @@ impl DuckDbConnectionAdapter {
             ))),
             value @ DuckDbValueRef::Timestamp(..) => NaiveDateTime::column_result(value)
                 .map(Value::Timestamp)
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             DuckDbValueRef::Text(value) => std::str::from_utf8(value)
                 .map(|value| Value::String(value.to_owned()))
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             DuckDbValueRef::Blob(value) | DuckDbValueRef::Geometry(value) => {
                 Ok(Value::Bytes(value.to_vec()))
             }
             value @ DuckDbValueRef::Date32(_) => NaiveDate::column_result(value)
                 .map(Value::Date)
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             value @ DuckDbValueRef::Time64(..) => NaiveTime::column_result(value)
                 .map(Value::Time)
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             DuckDbValueRef::Enum(value, index) => DuckDbValueRef::Enum(value, index)
                 .as_str()
                 .map(|value| Value::String(value.to_owned()))
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             DuckDbValueRef::Interval { .. }
             | DuckDbValueRef::List(..)
             | DuckDbValueRef::Struct(..)
             | DuckDbValueRef::Array(..)
             | DuckDbValueRef::Map(..)
-            | DuckDbValueRef::Union(..) => Err(DruidError::UnsupportedOperation {
+            | DuckDbValueRef::Union(..) => Err(RdbcError::UnsupportedOperation {
                 operation: "duckdb_complex_result_value",
             }),
-            _ => Err(DruidError::UnsupportedOperation {
+            _ => Err(RdbcError::UnsupportedOperation {
                 operation: "duckdb_unknown_result_value",
             }),
         }
@@ -302,7 +302,7 @@ impl DuckDbConnectionAdapter {
         connection: &Connection,
         sql: &str,
         params: &[Value],
-    ) -> Result<(Vec<Row>, Vec<String>), DruidError> {
+    ) -> Result<(Vec<Row>, Vec<String>), RdbcError> {
         let mut statement = connection.prepare_cached(sql).map_err(Self::driver_error)?;
         Self::bind_parameters(&mut statement, params)?;
         statement.raw_execute().map_err(Self::driver_error)?;
@@ -311,7 +311,7 @@ impl DuckDbConnectionAdapter {
 
     fn collect_executed_rows(
         statement: &Statement<'_>,
-    ) -> Result<(Vec<Row>, Vec<String>), DruidError> {
+    ) -> Result<(Vec<Row>, Vec<String>), RdbcError> {
         let column_count = statement.column_count();
         let labels = (0..column_count)
             .map(|index| {
@@ -338,27 +338,27 @@ impl DuckDbConnectionAdapter {
     fn prepared_statement<'statement>(
         &self,
         statement: &'statement dyn PhysicalPreparedStatement,
-    ) -> Result<&'statement DuckDbPreparedStatement, DruidError> {
+    ) -> Result<&'statement DuckDbPreparedStatement, RdbcError> {
         let statement = statement
             .as_any()
             .downcast_ref::<DuckDbPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by DuckDbConnectionAdapter".to_string(),
                 )
             })?;
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         if statement.connection_id() != self.connection_id {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "DuckDB prepared statement belongs to another physical connection".to_string(),
             ));
         }
         Ok(statement)
     }
 
-    async fn control_statement(&self, sql: &'static str) -> Result<(), DruidError> {
+    async fn control_statement(&self, sql: &'static str) -> Result<(), RdbcError> {
         self.run_blocking(move |connection| {
             connection.execute_batch(sql).map_err(Self::driver_error)
         })
@@ -368,7 +368,7 @@ impl DuckDbConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for DuckDbConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         let sql = sql.to_owned();
         self.run_blocking(move |connection| {
             let mut statement = connection
@@ -390,9 +390,9 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         sql: &str,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if !matches!(generated_keys, StatementGeneratedKeys::None) {
-            return Err(DruidError::UnsupportedOperation {
+            return Err(RdbcError::UnsupportedOperation {
                 operation: "duckdb_generated_keys",
             });
         }
@@ -417,7 +417,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         .await
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         let sql = sql.to_owned();
         self.run_blocking(move |connection| {
             Self::query(connection, &sql, &params).map(|value| value.0)
@@ -429,7 +429,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let sql = sql.to_owned();
         let (rows, labels) = self
             .run_blocking(move |connection| Self::query(connection, &sql, &params))
@@ -440,7 +440,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let sql = key.sql().to_owned();
         let prepare_sql = sql.clone();
         self.run_blocking(move |connection| {
@@ -461,7 +461,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let statement = self.prepared_statement(statement)?;
         let sql = statement.sql().to_owned();
         self.run_prepared_blocking(statement, move |connection| {
@@ -484,9 +484,9 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if !matches!(generated_keys, StatementGeneratedKeys::None) {
-            return Err(DruidError::UnsupportedOperation {
+            return Err(RdbcError::UnsupportedOperation {
                 operation: "duckdb_generated_keys",
             });
         }
@@ -516,7 +516,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let statement = self.prepared_statement(statement)?;
         let sql = statement.sql().to_owned();
         self.run_prepared_blocking(statement, move |connection| {
@@ -525,9 +525,9 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         .await
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "DuckDB transaction is already active".to_string(),
             ));
         }
@@ -536,9 +536,9 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         if self.auto_commit {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "DuckDB has no active transaction to commit".to_string(),
             ));
         }
@@ -547,9 +547,9 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         if self.auto_commit {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "DuckDB has no active transaction to roll back".to_string(),
             ));
         }
@@ -558,12 +558,12 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         Ok(())
     }
 
-    async fn abort(&mut self) -> Result<(), DruidError> {
+    async fn abort(&mut self) -> Result<(), RdbcError> {
         self.interrupt_handle.interrupt();
         self.close().await
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         self.run_blocking(|connection| {
             connection
                 .query_row("SELECT 1", [], |_row| Ok(()))
@@ -572,7 +572,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         .await
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.connection.take();
         self.auto_commit = true;
         Ok(())
@@ -596,7 +596,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         }
     }
 
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         Ok(Box::new(DuckDbDatabaseMetaData::new(
             self.connection_ref()?,
             self.url.clone(),
@@ -607,7 +607,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         self.auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         match (self.auto_commit, auto_commit) {
             (true, false) => self.begin().await,
             (false, true) => self.commit().await,
@@ -615,12 +615,12 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
         }
     }
 
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.connection_ref()?;
         Ok(None)
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.connection_ref()?;
         Ok(())
     }

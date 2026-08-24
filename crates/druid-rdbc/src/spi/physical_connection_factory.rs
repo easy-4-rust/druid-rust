@@ -1,6 +1,6 @@
 //! 未池化物理连接工厂。
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::spi::{PhysicalConnection, PhysicalConnectionInfo};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -28,7 +28,7 @@ pub trait PhysicalConnectionFactory: Send + Sync {
     }
 
     /// 创建一个未池化的物理连接。
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError>;
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError>;
 
     /// 创建一个带阶段时序的未池化物理连接。
     ///
@@ -36,7 +36,7 @@ pub trait PhysicalConnectionFactory: Send + Sync {
     /// `PhysicalConnectionInfo`。默认实现包裹现有 `create()`，因此外部驱动
     /// Adapter 无需为了新增元数据立即改写；需要提供会话变量的 Adapter 可以
     /// 覆盖本方法。
-    async fn create_info(&self) -> Result<PhysicalConnectionInfo, DruidError> {
+    async fn create_info(&self) -> Result<PhysicalConnectionInfo, RdbcError> {
         let connect_started_at = Instant::now();
         let connection = self.create().await?;
         Ok(PhysicalConnectionInfo::connected(
@@ -53,18 +53,16 @@ pub trait PhysicalConnectionFactory: Send + Sync {
     async fn create_info_with_properties(
         &self,
         _properties: &HashMap<String, String>,
-    ) -> Result<PhysicalConnectionInfo, DruidError> {
+    ) -> Result<PhysicalConnectionInfo, RdbcError> {
         self.create_info().await
     }
 
     /// 验证物理连接是否可继续使用。
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError>;
+    async fn validate(&self, connection: &mut Box<dyn PhysicalConnection>)
+        -> Result<(), RdbcError>;
 
     /// 关闭物理连接。
-    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), DruidError> {
+    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), RdbcError> {
         connection.close().await
     }
 }

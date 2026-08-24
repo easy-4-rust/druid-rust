@@ -18,10 +18,14 @@ impl ValidConnectionChecker for Rdbc4ValidConnectionChecker {
         validation_query_timeout: Duration,
     ) -> Result<bool, DruidError> {
         if validation_query_timeout.is_zero() {
-            return connection.ping().await.map(|()| true);
+            return connection
+                .ping()
+                .await
+                .map(|()| true)
+                .map_err(DruidError::from);
         }
         match tokio::time::timeout(validation_query_timeout, connection.ping()).await {
-            Ok(result) => result.map(|()| true),
+            Ok(result) => result.map(|()| true).map_err(DruidError::from),
             Err(_) => Ok(false),
         }
     }

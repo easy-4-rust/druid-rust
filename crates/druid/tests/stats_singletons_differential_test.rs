@@ -502,14 +502,14 @@ impl CountingPool {
 
 #[async_trait::async_trait]
 impl druid::core::Pool for CountingPool {
-    async fn get(&self) -> Result<druid::core::DruidPooledConnection, druid::core::DruidError> {
-        Err(druid::core::DruidError::Other("mock".to_owned()))
+    async fn get(&self) -> Result<druid::core::DruidPooledConnection, druid::core::RdbcError> {
+        Err(druid::core::RdbcError::Other("mock".to_owned()))
     }
     async fn get_timeout(
         &self,
         _: Duration,
-    ) -> Result<druid::core::DruidPooledConnection, druid::core::DruidError> {
-        Err(druid::core::DruidError::Other("mock".to_owned()))
+    ) -> Result<druid::core::DruidPooledConnection, druid::core::RdbcError> {
+        Err(druid::core::RdbcError::Other("mock".to_owned()))
     }
     fn state(&self) -> PoolState {
         PoolState::default()

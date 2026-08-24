@@ -1,6 +1,6 @@
 //! Standard Rust mapping for Java `java.sql.Array`.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcArrayAccess, RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceId,
     RdbcResourceState,
@@ -29,38 +29,38 @@ impl RdbcArray {
     }
 
     /// Returns the SQL type name of array elements. Corresponds to `Array#getBaseTypeName()`.
-    pub async fn base_type_name(&self) -> Result<String, DruidError> {
+    pub async fn base_type_name(&self) -> Result<String, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::READ, "Array#getBaseTypeName")?;
         self.context.observe(self.access.base_type_name().await)
     }
 
     /// Returns the SQL type name of array elements. Corresponds to `Array#getBaseTypeName()`.
-    pub async fn get_base_type_name(&self) -> Result<String, DruidError> {
+    pub async fn get_base_type_name(&self) -> Result<String, RdbcError> {
         self.base_type_name().await
     }
 
     /// Returns the `java.sql.Types` number of array elements. Corresponds to `Array#getBaseType()`.
-    pub async fn base_type(&self) -> Result<i32, DruidError> {
+    pub async fn base_type(&self) -> Result<i32, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::READ, "Array#getBaseType")?;
         self.context.observe(self.access.base_type().await)
     }
 
     /// Returns the `java.sql.Types` number of array elements. Corresponds to `Array#getBaseType()`.
-    pub async fn get_base_type(&self) -> Result<i32, DruidError> {
+    pub async fn get_base_type(&self) -> Result<i32, RdbcError> {
         self.base_type().await
     }
 
     /// Reads all elements using the driver's default type map. Corresponds to `Array#getArray()`.
-    pub async fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
+    pub async fn values(&self) -> Result<Vec<RdbcObject>, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::READ, "Array#getArray")?;
         self.context.observe(self.access.values().await)
     }
 
     /// Reads all elements using the driver's default type map. Corresponds to `Array#getArray()`.
-    pub async fn get_array(&self) -> Result<Vec<RdbcObject>, DruidError> {
+    pub async fn get_array(&self) -> Result<Vec<RdbcObject>, RdbcError> {
         self.values().await
     }
 
@@ -68,7 +68,7 @@ impl RdbcArray {
     pub async fn values_with_type_map(
         &self,
         type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::TYPE_MAP,
             "Array#getArray(Map)",
@@ -78,11 +78,7 @@ impl RdbcArray {
     }
 
     /// Reads a 1-based range. Corresponds to `Array#getArray(long,int)`.
-    pub async fn values_range(
-        &self,
-        index: i64,
-        count: i32,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    pub async fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::RANGE,
             "Array#getArray(long,int)",
@@ -97,7 +93,7 @@ impl RdbcArray {
         index: i64,
         count: i32,
         type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ
                 | RdbcResourceCapabilities::RANGE
@@ -112,7 +108,7 @@ impl RdbcArray {
     }
 
     /// Returns all elements as a result set. Corresponds to `Array#getResultSet()`.
-    pub async fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
+    pub async fn result_set(&self) -> Result<RdbcResultSet, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::RESULT_SET,
             "Array#getResultSet",
@@ -124,7 +120,7 @@ impl RdbcArray {
     pub async fn result_set_with_type_map(
         &self,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ
                 | RdbcResourceCapabilities::RESULT_SET
@@ -140,7 +136,7 @@ impl RdbcArray {
         &self,
         index: i64,
         count: i32,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ
                 | RdbcResourceCapabilities::RANGE
@@ -157,7 +153,7 @@ impl RdbcArray {
         index: i64,
         count: i32,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ
                 | RdbcResourceCapabilities::RANGE
@@ -173,7 +169,7 @@ impl RdbcArray {
     }
 
     /// Releases the array resource. Corresponds to `Array#free()`.
-    pub async fn free(&self) -> Result<(), DruidError> {
+    pub async fn free(&self) -> Result<(), RdbcError> {
         self.context
             .require_capability(RdbcResourceCapabilities::FREE, "Array#free")?;
         self.context.free(self.access.as_ref()).await

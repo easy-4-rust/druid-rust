@@ -7,9 +7,9 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, PreparedInputParameter, PreparedTypeNameArgument, RdbcCalendar,
-    RdbcCalendarArgument, RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcParameter,
-    RdbcParameterType, RdbcParameterValue, RdbcReader, RdbcStreamLength, Value,
+    PreparedInputParameter, PreparedTypeNameArgument, RdbcCalendar, RdbcCalendarArgument,
+    RdbcCharacterLength, RdbcError, RdbcInputStream, RdbcObject, RdbcParameter, RdbcParameterType,
+    RdbcParameterValue, RdbcReader, RdbcStreamLength, Value,
 };
 use std::str::FromStr;
 
@@ -415,7 +415,7 @@ fn object_ref_and_character_stream_require_native_adapter() {
         assert!(
             matches!(
                 p.scalar_value(),
-                Err(DruidError::UnsupportedOperation { .. })
+                Err(RdbcError::UnsupportedOperation { .. })
             ),
             "expected UnsupportedOperation for non-scalar RdbcObject"
         );
@@ -432,7 +432,7 @@ fn ascii_stream_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.length(), 0); // stream is None => 0
     assert_eq!(p.sql_type(), RdbcParameterType::ASCII_INPUT_STREAM);
@@ -446,7 +446,7 @@ fn unicode_stream_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), RdbcParameterType::UNICODE_STREAM);
 }
@@ -459,7 +459,7 @@ fn binary_stream_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), RdbcParameterType::BINARY_INPUT_STREAM);
 }
@@ -472,7 +472,7 @@ fn character_stream_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), RdbcParameterType::CHARACTER_INPUT_STREAM);
 }
@@ -485,7 +485,7 @@ fn n_character_stream_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), RdbcParameterType::NCHARACTER_INPUT_STREAM);
 }
@@ -571,7 +571,7 @@ fn blob_stream_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), 2_004);
 }
@@ -584,7 +584,7 @@ fn clob_reader_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), 2_005);
 }
@@ -597,7 +597,7 @@ fn n_clob_reader_requires_native_adapter() {
     };
     assert!(matches!(
         p.scalar_value(),
-        Err(DruidError::UnsupportedOperation { .. })
+        Err(RdbcError::UnsupportedOperation { .. })
     ));
     assert_eq!(p.sql_type(), 2_011);
 }

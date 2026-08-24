@@ -1,6 +1,6 @@
 //! Standard Rust mapping for Java `java.sql.Ref`.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcRefAccess, RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceId, RdbcResourceState,
 };
@@ -24,26 +24,26 @@ impl RdbcRef {
     }
 
     /// Returns the fully qualified SQL type name. Corresponds to `Ref#getBaseTypeName()`.
-    pub async fn base_type_name(&self) -> Result<String, DruidError> {
+    pub async fn base_type_name(&self) -> Result<String, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::READ, "Ref#getBaseTypeName")?;
         self.context.observe(self.access.base_type_name().await)
     }
 
     /// Returns the fully qualified SQL type name. Corresponds to `Ref#getBaseTypeName()`.
-    pub async fn get_base_type_name(&self) -> Result<String, DruidError> {
+    pub async fn get_base_type_name(&self) -> Result<String, RdbcError> {
         self.base_type_name().await
     }
 
     /// Reads the referenced object using the driver's default type map.
-    pub async fn object(&self) -> Result<RdbcObject, DruidError> {
+    pub async fn object(&self) -> Result<RdbcObject, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::READ, "Ref#getObject")?;
         self.context.observe(self.access.object().await)
     }
 
     /// Reads the referenced object using the driver's default type map.
-    pub async fn get_object(&self) -> Result<RdbcObject, DruidError> {
+    pub async fn get_object(&self) -> Result<RdbcObject, RdbcError> {
         self.object().await
     }
 
@@ -51,7 +51,7 @@ impl RdbcRef {
     pub async fn object_with_type_map(
         &self,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::TYPE_MAP,
             "Ref#getObject(Map)",
@@ -64,12 +64,12 @@ impl RdbcRef {
     pub async fn get_object_with_type_map(
         &self,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.object_with_type_map(type_map).await
     }
 
     /// Replaces the referenced object. Corresponds to `Ref#setObject(Object)`.
-    pub async fn set_object(&self, value: RdbcObject) -> Result<(), DruidError> {
+    pub async fn set_object(&self, value: RdbcObject) -> Result<(), RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::WRITE, "Ref#setObject")?;
         self.context.observe(self.access.set_object(value).await)

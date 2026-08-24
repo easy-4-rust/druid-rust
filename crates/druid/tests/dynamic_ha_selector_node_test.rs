@@ -12,7 +12,7 @@
 //! - `FileNodeListener`：properties 读取、前缀过滤、refresh 差分。
 //! - `ZookeeperNodeInfo`：连接信息组装。
 
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid::core::{DruidPooledConnection, Pool, PoolState, RdbcError};
 use druid::dynamic::node::{
     FileNodeListener, NodeEvent, NodeEventTypeEnum, NodeListener, ZookeeperNodeInfo,
 };
@@ -44,11 +44,11 @@ impl CountingPool {
 
 #[async_trait::async_trait]
 impl Pool for CountingPool {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        Err(DruidError::Other(format!("mock pool {}", self.name)))
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
+        Err(RdbcError::Other(format!("mock pool {}", self.name)))
     }
-    async fn get_timeout(&self, _timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
-        Err(DruidError::Other(format!("mock pool {}", self.name)))
+    async fn get_timeout(&self, _timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
+        Err(RdbcError::Other(format!("mock pool {}", self.name)))
     }
     fn state(&self) -> PoolState {
         // Java sticky isAvailable 要求 poolingCount > 0：mock 池报告
@@ -66,7 +66,7 @@ impl Pool for CountingPool {
     fn name(&self) -> &str {
         self.name
     }
-    async fn close_for_removal_if_idle(&self) -> Result<bool, DruidError> {
+    async fn close_for_removal_if_idle(&self) -> Result<bool, RdbcError> {
         self.closes.fetch_add(1, Ordering::Relaxed);
         Ok(true)
     }

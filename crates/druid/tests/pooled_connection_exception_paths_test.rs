@@ -4,9 +4,9 @@
 //! `com.alibaba.druid.bvt.pool.exception.OracleExceptionSorterTest_*`。
 
 use druid::core::{
-    DruidError, DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties, ExecResult,
+    DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties, ExecResult,
     PhysicalConnection, PhysicalPreparedStatement, PreparedStatementKey,
-    PreparedStatementMethodType, Row, Savepoint, SqlException, SqlTextPreparedStatement,
+    PreparedStatementMethodType, RdbcError, Row, Savepoint, SqlException, SqlTextPreparedStatement,
     StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,8 +27,8 @@ struct FailingPhysicalConnection {
 }
 
 impl FailingPhysicalConnection {
-    fn error<T>() -> Result<T, DruidError> {
-        Err(DruidError::SqlException(Box::new(
+    fn error<T>() -> Result<T, RdbcError> {
+        Err(RdbcError::SqlException(Box::new(
             SqlException::driver(17002, "Io exception: Connection reset")
                 .with_sql_state("08006")
                 .with_class_name("java.sql.SQLRecoverableException"),
@@ -38,7 +38,7 @@ impl FailingPhysicalConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for FailingPhysicalConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Self::error()
     }
 
@@ -47,25 +47,25 @@ impl PhysicalConnection for FailingPhysicalConnection {
         _sql: &str,
         _params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         Self::error()
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Self::error()
     }
 
     async fn prepare_physical_statement(
         &mut self,
         _key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         Self::error()
     }
 
     async fn prepare_physical_call(
         &mut self,
         _key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         Self::error()
     }
 
@@ -73,7 +73,7 @@ impl PhysicalConnection for FailingPhysicalConnection {
         &mut self,
         _statement: &dyn PhysicalPreparedStatement,
         _params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         Self::error()
     }
 
@@ -81,74 +81,74 @@ impl PhysicalConnection for FailingPhysicalConnection {
         &mut self,
         _statement: &dyn PhysicalPreparedStatement,
         _params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         Self::error()
     }
 
     async fn close_prepared_statement(
         &mut self,
         _statement: Arc<dyn PhysicalPreparedStatement>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn rollback_to(&mut self, _savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, _savepoint: &Savepoint) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         Self::error()
     }
 
-    async fn set_savepoint_named(&mut self, _name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, _name: &str) -> Result<Savepoint, RdbcError> {
         Self::error()
     }
 
-    async fn release_savepoint(&mut self, _savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, _savepoint: &Savepoint) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn abort(&mut self) -> Result<(), DruidError> {
+    async fn abort(&mut self) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn set_auto_commit(&mut self, _auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, _auto_commit: bool) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn set_read_only(&mut self, _read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, _read_only: bool) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn set_transaction_isolation(&mut self, _level: u8) -> Result<(), DruidError> {
+    async fn set_transaction_isolation(&mut self, _level: u8) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), DruidError> {
+    async fn set_holdability(&mut self, _holdability: i32) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         Self::error()
     }
 
@@ -160,11 +160,11 @@ impl PhysicalConnection for FailingPhysicalConnection {
         self.discarded.load(Ordering::Acquire)
     }
 
-    async fn set_catalog(&mut self, _catalog: &str) -> Result<(), DruidError> {
+    async fn set_catalog(&mut self, _catalog: &str) -> Result<(), RdbcError> {
         Self::error()
     }
 
-    async fn set_schema(&mut self, _schema: &str) -> Result<(), DruidError> {
+    async fn set_schema(&mut self, _schema: &str) -> Result<(), RdbcError> {
         Self::error()
     }
 }
@@ -179,9 +179,9 @@ fn failing_connection() -> (DruidPooledConnection, Arc<AtomicBool>) {
     (pooled, discarded)
 }
 
-fn assert_fatal<T>(result: Result<T, DruidError>, discarded: &AtomicBool, operation: &str) {
+fn assert_fatal<T>(result: Result<T, RdbcError>, discarded: &AtomicBool, operation: &str) {
     assert!(
-        matches!(result, Err(DruidError::SqlException(_))),
+        matches!(result, Err(RdbcError::SqlException(_))),
         "{operation} 必须原样返回结构化 SQL 异常"
     );
     assert!(

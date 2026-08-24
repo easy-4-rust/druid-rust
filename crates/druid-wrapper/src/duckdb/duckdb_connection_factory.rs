@@ -1,7 +1,7 @@
 //! `DuckDB` 原生物理连接工厂。
 
 use super::DuckDbConnectionAdapter;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
 /// `DuckDB` 原生未池化物理连接工厂。
@@ -35,14 +35,14 @@ impl PhysicalConnectionFactory for DuckDbConnectionFactory {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(DuckDbConnectionAdapter::connect(&self.url).await?))
     }
 
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

@@ -8,6 +8,7 @@ use druid::core::{
 };
 use druid::pool::{DruidDataSource, DruidPool, DruidPoolBuilder};
 use druid::sql::RdbcUrl;
+use druid_rdbc::error::RdbcError;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -137,7 +138,11 @@ impl DruidDatabasePoolBuilder {
         if let Some(configure) = self.configure {
             builder = configure(builder);
         }
-        builder.build().await.map_err(Into::into)
+        builder
+            .build()
+            .await
+            .map_err(RdbcError::from)
+            .map_err(Into::into)
     }
 
     /// 构建以同一个 native pool 为底座的 RDBC `DataSource`。

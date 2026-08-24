@@ -4,7 +4,7 @@ use crate::sqlx::SqlxConnectionFactory;
 use crate::{ManagedWrapperPool, ProxoolConfigKey};
 use druid::pool::DruidPoolBuilder;
 use druid::sql::RdbcUtils;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,7 +27,7 @@ impl WrapperDataSourceFactory {
         properties: &HashMap<String, String>,
         factory: Arc<dyn PhysicalConnectionFactory>,
         driver_name: impl Into<String>,
-    ) -> Result<ManagedWrapperPool, DruidError> {
+    ) -> Result<ManagedWrapperPool, RdbcError> {
         let url = first(
             properties,
             &[
@@ -36,7 +36,7 @@ impl WrapperDataSourceFactory {
                 ProxoolConfigKey::PROXOOL_DRIVER_URL,
             ],
         )
-        .ok_or_else(|| DruidError::InvalidArgument("url is required".to_owned()))?;
+        .ok_or_else(|| RdbcError::InvalidArgument("url is required".to_owned()))?;
         let name = first(
             properties,
             &[
@@ -67,7 +67,7 @@ impl WrapperDataSourceFactory {
             .unwrap_or(30_000),
         );
         if max_open == 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "maximum connection count must be greater than zero".to_owned(),
             ));
         }
@@ -163,7 +163,7 @@ impl WrapperDataSourceFactory {
     /// 根据兼容属性创建 managed wrapper pool。
     pub async fn create(
         properties: &HashMap<String, String>,
-    ) -> Result<ManagedWrapperPool, DruidError> {
+    ) -> Result<ManagedWrapperPool, RdbcError> {
         let provider = properties
             .get(ProxoolConfigKey::PROVIDER)
             .map_or("native", String::as_str)
@@ -176,7 +176,7 @@ impl WrapperDataSourceFactory {
                 ProxoolConfigKey::PROXOOL_DRIVER_URL,
             ],
         )
-        .ok_or_else(|| DruidError::InvalidArgument("url is required".to_owned()))?;
+        .ok_or_else(|| RdbcError::InvalidArgument("url is required".to_owned()))?;
         let name = first(
             properties,
             &[
@@ -197,7 +197,7 @@ impl WrapperDataSourceFactory {
         )?
         .unwrap_or(8);
         if max_open == 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "maximum connection count must be greater than zero".to_owned(),
             ));
         }
@@ -213,7 +213,7 @@ impl WrapperDataSourceFactory {
         );
 
         let native_url = RdbcUtils::to_rust_url(url).ok_or_else(|| {
-            DruidError::InvalidArgument(format!(
+            RdbcError::InvalidArgument(format!(
                 "SQLx provider does not support JDBC URL `{url}`; inject a matching PhysicalConnectionFactory"
             ))
         })?;
@@ -317,7 +317,7 @@ impl WrapperDataSourceFactory {
                 )?),
             ),
             value => {
-                return Err(DruidError::InvalidArgument(format!(
+                return Err(RdbcError::InvalidArgument(format!(
                     "unsupported wrapper provider: {value}"
                 )));
             }
@@ -329,7 +329,7 @@ impl WrapperDataSourceFactory {
 fn apply_credentials(
     raw_url: &str,
     properties: &HashMap<String, String>,
-) -> Result<String, DruidError> {
+) -> Result<String, RdbcError> {
     let username = first(
         properties,
         &[ProxoolConfigKey::USERNAME, ProxoolConfigKey::USER],
@@ -339,21 +339,21 @@ fn apply_credentials(
         return Ok(raw_url.to_owned());
     }
     let mut url = url::Url::parse(raw_url).map_err(|error| {
-        DruidError::InvalidArgument(format!("invalid database URL for credentials: {error}"))
+        RdbcError::InvalidArgument(format!("invalid database URL for credentials: {error}"))
     })?;
     if url.scheme() == "sqlite" {
-        return Err(DruidError::InvalidArgument(
+        return Err(RdbcError::InvalidArgument(
             "SQLite does not accept username/password properties".to_owned(),
         ));
     }
     if let Some(username) = username {
         url.set_username(username).map_err(|()| {
-            DruidError::InvalidArgument("database URL cannot carry username".to_owned())
+            RdbcError::InvalidArgument("database URL cannot carry username".to_owned())
         })?;
     }
     if let Some(password) = password {
         url.set_password(Some(password)).map_err(|()| {
-            DruidError::InvalidArgument("database URL cannot carry password".to_owned())
+            RdbcError::InvalidArgument("database URL cannot carry password".to_owned())
         })?;
     }
     Ok(url.into())
@@ -369,11 +369,11 @@ fn first<'a>(properties: &'a HashMap<String, String>, keys: &[&str]) -> Option<&
 fn first_usize(
     properties: &HashMap<String, String>,
     keys: &[&str],
-) -> Result<Option<usize>, DruidError> {
+) -> Result<Option<usize>, RdbcError> {
     first(properties, keys)
         .map(|value| {
             value.parse().map_err(|_| {
-                DruidError::InvalidArgument(format!("{} must be a non-negative integer", keys[0]))
+                RdbcError::InvalidArgument(format!("{} must be a non-negative integer", keys[0]))
             })
         })
         .transpose()
@@ -382,11 +382,11 @@ fn first_usize(
 fn first_u64(
     properties: &HashMap<String, String>,
     keys: &[&str],
-) -> Result<Option<u64>, DruidError> {
+) -> Result<Option<u64>, RdbcError> {
     first(properties, keys)
         .map(|value| {
             value.parse().map_err(|_| {
-                DruidError::InvalidArgument(format!("{} must be a non-negative integer", keys[0]))
+                RdbcError::InvalidArgument(format!("{} must be a non-negative integer", keys[0]))
             })
         })
         .transpose()
@@ -395,12 +395,12 @@ fn first_u64(
 fn first_bool(
     properties: &HashMap<String, String>,
     keys: &[&str],
-) -> Result<Option<bool>, DruidError> {
+) -> Result<Option<bool>, RdbcError> {
     first(properties, keys)
         .map(|value| match value.to_ascii_lowercase().as_str() {
             "true" => Ok(true),
             "false" => Ok(false),
-            _ => Err(DruidError::InvalidArgument(format!(
+            _ => Err(RdbcError::InvalidArgument(format!(
                 "{} must be true or false",
                 keys[0]
             ))),

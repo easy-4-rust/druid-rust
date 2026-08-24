@@ -1,6 +1,6 @@
 //! Standard Rust mapping for Java `java.sql.NClob`.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcClob, RdbcInputStream, RdbcNClobAccess, RdbcOutputStream, RdbcReader,
     RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceId, RdbcResourceState, RdbcWriter,
@@ -36,7 +36,7 @@ impl RdbcNClob {
     }
 
     /// Returns the character length. Corresponds to `Clob#length()`.
-    pub async fn length(&self) -> Result<i64, DruidError> {
+    pub async fn length(&self) -> Result<i64, RdbcError> {
         self.clob.length().await
     }
 
@@ -45,17 +45,17 @@ impl RdbcNClob {
         &self,
         position: i64,
         length: i32,
-    ) -> Result<RdbcString, DruidError> {
+    ) -> Result<RdbcString, RdbcError> {
         self.clob.get_sub_string(position, length).await
     }
 
     /// Opens the full character stream. Corresponds to `Clob#getCharacterStream()`.
-    pub async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    pub async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
         self.clob.get_character_stream().await
     }
 
     /// Opens the ASCII stream. Corresponds to `Clob#getAsciiStream()`.
-    pub async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    pub async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.clob.get_ascii_stream().await
     }
 
@@ -64,7 +64,7 @@ impl RdbcNClob {
         &self,
         pattern: &RdbcString,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         self.clob.position_string(pattern, start).await
     }
 
@@ -73,12 +73,12 @@ impl RdbcNClob {
         &self,
         pattern: &RdbcClob,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         self.clob.position_clob(pattern, start).await
     }
 
     /// Writes a string. Corresponds to `Clob#setString(long,String)`.
-    pub async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
+    pub async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, RdbcError> {
         self.clob.set_string(position, value).await
     }
 
@@ -89,29 +89,29 @@ impl RdbcNClob {
         value: &RdbcString,
         offset: i32,
         length: i32,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.clob
             .set_string_range(position, value, offset, length)
             .await
     }
 
     /// Opens a positioned ASCII output stream. Corresponds to `Clob#setAsciiStream(long)`.
-    pub async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    pub async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         self.clob.set_ascii_stream(position).await
     }
 
     /// Opens a positioned character writer. Corresponds to `Clob#setCharacterStream(long)`.
-    pub async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
+    pub async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, RdbcError> {
         self.clob.set_character_stream(position).await
     }
 
     /// Truncates the `NClob`. Corresponds to `Clob#truncate(long)`.
-    pub async fn truncate(&self, length: i64) -> Result<(), DruidError> {
+    pub async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
         self.clob.truncate(length).await
     }
 
     /// Releases the `NClob`. Corresponds to `Clob#free()`.
-    pub async fn free(&self) -> Result<(), DruidError> {
+    pub async fn free(&self) -> Result<(), RdbcError> {
         self.clob.free().await
     }
 
@@ -126,7 +126,7 @@ impl RdbcNClob {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcReader, DruidError> {
+    ) -> Result<RdbcReader, RdbcError> {
         self.clob.get_character_stream_range(position, length).await
     }
 

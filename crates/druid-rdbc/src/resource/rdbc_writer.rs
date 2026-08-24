@@ -4,7 +4,7 @@
 //! use UTF-16 code units as the lossless boundary, avoiding silent replacement
 //! when a Rust string cannot represent unpaired surrogates.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -14,13 +14,13 @@ static NEXT_WRITER_ID: AtomicU64 = AtomicU64::new(1);
 /// Service-provider interface for a physical character writer.
 pub trait PhysicalCharacterWriter: fmt::Debug + Send {
     /// Writes UTF-16 code units.
-    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, DruidError>;
+    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, RdbcError>;
 
     /// Flushes the underlying writer.
-    fn flush(&mut self) -> Result<(), DruidError>;
+    fn flush(&mut self) -> Result<(), RdbcError>;
 
     /// Closes the underlying writer.
-    fn close(&mut self) -> Result<(), DruidError>;
+    fn close(&mut self) -> Result<(), RdbcError>;
 }
 
 struct RdbcWriterState {
@@ -54,7 +54,7 @@ impl RdbcWriter {
     }
 
     /// Writes UTF-16 code units.
-    pub fn write_utf16(&self, code_units: &[u16]) -> Result<usize, DruidError> {
+    pub fn write_utf16(&self, code_units: &[u16]) -> Result<usize, RdbcError> {
         let mut state = self
             .inner
             .state
@@ -63,17 +63,17 @@ impl RdbcWriter {
         state
             .writer
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("Writer is closed".to_string()))?
+            .ok_or_else(|| RdbcError::DriverError("Writer is closed".to_string()))?
             .write_utf16(code_units)
     }
 
     /// Encodes a Rust string as UTF-16 and writes the resulting code units.
-    pub fn write_str(&self, value: &str) -> Result<usize, DruidError> {
+    pub fn write_str(&self, value: &str) -> Result<usize, RdbcError> {
         self.write_utf16(&value.encode_utf16().collect::<Vec<_>>())
     }
 
     /// Flushes the underlying writer.
-    pub fn flush(&self) -> Result<(), DruidError> {
+    pub fn flush(&self) -> Result<(), RdbcError> {
         let mut state = self
             .inner
             .state
@@ -82,12 +82,12 @@ impl RdbcWriter {
         state
             .writer
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("Writer is closed".to_string()))?
+            .ok_or_else(|| RdbcError::DriverError("Writer is closed".to_string()))?
             .flush()
     }
 
     /// Closes the writer. Repeated calls are idempotent.
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         let mut state = self
             .inner
             .state

@@ -3,7 +3,7 @@ use super::{
     HttpSqlPreparedStatement, HttpSqlProvider,
 };
 use base64::Engine;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -42,18 +42,18 @@ impl HttpSqlConnectionAdapter {
         endpoint: impl Into<String>,
         properties: HashMap<String, String>,
         client: reqwest::Client,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         let endpoint = endpoint.into();
         let endpoint = Url::parse(&endpoint).map_err(|error| {
-            DruidError::InvalidArgument(format!("invalid HTTP SQL URL: {error}"))
+            RdbcError::InvalidArgument(format!("invalid HTTP SQL URL: {error}"))
         })?;
         if !matches!(endpoint.scheme(), "http" | "https") {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "HTTP SQL URL must use http or https".to_owned(),
             ));
         }
         if provider == HttpSqlProvider::CloudflareD1 && endpoint.scheme() != "https" {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "Cloudflare D1 endpoint must use https".to_owned(),
             ));
         }
@@ -68,15 +68,15 @@ impl HttpSqlConnectionAdapter {
         })
     }
 
-    fn ensure_open(&self) -> Result<(), DruidError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.closed || self.discarded {
-            Err(DruidError::ConnectionDiscarded)
+            Err(RdbcError::ConnectionDiscarded)
         } else {
             Ok(())
         }
     }
 
-    fn request_url(&self) -> Result<Url, DruidError> {
+    fn request_url(&self) -> Result<Url, RdbcError> {
         let expected_suffix = match self.provider {
             HttpSqlProvider::Rqlite => "db/request",
             HttpSqlProvider::CloudflareD1 => "query",
@@ -131,7 +131,7 @@ impl HttpSqlConnectionAdapter {
         }
     }
 
-    fn decode_value(value: JsonValue) -> Result<Value, DruidError> {
+    fn decode_value(value: JsonValue) -> Result<Value, RdbcError> {
         match value {
             JsonValue::Null => Ok(Value::Null),
             JsonValue::Bool(value) => Ok(Value::Bool(value)),
@@ -139,7 +139,7 @@ impl HttpSqlConnectionAdapter {
                 .as_i64()
                 .map(Value::Int)
                 .or_else(|| value.as_f64().map(Value::Float))
-                .ok_or_else(|| DruidError::DriverError("invalid HTTP SQL number".to_owned())),
+                .ok_or_else(|| RdbcError::DriverError("invalid HTTP SQL number".to_owned())),
             JsonValue::String(value) => Ok(Value::String(value)),
             JsonValue::Array(values)
                 if values
@@ -157,21 +157,19 @@ impl HttpSqlConnectionAdapter {
                 let encoded = value
                     .remove("b64")
                     .and_then(|value| value.as_str().map(str::to_owned))
-                    .ok_or_else(|| {
-                        DruidError::DriverError("invalid rqlite b64 value".to_owned())
-                    })?;
+                    .ok_or_else(|| RdbcError::DriverError("invalid rqlite b64 value".to_owned()))?;
                 base64::engine::general_purpose::STANDARD
                     .decode(encoded)
                     .map(Value::Bytes)
-                    .map_err(|error| DruidError::DriverError(error.to_string()))
+                    .map_err(|error| RdbcError::DriverError(error.to_string()))
             }
-            other => Err(DruidError::DriverError(format!(
+            other => Err(RdbcError::DriverError(format!(
                 "unsupported HTTP SQL value {other}"
             ))),
         }
     }
 
-    fn http_error(status: StatusCode, message: impl Into<String>) -> DruidError {
+    fn http_error(status: StatusCode, message: impl Into<String>) -> RdbcError {
         let sql_state = if matches!(status, StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN) {
             "28000"
         } else if matches!(
@@ -190,7 +188,7 @@ impl HttpSqlConnectionAdapter {
             Some(message.into()),
         )
         .with_class_name("druid.http_sql.HttpSqlException");
-        DruidError::SqlException(Box::new(
+        RdbcError::SqlException(Box::new(
             if status.is_server_error()
                 || matches!(
                     status,
@@ -204,11 +202,7 @@ impl HttpSqlConnectionAdapter {
         ))
     }
 
-    async fn request(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<HttpSqlResult, DruidError> {
+    async fn request(&mut self, sql: &str, params: Vec<Value>) -> Result<HttpSqlResult, RdbcError> {
         self.ensure_open()?;
         let parameters = params
             .into_iter()
@@ -250,7 +244,7 @@ impl HttpSqlConnectionAdapter {
         }
     }
 
-    fn decode_rqlite(payload: JsonValue) -> Result<HttpSqlResult, DruidError> {
+    fn decode_rqlite(payload: JsonValue) -> Result<HttpSqlResult, RdbcError> {
         let result = payload
             .get("results")
             .and_then(JsonValue::as_array)
@@ -277,9 +271,7 @@ impl HttpSqlConnectionAdapter {
                 rows.iter()
                     .map(|row| {
                         row.as_array()
-                            .ok_or_else(|| {
-                                DruidError::DriverError("invalid rqlite row".to_owned())
-                            })?
+                            .ok_or_else(|| RdbcError::DriverError("invalid rqlite row".to_owned()))?
                             .iter()
                             .cloned()
                             .map(Self::decode_value)
@@ -301,7 +293,7 @@ impl HttpSqlConnectionAdapter {
         })
     }
 
-    fn decode_d1(payload: JsonValue) -> Result<HttpSqlResult, DruidError> {
+    fn decode_d1(payload: JsonValue) -> Result<HttpSqlResult, RdbcError> {
         if payload.get("success").and_then(JsonValue::as_bool) != Some(true) {
             let error = payload
                 .get("errors")
@@ -330,7 +322,7 @@ impl HttpSqlConnectionAdapter {
             .into_iter()
             .map(|row| {
                 let mut object = row.as_object().cloned().ok_or_else(|| {
-                    DruidError::DriverError("invalid Cloudflare D1 row".to_owned())
+                    RdbcError::DriverError("invalid Cloudflare D1 row".to_owned())
                 })?;
                 labels
                     .iter()
@@ -357,12 +349,12 @@ impl HttpSqlConnectionAdapter {
 
     fn prepared_statement(
         statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&HttpSqlPreparedStatement, DruidError> {
+    ) -> Result<&HttpSqlPreparedStatement, RdbcError> {
         statement
             .as_any()
             .downcast_ref::<HttpSqlPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by HttpSqlConnectionAdapter".to_owned(),
                 )
             })
@@ -371,13 +363,13 @@ impl HttpSqlConnectionAdapter {
     fn finish_controlled<T>(
         &mut self,
         result: Result<T, HttpSqlStatementExecutionError>,
-    ) -> Result<T, DruidError> {
+    ) -> Result<T, RdbcError> {
         match result {
             Ok(value) => Ok(value),
             Err(HttpSqlStatementExecutionError::Driver(error)) => Err(error),
             Err(HttpSqlStatementExecutionError::TimedOut) => {
                 self.discarded = true;
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     druid_rdbc::error::SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
@@ -388,7 +380,7 @@ impl HttpSqlConnectionAdapter {
             }
             Err(HttpSqlStatementExecutionError::Cancelled) => {
                 self.discarded = true;
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     druid_rdbc::error::SqlException::new(
                         0,
                         Some("HY008".to_owned()),
@@ -403,7 +395,7 @@ impl HttpSqlConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for HttpSqlConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         let result = self.request(sql, params).await?;
         Ok(ExecResult {
             rows_affected: result.rows_affected,
@@ -417,7 +409,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         sql: &str,
         params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let result = self.request(sql, params).await?;
         if result.column_labels.is_empty() {
             Ok(vec![StatementExecuteResult::Update(ExecResult {
@@ -430,7 +422,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         }
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.request(sql, params).await.map(|result| result.rows)
     }
 
@@ -438,7 +430,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let result = self.request(sql, params).await?;
         Ok(Arc::new(RowSetResultSet::with_column_labels(
             result.rows,
@@ -449,7 +441,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         self.ensure_open()?;
         Ok(Arc::new(HttpSqlPreparedStatement::new(key.sql())))
     }
@@ -458,7 +450,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let statement = Self::prepared_statement(statement)?;
         let result = statement
             .execute_with_controls(self.request(statement.sql(), params))
@@ -475,7 +467,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let statement = Self::prepared_statement(statement)?;
         let result = statement
             .execute_with_controls(self.request(statement.sql(), params))
@@ -483,35 +475,35 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         self.finish_controlled(result).map(|result| result.rows)
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         let result = self.request("SELECT 1", Vec::new()).await?;
         if result.rows.is_empty() {
-            return Err(DruidError::ValidationFailed(
+            return Err(RdbcError::ValidationFailed(
                 "HTTP SQL validation returned no rows".to_owned(),
             ));
         }
         Ok(())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "http_sql_transactions",
         })
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "http_sql_transactions",
         })
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "http_sql_transactions",
         })
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -534,7 +526,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         }
     }
 
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         self.ensure_open()?;
         Ok(Box::new(HttpSqlDatabaseMetaData::new(
             self.provider,
@@ -543,12 +535,12 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         )))
     }
 
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.ensure_open()?;
         Ok(None)
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()
     }
 

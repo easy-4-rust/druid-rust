@@ -755,9 +755,11 @@ impl PoolInner {
                 )
                 .await
                 {
-                    Ok(result) => result.map(|connection_info| {
-                        PhysicalConnectionConnectResult::new(connection_info, self.next_id())
-                    }),
+                    Ok(result) => result
+                        .map(|connection_info| {
+                            PhysicalConnectionConnectResult::new(connection_info, self.next_id())
+                        })
+                        .map_err(DruidError::from),
                     Err(_) => Err(DruidError::LoginTimeout),
                 }
             }
@@ -767,7 +769,8 @@ impl PoolInner {
                 .await
                 .map(|connection_info| {
                     PhysicalConnectionConnectResult::new(connection_info, self.next_id())
-                }),
+                })
+                .map_err(DruidError::from),
         };
 
         match create_result {
@@ -919,7 +922,11 @@ impl PoolInner {
                     )
                     .await
             }
-            _ => self.factory.close(connection).await,
+            _ => self
+                .factory
+                .close(connection)
+                .await
+                .map_err(DruidError::from),
         };
         if let Err(error) = result {
             tracing::warn!(
@@ -1256,7 +1263,11 @@ impl PoolInner {
                         )
                         .await
                 }
-                _ => self.factory.close(&mut connection).await,
+                _ => self
+                    .factory
+                    .close(&mut connection)
+                    .await
+                    .map_err(DruidError::from),
             };
             if let Err(error) = result {
                 tracing::warn!(

@@ -1,4 +1,4 @@
-use druid::core::{Driver, DriverProperty, DruidError, PhysicalConnection};
+use druid::core::{Driver, DriverProperty, PhysicalConnection, RdbcError};
 use std::collections::HashMap;
 
 struct MockDriver;
@@ -8,8 +8,8 @@ impl Driver for MockDriver {
     fn name(&self) -> &'static str {
         "mock"
     }
-    async fn connect(&self, _url: &str) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        Err(DruidError::Other("not implemented".to_owned()))
+    async fn connect(&self, _url: &str) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+        Err(RdbcError::Other("not implemented".to_owned()))
     }
 }
 

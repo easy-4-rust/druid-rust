@@ -1,6 +1,6 @@
 //! `DuckDB` 原生数据库元数据。
 
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalDatabaseMetaData;
 use duckdb::Connection;
 use parking_lot::Mutex;
@@ -24,7 +24,7 @@ impl DuckDbDatabaseMetaData {
         }
     }
 
-    async fn product_version(&self) -> Result<String, DruidError> {
+    async fn product_version(&self) -> Result<String, RdbcError> {
         let connection = Arc::clone(&self.connection);
         tokio::task::spawn_blocking(move || {
             connection
@@ -34,11 +34,11 @@ impl DuckDbDatabaseMetaData {
         })
         .await
         .map_err(|error| {
-            DruidError::DriverError(format!("DuckDB metadata worker failed: {error}"))
+            RdbcError::DriverError(format!("DuckDB metadata worker failed: {error}"))
         })?
     }
 
-    async fn version_component(&self, index: usize) -> Result<i32, DruidError> {
+    async fn version_component(&self, index: usize) -> Result<i32, RdbcError> {
         let version = self.product_version().await?;
         version
             .split(|character: char| !character.is_ascii_digit())
@@ -46,7 +46,7 @@ impl DuckDbDatabaseMetaData {
             .nth(index)
             .and_then(|component| component.parse().ok())
             .ok_or_else(|| {
-                DruidError::DriverError(format!(
+                RdbcError::DriverError(format!(
                     "DuckDB version `{version}` has no numeric component {index}"
                 ))
             })
@@ -55,83 +55,83 @@ impl DuckDbDatabaseMetaData {
 
 #[async_trait::async_trait]
 impl PhysicalDatabaseMetaData for DuckDbDatabaseMetaData {
-    async fn all_procedures_are_callable(&mut self) -> Result<bool, DruidError> {
+    async fn all_procedures_are_callable(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 
-    async fn all_tables_are_selectable(&mut self) -> Result<bool, DruidError> {
+    async fn all_tables_are_selectable(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn get_url(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_url(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(self.url.clone()))
     }
 
-    async fn get_user_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_user_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(None)
     }
 
-    async fn is_read_only(&mut self) -> Result<bool, DruidError> {
+    async fn is_read_only(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 
-    async fn get_database_product_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("DuckDB".to_string()))
     }
 
-    async fn get_database_product_version(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_database_product_version(&mut self) -> Result<Option<String>, RdbcError> {
         self.product_version().await.map(Some)
     }
 
-    async fn get_driver_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_driver_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("duckdb-rs".to_string()))
     }
 
-    async fn get_driver_version(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_driver_version(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("1.10505.0".to_string()))
     }
 
-    async fn get_driver_major_version(&mut self) -> Result<i32, DruidError> {
+    async fn get_driver_major_version(&mut self) -> Result<i32, RdbcError> {
         self.version_component(0).await
     }
 
-    async fn get_driver_minor_version(&mut self) -> Result<i32, DruidError> {
+    async fn get_driver_minor_version(&mut self) -> Result<i32, RdbcError> {
         self.version_component(1).await
     }
 
-    async fn uses_local_files(&mut self) -> Result<bool, DruidError> {
+    async fn uses_local_files(&mut self) -> Result<bool, RdbcError> {
         Ok(!self.url.ends_with(":memory:"))
     }
 
-    async fn uses_local_file_per_table(&mut self) -> Result<bool, DruidError> {
+    async fn uses_local_file_per_table(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 
-    async fn stores_lower_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_lower_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 
-    async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn supports_mixed_case_quoted_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn supports_mixed_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn get_identifier_quote_string(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_identifier_quote_string(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("\"".to_string()))
     }
 
-    async fn supports_transactions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_transactions(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn supports_savepoints(&mut self) -> Result<bool, DruidError> {
+    async fn supports_savepoints(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 
-    async fn supports_batch_updates(&mut self) -> Result<bool, DruidError> {
+    async fn supports_batch_updates(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 }

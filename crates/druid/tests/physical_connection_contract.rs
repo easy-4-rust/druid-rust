@@ -7,7 +7,7 @@
 
 use druid::core::{
     AfterFilter, BeforeFilter, ConnectionFactory, DruidError, ExecContext, ExecResult, FilterChain,
-    PhysicalConnection, PhysicalPreparedStatement, PreparedInputParameter, Row,
+    PhysicalConnection, PhysicalPreparedStatement, PreparedInputParameter, RdbcError, Row,
     SqlTextPreparedStatement, StatementGeneratedKeys, Value,
 };
 use druid::pool::DruidPool;
@@ -20,7 +20,7 @@ struct ContractPhysicalConnection;
 
 #[async_trait::async_trait]
 impl PhysicalConnection for ContractPhysicalConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult {
             rows_affected: 1,
             last_insert_id: Some(7),
@@ -28,30 +28,30 @@ impl PhysicalConnection for ContractPhysicalConnection {
         })
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![
             Row::new(vec![Value::Int(1)]),
             Row::new(vec![Value::Int(2)]),
         ])
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -64,14 +64,14 @@ struct ContractFactory;
 
 #[async_trait::async_trait]
 impl ConnectionFactory for ContractFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(ContractPhysicalConnection))
     }
 
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }
@@ -182,7 +182,7 @@ async fn exec_and_fetch_preserve_one_filter_context() {
 
     assert_eq!(
         connection.warnings().await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_get_warnings"
         })
     );
@@ -232,7 +232,7 @@ async fn physical_connection_default_generic_execute_is_explicitly_unsupported()
     let mut connection = ContractPhysicalConnection;
     assert_eq!(
         connection.warnings().await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_get_warnings"
         })
     );
@@ -240,7 +240,7 @@ async fn physical_connection_default_generic_execute_is_explicitly_unsupported()
         connection
             .execute("SELECT 1", Vec::new(), StatementGeneratedKeys::None,)
             .await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "statement_execute"
         })
     );
@@ -279,18 +279,18 @@ async fn physical_connection_default_generic_execute_is_explicitly_unsupported()
                 StatementGeneratedKeys::None,
             )
             .await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "statement_execute"
         })
     );
     prepared.close().unwrap();
     assert!(matches!(
         prepared.warnings(),
-        Err(DruidError::Other(message)) if message == "statement is closed"
+        Err(RdbcError::Other(message)) if message == "statement is closed"
     ));
     assert!(matches!(
         prepared.clear_warnings(),
-        Err(DruidError::Other(message)) if message == "statement is closed"
+        Err(RdbcError::Other(message)) if message == "statement is closed"
     ));
 }
 
@@ -347,7 +347,7 @@ struct GatedFactory {
 
 #[async_trait::async_trait]
 impl ConnectionFactory for GatedFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.entered.fetch_add(1, Ordering::AcqRel);
         self.entered_notify.notify_one();
         self.release
@@ -361,7 +361,7 @@ impl ConnectionFactory for GatedFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

@@ -3,7 +3,7 @@
 use druid::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent, DruidError,
     DruidPooledConnection, ExecContext, ExecOperation, ExecResult, ExtendedFilter, FilterChain,
-    FilterEventAdapter, FilterEventListener, PhysicalConnectionFactory, ResultSetFilter,
+    FilterEventAdapter, FilterEventListener, PhysicalConnectionFactory, RdbcError, ResultSetFilter,
     ResultSetFilterContext, StatementEvent, WrapperExt,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -539,7 +539,7 @@ async fn real_toasty_sqlite_preserves_operation_specific_success_and_error_event
         .unwrap_err();
     assert!(matches!(
         error,
-        DruidError::SqlException(_) | DruidError::DriverError(_)
+        RdbcError::SqlException(_) | RdbcError::DriverError(_)
     ));
 
     let recorded = events(&event_log);

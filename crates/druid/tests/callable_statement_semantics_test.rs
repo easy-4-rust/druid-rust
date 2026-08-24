@@ -10,14 +10,14 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableParameter, DruidError, DruidPooledCallableStatement,
-    DruidPooledCallableStatementHandle, ExecResult, PhysicalCallableStatement, PhysicalConnection,
-    PhysicalPreparedStatement, PreparedStatementKey, PreparedStatementMethodType, RdbcBlob,
-    RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream,
-    RdbcReader, RdbcResultSet, RdbcRowId, RdbcStreamLength, RdbcString, RdbcTargetType,
-    RdbcTypeMap, RdbcUrl, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource,
-    ResultSetStatement, Row, SqlTextPreparedStatement, StatementExecuteResult,
-    StatementGeneratedKeys, Value, Wrapper, WrapperExt,
+    CallableParameter, DruidPooledCallableStatement, DruidPooledCallableStatementHandle,
+    ExecResult, PhysicalCallableStatement, PhysicalConnection, PhysicalPreparedStatement,
+    PreparedStatementKey, PreparedStatementMethodType, RdbcBlob, RdbcCharacterLength, RdbcClob,
+    RdbcError, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcResultSet,
+    RdbcRowId, RdbcStreamLength, RdbcString, RdbcTargetType, RdbcTypeMap, RdbcUrl, RdbcWriter,
+    RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, ResultSetStatement, Row,
+    SqlTextPreparedStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper,
+    WrapperExt,
 };
 use druid::pool::DruidPool;
 use druid::spi::{
@@ -41,9 +41,9 @@ struct TestBlobAccess {
 }
 
 impl TestBlobAccess {
-    fn ensure_open(&self) -> Result<(), DruidError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.freed.load(Ordering::Acquire) {
-            Err(DruidError::DriverError("Blob has been freed".to_string()))
+            Err(RdbcError::DriverError("Blob has been freed".to_string()))
         } else {
             Ok(())
         }
@@ -56,7 +56,7 @@ impl RdbcResourceAccess for TestBlobAccess {
         RdbcResourceCapabilities::blob()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
@@ -64,36 +64,36 @@ impl RdbcResourceAccess for TestBlobAccess {
 
 #[async_trait::async_trait]
 impl RdbcBlobAccess for TestBlobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         self.ensure_open()?;
         Ok(i64::try_from(self.bytes.len()).expect("test Blob length fits i64"))
     }
 
-    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
+    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
         self.ensure_open()?;
         let start = usize::try_from(position - 1)
-            .map_err(|_| DruidError::DriverError("invalid Blob position".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Blob position".to_string()))?;
         let length = usize::try_from(length)
-            .map_err(|_| DruidError::DriverError("invalid Blob length".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Blob length".to_string()))?;
         let end = start
             .checked_add(length)
             .map(|end| end.min(self.bytes.len()))
-            .ok_or_else(|| DruidError::DriverError("Blob range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Blob range overflow".to_string()))?;
         self.bytes
             .get(start..end)
             .map(<[u8]>::to_vec)
-            .ok_or_else(|| DruidError::DriverError("invalid Blob range".to_string()))
+            .ok_or_else(|| RdbcError::DriverError("invalid Blob range".to_string()))
     }
 
-    async fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcInputStream::from_bytes(self.bytes.clone()))
     }
 
-    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
+    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, RdbcError> {
         self.ensure_open()?;
         let start = usize::try_from(start - 1)
-            .map_err(|_| DruidError::DriverError("invalid Blob position".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Blob position".to_string()))?;
         Ok(self
             .bytes
             .get(start..)
@@ -109,15 +109,15 @@ impl RdbcBlobAccess for TestBlobAccess {
         &self,
         pattern: &RdbcBlob,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         let length = i32::try_from(pattern.length().await?)
-            .map_err(|_| DruidError::DriverError("test pattern is too large".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("test pattern is too large".to_string()))?;
         let bytes = pattern.get_bytes(1, length).await?;
         self.position_bytes(&bytes, start).await
     }
 
-    async fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_set_bytes",
         })
     }
@@ -128,20 +128,20 @@ impl RdbcBlobAccess for TestBlobAccess {
         _bytes: &[u8],
         _offset: i32,
         _length: i32,
-    ) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_set_bytes_range",
         })
     }
 
-    async fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_set_binary_stream",
         })
     }
 
-    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn truncate(&self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_truncate",
         })
     }
@@ -150,9 +150,9 @@ impl RdbcBlobAccess for TestBlobAccess {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, RdbcError> {
         let length = i32::try_from(length)
-            .map_err(|_| DruidError::DriverError("invalid Blob range length".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Blob range length".to_string()))?;
         Ok(RdbcInputStream::from_bytes(
             self.get_bytes(position, length).await?,
         ))
@@ -174,21 +174,21 @@ struct TestClobAccess {
 }
 
 impl TestClobAccess {
-    fn ensure_open(&self) -> Result<(), DruidError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.freed.load(Ordering::Acquire) {
-            Err(DruidError::DriverError("Clob has been freed".to_string()))
+            Err(RdbcError::DriverError("Clob has been freed".to_string()))
         } else {
             Ok(())
         }
     }
 
-    fn start(&self, position: i64) -> Result<usize, DruidError> {
+    fn start(&self, position: i64) -> Result<usize, RdbcError> {
         self.ensure_open()?;
         position
             .checked_sub(1)
             .and_then(|position| usize::try_from(position).ok())
             .filter(|position| *position <= self.code_units.len())
-            .ok_or_else(|| DruidError::DriverError("invalid Clob position".to_string()))
+            .ok_or_else(|| RdbcError::DriverError("invalid Clob position".to_string()))
     }
 }
 
@@ -198,7 +198,7 @@ impl RdbcResourceAccess for TestClobAccess {
         RdbcResourceCapabilities::clob()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
@@ -206,35 +206,35 @@ impl RdbcResourceAccess for TestClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcClobAccess for TestClobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         self.ensure_open()?;
         Ok(i64::try_from(self.code_units.len()).expect("test Clob length fits i64"))
     }
 
-    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
+    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, RdbcError> {
         let start = self.start(position)?;
         let length = usize::try_from(length)
-            .map_err(|_| DruidError::DriverError("invalid Clob length".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Clob length".to_string()))?;
         let end = start
             .checked_add(length)
             .map(|end| end.min(self.code_units.len()))
-            .ok_or_else(|| DruidError::DriverError("Clob range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Clob range overflow".to_string()))?;
         Ok(RdbcString::from_utf16(self.code_units[start..end].to_vec()))
     }
 
-    async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcReader::from_utf16(self.code_units.clone()))
     }
 
-    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.ensure_open()?;
         let bytes = self
             .code_units
             .iter()
             .map(|value| {
                 u8::try_from(*value).map_err(|_| {
-                    DruidError::DriverError("test Clob contains non-ASCII data".to_string())
+                    RdbcError::DriverError("test Clob contains non-ASCII data".to_string())
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -245,7 +245,7 @@ impl RdbcClobAccess for TestClobAccess {
         &self,
         pattern: &RdbcString,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         let start = self.start(start)?;
         let position = if pattern.is_empty() {
             Some(start)
@@ -263,15 +263,15 @@ impl RdbcClobAccess for TestClobAccess {
         &self,
         pattern: &RdbcClob,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         let length = i32::try_from(pattern.length().await?)
-            .map_err(|_| DruidError::DriverError("test Clob pattern is too large".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("test Clob pattern is too large".to_string()))?;
         let value = pattern.get_sub_string(1, length).await?;
         self.position_string(&value, start).await
     }
 
-    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_clob_set_string",
         })
     }
@@ -282,26 +282,26 @@ impl RdbcClobAccess for TestClobAccess {
         _value: &RdbcString,
         _offset: i32,
         _length: i32,
-    ) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_clob_set_string_range",
         })
     }
 
-    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_clob_set_ascii_stream",
         })
     }
 
-    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_clob_set_character_stream",
         })
     }
 
-    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn truncate(&self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_clob_truncate",
         })
     }
@@ -310,9 +310,9 @@ impl RdbcClobAccess for TestClobAccess {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcReader, DruidError> {
+    ) -> Result<RdbcReader, RdbcError> {
         let length = i32::try_from(length)
-            .map_err(|_| DruidError::DriverError("invalid Clob range length".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Clob range length".to_string()))?;
         Ok(RdbcReader::from_utf16(
             self.get_sub_string(position, length)
                 .await?
@@ -350,22 +350,19 @@ impl RdbcResourceAccess for TestRefAccess {
 
 #[async_trait::async_trait]
 impl RdbcRefAccess for TestRefAccess {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         Ok("schema.kind".to_string())
     }
 
-    async fn object(&self) -> Result<RdbcObject, DruidError> {
+    async fn object(&self) -> Result<RdbcObject, RdbcError> {
         Ok(RdbcObject::from(Value::String("ref-value".to_string())))
     }
 
-    async fn object_with_type_map(
-        &self,
-        _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, DruidError> {
+    async fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, RdbcError> {
         self.object().await
     }
 
-    async fn set_object(&self, _value: RdbcObject) -> Result<(), DruidError> {
+    async fn set_object(&self, _value: RdbcObject) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -382,26 +379,26 @@ impl RdbcResourceAccess for TestArrayAccess {
 
 #[async_trait::async_trait]
 impl RdbcArrayAccess for TestArrayAccess {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         Ok("INTEGER".to_string())
     }
 
-    async fn base_type(&self) -> Result<i32, DruidError> {
+    async fn base_type(&self) -> Result<i32, RdbcError> {
         Ok(4)
     }
 
-    async fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values(&self) -> Result<Vec<RdbcObject>, RdbcError> {
         Ok(vec![RdbcObject::from(Value::Int(1))])
     }
 
     async fn values_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.values().await
     }
 
-    async fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values_range(&self, _index: i64, _count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
         self.values().await
     }
 
@@ -410,12 +407,12 @@ impl RdbcArrayAccess for TestArrayAccess {
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.values_range(index, count).await
     }
 
-    async fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn result_set(&self) -> Result<RdbcResultSet, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_array_result_set",
         })
     }
@@ -423,15 +420,11 @@ impl RdbcArrayAccess for TestArrayAccess {
     async fn result_set_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.result_set().await
     }
 
-    async fn result_set_range(
-        &self,
-        _index: i64,
-        _count: i32,
-    ) -> Result<RdbcResultSet, DruidError> {
+    async fn result_set_range(&self, _index: i64, _count: i32) -> Result<RdbcResultSet, RdbcError> {
         self.result_set().await
     }
 
@@ -440,7 +433,7 @@ impl RdbcArrayAccess for TestArrayAccess {
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.result_set_range(index, count).await
     }
 }
@@ -457,37 +450,37 @@ impl RdbcResourceAccess for TestSqlXmlAccess {
 
 #[async_trait::async_trait]
 impl RdbcSqlXmlAccess for TestSqlXmlAccess {
-    async fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         Ok(RdbcInputStream::from_bytes(b"<x/>".to_vec()))
     }
 
-    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, RdbcError> {
         Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    async fn character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn character_stream(&self) -> Result<RdbcReader, RdbcError> {
         Ok(RdbcReader::from_string("<x/>"))
     }
 
-    async fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn set_character_stream(&self) -> Result<RdbcWriter, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_sql_xml_writer",
         })
     }
 
-    async fn string(&self) -> Result<RdbcString, DruidError> {
+    async fn string(&self) -> Result<RdbcString, RdbcError> {
         Ok(RdbcString::from("<x/>"))
     }
 
-    async fn set_string(&self, _value: &RdbcString) -> Result<(), DruidError> {
+    async fn set_string(&self, _value: &RdbcString) -> Result<(), RdbcError> {
         Ok(())
     }
 
     async fn source(
         &self,
         _representation: &RdbcXmlRepresentationType,
-    ) -> Result<RdbcXmlSource, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<RdbcXmlSource, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_sql_xml_source",
         })
     }
@@ -495,8 +488,8 @@ impl RdbcSqlXmlAccess for TestSqlXmlAccess {
     async fn result(
         &self,
         _representation: &RdbcXmlRepresentationType,
-    ) -> Result<RdbcXmlResult, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<RdbcXmlResult, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_sql_xml_result",
         })
     }
@@ -691,7 +684,7 @@ impl PhysicalPreparedStatement for TestCallableStatement {
         Some(self)
     }
 
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         self.named_parameters
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -699,7 +692,7 @@ impl PhysicalPreparedStatement for TestCallableStatement {
         Ok(())
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
@@ -714,7 +707,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter: CallableParameter,
         out_parameter: CallableOutParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.registrations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -726,7 +719,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter_name: &str,
         parameter: CallableInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.named_parameters
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -734,9 +727,9 @@ impl PhysicalCallableStatement for TestCallableStatement {
         Ok(())
     }
 
-    fn out_parameter(&self, parameter: &CallableParameter) -> Result<RdbcObject, DruidError> {
+    fn out_parameter(&self, parameter: &CallableParameter) -> Result<RdbcObject, RdbcError> {
         let value = self.outputs.get(parameter).cloned().ok_or_else(|| {
-            DruidError::DriverError(format!("OUT parameter {parameter:?} is unavailable"))
+            RdbcError::DriverError(format!("OUT parameter {parameter:?} is unavailable"))
         })?;
         self.last_was_null.store(value.is_null(), Ordering::Release);
         Ok(value)
@@ -746,7 +739,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter: &CallableParameter,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.type_map_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -758,7 +751,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter: &CallableParameter,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.typed_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -766,7 +759,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         self.out_parameter(parameter)
     }
 
-    fn was_null(&self) -> Result<bool, DruidError> {
+    fn was_null(&self) -> Result<bool, RdbcError> {
         Ok(self.last_was_null.load(Ordering::Acquire))
     }
 
@@ -774,7 +767,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter: &CallableParameter,
         calendar: &CallableCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.calendar_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -782,7 +775,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         match self.out_parameter(parameter)? {
             RdbcObject::Scalar(Value::Null) => Ok(None),
             RdbcObject::Date(value) => Ok(Some(value)),
-            other => Err(DruidError::DriverError(format!(
+            other => Err(RdbcError::DriverError(format!(
                 "expected Date, got {other}"
             ))),
         }
@@ -792,7 +785,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter: &CallableParameter,
         calendar: &CallableCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.calendar_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -800,7 +793,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         match self.out_parameter(parameter)? {
             RdbcObject::Scalar(Value::Null) => Ok(None),
             RdbcObject::Time(value) => Ok(Some(value)),
-            other => Err(DruidError::DriverError(format!(
+            other => Err(RdbcError::DriverError(format!(
                 "expected Time, got {other}"
             ))),
         }
@@ -810,7 +803,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         &self,
         parameter: &CallableParameter,
         calendar: &CallableCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.calendar_reads
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -818,7 +811,7 @@ impl PhysicalCallableStatement for TestCallableStatement {
         match self.out_parameter(parameter)? {
             RdbcObject::Scalar(Value::Null) => Ok(None),
             RdbcObject::Timestamp(value) => Ok(Some(value)),
-            other => Err(DruidError::DriverError(format!(
+            other => Err(RdbcError::DriverError(format!(
                 "expected Timestamp, got {other}"
             ))),
         }
@@ -834,7 +827,7 @@ struct CallableConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for CallableConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult {
             rows_affected: 1,
             last_insert_id: None,
@@ -842,7 +835,7 @@ impl PhysicalConnection for CallableConnection {
         })
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
 
@@ -851,7 +844,7 @@ impl PhysicalConnection for CallableConnection {
         sql: &str,
         _params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if sql == "{call multi()}" {
             Ok(vec![
                 StatementExecuteResult::ResultSet(vec![Row::new(vec![Value::Int(10)])]),
@@ -874,14 +867,14 @@ impl PhysicalConnection for CallableConnection {
     async fn prepare_physical_call(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         self.prepare_count.fetch_add(1, Ordering::Relaxed);
         self.prepared_keys
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(key.clone());
         match key.sql() {
-            "unsupported" => Err(DruidError::UnsupportedOperation {
+            "unsupported" => Err(RdbcError::UnsupportedOperation {
                 operation: "test_prepare_call",
             }),
             "ordinary-handle" => Ok(Arc::new(SqlTextPreparedStatement::new(key.sql()))),
@@ -889,23 +882,23 @@ impl PhysicalConnection for CallableConnection {
         }
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -918,7 +911,7 @@ impl PhysicalConnection for CallableConnection {
         Some(&self.schema)
     }
 
-    async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
+    async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
         self.schema = schema.to_string();
         Ok(())
     }
@@ -931,7 +924,7 @@ struct CallableFactory {
 
 #[async_trait::async_trait]
 impl druid::core::PhysicalConnectionFactory for CallableFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(CallableConnection {
             prepare_count: self.prepare_count.clone(),
             prepared_keys: self.prepared_keys.clone(),
@@ -943,11 +936,11 @@ impl druid::core::PhysicalConnectionFactory for CallableFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 
-    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), DruidError> {
+    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), RdbcError> {
         connection.close().await
     }
 }
@@ -2150,13 +2143,13 @@ async fn callable_errors_invalidate_cache_and_non_callable_handles_are_rejected(
     let wrong_handle = connection.prepare_call("ordinary-handle").await;
     assert!(matches!(
         wrong_handle,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepare_physical_call"
         })
     ));
     assert!(matches!(
         connection.prepare_call("unsupported").await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "test_prepare_call"
         })
     ));

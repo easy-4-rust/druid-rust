@@ -6,8 +6,8 @@
 //! - `com.alibaba.druid.bvt.pool.PSCacheTest3`
 
 use druid::core::{
-    DruidError, PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementKey,
-    PreparedStatementMethodType, PreparedStatementPool, SqlTextPreparedStatement,
+    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementKey,
+    PreparedStatementMethodType, PreparedStatementPool, RdbcError, SqlTextPreparedStatement,
     StatementGeneratedKeys,
 };
 use std::collections::HashSet;
@@ -251,7 +251,7 @@ fn prepared_statement_key_maps_all_java_constructor_overloads_and_null_error() {
 
     assert_eq!(
         PreparedStatementKey::new(None, None, PreparedStatementMethodType::M1),
-        Err(DruidError::InvalidArgument("sql is null".to_string()))
+        Err(RdbcError::InvalidArgument("sql is null".to_string()))
     );
 }
 

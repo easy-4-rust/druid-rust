@@ -1,9 +1,7 @@
 //! Java 语义兼容合同的声明入口。
 
-mod druid_error;
 mod exceptions;
 
-pub use druid_error::DruidError;
 pub use exceptions::BatchUpdateException;
 pub use exceptions::DataTruncation;
 pub use exceptions::SqlClientInfoException;

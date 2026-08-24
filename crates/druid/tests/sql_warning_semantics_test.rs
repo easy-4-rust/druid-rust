@@ -8,7 +8,7 @@
 use druid::core::{
     BeforeFilter, ConnectionWarningFilterChain, DruidError, DruidPooledConnection, ExceptionSorter,
     ExceptionSorterProperties, ExecContext, ExecResult, FilterChain, PhysicalConnection,
-    PhysicalConnectionFactory, ResultSetFilter, ResultSetFilterChain, Row, SqlException,
+    PhysicalConnectionFactory, RdbcError, ResultSetFilter, ResultSetFilterChain, Row, SqlException,
     SqlWarning, StatementWarningFilterChain, Value,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -43,31 +43,31 @@ struct WarningPhysicalConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for WarningPhysicalConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -76,25 +76,25 @@ impl PhysicalConnection for WarningPhysicalConnection {
         self.closed
     }
 
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.log
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push("physical-connection-get".to_string());
         if self.fail_get {
-            Err(fatal_warning_error())
+            Err(fatal_warning_error().into())
         } else {
             Ok(self.warning.clone())
         }
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.log
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push("physical-connection-clear".to_string());
         if self.fail_clear {
-            Err(fatal_warning_error())
+            Err(fatal_warning_error().into())
         } else {
             self.warning = None;
             Ok(())
@@ -295,7 +295,7 @@ async fn connection_get_warning_error_skips_sorter_but_clear_uses_sorter() {
 
     assert!(matches!(
         connection.warnings().await,
-        Err(DruidError::SqlException(_))
+        Err(RdbcError::SqlException(_))
     ));
     assert!(
         !connection.is_discarded(),
@@ -304,7 +304,7 @@ async fn connection_get_warning_error_skips_sorter_but_clear_uses_sorter() {
 
     assert!(matches!(
         connection.clear_warnings().await,
-        Err(DruidError::SqlException(_))
+        Err(RdbcError::SqlException(_))
     ));
     assert!(
         connection.is_discarded(),
@@ -467,7 +467,7 @@ async fn statement_warning_filter_error_enters_fatal_sorter() {
 
     assert!(matches!(
         statement.warnings(&mut connection).await,
-        Err(DruidError::SqlException(_))
+        Err(RdbcError::SqlException(_))
     ));
     assert!(connection.is_discarded());
     assert_eq!(statement.exception_count(), 1);
@@ -497,7 +497,7 @@ async fn prepared_warning_filter_errors_enter_fatal_sorter_for_get_and_clear() {
             prepared.clear_warnings(&mut connection).await
         };
         assert!(
-            matches!(result, Err(DruidError::SqlException(_))),
+            matches!(result, Err(RdbcError::SqlException(_))),
             "{operation} 必须保留结构化 SQL 异常"
         );
         assert!(

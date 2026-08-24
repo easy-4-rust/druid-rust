@@ -13,7 +13,7 @@ pub struct Savepoint {
 
 impl Savepoint {
     /// 返回匿名保存点 ID。命名保存点调用该方法返回 `SQLException`。
-    pub fn get_savepoint_id(&self) -> Result<i32, crate::compat::DruidError> {
+    pub fn get_savepoint_id(&self) -> Result<i32, crate::error::RdbcError> {
         if self.name.is_some() {
             return Err(Self::access_error(
                 "named savepoint does not have a numeric id",
@@ -23,14 +23,14 @@ impl Savepoint {
     }
 
     /// 返回命名保存点名称。匿名保存点调用该方法返回 `SQLException`。
-    pub fn get_savepoint_name(&self) -> Result<&str, crate::compat::DruidError> {
+    pub fn get_savepoint_name(&self) -> Result<&str, crate::error::RdbcError> {
         self.name
             .as_deref()
             .ok_or_else(|| Self::access_error("unnamed savepoint does not have a name"))
     }
 
-    fn access_error(message: &str) -> crate::compat::DruidError {
-        crate::compat::DruidError::SqlException(Box::new(crate::error::SqlException::new(
+    fn access_error(message: &str) -> crate::error::RdbcError {
+        crate::error::RdbcError::SqlException(Box::new(crate::error::SqlException::new(
             0,
             Some("HY024".to_owned()),
             Some(message.to_owned()),

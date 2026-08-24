@@ -1,6 +1,6 @@
 //! 对应 Java 类：java.sql.Driver
 
-use super::error::DruidError;
+use super::error::RdbcError;
 use super::physical_connection::PhysicalConnection;
 use std::collections::HashMap;
 
@@ -53,17 +53,17 @@ pub trait Driver: Send + Sync {
         false
     }
     /// 返回驱动日志父命名空间。对应 Java: `Driver#getParentLogger`。
-    fn parent_logger(&self) -> Result<&str, DruidError> {
+    fn parent_logger(&self) -> Result<&str, RdbcError> {
         Ok("druid::rdbc")
     }
     /// 对应 Java `getParentLogger`。
-    fn get_parent_logger(&self) -> Result<&str, DruidError> {
+    fn get_parent_logger(&self) -> Result<&str, RdbcError> {
         self.parent_logger()
     }
     /// 使用已被当前驱动接受的 `url` 建立未池化物理连接。
     ///
     /// 返回连接或数据库访问错误；调用方应先执行 `accepts_url`。
-    async fn connect(&self, url: &str) -> Result<Box<dyn PhysicalConnection>, DruidError>;
+    async fn connect(&self, url: &str) -> Result<Box<dyn PhysicalConnection>, RdbcError>;
     /// 使用 URL 与本次调用的用户名、密码建立未池化物理连接。
     ///
     /// 默认实现忽略显式凭据并转发到 `connect`；需要认证的驱动必须覆盖此方法。
@@ -72,7 +72,7 @@ pub trait Driver: Send + Sync {
         url: &str,
         username: &str,
         password: &str,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let _ = (username, password);
         self.connect(url).await
     }
@@ -85,7 +85,7 @@ pub trait Driver: Send + Sync {
         &self,
         url: &str,
         info: &HashMap<String, String>,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         match (info.get("user"), info.get("password")) {
             (Some(username), Some(password)) => {
                 self.connect_with_auth(url, username, password).await

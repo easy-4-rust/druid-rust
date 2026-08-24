@@ -3,7 +3,7 @@
 //! 对应 Java：`java.sql.PreparedStatement` 的驱动句柄职责。
 
 use super::toasty_connection_adapter::ToastyConnectionAdapter;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
@@ -20,7 +20,7 @@ enum ToastyStoredParameter {
 }
 
 impl ToastyStoredParameter {
-    async fn materialize(self) -> Result<Value, DruidError> {
+    async fn materialize(self) -> Result<Value, RdbcError> {
         match self {
             Self::Materialized(value) => Ok(value),
             Self::Deferred(parameter) => {
@@ -59,7 +59,7 @@ impl ToastyPreparedStatement {
     pub(super) async fn materialized_parameters(
         &self,
         parameter_count: usize,
-    ) -> Result<Vec<Value>, DruidError> {
+    ) -> Result<Vec<Value>, RdbcError> {
         let parameters = self
             .parameters
             .lock()
@@ -68,7 +68,7 @@ impl ToastyPreparedStatement {
         let parameters = (0..parameter_count)
             .map(|index| {
                 parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
-                    DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
+                    RdbcError::InvalidArgument(format!("parameter {} has not been set", index + 1))
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -83,7 +83,7 @@ impl ToastyPreparedStatement {
     pub(super) async fn take_batches(
         &self,
         expected_count: usize,
-    ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
+    ) -> Result<Option<Vec<Vec<Value>>>, RdbcError> {
         let batches = {
             let mut batches = self
                 .batches
@@ -93,7 +93,7 @@ impl ToastyPreparedStatement {
                 return Ok(None);
             }
             if batches.len() != expected_count {
-                return Err(DruidError::InvalidArgument(format!(
+                return Err(RdbcError::InvalidArgument(format!(
                     "physical prepared batch count {}, wrapper batch count {expected_count}",
                     batches.len(),
                 )));
@@ -130,63 +130,63 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         self.inner.statement_options()
     }
 
-    fn max_field_size(&self) -> Result<i32, DruidError> {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
         self.inner.max_field_size()
     }
 
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError> {
         self.inner.set_max_field_size(max)
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         self.inner.max_rows()
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         self.inner.set_max_rows(max)
     }
 
-    fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError> {
+    fn set_escape_processing(&self, enabled: bool) -> Result<(), RdbcError> {
         self.inner.set_escape_processing(enabled)
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.inner.query_timeout()
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         self.inner.set_query_timeout(seconds)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         self.inner.cancel()
     }
 
-    fn set_cursor_name(&self, name: &str) -> Result<(), DruidError> {
+    fn set_cursor_name(&self, name: &str) -> Result<(), RdbcError> {
         self.inner.set_cursor_name(name)
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         self.inner.set_fetch_direction(direction)
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         self.inner.fetch_direction()
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         self.inner.set_fetch_size(rows)
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         self.inner.fetch_size()
     }
 
-    fn close_on_completion(&self) -> Result<(), DruidError> {
+    fn close_on_completion(&self) -> Result<(), RdbcError> {
         self.inner.close_on_completion()
     }
 
-    fn is_close_on_completion(&self) -> Result<bool, DruidError> {
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
         self.inner.is_close_on_completion()
     }
 
@@ -194,9 +194,9 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         &self,
         parameter_index: usize,
         parameter: &PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if parameter_index == 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "parameterIndex must be at least 1".to_string(),
             ));
         }
@@ -216,7 +216,7 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         Ok(())
     }
 
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         self.parameters
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -224,7 +224,7 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         Ok(())
     }
 
-    fn add_batch(&self, params: &[Value]) -> Result<(), DruidError> {
+    fn add_batch(&self, params: &[Value]) -> Result<(), RdbcError> {
         self.batches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -232,7 +232,7 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         Ok(())
     }
 
-    fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), DruidError> {
+    fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), RdbcError> {
         let parameters = self
             .parameters
             .lock()
@@ -240,7 +240,7 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         let snapshot = (0..params.len())
             .map(|index| {
                 parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
-                    DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
+                    RdbcError::InvalidArgument(format!("parameter {} has not been set", index + 1))
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -251,7 +251,7 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         Ok(())
     }
 
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         self.batches
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -259,15 +259,15 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         Ok(())
     }
 
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
         self.inner.warnings()
     }
 
-    fn clear_warnings(&self) -> Result<(), DruidError> {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
         self.inner.clear_warnings()
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.inner.close()
     }
 
@@ -289,11 +289,11 @@ mod tests {
         );
         assert!(matches!(
             statement.materialized_parameters(1).await,
-            Err(DruidError::InvalidArgument(_))
+            Err(RdbcError::InvalidArgument(_))
         ));
         assert!(matches!(
             statement.set_parameter(0, &PreparedInputParameter::Int(1)),
-            Err(DruidError::InvalidArgument(_))
+            Err(RdbcError::InvalidArgument(_))
         ));
 
         statement
@@ -306,7 +306,7 @@ mod tests {
         statement.add_batch(&[Value::Int(7)]).unwrap();
         assert!(matches!(
             statement.take_batches(2).await,
-            Err(DruidError::InvalidArgument(_))
+            Err(RdbcError::InvalidArgument(_))
         ));
         assert_eq!(
             statement.take_batches(1).await.unwrap(),
@@ -317,7 +317,7 @@ mod tests {
         statement.clear_parameters().unwrap();
         assert!(matches!(
             statement.add_parameter_batch(&[PreparedInputParameter::Int(7)]),
-            Err(DruidError::InvalidArgument(_))
+            Err(RdbcError::InvalidArgument(_))
         ));
     }
 }

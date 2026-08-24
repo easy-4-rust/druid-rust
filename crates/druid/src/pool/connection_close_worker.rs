@@ -4,7 +4,7 @@
 //! `PhysicalConnection::close` 是 async，`Drop` 不能直接 await。本对象把脏
 //! Drop 的关闭请求交给每个 `DruidPool` 唯一 worker，并由 pool 保存 `JoinHandle`。
 
-use crate::core::{FilterChain, PhysicalConnection, PhysicalConnectionFactory};
+use crate::core::{DruidError, FilterChain, PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -61,7 +61,11 @@ impl ConnectionCloseWorker {
                             )
                             .await
                     }
-                    _ => self.factory.close(&mut command.connection).await,
+                    _ => self
+                        .factory
+                        .close(&mut command.connection)
+                        .await
+                        .map_err(DruidError::from),
                 };
                 if let Err(error) = result {
                     tracing::warn!(

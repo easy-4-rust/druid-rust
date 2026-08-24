@@ -19,10 +19,15 @@ impl ValidConnectionCheckerAdapter {
     ) -> Result<bool, DruidError> {
         let fetch = connection.fetch(query, Vec::<Value>::new());
         if validation_query_timeout.is_zero() {
-            return fetch.await.map(|rows| !rows.is_empty());
+            return fetch
+                .await
+                .map(|rows| !rows.is_empty())
+                .map_err(DruidError::from);
         }
         match tokio::time::timeout(validation_query_timeout, fetch).await {
-            Ok(result) => result.map(|rows| !rows.is_empty()),
+            Ok(result) => result
+                .map(|rows| !rows.is_empty())
+                .map_err(DruidError::from),
             Err(_) => Ok(false),
         }
     }

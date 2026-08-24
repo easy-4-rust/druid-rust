@@ -2,7 +2,7 @@
 //! 来源文件：
 //! `core/src/main/java/com/alibaba/druid/proxy/rdbc/DatabaseMetaDataProxyImpl.java`。
 
-use super::{DruidError, PhysicalDatabaseMetaData};
+use super::{PhysicalDatabaseMetaData, RdbcError};
 use std::ops::{Deref, DerefMut};
 
 /// 借用当前物理连接的数据库元数据代理。
@@ -49,21 +49,21 @@ impl<'connection> DatabaseMetaDataProxyImpl<'connection> {
     /// 保留 Java 源实现的历史委托：
     /// `storesLowerCaseIdentifiers()` 实际调用
     /// `storesMixedCaseIdentifiers()`。
-    pub async fn stores_lower_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    pub async fn stores_lower_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.raw.stores_mixed_case_identifiers().await
     }
 
     /// 保留 Java 源实现的历史委托：
     /// `storesMixedCaseIdentifiers()` 实际调用
     /// `supportsMixedCaseIdentifiers()`。
-    pub async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    pub async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.raw.supports_mixed_case_identifiers().await
     }
 
     /// 保留 Java 源实现的历史委托：
     /// `storesUpperCaseQuotedIdentifiers()` 实际调用
     /// `storesUpperCaseIdentifiers()`。
-    pub async fn stores_upper_case_quoted_identifiers(&mut self) -> Result<bool, DruidError> {
+    pub async fn stores_upper_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.raw.stores_upper_case_identifiers().await
     }
 }

@@ -23,7 +23,9 @@ macro_rules! scalar_getter_chain_methods {
                     self.position += 1;
                     filter.$filter_index(self, column_index)
                 } else {
-                    self.physical.$physical_index(column_index)
+                    self.physical
+                        .$physical_index(column_index)
+                        .map_err(DruidError::from)
                 }
             }
 
@@ -34,7 +36,9 @@ macro_rules! scalar_getter_chain_methods {
                     self.position += 1;
                     filter.$filter_label(self, column_label)
                 } else {
-                    self.physical.$physical_label(column_label)
+                    self.physical
+                        .$physical_label(column_label)
+                        .map_err(DruidError::from)
                 }
             }
         )+
@@ -53,6 +57,7 @@ macro_rules! temporal_getter_chain_methods {
                 } else {
                     self.physical
                         .$physical_index(column_index, &RdbcCalendarArgument::unspecified())
+                        .map_err(DruidError::from)
                 }
             }
 
@@ -66,7 +71,7 @@ macro_rules! temporal_getter_chain_methods {
                     self.physical.$physical_label(
                         column_label,
                         &RdbcCalendarArgument::unspecified(),
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -81,7 +86,9 @@ macro_rules! temporal_getter_chain_methods {
                     self.position += 1;
                     filter.$filter_index_calendar(self, column_index, calendar)
                 } else {
-                    self.physical.$physical_index(column_index, calendar)
+                    self.physical
+                        .$physical_index(column_index, calendar)
+                        .map_err(DruidError::from)
                 }
             }
 
@@ -96,7 +103,9 @@ macro_rules! temporal_getter_chain_methods {
                     self.position += 1;
                     filter.$filter_label_calendar(self, column_label, calendar)
                 } else {
-                    self.physical.$physical_label(column_label, calendar)
+                    self.physical
+                        .$physical_label(column_label, calendar)
+                        .map_err(DruidError::from)
                 }
             }
         )+
@@ -113,7 +122,9 @@ macro_rules! resource_getter_chain_methods {
                     self.position += 1;
                     filter.$filter_index(self, column_index)
                 } else {
-                    self.physical.$physical_index(column_index)
+                    self.physical
+                        .$physical_index(column_index)
+                        .map_err(DruidError::from)
                 }
             }
 
@@ -124,7 +135,9 @@ macro_rules! resource_getter_chain_methods {
                     self.position += 1;
                     filter.$filter_label(self, column_label)
                 } else {
-                    self.physical.$physical_label(column_label)
+                    self.physical
+                        .$physical_label(column_label)
+                        .map_err(DruidError::from)
                 }
             }
         )+
@@ -141,7 +154,7 @@ macro_rules! no_arg_result_set_chain_methods {
                     self.position += 1;
                     filter.$filter_method(self)
                 } else {
-                    self.physical.$physical_method()
+                    self.physical.$physical_method().map_err(DruidError::from)
                 }
             }
         )+
@@ -158,7 +171,9 @@ macro_rules! i32_arg_result_set_chain_methods {
                     self.position += 1;
                     filter.$filter_method(self, $argument)
                 } else {
-                    self.physical.$physical_method($argument)
+                    self.physical
+                        .$physical_method($argument)
+                        .map_err(DruidError::from)
                 }
             }
         )+
@@ -177,6 +192,7 @@ macro_rules! scalar_update_chain_methods {
                 } else {
                     self.physical
                         .update_value(column_index, &ResultSetUpdate::$variant(value))
+                        .map_err(DruidError::from)
                 }
             }
 
@@ -190,7 +206,7 @@ macro_rules! scalar_update_chain_methods {
                     self.physical.update_value_by_label(
                         column_label,
                         &ResultSetUpdate::$variant(value),
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
         )+
@@ -211,7 +227,9 @@ macro_rules! resource_update_chain_methods {
                     self.position += 1;
                     filter.$index(self, column_index, value)
                 } else {
-                    self.physical.$physical_index(column_index, value.as_ref())
+                    self.physical
+                        .$physical_index(column_index, value.as_ref())
+                        .map_err(DruidError::from)
                 }
             }
 
@@ -226,7 +244,9 @@ macro_rules! resource_update_chain_methods {
                     self.position += 1;
                     filter.$label(self, column_label, value)
                 } else {
-                    self.physical.$physical_label(column_label, value.as_ref())
+                    self.physical
+                        .$physical_label(column_label, value.as_ref())
+                        .map_err(DruidError::from)
                 }
             }
         )+
@@ -261,7 +281,7 @@ macro_rules! lob_stream_update_chain_methods {
                         column_index,
                         value.as_ref(),
                         $length_type::Unspecified,
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -280,7 +300,7 @@ macro_rules! lob_stream_update_chain_methods {
                         column_label,
                         value.as_ref(),
                         $length_type::Unspecified,
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -300,7 +320,7 @@ macro_rules! lob_stream_update_chain_methods {
                         column_index,
                         value.as_ref(),
                         $length_type::Long(length),
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -320,7 +340,7 @@ macro_rules! lob_stream_update_chain_methods {
                         column_label,
                         value.as_ref(),
                         $length_type::Long(length),
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
         )+
@@ -359,7 +379,7 @@ macro_rules! stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Unspecified,
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -380,7 +400,7 @@ macro_rules! stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Unspecified,
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -402,7 +422,7 @@ macro_rules! stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Int(length),
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -424,7 +444,7 @@ macro_rules! stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Int(length),
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -446,7 +466,7 @@ macro_rules! stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Long(length),
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -468,7 +488,7 @@ macro_rules! stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Long(length),
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
         )+
@@ -505,7 +525,7 @@ macro_rules! long_stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Unspecified,
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -526,7 +546,7 @@ macro_rules! long_stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Unspecified,
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -548,7 +568,7 @@ macro_rules! long_stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Long(length),
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
 
@@ -570,7 +590,7 @@ macro_rules! long_stream_update_chain_methods {
                             $resource_field: value,
                             length: $length_type::Long(length),
                         },
-                    )
+                    ).map_err(DruidError::from)
                 }
             }
         )+
@@ -628,7 +648,7 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_next(self)
         } else {
-            self.physical.next()
+            self.physical.next().map_err(DruidError::from)
         }
     }
 
@@ -639,7 +659,7 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_close(self)
         } else {
-            self.physical.close()
+            self.physical.close().map_err(DruidError::from)
         }
     }
 
@@ -650,7 +670,7 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_warnings(self)
         } else {
-            self.physical.warnings()
+            self.physical.warnings().map_err(DruidError::from)
         }
     }
 
@@ -661,7 +681,7 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_clear_warnings(self)
         } else {
-            self.physical.clear_warnings()
+            self.physical.clear_warnings().map_err(DruidError::from)
         }
     }
 
@@ -672,7 +692,7 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_object(self, column_index)
         } else {
-            self.physical.value(column_index)
+            self.physical.value(column_index).map_err(DruidError::from)
         }
     }
 
@@ -686,7 +706,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_object_by_label(self, column_label)
         } else {
-            self.physical.value_by_label(column_label)
+            self.physical
+                .value_by_label(column_label)
+                .map_err(DruidError::from)
         }
     }
 
@@ -701,7 +723,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_object_with_type_map(self, column_index, type_map)
         } else {
-            self.physical.object_with_type_map(column_index, type_map)
+            self.physical
+                .object_with_type_map(column_index, type_map)
+                .map_err(DruidError::from)
         }
     }
 
@@ -718,6 +742,7 @@ impl<'a> ResultSetFilterChain<'a> {
         } else {
             self.physical
                 .object_by_label_with_type_map(column_label, type_map)
+                .map_err(DruidError::from)
         }
     }
 
@@ -732,7 +757,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_object_typed(self, column_index, target_type)
         } else {
-            self.physical.object_as(column_index, target_type)
+            self.physical
+                .object_as(column_index, target_type)
+                .map_err(DruidError::from)
         }
     }
 
@@ -747,7 +774,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_object_typed_by_label(self, column_label, target_type)
         } else {
-            self.physical.object_by_label_as(column_label, target_type)
+            self.physical
+                .object_by_label_as(column_label, target_type)
+                .map_err(DruidError::from)
         }
     }
 
@@ -864,7 +893,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_big_decimal(self, column_index)
         } else {
-            self.physical.big_decimal(column_index, None)
+            self.physical
+                .big_decimal(column_index, None)
+                .map_err(DruidError::from)
         }
     }
 
@@ -878,7 +909,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_big_decimal_by_label(self, column_label)
         } else {
-            self.physical.big_decimal_by_label(column_label, None)
+            self.physical
+                .big_decimal_by_label(column_label, None)
+                .map_err(DruidError::from)
         }
     }
 
@@ -893,7 +926,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_big_decimal_with_scale(self, column_index, scale)
         } else {
-            self.physical.big_decimal(column_index, Some(scale))
+            self.physical
+                .big_decimal(column_index, Some(scale))
+                .map_err(DruidError::from)
         }
     }
 
@@ -910,6 +945,7 @@ impl<'a> ResultSetFilterChain<'a> {
         } else {
             self.physical
                 .big_decimal_by_label(column_label, Some(scale))
+                .map_err(DruidError::from)
         }
     }
 
@@ -1183,6 +1219,7 @@ impl<'a> ResultSetFilterChain<'a> {
         } else {
             self.physical
                 .update_value(column_index, &ResultSetUpdate::Null)
+                .map_err(DruidError::from)
         }
     }
 
@@ -1198,6 +1235,7 @@ impl<'a> ResultSetFilterChain<'a> {
         } else {
             self.physical
                 .update_value_by_label(column_label, &ResultSetUpdate::Null)
+                .map_err(DruidError::from)
         }
     }
 
@@ -1231,6 +1269,7 @@ impl<'a> ResultSetFilterChain<'a> {
         } else {
             self.physical
                 .update_value(column_index, &ResultSetUpdate::Object(value))
+                .map_err(DruidError::from)
         }
     }
 
@@ -1247,6 +1286,7 @@ impl<'a> ResultSetFilterChain<'a> {
         } else {
             self.physical
                 .update_value_by_label(column_label, &ResultSetUpdate::Object(value))
+                .map_err(DruidError::from)
         }
     }
 
@@ -1260,20 +1300,24 @@ impl<'a> ResultSetFilterChain<'a> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
-            filter.result_set_update_object_with_scale_or_length(
-                self,
-                column_index,
-                value,
-                scale_or_length,
-            )
-        } else {
-            self.physical.update_value(
-                column_index,
-                &ResultSetUpdate::ObjectWithScaleOrLength {
+            filter
+                .result_set_update_object_with_scale_or_length(
+                    self,
+                    column_index,
                     value,
                     scale_or_length,
-                },
-            )
+                )
+                .map_err(DruidError::from)
+        } else {
+            self.physical
+                .update_value(
+                    column_index,
+                    &ResultSetUpdate::ObjectWithScaleOrLength {
+                        value,
+                        scale_or_length,
+                    },
+                )
+                .map_err(DruidError::from)
         }
     }
 
@@ -1294,13 +1338,15 @@ impl<'a> ResultSetFilterChain<'a> {
                 scale_or_length,
             )
         } else {
-            self.physical.update_value_by_label(
-                column_label,
-                &ResultSetUpdate::ObjectWithScaleOrLength {
-                    value,
-                    scale_or_length,
-                },
-            )
+            self.physical
+                .update_value_by_label(
+                    column_label,
+                    &ResultSetUpdate::ObjectWithScaleOrLength {
+                        value,
+                        scale_or_length,
+                    },
+                )
+                .map_err(DruidError::from)
         }
     }
 
@@ -1460,7 +1506,9 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_find_column(self, column_label)
         } else {
-            self.physical.find_column(column_label)
+            self.physical
+                .find_column(column_label)
+                .map_err(DruidError::from)
         }
     }
 
@@ -1482,7 +1530,7 @@ impl<'a> ResultSetFilterChain<'a> {
             self.position += 1;
             filter.result_set_get_meta_data(self)
         } else {
-            self.physical.meta_data()
+            self.physical.meta_data().map_err(DruidError::from)
         }
     }
 
@@ -1511,6 +1559,6 @@ impl<'a> ResultSetFilterChain<'a> {
     /// 对应 Java：`ResultSetProxy#getResultSetRaw().getObject(columnIndex)`；
     /// `WallFilter#resultSet_next` 用它向租户回调报告真实列值。
     pub fn raw_value(&self, column_index: usize) -> Result<Value, DruidError> {
-        self.physical.value(column_index)
+        self.physical.value(column_index).map_err(DruidError::from)
     }
 }

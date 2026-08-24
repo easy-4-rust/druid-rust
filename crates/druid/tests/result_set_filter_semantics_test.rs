@@ -5,10 +5,10 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     DruidError, DruidPooledConnection, FilterChain, PhysicalConnectionFactory,
     PhysicalRdbcOpaqueObject, PhysicalResultSet, RdbcArray, RdbcBlob, RdbcCalendar,
-    RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject,
-    RdbcOpaqueObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType,
-    RdbcTypeMap, RdbcUrl, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
-    ResultSetMetaData, ResultSetStatement, ResultSetUpdate, Value,
+    RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob,
+    RdbcObject, RdbcOpaqueObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength,
+    RdbcTargetType, RdbcTypeMap, RdbcUrl, ResultSetFilter, ResultSetFilterChain,
+    ResultSetFilterContext, ResultSetMetaData, ResultSetStatement, ResultSetUpdate, Value,
 };
 use druid::stats::{StatFilter, StatsCollector};
 use druid_wrapper::toasty::ToastyConnectionFactory;
@@ -20,7 +20,7 @@ use std::time::Duration;
 
 macro_rules! physical_scalar_getter_pair {
     ($index:ident, $label:ident, $ty:ty, $index_value:expr, $label_value:expr) => {
-        fn $index(&self, column_index: usize) -> Result<$ty, DruidError> {
+        fn $index(&self, column_index: usize) -> Result<$ty, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -28,7 +28,7 @@ macro_rules! physical_scalar_getter_pair {
             Ok($index_value)
         }
 
-        fn $label(&self, column_label: &str) -> Result<$ty, DruidError> {
+        fn $label(&self, column_label: &str) -> Result<$ty, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -88,7 +88,7 @@ macro_rules! physical_temporal_getter_pair {
             &self,
             column_index: usize,
             calendar: &RdbcCalendarArgument,
-        ) -> Result<Option<$ty>, DruidError> {
+        ) -> Result<Option<$ty>, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -104,7 +104,7 @@ macro_rules! physical_temporal_getter_pair {
             &self,
             column_label: &str,
             calendar: &RdbcCalendarArgument,
-        ) -> Result<Option<$ty>, DruidError> {
+        ) -> Result<Option<$ty>, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -120,7 +120,7 @@ macro_rules! physical_temporal_getter_pair {
 
 macro_rules! physical_resource_getter_pair {
     ($index:ident, $label:ident, $ty:ty) => {
-        fn $index(&self, column_index: usize) -> Result<Option<$ty>, DruidError> {
+        fn $index(&self, column_index: usize) -> Result<Option<$ty>, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -128,7 +128,7 @@ macro_rules! physical_resource_getter_pair {
             Ok(None)
         }
 
-        fn $label(&self, column_label: &str) -> Result<Option<$ty>, DruidError> {
+        fn $label(&self, column_label: &str) -> Result<Option<$ty>, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -140,7 +140,7 @@ macro_rules! physical_resource_getter_pair {
 
 macro_rules! physical_resource_update_pair {
     ($index:ident, $label:ident, $ty:ty) => {
-        fn $index(&self, column_index: usize, value: Option<&$ty>) -> Result<(), DruidError> {
+        fn $index(&self, column_index: usize, value: Option<&$ty>) -> Result<(), RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -151,7 +151,7 @@ macro_rules! physical_resource_update_pair {
             Ok(())
         }
 
-        fn $label(&self, column_label: &str, value: Option<&$ty>) -> Result<(), DruidError> {
+        fn $label(&self, column_label: &str, value: Option<&$ty>) -> Result<(), RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -171,7 +171,7 @@ macro_rules! physical_lob_stream_update_pair {
             column_index: usize,
             value: Option<&$ty>,
             length: $length_ty,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -188,7 +188,7 @@ macro_rules! physical_lob_stream_update_pair {
             column_label: &str,
             value: Option<&$ty>,
             length: $length_ty,
-        ) -> Result<(), DruidError> {
+        ) -> Result<(), RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -204,7 +204,7 @@ macro_rules! physical_lob_stream_update_pair {
 
 macro_rules! physical_no_arg_method {
     ($method:ident, $ty:ty, $value:expr) => {
-        fn $method(&self) -> Result<$ty, DruidError> {
+        fn $method(&self) -> Result<$ty, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -216,7 +216,7 @@ macro_rules! physical_no_arg_method {
 
 macro_rules! physical_i32_arg_method {
     ($method:ident, $argument:ident, $ty:ty, $value:expr) => {
-        fn $method(&self, $argument: i32) -> Result<$ty, DruidError> {
+        fn $method(&self, $argument: i32) -> Result<$ty, RdbcError> {
             self.calls
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -246,14 +246,14 @@ impl PhysicalResultSetProbe {
 }
 
 impl PhysicalResultSet for PhysicalResultSetProbe {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push("physical:close".to_string());
         self.closed.store(true, Ordering::Release);
         if self.close_error {
-            Err(DruidError::DriverError("close failed".to_string()))
+            Err(RdbcError::DriverError("close failed".to_string()))
         } else {
             Ok(())
         }
@@ -263,7 +263,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         self.closed.load(Ordering::Acquire)
     }
 
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -272,7 +272,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         Ok(true)
     }
 
-    fn value(&self, column_index: usize) -> Result<Value, DruidError> {
+    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -280,7 +280,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         Ok(Value::Int(i64::try_from(column_index).unwrap()))
     }
 
-    fn value_by_label(&self, column_label: &str) -> Result<Value, DruidError> {
+    fn value_by_label(&self, column_label: &str) -> Result<Value, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -292,7 +292,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_index: usize,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         let identity = type_map_identity(type_map);
         self.calls
             .lock()
@@ -309,7 +309,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_label: &str,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         let identity = type_map_identity(type_map);
         self.calls
             .lock()
@@ -326,7 +326,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_index: usize,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -340,7 +340,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_label: &str,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -385,7 +385,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_index: usize,
         scale: Option<i32>,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -397,7 +397,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_label: &str,
         scale: Option<i32>,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -504,7 +504,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
     physical_i32_arg_method!(set_fetch_direction, direction, (), ());
     physical_i32_arg_method!(set_fetch_size, rows, (), ());
 
-    fn find_column(&self, column_label: &str) -> Result<usize, DruidError> {
+    fn find_column(&self, column_label: &str) -> Result<usize, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -512,7 +512,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         Ok(23)
     }
 
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
         self.calls
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -520,11 +520,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         Ok(ResultSetMetaData::new(Vec::new()))
     }
 
-    fn update_value(
-        &self,
-        column_index: usize,
-        update: &ResultSetUpdate,
-    ) -> Result<(), DruidError> {
+    fn update_value(&self, column_index: usize, update: &ResultSetUpdate) -> Result<(), RdbcError> {
         let identity = result_set_update_identity(update);
         self.calls
             .lock()
@@ -537,7 +533,7 @@ impl PhysicalResultSet for PhysicalResultSetProbe {
         &self,
         column_label: &str,
         update: &ResultSetUpdate,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let identity = result_set_update_identity(update);
         self.calls
             .lock()
@@ -3170,7 +3166,7 @@ async fn pooled_result_set_routes_all_scalar_getters_through_java_filter_overloa
 
     assert_eq!(
         result_set.double_by_label(&mut connection, "fail"),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered double failure".to_string()
         ))
     );
@@ -3346,7 +3342,7 @@ async fn pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overlo
             "fail",
             Some(RdbcCalendar::new("UTC").unwrap()),
         ),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered temporal failure".to_string()
         ))
     );
@@ -3452,7 +3448,7 @@ async fn pooled_result_set_routes_all_object_overloads_and_preserves_argument_id
             "fail",
             &RdbcTargetType::Custom("example.Fail".to_string()),
         ),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered object failure".to_string()
         ))
     );
@@ -3549,7 +3545,7 @@ async fn pooled_result_set_routes_resource_getters_and_real_sqlite_streams() {
 
     assert_eq!(
         result_set.sql_xml_by_label(&mut connection, "fail"),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered SQLXML failure".to_string()
         ))
     );
@@ -3663,7 +3659,7 @@ async fn pooled_result_set_routes_navigation_properties_and_real_sqlite_state() 
     assert_eq!(calls(&call_log).len(), 26);
     assert_eq!(
         result_set.find_column(&mut connection, "fail"),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered findColumn failure".to_string()
         ))
     );
@@ -3756,7 +3752,7 @@ async fn pooled_result_set_routes_row_mutations_and_preserves_sqlite_capability_
     fail_refresh.store(true, Ordering::Release);
     assert_eq!(
         result_set.refresh_row(&mut connection),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered refreshRow failure".to_string()
         ))
     );
@@ -3786,7 +3782,7 @@ async fn pooled_result_set_routes_row_mutations_and_preserves_sqlite_capability_
         ($method:ident, $operation:literal) => {
             assert_eq!(
                 result_set.$method(&mut connection),
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: $operation,
                 })
             );
@@ -3886,7 +3882,7 @@ async fn pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability
     // 且失败的标签重载不触达只读 SQLite RowSet。
     assert_eq!(
         result_set.update_timestamp_by_label(&mut connection, "fail", None),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered scalar update failure".to_string()
         ))
     );
@@ -3915,7 +3911,7 @@ async fn pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability
         ($method:ident $(, $value:expr)?) => {
             assert_eq!(
                 result_set.$method(&mut connection, 1 $(, $value)?),
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: "result_set_update_value",
                 })
             );
@@ -3925,7 +3921,7 @@ async fn pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability
         ($method:ident $(, $value:expr)?) => {
             assert_eq!(
                 result_set.$method(&mut connection, "value" $(, $value)?),
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: "result_set_update_value_by_label",
                 })
             );
@@ -4038,7 +4034,7 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
     // 且短路后不触达真实只读 RowSet。
     assert_eq!(
         result_set.update_object_by_label(&mut connection, "fail", Value::Null.into()),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered updateObject failure".to_string()
         ))
     );
@@ -4065,13 +4061,13 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
 
     assert_eq!(
         result_set.update_object(&mut connection, 15, RdbcObject::String("index".to_string())),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value",
         })
     );
     assert_eq!(
         result_set.update_object_by_label(&mut connection, "object_value", Value::Null.into()),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value_by_label",
         })
     );
@@ -4082,7 +4078,7 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
             RdbcObject::Integer(7),
             -3,
         ),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value",
         })
     );
@@ -4093,7 +4089,7 @@ async fn pooled_result_set_routes_object_updates_and_preserves_sqlite_capability
             RdbcObject::Bytes(vec![9]),
             99,
         ),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value_by_label",
         })
     );
@@ -4259,7 +4255,7 @@ async fn pooled_result_set_routes_resource_updates_and_preserves_sqlite_capabili
     // 且不会触达只读 RowSet。
     assert_eq!(
         result_set.update_sql_xml_by_label(&mut connection, "fail", None),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered resource update failure".to_string()
         ))
     );
@@ -4286,7 +4282,7 @@ async fn pooled_result_set_routes_resource_updates_and_preserves_sqlite_capabili
         ($expression:expr, $operation:literal) => {
             assert_eq!(
                 $expression,
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: $operation,
                 })
             );
@@ -4545,7 +4541,7 @@ async fn pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capabi
     // 并且短路后不触达真实只读 RowSet。
     assert_eq!(
         result_set.update_n_clob_reader_by_label_with_length(&mut connection, "fail", None, -23,),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered LOB stream update failure".to_string()
         ))
     );
@@ -4575,7 +4571,7 @@ async fn pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capabi
         ($expression:expr, $operation:literal) => {
             assert_eq!(
                 $expression,
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: $operation,
                 })
             );
@@ -4997,7 +4993,7 @@ async fn pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability
             None,
             -47,
         ),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered stream update failure".to_string()
         ))
     );
@@ -5024,7 +5020,7 @@ async fn pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability
         ($expression:expr, $operation:literal) => {
             assert_eq!(
                 $expression,
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: $operation,
                 })
             );
@@ -5243,7 +5239,7 @@ async fn pooled_result_set_routes_n_string_updates_and_preserves_sqlite_capabili
     );
     assert_eq!(
         result_set.update_n_string_by_label(&mut connection, "fail", Some("失败".to_string()),),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered NString update failure".to_string()
         ))
     );
@@ -5270,13 +5266,13 @@ async fn pooled_result_set_routes_n_string_updates_and_preserves_sqlite_capabili
     // capability error 必须穿过两条精确 Filter 入口，并各计数一次。
     assert_eq!(
         result_set.update_n_string(&mut connection, 1, Some("索引".to_string())),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value",
         })
     );
     assert_eq!(
         result_set.update_n_string_by_label(&mut connection, "value", None),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value_by_label",
         })
     );
@@ -5349,7 +5345,7 @@ async fn pooled_result_set_preserves_distinct_n_string_filter_overloads() {
     );
     assert_eq!(
         result_set.n_string_by_label(&mut connection, "fail"),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered NString failure".to_string()
         ))
     );
@@ -5431,7 +5427,7 @@ async fn pooled_result_set_routes_metadata_platform_handle_through_filter() {
     fail.store(true, Ordering::Release);
     assert_eq!(
         result_set.meta_data(&mut connection).map(|_| ()),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered metadata failure".to_string()
         ))
     );
@@ -5524,7 +5520,7 @@ async fn pooled_result_set_routes_dynamic_statement_identity_through_filter() {
     fail.store(true, Ordering::Release);
     assert_eq!(
         result_set.statement_object(&mut connection).map(|_| ()),
-        Err(DruidError::DriverError(
+        Err(RdbcError::DriverError(
             "filtered statement failure".to_string()
         ))
     );

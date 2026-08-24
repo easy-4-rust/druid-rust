@@ -7,11 +7,11 @@ use std::time::Duration;
 struct MockPool;
 #[async_trait::async_trait]
 impl Pool for MockPool {
-    async fn get(&self) -> Result<PooledConnection, DruidError> {
+    async fn get(&self) -> Result<PooledConnection, RdbcError> {
         let conn = Box::new(MockConn) as Box<dyn Connection>;
         Ok(PooledConnection::new(conn, 1, Box::new(|_, _| {})))
     }
-    async fn get_timeout(&self, _: Duration) -> Result<PooledConnection, DruidError> {
+    async fn get_timeout(&self, _: Duration) -> Result<PooledConnection, RdbcError> {
         self.get().await
     }
     fn state(&self) -> PoolState {
@@ -31,25 +31,25 @@ impl Pool for MockPool {
 struct MockConn;
 #[async_trait::async_trait]
 impl Connection for MockConn {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }

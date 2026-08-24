@@ -1,4 +1,4 @@
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceId, RdbcResourceKind,
     RdbcResourceOwner, RdbcResourceState,
@@ -81,11 +81,11 @@ impl RdbcResourceContext {
     }
 
     /// Rejects access after release or owner invalidation.
-    pub fn ensure_open(&self) -> Result<(), DruidError> {
+    pub fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.state() == RdbcResourceState::Open {
             Ok(())
         } else {
-            Err(DruidError::rdbc_resource_closed(self.kind.standard_name()))
+            Err(RdbcError::rdbc_resource_closed(self.kind.standard_name()))
         }
     }
 
@@ -94,7 +94,7 @@ impl RdbcResourceContext {
         &self,
         capability: RdbcResourceCapabilities,
         operation: &'static str,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.require_capability(capability, operation)
     }
@@ -104,16 +104,16 @@ impl RdbcResourceContext {
         &self,
         capability: RdbcResourceCapabilities,
         operation: &'static str,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if self.capabilities.contains(capability) {
             Ok(())
         } else {
-            Err(DruidError::feature_not_supported(operation))
+            Err(RdbcError::feature_not_supported(operation))
         }
     }
 
     /// Preserves an access result while notifying the owner about failures.
-    pub fn observe<T>(&self, result: Result<T, DruidError>) -> Result<T, DruidError> {
+    pub fn observe<T>(&self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
         if let Err(error) = &result {
             if let Some(owner) = &self.owner {
                 owner.resource_failed(&self.resource_id, self.kind, error);
@@ -123,7 +123,7 @@ impl RdbcResourceContext {
     }
 
     /// Releases the resource exactly once across all cloned handles.
-    pub async fn free<A>(&self, access: &A) -> Result<(), DruidError>
+    pub async fn free<A>(&self, access: &A) -> Result<(), RdbcError>
     where
         A: RdbcResourceAccess + ?Sized,
     {
@@ -135,7 +135,7 @@ impl RdbcResourceContext {
             match self.state() {
                 RdbcResourceState::Freed => return Ok(()),
                 RdbcResourceState::Invalid => {
-                    return Err(DruidError::rdbc_resource_closed(self.kind.standard_name()));
+                    return Err(RdbcError::rdbc_resource_closed(self.kind.standard_name()));
                 }
                 RdbcResourceState::Releasing => {
                     state_changed.await;

@@ -2,7 +2,7 @@
 
 mod common;
 
-use druid::core::{DruidError, PhysicalConnection, Pool, Value};
+use druid::core::{PhysicalConnection, Pool, RdbcError, Value};
 use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;
 use std::time::Duration;
 
@@ -82,7 +82,7 @@ async fn deadpool_maps_timeout_and_closed_state() {
         .get_timeout(Duration::from_millis(1))
         .await
         .expect_err("second connection must time out");
-    assert_eq!(error, DruidError::AcquireTimeout);
+    assert_eq!(error, RdbcError::AcquireTimeout);
     assert_eq!(pool.state().connect_error_count, 1);
 
     pool.close();
@@ -91,7 +91,7 @@ async fn deadpool_maps_timeout_and_closed_state() {
         .get()
         .await
         .expect_err("closed pool must reject acquire");
-    assert_eq!(error, DruidError::PoolClosed);
+    assert_eq!(error, RdbcError::PoolClosed);
 }
 
 #[test]

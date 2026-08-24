@@ -1,5 +1,5 @@
 use super::CommonDataSource;
-use crate::core::{DruidError, DruidPooledConnection};
+use crate::core::{DruidPooledConnection, RdbcError};
 
 /// Factory for connections to the physical data source represented by this object.
 ///
@@ -12,7 +12,7 @@ pub trait DataSource: CommonDataSource + Sync {
     ///
     /// Returns a usable Druid logical connection. Timeout, closed/disabled source, and driver
     /// failures retain their SQL exception semantics. Corresponds to Java: `getConnection()`.
-    async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError>;
+    async fn get_connection(&self) -> Result<DruidPooledConnection, RdbcError>;
 
     /// Obtains a connection with an explicit user name and password.
     ///
@@ -23,8 +23,8 @@ pub trait DataSource: CommonDataSource + Sync {
         &self,
         _username: &str,
         _password: &str,
-    ) -> Result<DruidPooledConnection, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<DruidPooledConnection, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "data_source_credentials",
         })
     }
@@ -38,8 +38,10 @@ impl CommonDataSource for crate::pool::DruidDataSource {
 
 #[async_trait::async_trait]
 impl DataSource for crate::pool::DruidDataSource {
-    async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
-        crate::pool::DruidDataSource::get_connection(self).await
+    async fn get_connection(&self) -> Result<DruidPooledConnection, RdbcError> {
+        crate::pool::DruidDataSource::get_connection(self)
+            .await
+            .map_err(RdbcError::from)
     }
 }
 
@@ -47,7 +49,9 @@ impl CommonDataSource for crate::dynamic::DynamicDataSource {}
 
 #[async_trait::async_trait]
 impl DataSource for crate::dynamic::DynamicDataSource {
-    async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
-        crate::dynamic::DynamicDataSource::get_connection(self).await
+    async fn get_connection(&self) -> Result<DruidPooledConnection, RdbcError> {
+        crate::dynamic::DynamicDataSource::get_connection(self)
+            .await
+            .map_err(RdbcError::from)
     }
 }

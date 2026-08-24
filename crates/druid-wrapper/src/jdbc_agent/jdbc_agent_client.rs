@@ -1,5 +1,5 @@
 use super::{AgentRequestHandle, AgentRuntimeLease, JdbcAgentOptions};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use serde_json::{json, Value as JsonValue};
 
 /// 共享 JDBC Agent 运行时中的单个数据库 session 客户端。
@@ -14,7 +14,7 @@ impl JdbcAgentClient {
     pub(crate) async fn connect(
         options: JdbcAgentOptions,
         connect_payload: JsonValue,
-    ) -> Result<(Self, JsonValue), DruidError> {
+    ) -> Result<(Self, JsonValue), RdbcError> {
         let runtime = super::agent_runtime_manager::AgentRuntimeManager::acquire(&options).await?;
         let result = runtime.request("open_session", connect_payload).await?;
         let session_id = result
@@ -22,7 +22,7 @@ impl JdbcAgentClient {
             .and_then(JsonValue::as_str)
             .filter(|session_id| !session_id.is_empty())
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "JDBC Agent open_session did not return sessionId".to_owned(),
                 )
             })?
@@ -42,9 +42,9 @@ impl JdbcAgentClient {
         &mut self,
         operation: &str,
         payload: JsonValue,
-    ) -> Result<JsonValue, DruidError> {
+    ) -> Result<JsonValue, RdbcError> {
         if self.closed {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         let mut params = match payload {
             JsonValue::Object(object) => object,
@@ -65,7 +65,7 @@ impl JdbcAgentClient {
     }
 
     /// 仅关闭当前 session；共享 Agent 在空闲 TTL 到期后退出。
-    pub(crate) async fn close(&mut self) -> Result<(), DruidError> {
+    pub(crate) async fn close(&mut self) -> Result<(), RdbcError> {
         if self.closed {
             return Ok(());
         }

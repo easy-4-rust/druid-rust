@@ -4,7 +4,7 @@
 //! `Vec<Row>`，但查询侧仍使用 `fetch_all`，因此不是流式游标。真正的流式结果集
 //! 需要先把同步 `PhysicalResultSet::next()` 演进为可等待的 C7 生命周期接口。
 
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     PhysicalResultSet, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData,
 };
@@ -209,7 +209,7 @@ impl ValueAt<'_> {
         }
     }
 
-    fn value(&self, column_index: usize) -> Result<Value, DruidError> {
+    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
         match self {
             ValueAt::Any(row) => decode_any_value(row, column_index),
             ValueAt::MySql(row) => decode_mysql_value(row, column_index),
@@ -219,13 +219,13 @@ impl ValueAt<'_> {
     }
 }
 
-fn decode_any_value(row: &AnyRow, index: usize) -> Result<Value, DruidError> {
+fn decode_any_value(row: &AnyRow, index: usize) -> Result<Value, RdbcError> {
     let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
     if ValueRef::is_null(&raw) {
         return Ok(Value::Null);
     }
     let Some(column) = row.columns().get(index) else {
-        return Err(DruidError::DriverError(format!(
+        return Err(RdbcError::DriverError(format!(
             "column {index} is out of range"
         )));
     };
@@ -261,13 +261,13 @@ fn decode_any_value(row: &AnyRow, index: usize) -> Result<Value, DruidError> {
     })
 }
 
-fn decode_mysql_value(row: &MySqlRow, index: usize) -> Result<Value, DruidError> {
+fn decode_mysql_value(row: &MySqlRow, index: usize) -> Result<Value, RdbcError> {
     let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
     if ValueRef::is_null(&raw) {
         return Ok(Value::Null);
     }
     let Some(column) = row.columns().get(index) else {
-        return Err(DruidError::DriverError(format!(
+        return Err(RdbcError::DriverError(format!(
             "column {index} is out of range"
         )));
     };
@@ -307,13 +307,13 @@ fn decode_mysql_value(row: &MySqlRow, index: usize) -> Result<Value, DruidError>
     })
 }
 
-fn decode_postgresql_value(row: &PgRow, index: usize) -> Result<Value, DruidError> {
+fn decode_postgresql_value(row: &PgRow, index: usize) -> Result<Value, RdbcError> {
     let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
     if ValueRef::is_null(&raw) {
         return Ok(Value::Null);
     }
     let Some(column) = row.columns().get(index) else {
-        return Err(DruidError::DriverError(format!(
+        return Err(RdbcError::DriverError(format!(
             "column {index} is out of range"
         )));
     };
@@ -345,13 +345,13 @@ fn decode_postgresql_value(row: &PgRow, index: usize) -> Result<Value, DruidErro
     })
 }
 
-fn decode_sqlite_value(row: &SqliteRow, index: usize) -> Result<Value, DruidError> {
+fn decode_sqlite_value(row: &SqliteRow, index: usize) -> Result<Value, RdbcError> {
     let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
     if ValueRef::is_null(&raw) {
         return Ok(Value::Null);
     }
     let Some(column) = row.columns().get(index) else {
-        return Err(DruidError::DriverError(format!(
+        return Err(RdbcError::DriverError(format!(
             "column {index} is out of range"
         )));
     };
@@ -450,12 +450,12 @@ fn match_type_sqlite(name: &str) -> ResultSetColumnType {
 }
 
 #[allow(clippy::needless_pass_by_value)]
-fn sqlx_driver_error(error: sqlx::Error) -> DruidError {
-    DruidError::DriverError(error.to_string())
+fn sqlx_driver_error(error: sqlx::Error) -> RdbcError {
+    RdbcError::DriverError(error.to_string())
 }
 
 impl PhysicalResultSet for SqlxStreamingResultSet {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.state().closed = true;
         Ok(())
     }
@@ -464,10 +464,10 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         self.state().closed
     }
 
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         let next = state.cursor.saturating_add(1);
         let len = self.len();
@@ -477,10 +477,10 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(present)
     }
 
-    fn first(&self) -> Result<bool, DruidError> {
+    fn first(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         let present = self.len() > 0;
         state.cursor = if present { 0 } else { -1 };
@@ -488,10 +488,10 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(present)
     }
 
-    fn last(&self) -> Result<bool, DruidError> {
+    fn last(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         let len = self.len();
         let present = len > 0;
@@ -500,30 +500,30 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(present)
     }
 
-    fn before_first(&self) -> Result<(), DruidError> {
+    fn before_first(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         state.cursor = -1;
         state.was_null = false;
         Ok(())
     }
 
-    fn after_last(&self) -> Result<(), DruidError> {
+    fn after_last(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         state.cursor = self.len();
         state.was_null = false;
         Ok(())
     }
 
-    fn absolute(&self, row: i32) -> Result<bool, DruidError> {
+    fn absolute(&self, row: i32) -> Result<bool, RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         let len = self.len();
         let cursor = match row.cmp(&0) {
@@ -543,10 +543,10 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(present)
     }
 
-    fn relative(&self, rows: i32) -> Result<bool, DruidError> {
+    fn relative(&self, rows: i32) -> Result<bool, RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         let len = self.len();
         let next = state
@@ -565,10 +565,10 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(present)
     }
 
-    fn previous(&self) -> Result<bool, DruidError> {
+    fn previous(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         if state.closed {
-            return Err(DruidError::Other("result set is closed".to_string()));
+            return Err(RdbcError::Other("result set is closed".to_string()));
         }
         let len = self.len();
         let previous = if state.cursor >= len {
@@ -582,54 +582,54 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(present)
     }
 
-    fn row(&self) -> Result<i32, DruidError> {
+    fn row(&self) -> Result<i32, RdbcError> {
         let state = self.state();
         if state.cursor < 0 || state.cursor >= self.len() {
             Ok(0)
         } else {
             i32::try_from(state.cursor.saturating_add(1))
-                .map_err(|error| DruidError::DriverError(error.to_string()))
+                .map_err(|error| RdbcError::DriverError(error.to_string()))
         }
     }
 
-    fn was_null(&self) -> Result<bool, DruidError> {
+    fn was_null(&self) -> Result<bool, RdbcError> {
         Ok(self.state().was_null)
     }
 
-    fn find_column(&self, column_label: &str) -> Result<usize, DruidError> {
+    fn find_column(&self, column_label: &str) -> Result<usize, RdbcError> {
         self.column_labels
             .iter()
             .position(|label| label.eq_ignore_ascii_case(column_label))
             .map(|index| index + 1)
             .ok_or_else(|| {
-                DruidError::DriverError(format!("column label {column_label:?} not found"))
+                RdbcError::DriverError(format!("column label {column_label:?} not found"))
             })
     }
 
-    fn value(&self, column_index: usize) -> Result<Value, DruidError> {
+    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
         let zero_index = column_index.checked_sub(1).ok_or_else(|| {
-            DruidError::DriverError(format!(
+            RdbcError::DriverError(format!(
                 "column_index {column_index} is not a valid 1-based index"
             ))
         })?;
         let current_index = {
             let state = self.state();
             if state.closed {
-                return Err(DruidError::Other("result set is closed".to_string()));
+                return Err(RdbcError::Other("result set is closed".to_string()));
             }
             if state.cursor < 0 || state.cursor >= self.len() {
-                return Err(DruidError::DriverError(
+                return Err(RdbcError::DriverError(
                     "result set is not positioned on a row".to_string(),
                 ));
             }
             usize::try_from(state.cursor)
-                .map_err(|error| DruidError::DriverError(error.to_string()))?
+                .map_err(|error| RdbcError::DriverError(error.to_string()))?
         };
         let row = self.current_row(current_index).ok_or_else(|| {
-            DruidError::DriverError("result set cursor is out of range".to_string())
+            RdbcError::DriverError("result set cursor is out of range".to_string())
         })?;
         if zero_index >= row.column_len() {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "column_index {column_index} is out of range"
             )));
         }
@@ -640,7 +640,7 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(value)
     }
 
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
         Ok(self.meta_data.clone())
     }
 }

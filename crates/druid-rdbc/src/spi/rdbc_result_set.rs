@@ -3,7 +3,8 @@
 //! 对应 Java 平台对象：`java.sql.ResultSet`。本对象先承载 Array 返回行集所需的
 //! 身份和关闭生命周期；游标、metadata 与 pooled trace 继续由 `ResultSet` 专项迁移。
 
-use crate::compat::{DruidError, SqlWarning};
+use crate::compat::SqlWarning;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcArray, RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcReader,
     RdbcRef, RdbcSqlXml, RdbcStreamLength,
@@ -21,77 +22,77 @@ use std::sync::{Arc, Mutex};
 /// 物理结果集最小资源 SPI。
 pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     /// 关闭物理结果集。
-    fn close(&self) -> Result<(), DruidError>;
+    fn close(&self) -> Result<(), RdbcError>;
 
     /// 返回结果集是否关闭。
     fn is_closed(&self) -> bool;
 
     /// 移到下一行。
-    fn next(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn next(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_next",
         })
     }
 
     /// 移到上一行。
-    fn previous(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn previous(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_previous",
         })
     }
 
     /// 移到第一行。
-    fn first(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn first(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_first",
         })
     }
 
     /// 移到最后一行。
-    fn last(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn last(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_last",
         })
     }
 
     /// 移到第一行之前。
-    fn before_first(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn before_first(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_before_first",
         })
     }
 
     /// 移到最后一行之后。
-    fn after_last(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn after_last(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_after_last",
         })
     }
 
     /// 按 RDBC 绝对行号定位。
-    fn absolute(&self, _row: i32) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn absolute(&self, _row: i32) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_absolute",
         })
     }
 
     /// 相对当前游标定位。
-    fn relative(&self, _rows: i32) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn relative(&self, _rows: i32) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_relative",
         })
     }
 
     /// 返回当前 RDBC 行号；无当前行时为 0。
-    fn row(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn row(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_row",
         })
     }
 
     /// 返回当前行指定 1-based 列值。
-    fn value(&self, _column_index: usize) -> Result<Value, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn value(&self, _column_index: usize) -> Result<Value, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_value",
         })
     }
@@ -100,7 +101,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     ///
     /// 真实驱动可覆盖本方法，保留 vendor 转换规则；默认实现仅为基于
     /// `Value` 的 Adapter 提供等价回退。
-    fn string(&self, column_index: usize) -> Result<Option<String>, DruidError> {
+    fn string(&self, column_index: usize) -> Result<Option<String>, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(None),
             value => value_to_string(value).map(Some),
@@ -108,7 +109,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     }
 
     /// 按标签执行 RDBC `ResultSet#getString(String)`。
-    fn string_by_label(&self, column_label: &str) -> Result<Option<String>, DruidError> {
+    fn string_by_label(&self, column_label: &str) -> Result<Option<String>, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.string(column_index)
     }
@@ -117,17 +118,17 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     ///
     /// Rust 字符串统一为 Unicode，但仍保留独立 SPI，避免驱动和 Filter 无法
     /// 区分 RDBC 的 `getString` 与 `getNString` 调用。
-    fn n_string(&self, column_index: usize) -> Result<Option<String>, DruidError> {
+    fn n_string(&self, column_index: usize) -> Result<Option<String>, RdbcError> {
         self.string(column_index)
     }
 
     /// 按标签执行 RDBC `ResultSet#getNString(String)`。
-    fn n_string_by_label(&self, column_label: &str) -> Result<Option<String>, DruidError> {
+    fn n_string_by_label(&self, column_label: &str) -> Result<Option<String>, RdbcError> {
         self.string_by_label(column_label)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getBoolean(int)`。
-    fn boolean(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn boolean(&self, column_index: usize) -> Result<bool, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(false),
             value => value_to_boolean(value),
@@ -135,13 +136,13 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     }
 
     /// 按标签执行 RDBC `ResultSet#getBoolean(String)`。
-    fn boolean_by_label(&self, column_label: &str) -> Result<bool, DruidError> {
+    fn boolean_by_label(&self, column_label: &str) -> Result<bool, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.boolean(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getLong(int)`。
-    fn long(&self, column_index: usize) -> Result<i64, DruidError> {
+    fn long(&self, column_index: usize) -> Result<i64, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(0),
             value => value_to_long(value),
@@ -149,49 +150,49 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     }
 
     /// 按标签执行 RDBC `ResultSet#getLong(String)`。
-    fn long_by_label(&self, column_label: &str) -> Result<i64, DruidError> {
+    fn long_by_label(&self, column_label: &str) -> Result<i64, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.long(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getInt(int)`。
-    fn int(&self, column_index: usize) -> Result<i32, DruidError> {
+    fn int(&self, column_index: usize) -> Result<i32, RdbcError> {
         i32::try_from(self.long(column_index)?)
-            .map_err(|error| DruidError::DriverError(error.to_string()))
+            .map_err(|error| RdbcError::DriverError(error.to_string()))
     }
 
     /// 按标签执行 RDBC `ResultSet#getInt(String)`。
-    fn int_by_label(&self, column_label: &str) -> Result<i32, DruidError> {
+    fn int_by_label(&self, column_label: &str) -> Result<i32, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.int(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getShort(int)`。
-    fn short(&self, column_index: usize) -> Result<i16, DruidError> {
+    fn short(&self, column_index: usize) -> Result<i16, RdbcError> {
         i16::try_from(self.long(column_index)?)
-            .map_err(|error| DruidError::DriverError(error.to_string()))
+            .map_err(|error| RdbcError::DriverError(error.to_string()))
     }
 
     /// 按标签执行 RDBC `ResultSet#getShort(String)`。
-    fn short_by_label(&self, column_label: &str) -> Result<i16, DruidError> {
+    fn short_by_label(&self, column_label: &str) -> Result<i16, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.short(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getByte(int)`。
-    fn byte(&self, column_index: usize) -> Result<i8, DruidError> {
+    fn byte(&self, column_index: usize) -> Result<i8, RdbcError> {
         i8::try_from(self.long(column_index)?)
-            .map_err(|error| DruidError::DriverError(error.to_string()))
+            .map_err(|error| RdbcError::DriverError(error.to_string()))
     }
 
     /// 按标签执行 RDBC `ResultSet#getByte(String)`。
-    fn byte_by_label(&self, column_label: &str) -> Result<i8, DruidError> {
+    fn byte_by_label(&self, column_label: &str) -> Result<i8, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.byte(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getDouble(int)`。
-    fn double(&self, column_index: usize) -> Result<f64, DruidError> {
+    fn double(&self, column_index: usize) -> Result<f64, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(0.0),
             value => value_to_double(value),
@@ -199,24 +200,24 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     }
 
     /// 按标签执行 RDBC `ResultSet#getDouble(String)`。
-    fn double_by_label(&self, column_label: &str) -> Result<f64, DruidError> {
+    fn double_by_label(&self, column_label: &str) -> Result<f64, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.double(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getFloat(int)`。
-    fn float(&self, column_index: usize) -> Result<f32, DruidError> {
+    fn float(&self, column_index: usize) -> Result<f32, RdbcError> {
         Ok(self.double(column_index)? as f32)
     }
 
     /// 按标签执行 RDBC `ResultSet#getFloat(String)`。
-    fn float_by_label(&self, column_label: &str) -> Result<f32, DruidError> {
+    fn float_by_label(&self, column_label: &str) -> Result<f32, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.float(column_index)
     }
 
     /// 按 1-based 下标执行 RDBC `ResultSet#getBytes(int)`。
-    fn bytes(&self, column_index: usize) -> Result<Option<Vec<u8>>, DruidError> {
+    fn bytes(&self, column_index: usize) -> Result<Option<Vec<u8>>, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(None),
             value => value_to_bytes(value).map(Some),
@@ -224,13 +225,13 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     }
 
     /// 按标签执行 RDBC `ResultSet#getBytes(String)`。
-    fn bytes_by_label(&self, column_label: &str) -> Result<Option<Vec<u8>>, DruidError> {
+    fn bytes_by_label(&self, column_label: &str) -> Result<Option<Vec<u8>>, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.bytes(column_index)
     }
 
     /// 按标签执行 RDBC `ResultSet#getObject(String)` 的通用值分支。
-    fn value_by_label(&self, column_label: &str) -> Result<Value, DruidError> {
+    fn value_by_label(&self, column_label: &str) -> Result<Value, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.value(column_index)
     }
@@ -243,7 +244,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_index: usize,
         scale: Option<i32>,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         value_to_big_decimal(self.value(column_index)?, scale)
     }
 
@@ -254,7 +255,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_label: &str,
         scale: Option<i32>,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.big_decimal(column_index, scale)
     }
@@ -266,7 +267,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_index: usize,
         _calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         value_to_date(self.value(column_index)?)
     }
 
@@ -275,7 +276,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_label: &str,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.date(column_index, calendar)
     }
@@ -285,7 +286,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_index: usize,
         _calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         value_to_time(self.value(column_index)?)
     }
 
@@ -294,7 +295,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_label: &str,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.time(column_index, calendar)
     }
@@ -304,7 +305,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_index: usize,
         _calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         value_to_timestamp(self.value(column_index)?)
     }
 
@@ -313,7 +314,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_label: &str,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.timestamp(column_index, calendar)
     }
@@ -326,8 +327,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<RdbcObject, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_get_object_with_type_map",
         })
     }
@@ -337,8 +338,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<RdbcObject, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_get_object_by_label_with_type_map",
         })
     }
@@ -351,7 +352,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_index: usize,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         match target_type {
             RdbcTargetType::Blob => Ok(self
                 .blob(column_index)?
@@ -380,7 +381,7 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
             RdbcTargetType::Custom(_) => {
                 // 先读取值以保持 RDBC 驱动对游标状态、列下标等前置条件的错误优先级。
                 let _ = self.value(column_index)?;
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: "result_set_get_object_typed_custom",
                 })
             }
@@ -393,119 +394,119 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         column_label: &str,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         let column_index = self.find_column(column_label)?;
         self.object_as(column_index, target_type)
     }
 
     /// 按 1-based 下标读取 RDBC `Ref` 资源。
-    fn reference(&self, _column_index: usize) -> Result<Option<RdbcRef>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn reference(&self, _column_index: usize) -> Result<Option<RdbcRef>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_ref",
         })
     }
 
     /// 按标签读取 RDBC `Ref` 资源。
-    fn reference_by_label(&self, _column_label: &str) -> Result<Option<RdbcRef>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn reference_by_label(&self, _column_label: &str) -> Result<Option<RdbcRef>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_ref_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `Blob` 资源。
-    fn blob(&self, _column_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn blob(&self, _column_index: usize) -> Result<Option<RdbcBlob>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_blob",
         })
     }
 
     /// 按标签读取 RDBC `Blob` 资源。
-    fn blob_by_label(&self, _column_label: &str) -> Result<Option<RdbcBlob>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn blob_by_label(&self, _column_label: &str) -> Result<Option<RdbcBlob>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_blob_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `Clob` 资源。
-    fn clob(&self, _column_index: usize) -> Result<Option<RdbcClob>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn clob(&self, _column_index: usize) -> Result<Option<RdbcClob>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_clob",
         })
     }
 
     /// 按标签读取 RDBC `Clob` 资源。
-    fn clob_by_label(&self, _column_label: &str) -> Result<Option<RdbcClob>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn clob_by_label(&self, _column_label: &str) -> Result<Option<RdbcClob>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_clob_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `Array` 资源。
-    fn array(&self, _column_index: usize) -> Result<Option<RdbcArray>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn array(&self, _column_index: usize) -> Result<Option<RdbcArray>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_array",
         })
     }
 
     /// 按标签读取 RDBC `Array` 资源。
-    fn array_by_label(&self, _column_label: &str) -> Result<Option<RdbcArray>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn array_by_label(&self, _column_label: &str) -> Result<Option<RdbcArray>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_array_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `URL` 值。
-    fn url(&self, _column_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn url(&self, _column_index: usize) -> Result<Option<RdbcUrl>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_url",
         })
     }
 
     /// 按标签读取 RDBC `URL` 值。
-    fn url_by_label(&self, _column_label: &str) -> Result<Option<RdbcUrl>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn url_by_label(&self, _column_label: &str) -> Result<Option<RdbcUrl>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_url_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `RowId` 值。
-    fn row_id(&self, _column_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn row_id(&self, _column_index: usize) -> Result<Option<RdbcRowId>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_row_id",
         })
     }
 
     /// 按标签读取 RDBC `RowId` 值。
-    fn row_id_by_label(&self, _column_label: &str) -> Result<Option<RdbcRowId>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn row_id_by_label(&self, _column_label: &str) -> Result<Option<RdbcRowId>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_row_id_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `NClob` 资源。
-    fn n_clob(&self, _column_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn n_clob(&self, _column_index: usize) -> Result<Option<RdbcNClob>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_n_clob",
         })
     }
 
     /// 按标签读取 RDBC `NClob` 资源。
-    fn n_clob_by_label(&self, _column_label: &str) -> Result<Option<RdbcNClob>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn n_clob_by_label(&self, _column_label: &str) -> Result<Option<RdbcNClob>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_n_clob_by_label",
         })
     }
 
     /// 按 1-based 下标读取 RDBC `SQLXML` 资源。
-    fn sql_xml(&self, _column_index: usize) -> Result<Option<RdbcSqlXml>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn sql_xml(&self, _column_index: usize) -> Result<Option<RdbcSqlXml>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_sql_xml",
         })
     }
 
     /// 按标签读取 RDBC `SQLXML` 资源。
-    fn sql_xml_by_label(&self, _column_label: &str) -> Result<Option<RdbcSqlXml>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn sql_xml_by_label(&self, _column_label: &str) -> Result<Option<RdbcSqlXml>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_sql_xml_by_label",
         })
     }
@@ -517,8 +518,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _update: &ResultSetUpdate,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value",
         })
     }
@@ -528,8 +529,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _update: &ResultSetUpdate,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_value_by_label",
         })
     }
@@ -539,8 +540,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcRef>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_ref",
         })
     }
@@ -550,8 +551,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcRef>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_ref_by_label",
         })
     }
@@ -561,8 +562,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcBlob>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_blob",
         })
     }
@@ -572,8 +573,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcBlob>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_blob_by_label",
         })
     }
@@ -583,8 +584,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcClob>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_clob",
         })
     }
@@ -594,8 +595,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcClob>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_clob_by_label",
         })
     }
@@ -605,8 +606,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcArray>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_array",
         })
     }
@@ -616,8 +617,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcArray>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_array_by_label",
         })
     }
@@ -627,8 +628,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcRowId>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_row_id",
         })
     }
@@ -638,8 +639,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcRowId>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_row_id_by_label",
         })
     }
@@ -649,8 +650,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcNClob>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_n_clob",
         })
     }
@@ -660,8 +661,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcNClob>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_n_clob_by_label",
         })
     }
@@ -671,8 +672,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_index: usize,
         _value: Option<&RdbcSqlXml>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_sql_xml",
         })
     }
@@ -682,8 +683,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         &self,
         _column_label: &str,
         _value: Option<&RdbcSqlXml>,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_sql_xml_by_label",
         })
     }
@@ -694,8 +695,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         _column_index: usize,
         _stream: Option<&RdbcInputStream>,
         _length: RdbcStreamLength,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_blob_stream",
         })
     }
@@ -706,8 +707,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         _column_label: &str,
         _stream: Option<&RdbcInputStream>,
         _length: RdbcStreamLength,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_blob_stream_by_label",
         })
     }
@@ -718,8 +719,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         _column_index: usize,
         _reader: Option<&RdbcReader>,
         _length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_clob_reader",
         })
     }
@@ -730,8 +731,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         _column_label: &str,
         _reader: Option<&RdbcReader>,
         _length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_clob_reader_by_label",
         })
     }
@@ -742,8 +743,8 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         _column_index: usize,
         _reader: Option<&RdbcReader>,
         _length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_n_clob_reader",
         })
     }
@@ -754,29 +755,29 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
         _column_label: &str,
         _reader: Option<&RdbcReader>,
         _length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_n_clob_reader_by_label",
         })
     }
 
     /// 按列标签查找 1-based 下标。
-    fn find_column(&self, _column_label: &str) -> Result<usize, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn find_column(&self, _column_label: &str) -> Result<usize, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_find_column",
         })
     }
 
     /// 返回最近一次读取是否为 SQL NULL。
-    fn was_null(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn was_null(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_was_null",
         })
     }
 
     /// 按 1-based 下标返回 ASCII 输入流。
-    fn ascii_stream(&self, _column_index: usize) -> Result<Option<RdbcInputStream>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn ascii_stream(&self, _column_index: usize) -> Result<Option<RdbcInputStream>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_ascii_stream",
         })
     }
@@ -785,15 +786,15 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     fn ascii_stream_by_label(
         &self,
         _column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_ascii_stream_by_label",
         })
     }
 
     /// 按 1-based 下标返回已废弃的 Unicode 输入流。
-    fn unicode_stream(&self, _column_index: usize) -> Result<Option<RdbcInputStream>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn unicode_stream(&self, _column_index: usize) -> Result<Option<RdbcInputStream>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_unicode_stream",
         })
     }
@@ -802,15 +803,15 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     fn unicode_stream_by_label(
         &self,
         _column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_unicode_stream_by_label",
         })
     }
 
     /// 按 1-based 下标返回二进制输入流。
-    fn binary_stream(&self, _column_index: usize) -> Result<Option<RdbcInputStream>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn binary_stream(&self, _column_index: usize) -> Result<Option<RdbcInputStream>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_binary_stream",
         })
     }
@@ -819,15 +820,15 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     fn binary_stream_by_label(
         &self,
         _column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_binary_stream_by_label",
         })
     }
 
     /// 按 1-based 下标返回字符 Reader。
-    fn character_stream(&self, _column_index: usize) -> Result<Option<RdbcReader>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn character_stream(&self, _column_index: usize) -> Result<Option<RdbcReader>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_character_stream",
         })
     }
@@ -836,15 +837,15 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     fn character_stream_by_label(
         &self,
         _column_label: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_character_stream_by_label",
         })
     }
 
     /// 按 1-based 下标返回国家字符集 Reader。
-    fn n_character_stream(&self, _column_index: usize) -> Result<Option<RdbcReader>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn n_character_stream(&self, _column_index: usize) -> Result<Option<RdbcReader>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_n_character_stream",
         })
     }
@@ -853,183 +854,183 @@ pub trait PhysicalResultSet: fmt::Debug + Send + Sync {
     fn n_character_stream_by_label(
         &self,
         _column_label: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_n_character_stream_by_label",
         })
     }
 
     /// 返回是否位于第一行之前。
-    fn is_before_first(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn is_before_first(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_is_before_first",
         })
     }
 
     /// 返回是否位于最后一行之后。
-    fn is_after_last(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn is_after_last(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_is_after_last",
         })
     }
 
     /// 返回是否位于第一行。
-    fn is_first(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn is_first(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_is_first",
         })
     }
 
     /// 返回是否位于最后一行。
-    fn is_last(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn is_last(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_is_last",
         })
     }
 
     /// 设置抓取方向。
-    fn set_fetch_direction(&self, _direction: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_fetch_direction(&self, _direction: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_set_fetch_direction",
         })
     }
 
     /// 返回抓取方向。
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_fetch_direction",
         })
     }
 
     /// 设置抓取大小。
-    fn set_fetch_size(&self, _rows: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_fetch_size(&self, _rows: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_set_fetch_size",
         })
     }
 
     /// 返回抓取大小。
-    fn fetch_size(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_fetch_size",
         })
     }
 
     /// 返回结果集类型。
-    fn result_set_type(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn result_set_type(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_type",
         })
     }
 
     /// 返回并发模式。
-    fn concurrency(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn concurrency(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_concurrency",
         })
     }
 
     /// 返回保持性。
-    fn holdability(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn holdability(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_holdability",
         })
     }
 
     /// 返回警告链。
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_warnings",
         })
     }
 
     /// 清除警告链。
-    fn clear_warnings(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_clear_warnings",
         })
     }
 
     /// 返回可空游标名称。
-    fn cursor_name(&self) -> Result<Option<String>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn cursor_name(&self) -> Result<Option<String>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_cursor_name",
         })
     }
 
     /// 返回结果列 metadata。
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_meta_data",
         })
     }
 
     /// 返回当前行是否被更新。
-    fn row_updated(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn row_updated(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_row_updated",
         })
     }
 
     /// 返回当前行是否为插入行。
-    fn row_inserted(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn row_inserted(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_row_inserted",
         })
     }
 
     /// 返回当前行是否被删除。
-    fn row_deleted(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn row_deleted(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_row_deleted",
         })
     }
 
     /// 提交插入行。
-    fn insert_row(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn insert_row(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_insert_row",
         })
     }
 
     /// 提交当前行更新。
-    fn update_row(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn update_row(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_update_row",
         })
     }
 
     /// 删除当前行。
-    fn delete_row(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn delete_row(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_delete_row",
         })
     }
 
     /// 刷新当前行。
-    fn refresh_row(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn refresh_row(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_refresh_row",
         })
     }
 
     /// 取消当前行尚未提交的更新。
-    fn cancel_row_updates(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn cancel_row_updates(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_cancel_row_updates",
         })
     }
 
     /// 移到插入行。
-    fn move_to_insert_row(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn move_to_insert_row(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_move_to_insert_row",
         })
     }
 
     /// 从插入行返回当前行。
-    fn move_to_current_row(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn move_to_current_row(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_move_to_current_row",
         })
     }
@@ -1123,9 +1124,9 @@ impl RowSetResultSet {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn ensure_open(state: &RowSetResultSetState) -> Result<(), DruidError> {
+    fn ensure_open(state: &RowSetResultSetState) -> Result<(), RdbcError> {
         if state.closed {
-            Err(DruidError::Other("result set is closed".to_string()))
+            Err(RdbcError::Other("result set is closed".to_string()))
         } else {
             Ok(())
         }
@@ -1151,7 +1152,7 @@ impl RowSetResultSet {
 }
 
 impl PhysicalResultSet for RowSetResultSet {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.state().closed = true;
         Ok(())
     }
@@ -1160,14 +1161,14 @@ impl PhysicalResultSet for RowSetResultSet {
         self.state().closed
     }
 
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         let next = state.cursor.saturating_add(1);
         Ok(self.move_to(&mut state, next))
     }
 
-    fn previous(&self) -> Result<bool, DruidError> {
+    fn previous(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         let previous = if state.cursor >= self.len() {
@@ -1178,33 +1179,33 @@ impl PhysicalResultSet for RowSetResultSet {
         Ok(self.move_to(&mut state, previous))
     }
 
-    fn first(&self) -> Result<bool, DruidError> {
+    fn first(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         Ok(self.move_to(&mut state, 0))
     }
 
-    fn last(&self) -> Result<bool, DruidError> {
+    fn last(&self) -> Result<bool, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         Ok(self.move_to(&mut state, self.len().saturating_sub(1)))
     }
 
-    fn before_first(&self) -> Result<(), DruidError> {
+    fn before_first(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         state.cursor = -1;
         Ok(())
     }
 
-    fn after_last(&self) -> Result<(), DruidError> {
+    fn after_last(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         state.cursor = self.len();
         Ok(())
     }
 
-    fn absolute(&self, row: i32) -> Result<bool, DruidError> {
+    fn absolute(&self, row: i32) -> Result<bool, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         if row == 0 {
@@ -1219,14 +1220,14 @@ impl PhysicalResultSet for RowSetResultSet {
         Ok(self.move_to(&mut state, cursor))
     }
 
-    fn relative(&self, rows: i32) -> Result<bool, DruidError> {
+    fn relative(&self, rows: i32) -> Result<bool, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         let cursor = state.cursor.saturating_add(i64::from(rows));
         Ok(self.move_to(&mut state, cursor))
     }
 
-    fn row(&self) -> Result<i32, DruidError> {
+    fn row(&self) -> Result<i32, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(if self.has_current(state.cursor) {
@@ -1236,68 +1237,66 @@ impl PhysicalResultSet for RowSetResultSet {
         })
     }
 
-    fn value(&self, column_index: usize) -> Result<Value, DruidError> {
+    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         if !self.has_current(state.cursor) {
-            return Err(DruidError::Other(
+            return Err(RdbcError::Other(
                 "result set cursor is not positioned on a row".to_string(),
             ));
         }
         let index = column_index
             .checked_sub(1)
-            .ok_or_else(|| DruidError::InvalidArgument("column_index is 1-based".to_string()))?;
+            .ok_or_else(|| RdbcError::InvalidArgument("column_index is 1-based".to_string()))?;
         let value = self.rows[state.cursor as usize]
             .get(index)
             .cloned()
             .ok_or_else(|| {
-                DruidError::InvalidArgument(format!(
-                    "column_index {column_index} exceeds row width"
-                ))
+                RdbcError::InvalidArgument(format!("column_index {column_index} exceeds row width"))
             })?;
         state.was_null = matches!(value, Value::Null);
         Ok(value)
     }
 
-    fn find_column(&self, column_label: &str) -> Result<usize, DruidError> {
+    fn find_column(&self, column_label: &str) -> Result<usize, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         self.column_labels
             .iter()
             .position(|label| label.eq_ignore_ascii_case(column_label))
             .map(|index| index + 1)
-            .ok_or_else(|| DruidError::InvalidArgument(format!("unknown column: {column_label}")))
+            .ok_or_else(|| RdbcError::InvalidArgument(format!("unknown column: {column_label}")))
     }
 
-    fn was_null(&self) -> Result<bool, DruidError> {
+    fn was_null(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(state.was_null)
     }
 
-    fn ascii_stream(&self, column_index: usize) -> Result<Option<RdbcInputStream>, DruidError> {
+    fn ascii_stream(&self, column_index: usize) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.binary_stream(column_index)
     }
 
     fn ascii_stream_by_label(
         &self,
         column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.ascii_stream(self.find_column(column_label)?)
     }
 
-    fn unicode_stream(&self, column_index: usize) -> Result<Option<RdbcInputStream>, DruidError> {
+    fn unicode_stream(&self, column_index: usize) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.binary_stream(column_index)
     }
 
     fn unicode_stream_by_label(
         &self,
         column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.unicode_stream(self.find_column(column_label)?)
     }
 
-    fn binary_stream(&self, column_index: usize) -> Result<Option<RdbcInputStream>, DruidError> {
+    fn binary_stream(&self, column_index: usize) -> Result<Option<RdbcInputStream>, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(None),
             Value::Bytes(value) => Ok(Some(RdbcInputStream::from_bytes(value))),
@@ -1329,18 +1328,18 @@ impl PhysicalResultSet for RowSetResultSet {
     fn binary_stream_by_label(
         &self,
         column_label: &str,
-    ) -> Result<Option<RdbcInputStream>, DruidError> {
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
         self.binary_stream(self.find_column(column_label)?)
     }
 
-    fn character_stream(&self, column_index: usize) -> Result<Option<RdbcReader>, DruidError> {
+    fn character_stream(&self, column_index: usize) -> Result<Option<RdbcReader>, RdbcError> {
         match self.value(column_index)? {
             Value::Null => Ok(None),
             Value::String(value) => Ok(Some(RdbcReader::from_string(value))),
             Value::Bytes(value) => String::from_utf8(value)
                 .map(RdbcReader::from_string)
                 .map(Some)
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             Value::Bool(value) => Ok(Some(RdbcReader::from_string(value.to_string()))),
             Value::Int(value) => Ok(Some(RdbcReader::from_string(value.to_string()))),
             Value::Float(value) => Ok(Some(RdbcReader::from_string(value.to_string()))),
@@ -1354,48 +1353,48 @@ impl PhysicalResultSet for RowSetResultSet {
     fn character_stream_by_label(
         &self,
         column_label: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         self.character_stream(self.find_column(column_label)?)
     }
 
-    fn n_character_stream(&self, column_index: usize) -> Result<Option<RdbcReader>, DruidError> {
+    fn n_character_stream(&self, column_index: usize) -> Result<Option<RdbcReader>, RdbcError> {
         self.character_stream(column_index)
     }
 
     fn n_character_stream_by_label(
         &self,
         column_label: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         self.n_character_stream(self.find_column(column_label)?)
     }
 
-    fn is_before_first(&self) -> Result<bool, DruidError> {
+    fn is_before_first(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(!self.rows.is_empty() && state.cursor < 0)
     }
 
-    fn is_after_last(&self) -> Result<bool, DruidError> {
+    fn is_after_last(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(!self.rows.is_empty() && state.cursor >= self.len())
     }
 
-    fn is_first(&self) -> Result<bool, DruidError> {
+    fn is_first(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(!self.rows.is_empty() && state.cursor == 0)
     }
 
-    fn is_last(&self) -> Result<bool, DruidError> {
+    fn is_last(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(!self.rows.is_empty() && state.cursor == self.len() - 1)
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         if ![1000, 1001, 1002].contains(&direction) {
-            return Err(DruidError::InvalidArgument(format!(
+            return Err(RdbcError::InvalidArgument(format!(
                 "invalid fetch direction: {direction}"
             )));
         }
@@ -1405,15 +1404,15 @@ impl PhysicalResultSet for RowSetResultSet {
         Ok(())
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(state.fetch_direction)
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         if rows < 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "fetch_size must not be negative".to_string(),
             ));
         }
@@ -1423,62 +1422,62 @@ impl PhysicalResultSet for RowSetResultSet {
         Ok(())
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(state.fetch_size)
     }
 
-    fn result_set_type(&self) -> Result<i32, DruidError> {
+    fn result_set_type(&self) -> Result<i32, RdbcError> {
         Ok(1004)
     }
 
-    fn concurrency(&self) -> Result<i32, DruidError> {
+    fn concurrency(&self) -> Result<i32, RdbcError> {
         Ok(1007)
     }
 
-    fn holdability(&self) -> Result<i32, DruidError> {
+    fn holdability(&self) -> Result<i32, RdbcError> {
         Ok(1)
     }
 
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(state.warnings.clone())
     }
 
-    fn clear_warnings(&self) -> Result<(), DruidError> {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         Self::ensure_open(&state)?;
         state.warnings = None;
         Ok(())
     }
 
-    fn cursor_name(&self) -> Result<Option<String>, DruidError> {
+    fn cursor_name(&self) -> Result<Option<String>, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(None)
     }
 
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(self.meta_data.clone())
     }
 
-    fn row_updated(&self) -> Result<bool, DruidError> {
+    fn row_updated(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(false)
     }
 
-    fn row_inserted(&self) -> Result<bool, DruidError> {
+    fn row_inserted(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(false)
     }
 
-    fn row_deleted(&self) -> Result<bool, DruidError> {
+    fn row_deleted(&self) -> Result<bool, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
         Ok(false)
@@ -1488,7 +1487,7 @@ impl PhysicalResultSet for RowSetResultSet {
 fn value_to_rdbc_object(
     value: Value,
     target_type: &RdbcTargetType,
-) -> Result<RdbcObject, DruidError> {
+) -> Result<RdbcObject, RdbcError> {
     if matches!(value, Value::Null) {
         return Ok(RdbcObject::Scalar(Value::Null));
     }
@@ -1498,13 +1497,13 @@ fn value_to_rdbc_object(
         RdbcTargetType::Boolean => value_to_boolean(value).map(RdbcObject::Boolean),
         RdbcTargetType::Byte => i8::try_from(value_to_long(value)?)
             .map(RdbcObject::Byte)
-            .map_err(|error| DruidError::DriverError(error.to_string())),
+            .map_err(|error| RdbcError::DriverError(error.to_string())),
         RdbcTargetType::Short => i16::try_from(value_to_long(value)?)
             .map(RdbcObject::Short)
-            .map_err(|error| DruidError::DriverError(error.to_string())),
+            .map_err(|error| RdbcError::DriverError(error.to_string())),
         RdbcTargetType::Integer => i32::try_from(value_to_long(value)?)
             .map(RdbcObject::Integer)
-            .map_err(|error| DruidError::DriverError(error.to_string())),
+            .map_err(|error| RdbcError::DriverError(error.to_string())),
         RdbcTargetType::Long => value_to_long(value).map(RdbcObject::Long),
         RdbcTargetType::Float => {
             value_to_double(value).map(|value| RdbcObject::Float(value as f32))
@@ -1513,16 +1512,16 @@ fn value_to_rdbc_object(
         RdbcTargetType::Bytes => value_to_bytes(value).map(RdbcObject::Bytes),
         RdbcTargetType::BigDecimal => value_to_big_decimal(value, None)?
             .map(RdbcObject::BigDecimal)
-            .ok_or_else(|| DruidError::DriverError("unexpected SQL NULL".to_string())),
+            .ok_or_else(|| RdbcError::DriverError("unexpected SQL NULL".to_string())),
         RdbcTargetType::Date => value_to_date(value)?
             .map(RdbcObject::Date)
-            .ok_or_else(|| DruidError::DriverError("unexpected SQL NULL".to_string())),
+            .ok_or_else(|| RdbcError::DriverError("unexpected SQL NULL".to_string())),
         RdbcTargetType::Time => value_to_time(value)?
             .map(RdbcObject::Time)
-            .ok_or_else(|| DruidError::DriverError("unexpected SQL NULL".to_string())),
+            .ok_or_else(|| RdbcError::DriverError("unexpected SQL NULL".to_string())),
         RdbcTargetType::Timestamp => value_to_timestamp(value)?
             .map(RdbcObject::Timestamp)
-            .ok_or_else(|| DruidError::DriverError("unexpected SQL NULL".to_string())),
+            .ok_or_else(|| RdbcError::DriverError("unexpected SQL NULL".to_string())),
         RdbcTargetType::Blob
         | RdbcTargetType::Clob
         | RdbcTargetType::NClob
@@ -1531,17 +1530,17 @@ fn value_to_rdbc_object(
         | RdbcTargetType::RowId
         | RdbcTargetType::SqlXml
         | RdbcTargetType::Url
-        | RdbcTargetType::Custom(_) => Err(DruidError::UnsupportedOperation {
+        | RdbcTargetType::Custom(_) => Err(RdbcError::UnsupportedOperation {
             operation: "result_set_get_object_typed_resource",
         }),
     }
 }
 
-fn value_to_string(value: Value) -> Result<String, DruidError> {
+fn value_to_string(value: Value) -> Result<String, RdbcError> {
     match value {
         Value::String(value) => Ok(value),
         Value::Bytes(value) => {
-            String::from_utf8(value).map_err(|error| DruidError::DriverError(error.to_string()))
+            String::from_utf8(value).map_err(|error| RdbcError::DriverError(error.to_string()))
         }
         Value::Bool(value) => Ok(value.to_string()),
         Value::Int(value) => Ok(value.to_string()),
@@ -1550,11 +1549,11 @@ fn value_to_string(value: Value) -> Result<String, DruidError> {
         Value::Date(value) => Ok(value.to_string()),
         Value::Time(value) => Ok(value.to_string()),
         Value::Timestamp(value) => Ok(value.to_string()),
-        Value::Null => Err(DruidError::DriverError("unexpected SQL NULL".to_string())),
+        Value::Null => Err(RdbcError::DriverError("unexpected SQL NULL".to_string())),
     }
 }
 
-fn value_to_boolean(value: Value) -> Result<bool, DruidError> {
+fn value_to_boolean(value: Value) -> Result<bool, RdbcError> {
     match value {
         Value::Bool(value) => Ok(value),
         Value::Int(value) => Ok(value != 0),
@@ -1565,7 +1564,7 @@ fn value_to_boolean(value: Value) -> Result<bool, DruidError> {
     }
 }
 
-fn value_to_long(value: Value) -> Result<i64, DruidError> {
+fn value_to_long(value: Value) -> Result<i64, RdbcError> {
     match value {
         Value::Bool(value) => Ok(i64::from(value)),
         Value::Int(value) => Ok(value),
@@ -1575,12 +1574,12 @@ fn value_to_long(value: Value) -> Result<i64, DruidError> {
             .ok_or_else(|| result_set_type_error("Long", &Value::Decimal(value))),
         Value::String(value) => value
             .parse::<i64>()
-            .map_err(|error| DruidError::DriverError(error.to_string())),
+            .map_err(|error| RdbcError::DriverError(error.to_string())),
         actual => Err(result_set_type_error("Long", &actual)),
     }
 }
 
-fn value_to_double(value: Value) -> Result<f64, DruidError> {
+fn value_to_double(value: Value) -> Result<f64, RdbcError> {
     match value {
         Value::Bool(value) => Ok(if value { 1.0 } else { 0.0 }),
         Value::Int(value) => Ok(value as f64),
@@ -1590,33 +1589,30 @@ fn value_to_double(value: Value) -> Result<f64, DruidError> {
             .ok_or_else(|| result_set_type_error("Double", &Value::Decimal(value))),
         Value::String(value) => value
             .parse::<f64>()
-            .map_err(|error| DruidError::DriverError(error.to_string())),
+            .map_err(|error| RdbcError::DriverError(error.to_string())),
         actual => Err(result_set_type_error("Double", &actual)),
     }
 }
 
-fn value_to_bytes(value: Value) -> Result<Vec<u8>, DruidError> {
+fn value_to_bytes(value: Value) -> Result<Vec<u8>, RdbcError> {
     match value {
         Value::Bytes(value) => Ok(value),
         other => value_to_string(other).map(String::into_bytes),
     }
 }
 
-fn value_to_big_decimal(
-    value: Value,
-    scale: Option<i32>,
-) -> Result<Option<BigDecimal>, DruidError> {
+fn value_to_big_decimal(value: Value, scale: Option<i32>) -> Result<Option<BigDecimal>, RdbcError> {
     let value = match value {
         Value::Null => return Ok(None),
         Value::Decimal(value) => value,
         Value::Int(value) => BigDecimal::from(value),
         Value::Float(value) => BigDecimal::from_f64(value).ok_or_else(|| {
-            DruidError::DriverError(format!(
+            RdbcError::DriverError(format!(
                 "ResultSet floating point value {value} cannot be represented as BigDecimal"
             ))
         })?,
         Value::String(value) => BigDecimal::from_str(&value).map_err(|error| {
-            DruidError::DriverError(format!(
+            RdbcError::DriverError(format!(
                 "ResultSet value {value:?} cannot be converted to BigDecimal: {error}"
             ))
         })?,
@@ -1628,7 +1624,7 @@ fn value_to_big_decimal(
     }))
 }
 
-fn value_to_date(value: Value) -> Result<Option<NaiveDate>, DruidError> {
+fn value_to_date(value: Value) -> Result<Option<NaiveDate>, RdbcError> {
     match value {
         Value::Null => Ok(None),
         Value::Date(value) => Ok(Some(value)),
@@ -1636,7 +1632,7 @@ fn value_to_date(value: Value) -> Result<Option<NaiveDate>, DruidError> {
         Value::String(value) => NaiveDate::parse_from_str(&value, "%Y-%m-%d")
             .map(Some)
             .map_err(|error| {
-                DruidError::DriverError(format!(
+                RdbcError::DriverError(format!(
                     "ResultSet value {value:?} cannot be converted to Date: {error}"
                 ))
             }),
@@ -1644,7 +1640,7 @@ fn value_to_date(value: Value) -> Result<Option<NaiveDate>, DruidError> {
     }
 }
 
-fn value_to_time(value: Value) -> Result<Option<NaiveTime>, DruidError> {
+fn value_to_time(value: Value) -> Result<Option<NaiveTime>, RdbcError> {
     match value {
         Value::Null => Ok(None),
         Value::Time(value) => Ok(Some(value)),
@@ -1652,7 +1648,7 @@ fn value_to_time(value: Value) -> Result<Option<NaiveTime>, DruidError> {
         Value::String(value) => NaiveTime::parse_from_str(&value, "%H:%M:%S%.f")
             .map(Some)
             .map_err(|error| {
-                DruidError::DriverError(format!(
+                RdbcError::DriverError(format!(
                     "ResultSet value {value:?} cannot be converted to Time: {error}"
                 ))
             }),
@@ -1660,14 +1656,14 @@ fn value_to_time(value: Value) -> Result<Option<NaiveTime>, DruidError> {
     }
 }
 
-fn value_to_timestamp(value: Value) -> Result<Option<NaiveDateTime>, DruidError> {
+fn value_to_timestamp(value: Value) -> Result<Option<NaiveDateTime>, RdbcError> {
     match value {
         Value::Null => Ok(None),
         Value::Timestamp(value) => Ok(Some(value)),
         // 有效 `NaiveDate` 与午夜组合不存在失败分支。
         Value::Date(value) => Ok(Some(NaiveDateTime::new(value, NaiveTime::MIN))),
         Value::String(value) => parse_timestamp(&value).map(Some).map_err(|error| {
-            DruidError::DriverError(format!(
+            RdbcError::DriverError(format!(
                 "ResultSet value {value:?} cannot be converted to Timestamp: {error}"
             ))
         }),
@@ -1680,8 +1676,8 @@ fn parse_timestamp(value: &str) -> Result<NaiveDateTime, chrono::ParseError> {
         .or_else(|_| NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f"))
 }
 
-fn result_set_type_error(expected: &str, actual: &Value) -> DruidError {
-    DruidError::DriverError(format!("ResultSet expected {expected} value, got {actual}"))
+fn result_set_type_error(expected: &str, actual: &Value) -> RdbcError {
+    RdbcError::DriverError(format!("ResultSet expected {expected} value, got {actual}"))
 }
 
 /// 不泄漏具体驱动类型的结果集句柄。
@@ -1697,7 +1693,7 @@ impl RdbcResultSet {
     }
 
     /// 关闭结果集。
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         self.physical.close()
     }
 
@@ -1733,14 +1729,14 @@ impl Eq for RdbcResultSet {}
 #[cfg(test)]
 mod tests {
     use super::{value_to_rdbc_object, value_to_string};
-    use crate::compat::DruidError;
+    use crate::error::RdbcError;
     use crate::types::{RdbcTargetType, Value};
 
     #[test]
     fn internal_scalar_converter_rejects_resource_targets_explicitly() {
         assert!(matches!(
             value_to_rdbc_object(Value::Int(1), &RdbcTargetType::Blob),
-            Err(DruidError::UnsupportedOperation {
+            Err(RdbcError::UnsupportedOperation {
                 operation: "result_set_get_object_typed_resource"
             })
         ));
@@ -1749,7 +1745,7 @@ mod tests {
                 Value::Int(1),
                 &RdbcTargetType::Custom("vendor.Type".to_string())
             ),
-            Err(DruidError::UnsupportedOperation {
+            Err(RdbcError::UnsupportedOperation {
                 operation: "result_set_get_object_typed_resource"
             })
         ));
@@ -1759,7 +1755,7 @@ mod tests {
     fn internal_non_null_string_converter_rejects_accidental_null_input() {
         assert!(matches!(
             value_to_string(Value::Null),
-            Err(DruidError::DriverError(message)) if message == "unexpected SQL NULL"
+            Err(RdbcError::DriverError(message)) if message == "unexpected SQL NULL"
         ));
     }
 }

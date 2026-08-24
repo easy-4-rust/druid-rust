@@ -4,7 +4,7 @@ extern crate druid_wrapper as wrapper;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
+    PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, RdbcError, Value,
 };
 use std::str::FromStr;
 use wrapper::toasty::ToastyConnectionFactory;
@@ -125,7 +125,7 @@ async fn sqlite_factory_and_raw_sql_cover_druid_value_semantics() {
     assert!(connection.is_closed());
     assert!(matches!(
         connection.ping().await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
 }
 
@@ -261,7 +261,7 @@ async fn sqlite_transactions_savepoints_and_discard_are_real() {
 
     assert!(matches!(
         connection.set_read_only(true).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "toasty_sqlite_read_only_transaction"
         })
     ));
@@ -272,13 +272,13 @@ async fn sqlite_transactions_savepoints_and_discard_are_real() {
     assert_eq!(connection.transaction_isolation(), 8);
     assert!(matches!(
         connection.set_transaction_isolation(2).await,
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
 
     connection.begin().await.expect("保存点校验事务必须开始");
     assert!(matches!(
         connection.set_savepoint_named("unsafe-name").await,
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     connection.rollback().await.expect("校验事务必须回滚");
 
@@ -286,7 +286,7 @@ async fn sqlite_transactions_savepoints_and_discard_are_real() {
     assert!(connection.is_discarded());
     assert!(matches!(
         connection.fetch("SELECT 1", Vec::new()).await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
 }
 
@@ -295,14 +295,14 @@ async fn unsupported_scheme_is_reported_instead_of_falling_back() {
     let error = ToastyConnectionFactory::new("unknown://database")
         .await
         .expect_err("未知 scheme 不得回退到其他驱动");
-    assert!(matches!(error, DruidError::DriverError(_)));
+    assert!(matches!(error, RdbcError::DriverError(_)));
 
     let error = ToastyConnectionFactory::new("dynamodb://local")
         .await
         .expect_err("DynamoDB 不得冒充 SQL 物理连接");
     assert_eq!(
         error,
-        DruidError::UnsupportedOperation {
+        RdbcError::UnsupportedOperation {
             operation: "toasty_non_sql_physical_connection"
         }
     );
@@ -316,7 +316,7 @@ async fn sqlite_driver_failure_preserves_structured_sql_exception_boundary() {
         .await
         .expect_err("真实 SQLite 语法错误必须返回失败");
 
-    let DruidError::SqlException(exception) = error else {
+    let RdbcError::SqlException(exception) = error else {
         panic!("Toasty driver operation failure 必须映射为结构化 SqlException");
     };
     assert_eq!(exception.error_code(), 0);

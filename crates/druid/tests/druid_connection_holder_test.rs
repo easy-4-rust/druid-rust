@@ -6,8 +6,8 @@
 //! - `LastActiveTest_0.java`
 
 use druid::core::{
-    DruidConnectionHolder, DruidError, DruidPooledConnection, ExecResult, PhysicalConnection,
-    PhysicalConnectionCapabilities, Row, Value,
+    DruidConnectionHolder, DruidPooledConnection, ExecResult, PhysicalConnection,
+    PhysicalConnectionCapabilities, RdbcError, Row, Value,
 };
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -52,31 +52,31 @@ impl HolderConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for HolderConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.probe
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -109,7 +109,7 @@ impl PhysicalConnection for HolderConnection {
         self.auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         self.record(format!("auto_commit:{auto_commit}"));
         self.auto_commit = auto_commit;
         Ok(())
@@ -119,7 +119,7 @@ impl PhysicalConnection for HolderConnection {
         self.read_only
     }
 
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         self.record(format!("read_only:{read_only}"));
         self.read_only = read_only;
         Ok(())
@@ -129,7 +129,7 @@ impl PhysicalConnection for HolderConnection {
         self.isolation
     }
 
-    async fn set_transaction_isolation(&mut self, isolation: u8) -> Result<(), DruidError> {
+    async fn set_transaction_isolation(&mut self, isolation: u8) -> Result<(), RdbcError> {
         self.record(format!("isolation:{isolation}"));
         self.isolation = isolation;
         Ok(())
@@ -139,13 +139,13 @@ impl PhysicalConnection for HolderConnection {
         self.holdability
     }
 
-    async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {
+    async fn set_holdability(&mut self, holdability: i32) -> Result<(), RdbcError> {
         self.record(format!("holdability:{holdability}"));
         self.holdability = holdability;
         Ok(())
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.record("clear_warnings");
         Ok(())
     }
@@ -168,7 +168,7 @@ impl PhysicalConnection for HolderConnection {
         self.schema.as_deref()
     }
 
-    async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
+    async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
         self.record(format!("schema:{schema}"));
         self.schema = Some(schema.to_string());
         Ok(())

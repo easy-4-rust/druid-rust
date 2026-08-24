@@ -3,13 +3,13 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, DruidPooledConnection, DruidPooledResultSet, PhysicalConnection,
-    PhysicalConnectionFactory, PhysicalRdbcOpaqueObject, PhysicalResultSet,
-    PhysicalResultSetMetaData, RdbcArray, RdbcBlob, RdbcCalendar, RdbcCalendarArgument,
-    RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcOpaqueObject,
-    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap,
-    RdbcUrl, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData, ResultSetNullability,
-    ResultSetUpdate, Row, RowSetResultSet, SqlWarning, Value, Wrapper, WrapperExt,
+    DruidPooledConnection, DruidPooledResultSet, PhysicalConnection, PhysicalConnectionFactory,
+    PhysicalRdbcOpaqueObject, PhysicalResultSet, PhysicalResultSetMetaData, RdbcArray, RdbcBlob,
+    RdbcCalendar, RdbcCalendarArgument, RdbcCharacterLength, RdbcClob, RdbcError, RdbcInputStream,
+    RdbcNClob, RdbcObject, RdbcOpaqueObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml,
+    RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, ResultSetColumnMeta,
+    ResultSetColumnType, ResultSetMetaData, ResultSetNullability, ResultSetUpdate, Row,
+    RowSetResultSet, SqlWarning, Value, Wrapper, WrapperExt,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::{Any, TypeId};
@@ -38,7 +38,7 @@ struct CustomTargetReadProbe {
 }
 
 impl PhysicalResultSet for CustomTargetReadProbe {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -46,7 +46,7 @@ impl PhysicalResultSet for CustomTargetReadProbe {
         false
     }
 
-    fn value(&self, column_index: usize) -> Result<Value, DruidError> {
+    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
         assert_eq!(column_index, 3);
         self.value_calls.fetch_add(1, Ordering::Relaxed);
         Ok(Value::String("vendor-value".to_string()))
@@ -60,7 +60,7 @@ fn custom_typed_object_checks_the_physical_column_exactly_once() {
     };
     assert!(matches!(
         probe.object_as(3, &RdbcTargetType::Custom("vendor.Type".to_string())),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_get_object_typed_custom"
         })
     ));
@@ -74,10 +74,10 @@ struct ScalarGetterDelegationProbe {
 }
 
 impl ScalarGetterDelegationProbe {
-    fn record<T>(&self, method: &'static str, value: T) -> Result<T, DruidError> {
+    fn record<T>(&self, method: &'static str, value: T) -> Result<T, RdbcError> {
         self.calls.lock().unwrap().push(method);
         if self.fail_on == Some(method) {
-            Err(DruidError::DriverError(format!("{method} failed")))
+            Err(RdbcError::DriverError(format!("{method} failed")))
         } else {
             Ok(value)
         }
@@ -89,7 +89,7 @@ impl ScalarGetterDelegationProbe {
 }
 
 impl PhysicalResultSet for ScalarGetterDelegationProbe {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -97,79 +97,79 @@ impl PhysicalResultSet for ScalarGetterDelegationProbe {
         false
     }
 
-    fn value_by_label(&self, _column_label: &str) -> Result<Value, DruidError> {
+    fn value_by_label(&self, _column_label: &str) -> Result<Value, RdbcError> {
         self.record("value_by_label", Value::Int(90))
     }
 
-    fn string(&self, _column_index: usize) -> Result<Option<String>, DruidError> {
+    fn string(&self, _column_index: usize) -> Result<Option<String>, RdbcError> {
         self.record("string", Some("index".to_string()))
     }
 
-    fn string_by_label(&self, _column_label: &str) -> Result<Option<String>, DruidError> {
+    fn string_by_label(&self, _column_label: &str) -> Result<Option<String>, RdbcError> {
         self.record("string_by_label", Some("label".to_string()))
     }
 
-    fn boolean(&self, _column_index: usize) -> Result<bool, DruidError> {
+    fn boolean(&self, _column_index: usize) -> Result<bool, RdbcError> {
         self.record("boolean", true)
     }
 
-    fn boolean_by_label(&self, _column_label: &str) -> Result<bool, DruidError> {
+    fn boolean_by_label(&self, _column_label: &str) -> Result<bool, RdbcError> {
         self.record("boolean_by_label", false)
     }
 
-    fn long(&self, _column_index: usize) -> Result<i64, DruidError> {
+    fn long(&self, _column_index: usize) -> Result<i64, RdbcError> {
         self.record("long", 101)
     }
 
-    fn long_by_label(&self, _column_label: &str) -> Result<i64, DruidError> {
+    fn long_by_label(&self, _column_label: &str) -> Result<i64, RdbcError> {
         self.record("long_by_label", 102)
     }
 
-    fn int(&self, _column_index: usize) -> Result<i32, DruidError> {
+    fn int(&self, _column_index: usize) -> Result<i32, RdbcError> {
         self.record("int", 103)
     }
 
-    fn int_by_label(&self, _column_label: &str) -> Result<i32, DruidError> {
+    fn int_by_label(&self, _column_label: &str) -> Result<i32, RdbcError> {
         self.record("int_by_label", 104)
     }
 
-    fn short(&self, _column_index: usize) -> Result<i16, DruidError> {
+    fn short(&self, _column_index: usize) -> Result<i16, RdbcError> {
         self.record("short", 105)
     }
 
-    fn short_by_label(&self, _column_label: &str) -> Result<i16, DruidError> {
+    fn short_by_label(&self, _column_label: &str) -> Result<i16, RdbcError> {
         self.record("short_by_label", 106)
     }
 
-    fn byte(&self, _column_index: usize) -> Result<i8, DruidError> {
+    fn byte(&self, _column_index: usize) -> Result<i8, RdbcError> {
         self.record("byte", 107)
     }
 
-    fn byte_by_label(&self, _column_label: &str) -> Result<i8, DruidError> {
+    fn byte_by_label(&self, _column_label: &str) -> Result<i8, RdbcError> {
         self.record("byte_by_label", 108)
     }
 
-    fn double(&self, _column_index: usize) -> Result<f64, DruidError> {
+    fn double(&self, _column_index: usize) -> Result<f64, RdbcError> {
         self.record("double", 109.5)
     }
 
-    fn double_by_label(&self, _column_label: &str) -> Result<f64, DruidError> {
+    fn double_by_label(&self, _column_label: &str) -> Result<f64, RdbcError> {
         self.record("double_by_label", 110.5)
     }
 
-    fn float(&self, _column_index: usize) -> Result<f32, DruidError> {
+    fn float(&self, _column_index: usize) -> Result<f32, RdbcError> {
         self.record("float", 111.5)
     }
 
-    fn float_by_label(&self, _column_label: &str) -> Result<f32, DruidError> {
+    fn float_by_label(&self, _column_label: &str) -> Result<f32, RdbcError> {
         self.record("float_by_label", 112.5)
     }
 
-    fn bytes(&self, _column_index: usize) -> Result<Option<Vec<u8>>, DruidError> {
+    fn bytes(&self, _column_index: usize) -> Result<Option<Vec<u8>>, RdbcError> {
         self.record("bytes", Some(vec![113]))
     }
 
-    fn bytes_by_label(&self, _column_label: &str) -> Result<Option<Vec<u8>>, DruidError> {
+    fn bytes_by_label(&self, _column_label: &str) -> Result<Option<Vec<u8>>, RdbcError> {
         self.record("bytes_by_label", Some(vec![114]))
     }
 }
@@ -233,7 +233,7 @@ async fn pooled_scalar_getters_delegate_exact_physical_overloads_and_classify_er
 
     assert!(matches!(
         result_set.boolean_by_label(&mut connection, "failing"),
-        Err(DruidError::DriverError(message)) if message == "boolean_by_label failed"
+        Err(RdbcError::DriverError(message)) if message == "boolean_by_label failed"
     ));
     assert_eq!(statement.exception_count(), 1);
 
@@ -252,7 +252,7 @@ async fn pooled_scalar_getters_delegate_exact_physical_overloads_and_classify_er
 struct SparsePhysicalResultSet;
 
 impl PhysicalResultSet for SparsePhysicalResultSet {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -262,13 +262,13 @@ impl PhysicalResultSet for SparsePhysicalResultSet {
 }
 
 fn assert_unsupported_operation<T: std::fmt::Debug>(
-    result: Result<T, DruidError>,
+    result: Result<T, RdbcError>,
     expected_operation: &'static str,
 ) {
     assert!(
         matches!(
             result,
-            Err(DruidError::UnsupportedOperation { operation })
+            Err(RdbcError::UnsupportedOperation { operation })
                 if operation == expected_operation
         ),
         "expected unsupported operation {expected_operation}"
@@ -514,7 +514,7 @@ impl TypedResourceProbe {
 }
 
 impl PhysicalResultSet for TypedResourceProbe {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -522,7 +522,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         false
     }
 
-    fn find_column(&self, column_label: &str) -> Result<usize, DruidError> {
+    fn find_column(&self, column_label: &str) -> Result<usize, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -530,7 +530,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(41)
     }
 
-    fn blob(&self, column_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
+    fn blob(&self, column_index: usize) -> Result<Option<RdbcBlob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -538,7 +538,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn clob(&self, column_index: usize) -> Result<Option<RdbcClob>, DruidError> {
+    fn clob(&self, column_index: usize) -> Result<Option<RdbcClob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -546,7 +546,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn n_clob(&self, column_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
+    fn n_clob(&self, column_index: usize) -> Result<Option<RdbcNClob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -554,7 +554,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn array(&self, column_index: usize) -> Result<Option<RdbcArray>, DruidError> {
+    fn array(&self, column_index: usize) -> Result<Option<RdbcArray>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -562,7 +562,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn reference(&self, column_index: usize) -> Result<Option<RdbcRef>, DruidError> {
+    fn reference(&self, column_index: usize) -> Result<Option<RdbcRef>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -570,7 +570,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn row_id(&self, column_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
+    fn row_id(&self, column_index: usize) -> Result<Option<RdbcRowId>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -578,7 +578,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn sql_xml(&self, column_index: usize) -> Result<Option<RdbcSqlXml>, DruidError> {
+    fn sql_xml(&self, column_index: usize) -> Result<Option<RdbcSqlXml>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -586,7 +586,7 @@ impl PhysicalResultSet for TypedResourceProbe {
         Ok(None)
     }
 
-    fn url(&self, column_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
+    fn url(&self, column_index: usize) -> Result<Option<RdbcUrl>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -609,10 +609,10 @@ impl PhysicalMetaDataProbe {
         }
     }
 
-    fn call<T>(&self, method: &'static str, value: T) -> Result<T, DruidError> {
+    fn call<T>(&self, method: &'static str, value: T) -> Result<T, RdbcError> {
         self.calls.lock().unwrap().push(method);
         if self.fail_method == Some(method) {
-            Err(DruidError::DriverError(format!(
+            Err(RdbcError::DriverError(format!(
                 "metadata probe failed at {method}"
             )))
         } else {
@@ -632,27 +632,27 @@ impl Wrapper for PhysicalMetaDataProbe {
 }
 
 impl PhysicalResultSetMetaData for PhysicalMetaDataProbe {
-    fn column_count(&self) -> Result<usize, DruidError> {
+    fn column_count(&self) -> Result<usize, RdbcError> {
         self.call("column_count", 1)
     }
 
-    fn is_auto_increment(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_auto_increment(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_auto_increment", column_index == 1)
     }
 
-    fn is_case_sensitive(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_case_sensitive(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_case_sensitive", column_index == 1)
     }
 
-    fn is_searchable(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_searchable(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_searchable", column_index == 1)
     }
 
-    fn is_currency(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_currency(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_currency", column_index == 1)
     }
 
-    fn nullability(&self, column_index: usize) -> Result<ResultSetNullability, DruidError> {
+    fn nullability(&self, column_index: usize) -> Result<ResultSetNullability, RdbcError> {
         self.call(
             "nullability",
             if column_index == 1 {
@@ -663,43 +663,43 @@ impl PhysicalResultSetMetaData for PhysicalMetaDataProbe {
         )
     }
 
-    fn is_signed(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_signed(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_signed", column_index == 1)
     }
 
-    fn column_display_size(&self, column_index: usize) -> Result<usize, DruidError> {
+    fn column_display_size(&self, column_index: usize) -> Result<usize, RdbcError> {
         self.call("column_display_size", column_index + 20)
     }
 
-    fn column_label(&self, column_index: usize) -> Result<String, DruidError> {
+    fn column_label(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call("column_label", format!("label_{column_index}"))
     }
 
-    fn column_name(&self, column_index: usize) -> Result<String, DruidError> {
+    fn column_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call("column_name", format!("name_{column_index}"))
     }
 
-    fn schema_name(&self, column_index: usize) -> Result<String, DruidError> {
+    fn schema_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call("schema_name", format!("schema_{column_index}"))
     }
 
-    fn precision(&self, column_index: usize) -> Result<usize, DruidError> {
+    fn precision(&self, column_index: usize) -> Result<usize, RdbcError> {
         self.call("precision", column_index + 30)
     }
 
-    fn scale(&self, column_index: usize) -> Result<usize, DruidError> {
+    fn scale(&self, column_index: usize) -> Result<usize, RdbcError> {
         self.call("scale", column_index + 4)
     }
 
-    fn table_name(&self, column_index: usize) -> Result<String, DruidError> {
+    fn table_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call("table_name", format!("table_{column_index}"))
     }
 
-    fn catalog_name(&self, column_index: usize) -> Result<String, DruidError> {
+    fn catalog_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call("catalog_name", format!("catalog_{column_index}"))
     }
 
-    fn column_type(&self, column_index: usize) -> Result<ResultSetColumnType, DruidError> {
+    fn column_type(&self, column_index: usize) -> Result<ResultSetColumnType, RdbcError> {
         self.call(
             "column_type",
             if column_index == 1 {
@@ -710,23 +710,23 @@ impl PhysicalResultSetMetaData for PhysicalMetaDataProbe {
         )
     }
 
-    fn column_type_name(&self, column_index: usize) -> Result<String, DruidError> {
+    fn column_type_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call("column_type_name", format!("MONEY_{column_index}"))
     }
 
-    fn is_read_only(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_read_only(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_read_only", column_index != 1)
     }
 
-    fn is_writable(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_writable(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_writable", column_index == 1)
     }
 
-    fn is_definitely_writable(&self, column_index: usize) -> Result<bool, DruidError> {
+    fn is_definitely_writable(&self, column_index: usize) -> Result<bool, RdbcError> {
         self.call("is_definitely_writable", column_index == 1)
     }
 
-    fn column_class_name(&self, column_index: usize) -> Result<String, DruidError> {
+    fn column_class_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.call(
             "column_class_name",
             format!("com.example.Money{column_index}"),
@@ -808,7 +808,7 @@ impl StrongGetterProbe {
 }
 
 impl PhysicalResultSet for StrongGetterProbe {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
@@ -821,7 +821,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         scale: Option<i32>,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -833,7 +833,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         scale: Option<i32>,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -848,7 +848,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -860,7 +860,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.calls.lock().unwrap().push(StrongGetterCall::DateLabel(
             column_label.to_string(),
             calendar.clone(),
@@ -872,7 +872,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -884,7 +884,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.calls.lock().unwrap().push(StrongGetterCall::TimeLabel(
             column_label.to_string(),
             calendar.clone(),
@@ -896,7 +896,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -911,7 +911,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         calendar: &RdbcCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -922,7 +922,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(NaiveDate::from_ymd_opt(2026, 7, 29).and_then(|date| date.and_hms_opt(13, 14, 15)))
     }
 
-    fn reference(&self, column_index: usize) -> Result<Option<RdbcRef>, DruidError> {
+    fn reference(&self, column_index: usize) -> Result<Option<RdbcRef>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -930,7 +930,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn reference_by_label(&self, column_label: &str) -> Result<Option<RdbcRef>, DruidError> {
+    fn reference_by_label(&self, column_label: &str) -> Result<Option<RdbcRef>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -938,7 +938,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn blob(&self, column_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
+    fn blob(&self, column_index: usize) -> Result<Option<RdbcBlob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -946,7 +946,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn blob_by_label(&self, column_label: &str) -> Result<Option<RdbcBlob>, DruidError> {
+    fn blob_by_label(&self, column_label: &str) -> Result<Option<RdbcBlob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -954,7 +954,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn clob(&self, column_index: usize) -> Result<Option<RdbcClob>, DruidError> {
+    fn clob(&self, column_index: usize) -> Result<Option<RdbcClob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -962,7 +962,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn clob_by_label(&self, column_label: &str) -> Result<Option<RdbcClob>, DruidError> {
+    fn clob_by_label(&self, column_label: &str) -> Result<Option<RdbcClob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -970,7 +970,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn array(&self, column_index: usize) -> Result<Option<RdbcArray>, DruidError> {
+    fn array(&self, column_index: usize) -> Result<Option<RdbcArray>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -978,7 +978,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn array_by_label(&self, column_label: &str) -> Result<Option<RdbcArray>, DruidError> {
+    fn array_by_label(&self, column_label: &str) -> Result<Option<RdbcArray>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -986,7 +986,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn url(&self, column_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
+    fn url(&self, column_index: usize) -> Result<Option<RdbcUrl>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -994,7 +994,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn url_by_label(&self, column_label: &str) -> Result<Option<RdbcUrl>, DruidError> {
+    fn url_by_label(&self, column_label: &str) -> Result<Option<RdbcUrl>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1002,7 +1002,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn row_id(&self, column_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
+    fn row_id(&self, column_index: usize) -> Result<Option<RdbcRowId>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1010,7 +1010,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn row_id_by_label(&self, column_label: &str) -> Result<Option<RdbcRowId>, DruidError> {
+    fn row_id_by_label(&self, column_label: &str) -> Result<Option<RdbcRowId>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1018,7 +1018,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn n_clob(&self, column_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
+    fn n_clob(&self, column_index: usize) -> Result<Option<RdbcNClob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1026,7 +1026,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn n_clob_by_label(&self, column_label: &str) -> Result<Option<RdbcNClob>, DruidError> {
+    fn n_clob_by_label(&self, column_label: &str) -> Result<Option<RdbcNClob>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1034,7 +1034,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn sql_xml(&self, column_index: usize) -> Result<Option<RdbcSqlXml>, DruidError> {
+    fn sql_xml(&self, column_index: usize) -> Result<Option<RdbcSqlXml>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1042,7 +1042,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(None)
     }
 
-    fn sql_xml_by_label(&self, column_label: &str) -> Result<Option<RdbcSqlXml>, DruidError> {
+    fn sql_xml_by_label(&self, column_label: &str) -> Result<Option<RdbcSqlXml>, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1054,7 +1054,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         value: Option<&RdbcRef>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1069,7 +1069,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcRef>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1080,7 +1080,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(())
     }
 
-    fn update_blob(&self, column_index: usize, value: Option<&RdbcBlob>) -> Result<(), DruidError> {
+    fn update_blob(&self, column_index: usize, value: Option<&RdbcBlob>) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1095,7 +1095,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcBlob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1106,7 +1106,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(())
     }
 
-    fn update_clob(&self, column_index: usize, value: Option<&RdbcClob>) -> Result<(), DruidError> {
+    fn update_clob(&self, column_index: usize, value: Option<&RdbcClob>) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1121,7 +1121,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcClob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1136,7 +1136,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         value: Option<&RdbcArray>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1151,7 +1151,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcArray>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1166,7 +1166,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         value: Option<&RdbcRowId>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1181,7 +1181,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcRowId>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1196,7 +1196,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         value: Option<&RdbcNClob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1211,7 +1211,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcNClob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1226,7 +1226,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         value: Option<&RdbcSqlXml>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1241,7 +1241,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         value: Option<&RdbcSqlXml>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1257,7 +1257,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         column_index: usize,
         stream: Option<&RdbcInputStream>,
         length: RdbcStreamLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1274,7 +1274,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         column_label: &str,
         stream: Option<&RdbcInputStream>,
         length: RdbcStreamLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1291,7 +1291,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1308,7 +1308,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1325,7 +1325,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         column_index: usize,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1342,7 +1342,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         column_label: &str,
         reader: Option<&RdbcReader>,
         length: RdbcCharacterLength,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1354,11 +1354,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         Ok(())
     }
 
-    fn update_value(
-        &self,
-        column_index: usize,
-        update: &ResultSetUpdate,
-    ) -> Result<(), DruidError> {
+    fn update_value(&self, column_index: usize, update: &ResultSetUpdate) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1373,7 +1369,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         update: &ResultSetUpdate,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1388,7 +1384,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1403,7 +1399,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1418,7 +1414,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_index: usize,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1433,7 +1429,7 @@ impl PhysicalResultSet for StrongGetterProbe {
         &self,
         column_label: &str,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         self.calls
             .lock()
             .unwrap()
@@ -1564,7 +1560,7 @@ async fn sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity() {
         ($expression:expr, $operation:literal) => {
             assert!(matches!(
                 $expression,
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: $operation
                 })
             ));
@@ -1785,7 +1781,7 @@ async fn sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity() {
     ] {
         assert!(matches!(
             operation,
-            Err(DruidError::UnsupportedOperation { .. })
+            Err(RdbcError::UnsupportedOperation { .. })
         ));
     }
 
@@ -1818,7 +1814,7 @@ async fn sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor
         ($expression:expr, $operation:literal) => {
             assert!(matches!(
                 $expression,
-                Err(DruidError::UnsupportedOperation {
+                Err(RdbcError::UnsupportedOperation {
                     operation: $operation
                 })
             ));
@@ -2315,7 +2311,7 @@ async fn sqlite_typed_get_object_converts_all_standard_scalar_targets() {
 
     assert!(matches!(
         result_set.object_typed(&mut connection, 15, &RdbcTargetType::Byte),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.object_typed(
@@ -2323,7 +2319,7 @@ async fn sqlite_typed_get_object_converts_all_standard_scalar_targets() {
             12,
             &RdbcTargetType::Custom("vendor.Type".to_string()),
         ),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_get_object_typed_custom"
         })
     ));
@@ -3083,7 +3079,7 @@ async fn statement_close_closes_traced_result_set_and_records_fetched_peak() {
     assert_eq!(statement.fetch_row_peak(), 2);
     assert!(matches!(
         result_set.next(&mut connection),
-        Err(DruidError::Other(message)) if message == "result set is closed"
+        Err(RdbcError::Other(message)) if message == "result set is closed"
     ));
 }
 
@@ -3112,18 +3108,18 @@ async fn result_set_errors_typed_getters_and_old_lease_are_observable() {
 
     assert!(matches!(
         result_set.object(&mut connection, 1),
-        Err(DruidError::Other(message))
+        Err(RdbcError::Other(message))
             if message == "result set cursor is not positioned on a row"
     ));
     assert!(matches!(
         result_set.object_typed(&mut connection, 1, &RdbcTargetType::Custom("X".to_string())),
-        Err(DruidError::Other(message))
+        Err(RdbcError::Other(message))
             if message == "result set cursor is not positioned on a row"
     ));
     assert!(result_set.next(&mut connection).unwrap());
     assert!(matches!(
         result_set.object_typed(&mut connection, 1, &RdbcTargetType::Custom("X".to_string())),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_get_object_typed_custom"
         })
     ));
@@ -3138,7 +3134,7 @@ async fn result_set_errors_typed_getters_and_old_lease_are_observable() {
     let mut next_lease = DruidPooledConnection::new(physical, 19, Box::new(|_, _| {}));
     assert!(matches!(
         result_set.next(&mut next_lease),
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
 }
 
@@ -3382,12 +3378,12 @@ async fn strong_typed_getter_conversion_errors_follow_statement_check_exception_
     assert!(result_set.next(&mut connection).unwrap());
     assert!(matches!(
         result_set.date_by_label(&mut connection, "event_date"),
-        Err(DruidError::DriverError(message))
+        Err(RdbcError::DriverError(message))
             if message.contains("cannot be converted to Date")
     ));
     assert!(matches!(
         result_set.blob(&mut connection, 1),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "result_set_blob"
         })
     ));
@@ -3432,29 +3428,29 @@ fn row_set_result_set_preserves_labels_navigation_and_validation() {
 
     assert!(matches!(
         result_set.find_column("missing"),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         result_set.value(0),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         result_set.set_fetch_direction(999),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         result_set.set_fetch_size(-1),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     result_set.close().unwrap();
     assert!(result_set.is_closed());
     assert!(matches!(
         result_set.next(),
-        Err(DruidError::Other(message)) if message == "result set is closed"
+        Err(RdbcError::Other(message)) if message == "result set is closed"
     ));
     assert!(matches!(
         result_set.meta_data(),
-        Err(DruidError::Other(message)) if message == "result set is closed"
+        Err(RdbcError::Other(message)) if message == "result set is closed"
     ));
 }
 
@@ -3525,43 +3521,40 @@ fn assert_default_scalar_successes(result_set: &RowSetResultSet) {
 fn assert_default_scalar_failures(result_set: &RowSetResultSet) {
     assert!(matches!(
         result_set.string(11),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.boolean(7),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.long(12),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.long(14),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.double(12),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.double(14),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
-    assert!(matches!(
-        result_set.int(13),
-        Err(DruidError::DriverError(_))
-    ));
+    assert!(matches!(result_set.int(13), Err(RdbcError::DriverError(_))));
     assert!(matches!(
         result_set.short(13),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.byte(13),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.value(15),
-        Err(DruidError::InvalidArgument(message)) if message.contains("exceeds row width")
+        Err(RdbcError::InvalidArgument(message)) if message.contains("exceeds row width")
     ));
 }
 
@@ -3574,7 +3567,7 @@ fn assert_default_stream_conversions(result_set: &RowSetResultSet) {
     }
     assert!(matches!(
         result_set.character_stream(11),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
 }
 
@@ -3638,15 +3631,15 @@ fn assert_default_decimal_and_date_conversions(result_set: &RowSetResultSet) {
     );
     assert!(matches!(
         result_set.big_decimal(4, None),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.big_decimal(6, None),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.big_decimal(7, None),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
 
     assert_eq!(
@@ -3665,11 +3658,11 @@ fn assert_default_decimal_and_date_conversions(result_set: &RowSetResultSet) {
         .is_some());
     assert!(matches!(
         result_set.date(6, &RdbcCalendarArgument::Unspecified),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.date(7, &RdbcCalendarArgument::Unspecified),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
 }
 
@@ -3690,11 +3683,11 @@ fn assert_default_time_and_timestamp_conversions(result_set: &RowSetResultSet) {
         .is_some());
     assert!(matches!(
         result_set.time(6, &RdbcCalendarArgument::Unspecified),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.time(7, &RdbcCalendarArgument::Unspecified),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
 
     assert_eq!(
@@ -3711,11 +3704,11 @@ fn assert_default_time_and_timestamp_conversions(result_set: &RowSetResultSet) {
     }
     assert!(matches!(
         result_set.timestamp(6, &RdbcCalendarArgument::Unspecified),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(matches!(
         result_set.timestamp(7, &RdbcCalendarArgument::Unspecified),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
 }
 
@@ -3754,11 +3747,11 @@ fn sql_warning_and_result_set_metadata_preserve_structured_fields() {
     assert!(meta_data.is_nullable(2).unwrap());
     assert!(matches!(
         meta_data.column_label(0),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         meta_data.column_type(3),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
 }
 
@@ -3973,7 +3966,7 @@ fn physical_result_set_metadata_preserves_getter_error_and_wrapper_identity() {
     let failing = ResultSetMetaData::from_physical(failing_probe.clone());
     assert!(matches!(
         failing.column_label(9),
-        Err(DruidError::DriverError(message))
+        Err(RdbcError::DriverError(message))
             if message == "metadata probe failed at column_label"
     ));
     assert_eq!(failing_probe.calls(), vec!["column_label"]);

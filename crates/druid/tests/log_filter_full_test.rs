@@ -16,7 +16,7 @@
 use druid::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent,
     ConnectionEventContext, DruidError, ExecContext, ExecOperation, ExecResult, LogFilter,
-    PhysicalResultSet, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
+    PhysicalResultSet, RdbcError, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
     ResultSetMetaData, StatementEvent, StatementEventContext, Value,
 };
 use druid::sql::SqlFormatOption;
@@ -934,16 +934,16 @@ fn log_filter_result_set_open_after_disabled() {
 #[derive(Debug)]
 struct StubResultSet;
 impl PhysicalResultSet for StubResultSet {
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         Ok(true)
     }
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn is_closed(&self) -> bool {
         false
     }
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
         Ok(ResultSetMetaData::new(vec![]))
     }
 }
@@ -951,16 +951,16 @@ impl PhysicalResultSet for StubResultSet {
 #[derive(Debug)]
 struct ErrorResultSet;
 impl PhysicalResultSet for ErrorResultSet {
-    fn next(&self) -> Result<bool, DruidError> {
-        Err(DruidError::DriverError("rs next error".to_string()))
+    fn next(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::DriverError("rs next error".to_string()))
     }
-    fn close(&self) -> Result<(), DruidError> {
-        Err(DruidError::DriverError("close error".to_string()))
+    fn close(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::DriverError("close error".to_string()))
     }
     fn is_closed(&self) -> bool {
         false
     }
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
         Ok(ResultSetMetaData::new(vec![]))
     }
 }
@@ -968,16 +968,16 @@ impl PhysicalResultSet for ErrorResultSet {
 #[derive(Debug)]
 struct NoMoreRowsResultSet;
 impl PhysicalResultSet for NoMoreRowsResultSet {
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         Ok(false)
     }
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn is_closed(&self) -> bool {
         false
     }
-    fn meta_data(&self) -> Result<ResultSetMetaData, DruidError> {
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
         Ok(ResultSetMetaData::new(vec![]))
     }
 }
@@ -1122,8 +1122,9 @@ async fn log_filter_before_execute_error_is_noop() {
         in_transaction: false,
         operation: ExecOperation::Execute,
     };
-    let error = DruidError::DriverError("test".to_string());
-    BeforeFilter::before_execute_error(&f, &ctx, &error)
+    let error = RdbcError::DriverError("test".to_string());
+    let product_error = DruidError::from(error);
+    BeforeFilter::before_execute_error(&f, &ctx, &product_error)
         .await
         .unwrap();
 }

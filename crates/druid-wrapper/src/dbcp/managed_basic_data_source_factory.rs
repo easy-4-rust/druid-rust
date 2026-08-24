@@ -1,5 +1,5 @@
 use druid::pool::DruidDataSource;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,7 +17,7 @@ impl ManagedBasicDataSourceFactory {
     /// 使用 Druid 内置 Toasty factory 创建 managed 数据源。
     pub async fn create_data_source(
         properties: &HashMap<String, String>,
-    ) -> Result<DruidDataSource, DruidError> {
+    ) -> Result<DruidDataSource, RdbcError> {
         BasicDataSourceFactory::create_data_source(properties).await
     }
 
@@ -26,7 +26,7 @@ impl ManagedBasicDataSourceFactory {
         properties: &HashMap<String, String>,
         factory: Arc<dyn PhysicalConnectionFactory>,
         driver_name: impl Into<String>,
-    ) -> Result<DruidDataSource, DruidError> {
+    ) -> Result<DruidDataSource, RdbcError> {
         BasicDataSourceFactory::create_data_source_with_factory(properties, factory, driver_name)
             .await
     }

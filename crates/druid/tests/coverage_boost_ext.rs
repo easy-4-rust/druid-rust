@@ -17,32 +17,32 @@ struct MockConnForPool;
 
 #[async_trait::async_trait]
 impl Connection for MockConnForPool {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult {
             rows_affected: 1,
             last_insert_id: Some(42),
             row_count: None,
         })
     }
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![
             Value::Int(1),
             Value::String("test".into()),
         ])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn driver_name(&self) -> &'static str {
@@ -406,22 +406,22 @@ fn test_connection_holder_fingerprint() {
 #[test]
 fn test_error_display_all_variants() {
     let errors = vec![
-        DruidError::DataSourceClosed {
+        RdbcError::DataSourceClosed {
             close_time_millis: 0,
         },
-        DruidError::AcquireTimeout,
-        DruidError::PoolExhausted,
-        DruidError::ValidationFailed("timeout".into()),
-        DruidError::ConnectionLeaked {
+        RdbcError::AcquireTimeout,
+        RdbcError::PoolExhausted,
+        RdbcError::ValidationFailed("timeout".into()),
+        RdbcError::ConnectionLeaked {
             id: 1,
             held_for: Duration::from_mins(1),
         },
-        DruidError::ConnectionDiscarded,
-        DruidError::DriverError("bad driver".into()),
-        DruidError::SqlParseError("syntax error".into()),
-        DruidError::WallViolation("injection detected".into()),
-        DruidError::DataSourceNotFound("ds1".into()),
-        DruidError::Other("something".into()),
+        RdbcError::ConnectionDiscarded,
+        RdbcError::DriverError("bad driver".into()),
+        RdbcError::SqlParseError("syntax error".into()),
+        RdbcError::WallViolation("injection detected".into()),
+        RdbcError::DataSourceNotFound("ds1".into()),
+        RdbcError::Other("something".into()),
     ];
     for e in &errors {
         let s = format!("{e}");
@@ -429,40 +429,40 @@ fn test_error_display_all_variants() {
     }
     assert!(format!(
         "{}",
-        DruidError::DataSourceClosed {
+        RdbcError::DataSourceClosed {
             close_time_millis: 0
         }
     )
     .contains("closed"));
-    assert!(format!("{}", DruidError::AcquireTimeout).contains("timed out"));
-    assert!(format!("{}", DruidError::PoolExhausted).contains("exhausted"));
-    assert!(format!("{}", DruidError::ValidationFailed("x".into())).contains('x'));
+    assert!(format!("{}", RdbcError::AcquireTimeout).contains("timed out"));
+    assert!(format!("{}", RdbcError::PoolExhausted).contains("exhausted"));
+    assert!(format!("{}", RdbcError::ValidationFailed("x".into())).contains('x'));
     assert!(format!(
         "{}",
-        DruidError::ConnectionLeaked {
+        RdbcError::ConnectionLeaked {
             id: 5,
             held_for: Duration::from_secs(10)
         }
     )
     .contains('5'));
-    assert!(format!("{}", DruidError::DriverError("d".into())).contains('d'));
-    assert!(format!("{}", DruidError::SqlParseError("p".into())).contains('p'));
-    assert!(format!("{}", DruidError::WallViolation("w".into())).contains('w'));
-    assert!(format!("{}", DruidError::DataSourceNotFound("n".into())).contains('n'));
-    assert!(format!("{}", DruidError::Other("o".into())).contains('o'));
+    assert!(format!("{}", RdbcError::DriverError("d".into())).contains('d'));
+    assert!(format!("{}", RdbcError::SqlParseError("p".into())).contains('p'));
+    assert!(format!("{}", RdbcError::WallViolation("w".into())).contains('w'));
+    assert!(format!("{}", RdbcError::DataSourceNotFound("n".into())).contains('n'));
+    assert!(format!("{}", RdbcError::Other("o".into())).contains('o'));
 }
 
 #[test]
 fn test_error_from_string_conversions() {
-    let e: DruidError = "test".into();
-    assert_eq!(e, DruidError::Other("test".into()));
-    let e2: DruidError = String::from("hello").into();
-    assert_eq!(e2, DruidError::Other("hello".into()));
+    let e: RdbcError = "test".into();
+    assert_eq!(e, RdbcError::Other("test".into()));
+    let e2: RdbcError = String::from("hello").into();
+    assert_eq!(e2, RdbcError::Other("hello".into()));
 }
 
 #[test]
 fn test_error_is_std_error() {
-    let e = DruidError::DataSourceClosed {
+    let e = RdbcError::DataSourceClosed {
         close_time_millis: 0,
     };
     let _: &dyn std::error::Error = &e;
@@ -541,25 +541,25 @@ struct MockConnForDefaults;
 
 #[async_trait::async_trait]
 impl Connection for MockConnForDefaults {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -601,7 +601,7 @@ async fn test_connection_trait_all_defaults() {
     // 未声明能力时不得伪造设置成功。
     assert!(matches!(
         c.set_auto_commit(false).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_auto_commit"
         })
     ));
@@ -611,7 +611,7 @@ async fn test_connection_trait_all_defaults() {
 
     assert!(matches!(
         c.set_read_only(true).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_read_only"
         })
     ));
@@ -621,7 +621,7 @@ async fn test_connection_trait_all_defaults() {
 
     assert!(matches!(
         c.set_transaction_isolation(4).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_transaction_isolation"
         })
     ));
@@ -631,7 +631,7 @@ async fn test_connection_trait_all_defaults() {
 
     assert!(matches!(
         c.set_catalog("mydb").await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_catalog"
         })
     ));
@@ -641,7 +641,7 @@ async fn test_connection_trait_all_defaults() {
 
     assert!(matches!(
         c.set_schema("public").await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_schema"
         })
     ));
@@ -683,14 +683,14 @@ async fn test_connection_ext_all_defaults() {
 
     assert!(matches!(
         ConnectionExt::set_holdability(&mut c, 2).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_holdability"
         })
     ));
 
     assert!(matches!(
         c.set_client_info("key", "value").await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_client_info"
         })
     ));
@@ -700,14 +700,14 @@ async fn test_connection_ext_all_defaults() {
 
     assert!(matches!(
         ConnectionExt::get_warnings(&mut c).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "connection_get_warnings"
         })
     ));
 
     assert!(matches!(
         ConnectionExt::clear_warnings(&mut c).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "clear_warnings"
         })
     ));
@@ -717,7 +717,7 @@ async fn test_connection_ext_all_defaults() {
 
     assert!(matches!(
         c.set_network_timeout(Duration::from_secs(5)).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_network_timeout"
         })
     ));
@@ -733,7 +733,7 @@ async fn test_connection_ext_all_defaults() {
     map.insert("k".into(), "v".into());
     assert!(matches!(
         c.set_type_map(map).await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "set_type_map"
         })
     ));
@@ -747,10 +747,10 @@ struct MockConnectionFactory;
 
 #[async_trait::async_trait]
 impl ConnectionFactory for MockConnectionFactory {
-    async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
         Ok(Box::new(MockConnForDefaults))
     }
-    async fn validate(&self, _conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+    async fn validate(&self, _conn: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
         Ok(())
     }
 }

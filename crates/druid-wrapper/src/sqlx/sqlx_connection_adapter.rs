@@ -4,7 +4,7 @@ use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecuti
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -22,8 +22,8 @@ use sqlx::{
 };
 use std::sync::Arc;
 
-fn any_bind_unsupported(value_type: &'static str) -> DruidError {
-    DruidError::UnsupportedOperation {
+fn any_bind_unsupported(value_type: &'static str) -> RdbcError {
+    RdbcError::UnsupportedOperation {
         operation: match value_type {
             "decimal" => "sqlx_any_bind_decimal",
             "date" => "sqlx_any_bind_date",
@@ -70,7 +70,7 @@ impl SqlxConnectionAdapter {
     /// 直接连接数据库并创建 Adapter。
     ///
     /// 参数 `url` 为 `SQLx` 数据库 URL；返回未池化的物理连接 Adapter。
-    pub async fn connect(url: &str) -> Result<Self, DruidError> {
+    pub async fn connect(url: &str) -> Result<Self, RdbcError> {
         let connection = if url.starts_with("sqlite:") {
             SqlxConnectionBackend::Sqlite(
                 SqliteConnection::connect(url)
@@ -107,13 +107,13 @@ impl SqlxConnectionAdapter {
         })
     }
 
-    fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, DruidError> {
+    fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, RdbcError> {
         if self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.connection
             .as_mut()
-            .ok_or(DruidError::ConnectionDiscarded)
+            .ok_or(RdbcError::ConnectionDiscarded)
     }
 
     fn backend_key(&self) -> &'static str {
@@ -126,7 +126,7 @@ impl SqlxConnectionAdapter {
         }
     }
 
-    pub(super) fn driver_error(error: sqlx::Error) -> DruidError {
+    pub(super) fn driver_error(error: sqlx::Error) -> RdbcError {
         match error {
             sqlx::Error::Database(database_error) => {
                 let sql_state = database_error.code().map(std::borrow::Cow::into_owned);
@@ -134,7 +134,7 @@ impl SqlxConnectionAdapter {
                     .as_deref()
                     .and_then(|code| code.parse::<i32>().ok())
                     .unwrap_or_default();
-                DruidError::SqlException(Box::new(
+                RdbcError::SqlException(Box::new(
                     druid_rdbc::error::SqlException::new(
                         error_code,
                         sql_state,
@@ -143,7 +143,7 @@ impl SqlxConnectionAdapter {
                     .with_class_name("sqlx::error::DatabaseError"),
                 ))
             }
-            sqlx::Error::Io(error) => DruidError::SqlException(Box::new(
+            sqlx::Error::Io(error) => RdbcError::SqlException(Box::new(
                 druid_rdbc::error::SqlException::new(
                     0,
                     Some("08006".to_owned()),
@@ -152,7 +152,7 @@ impl SqlxConnectionAdapter {
                 .with_class_name("std::io::Error")
                 .recoverable(),
             )),
-            sqlx::Error::Tls(error) => DruidError::SqlException(Box::new(
+            sqlx::Error::Tls(error) => RdbcError::SqlException(Box::new(
                 druid_rdbc::error::SqlException::new(
                     0,
                     Some("08006".to_owned()),
@@ -161,14 +161,14 @@ impl SqlxConnectionAdapter {
                 .with_class_name("sqlx::error::TlsError")
                 .recoverable(),
             )),
-            sqlx::Error::Protocol(message) => DruidError::SqlException(Box::new(
+            sqlx::Error::Protocol(message) => RdbcError::SqlException(Box::new(
                 druid_rdbc::error::SqlException::new(0, Some("08006".to_owned()), Some(message))
                     .with_class_name("sqlx::error::ProtocolError")
                     .recoverable(),
             )),
             error @ (sqlx::Error::PoolTimedOut
             | sqlx::Error::PoolClosed
-            | sqlx::Error::WorkerCrashed) => DruidError::SqlException(Box::new(
+            | sqlx::Error::WorkerCrashed) => RdbcError::SqlException(Box::new(
                 druid_rdbc::error::SqlException::new(
                     0,
                     Some("08006".to_owned()),
@@ -177,21 +177,21 @@ impl SqlxConnectionAdapter {
                 .with_class_name("sqlx::Error")
                 .recoverable(),
             )),
-            error => DruidError::DriverError(error.to_string()),
+            error => RdbcError::DriverError(error.to_string()),
         }
     }
 
     fn finish_statement_execution<T>(
         &mut self,
         result: Result<T, SqlxStatementExecutionError>,
-    ) -> Result<T, DruidError> {
+    ) -> Result<T, RdbcError> {
         match result {
             Ok(value) => Ok(value),
             Err(SqlxStatementExecutionError::Driver(error)) => Err(error),
             Err(SqlxStatementExecutionError::TimedOut) => {
                 self.discarded = true;
                 self.connection.take();
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     druid_rdbc::error::SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
@@ -203,7 +203,7 @@ impl SqlxConnectionAdapter {
             Err(SqlxStatementExecutionError::Cancelled) => {
                 self.discarded = true;
                 self.connection.take();
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     druid_rdbc::error::SqlException::new(
                         0,
                         Some("HY008".to_owned()),
@@ -215,7 +215,7 @@ impl SqlxConnectionAdapter {
         }
     }
 
-    fn validate_savepoint_name(name: &str) -> Result<(), DruidError> {
+    fn validate_savepoint_name(name: &str) -> Result<(), RdbcError> {
         let valid = !name.is_empty()
             && name
                 .bytes()
@@ -223,7 +223,7 @@ impl SqlxConnectionAdapter {
         if valid {
             Ok(())
         } else {
-            Err(DruidError::DriverError(
+            Err(RdbcError::DriverError(
                 "savepoint name must contain only ASCII letters, digits, or '_'".to_string(),
             ))
         }
@@ -231,12 +231,12 @@ impl SqlxConnectionAdapter {
 
     fn prepared_statement(
         statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&SqlxPreparedStatement, DruidError> {
+    ) -> Result<&SqlxPreparedStatement, RdbcError> {
         statement
             .as_any()
             .downcast_ref::<SqlxPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by SqlxConnectionAdapter".to_string(),
                 )
             })
@@ -245,7 +245,7 @@ impl SqlxConnectionAdapter {
     async fn materialized_parameters(
         statement: &dyn PhysicalPreparedStatement,
         parameters: &[PreparedInputParameter],
-    ) -> Result<Vec<Value>, DruidError> {
+    ) -> Result<Vec<Value>, RdbcError> {
         Self::prepared_statement(statement)?
             .materialized_parameters(parameters.len())
             .await
@@ -254,7 +254,7 @@ impl SqlxConnectionAdapter {
     fn bind_any_values(
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<sqlx::query::Query<'_, Any, sqlx::any::AnyArguments<'_>>, DruidError> {
+    ) -> Result<sqlx::query::Query<'_, Any, sqlx::any::AnyArguments<'_>>, RdbcError> {
         let mut query = sqlx::query(sql);
         for value in params {
             query = match value {
@@ -345,7 +345,7 @@ impl SqlxConnectionAdapter {
     fn bind_any_prepared_values<'query>(
         statement: &'query sqlx::any::AnyStatement<'query>,
         params: Vec<Value>,
-    ) -> Result<sqlx::query::Query<'query, Any, sqlx::any::AnyArguments<'query>>, DruidError> {
+    ) -> Result<sqlx::query::Query<'query, Any, sqlx::any::AnyArguments<'query>>, RdbcError> {
         let mut query = statement.query();
         for value in params {
             query = match value {
@@ -430,7 +430,7 @@ impl SqlxConnectionAdapter {
         query
     }
 
-    fn decode_any_row(row: AnyRow) -> Result<Row, DruidError> {
+    fn decode_any_row(row: AnyRow) -> Result<Row, RdbcError> {
         let mut values = Vec::with_capacity(row.columns().len());
         for (index, column) in row.columns().iter().enumerate() {
             let raw = row.try_get_raw(index).map_err(Self::driver_error)?;
@@ -474,7 +474,7 @@ impl SqlxConnectionAdapter {
         Ok(Row::new(values))
     }
 
-    fn decode_mysql_row(row: MySqlRow) -> Result<Row, DruidError> {
+    fn decode_mysql_row(row: MySqlRow) -> Result<Row, RdbcError> {
         let mut values = Vec::with_capacity(row.columns().len());
         for (index, column) in row.columns().iter().enumerate() {
             let raw = row.try_get_raw(index).map_err(Self::driver_error)?;
@@ -521,7 +521,7 @@ impl SqlxConnectionAdapter {
                     Value::String(row.try_get(index).map_err(Self::driver_error)?)
                 }
                 unsupported => {
-                    return Err(DruidError::DriverError(format!(
+                    return Err(RdbcError::DriverError(format!(
                         "MySQL type {unsupported} is not represented by druid::core::Value"
                     )));
                 }
@@ -531,7 +531,7 @@ impl SqlxConnectionAdapter {
         Ok(Row::new(values))
     }
 
-    fn decode_postgresql_row(row: PgRow) -> Result<Row, DruidError> {
+    fn decode_postgresql_row(row: PgRow) -> Result<Row, RdbcError> {
         let mut values = Vec::with_capacity(row.columns().len());
         for (index, column) in row.columns().iter().enumerate() {
             let raw = row.try_get_raw(index).map_err(Self::driver_error)?;
@@ -569,7 +569,7 @@ impl SqlxConnectionAdapter {
                     Value::String(row.try_get(index).map_err(Self::driver_error)?)
                 }
                 unsupported => {
-                    return Err(DruidError::DriverError(format!(
+                    return Err(RdbcError::DriverError(format!(
                         "PostgreSQL type {unsupported} is not represented by druid::core::Value"
                     )));
                 }
@@ -579,7 +579,7 @@ impl SqlxConnectionAdapter {
         Ok(Row::new(values))
     }
 
-    fn decode_sqlite_row(row: SqliteRow) -> Result<Row, DruidError> {
+    fn decode_sqlite_row(row: SqliteRow) -> Result<Row, RdbcError> {
         let mut values = Vec::with_capacity(row.columns().len());
         for (index, column) in row.columns().iter().enumerate() {
             let raw = row.try_get_raw(index).map_err(Self::driver_error)?;
@@ -609,7 +609,7 @@ impl SqlxConnectionAdapter {
                             row.try_get::<f64, _>(index).map_err(Self::driver_error)?,
                         )
                         .ok_or_else(|| {
-                            DruidError::DriverError(
+                            RdbcError::DriverError(
                                 "SQLite REAL cannot be represented as BigDecimal".to_string(),
                             )
                         })?,
@@ -617,7 +617,7 @@ impl SqlxConnectionAdapter {
                             .try_get::<String, _>(index)
                             .map_err(Self::driver_error)?
                             .parse::<BigDecimal>()
-                            .map_err(|error| DruidError::DriverError(error.to_string()))?,
+                            .map_err(|error| RdbcError::DriverError(error.to_string()))?,
                     };
                     Value::Decimal(value)
                 }
@@ -637,7 +637,7 @@ impl SqlxConnectionAdapter {
                 "BLOB" => Value::Bytes(row.try_get(index).map_err(Self::driver_error)?),
                 "NULL" => Value::Null,
                 unsupported => {
-                    return Err(DruidError::DriverError(format!(
+                    return Err(RdbcError::DriverError(format!(
                         "SQLite type {unsupported} is not represented by druid::core::Value"
                     )));
                 }
@@ -651,7 +651,7 @@ impl SqlxConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<(Vec<Row>, Vec<String>), DruidError> {
+    ) -> Result<(Vec<Row>, Vec<String>), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let statement = {
@@ -748,7 +748,7 @@ impl SqlxConnectionAdapter {
         }
     }
 
-    async fn execute_control_statement(&mut self, sql: &str) -> Result<(), DruidError> {
+    async fn execute_control_statement(&mut self, sql: &str) -> Result<(), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 sqlx::query(sql)
@@ -781,7 +781,7 @@ impl SqlxConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for SqlxConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let result = Self::bind_any_values(sql, params)?
@@ -833,7 +833,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         }
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.fetch_rows_with_labels(sql, params)
             .await
             .map(|(rows, _)| rows)
@@ -843,7 +843,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let statement = {
@@ -927,7 +927,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let sql = key.sql().to_string();
         let statement: Arc<dyn PhysicalPreparedStatement> = match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
@@ -970,27 +970,27 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let statement = statement
             .as_any()
             .downcast_ref::<SqlxPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by SqlxConnectionAdapter".to_string(),
                 )
             })?;
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         if !statement.matches_backend(self.backend_key()) {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
         }
         let execution = match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let backend_statement = statement.any_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1011,7 +1011,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::MySql(connection) => {
                 let backend_statement = statement.mysql_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1034,7 +1034,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
                 let backend_statement = statement.postgresql_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1055,7 +1055,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let backend_statement = statement.sqlite_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1084,7 +1084,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let params = Self::materialized_parameters(statement, &parameters).await?;
         self.exec_prepared(statement, params).await
     }
@@ -1094,7 +1094,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let statement_ref = Self::prepared_statement(statement)?;
         let returns_rows = statement_ref.returns_rows();
         if returns_rows {
@@ -1113,7 +1113,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let params = Self::materialized_parameters(statement, &parameters).await?;
         self.execute_prepared(statement, params, generated_keys)
             .await
@@ -1123,7 +1123,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let statement_ref = Self::prepared_statement(statement)?;
         let parameter_sets =
             if let Some(parameter_sets) = statement_ref.take_batches(parameter_sets.len()).await? {
@@ -1135,8 +1135,8 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     for parameter in parameters {
                         let value = SqlxPreparedStatement::materialize_parameter(parameter)
                             .await
-                            .map_err(|error| DruidError::BatchUpdateException {
-                                update_counts: Vec::new(),
+                            .map_err(|error| RdbcError::BatchUpdateException {
+                                update_counts: Vec::<i32>::new().into(),
                                 cause: Box::new(error),
                             })?;
                         materialized.push(value);
@@ -1153,8 +1153,8 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                     update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
                 }
                 Err(error) => {
-                    return Err(DruidError::BatchUpdateException {
-                        update_counts,
+                    return Err(RdbcError::BatchUpdateException {
+                        update_counts: update_counts.into(),
                         cause: Box::new(error),
                     });
                 }
@@ -1167,27 +1167,27 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let statement = statement
             .as_any()
             .downcast_ref::<SqlxPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by SqlxConnectionAdapter".to_string(),
                 )
             })?;
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         if !statement.matches_backend(self.backend_key()) {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
         }
         let execution = match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let backend_statement = statement.any_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1204,7 +1204,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::MySql(connection) => {
                 let backend_statement = statement.mysql_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1221,7 +1221,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
                 let backend_statement = statement.postgresql_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1238,7 +1238,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let backend_statement = statement.sqlite_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1261,7 +1261,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let params = Self::materialized_parameters(statement, &parameters).await?;
         self.fetch_prepared(statement, params).await
     }
@@ -1270,28 +1270,28 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let sqlx_statement = statement
             .as_any()
             .downcast_ref::<SqlxPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by SqlxConnectionAdapter".to_string(),
                 )
             })?;
         let labels = sqlx_statement.column_labels();
         if sqlx_statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         if !sqlx_statement.matches_backend(self.backend_key()) {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "SQLx prepared statement backend does not match connection".to_string(),
             ));
         }
         let result = match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let backend_statement = sqlx_statement.any_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1304,7 +1304,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::MySql(connection) => {
                 let backend_statement = sqlx_statement.mysql_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1317,7 +1317,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
                 let backend_statement = sqlx_statement.postgresql_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1331,7 +1331,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             }
             SqlxConnectionBackend::Sqlite(connection) => {
                 let backend_statement = sqlx_statement.sqlite_statement().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "SQLx prepared statement backend does not match connection".to_string(),
                     )
                 })?;
@@ -1350,14 +1350,14 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let params = Self::materialized_parameters(statement, &parameters).await?;
         self.fetch_prepared_result_set(statement, params).await
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "SQLx transaction is already active".to_owned(),
             ));
         }
@@ -1387,7 +1387,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => AnyTransactionManager::commit(connection)
                 .await
@@ -1410,7 +1410,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => AnyTransactionManager::rollback(connection)
                 .await
@@ -1435,7 +1435,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         Ok(())
     }
 
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         let name = savepoint
             .name
             .clone()
@@ -1445,7 +1445,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             .await
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         let savepoint = Savepoint {
             id: self.savepoint_sequence,
@@ -1456,7 +1456,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         Ok(savepoint)
     }
 
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
         Self::validate_savepoint_name(name)?;
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         self.execute_control_statement(&format!("SAVEPOINT {name}"))
@@ -1467,7 +1467,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         })
     }
 
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         let name = savepoint
             .name
             .clone()
@@ -1477,11 +1477,11 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             .await
     }
 
-    async fn abort(&mut self) -> Result<(), DruidError> {
+    async fn abort(&mut self) -> Result<(), RdbcError> {
         self.close().await
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => SqlxConnection::ping(connection)
                 .await
@@ -1498,7 +1498,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         }
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         match self.connection.take() {
             Some(SqlxConnectionBackend::Any(connection)) => {
                 SqlxConnection::close(connection)
@@ -1543,15 +1543,15 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         }
     }
 
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         if self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         let url = self.url.as_str();
         match self
             .connection
             .as_mut()
-            .ok_or(DruidError::ConnectionDiscarded)?
+            .ok_or(RdbcError::ConnectionDiscarded)?
         {
             SqlxConnectionBackend::Any(connection) => Ok(Box::new(
                 super::sqlx_database_meta_data::SqlxDatabaseMetaData::any(connection, url),
@@ -1572,7 +1572,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         self.auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         let current = self.auto_commit();
         match (current, auto_commit) {
             (true, false) => self.begin().await,
@@ -1585,9 +1585,9 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         self.read_only
     }
 
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "read_only cannot change while a transaction is active".to_string(),
             ));
         }
@@ -1595,7 +1595,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
         let backend = self.backend_key();
         let Some(sql) = read_only_session_sql(backend, read_only) else {
             if read_only {
-                return Err(DruidError::UnsupportedOperation {
+                return Err(RdbcError::UnsupportedOperation {
                     operation: if backend == "sqlite" {
                         "sqlx_sqlite_read_only_transaction"
                     } else {
@@ -1616,7 +1616,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     /// 对应 Java：`java.sql.Connection#getWarnings()`。`SQLx` 的公开 Connection
     /// SPI 不暴露 JDBC warning 链，因此存活连接返回 `None`；关闭或已丢弃连接
     /// 仍按 Druid 连接状态语义返回 `ConnectionDiscarded`。
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.connection_mut()?;
         Ok(None)
     }
@@ -1625,7 +1625,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     ///
     /// 对应 Java：`java.sql.Connection#clearWarnings()`。`SQLx` 不保留可清理的
     /// warning 状态，存活连接无操作成功，关闭或已丢弃连接返回状态错误。
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.connection_mut()?;
         Ok(())
     }

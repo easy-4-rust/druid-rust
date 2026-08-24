@@ -52,7 +52,7 @@ fn new_factory_to_old(
 }
 
 #[test]
-fn old_and_new_rdbc_contracts_are_bidirectionally_identical() {
+fn old_and_new_rdbc_contracts_are_bidirectionally_identical_except_product_error() {
     let _ = old_connection_to_new
         as fn(Box<dyn OldPhysicalConnection>) -> Box<dyn NewPhysicalConnection>;
     let _ = new_connection_to_old
@@ -87,7 +87,10 @@ fn old_and_new_rdbc_contracts_are_bidirectionally_identical() {
         druid_rdbc::spi::CallableInputParameter
     );
     assert_type_eq_all!(druid::core::Value, druid_rdbc::types::Value);
-    assert_type_eq_all!(druid::core::DruidError, druid_rdbc::compat::DruidError);
+    assert_ne!(
+        std::any::TypeId::of::<druid::core::DruidError>(),
+        std::any::TypeId::of::<druid_rdbc::error::RdbcError>()
+    );
 }
 
 #[test]

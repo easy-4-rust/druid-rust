@@ -4,7 +4,7 @@
 //! the driver-provided stream returned by
 //! `java.sql.Blob#setBinaryStream(long)`.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use std::fmt;
 use std::io::Write;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -54,7 +54,7 @@ impl RdbcOutputStream {
     /// # Returns
     /// The number of bytes written, or an error if the stream is closed or the
     /// underlying write operation fails.
-    pub fn write(&self, bytes: &[u8]) -> Result<usize, DruidError> {
+    pub fn write(&self, bytes: &[u8]) -> Result<usize, RdbcError> {
         let mut state = self
             .inner
             .state
@@ -63,14 +63,14 @@ impl RdbcOutputStream {
         let writer = state
             .writer
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("OutputStream is closed".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("OutputStream is closed".to_string()))?;
         writer
             .write(bytes)
-            .map_err(|error| DruidError::DriverError(format!("OutputStream write failed: {error}")))
+            .map_err(|error| RdbcError::DriverError(format!("OutputStream write failed: {error}")))
     }
 
     /// Flushes the underlying output stream.
-    pub fn flush(&self) -> Result<(), DruidError> {
+    pub fn flush(&self) -> Result<(), RdbcError> {
         let mut state = self
             .inner
             .state
@@ -79,14 +79,14 @@ impl RdbcOutputStream {
         let writer = state
             .writer
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("OutputStream is closed".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("OutputStream is closed".to_string()))?;
         writer
             .flush()
-            .map_err(|error| DruidError::DriverError(format!("OutputStream flush failed: {error}")))
+            .map_err(|error| RdbcError::DriverError(format!("OutputStream flush failed: {error}")))
     }
 
     /// Flushes and closes the output stream. Repeated calls are idempotent.
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         let mut state = self
             .inner
             .state
@@ -97,7 +97,7 @@ impl RdbcOutputStream {
         };
         writer
             .flush()
-            .map_err(|error| DruidError::DriverError(format!("OutputStream close failed: {error}")))
+            .map_err(|error| RdbcError::DriverError(format!("OutputStream close failed: {error}")))
     }
 
     /// Returns whether the output stream has been closed.

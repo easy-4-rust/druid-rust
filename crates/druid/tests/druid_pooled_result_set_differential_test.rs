@@ -5,7 +5,7 @@
 //! paths that are NOT already covered in `druid_pooled_result_set_semantics_test.rs`.
 
 use druid::core::{
-    DruidError, DruidPooledConnection, PhysicalConnection, PhysicalConnectionFactory, Value,
+    DruidPooledConnection, PhysicalConnection, PhysicalConnectionFactory, RdbcError, Value,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 
@@ -356,7 +356,7 @@ async fn int_getter_returns_integer() {
     assert_eq!(rs.int(&mut conn, 1).unwrap(), 3);
     // Label-based not supported by RowSetResultSet
     let err = rs.int_by_label(&mut conn, "id").unwrap_err();
-    assert!(matches!(err, DruidError::InvalidArgument(_)));
+    assert!(matches!(err, RdbcError::InvalidArgument(_)));
     rs.close_with_connection(&mut conn).unwrap();
 }
 

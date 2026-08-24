@@ -2,7 +2,7 @@ use super::{
     AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions,
     JdbcAgentPreparedStatement,
 };
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
     PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
@@ -38,7 +38,7 @@ impl JdbcAgentConnection {
         validation_query: Option<&str>,
         properties: HashMap<String, String>,
         options: JdbcAgentOptions,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         let (client, session) = JdbcAgentClient::connect(
             options,
             json!({
@@ -122,7 +122,7 @@ impl JdbcAgentConnection {
 
     /// 终止当前隔离 Agent，用于认证其崩溃传播与连接丢弃合同。
     #[doc(hidden)]
-    pub async fn diagnostic_crash_agent(&mut self) -> Result<(), DruidError> {
+    pub async fn diagnostic_crash_agent(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("diagnostic_crash", JsonValue::Null)
@@ -132,7 +132,7 @@ impl JdbcAgentConnection {
 
     /// 令当前隔离 Agent 输出非法协议帧，用于认证 fail-closed 行为。
     #[doc(hidden)]
-    pub async fn diagnostic_protocol_failure(&mut self) -> Result<(), DruidError> {
+    pub async fn diagnostic_protocol_failure(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("diagnostic_protocol_failure", JsonValue::Null)
@@ -140,19 +140,19 @@ impl JdbcAgentConnection {
             .map(|_| ())
     }
 
-    fn ensure_open(&self) -> Result<(), DruidError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.closed || self.discarded || self.client.is_unusable() {
-            Err(DruidError::ConnectionDiscarded)
+            Err(RdbcError::ConnectionDiscarded)
         } else {
             Ok(())
         }
     }
 
-    fn parameters(params: Vec<Value>) -> Result<Vec<AgentValue>, DruidError> {
+    fn parameters(params: Vec<Value>) -> Result<Vec<AgentValue>, RdbcError> {
         params.into_iter().map(AgentValue::from_druid).collect()
     }
 
-    fn rows(payload: &JsonValue) -> Result<Vec<Row>, DruidError> {
+    fn rows(payload: &JsonValue) -> Result<Vec<Row>, RdbcError> {
         let rows = payload
             .get("rows")
             .cloned()
@@ -170,7 +170,7 @@ impl JdbcAgentConnection {
             .collect()
     }
 
-    fn column_labels(payload: &JsonValue) -> Result<Vec<String>, DruidError> {
+    fn column_labels(payload: &JsonValue) -> Result<Vec<String>, RdbcError> {
         payload
             .get("columns")
             .and_then(JsonValue::as_array)
@@ -189,7 +189,7 @@ impl JdbcAgentConnection {
     async fn collect_query_payload(
         &mut self,
         mut payload: JsonValue,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let mut result = Vec::new();
         loop {
             let has_more = payload
@@ -242,7 +242,7 @@ impl JdbcAgentConnection {
         }
     }
 
-    fn exec_result(payload: &JsonValue) -> Result<ExecResult, DruidError> {
+    fn exec_result(payload: &JsonValue) -> Result<ExecResult, RdbcError> {
         let rows_affected = payload
             .get("rowsAffected")
             .and_then(JsonValue::as_u64)
@@ -279,22 +279,22 @@ impl JdbcAgentConnection {
 
     fn statement(
         statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&JdbcAgentPreparedStatement, DruidError> {
+    ) -> Result<&JdbcAgentPreparedStatement, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         statement
             .as_any()
             .downcast_ref::<JdbcAgentPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by JdbcAgentConnection".to_owned(),
                 )
             })
     }
 
-    fn protocol_error(message: impl Into<String>) -> DruidError {
-        DruidError::SqlException(Box::new(
+    fn protocol_error(message: impl Into<String>) -> RdbcError {
+        RdbcError::SqlException(Box::new(
             druid_rdbc::error::SqlException::new(
                 0,
                 Some("08006".to_owned()),
@@ -305,7 +305,7 @@ impl JdbcAgentConnection {
         ))
     }
 
-    async fn create_savepoint(&mut self, name: Option<&str>) -> Result<Savepoint, DruidError> {
+    async fn create_savepoint(&mut self, name: Option<&str>) -> Result<Savepoint, RdbcError> {
         self.ensure_open()?;
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         let payload = self
@@ -331,7 +331,7 @@ impl JdbcAgentConnection {
         sql: &str,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let payload = self
             .client
             .request(
@@ -375,7 +375,7 @@ impl std::fmt::Debug for JdbcAgentConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for JdbcAgentConnection {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         self.ensure_open()?;
         let results = self
             .execute_request(sql, params, StatementGeneratedKeys::AutoGeneratedKeys(1))
@@ -394,12 +394,12 @@ impl PhysicalConnection for JdbcAgentConnection {
         sql: &str,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         self.ensure_open()?;
         self.execute_request(sql, params, generated_keys).await
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.ensure_open()?;
         let payload = self
             .client
@@ -415,7 +415,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.ensure_open()?;
         let payload = self
             .client
@@ -432,7 +432,7 @@ impl PhysicalConnection for JdbcAgentConnection {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         self.ensure_open()?;
         let result = self
             .client
@@ -463,7 +463,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         self.ensure_open()?;
         let statement = Self::statement(statement)?;
         let statement_id = statement.statement_id().to_owned();
@@ -489,7 +489,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<Value>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         self.ensure_open()?;
         let statement = Self::statement(statement)?;
         let parameter_sets = parameter_sets
@@ -532,7 +532,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         self.ensure_open()?;
         let statement = Self::statement(statement)?;
         let statement_id = statement.statement_id().to_owned();
@@ -570,7 +570,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         self.ensure_open()?;
         let statement = Self::statement(statement)?;
         let statement_id = statement.statement_id().to_owned();
@@ -594,7 +594,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.ensure_open()?;
         let statement = Self::statement(statement)?;
         let payload = self
@@ -614,31 +614,31 @@ impl PhysicalConnection for JdbcAgentConnection {
         Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client.request("begin", JsonValue::Null).await?;
         self.auto_commit = false;
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client.request("commit", JsonValue::Null).await?;
         self.savepoint_ids.clear();
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client.request("rollback", JsonValue::Null).await?;
         self.savepoint_ids.clear();
         Ok(())
     }
 
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let savepoint_id = self.savepoint_ids.get(&savepoint.id).ok_or_else(|| {
-            DruidError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
+            RdbcError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
         })?;
         self.client
             .request(
@@ -649,23 +649,23 @@ impl PhysicalConnection for JdbcAgentConnection {
         Ok(())
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         self.create_savepoint(None).await
     }
 
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
         if name.is_empty() {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "JDBC savepoint name must not be empty".to_owned(),
             ));
         }
         self.create_savepoint(Some(name)).await
     }
 
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let savepoint_id = self.savepoint_ids.remove(&savepoint.id).ok_or_else(|| {
-            DruidError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
+            RdbcError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
         })?;
         self.client
             .request("release_savepoint", json!({"savepointId": savepoint_id}))
@@ -673,7 +673,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("validate_connection", JsonValue::Null)
@@ -681,7 +681,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if self.closed {
             return Ok(());
         }
@@ -698,7 +698,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.capabilities
     }
 
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         self.ensure_open()?;
         Ok(Box::new(self.metadata.clone()))
     }
@@ -707,7 +707,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("set_auto_commit", json!({"value": auto_commit}))
@@ -720,7 +720,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.read_only
     }
 
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("set_read_only", json!({"value": read_only}))
@@ -733,7 +733,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.transaction_isolation
     }
 
-    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
+    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("set_transaction_isolation", json!({"value": level}))
@@ -746,7 +746,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.catalog.as_deref()
     }
 
-    async fn set_catalog(&mut self, catalog: &str) -> Result<(), DruidError> {
+    async fn set_catalog(&mut self, catalog: &str) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("set_catalog", json!({"value": catalog}))
@@ -759,7 +759,7 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.schema.as_deref()
     }
 
-    async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
+    async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.client
             .request("set_schema", json!({"value": schema}))

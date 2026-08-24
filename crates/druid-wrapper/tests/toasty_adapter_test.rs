@@ -6,8 +6,8 @@
 
 extern crate druid_wrapper as wrapper;
 use druid::core::{
-    DruidError, PhysicalConnection, PhysicalConnectionFactory, PreparedInputParameter,
-    PreparedStatementKey, PreparedStatementMethodType, StatementGeneratedKeys, Value,
+    PhysicalConnection, PhysicalConnectionFactory, PreparedInputParameter, PreparedStatementKey,
+    PreparedStatementMethodType, RdbcError, StatementGeneratedKeys, Value,
 };
 use wrapper::toasty::ToastyConnectionFactory;
 
@@ -234,7 +234,7 @@ async fn begin_when_already_active_errors() {
     conn.begin().await.unwrap();
     let err = conn.begin().await.unwrap_err();
     assert!(
-        matches!(err, DruidError::DriverError(_)),
+        matches!(err, RdbcError::DriverError(_)),
         "double begin should error: {err:?}"
     );
     conn.rollback().await.unwrap();
@@ -244,14 +244,14 @@ async fn begin_when_already_active_errors() {
 async fn commit_without_transaction_errors() {
     let mut conn = make_connection().await;
     let err = conn.commit().await.unwrap_err();
-    assert!(matches!(err, DruidError::DriverError(_)));
+    assert!(matches!(err, RdbcError::DriverError(_)));
 }
 
 #[tokio::test]
 async fn rollback_without_transaction_errors() {
     let mut conn = make_connection().await;
     let err = conn.rollback().await.unwrap_err();
-    assert!(matches!(err, DruidError::DriverError(_)));
+    assert!(matches!(err, RdbcError::DriverError(_)));
 }
 
 // ── savepoints ───────────────────────────────────────────────────
@@ -341,7 +341,7 @@ async fn set_transaction_isolation_serializable() {
 async fn set_transaction_isolation_non_serializable_errors_for_sqlite() {
     let mut conn = make_connection().await;
     let err = conn.set_transaction_isolation(2).await.unwrap_err();
-    assert!(matches!(err, DruidError::InvalidArgument(_)));
+    assert!(matches!(err, RdbcError::InvalidArgument(_)));
 }
 
 #[tokio::test]
@@ -349,7 +349,7 @@ async fn set_transaction_isolation_during_active_transaction_errors() {
     let mut conn = make_connection().await;
     conn.begin().await.unwrap();
     let err = conn.set_transaction_isolation(8).await.unwrap_err();
-    assert!(matches!(err, DruidError::InvalidArgument(_)));
+    assert!(matches!(err, RdbcError::InvalidArgument(_)));
     conn.rollback().await.unwrap();
 }
 
@@ -365,7 +365,7 @@ async fn read_only_default_is_false() {
 async fn set_read_only_true_errors_for_sqlite() {
     let mut conn = make_connection().await;
     let err = conn.set_read_only(true).await.unwrap_err();
-    assert!(matches!(err, DruidError::UnsupportedOperation { .. }));
+    assert!(matches!(err, RdbcError::UnsupportedOperation { .. }));
 }
 
 #[tokio::test]
@@ -373,7 +373,7 @@ async fn set_read_only_during_transaction_errors() {
     let mut conn = make_connection().await;
     conn.begin().await.unwrap();
     let err = conn.set_read_only(false).await.unwrap_err();
-    assert!(matches!(err, DruidError::InvalidArgument(_)));
+    assert!(matches!(err, RdbcError::InvalidArgument(_)));
     conn.rollback().await.unwrap();
 }
 
@@ -401,7 +401,7 @@ async fn exec_after_close_errors() {
     let mut conn = make_connection().await;
     conn.close().await.unwrap();
     let err = conn.exec("SELECT 1", vec![]).await.unwrap_err();
-    assert!(matches!(err, DruidError::ConnectionDiscarded));
+    assert!(matches!(err, RdbcError::ConnectionDiscarded));
 }
 
 // ── ping ─────────────────────────────────────────────────────────
@@ -432,7 +432,7 @@ async fn warnings_after_close_errors() {
     let mut conn = make_connection().await;
     conn.close().await.unwrap();
     let err = conn.warnings().await.unwrap_err();
-    assert!(matches!(err, DruidError::ConnectionDiscarded));
+    assert!(matches!(err, RdbcError::ConnectionDiscarded));
 }
 
 #[tokio::test]
@@ -440,7 +440,7 @@ async fn clear_warnings_after_close_errors() {
     let mut conn = make_connection().await;
     conn.close().await.unwrap();
     let err = conn.clear_warnings().await.unwrap_err();
-    assert!(matches!(err, DruidError::ConnectionDiscarded));
+    assert!(matches!(err, RdbcError::ConnectionDiscarded));
 }
 
 // ── discarded ────────────────────────────────────────────────────
@@ -458,7 +458,7 @@ async fn exec_on_discarded_connection_errors() {
     let mut conn = make_connection().await;
     conn.mark_discarded();
     let err = conn.exec("SELECT 1", vec![]).await.unwrap_err();
-    assert!(matches!(err, DruidError::ConnectionDiscarded));
+    assert!(matches!(err, RdbcError::ConnectionDiscarded));
 }
 
 // ── capabilities ─────────────────────────────────────────────────
@@ -608,7 +608,7 @@ async fn execute_prepared_on_closed_statement_errors() {
         .execute_prepared(stmt.as_ref(), vec![], StatementGeneratedKeys::None)
         .await
         .unwrap_err();
-    assert!(matches!(err, DruidError::ConnectionDiscarded));
+    assert!(matches!(err, RdbcError::ConnectionDiscarded));
 }
 
 // ── fetch_prepared_result_set ────────────────────────────────────
@@ -801,7 +801,7 @@ async fn execute_with_generated_key_columns_errors() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(err, DruidError::UnsupportedOperation { .. }));
+    assert!(matches!(err, RdbcError::UnsupportedOperation { .. }));
 }
 
 // ── exec_prepared_parameter_batch ───────────────────────────────────
@@ -847,7 +847,7 @@ async fn exec_prepared_parameter_batch() {
 async fn set_transaction_isolation_invalid_level_errors() {
     let mut conn = make_connection().await;
     let err = conn.set_transaction_isolation(99).await.unwrap_err();
-    assert!(matches!(err, DruidError::InvalidArgument(_)));
+    assert!(matches!(err, RdbcError::InvalidArgument(_)));
 }
 
 // ── fetch_prepared with value params ────────────────────────────────
@@ -1032,5 +1032,5 @@ async fn ping_after_close_errors() {
     let mut conn = make_connection().await;
     conn.close().await.unwrap();
     let err = conn.ping().await.unwrap_err();
-    assert!(matches!(err, DruidError::ConnectionDiscarded));
+    assert!(matches!(err, RdbcError::ConnectionDiscarded));
 }

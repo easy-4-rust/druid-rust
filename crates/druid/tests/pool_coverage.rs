@@ -20,29 +20,29 @@ struct MockConn {
 
 #[async_trait::async_trait]
 impl Connection for MockConn {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult {
             rows_affected: 1,
             last_insert_id: Some(self.id as i64),
             row_count: None,
         })
     }
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(self.id as i64)])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Relaxed);
         Ok(())
     }
@@ -57,14 +57,14 @@ struct MockFactory {
 
 #[async_trait::async_trait]
 impl ConnectionFactory for MockFactory {
-    async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
         let id = self.counter.fetch_add(1, Ordering::SeqCst) + 1;
         Ok(Box::new(MockConn {
             id,
             closed: std::sync::atomic::AtomicBool::new(false),
         }))
     }
-    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
         conn.ping().await
     }
 }
@@ -395,10 +395,10 @@ async fn test_pool_inner_create_connection_error() {
     struct FailFactory;
     #[async_trait::async_trait]
     impl ConnectionFactory for FailFactory {
-        async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
-            Err(DruidError::DriverError("connection refused".into()))
+        async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
+            Err(RdbcError::DriverError("connection refused".into()))
         }
-        async fn validate(&self, _conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+        async fn validate(&self, _conn: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -593,7 +593,7 @@ async fn test_pool_connection_before_execute_error() {
     let mut conn = pool.get().await.unwrap();
     let result = conn.exec("SELECT 1", vec![]).await;
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), DruidError::WallViolation(_)));
+    assert!(matches!(result.unwrap_err(), RdbcError::WallViolation(_)));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -677,10 +677,10 @@ async fn test_pool_get_timeout_retry_on_create_failure() {
 
     #[async_trait::async_trait]
     impl ConnectionFactory for FailAfterFirstFactory {
-        async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+        async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
             let count = self.counter.fetch_add(1, Ordering::SeqCst);
             if self.fail.load(Ordering::Relaxed) && count > 0 {
-                Err(DruidError::DriverError("transient failure".into()))
+                Err(RdbcError::DriverError("transient failure".into()))
             } else {
                 Ok(Box::new(MockConn {
                     id: count + 1,
@@ -688,7 +688,7 @@ async fn test_pool_get_timeout_retry_on_create_failure() {
                 }))
             }
         }
-        async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+        async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
             conn.ping().await
         }
     }

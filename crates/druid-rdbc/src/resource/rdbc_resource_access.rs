@@ -1,4 +1,4 @@
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::RdbcResourceCapabilities;
 use std::fmt;
 
@@ -11,7 +11,7 @@ pub trait RdbcResourceAccess: fmt::Debug + Send + Sync {
     /// Releases the driver-owned value.
     ///
     /// Resources without a Java `free()` operation retain the default no-op implementation.
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 }

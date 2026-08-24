@@ -3,9 +3,9 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    ConnectionRecycleDisposition, DruidError, DruidPooledConnection, ExceptionSorter,
+    ConnectionRecycleDisposition, DruidPooledConnection, ExceptionSorter,
     ExceptionSorterProperties, PhysicalConnection, PhysicalConnectionFactory, PhysicalResultSet,
-    Pool, RowSetResultSet, SqlException, Value, Wrapper, WrapperExt,
+    Pool, RdbcError, RowSetResultSet, SqlException, Value, Wrapper, WrapperExt,
 };
 use druid_wrapper::sqlx::bb8::SqlxBb8Pool;
 use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;
@@ -61,7 +61,7 @@ async fn direct_sqlx_wrapper_uses_real_sqlite_and_reports_callable_capability() 
         .await;
     assert!(matches!(
         callable,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepare_physical_call"
         })
     ));
@@ -81,11 +81,11 @@ async fn direct_sqlx_wrapper_uses_real_sqlite_and_reports_callable_capability() 
     assert!(connection.is_closed());
     assert!(matches!(
         connection.warnings().await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
     assert!(matches!(
         connection.clear_warnings().await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
 }
 
@@ -262,7 +262,7 @@ async fn real_sqlite_database_error_flows_through_sorter_and_discards_physical_c
         .exec("SELECT * FROM table_that_does_not_exist", Vec::new())
         .await
         .expect_err("真实 SQLite 必须返回数据库错误");
-    let DruidError::SqlException(exception) = &error else {
+    let RdbcError::SqlException(exception) = &error else {
         panic!("SQLx DatabaseError 必须保留为 SqlException，实际为 {error:?}");
     };
     assert_eq!(exception.class_name(), "sqlx::error::DatabaseError");

@@ -1,4 +1,4 @@
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{RdbcResourceId, RdbcResourceKind};
 
 /// Receives lifecycle and failure notifications from connection-bound RDBC resources.
@@ -12,7 +12,7 @@ pub trait RdbcResourceOwner: Send + Sync {
         &self,
         _resource_id: &RdbcResourceId,
         _kind: RdbcResourceKind,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -21,7 +21,7 @@ pub trait RdbcResourceOwner: Send + Sync {
         &self,
         _resource_id: &RdbcResourceId,
         _kind: RdbcResourceKind,
-        _error: &DruidError,
+        _error: &RdbcError,
     ) {
     }
 

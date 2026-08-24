@@ -2,7 +2,8 @@
 //!
 //! 对应 Java 平台依赖：`java.sql.PreparedStatement`。
 
-use crate::compat::{DruidError, SqlWarning};
+use crate::compat::SqlWarning;
+use crate::error::RdbcError;
 use crate::spi::{
     PhysicalCallableStatement, PhysicalStatementOptions, PreparedInputParameter, SqlTextStatement,
 };
@@ -33,106 +34,106 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     }
 
     /// 返回最大字段字节数。
-    fn max_field_size(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_max_field_size",
         })
     }
 
     /// 设置最大字段字节数。
-    fn set_max_field_size(&self, _max: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_max_field_size(&self, _max: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_max_field_size",
         })
     }
 
     /// 返回最大结果行数。
-    fn max_rows(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_max_rows",
         })
     }
 
     /// 设置最大结果行数。
-    fn set_max_rows(&self, _max: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_max_rows(&self, _max: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_max_rows",
         })
     }
 
     /// 设置 RDBC escape 处理开关。
-    fn set_escape_processing(&self, _enabled: bool) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_escape_processing(&self, _enabled: bool) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_escape_processing",
         })
     }
 
     /// 返回查询超时秒数。
-    fn query_timeout(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_query_timeout",
         })
     }
 
     /// 设置查询超时秒数。
-    fn set_query_timeout(&self, _seconds: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_query_timeout(&self, _seconds: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_query_timeout",
         })
     }
 
     /// 取消当前执行。
-    fn cancel(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn cancel(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_cancel",
         })
     }
 
     /// 设置游标名称。
-    fn set_cursor_name(&self, _name: &str) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_cursor_name(&self, _name: &str) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_cursor_name",
         })
     }
 
     /// 设置抓取方向。
-    fn set_fetch_direction(&self, _direction: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_fetch_direction(&self, _direction: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_fetch_direction",
         })
     }
 
     /// 返回抓取方向。
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_fetch_direction",
         })
     }
 
     /// 设置抓取行数。
-    fn set_fetch_size(&self, _rows: i32) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn set_fetch_size(&self, _rows: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_set_fetch_size",
         })
     }
 
     /// 返回抓取行数。
-    fn fetch_size(&self) -> Result<i32, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_fetch_size",
         })
     }
 
     /// 设置执行完成后自动关闭。
-    fn close_on_completion(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn close_on_completion(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_close_on_completion",
         })
     }
 
     /// 返回执行完成后自动关闭状态。
-    fn is_close_on_completion(&self) -> Result<bool, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_is_close_on_completion",
         })
     }
@@ -146,9 +147,9 @@ pub trait PhysicalPreparedStatement: Send + Sync {
         &self,
         parameter_index: usize,
         _parameter: &PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if parameter_index == 0 {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "parameterIndex must be at least 1".to_string(),
             ))
         } else {
@@ -159,7 +160,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     /// 清理上一次执行设置的参数。
     ///
     /// Rust API 每次执行显式传入参数；Adapter 有额外缓存时应覆盖本方法。
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -167,7 +168,7 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     ///
     /// 对应 Java：`PreparedStatement#addBatch()`。Druid wrapper 保存可移植的
     /// 参数快照；需要在 add 阶段分配驱动资源或执行参数校验的 Adapter 可覆盖。
-    fn add_batch(&self, _params: &[Value]) -> Result<(), DruidError> {
+    fn add_batch(&self, _params: &[Value]) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -175,29 +176,29 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     ///
     /// 默认实现仅接收快照；需要在 `addBatch` 阶段物化资源或进行驱动校验的
     /// Adapter 应覆盖本方法。
-    fn add_parameter_batch(&self, _params: &[PreparedInputParameter]) -> Result<(), DruidError> {
+    fn add_parameter_batch(&self, _params: &[PreparedInputParameter]) -> Result<(), RdbcError> {
         Ok(())
     }
 
     /// 清理批处理参数。
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
     /// 访问当前 `ResultSet` 前执行驱动 getter。
     ///
     /// 对应 Java：`PreparedStatement` 继承的 `Statement#getResultSet()`。
-    fn get_result_set(&self) -> Result<(), DruidError> {
+    fn get_result_set(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
     /// 访问当前更新计数前执行驱动 getter。
-    fn get_update_count(&self) -> Result<(), DruidError> {
+    fn get_update_count(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
     /// 访问 generated keys 前执行驱动 getter。
-    fn get_generated_keys(&self) -> Result<(), DruidError> {
+    fn get_generated_keys(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -205,9 +206,9 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     ///
     /// 对应 Java：PreparedStatement 继承的 `getMoreResults()` 与
     /// `getMoreResults(int)`。非法 current 必须在关闭旧 `ResultSet` 前失败。
-    fn get_more_results(&self, current: Option<i32>) -> Result<(), DruidError> {
+    fn get_more_results(&self, current: Option<i32>) -> Result<(), RdbcError> {
         if current.is_some_and(|value| !matches!(value, 1..=3)) {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "current must be CLOSE_CURRENT_RESULT(1), KEEP_CURRENT_RESULT(2), or CLOSE_ALL_RESULTS(3)"
                     .to_string(),
             ))
@@ -217,21 +218,21 @@ pub trait PhysicalPreparedStatement: Send + Sync {
     }
 
     /// 返回继承自 Statement 的警告链。
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_warnings",
         })
     }
 
     /// 清除继承自 Statement 的警告链。
-    fn clear_warnings(&self) -> Result<(), DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_clear_warnings",
         })
     }
 
     /// 关闭物理语句句柄。
-    fn close(&self) -> Result<(), DruidError>;
+    fn close(&self) -> Result<(), RdbcError>;
 
     /// 返回语句是否已经关闭。
     fn is_closed(&self) -> bool;
@@ -271,75 +272,75 @@ impl PhysicalPreparedStatement for SqlTextPreparedStatement {
         super::PhysicalStatement::options(&self.statement)
     }
 
-    fn max_field_size(&self) -> Result<i32, DruidError> {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
         super::PhysicalStatement::max_field_size(&self.statement)
     }
 
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_max_field_size(&self.statement, max)
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         super::PhysicalStatement::max_rows(&self.statement)
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_max_rows(&self.statement, max)
     }
 
-    fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError> {
+    fn set_escape_processing(&self, enabled: bool) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_escape_processing(&self.statement, enabled)
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         super::PhysicalStatement::query_timeout(&self.statement)
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_query_timeout(&self.statement, seconds)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         super::PhysicalStatement::cancel(&self.statement)
     }
 
-    fn set_cursor_name(&self, name: &str) -> Result<(), DruidError> {
+    fn set_cursor_name(&self, name: &str) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_cursor_name(&self.statement, name)
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_fetch_direction(&self.statement, direction)
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         super::PhysicalStatement::fetch_direction(&self.statement)
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         super::PhysicalStatement::set_fetch_size(&self.statement, rows)
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         super::PhysicalStatement::fetch_size(&self.statement)
     }
 
-    fn warnings(&self) -> Result<Option<SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
         super::PhysicalStatement::warnings(&self.statement)
     }
 
-    fn clear_warnings(&self) -> Result<(), DruidError> {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
         super::PhysicalStatement::clear_warnings(&self.statement)
     }
 
-    fn close_on_completion(&self) -> Result<(), DruidError> {
+    fn close_on_completion(&self) -> Result<(), RdbcError> {
         super::PhysicalStatement::close_on_completion(&self.statement)
     }
 
-    fn is_close_on_completion(&self) -> Result<bool, DruidError> {
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
         super::PhysicalStatement::is_close_on_completion(&self.statement)
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         super::PhysicalStatement::close(&self.statement)?;
         Ok(())

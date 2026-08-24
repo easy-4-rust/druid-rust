@@ -162,8 +162,9 @@ pub use druid_pooled_prepared_statement::{
 };
 pub use druid_pooled_result_set::DruidPooledResultSet;
 pub use druid_pooled_statement::DruidPooledStatement;
-pub use druid_rdbc::compat::DruidError;
-pub use druid_rdbc::error::{SqlException, SqlExceptionCause, SqlExceptionKind, SqlWarning};
+pub use druid_rdbc::error::{
+    RdbcError, SqlException, SqlExceptionCause, SqlExceptionKind, SqlWarning,
+};
 pub use druid_rdbc::resource::RdbcOutputStream;
 pub use druid_rdbc::resource::RdbcXmlRepresentationType;
 pub use druid_rdbc::resource::{PhysicalCharacterReader, RdbcCharacterLength, RdbcReader};
@@ -220,6 +221,7 @@ pub use druid_rdbc::types::{RdbcObject, RdbcObject as CallableOutputValue};
 pub use druid_rdbc::types::{RdbcParameter, RdbcParameterType, RdbcParameterValue};
 pub use druid_rdbc::types::{RdbcString, RdbcUrl, Row, Savepoint, Value};
 pub use druid_rdbc::types::{RdbcTypeMap, RdbcTypeMap as CallableTypeMap};
+pub use error::DruidError;
 pub use exception_sorter::{ExceptionSorter, ExceptionSorterProperties};
 #[allow(deprecated)]
 pub use filter::config::{ConfigFilter, ConfigTools};
@@ -294,7 +296,7 @@ pub use xa::{
 /// Delegates to [`crate::spi::driver_extension_registry::lookup_driver_extension`].
 pub fn lookup_driver_extension(
     db_type: &str,
-) -> Result<&'static crate::spi::driver_extension_descriptor::DriverExtensionDescriptor, DruidError>
+) -> Result<&'static crate::spi::driver_extension_descriptor::DriverExtensionDescriptor, RdbcError>
 {
     crate::spi::driver_extension_registry::lookup_driver_extension(db_type)
 }

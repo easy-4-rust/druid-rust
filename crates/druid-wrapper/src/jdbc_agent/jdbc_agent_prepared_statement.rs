@@ -1,5 +1,5 @@
 use super::AgentRequestHandle;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatementOptions, PreparedStatementKey,
     StatementGeneratedKeys,
@@ -86,7 +86,7 @@ impl PhysicalPreparedStatement for JdbcAgentPreparedStatement {
         self.options
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         if self.closed.swap(true, Ordering::AcqRel) {
             return Ok(());
         }
@@ -104,9 +104,9 @@ impl PhysicalPreparedStatement for JdbcAgentPreparedStatement {
         self.closed.load(Ordering::Acquire)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         if self.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.request_handle.spawn_request(
             "cancel",
@@ -118,13 +118,13 @@ impl PhysicalPreparedStatement for JdbcAgentPreparedStatement {
         Ok(())
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         Ok(self.query_timeout_seconds())
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         if seconds < 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "JDBC query timeout must not be negative".to_owned(),
             ));
         }

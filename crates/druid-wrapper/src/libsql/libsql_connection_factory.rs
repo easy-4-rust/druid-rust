@@ -1,5 +1,5 @@
 use super::LibSqlConnectionAdapter;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 
@@ -49,7 +49,7 @@ impl PhysicalConnectionFactory for LibSqlConnectionFactory {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let token = self
             .properties
             .get("token")
@@ -64,7 +64,7 @@ impl PhysicalConnectionFactory for LibSqlConnectionFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

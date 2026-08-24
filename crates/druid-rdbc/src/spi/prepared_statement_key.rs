@@ -5,7 +5,7 @@
 //! 来源文件：
 //! `core/src/main/java/com/alibaba/druid/pool/DruidPooledPreparedStatement.java`。
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::spi::StatementGeneratedKeys;
 
 /// 创建预编译语句所调用的 RDBC 重载。
@@ -67,7 +67,7 @@ impl PreparedStatementKey {
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         Self::full(sql, catalog, method_type, 0, 0, 0, 0, None, None)
     }
 
@@ -81,7 +81,7 @@ impl PreparedStatementKey {
         method_type: PreparedStatementMethodType,
         result_set_type: i32,
         result_set_concurrency: i32,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         Self::full(
             sql,
             catalog,
@@ -106,7 +106,7 @@ impl PreparedStatementKey {
         result_set_type: i32,
         result_set_concurrency: i32,
         result_set_holdability: i32,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         Self::full(
             sql,
             catalog,
@@ -129,7 +129,7 @@ impl PreparedStatementKey {
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
         auto_generated_keys: i32,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         Self::full(
             sql,
             catalog,
@@ -152,7 +152,7 @@ impl PreparedStatementKey {
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
         column_indexes: Option<Vec<i32>>,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         Self::full(sql, catalog, method_type, 0, 0, 0, 0, column_indexes, None)
     }
 
@@ -165,7 +165,7 @@ impl PreparedStatementKey {
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
         column_names: Option<Vec<String>>,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         Self::full(sql, catalog, method_type, 0, 0, 0, 0, None, column_names)
     }
 
@@ -183,8 +183,8 @@ impl PreparedStatementKey {
         auto_generated_keys: i32,
         column_indexes: Option<Vec<i32>>,
         column_names: Option<Vec<String>>,
-    ) -> Result<Self, DruidError> {
-        let sql = sql.ok_or_else(|| DruidError::InvalidArgument("sql is null".to_string()))?;
+    ) -> Result<Self, RdbcError> {
+        let sql = sql.ok_or_else(|| RdbcError::InvalidArgument("sql is null".to_string()))?;
         Ok(Self {
             sql,
             catalog,

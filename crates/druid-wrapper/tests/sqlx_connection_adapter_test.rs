@@ -5,7 +5,7 @@ mod common;
 use druid::core::{
     BatchExecContext, BeforeFilter, DruidError, ExecContext, FilterChain, PhysicalConnection,
     PreparedInputParameter, PreparedStatementKey, PreparedStatementMethodType, RdbcCharacterLength,
-    RdbcInputStream, RdbcReader, RdbcRowId, RdbcStreamLength, RdbcUrl, Row, Value,
+    RdbcError, RdbcInputStream, RdbcReader, RdbcRowId, RdbcStreamLength, RdbcUrl, Row, Value,
 };
 use druid::pool::DruidPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
@@ -59,9 +59,11 @@ async fn sqlite_pool() -> DruidPool {
 #[tokio::test]
 async fn rdbc_connection_contract() {
     let pool = sqlite_pool().await;
-    common::physical_connection_contract::assert_rdbc_connection_contract(|| pool.get())
-        .await
-        .expect("direct SQLx must satisfy the RDBC connection contract");
+    common::physical_connection_contract::assert_rdbc_connection_contract(|| async {
+        pool.get().await.map_err(RdbcError::from)
+    })
+    .await
+    .expect("direct SQLx must satisfy the RDBC connection contract");
 }
 
 #[tokio::test]
@@ -409,7 +411,7 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
     let short = RdbcInputStream::from_bytes(vec![1, 2]);
     assert!(matches!(
         invalid.set_binary_stream_with_int_length(&mut connection, 1, Some(short.clone()), 3,),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(short.read_to_end().unwrap().is_empty());
     assert!(matches!(
@@ -419,7 +421,7 @@ async fn sqlx_prepared_resources_execute_and_batch_against_real_sqlite() {
             Some(RdbcReader::from_string("x")),
             -1,
         ),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     invalid.close_with_connection(&mut connection).unwrap();
 

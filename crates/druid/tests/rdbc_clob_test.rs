@@ -1,7 +1,7 @@
 //! java.sql.Clob/NClob 与 java.io.Reader/Writer 的资源语义契约。
 
 use druid::core::{
-    DruidError, PhysicalCharacterReader, PhysicalCharacterWriter, RdbcClob, RdbcInputStream,
+    PhysicalCharacterReader, PhysicalCharacterWriter, RdbcClob, RdbcError, RdbcInputStream,
     RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
 use druid::spi::{
@@ -38,40 +38,38 @@ impl InMemoryClobAccess {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn checked_start(state: &ClobState, position: i64) -> Result<usize, DruidError> {
+    fn checked_start(state: &ClobState, position: i64) -> Result<usize, RdbcError> {
         if state.freed {
-            return Err(DruidError::DriverError("Clob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Clob has been freed".to_string()));
         }
         let start = position
             .checked_sub(1)
             .and_then(|value| usize::try_from(value).ok())
-            .ok_or_else(|| {
-                DruidError::DriverError("Clob position must be one-based".to_string())
-            })?;
+            .ok_or_else(|| RdbcError::DriverError("Clob position must be one-based".to_string()))?;
         if start > state.code_units.len() {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "Clob position exceeds its length".to_string(),
             ));
         }
         Ok(start)
     }
 
-    fn checked_length(length: i64) -> Result<usize, DruidError> {
+    fn checked_length(length: i64) -> Result<usize, RdbcError> {
         usize::try_from(length)
-            .map_err(|_| DruidError::DriverError("Clob length must be non-negative".to_string()))
+            .map_err(|_| RdbcError::DriverError("Clob length must be non-negative".to_string()))
     }
 
     fn write_units(
         state: &mut ClobState,
         position: usize,
         code_units: &[u16],
-    ) -> Result<usize, DruidError> {
+    ) -> Result<usize, RdbcError> {
         if state.freed {
-            return Err(DruidError::DriverError("Clob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Clob has been freed".to_string()));
         }
         let end = position
             .checked_add(code_units.len())
-            .ok_or_else(|| DruidError::DriverError("Clob write range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Clob write range overflow".to_string()))?;
         if end > state.code_units.len() {
             state.code_units.resize(end, 0);
         }
@@ -87,7 +85,7 @@ struct ClobCharacterWriter {
 }
 
 impl PhysicalCharacterWriter for ClobCharacterWriter {
-    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, DruidError> {
+    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, RdbcError> {
         let mut state = self
             .state
             .lock()
@@ -97,11 +95,11 @@ impl PhysicalCharacterWriter for ClobCharacterWriter {
         Ok(length)
     }
 
-    fn flush(&mut self) -> Result<(), DruidError> {
+    fn flush(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    fn close(&mut self) -> Result<(), DruidError> {
+    fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -138,7 +136,7 @@ impl RdbcResourceAccess for InMemoryClobAccess {
         RdbcResourceCapabilities::clob()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         state.freed = true;
         state.code_units.clear();
@@ -148,47 +146,47 @@ impl RdbcResourceAccess for InMemoryClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcClobAccess for InMemoryClobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         let state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Clob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Clob has been freed".to_string()));
         }
         i64::try_from(state.code_units.len())
-            .map_err(|_| DruidError::DriverError("Clob length exceeds i64".to_string()))
+            .map_err(|_| RdbcError::DriverError("Clob length exceeds i64".to_string()))
     }
 
-    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, DruidError> {
+    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, position)?;
         let length = Self::checked_length(i64::from(length))?;
         let end = start
             .checked_add(length)
             .map(|value| value.min(state.code_units.len()))
-            .ok_or_else(|| DruidError::DriverError("Clob range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Clob range overflow".to_string()))?;
         Ok(RdbcString::from_utf16(
             state.code_units[start..end].to_vec(),
         ))
     }
 
-    async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
         let state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Clob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Clob has been freed".to_string()));
         }
         Ok(RdbcReader::from_utf16(state.code_units.clone()))
     }
 
-    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         let state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Clob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Clob has been freed".to_string()));
         }
         let bytes = state
             .code_units
             .iter()
             .map(|value| {
                 u8::try_from(*value).map_err(|_| {
-                    DruidError::DriverError("test Clob contains non-ASCII data".to_string())
+                    RdbcError::DriverError("test Clob contains non-ASCII data".to_string())
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -199,7 +197,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         &self,
         pattern: &RdbcString,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, start)?;
         let pattern = pattern.as_utf16();
@@ -214,7 +212,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         position
             .map(|position| {
                 i64::try_from(position + 1)
-                    .map_err(|_| DruidError::DriverError("Clob position exceeds i64".to_string()))
+                    .map_err(|_| RdbcError::DriverError("Clob position exceeds i64".to_string()))
             })
             .transpose()
     }
@@ -223,16 +221,16 @@ impl RdbcClobAccess for InMemoryClobAccess {
         &self,
         pattern: &RdbcClob,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         let length = i32::try_from(pattern.length().await?)
-            .map_err(|_| DruidError::DriverError("pattern Clob is too large".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("pattern Clob is too large".to_string()))?;
         let value = pattern.get_sub_string(1, length).await?;
         self.position_string(&value, start).await
     }
 
-    async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
+    async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, RdbcError> {
         let length = i32::try_from(value.len())
-            .map_err(|_| DruidError::DriverError("Clob write is too large".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("Clob write is too large".to_string()))?;
         self.set_string_range(position, value, 0, length).await
     }
 
@@ -242,7 +240,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         value: &RdbcString,
         offset: i32,
         length: i32,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         let mut state = self.state();
         let position = Self::checked_start(&state, position)?;
         let offset = Self::checked_length(i64::from(offset))?;
@@ -250,13 +248,13 @@ impl RdbcClobAccess for InMemoryClobAccess {
         let source_end = offset
             .checked_add(length)
             .filter(|end| *end <= value.len())
-            .ok_or_else(|| DruidError::DriverError("Clob source range is invalid".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Clob source range is invalid".to_string()))?;
         Self::write_units(&mut state, position, &value.as_utf16()[offset..source_end])?;
         i32::try_from(length)
-            .map_err(|_| DruidError::DriverError("Clob write exceeds i32".to_string()))
+            .map_err(|_| RdbcError::DriverError("Clob write exceeds i32".to_string()))
     }
 
-    async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         let state = self.state();
         let position = Self::checked_start(&state, position)?;
         drop(state);
@@ -266,7 +264,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         }))
     }
 
-    async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, RdbcError> {
         let state = self.state();
         let position = Self::checked_start(&state, position)?;
         drop(state);
@@ -276,14 +274,14 @@ impl RdbcClobAccess for InMemoryClobAccess {
         }))
     }
 
-    async fn truncate(&self, length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
         let mut state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Clob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Clob has been freed".to_string()));
         }
         let length = Self::checked_length(length)?;
         if length > state.code_units.len() {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "Clob truncate length exceeds current length".to_string(),
             ));
         }
@@ -295,14 +293,14 @@ impl RdbcClobAccess for InMemoryClobAccess {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcReader, DruidError> {
+    ) -> Result<RdbcReader, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, position)?;
         let length = Self::checked_length(length)?;
         let end = start
             .checked_add(length)
             .filter(|end| *end <= state.code_units.len())
-            .ok_or_else(|| DruidError::DriverError("Clob range is invalid".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Clob range is invalid".to_string()))?;
         Ok(RdbcReader::from_utf16(
             state.code_units[start..end].to_vec(),
         ))
@@ -325,15 +323,15 @@ struct FailingReader {
 }
 
 impl PhysicalCharacterReader for FailingReader {
-    fn read_utf16(&mut self, _buffer: &mut [u16]) -> Result<usize, DruidError> {
-        Err(DruidError::DriverError(
+    fn read_utf16(&mut self, _buffer: &mut [u16]) -> Result<usize, RdbcError> {
+        Err(RdbcError::DriverError(
             "injected Reader failure".to_string(),
         ))
     }
 
-    fn close(&mut self) -> Result<(), DruidError> {
+    fn close(&mut self) -> Result<(), RdbcError> {
         if self.fail_close {
-            Err(DruidError::DriverError(
+            Err(RdbcError::DriverError(
                 "injected Reader close failure".to_string(),
             ))
         } else {
@@ -346,20 +344,20 @@ impl PhysicalCharacterReader for FailingReader {
 struct FailingWriter;
 
 impl PhysicalCharacterWriter for FailingWriter {
-    fn write_utf16(&mut self, _code_units: &[u16]) -> Result<usize, DruidError> {
-        Err(DruidError::DriverError(
+    fn write_utf16(&mut self, _code_units: &[u16]) -> Result<usize, RdbcError> {
+        Err(RdbcError::DriverError(
             "injected Writer failure".to_string(),
         ))
     }
 
-    fn flush(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::DriverError(
+    fn flush(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::DriverError(
             "injected Writer flush failure".to_string(),
         ))
     }
 
-    fn close(&mut self) -> Result<(), DruidError> {
-        Err(DruidError::DriverError(
+    fn close(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::DriverError(
             "injected Writer close failure".to_string(),
         ))
     }

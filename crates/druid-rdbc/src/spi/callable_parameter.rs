@@ -3,7 +3,7 @@
 //! 对应 Java 平台依赖：`java.sql.CallableStatement` 的 `parameterIndex` /
 //! `parameterName` 两组重载。
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 
 /// 存储过程参数的索引或名称。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -19,9 +19,9 @@ impl CallableParameter {
     ///
     /// # 参数
     /// - `parameter_index`：对应 Java 参数 `parameterIndex`，必须大于零。
-    pub fn by_index(parameter_index: usize) -> Result<Self, DruidError> {
+    pub fn by_index(parameter_index: usize) -> Result<Self, RdbcError> {
         if parameter_index == 0 {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "parameterIndex must be greater than zero".to_string(),
             ))
         } else {
@@ -33,10 +33,10 @@ impl CallableParameter {
     ///
     /// # 参数
     /// - `parameter_name`：对应 Java 参数 `parameterName`，不能为空。
-    pub fn by_name(parameter_name: impl Into<String>) -> Result<Self, DruidError> {
+    pub fn by_name(parameter_name: impl Into<String>) -> Result<Self, RdbcError> {
         let parameter_name = parameter_name.into();
         if parameter_name.is_empty() {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "parameterName is empty".to_string(),
             ))
         } else {

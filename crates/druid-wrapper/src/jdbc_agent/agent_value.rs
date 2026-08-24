@@ -1,7 +1,7 @@
 use base64::Engine;
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::types::Value;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -24,13 +24,13 @@ pub enum AgentValue {
 
 impl AgentValue {
     /// 从 Druid 标量创建协议值。
-    pub fn from_druid(value: Value) -> Result<Self, DruidError> {
+    pub fn from_druid(value: Value) -> Result<Self, RdbcError> {
         match value {
             Value::Null => Ok(Self::Null),
             Value::Bool(value) => Ok(Self::Bool(value)),
             Value::Int(value) => Ok(Self::Int(value)),
             Value::Float(value) if value.is_finite() => Ok(Self::Float(value)),
-            Value::Float(_) => Err(DruidError::InvalidArgument(
+            Value::Float(_) => Err(RdbcError::InvalidArgument(
                 "JDBC Agent protocol rejects non-finite floating-point values".to_owned(),
             )),
             Value::Decimal(value) => Ok(Self::Decimal(value.to_string())),
@@ -47,7 +47,7 @@ impl AgentValue {
     }
 
     /// 转换为 Druid 标量并严格校验日期、数值和 Base64。
-    pub fn into_druid(self) -> Result<Value, DruidError> {
+    pub fn into_druid(self) -> Result<Value, RdbcError> {
         match self {
             Self::Null => Ok(Value::Null),
             Self::Bool(value) => Ok(Value::Bool(value)),
@@ -72,15 +72,15 @@ impl AgentValue {
         }
     }
 
-    fn parse_timestamp(value: &str) -> Result<NaiveDateTime, DruidError> {
+    fn parse_timestamp(value: &str) -> Result<NaiveDateTime, RdbcError> {
         ["%Y-%m-%dT%H:%M:%S%.f", "%Y-%m-%dT%H:%M"]
             .into_iter()
             .find_map(|format| NaiveDateTime::parse_from_str(value, format).ok())
             .ok_or_else(|| Self::invalid(format!("invalid timestamp '{value}'")))
     }
 
-    fn invalid(message: impl Into<String>) -> DruidError {
-        DruidError::DriverError(format!(
+    fn invalid(message: impl Into<String>) -> RdbcError {
+        RdbcError::DriverError(format!(
             "invalid JDBC Agent scalar value: {}",
             message.into()
         ))

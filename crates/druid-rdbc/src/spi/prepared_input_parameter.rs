@@ -5,7 +5,7 @@
 //! 来源语义：
 //! `com.alibaba.druid.pool.DruidPooledPreparedStatement`。
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcArray, RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcReader,
     RdbcRef, RdbcSqlXml, RdbcStreamLength,
@@ -225,7 +225,7 @@ impl PreparedInputParameter {
     ///
     /// LOB、流、Ref、Array、RowId、SQLXML 和 vendor object 必须由覆盖
     /// `PhysicalConnection` 参数执行入口的 Adapter 原生处理，不能在池化层物化。
-    pub fn scalar_value(&self) -> Result<Value, DruidError> {
+    pub fn scalar_value(&self) -> Result<Value, RdbcError> {
         match self {
             Self::RustValue(value) => Ok(value.clone()),
             Self::Null { .. } => Ok(Value::Null),
@@ -271,13 +271,13 @@ impl PreparedInputParameter {
             | Self::NClobReader { .. }
             | Self::Array(Some(_))
             | Self::RowId(Some(_))
-            | Self::SqlXml(Some(_)) => Err(DruidError::UnsupportedOperation {
+            | Self::SqlXml(Some(_)) => Err(RdbcError::UnsupportedOperation {
                 operation: "prepared_parameter_requires_native_adapter",
             }),
         }
     }
 
-    fn rdbc_object_scalar(value: &RdbcObject) -> Result<Value, DruidError> {
+    fn rdbc_object_scalar(value: &RdbcObject) -> Result<Value, RdbcError> {
         match value {
             RdbcObject::Scalar(value) => Ok(value.clone()),
             RdbcObject::String(value) | RdbcObject::NString(value) => {
@@ -305,7 +305,7 @@ impl PreparedInputParameter {
             | RdbcObject::NClob(_)
             | RdbcObject::CharacterStream(_)
             | RdbcObject::NCharacterStream(_)
-            | RdbcObject::Custom(_) => Err(DruidError::UnsupportedOperation {
+            | RdbcObject::Custom(_) => Err(RdbcError::UnsupportedOperation {
                 operation: "prepared_object_requires_native_adapter",
             }),
         }

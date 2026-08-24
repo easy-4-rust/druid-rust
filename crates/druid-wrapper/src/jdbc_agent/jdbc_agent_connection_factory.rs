@@ -1,5 +1,5 @@
 use super::{JdbcAgentConnection, JdbcAgentOptions};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 
@@ -56,7 +56,7 @@ impl JdbcAgentConnectionFactory {
     async fn create_with_properties(
         &self,
         properties: HashMap<String, String>,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let connection = JdbcAgentConnection::connect(
             &self.url,
             self.validation_query.as_deref(),
@@ -113,7 +113,7 @@ impl PhysicalConnectionFactory for JdbcAgentConnectionFactory {
         self.user_name.as_deref()
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.create_with_properties(self.merged_properties(None))
             .await
     }
@@ -121,7 +121,7 @@ impl PhysicalConnectionFactory for JdbcAgentConnectionFactory {
     async fn create_info_with_properties(
         &self,
         properties: &HashMap<String, String>,
-    ) -> Result<druid_rdbc::spi::PhysicalConnectionInfo, DruidError> {
+    ) -> Result<druid_rdbc::spi::PhysicalConnectionInfo, RdbcError> {
         let started_at = std::time::Instant::now();
         let connection = self
             .create_with_properties(self.merged_properties(Some(properties)))
@@ -134,7 +134,7 @@ impl PhysicalConnectionFactory for JdbcAgentConnectionFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

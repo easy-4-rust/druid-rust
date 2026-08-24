@@ -5,8 +5,8 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    DruidError, PhysicalConnection, PhysicalPreparedStatement, PreparedStatementKey,
-    PreparedStatementMethodType, Value,
+    PhysicalConnection, PhysicalPreparedStatement, PreparedStatementKey,
+    PreparedStatementMethodType, RdbcError, Value,
 };
 use druid_wrapper::driver::{DatabaseConnectionConfig, DruidDriverRegistry};
 use druid_wrapper::duckdb::DuckDbConnectionAdapter;
@@ -27,7 +27,7 @@ async fn duckdb_registry_resolves_only_explicit_native_urls() {
     assert_eq!(resolved.factory().connection_url(), Some("duckdb::memory:"));
 
     let invalid = DuckDbConnectionAdapter::connect("sqlite::memory:").await;
-    assert!(matches!(invalid, Err(DruidError::InvalidArgument(_))));
+    assert!(matches!(invalid, Err(RdbcError::InvalidArgument(_))));
 }
 
 #[tokio::test]
@@ -176,7 +176,7 @@ async fn duckdb_adapter_transactions_metadata_and_lifecycle_are_explicit() {
     assert!(connection.is_closed());
     assert!(matches!(
         connection.ping().await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
 }
 
@@ -203,7 +203,7 @@ async fn duckdb_prepared_statement_is_bound_to_its_physical_connection() {
         .fetch_prepared(statement.as_ref(), vec![Value::Int(1)])
         .await;
     assert!(
-        matches!(result, Err(DruidError::DriverError(message)) if message.contains("another physical connection"))
+        matches!(result, Err(RdbcError::DriverError(message)) if message.contains("another physical connection"))
     );
 }
 
@@ -218,7 +218,7 @@ async fn duckdb_errors_preserve_sql_classification_fields() {
         .expect_err("不存在的表必须返回驱动错误");
 
     match error {
-        DruidError::SqlException(exception) => {
+        RdbcError::SqlException(exception) => {
             assert_ne!(exception.error_code(), 0);
             assert_eq!(exception.sql_state(), Some("HY000"));
             assert!(exception.class_name().starts_with("duckdb::Error"));
@@ -248,7 +248,7 @@ async fn duckdb_prepared_statement_timeout_interrupts_the_native_query() {
     .expect("原生超时必须在上层测试截止时间内完成")
     .expect_err("长查询必须被查询超时中断");
     match error {
-        DruidError::SqlException(exception) => {
+        RdbcError::SqlException(exception) => {
             assert_eq!(exception.sql_state(), Some("HYT00"));
             assert_eq!(exception.class_name(), "java.sql.SQLTimeoutException");
         }
@@ -281,7 +281,7 @@ async fn duckdb_prepared_statement_cancel_interrupts_the_native_query() {
         .expect("取消必须在上层测试截止时间内完成")
         .expect("取消任务不得 panic");
     match result.expect_err("长查询必须被显式 cancel 中断") {
-        DruidError::SqlException(exception) => {
+        RdbcError::SqlException(exception) => {
             assert_eq!(exception.sql_state(), Some("HY008"));
             assert_eq!(
                 exception.class_name(),

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use druid::core::{Driver, DruidError, PhysicalConnection, SqlException, Value};
+use druid::core::{Driver, PhysicalConnection, RdbcError, SqlException, Value};
 use druid::sql::{
     Date, DriverManager, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcString, RdbcType,
     RdbcUrl, RdbcWriter, SQLType, SqlExceptionKind, SqlInput, SqlOutput, Time, Timestamp, Types,
@@ -42,8 +42,8 @@ impl Driver for ProbeDriver {
         url.starts_with("rdbc-probe:")
     }
 
-    async fn connect(&self, _url: &str) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        Err(DruidError::DriverError("probe reached".to_owned()))
+    async fn connect(&self, _url: &str) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+        Err(RdbcError::DriverError("probe reached".to_owned()))
     }
 }
 
@@ -53,12 +53,12 @@ async fn driver_manager_uses_accepts_url_and_supports_deregister() {
     DriverManager::register_driver(Arc::clone(&driver));
     assert!(matches!(
         DriverManager::get_connection("rdbc-probe:test").await,
-        Err(DruidError::DriverError(message)) if message == "probe reached"
+        Err(RdbcError::DriverError(message)) if message == "probe reached"
     ));
     assert!(DriverManager::deregister_driver(&driver));
     assert!(matches!(
         DriverManager::get_connection("rdbc-probe:test").await,
-        Err(DruidError::DriverError(message)) if message.starts_with("No suitable driver")
+        Err(RdbcError::DriverError(message)) if message.starts_with("No suitable driver")
     ));
 }
 

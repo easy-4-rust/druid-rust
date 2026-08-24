@@ -6,7 +6,7 @@ use std::time::Duration;
 use parking_lot::RwLock;
 
 use super::{Driver, DriverAction, RdbcLogWriter};
-use crate::core::{DruidError, PhysicalConnection};
+use crate::core::{PhysicalConnection, RdbcError};
 
 #[derive(Clone)]
 struct RegisteredDriver {
@@ -107,7 +107,7 @@ impl DriverManager {
     /// Returns the first driver that declares it understands `url`.
     ///
     /// Returns `DriverError` when no suitable driver is registered.
-    pub fn get_driver(url: &str) -> Result<Arc<dyn Driver>, DruidError> {
+    pub fn get_driver(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
         Self::driver_for(url)
     }
 
@@ -153,13 +153,13 @@ impl DriverManager {
 
     /// Writes one line to the RDBC diagnostic writer.
     ///
-    /// This is a no-op when no writer is configured. I/O failure returns `DruidError::Other`.
+    /// This is a no-op when no writer is configured. I/O failure returns `RdbcError::Other`.
     /// Corresponds to Java: `DriverManager#println`.
-    pub fn println(message: &str) -> Result<(), DruidError> {
+    pub fn println(message: &str) -> Result<(), RdbcError> {
         if let Some(writer) = Self::log_writer() {
             use std::io::Write as _;
             writeln!(writer.lock(), "{message}")
-                .map_err(|error| DruidError::Other(format!("RDBC log writer failed: {error}")))?;
+                .map_err(|error| RdbcError::Other(format!("RDBC log writer failed: {error}")))?;
         }
         Ok(())
     }
@@ -168,7 +168,7 @@ impl DriverManager {
     ///
     /// Returns an unpooled connection. Missing drivers, driver failures, and login timeouts retain
     /// their error semantics. Corresponds to Java: `getConnection(String)`.
-    pub async fn get_connection(url: &str) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    pub async fn get_connection(url: &str) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let driver = Self::driver_for(url)?;
         Self::with_login_timeout(driver.connect(url)).await
     }
@@ -180,7 +180,7 @@ impl DriverManager {
     pub async fn get_connection_with_properties(
         url: &str,
         info: &HashMap<String, String>,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let driver = Self::driver_for(url)?;
         Self::with_login_timeout(driver.connect_with_properties(url, info)).await
     }
@@ -193,23 +193,23 @@ impl DriverManager {
         url: &str,
         username: &str,
         password: &str,
-    ) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let driver = Self::driver_for(url)?;
         Self::with_login_timeout(driver.connect_with_auth(url, username, password)).await
     }
 
-    fn driver_for(url: &str) -> Result<Arc<dyn Driver>, DruidError> {
+    fn driver_for(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
         Self::registry()
             .read()
             .iter()
             .find(|entry| entry.driver.accepts_url(url))
             .map(|entry| Arc::clone(&entry.driver))
-            .ok_or_else(|| DruidError::DriverError(format!("No suitable driver found for {url}")))
+            .ok_or_else(|| RdbcError::DriverError(format!("No suitable driver found for {url}")))
     }
 
-    async fn with_login_timeout<F>(future: F) -> Result<Box<dyn PhysicalConnection>, DruidError>
+    async fn with_login_timeout<F>(future: F) -> Result<Box<dyn PhysicalConnection>, RdbcError>
     where
-        F: std::future::Future<Output = Result<Box<dyn PhysicalConnection>, DruidError>>,
+        F: std::future::Future<Output = Result<Box<dyn PhysicalConnection>, RdbcError>>,
     {
         let seconds = Self::login_timeout();
         if seconds == 0 {
@@ -217,7 +217,7 @@ impl DriverManager {
         } else {
             tokio::time::timeout(Duration::from_secs(seconds), future)
                 .await
-                .map_err(|_| DruidError::LoginTimeout)?
+                .map_err(|_| RdbcError::LoginTimeout)?
         }
     }
 }

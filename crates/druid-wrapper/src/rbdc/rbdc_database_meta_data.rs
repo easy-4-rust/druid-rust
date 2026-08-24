@@ -1,6 +1,6 @@
 //! RBDC 数据库元数据 Adapter。
 
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalDatabaseMetaData;
 
 /// RBDC driver identity 的数据库元数据视图。
@@ -39,61 +39,61 @@ impl<'connection> RbdcDatabaseMetaData<'connection> {
 
 #[async_trait::async_trait]
 impl PhysicalDatabaseMetaData for RbdcDatabaseMetaData<'_> {
-    async fn get_url(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_url(&mut self) -> Result<Option<String>, RdbcError> {
         // RBDC Connection 在创建后不公开原始 URL。
         Ok(None)
     }
 
-    async fn get_user_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_user_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(None)
     }
 
-    async fn get_database_product_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
         self.product_name()
             .map(str::to_owned)
             .map(Some)
-            .ok_or(DruidError::UnsupportedOperation {
+            .ok_or(RdbcError::UnsupportedOperation {
                 operation: "rbdc_database_metadata_product_name",
             })
     }
 
-    async fn get_driver_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_driver_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(self.driver_name.to_owned()))
     }
 
-    async fn get_driver_version(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_driver_version(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(None)
     }
 
-    async fn get_identifier_quote_string(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_identifier_quote_string(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(if self.is_mysql() { "`" } else { "\"" }.to_owned()))
     }
 
-    async fn get_search_string_escape(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_search_string_escape(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("\\".to_owned()))
     }
 
-    async fn get_catalog_separator(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_catalog_separator(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(".".to_owned()))
     }
 
-    async fn get_max_connections(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_connections(&mut self) -> Result<i32, RdbcError> {
         Ok(0)
     }
 
-    async fn supports_transactions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_transactions(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn supports_batch_updates(&mut self) -> Result<bool, DruidError> {
+    async fn supports_batch_updates(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn supports_savepoints(&mut self) -> Result<bool, DruidError> {
+    async fn supports_savepoints(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn supports_named_parameters(&mut self) -> Result<bool, DruidError> {
+    async fn supports_named_parameters(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 }

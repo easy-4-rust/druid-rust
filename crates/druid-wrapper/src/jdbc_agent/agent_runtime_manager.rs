@@ -1,5 +1,5 @@
 use super::{AgentRuntime, JdbcAgentOptions, JdbcAgentRuntimeMetrics};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
@@ -47,7 +47,7 @@ impl AgentRuntimeManager {
     /// 取得或创建同一命令身份的共享 Agent 运行时。
     pub(crate) async fn acquire(
         options: &JdbcAgentOptions,
-    ) -> Result<AgentRuntimeLease, DruidError> {
+    ) -> Result<AgentRuntimeLease, RdbcError> {
         let manager = Self::global();
         let key = options.runtime_key();
         let mut runtimes = manager.runtimes.lock().await;
@@ -115,9 +115,9 @@ impl AgentRuntimeLease {
         &self,
         method: &str,
         params: JsonValue,
-    ) -> Result<JsonValue, DruidError> {
+    ) -> Result<JsonValue, RdbcError> {
         if !self.managed.healthy.load(Ordering::Acquire) {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         let started = Instant::now();
         let session_id = params.get("sessionId").cloned();
@@ -149,7 +149,7 @@ impl AgentRuntimeLease {
                 )
                 .await;
             });
-            Err(DruidError::DriverError(format!(
+            Err(RdbcError::DriverError(format!(
                 "JDBC Agent operation '{method}' requestId={request_id} exceeded {:?}; cancellation requested",
                 self.request_timeout,
             )))

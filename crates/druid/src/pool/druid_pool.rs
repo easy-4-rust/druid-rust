@@ -16,7 +16,7 @@ use crate::core::{
     MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker,
     OracleExceptionSorter, OracleValidConnectionChecker, PgExceptionSorter,
     PgValidConnectionChecker, PhoenixExceptionSorter, PhysicalConnectionFactory, PoolState,
-    SybaseExceptionSorter, ValidConnectionChecker,
+    RdbcError, SybaseExceptionSorter, ValidConnectionChecker,
 };
 use crate::sql::WallProvider;
 use crate::stats::{DruidDataSourceStatValue, StatsCollector};
@@ -1577,12 +1577,14 @@ impl DataSourceConnectionProvider for DruidPool {
 
 #[async_trait::async_trait]
 impl crate::core::Pool for DruidPool {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        DruidPool::get(self).await
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
+        DruidPool::get(self).await.map_err(RdbcError::from)
     }
 
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
-        DruidPool::get_timeout(self, timeout).await
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
+        DruidPool::get_timeout(self, timeout)
+            .await
+            .map_err(RdbcError::from)
     }
 
     fn state(&self) -> PoolState {

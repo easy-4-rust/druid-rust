@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::core::{DruidError, PhysicalConnection, PhysicalConnectionFactory};
+use crate::core::{PhysicalConnection, PhysicalConnectionFactory, RdbcError};
 
 use super::PoolInner;
 
@@ -20,8 +20,8 @@ impl PoolValidationFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for PoolValidationFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
-        Err(DruidError::UnsupportedOperation {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
             operation: "pool_validation_factory_create",
         })
     }
@@ -29,17 +29,17 @@ impl PhysicalConnectionFactory for PoolValidationFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if self.pool.test_connection_internal(connection).await {
             Ok(())
         } else {
-            Err(DruidError::ValidationFailed(
+            Err(RdbcError::ValidationFailed(
                 "testConnectionInternal returned false".to_owned(),
             ))
         }
     }
 
-    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), DruidError> {
+    async fn close(&self, connection: &mut Box<dyn PhysicalConnection>) -> Result<(), RdbcError> {
         self.pool.factory.close(connection).await
     }
 }

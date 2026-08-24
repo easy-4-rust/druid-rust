@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use parking_lot::RwLock;
 
-use crate::core::{DruidError, DruidPooledConnection, PhysicalConnectionFactory, Pool, PoolState};
+use crate::core::{
+    DruidError, DruidPooledConnection, PhysicalConnectionFactory, Pool, PoolState, RdbcError,
+};
 use crate::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidDataSourceStatManager,
     DruidDataSourceStatValue, DruidTelemetrySnapshot, PoolSnapshot, SnapshotUnavailable,
@@ -547,15 +549,17 @@ impl ManagedDataSource for DruidDataSource {
 
 #[async_trait::async_trait]
 impl Pool for DruidDataSource {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        DruidDataSource::get(self).await
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
+        DruidDataSource::get(self).await.map_err(RdbcError::from)
     }
 
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
-        DruidDataSource::get_timeout(self, timeout).await
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
+        DruidDataSource::get_timeout(self, timeout)
+            .await
+            .map_err(RdbcError::from)
     }
 
-    async fn close_for_removal_if_idle(&self) -> Result<bool, DruidError> {
+    async fn close_for_removal_if_idle(&self) -> Result<bool, RdbcError> {
         if self.state().active_count > 0 {
             return Ok(false);
         }

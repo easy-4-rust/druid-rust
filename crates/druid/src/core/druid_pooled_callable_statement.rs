@@ -7,12 +7,12 @@
 
 use super::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableParameter, DruidError, DruidPooledConnection, DruidPooledPreparedStatement,
+    CallableParameter, DruidPooledConnection, DruidPooledPreparedStatement,
     DruidPooledPreparedStatementHandle, DruidPooledResultSet, DruidPooledStatement, ExecResult,
     PhysicalCallableStatement, PhysicalPreparedStatement, PreparedStatementKey, RdbcArray,
-    RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader,
-    RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row,
-    Unwrapped, Value, Wrapper,
+    RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject,
+    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap,
+    RdbcUrl, Row, Unwrapped, Value, Wrapper,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -71,7 +71,7 @@ impl DruidPooledCallableStatementHandle {
     }
 
     /// 关闭原逻辑 `CallableStatement`。
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         self.prepared_statement.close()
     }
 }
@@ -177,15 +177,13 @@ impl DruidPooledCallableStatement {
     /// 返回物理 `CallableStatement` SPI。
     ///
     /// 对应 Java：`getCallableStatementRaw()` 的平台能力语义，但不泄漏具体驱动类型。
-    pub fn physical_callable_statement(
-        &self,
-    ) -> Result<&dyn PhysicalCallableStatement, DruidError> {
+    pub fn physical_callable_statement(&self) -> Result<&dyn PhysicalCallableStatement, RdbcError> {
         self.prepared_statement.ensure_open()?;
         self.prepared_statement
             .prepared_statement_holder()
             .statement()
             .as_callable()
-            .ok_or(DruidError::UnsupportedOperation {
+            .ok_or(RdbcError::UnsupportedOperation {
                 operation: "physical_callable_statement",
             })
     }
@@ -195,7 +193,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         self.prepared_statement.exec(connection, params).await
     }
 
@@ -204,7 +202,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         self.prepared_statement.fetch(connection, params).await
     }
 
@@ -213,7 +211,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         let result_set = self
             .prepared_statement
             .fetch_result_set(connection, params)
@@ -226,7 +224,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         params: Vec<Value>,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.prepared_statement.execute(connection, params).await
     }
 
@@ -234,7 +232,7 @@ impl DruidPooledCallableStatement {
     pub fn result_set(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<DruidPooledResultSet>, DruidError> {
+    ) -> Result<Option<DruidPooledResultSet>, RdbcError> {
         self.prepared_statement
             .result_set(connection)
             .map(|result_set| {
@@ -248,7 +246,7 @@ impl DruidPooledCallableStatement {
     pub fn update_count(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i64, DruidError> {
+    ) -> Result<i64, RdbcError> {
         self.prepared_statement.update_count(connection)
     }
 
@@ -256,7 +254,7 @@ impl DruidPooledCallableStatement {
     pub fn generated_keys(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.prepared_statement
             .generated_keys(connection)
             .map(|result_set| {
@@ -268,7 +266,7 @@ impl DruidPooledCallableStatement {
     pub fn more_results(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.prepared_statement.more_results(connection)
     }
 
@@ -277,13 +275,13 @@ impl DruidPooledCallableStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         current: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.prepared_statement
             .more_results_with_current(connection, current)
     }
 
     /// 关闭逻辑 `CallableStatement`。
-    pub fn close(&mut self) -> Result<(), DruidError> {
+    pub fn close(&mut self) -> Result<(), RdbcError> {
         self.prepared_statement.close()
     }
 
@@ -295,7 +293,7 @@ impl DruidPooledCallableStatement {
     pub fn close_with_connection(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.prepared_statement.close_with_connection(connection)
     }
 
@@ -310,7 +308,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         sql_type: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.register(parameter, CallableOutParameter::new(sql_type))
     }
@@ -321,7 +319,7 @@ impl DruidPooledCallableStatement {
         parameter_index: usize,
         sql_type: i32,
         scale: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.register(parameter, CallableOutParameter::with_scale(sql_type, scale))
     }
@@ -332,7 +330,7 @@ impl DruidPooledCallableStatement {
         parameter_index: usize,
         sql_type: i32,
         type_name: impl Into<String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.register(
             parameter,
@@ -345,7 +343,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: impl Into<String>,
         sql_type: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.register(parameter, CallableOutParameter::new(sql_type))
     }
@@ -356,7 +354,7 @@ impl DruidPooledCallableStatement {
         parameter_name: impl Into<String>,
         sql_type: i32,
         scale: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.register(parameter, CallableOutParameter::with_scale(sql_type, scale))
     }
@@ -367,7 +365,7 @@ impl DruidPooledCallableStatement {
         parameter_name: impl Into<String>,
         sql_type: i32,
         type_name: impl Into<String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.register(
             parameter,
@@ -380,7 +378,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Value,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::object(value))
     }
 
@@ -392,7 +390,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         value: Value,
         target_sql_type: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::object_with_sql_type(value, target_sql_type),
@@ -409,7 +407,7 @@ impl DruidPooledCallableStatement {
         value: Value,
         target_sql_type: i32,
         scale: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::object_with_sql_type_and_scale(value, target_sql_type, scale),
@@ -419,11 +417,7 @@ impl DruidPooledCallableStatement {
     /// 设置命名 SQL NULL。
     ///
     /// 对应 Java：`setNull(String parameterName, int sqlType)`。
-    pub fn set_named_null(
-        &mut self,
-        parameter_name: &str,
-        sql_type: i32,
-    ) -> Result<(), DruidError> {
+    pub fn set_named_null(&mut self, parameter_name: &str, sql_type: i32) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::null(sql_type))
     }
 
@@ -436,7 +430,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         sql_type: i32,
         type_name: impl Into<String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::null_with_type_name(sql_type, type_name),
@@ -447,7 +441,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         parameter: CallableInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameter_name = match self.named_parameter(parameter_name)? {
             CallableParameter::Name(parameter_name) => parameter_name,
             CallableParameter::Index(_) => {
@@ -462,43 +456,43 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Boolean(value))
     }
 
     /// 设置命名 byte 参数。
     ///
     /// 对应 Java：`setByte(String parameterName, byte x)`。
-    pub fn set_named_byte(&mut self, parameter_name: &str, value: i8) -> Result<(), DruidError> {
+    pub fn set_named_byte(&mut self, parameter_name: &str, value: i8) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Byte(value))
     }
 
     /// 设置命名 short 参数。
     ///
     /// 对应 Java：`setShort(String parameterName, short x)`。
-    pub fn set_named_short(&mut self, parameter_name: &str, value: i16) -> Result<(), DruidError> {
+    pub fn set_named_short(&mut self, parameter_name: &str, value: i16) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Short(value))
     }
 
     /// 设置命名整数参数。
-    pub fn set_named_int(&mut self, parameter_name: &str, value: i32) -> Result<(), DruidError> {
+    pub fn set_named_int(&mut self, parameter_name: &str, value: i32) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Int(value))
     }
 
     /// 设置命名长整数参数。
-    pub fn set_named_long(&mut self, parameter_name: &str, value: i64) -> Result<(), DruidError> {
+    pub fn set_named_long(&mut self, parameter_name: &str, value: i64) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Long(value))
     }
 
     /// 设置命名单精度参数。
     ///
     /// 对应 Java：`setFloat(String parameterName, float x)`。
-    pub fn set_named_float(&mut self, parameter_name: &str, value: f32) -> Result<(), DruidError> {
+    pub fn set_named_float(&mut self, parameter_name: &str, value: f32) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Float(value))
     }
 
     /// 设置命名浮点参数。
-    pub fn set_named_double(&mut self, parameter_name: &str, value: f64) -> Result<(), DruidError> {
+    pub fn set_named_double(&mut self, parameter_name: &str, value: f64) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Double(value))
     }
 
@@ -507,7 +501,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::String(value))
     }
 
@@ -519,7 +513,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::NString(value))
     }
 
@@ -528,7 +522,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<Vec<u8>>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Bytes(value))
     }
 
@@ -537,7 +531,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<RdbcUrl>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Url(value))
     }
 
@@ -546,7 +540,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<RdbcRowId>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::RowId(value))
     }
 
@@ -555,7 +549,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<RdbcSqlXml>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::SqlXml(value))
     }
 
@@ -564,7 +558,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::AsciiStream {
@@ -580,7 +574,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::AsciiStream {
@@ -596,7 +590,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::AsciiStream {
@@ -611,7 +605,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BinaryStream {
@@ -627,7 +621,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BinaryStream {
@@ -643,7 +637,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BinaryStream {
@@ -661,7 +655,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<RdbcBlob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Blob(value))
     }
 
@@ -672,7 +666,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BlobStream {
@@ -692,7 +686,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         stream: Option<RdbcInputStream>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::BlobStream {
@@ -709,7 +703,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<RdbcClob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::Clob(value))
     }
 
@@ -720,7 +714,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::ClobReader {
@@ -738,7 +732,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::ClobReader {
@@ -755,7 +749,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<RdbcNClob>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::NClob(value))
     }
 
@@ -766,7 +760,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NClobReader {
@@ -784,7 +778,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NClobReader {
@@ -801,7 +795,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::CharacterStream {
@@ -819,7 +813,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         reader: Option<RdbcReader>,
         length: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::CharacterStream {
@@ -837,7 +831,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::CharacterStream {
@@ -854,7 +848,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         reader: Option<RdbcReader>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NCharacterStream {
@@ -872,7 +866,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         reader: Option<RdbcReader>,
         length: i64,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::NCharacterStream {
@@ -890,7 +884,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<BigDecimal>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(parameter_name, CallableInputParameter::BigDecimal(value))
     }
 
@@ -901,7 +895,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<NaiveDate>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::Date {
@@ -920,7 +914,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         value: Option<NaiveDate>,
         calendar: Option<CallableCalendar>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::Date {
@@ -937,7 +931,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<NaiveTime>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::Time {
@@ -955,7 +949,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         value: Option<NaiveTime>,
         calendar: Option<CallableCalendar>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::Time {
@@ -972,7 +966,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         value: Option<NaiveDateTime>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::Timestamp {
@@ -991,7 +985,7 @@ impl DruidPooledCallableStatement {
         parameter_name: &str,
         value: Option<NaiveDateTime>,
         calendar: Option<CallableCalendar>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.set_named_input(
             parameter_name,
             CallableInputParameter::Timestamp {
@@ -1005,7 +999,7 @@ impl DruidPooledCallableStatement {
     ///
     /// 对应 Java：`getObject(int)` 的已迁移标量部分。ResultSet/LOB/Ref/Array
     /// 必须由后续独立对象 SPI 表达，不能伪装成标量。
-    pub fn get_object(&mut self, parameter_index: usize) -> Result<RdbcObject, DruidError> {
+    pub fn get_object(&mut self, parameter_index: usize) -> Result<RdbcObject, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.get(parameter)
     }
@@ -1013,7 +1007,7 @@ impl DruidPooledCallableStatement {
     /// 读取命名 OUT 参数。
     ///
     /// 对应 Java：`getObject(String)` 的已迁移标量部分。
-    pub fn get_named_object(&mut self, parameter_name: &str) -> Result<RdbcObject, DruidError> {
+    pub fn get_named_object(&mut self, parameter_name: &str) -> Result<RdbcObject, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.get(parameter)
     }
@@ -1023,7 +1017,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         let result = self.apply_callable(|statement| {
             statement.out_parameter_with_type_map(&parameter, type_map)
@@ -1037,7 +1031,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         let result = self.apply_callable(|statement| {
             statement.out_parameter_with_type_map(&parameter, type_map)
@@ -1051,7 +1045,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         // Java 4.1 typed `getObject` 直接委托给底层 stmt，不经过 checkException。
         let parameter = CallableParameter::by_index(parameter_index)?;
         self.physical_callable_statement()?
@@ -1063,7 +1057,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, DruidError> {
+    ) -> Result<RdbcObject, RdbcError> {
         // 与 Java 原方法一致：保留底层异常，不写入连接异常计数。
         let parameter = CallableParameter::by_name(parameter_name)?;
         self.physical_callable_statement()?
@@ -1076,7 +1070,7 @@ impl DruidPooledCallableStatement {
     pub fn get_big_decimal(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.big_decimal_out_parameter(&parameter))
     }
@@ -1089,7 +1083,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         scale: i32,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| {
             statement.big_decimal_out_parameter_with_scale(&parameter, scale)
@@ -1102,13 +1096,13 @@ impl DruidPooledCallableStatement {
     pub fn get_named_big_decimal(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<BigDecimal>, DruidError> {
+    ) -> Result<Option<BigDecimal>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.big_decimal_out_parameter(&parameter))
     }
 
     /// 读取不带 Calendar 的索引 Date OUT 参数。
-    pub fn get_date(&mut self, parameter_index: usize) -> Result<Option<NaiveDate>, DruidError> {
+    pub fn get_date(&mut self, parameter_index: usize) -> Result<Option<NaiveDate>, RdbcError> {
         self.get_date_with_argument(
             CallableParameter::by_index(parameter_index),
             CallableCalendarArgument::unspecified(),
@@ -1120,7 +1114,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.get_date_with_argument(
             CallableParameter::by_index(parameter_index),
             CallableCalendarArgument::specified(calendar),
@@ -1128,10 +1122,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取不带 Calendar 的命名 Date OUT 参数。
-    pub fn get_named_date(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    pub fn get_named_date(&mut self, parameter_name: &str) -> Result<Option<NaiveDate>, RdbcError> {
         self.get_date_with_argument(
             CallableParameter::by_name(parameter_name),
             CallableCalendarArgument::unspecified(),
@@ -1143,7 +1134,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         self.get_date_with_argument(
             CallableParameter::by_name(parameter_name),
             CallableCalendarArgument::specified(calendar),
@@ -1151,7 +1142,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取不带 Calendar 的索引 Time OUT 参数。
-    pub fn get_time(&mut self, parameter_index: usize) -> Result<Option<NaiveTime>, DruidError> {
+    pub fn get_time(&mut self, parameter_index: usize) -> Result<Option<NaiveTime>, RdbcError> {
         self.get_time_with_argument(
             CallableParameter::by_index(parameter_index),
             CallableCalendarArgument::unspecified(),
@@ -1163,7 +1154,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.get_time_with_argument(
             CallableParameter::by_index(parameter_index),
             CallableCalendarArgument::specified(calendar),
@@ -1171,10 +1162,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取不带 Calendar 的命名 Time OUT 参数。
-    pub fn get_named_time(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    pub fn get_named_time(&mut self, parameter_name: &str) -> Result<Option<NaiveTime>, RdbcError> {
         self.get_time_with_argument(
             CallableParameter::by_name(parameter_name),
             CallableCalendarArgument::unspecified(),
@@ -1186,7 +1174,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         self.get_time_with_argument(
             CallableParameter::by_name(parameter_name),
             CallableCalendarArgument::specified(calendar),
@@ -1197,7 +1185,7 @@ impl DruidPooledCallableStatement {
     pub fn get_timestamp(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.get_timestamp_with_argument(
             CallableParameter::by_index(parameter_index),
             CallableCalendarArgument::unspecified(),
@@ -1209,7 +1197,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_index: usize,
         calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.get_timestamp_with_argument(
             CallableParameter::by_index(parameter_index),
             CallableCalendarArgument::specified(calendar),
@@ -1220,7 +1208,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_timestamp(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.get_timestamp_with_argument(
             CallableParameter::by_name(parameter_name),
             CallableCalendarArgument::unspecified(),
@@ -1232,7 +1220,7 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter_name: &str,
         calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         self.get_timestamp_with_argument(
             CallableParameter::by_name(parameter_name),
             CallableCalendarArgument::specified(calendar),
@@ -1240,120 +1228,120 @@ impl DruidPooledCallableStatement {
     }
 
     /// 返回最近一次 OUT 参数读取是否得到 SQL NULL。
-    pub fn was_null(&mut self) -> Result<bool, DruidError> {
+    pub fn was_null(&mut self) -> Result<bool, RdbcError> {
         self.apply_callable(|statement| statement.was_null())
     }
 
     /// 读取索引字符串 OUT 参数。
-    pub fn get_string(&mut self, parameter_index: usize) -> Result<Option<String>, DruidError> {
+    pub fn get_string(&mut self, parameter_index: usize) -> Result<Option<String>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.string_out_parameter(&parameter))
     }
 
     /// 读取命名字符串 OUT 参数。
-    pub fn get_named_string(&mut self, parameter_name: &str) -> Result<Option<String>, DruidError> {
+    pub fn get_named_string(&mut self, parameter_name: &str) -> Result<Option<String>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.string_out_parameter(&parameter))
     }
 
     /// 读取索引布尔 OUT 参数；SQL NULL 与 RDBC 一致返回 `false`。
-    pub fn get_boolean(&mut self, parameter_index: usize) -> Result<bool, DruidError> {
+    pub fn get_boolean(&mut self, parameter_index: usize) -> Result<bool, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.boolean_out_parameter(&parameter))
     }
 
     /// 读取命名布尔 OUT 参数；SQL NULL 与 RDBC 一致返回 `false`。
-    pub fn get_named_boolean(&mut self, parameter_name: &str) -> Result<bool, DruidError> {
+    pub fn get_named_boolean(&mut self, parameter_name: &str) -> Result<bool, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.boolean_out_parameter(&parameter))
     }
 
     /// 读取索引 byte OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_byte(&mut self, parameter_index: usize) -> Result<i8, DruidError> {
+    pub fn get_byte(&mut self, parameter_index: usize) -> Result<i8, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.byte_out_parameter(&parameter))
     }
 
     /// 读取命名 byte OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_named_byte(&mut self, parameter_name: &str) -> Result<i8, DruidError> {
+    pub fn get_named_byte(&mut self, parameter_name: &str) -> Result<i8, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.byte_out_parameter(&parameter))
     }
 
     /// 读取索引 short OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_short(&mut self, parameter_index: usize) -> Result<i16, DruidError> {
+    pub fn get_short(&mut self, parameter_index: usize) -> Result<i16, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.short_out_parameter(&parameter))
     }
 
     /// 读取命名 short OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_named_short(&mut self, parameter_name: &str) -> Result<i16, DruidError> {
+    pub fn get_named_short(&mut self, parameter_name: &str) -> Result<i16, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.short_out_parameter(&parameter))
     }
 
     /// 读取索引整数 OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_int(&mut self, parameter_index: usize) -> Result<i32, DruidError> {
+    pub fn get_int(&mut self, parameter_index: usize) -> Result<i32, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.int_out_parameter(&parameter))
     }
 
     /// 读取命名整数 OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_named_int(&mut self, parameter_name: &str) -> Result<i32, DruidError> {
+    pub fn get_named_int(&mut self, parameter_name: &str) -> Result<i32, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.int_out_parameter(&parameter))
     }
 
     /// 读取索引长整数 OUT 参数。
-    pub fn get_long(&mut self, parameter_index: usize) -> Result<i64, DruidError> {
+    pub fn get_long(&mut self, parameter_index: usize) -> Result<i64, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.long_out_parameter(&parameter))
     }
 
     /// 读取命名长整数 OUT 参数。
-    pub fn get_named_long(&mut self, parameter_name: &str) -> Result<i64, DruidError> {
+    pub fn get_named_long(&mut self, parameter_name: &str) -> Result<i64, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.long_out_parameter(&parameter))
     }
 
     /// 读取索引 float OUT 参数。
-    pub fn get_float(&mut self, parameter_index: usize) -> Result<f32, DruidError> {
+    pub fn get_float(&mut self, parameter_index: usize) -> Result<f32, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.float_out_parameter(&parameter))
     }
 
     /// 读取命名 float OUT 参数。
-    pub fn get_named_float(&mut self, parameter_name: &str) -> Result<f32, DruidError> {
+    pub fn get_named_float(&mut self, parameter_name: &str) -> Result<f32, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.float_out_parameter(&parameter))
     }
 
     /// 读取索引双精度 OUT 参数。
-    pub fn get_double(&mut self, parameter_index: usize) -> Result<f64, DruidError> {
+    pub fn get_double(&mut self, parameter_index: usize) -> Result<f64, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.double_out_parameter(&parameter))
     }
 
     /// 读取命名双精度 OUT 参数。
-    pub fn get_named_double(&mut self, parameter_name: &str) -> Result<f64, DruidError> {
+    pub fn get_named_double(&mut self, parameter_name: &str) -> Result<f64, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.double_out_parameter(&parameter))
     }
 
     /// 读取索引字节 OUT 参数。
-    pub fn get_bytes(&mut self, parameter_index: usize) -> Result<Option<Vec<u8>>, DruidError> {
+    pub fn get_bytes(&mut self, parameter_index: usize) -> Result<Option<Vec<u8>>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.bytes_out_parameter(&parameter))
     }
 
     /// 读取命名字节 OUT 参数。
-    pub fn get_named_bytes(&mut self, parameter_name: &str) -> Result<Option<Vec<u8>>, DruidError> {
+    pub fn get_named_bytes(&mut self, parameter_name: &str) -> Result<Option<Vec<u8>>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.bytes_out_parameter(&parameter))
     }
 
     /// 读取索引 national-character 字符串。
-    pub fn get_n_string(&mut self, parameter_index: usize) -> Result<Option<String>, DruidError> {
+    pub fn get_n_string(&mut self, parameter_index: usize) -> Result<Option<String>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.n_string_out_parameter(&parameter))
     }
@@ -1362,37 +1350,37 @@ impl DruidPooledCallableStatement {
     pub fn get_named_n_string(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<String>, DruidError> {
+    ) -> Result<Option<String>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.n_string_out_parameter(&parameter))
     }
 
     /// 读取索引 URL。
-    pub fn get_url(&mut self, parameter_index: usize) -> Result<Option<RdbcUrl>, DruidError> {
+    pub fn get_url(&mut self, parameter_index: usize) -> Result<Option<RdbcUrl>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.url_out_parameter(&parameter))
     }
 
     /// 读取命名 URL。
-    pub fn get_named_url(&mut self, parameter_name: &str) -> Result<Option<RdbcUrl>, DruidError> {
+    pub fn get_named_url(&mut self, parameter_name: &str) -> Result<Option<RdbcUrl>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.url_out_parameter(&parameter))
     }
 
     /// 读取索引 RDBC `Ref`。
-    pub fn get_ref(&mut self, parameter_index: usize) -> Result<Option<RdbcRef>, DruidError> {
+    pub fn get_ref(&mut self, parameter_index: usize) -> Result<Option<RdbcRef>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.ref_out_parameter(&parameter))
     }
 
     /// 读取命名 RDBC `Ref`。
-    pub fn get_named_ref(&mut self, parameter_name: &str) -> Result<Option<RdbcRef>, DruidError> {
+    pub fn get_named_ref(&mut self, parameter_name: &str) -> Result<Option<RdbcRef>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.ref_out_parameter(&parameter))
     }
 
     /// 读取索引 RDBC `Array`。
-    pub fn get_array(&mut self, parameter_index: usize) -> Result<Option<RdbcArray>, DruidError> {
+    pub fn get_array(&mut self, parameter_index: usize) -> Result<Option<RdbcArray>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.array_out_parameter(&parameter))
     }
@@ -1401,13 +1389,13 @@ impl DruidPooledCallableStatement {
     pub fn get_named_array(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<RdbcArray>, DruidError> {
+    ) -> Result<Option<RdbcArray>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.array_out_parameter(&parameter))
     }
 
     /// 读取索引 RDBC `RowId`。
-    pub fn get_row_id(&mut self, parameter_index: usize) -> Result<Option<RdbcRowId>, DruidError> {
+    pub fn get_row_id(&mut self, parameter_index: usize) -> Result<Option<RdbcRowId>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.row_id_out_parameter(&parameter))
     }
@@ -1416,16 +1404,13 @@ impl DruidPooledCallableStatement {
     pub fn get_named_row_id(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<RdbcRowId>, DruidError> {
+    ) -> Result<Option<RdbcRowId>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.row_id_out_parameter(&parameter))
     }
 
     /// 读取索引 RDBC `SQLXML`。
-    pub fn get_sql_xml(
-        &mut self,
-        parameter_index: usize,
-    ) -> Result<Option<RdbcSqlXml>, DruidError> {
+    pub fn get_sql_xml(&mut self, parameter_index: usize) -> Result<Option<RdbcSqlXml>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.sql_xml_out_parameter(&parameter))
     }
@@ -1434,7 +1419,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_sql_xml(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<RdbcSqlXml>, DruidError> {
+    ) -> Result<Option<RdbcSqlXml>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.sql_xml_out_parameter(&parameter))
     }
@@ -1442,7 +1427,7 @@ impl DruidPooledCallableStatement {
     /// 读取索引 Blob OUT 参数。
     ///
     /// 对应 Java：`getBlob(int parameterIndex)`。
-    pub fn get_blob(&mut self, parameter_index: usize) -> Result<Option<RdbcBlob>, DruidError> {
+    pub fn get_blob(&mut self, parameter_index: usize) -> Result<Option<RdbcBlob>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1454,7 +1439,7 @@ impl DruidPooledCallableStatement {
     /// 读取命名 Blob OUT 参数。
     ///
     /// 对应 Java：`getBlob(String parameterName)`。
-    pub fn get_named_blob(&mut self, parameter_name: &str) -> Result<Option<RdbcBlob>, DruidError> {
+    pub fn get_named_blob(&mut self, parameter_name: &str) -> Result<Option<RdbcBlob>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1464,7 +1449,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取索引 Clob OUT 参数。
-    pub fn get_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcClob>, DruidError> {
+    pub fn get_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcClob>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1474,7 +1459,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取命名 Clob OUT 参数。
-    pub fn get_named_clob(&mut self, parameter_name: &str) -> Result<Option<RdbcClob>, DruidError> {
+    pub fn get_named_clob(&mut self, parameter_name: &str) -> Result<Option<RdbcClob>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
         if result.as_ref().is_ok_and(Option::is_some) {
@@ -1484,7 +1469,7 @@ impl DruidPooledCallableStatement {
     }
 
     /// 读取索引 `NClob` OUT 参数。
-    pub fn get_n_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcNClob>, DruidError> {
+    pub fn get_n_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcNClob>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
     }
@@ -1493,7 +1478,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_n_clob(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<RdbcNClob>, DruidError> {
+    ) -> Result<Option<RdbcNClob>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
     }
@@ -1502,7 +1487,7 @@ impl DruidPooledCallableStatement {
     pub fn get_character_stream(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.character_stream_out_parameter(&parameter))
     }
@@ -1511,7 +1496,7 @@ impl DruidPooledCallableStatement {
     pub fn get_named_character_stream(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.character_stream_out_parameter(&parameter))
     }
@@ -1520,7 +1505,7 @@ impl DruidPooledCallableStatement {
     pub fn get_n_character_stream(
         &mut self,
         parameter_index: usize,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         let parameter = self.index_parameter(parameter_index)?;
         self.apply_callable(|statement| statement.n_character_stream_out_parameter(&parameter))
     }
@@ -1529,34 +1514,34 @@ impl DruidPooledCallableStatement {
     pub fn get_named_n_character_stream(
         &mut self,
         parameter_name: &str,
-    ) -> Result<Option<RdbcReader>, DruidError> {
+    ) -> Result<Option<RdbcReader>, RdbcError> {
         let parameter = self.named_parameter(parameter_name)?;
         self.apply_callable(|statement| statement.n_character_stream_out_parameter(&parameter))
     }
 
     fn get_date_with_argument(
         &mut self,
-        parameter: Result<CallableParameter, DruidError>,
+        parameter: Result<CallableParameter, RdbcError>,
         calendar: CallableCalendarArgument,
-    ) -> Result<Option<NaiveDate>, DruidError> {
+    ) -> Result<Option<NaiveDate>, RdbcError> {
         let parameter = self.record_result(parameter)?;
         self.apply_callable(|statement| statement.date_out_parameter(&parameter, &calendar))
     }
 
     fn get_time_with_argument(
         &mut self,
-        parameter: Result<CallableParameter, DruidError>,
+        parameter: Result<CallableParameter, RdbcError>,
         calendar: CallableCalendarArgument,
-    ) -> Result<Option<NaiveTime>, DruidError> {
+    ) -> Result<Option<NaiveTime>, RdbcError> {
         let parameter = self.record_result(parameter)?;
         self.apply_callable(|statement| statement.time_out_parameter(&parameter, &calendar))
     }
 
     fn get_timestamp_with_argument(
         &mut self,
-        parameter: Result<CallableParameter, DruidError>,
+        parameter: Result<CallableParameter, RdbcError>,
         calendar: CallableCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, DruidError> {
+    ) -> Result<Option<NaiveDateTime>, RdbcError> {
         let parameter = self.record_result(parameter)?;
         self.apply_callable(|statement| statement.timestamp_out_parameter(&parameter, &calendar))
     }
@@ -1565,11 +1550,11 @@ impl DruidPooledCallableStatement {
         &mut self,
         parameter: CallableParameter,
         out_parameter: CallableOutParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.apply_callable(|statement| statement.register_out_parameter(parameter, out_parameter))
     }
 
-    fn get(&mut self, parameter: CallableParameter) -> Result<RdbcObject, DruidError> {
+    fn get(&mut self, parameter: CallableParameter) -> Result<RdbcObject, RdbcError> {
         let result = self.apply_callable(|statement| statement.out_parameter(&parameter));
         self.record_object_lob_result(&result);
         result
@@ -1577,8 +1562,8 @@ impl DruidPooledCallableStatement {
 
     fn apply_callable<T>(
         &mut self,
-        operation: impl FnOnce(&dyn PhysicalCallableStatement) -> Result<T, DruidError>,
-    ) -> Result<T, DruidError> {
+        operation: impl FnOnce(&dyn PhysicalCallableStatement) -> Result<T, RdbcError>,
+    ) -> Result<T, RdbcError> {
         let result = self.physical_callable_statement().and_then(operation);
         if result.is_err() {
             self.prepared_statement.record_exception();
@@ -1586,7 +1571,7 @@ impl DruidPooledCallableStatement {
         result
     }
 
-    fn index_parameter(&mut self, parameter_index: usize) -> Result<CallableParameter, DruidError> {
+    fn index_parameter(&mut self, parameter_index: usize) -> Result<CallableParameter, RdbcError> {
         let result = CallableParameter::by_index(parameter_index);
         self.record_result(result)
     }
@@ -1594,12 +1579,12 @@ impl DruidPooledCallableStatement {
     fn named_parameter(
         &mut self,
         parameter_name: impl Into<String>,
-    ) -> Result<CallableParameter, DruidError> {
+    ) -> Result<CallableParameter, RdbcError> {
         let result = CallableParameter::by_name(parameter_name);
         self.record_result(result)
     }
 
-    fn record_result<T>(&mut self, result: Result<T, DruidError>) -> Result<T, DruidError> {
+    fn record_result<T>(&mut self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
         if result.is_err() {
             self.prepared_statement.record_exception();
         }
@@ -1612,7 +1597,7 @@ impl DruidPooledCallableStatement {
             .record_blob_open();
     }
 
-    fn record_object_lob_result(&self, result: &Result<RdbcObject, DruidError>) {
+    fn record_object_lob_result(&self, result: &Result<RdbcObject, RdbcError>) {
         let Ok(value) = result.as_ref() else {
             return;
         };

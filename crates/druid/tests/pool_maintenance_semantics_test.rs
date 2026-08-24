@@ -25,7 +25,7 @@
 
 use druid::core::{
     DruidError, ExecResult, MySqlExceptionSorter, PhysicalConnection, PhysicalConnectionFactory,
-    Row, SqlException, ValidConnectionChecker, Value,
+    RdbcError, Row, SqlException, ValidConnectionChecker, Value,
 };
 use druid::pool::DruidPool;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -44,31 +44,31 @@ struct TestConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for TestConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.closed = true;
             self.closed_count.fetch_add(1, Ordering::Relaxed);
@@ -138,7 +138,7 @@ impl ValidConnectionChecker for TestChecker {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for TestFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.create_count.fetch_add(1, Ordering::Relaxed);
         Ok(Box::new(TestConnection {
             closed_count: self.closed_count.clone(),
@@ -150,12 +150,12 @@ impl PhysicalConnectionFactory for TestFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.validate_count.fetch_add(1, Ordering::Relaxed);
         if self.validation_succeeds.load(Ordering::Relaxed) {
             connection.ping().await
         } else {
-            Err(DruidError::ValidationFailed(
+            Err(RdbcError::ValidationFailed(
                 "test validation failed".to_string(),
             ))
         }
@@ -407,7 +407,7 @@ async fn fatal_error_forces_idle_connections_into_keepalive_validation() {
 
     // 注入 fatal 错误触发 onFatalError 置位。
     let mut conn = pool.get().await.unwrap();
-    let fatal = DruidError::SqlException(Box::new(SqlException::driver(
+    let fatal = RdbcError::SqlException(Box::new(SqlException::driver(
         1042,
         "fatal connection error".to_owned(),
     )));

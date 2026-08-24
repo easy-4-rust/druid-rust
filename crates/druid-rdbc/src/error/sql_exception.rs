@@ -1,5 +1,7 @@
 //! RDBC `SQLException` 的 Rust 平台值对象。
 
+use std::fmt;
+
 /// SQL 异常 cause 的运行时类型。
 ///
 /// Java sorter 会检查 cause 是否为 `SocketTimeoutException`，或按类名识别
@@ -200,3 +202,17 @@ impl SqlException {
         }
     }
 }
+
+impl fmt::Display for SqlException {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "SQL exception (code={}, state={}): {}",
+            self.error_code,
+            self.sql_state.as_deref().unwrap_or("null"),
+            self.message.as_deref().unwrap_or("null")
+        )
+    }
+}
+
+impl std::error::Error for SqlException {}

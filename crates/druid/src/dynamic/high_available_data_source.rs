@@ -3,7 +3,7 @@
 use super::data_source_creator::DataSourceCreator;
 use super::node::{FileNodeListener, NodeListener, PoolUpdater};
 use super::selector::{DataSourceSelector, DataSourceSelectorFactory};
-use crate::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use crate::core::{DruidError, DruidPooledConnection, Pool, PoolState, RdbcError};
 use dashmap::{DashMap, DashSet};
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -310,7 +310,7 @@ impl HighAvailableDataSource {
         let Some(data_source) = selector.and_then(|selector| selector.get()) else {
             return Ok(None);
         };
-        data_source.get().await.map(Some)
+        data_source.get().await.map(Some).map_err(DruidError::from)
     }
 
     /// 返回 testOnBorrow。
@@ -519,18 +519,19 @@ impl HighAvailableDataSource {
 
 #[async_trait::async_trait]
 impl Pool for HighAvailableDataSource {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
         self.get_connection()
-            .await?
-            .ok_or(DruidError::DataSourceNotAvailable { cause: None })
+            .await
+            .map_err(RdbcError::from)?
+            .ok_or_else(|| RdbcError::Other("datasource is not available".to_owned()))
     }
 
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
-        self.init().await?;
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
+        self.init().await.map_err(RdbcError::from)?;
         let selector = self.inner.selector.read().clone();
         let data_source = selector
             .and_then(|selector| selector.get())
-            .ok_or(DruidError::DataSourceNotAvailable { cause: None })?;
+            .ok_or_else(|| RdbcError::Other("datasource is not available".to_owned()))?;
         data_source.get_timeout(timeout).await
     }
 

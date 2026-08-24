@@ -25,7 +25,7 @@ impl MockConnection {
 
 #[async_trait::async_trait]
 impl Connection for MockConnection {
-    async fn exec(&mut self, _sql: &str, _p: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _p: Vec<Value>) -> Result<ExecResult, RdbcError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
         Ok(ExecResult {
             rows_affected: 1,
@@ -33,22 +33,22 @@ impl Connection for MockConnection {
             row_count: None,
         })
     }
-    async fn fetch(&mut self, _sql: &str, _p: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _p: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -60,11 +60,11 @@ impl Connection for MockConnection {
 struct MockFactory;
 #[async_trait::async_trait]
 impl ConnectionFactory for MockFactory {
-    async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
         let (c, _) = MockConnection::new();
         Ok(Box::new(c))
     }
-    async fn validate(&self, c: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+    async fn validate(&self, c: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
         c.ping().await
     }
 }

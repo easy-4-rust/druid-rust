@@ -7,8 +7,8 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableParameter, DruidError, PhysicalCallableStatement, PhysicalPreparedStatement,
-    RdbcObject, Value,
+    CallableParameter, PhysicalCallableStatement, PhysicalPreparedStatement, RdbcError, RdbcObject,
+    Value,
 };
 use std::any::Any;
 use std::str::FromStr;
@@ -47,7 +47,7 @@ impl PhysicalPreparedStatement for DefaultCallableStatement {
         Some(self)
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -61,7 +61,7 @@ impl PhysicalCallableStatement for DefaultCallableStatement {
         &self,
         _parameter: CallableParameter,
         _out_parameter: CallableOutParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -69,11 +69,11 @@ impl PhysicalCallableStatement for DefaultCallableStatement {
         &self,
         _parameter_name: &str,
         _parameter: CallableInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    fn out_parameter(&self, _parameter: &CallableParameter) -> Result<RdbcObject, DruidError> {
+    fn out_parameter(&self, _parameter: &CallableParameter) -> Result<RdbcObject, RdbcError> {
         Ok(self
             .output
             .lock()
@@ -81,7 +81,7 @@ impl PhysicalCallableStatement for DefaultCallableStatement {
             .clone())
     }
 
-    fn was_null(&self) -> Result<bool, DruidError> {
+    fn was_null(&self) -> Result<bool, RdbcError> {
         Ok(self
             .output
             .lock()
@@ -115,13 +115,13 @@ fn default_typed_out_conversions_preserve_decimal_and_temporal_values() {
     let statement = DefaultCallableStatement::new(RdbcObject::Scalar(Value::Null));
     assert_eq!(
         statement.warnings(),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_get_warnings"
         })
     );
     assert_eq!(
         statement.clear_warnings(),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_clear_warnings"
         })
     );

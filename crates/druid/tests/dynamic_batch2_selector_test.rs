@@ -7,7 +7,7 @@
 //! `RandomDataSourceValidateFilter`, `DynamicDataSource`,
 //! `LoadBalancer`, `DataSourceGroup`, `SqlHint`.
 
-use druid::core::{DruidError, DruidPooledConnection, Pool, PoolState};
+use druid::core::{DruidPooledConnection, Pool, PoolState, RdbcError};
 use druid::dynamic::selector::{
     DataSourceSelector, NamedDataSourceSelector, RandomDataSourceSelector,
     RandomDataSourceValidateFilter, StickyDataSourceHolder, StickyRandomDataSourceSelector,
@@ -44,10 +44,10 @@ impl MockPool {
 
 #[async_trait::async_trait]
 impl Pool for MockPool {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
-        Err(DruidError::Other(format!("mock {}", self.name)))
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
+        Err(RdbcError::Other(format!("mock {}", self.name)))
     }
-    async fn get_timeout(&self, _: Duration) -> Result<DruidPooledConnection, DruidError> {
+    async fn get_timeout(&self, _: Duration) -> Result<DruidPooledConnection, RdbcError> {
         self.get().await
     }
     fn state(&self) -> PoolState {

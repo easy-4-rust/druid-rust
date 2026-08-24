@@ -1,7 +1,7 @@
 //! `SQLx` 物理连接的 bb8 管理器。
 
 use crate::sqlx::SqlxConnectionFactory;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
 /// `SQLx` 物理连接的 bb8 管理器。
@@ -32,7 +32,7 @@ impl SqlxBb8ConnectionManager {
 #[async_trait::async_trait]
 impl bb8::ManageConnection for SqlxBb8ConnectionManager {
     type Connection = Box<dyn PhysicalConnection>;
-    type Error = DruidError;
+    type Error = RdbcError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         self.factory.create().await

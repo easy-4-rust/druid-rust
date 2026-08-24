@@ -8,50 +8,50 @@ use std::time::Duration;
 struct MockConnForExt;
 #[async_trait::async_trait]
 impl Connection for MockConnForExt {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
 
 #[async_trait::async_trait]
 impl ConnectionExt for MockConnForExt {
-    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
-        Err(DruidError::Other("n/a".into()))
+    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, RdbcError> {
+        Err(RdbcError::Other("n/a".into()))
     }
     async fn prepare_statement(
         &mut self,
         _: &str,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        Err(DruidError::Other("n/a".into()))
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        Err(RdbcError::Other("n/a".into()))
     }
     async fn prepare_call(
         &mut self,
         _: &str,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        Err(DruidError::Other("n/a".into()))
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        Err(RdbcError::Other("n/a".into()))
     }
-    async fn native_sql(&self, sql: &str) -> Result<String, DruidError> {
+    async fn native_sql(&self, sql: &str) -> Result<String, RdbcError> {
         Ok(sql.to_string())
     }
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn get_meta_data(&self) -> Option<&MetaData> {
@@ -72,16 +72,16 @@ impl ConnectionExt for MockConnForExt {
     fn get_holdability(&self) -> i32 {
         1
     }
-    async fn set_holdability(&mut self, _: i32) -> Result<(), DruidError> {
+    async fn set_holdability(&mut self, _: i32) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn set_client_info(&mut self, _: &str, _: &str) -> Result<(), DruidError> {
+    async fn set_client_info(&mut self, _: &str, _: &str) -> Result<(), RdbcError> {
         Ok(())
     }
     fn get_client_info(&self, _: &str) -> Option<String> {
         None
     }
-    async fn set_network_timeout(&mut self, _: std::time::Duration) -> Result<(), DruidError> {
+    async fn set_network_timeout(&mut self, _: std::time::Duration) -> Result<(), RdbcError> {
         Ok(())
     }
     fn get_network_timeout(&self) -> i32 {
@@ -93,7 +93,7 @@ impl ConnectionExt for MockConnForExt {
     async fn set_type_map(
         &mut self,
         _: std::collections::HashMap<String, String>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -131,29 +131,29 @@ async fn test_pooled_connection_all_paths() {
     struct MockConn;
     #[async_trait::async_trait]
     impl Connection for MockConn {
-        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
             Ok(ExecResult {
                 rows_affected: 1,
                 last_insert_id: Some(42),
                 row_count: None,
             })
         }
-        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(vec![Row::new(vec![Value::Int(99)])])
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -189,25 +189,25 @@ async fn test_pooled_connection_fetch_empty() {
     struct MockConn;
     #[async_trait::async_trait]
     impl Connection for MockConn {
-        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
             Ok(ExecResult::default())
         }
-        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(vec![])
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -221,23 +221,23 @@ async fn test_pooled_connection_fetch_empty() {
 #[test]
 fn test_error_all_variants_display() {
     let variants = vec![
-        DruidError::DataSourceClosed {
+        RdbcError::DataSourceClosed {
             close_time_millis: 0,
         },
-        DruidError::AcquireTimeout,
-        DruidError::PoolExhausted,
-        DruidError::ValidationFailed("x".into()),
-        DruidError::ConnectionLeaked {
+        RdbcError::AcquireTimeout,
+        RdbcError::PoolExhausted,
+        RdbcError::ValidationFailed("x".into()),
+        RdbcError::ConnectionLeaked {
             id: 1,
             held_for: std::time::Duration::from_secs(10),
         },
-        DruidError::ConnectionDiscarded,
-        DruidError::DriverError("e".into()),
-        DruidError::SqlParseError("e".into()),
-        DruidError::WallViolation("e".into()),
-        DruidError::DataSourceNotFound("e".into()),
-        DruidError::UnsupportedOperation { operation: "test" },
-        DruidError::Other("e".into()),
+        RdbcError::ConnectionDiscarded,
+        RdbcError::DriverError("e".into()),
+        RdbcError::SqlParseError("e".into()),
+        RdbcError::WallViolation("e".into()),
+        RdbcError::DataSourceNotFound("e".into()),
+        RdbcError::UnsupportedOperation { operation: "test" },
+        RdbcError::Other("e".into()),
     ];
     for v in &variants {
         let _ = format!("{v}");
@@ -387,25 +387,25 @@ async fn test_connection_all_defaults() {
     struct M;
     #[async_trait::async_trait]
     impl Connection for M {
-        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
             Ok(ExecResult::default())
         }
-        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(vec![])
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -428,29 +428,29 @@ async fn test_driver_all_methods() {
         fn name(&self) -> &'static str {
             "test"
         }
-        async fn connect(&self, url: &str) -> Result<Box<dyn Connection>, DruidError> {
+        async fn connect(&self, url: &str) -> Result<Box<dyn Connection>, RdbcError> {
             struct C(String);
             #[async_trait::async_trait]
             impl Connection for C {
-                async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+                async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
                     Ok(ExecResult::default())
                 }
-                async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+                async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
                     Ok(vec![])
                 }
-                async fn begin(&mut self) -> Result<(), DruidError> {
+                async fn begin(&mut self) -> Result<(), RdbcError> {
                     Ok(())
                 }
-                async fn commit(&mut self) -> Result<(), DruidError> {
+                async fn commit(&mut self) -> Result<(), RdbcError> {
                     Ok(())
                 }
-                async fn rollback(&mut self) -> Result<(), DruidError> {
+                async fn rollback(&mut self) -> Result<(), RdbcError> {
                     Ok(())
                 }
-                async fn ping(&mut self) -> Result<(), DruidError> {
+                async fn ping(&mut self) -> Result<(), RdbcError> {
                     Ok(())
                 }
-                async fn close(&mut self) -> Result<(), DruidError> {
+                async fn close(&mut self) -> Result<(), RdbcError> {
                     Ok(())
                 }
                 fn driver_name(&self) -> &str {
@@ -478,25 +478,25 @@ async fn test_ping_checker_valid() {
     struct C;
     #[async_trait::async_trait]
     impl Connection for C {
-        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
             Ok(ExecResult::default())
         }
-        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(vec![])
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -708,25 +708,25 @@ async fn test_after_filter_all_defaults() {
 struct DefaultConnExt;
 #[async_trait::async_trait]
 impl Connection for DefaultConnExt {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -735,20 +735,20 @@ impl Connection for DefaultConnExt {
 #[async_trait::async_trait]
 impl ConnectionExt for DefaultConnExt {
     // Use ALL default implementations - don't override anything!
-    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, DruidError> {
-        Err(DruidError::Other("not implemented".into()))
+    async fn create_statement(&mut self) -> Result<Arc<dyn PhysicalStatement>, RdbcError> {
+        Err(RdbcError::Other("not implemented".into()))
     }
     async fn prepare_statement(
         &mut self,
         _sql: &str,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        Err(DruidError::Other("not implemented".into()))
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        Err(RdbcError::Other("not implemented".into()))
     }
     async fn prepare_call(
         &mut self,
         _sql: &str,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
-        Err(DruidError::Other("not implemented".into()))
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        Err(RdbcError::Other("not implemented".into()))
     }
 }
 
@@ -784,25 +784,25 @@ async fn test_pooled_connection_drop_exercise() {
     struct MockConn;
     #[async_trait::async_trait]
     impl Connection for MockConn {
-        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
             Ok(ExecResult::default())
         }
-        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(vec![])
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
     }
@@ -829,25 +829,25 @@ struct MinimalConnExt;
 
 #[async_trait::async_trait]
 impl Connection for MinimalConnExt {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -864,25 +864,25 @@ struct SparseConnExt;
 
 #[async_trait::async_trait]
 impl Connection for SparseConnExt {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -942,25 +942,25 @@ async fn test_connection_defaults_comprehensive() {
     struct M;
     #[async_trait::async_trait]
     impl Connection for M {
-        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+        async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
             Ok(ExecResult::default())
         }
-        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+        async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
             Ok(vec![])
         }
-        async fn begin(&mut self) -> Result<(), DruidError> {
+        async fn begin(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn commit(&mut self) -> Result<(), DruidError> {
+        async fn commit(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn rollback(&mut self) -> Result<(), DruidError> {
+        async fn rollback(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn ping(&mut self) -> Result<(), DruidError> {
+        async fn ping(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
-        async fn close(&mut self) -> Result<(), DruidError> {
+        async fn close(&mut self) -> Result<(), RdbcError> {
             Ok(())
         }
     }

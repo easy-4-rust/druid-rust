@@ -1,5 +1,5 @@
 use crate::{ManagedWrapperPool, ProxoolConfigKey, WrapperDataSourceFactory};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use std::collections::HashMap;
 
 /// Proxool 兼容数据源配置对象。
@@ -334,7 +334,7 @@ impl ProxoolDataSource {
     }
 
     /// 解析 Java `setDelegateProperties` 的逗号分隔 `name=value` 文本。
-    pub fn set_delegate_properties(&mut self, properties: &str) -> Result<(), DruidError> {
+    pub fn set_delegate_properties(&mut self, properties: &str) -> Result<(), RdbcError> {
         for pair in properties.split(',').filter(|value| !value.is_empty()) {
             let tokens = pair.split('=').collect::<Vec<_>>();
             match tokens.as_slice() {
@@ -347,7 +347,7 @@ impl ProxoolDataSource {
                         .insert(name.trim().to_owned(), value.trim().to_owned());
                 }
                 _ => {
-                    return Err(DruidError::InvalidArgument(format!(
+                    return Err(RdbcError::InvalidArgument(format!(
                         "Unexpected delegateProperties value: '{properties}'. Expected 'name=value'"
                     )));
                 }
@@ -363,7 +363,7 @@ impl ProxoolDataSource {
     }
 
     /// 创建唯一 managed provider pool。
-    pub async fn build(&self) -> Result<ManagedWrapperPool, DruidError> {
+    pub async fn build(&self) -> Result<ManagedWrapperPool, RdbcError> {
         WrapperDataSourceFactory::create(&self.properties).await
     }
 }

@@ -5,7 +5,7 @@
 //! Rust UTF-8 `String` or byte-oriented `Read`. This type uses `u16` sequences
 //! as the lossless driver boundary.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -18,10 +18,10 @@ static NEXT_READER_ID: AtomicU64 = AtomicU64::new(1);
 pub trait PhysicalCharacterReader: fmt::Debug + Send {
     /// Reads UTF-16 code units and advances the cursor; zero denotes end of
     /// stream.
-    fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, DruidError>;
+    fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, RdbcError>;
 
     /// Closes the underlying reader.
-    fn close(&mut self) -> Result<(), DruidError>;
+    fn close(&mut self) -> Result<(), RdbcError>;
 }
 
 #[derive(Debug)]
@@ -31,7 +31,7 @@ struct Utf16SliceReader {
 }
 
 impl PhysicalCharacterReader for Utf16SliceReader {
-    fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, DruidError> {
+    fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, RdbcError> {
         let remaining = &self.code_units[self.position..];
         let length = remaining.len().min(buffer.len());
         buffer[..length].copy_from_slice(&remaining[..length]);
@@ -39,7 +39,7 @@ impl PhysicalCharacterReader for Utf16SliceReader {
         Ok(length)
     }
 
-    fn close(&mut self) -> Result<(), DruidError> {
+    fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -96,7 +96,7 @@ impl RdbcReader {
     }
 
     /// Reads UTF-16 code units and advances the shared cursor.
-    pub fn read_utf16(&self, buffer: &mut [u16]) -> Result<usize, DruidError> {
+    pub fn read_utf16(&self, buffer: &mut [u16]) -> Result<usize, RdbcError> {
         let mut state = self
             .inner
             .state
@@ -105,12 +105,12 @@ impl RdbcReader {
         state
             .reader
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("Reader is closed".to_string()))?
+            .ok_or_else(|| RdbcError::DriverError("Reader is closed".to_string()))?
             .read_utf16(buffer)
     }
 
     /// Reads all remaining UTF-16 code units from the current cursor.
-    pub fn read_to_end_utf16(&self) -> Result<Vec<u16>, DruidError> {
+    pub fn read_to_end_utf16(&self) -> Result<Vec<u16>, RdbcError> {
         let mut result = Vec::new();
         let mut buffer = [0_u16; 1024];
         loop {
@@ -127,14 +127,14 @@ impl RdbcReader {
     ///
     /// Java permits unpaired surrogates. Such input produces an error instead
     /// of a lossy replacement-character conversion.
-    pub fn read_to_string(&self) -> Result<String, DruidError> {
+    pub fn read_to_string(&self) -> Result<String, RdbcError> {
         String::from_utf16(&self.read_to_end_utf16()?).map_err(|error| {
-            DruidError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
+            RdbcError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
         })
     }
 
     /// Closes the reader. Repeated calls are idempotent.
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         let mut state = self
             .inner
             .state

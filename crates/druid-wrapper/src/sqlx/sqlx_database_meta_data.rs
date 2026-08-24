@@ -1,6 +1,6 @@
 //! `SQLx` 数据库元数据 Adapter。
 
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalDatabaseMetaData, PhysicalResultSet, RowSetResultSet};
 use druid_rdbc::types::{Row, Value};
 use sqlx::{
@@ -119,7 +119,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
                 .is_some_and(|scheme| scheme.eq_ignore_ascii_case("postgresql:"))
     }
 
-    async fn product_version(&mut self) -> Result<String, DruidError> {
+    async fn product_version(&mut self) -> Result<String, RdbcError> {
         let is_postgresql = self.is_postgresql();
         let is_mysql = self.is_mysql();
         match &mut self.backend {
@@ -153,13 +153,13 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
                     .await
                     .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)
             }
-            SqlxDatabaseMetaDataBackend::Any(_) => Err(DruidError::UnsupportedOperation {
+            SqlxDatabaseMetaDataBackend::Any(_) => Err(RdbcError::UnsupportedOperation {
                 operation: "sqlx_database_metadata_product_version",
             }),
         }
     }
 
-    async fn version_component(&mut self, index: usize) -> Result<i32, DruidError> {
+    async fn version_component(&mut self, index: usize) -> Result<i32, RdbcError> {
         let version = self.product_version().await?;
         version
             .split(|character: char| !character.is_ascii_digit())
@@ -167,7 +167,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
             .nth(index)
             .and_then(|component| component.parse::<i32>().ok())
             .ok_or_else(|| {
-                DruidError::DriverError(format!(
+                RdbcError::DriverError(format!(
                     "database version `{version}` has no numeric component {index}"
                 ))
             })
@@ -188,7 +188,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         &self,
         operation: &'static str,
         labels: &[&str],
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.require_sqlite(operation)?;
         Ok(Self::result_set(Vec::new(), labels))
     }
@@ -196,24 +196,24 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
     fn sqlite_connection(
         &mut self,
         operation: &'static str,
-    ) -> Result<&mut SqliteConnection, DruidError> {
+    ) -> Result<&mut SqliteConnection, RdbcError> {
         match &mut self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(connection) => Ok(&mut **connection),
             SqlxDatabaseMetaDataBackend::Any(_)
             | SqlxDatabaseMetaDataBackend::MySql(_)
             | SqlxDatabaseMetaDataBackend::PostgreSql(_) => {
-                Err(DruidError::UnsupportedOperation { operation })
+                Err(RdbcError::UnsupportedOperation { operation })
             }
         }
     }
 
-    fn require_sqlite(&self, operation: &'static str) -> Result<(), DruidError> {
+    fn require_sqlite(&self, operation: &'static str) -> Result<(), RdbcError> {
         match self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => Ok(()),
             SqlxDatabaseMetaDataBackend::Any(_)
             | SqlxDatabaseMetaDataBackend::MySql(_)
             | SqlxDatabaseMetaDataBackend::PostgreSql(_) => {
-                Err(DruidError::UnsupportedOperation { operation })
+                Err(RdbcError::UnsupportedOperation { operation })
             }
         }
     }
@@ -222,7 +222,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         &mut self,
         table_name_pattern: Option<&str>,
         types: Option<&[String]>,
-    ) -> Result<Vec<(String, String)>, DruidError> {
+    ) -> Result<Vec<(String, String)>, RdbcError> {
         let pattern = match table_name_pattern {
             None | Some("") => "%",
             Some(pattern) => pattern,
@@ -262,7 +262,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
                     .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)?;
                 Ok((name, table_type))
             })
-            .filter_map(|row: Result<(String, String), DruidError>| match row {
+            .filter_map(|row: Result<(String, String), RdbcError>| match row {
                 Ok((name, table_type))
                     if accepted_types
                         .as_ref()
@@ -430,9 +430,9 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         &mut self,
         table: &str,
         operation: &'static str,
-    ) -> Result<(String, Option<String>, Vec<String>), DruidError> {
+    ) -> Result<(String, Option<String>, Vec<String>), RdbcError> {
         if table.trim().is_empty() {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "Invalid table name: '{table}'"
             )));
         }
@@ -447,7 +447,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         .fetch_optional(self.sqlite_connection(operation)?)
         .await
         .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)?
-        .ok_or_else(|| DruidError::DriverError(format!("Table not found: '{table}'")))?;
+        .ok_or_else(|| RdbcError::DriverError(format!("Table not found: '{table}'")))?;
         let canonical_name = schema_row
             .try_get::<String, _>(0)
             .map_err(super::sqlx_connection_adapter::SqlxConnectionAdapter::driver_error)?;
@@ -478,7 +478,7 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
         &mut self,
         table: &str,
         operation: &'static str,
-    ) -> Result<Vec<SqliteForeignKey>, DruidError> {
+    ) -> Result<Vec<SqliteForeignKey>, RdbcError> {
         let create_sql = sqlx::query_scalar::<Sqlite, Option<String>>(
             "SELECT sql FROM sqlite_schema WHERE lower(name) = lower(?)",
         )
@@ -582,520 +582,520 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
 
 #[async_trait::async_trait]
 impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
-    async fn all_procedures_are_callable(&mut self) -> Result<bool, DruidError> {
+    async fn all_procedures_are_callable(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_all_procedures_are_callable")?;
         Ok(false)
     }
 
-    async fn all_tables_are_selectable(&mut self) -> Result<bool, DruidError> {
+    async fn all_tables_are_selectable(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_all_tables_are_selectable")?;
         Ok(true)
     }
 
-    async fn nulls_are_sorted_high(&mut self) -> Result<bool, DruidError> {
+    async fn nulls_are_sorted_high(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_nulls_are_sorted_high")?;
         Ok(true)
     }
 
-    async fn nulls_are_sorted_low(&mut self) -> Result<bool, DruidError> {
+    async fn nulls_are_sorted_low(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_nulls_are_sorted_low")?;
         Ok(false)
     }
 
-    async fn nulls_are_sorted_at_start(&mut self) -> Result<bool, DruidError> {
+    async fn nulls_are_sorted_at_start(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_nulls_are_sorted_at_start")?;
         Ok(true)
     }
 
-    async fn nulls_are_sorted_at_end(&mut self) -> Result<bool, DruidError> {
+    async fn nulls_are_sorted_at_end(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_nulls_are_sorted_at_end")?;
         Ok(false)
     }
 
-    async fn uses_local_files(&mut self) -> Result<bool, DruidError> {
+    async fn uses_local_files(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_uses_local_files")?;
         Ok(true)
     }
 
-    async fn uses_local_file_per_table(&mut self) -> Result<bool, DruidError> {
+    async fn uses_local_file_per_table(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_uses_local_file_per_table")?;
         Ok(false)
     }
 
-    async fn supports_mixed_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn supports_mixed_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_mixed_case_identifiers")?;
         Ok(true)
     }
 
-    async fn stores_upper_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_upper_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_stores_upper_case_identifiers")?;
         Ok(false)
     }
 
-    async fn stores_lower_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_lower_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_stores_lower_case_identifiers")?;
         Ok(false)
     }
 
-    async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_stores_mixed_case_identifiers")?;
         Ok(true)
     }
 
-    async fn supports_mixed_case_quoted_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn supports_mixed_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_mixed_case_quoted_identifiers",
         )?;
         Ok(false)
     }
 
-    async fn stores_upper_case_quoted_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_upper_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_stores_upper_case_quoted_identifiers")?;
         Ok(false)
     }
 
-    async fn stores_lower_case_quoted_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_lower_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_stores_lower_case_quoted_identifiers")?;
         Ok(false)
     }
 
-    async fn stores_mixed_case_quoted_identifiers(&mut self) -> Result<bool, DruidError> {
+    async fn stores_mixed_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_stores_mixed_case_quoted_identifiers")?;
         Ok(false)
     }
 
-    async fn supports_alter_table_with_add_column(&mut self) -> Result<bool, DruidError> {
+    async fn supports_alter_table_with_add_column(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_alter_table_with_add_column")?;
         Ok(true)
     }
 
-    async fn supports_alter_table_with_drop_column(&mut self) -> Result<bool, DruidError> {
+    async fn supports_alter_table_with_drop_column(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_alter_table_with_drop_column")?;
         Ok(true)
     }
 
-    async fn supports_column_aliasing(&mut self) -> Result<bool, DruidError> {
+    async fn supports_column_aliasing(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_column_aliasing")?;
         Ok(true)
     }
 
-    async fn null_plus_non_null_is_null(&mut self) -> Result<bool, DruidError> {
+    async fn null_plus_non_null_is_null(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_null_plus_non_null_is_null")?;
         Ok(true)
     }
 
-    async fn supports_convert(&mut self) -> Result<bool, DruidError> {
+    async fn supports_convert(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_convert")?;
         Ok(false)
     }
 
-    async fn supports_table_correlation_names(&mut self) -> Result<bool, DruidError> {
+    async fn supports_table_correlation_names(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_table_correlation_names")?;
         Ok(false)
     }
 
-    async fn supports_different_table_correlation_names(&mut self) -> Result<bool, DruidError> {
+    async fn supports_different_table_correlation_names(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_different_table_correlation_names",
         )?;
         Ok(false)
     }
 
-    async fn supports_expressions_in_order_by(&mut self) -> Result<bool, DruidError> {
+    async fn supports_expressions_in_order_by(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_expressions_in_order_by")?;
         Ok(true)
     }
 
-    async fn supports_order_by_unrelated(&mut self) -> Result<bool, DruidError> {
+    async fn supports_order_by_unrelated(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_order_by_unrelated")?;
         Ok(false)
     }
 
-    async fn supports_group_by(&mut self) -> Result<bool, DruidError> {
+    async fn supports_group_by(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_group_by")?;
         Ok(true)
     }
 
-    async fn supports_group_by_unrelated(&mut self) -> Result<bool, DruidError> {
+    async fn supports_group_by_unrelated(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_group_by_unrelated")?;
         Ok(false)
     }
 
-    async fn supports_group_by_beyond_select(&mut self) -> Result<bool, DruidError> {
+    async fn supports_group_by_beyond_select(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_group_by_beyond_select")?;
         Ok(false)
     }
 
-    async fn supports_like_escape_clause(&mut self) -> Result<bool, DruidError> {
+    async fn supports_like_escape_clause(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_like_escape_clause")?;
         Ok(false)
     }
 
-    async fn supports_multiple_result_sets(&mut self) -> Result<bool, DruidError> {
+    async fn supports_multiple_result_sets(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_multiple_result_sets")?;
         Ok(false)
     }
 
-    async fn supports_multiple_transactions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_multiple_transactions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_multiple_transactions")?;
         Ok(true)
     }
 
-    async fn supports_non_nullable_columns(&mut self) -> Result<bool, DruidError> {
+    async fn supports_non_nullable_columns(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_non_nullable_columns")?;
         Ok(true)
     }
 
-    async fn supports_minimum_sql_grammar(&mut self) -> Result<bool, DruidError> {
+    async fn supports_minimum_sql_grammar(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_minimum_sql_grammar")?;
         Ok(true)
     }
 
-    async fn supports_core_sql_grammar(&mut self) -> Result<bool, DruidError> {
+    async fn supports_core_sql_grammar(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_core_sql_grammar")?;
         Ok(true)
     }
 
-    async fn supports_extended_sql_grammar(&mut self) -> Result<bool, DruidError> {
+    async fn supports_extended_sql_grammar(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_extended_sql_grammar")?;
         Ok(false)
     }
 
-    async fn supports_ansi92_entry_level_sql(&mut self) -> Result<bool, DruidError> {
+    async fn supports_ansi92_entry_level_sql(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_ansi92_entry_level_sql")?;
         Ok(false)
     }
 
-    async fn supports_ansi92_intermediate_sql(&mut self) -> Result<bool, DruidError> {
+    async fn supports_ansi92_intermediate_sql(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_ansi92_intermediate_sql")?;
         Ok(false)
     }
 
-    async fn supports_ansi92_full_sql(&mut self) -> Result<bool, DruidError> {
+    async fn supports_ansi92_full_sql(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_ansi92_full_sql")?;
         Ok(false)
     }
 
-    async fn supports_integrity_enhancement_facility(&mut self) -> Result<bool, DruidError> {
+    async fn supports_integrity_enhancement_facility(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_integrity_enhancement_facility",
         )?;
         Ok(false)
     }
 
-    async fn supports_outer_joins(&mut self) -> Result<bool, DruidError> {
+    async fn supports_outer_joins(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_outer_joins")?;
         Ok(true)
     }
 
-    async fn supports_limited_outer_joins(&mut self) -> Result<bool, DruidError> {
+    async fn supports_limited_outer_joins(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_limited_outer_joins")?;
         Ok(true)
     }
 
-    async fn is_catalog_at_start(&mut self) -> Result<bool, DruidError> {
+    async fn is_catalog_at_start(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_is_catalog_at_start")?;
         Ok(true)
     }
 
-    async fn supports_schemas_in_data_manipulation(&mut self) -> Result<bool, DruidError> {
+    async fn supports_schemas_in_data_manipulation(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_schemas_in_data_manipulation")?;
         Ok(false)
     }
 
-    async fn supports_schemas_in_procedure_calls(&mut self) -> Result<bool, DruidError> {
+    async fn supports_schemas_in_procedure_calls(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_schemas_in_procedure_calls")?;
         Ok(false)
     }
 
-    async fn supports_schemas_in_table_definitions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_schemas_in_table_definitions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_schemas_in_table_definitions")?;
         Ok(false)
     }
 
-    async fn supports_schemas_in_index_definitions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_schemas_in_index_definitions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_schemas_in_index_definitions")?;
         Ok(false)
     }
 
-    async fn supports_schemas_in_privilege_definitions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_schemas_in_privilege_definitions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_schemas_in_privilege_definitions",
         )?;
         Ok(false)
     }
 
-    async fn supports_catalogs_in_data_manipulation(&mut self) -> Result<bool, DruidError> {
+    async fn supports_catalogs_in_data_manipulation(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_catalogs_in_data_manipulation",
         )?;
         Ok(false)
     }
 
-    async fn supports_catalogs_in_procedure_calls(&mut self) -> Result<bool, DruidError> {
+    async fn supports_catalogs_in_procedure_calls(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_catalogs_in_procedure_calls")?;
         Ok(false)
     }
 
-    async fn supports_catalogs_in_table_definitions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_catalogs_in_table_definitions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_catalogs_in_table_definitions",
         )?;
         Ok(false)
     }
 
-    async fn supports_catalogs_in_index_definitions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_catalogs_in_index_definitions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_catalogs_in_index_definitions",
         )?;
         Ok(false)
     }
 
-    async fn supports_catalogs_in_privilege_definitions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_catalogs_in_privilege_definitions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_catalogs_in_privilege_definitions",
         )?;
         Ok(false)
     }
 
-    async fn supports_positioned_delete(&mut self) -> Result<bool, DruidError> {
+    async fn supports_positioned_delete(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_positioned_delete")?;
         Ok(false)
     }
 
-    async fn supports_positioned_update(&mut self) -> Result<bool, DruidError> {
+    async fn supports_positioned_update(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_positioned_update")?;
         Ok(false)
     }
 
-    async fn supports_select_for_update(&mut self) -> Result<bool, DruidError> {
+    async fn supports_select_for_update(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_select_for_update")?;
         Ok(false)
     }
 
-    async fn supports_stored_procedures(&mut self) -> Result<bool, DruidError> {
+    async fn supports_stored_procedures(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_stored_procedures")?;
         Ok(false)
     }
 
-    async fn supports_subqueries_in_comparisons(&mut self) -> Result<bool, DruidError> {
+    async fn supports_subqueries_in_comparisons(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_subqueries_in_comparisons")?;
         Ok(false)
     }
 
-    async fn supports_subqueries_in_exists(&mut self) -> Result<bool, DruidError> {
+    async fn supports_subqueries_in_exists(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_subqueries_in_exists")?;
         Ok(true)
     }
 
-    async fn supports_subqueries_in_ins(&mut self) -> Result<bool, DruidError> {
+    async fn supports_subqueries_in_ins(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_subqueries_in_ins")?;
         Ok(true)
     }
 
-    async fn supports_subqueries_in_quantifieds(&mut self) -> Result<bool, DruidError> {
+    async fn supports_subqueries_in_quantifieds(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_subqueries_in_quantifieds")?;
         Ok(false)
     }
 
-    async fn supports_correlated_subqueries(&mut self) -> Result<bool, DruidError> {
+    async fn supports_correlated_subqueries(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_correlated_subqueries")?;
         Ok(false)
     }
 
-    async fn supports_union(&mut self) -> Result<bool, DruidError> {
+    async fn supports_union(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_union")?;
         Ok(true)
     }
 
-    async fn supports_union_all(&mut self) -> Result<bool, DruidError> {
+    async fn supports_union_all(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_union_all")?;
         Ok(true)
     }
 
-    async fn supports_open_cursors_across_commit(&mut self) -> Result<bool, DruidError> {
+    async fn supports_open_cursors_across_commit(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_open_cursors_across_commit")?;
         Ok(false)
     }
 
-    async fn supports_open_cursors_across_rollback(&mut self) -> Result<bool, DruidError> {
+    async fn supports_open_cursors_across_rollback(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_open_cursors_across_rollback")?;
         Ok(false)
     }
 
-    async fn supports_open_statements_across_commit(&mut self) -> Result<bool, DruidError> {
+    async fn supports_open_statements_across_commit(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_open_statements_across_commit",
         )?;
         Ok(false)
     }
 
-    async fn supports_open_statements_across_rollback(&mut self) -> Result<bool, DruidError> {
+    async fn supports_open_statements_across_rollback(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_open_statements_across_rollback",
         )?;
         Ok(false)
     }
 
-    async fn does_max_row_size_include_blobs(&mut self) -> Result<bool, DruidError> {
+    async fn does_max_row_size_include_blobs(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_does_max_row_size_include_blobs")?;
         Ok(false)
     }
 
     async fn supports_data_definition_and_data_manipulation_transactions(
         &mut self,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_data_definition_and_data_manipulation_transactions")?;
         Ok(true)
     }
 
-    async fn supports_data_manipulation_transactions_only(&mut self) -> Result<bool, DruidError> {
+    async fn supports_data_manipulation_transactions_only(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_supports_data_manipulation_transactions_only",
         )?;
         Ok(false)
     }
 
-    async fn data_definition_causes_transaction_commit(&mut self) -> Result<bool, DruidError> {
+    async fn data_definition_causes_transaction_commit(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_data_definition_causes_transaction_commit",
         )?;
         Ok(false)
     }
 
-    async fn data_definition_ignored_in_transactions(&mut self) -> Result<bool, DruidError> {
+    async fn data_definition_ignored_in_transactions(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite(
             "sqlx_database_metadata_sqlite_data_definition_ignored_in_transactions",
         )?;
         Ok(false)
     }
 
-    async fn supports_multiple_open_results(&mut self) -> Result<bool, DruidError> {
+    async fn supports_multiple_open_results(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_multiple_open_results")?;
         Ok(false)
     }
 
-    async fn supports_get_generated_keys(&mut self) -> Result<bool, DruidError> {
+    async fn supports_get_generated_keys(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_get_generated_keys")?;
         Ok(true)
     }
 
-    async fn locators_update_copy(&mut self) -> Result<bool, DruidError> {
+    async fn locators_update_copy(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_locators_update_copy")?;
         Ok(false)
     }
 
-    async fn supports_statement_pooling(&mut self) -> Result<bool, DruidError> {
+    async fn supports_statement_pooling(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_statement_pooling")?;
         Ok(false)
     }
 
-    async fn get_max_binary_literal_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_binary_literal_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_binary_literal_length")?;
         Ok(0)
     }
 
-    async fn get_max_char_literal_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_char_literal_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_char_literal_length")?;
         Ok(0)
     }
 
-    async fn get_max_column_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_column_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_column_name_length")?;
         Ok(0)
     }
 
-    async fn get_max_columns_in_group_by(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_columns_in_group_by(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_columns_in_group_by")?;
         Ok(0)
     }
 
-    async fn get_max_columns_in_index(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_columns_in_index(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_columns_in_index")?;
         Ok(0)
     }
 
-    async fn get_max_columns_in_order_by(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_columns_in_order_by(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_columns_in_order_by")?;
         Ok(0)
     }
 
-    async fn get_max_columns_in_select(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_columns_in_select(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_columns_in_select")?;
         Ok(0)
     }
 
-    async fn get_max_columns_in_table(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_columns_in_table(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_columns_in_table")?;
         Ok(0)
     }
 
-    async fn get_max_cursor_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_cursor_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_cursor_name_length")?;
         Ok(0)
     }
 
-    async fn get_max_index_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_index_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_index_length")?;
         Ok(0)
     }
 
-    async fn get_max_schema_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_schema_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_schema_name_length")?;
         Ok(0)
     }
 
-    async fn get_max_procedure_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_procedure_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_procedure_name_length")?;
         Ok(0)
     }
 
-    async fn get_max_catalog_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_catalog_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_catalog_name_length")?;
         Ok(0)
     }
 
-    async fn get_max_row_size(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_row_size(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_row_size")?;
         Ok(0)
     }
 
-    async fn get_max_statement_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_statement_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_statement_length")?;
         Ok(0)
     }
 
-    async fn get_max_statements(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_statements(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_statements")?;
         Ok(0)
     }
 
-    async fn get_max_table_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_table_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_table_name_length")?;
         Ok(0)
     }
 
-    async fn get_max_tables_in_select(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_tables_in_select(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_tables_in_select")?;
         Ok(0)
     }
 
-    async fn get_max_user_name_length(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_user_name_length(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_max_user_name_length")?;
         Ok(0)
     }
 
-    async fn get_url(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_url(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(self.url.to_owned()))
     }
 
-    async fn get_user_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_user_name(&mut self) -> Result<Option<String>, RdbcError> {
         // SQLx does not expose the authenticated username after connection setup. Returning
         // None preserves the absent value without reparsing and leaking URL credentials.
         Ok(None)
     }
 
-    async fn is_read_only(&mut self) -> Result<bool, DruidError> {
+    async fn is_read_only(&mut self) -> Result<bool, RdbcError> {
         let query_only = sqlx::query_scalar::<Sqlite, i64>("PRAGMA query_only")
             .fetch_one(self.sqlite_connection("sqlx_database_metadata_sqlite_is_read_only")?)
             .await
@@ -1103,7 +1103,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         Ok(query_only != 0)
     }
 
-    async fn get_database_product_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
         let product = match &self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => "SQLite",
             SqlxDatabaseMetaDataBackend::MySql(_) => "MySQL",
@@ -1111,7 +1111,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
             SqlxDatabaseMetaDataBackend::Any(_) if self.is_postgresql() => "PostgreSQL",
             SqlxDatabaseMetaDataBackend::Any(_) if self.is_mysql() => "MySQL",
             SqlxDatabaseMetaDataBackend::Any(_) => {
-                return Err(DruidError::UnsupportedOperation {
+                return Err(RdbcError::UnsupportedOperation {
                     operation: "sqlx_database_metadata_product_name",
                 });
             }
@@ -1119,28 +1119,28 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         Ok(Some(product.to_owned()))
     }
 
-    async fn get_database_product_version(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_database_product_version(&mut self) -> Result<Option<String>, RdbcError> {
         self.product_version().await.map(Some)
     }
 
-    async fn get_driver_name(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_driver_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("sqlx".to_owned()))
     }
 
-    async fn get_driver_version(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_driver_version(&mut self) -> Result<Option<String>, RdbcError> {
         // sqlx does not expose its crate version as a runtime driver metadata field.
         Ok(None)
     }
 
-    async fn get_identifier_quote_string(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_identifier_quote_string(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(if self.is_mysql() { "`" } else { "\"" }.to_owned()))
     }
 
-    async fn get_search_string_escape(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_search_string_escape(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("\\".to_owned()))
     }
 
-    async fn get_sql_keywords(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_sql_keywords(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_sql_keywords")?;
         Ok(Some(
             "ABORT,ACTION,AFTER,ANALYZE,ATTACH,AUTOINCREMENT,BEFORE,\
@@ -1153,68 +1153,68 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         ))
     }
 
-    async fn get_numeric_functions(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_numeric_functions(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_numeric_functions")?;
         Ok(Some(String::new()))
     }
 
-    async fn get_string_functions(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_string_functions(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_string_functions")?;
         Ok(Some(String::new()))
     }
 
-    async fn get_system_functions(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_system_functions(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_system_functions")?;
         Ok(Some(String::new()))
     }
 
-    async fn get_time_date_functions(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_time_date_functions(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_time_date_functions")?;
         Ok(Some("DATE,TIME,DATETIME,JULIANDAY,STRFTIME".to_owned()))
     }
 
-    async fn get_extra_name_characters(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_extra_name_characters(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_extra_name_characters")?;
         Ok(Some(String::new()))
     }
 
-    async fn get_schema_term(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_schema_term(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_schema_term")?;
         Ok(Some("schema".to_owned()))
     }
 
-    async fn get_procedure_term(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_procedure_term(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_procedure_term")?;
         Ok(Some("not_implemented".to_owned()))
     }
 
-    async fn get_catalog_term(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_catalog_term(&mut self) -> Result<Option<String>, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_catalog_term")?;
         Ok(Some("catalog".to_owned()))
     }
 
-    async fn get_catalog_separator(&mut self) -> Result<Option<String>, DruidError> {
+    async fn get_catalog_separator(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some(".".to_owned()))
     }
 
-    async fn get_max_connections(&mut self) -> Result<i32, DruidError> {
+    async fn get_max_connections(&mut self) -> Result<i32, RdbcError> {
         // JDBC 规定 0 表示未知或无限制；SQLx Connection 不暴露服务器上限。
         Ok(0)
     }
 
-    async fn get_default_transaction_isolation(&mut self) -> Result<i32, DruidError> {
+    async fn get_default_transaction_isolation(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_default_transaction_isolation")?;
         Ok(8)
     }
 
-    async fn supports_transactions(&mut self) -> Result<bool, DruidError> {
+    async fn supports_transactions(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
     async fn supports_transaction_isolation_level(
         &mut self,
         level: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         // Xerial SQLite 只报告 TRANSACTION_SERIALIZABLE（JDBC 常量 8）。
         Ok(match &self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => level == 8,
@@ -1224,16 +1224,16 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         })
     }
 
-    async fn supports_batch_updates(&mut self) -> Result<bool, DruidError> {
+    async fn supports_batch_updates(&mut self) -> Result<bool, RdbcError> {
         // Adapter 实现有序 batch，并在部分失败时保留已完成计数。
         Ok(true)
     }
 
-    async fn supports_savepoints(&mut self) -> Result<bool, DruidError> {
+    async fn supports_savepoints(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 
-    async fn supports_named_parameters(&mut self) -> Result<bool, DruidError> {
+    async fn supports_named_parameters(&mut self) -> Result<bool, RdbcError> {
         // SQLite SQL 语法支持 :name/@name/$name；SQLx Any 未提供统一保证。
         Ok(matches!(
             self.backend,
@@ -1245,19 +1245,19 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         &mut self,
         _from_type: i32,
         _to_type: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_convert_between")?;
         Ok(false)
     }
 
-    async fn supports_full_outer_joins(&mut self) -> Result<bool, DruidError> {
+    async fn supports_full_outer_joins(&mut self) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_full_outer_joins")?;
         let major = self.version_component(0).await?;
         let minor = self.version_component(1).await?;
         Ok(major >= 3 && minor >= 39)
     }
 
-    async fn supports_result_set_type(&mut self, result_set_type: i32) -> Result<bool, DruidError> {
+    async fn supports_result_set_type(&mut self, result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_result_set_type")?;
         Ok(result_set_type == 1003)
     }
@@ -1266,7 +1266,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         &mut self,
         result_set_type: i32,
         concurrency: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_result_set_concurrency")?;
         Ok(result_set_type == 1003 && concurrency == 1007)
     }
@@ -1274,32 +1274,32 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     async fn supports_result_set_holdability(
         &mut self,
         holdability: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_supports_result_set_holdability")?;
         Ok(holdability == 2)
     }
 
-    async fn get_result_set_holdability(&mut self) -> Result<i32, DruidError> {
+    async fn get_result_set_holdability(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_result_set_holdability")?;
         Ok(2)
     }
 
-    async fn get_sql_state_type(&mut self) -> Result<i32, DruidError> {
+    async fn get_sql_state_type(&mut self) -> Result<i32, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_get_sql_state_type")?;
         Ok(2)
     }
 
-    async fn own_updates_are_visible(&mut self, _result_set_type: i32) -> Result<bool, DruidError> {
+    async fn own_updates_are_visible(&mut self, _result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_own_updates_are_visible")?;
         Ok(false)
     }
 
-    async fn own_deletes_are_visible(&mut self, _result_set_type: i32) -> Result<bool, DruidError> {
+    async fn own_deletes_are_visible(&mut self, _result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_own_deletes_are_visible")?;
         Ok(false)
     }
 
-    async fn own_inserts_are_visible(&mut self, _result_set_type: i32) -> Result<bool, DruidError> {
+    async fn own_inserts_are_visible(&mut self, _result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_own_inserts_are_visible")?;
         Ok(false)
     }
@@ -1307,7 +1307,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     async fn others_updates_are_visible(
         &mut self,
         _result_set_type: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_others_updates_are_visible")?;
         Ok(false)
     }
@@ -1315,7 +1315,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     async fn others_deletes_are_visible(
         &mut self,
         _result_set_type: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_others_deletes_are_visible")?;
         Ok(false)
     }
@@ -1323,31 +1323,31 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     async fn others_inserts_are_visible(
         &mut self,
         _result_set_type: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_others_inserts_are_visible")?;
         Ok(false)
     }
 
-    async fn updates_are_detected(&mut self, _result_set_type: i32) -> Result<bool, DruidError> {
+    async fn updates_are_detected(&mut self, _result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_updates_are_detected")?;
         Ok(false)
     }
 
-    async fn deletes_are_detected(&mut self, _result_set_type: i32) -> Result<bool, DruidError> {
+    async fn deletes_are_detected(&mut self, _result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_deletes_are_detected")?;
         Ok(false)
     }
 
-    async fn inserts_are_detected(&mut self, _result_set_type: i32) -> Result<bool, DruidError> {
+    async fn inserts_are_detected(&mut self, _result_set_type: i32) -> Result<bool, RdbcError> {
         self.require_sqlite("sqlx_database_metadata_sqlite_inserts_are_detected")?;
         Ok(false)
     }
 
-    async fn get_database_major_version(&mut self) -> Result<i32, DruidError> {
+    async fn get_database_major_version(&mut self) -> Result<i32, RdbcError> {
         self.version_component(0).await
     }
 
-    async fn get_database_minor_version(&mut self) -> Result<i32, DruidError> {
+    async fn get_database_minor_version(&mut self) -> Result<i32, RdbcError> {
         self.version_component(1).await
     }
 
@@ -1357,7 +1357,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _schema_pattern: Option<&str>,
         table_name_pattern: Option<&str>,
         types: Option<&[String]>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let rows = self
             .sqlite_tables(table_name_pattern, types)
             .await?
@@ -1380,7 +1380,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         Ok(Self::result_set(rows, Self::sqlite_table_labels()))
     }
 
-    async fn get_schemas(&mut self) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    async fn get_schemas(&mut self) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_connection("sqlx_database_metadata_sqlite_get_schemas")?;
         Ok(Self::result_set(
             Vec::new(),
@@ -1388,12 +1388,12 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         ))
     }
 
-    async fn get_catalogs(&mut self) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    async fn get_catalogs(&mut self) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_connection("sqlx_database_metadata_sqlite_get_catalogs")?;
         Ok(Self::result_set(Vec::new(), &["TABLE_CAT"]))
     }
 
-    async fn get_table_types(&mut self) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    async fn get_table_types(&mut self) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_connection("sqlx_database_metadata_sqlite_get_table_types")?;
         let rows = ["GLOBAL TEMPORARY", "SYSTEM TABLE", "TABLE", "VIEW"]
             .into_iter()
@@ -1408,7 +1408,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _schema_pattern: Option<&str>,
         table_name_pattern: Option<&str>,
         column_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let tables = self.sqlite_tables(table_name_pattern, None).await?;
         let column_pattern = column_name_pattern.unwrap_or("%");
         let mut output = Vec::new();
@@ -1523,7 +1523,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _catalog: Option<&str>,
         _schema_pattern: Option<&str>,
         _procedure_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_procedures",
             &[
@@ -1545,7 +1545,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _schema_pattern: Option<&str>,
         _procedure_name_pattern: Option<&str>,
         _column_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_procedure_columns",
             &[
@@ -1572,7 +1572,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _schema: Option<&str>,
         _table: Option<&str>,
         _column_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_column_privileges",
             &[
@@ -1593,7 +1593,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _catalog: Option<&str>,
         _schema_pattern: Option<&str>,
         _table_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_table_privileges",
             &[
@@ -1615,7 +1615,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _table: Option<&str>,
         _scope: i32,
         _nullable: bool,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_best_row_identifier",
             &[
@@ -1636,7 +1636,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _catalog: Option<&str>,
         _schema: Option<&str>,
         _table: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_version_columns",
             &[
@@ -1657,9 +1657,9 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _catalog: Option<&str>,
         _schema: Option<&str>,
         table: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let table = table
-            .ok_or_else(|| DruidError::DriverError("Invalid table name: 'null'".to_owned()))?;
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
+        let table =
+            table.ok_or_else(|| RdbcError::DriverError("Invalid table name: 'null'".to_owned()))?;
         let labels = &[
             "TABLE_CAT",
             "TABLE_SCHEM",
@@ -1699,9 +1699,9 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         catalog: Option<&str>,
         schema: Option<&str>,
         table: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let table = table
-            .ok_or_else(|| DruidError::DriverError("Invalid table name: 'null'".to_owned()))?;
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
+        let table =
+            table.ok_or_else(|| RdbcError::DriverError("Invalid table name: 'null'".to_owned()))?;
         let keys = self
             .sqlite_foreign_keys(table, "sqlx_database_metadata_sqlite_get_imported_keys")
             .await?;
@@ -1758,9 +1758,9 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         catalog: Option<&str>,
         schema: Option<&str>,
         table: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let table = table
-            .ok_or_else(|| DruidError::DriverError("Invalid table name: 'null'".to_owned()))?;
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
+        let table =
+            table.ok_or_else(|| RdbcError::DriverError("Invalid table name: 'null'".to_owned()))?;
         let (canonical_table, primary_key_name, primary_columns) = self
             .sqlite_primary_key_info(table, "sqlx_database_metadata_sqlite_get_exported_keys")
             .await?;
@@ -1835,7 +1835,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         foreign_catalog: Option<&str>,
         foreign_schema: Option<&str>,
         foreign_table: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         if parent_table.is_none() {
             return self
                 .get_exported_keys(foreign_catalog, foreign_schema, foreign_table)
@@ -1852,7 +1852,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         )
     }
 
-    async fn get_type_info(&mut self) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    async fn get_type_info(&mut self) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_connection("sqlx_database_metadata_sqlite_get_type_info")?;
         let labels = &[
             "TYPE_NAME",
@@ -1916,7 +1916,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _schema_pattern: Option<&str>,
         _type_name_pattern: Option<&str>,
         _types: Option<&[i32]>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_ud_ts",
             &[
@@ -1936,7 +1936,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _catalog: Option<&str>,
         _schema_pattern: Option<&str>,
         _type_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_super_types",
             &[
@@ -1955,7 +1955,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _catalog: Option<&str>,
         _schema_pattern: Option<&str>,
         _table_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_super_tables",
             &["TABLE_CAT", "TABLE_SCHEM", "TABLE_NAME", "SUPERTABLE_NAME"],
@@ -1968,7 +1968,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         _schema_pattern: Option<&str>,
         _type_name_pattern: Option<&str>,
         _attribute_name_pattern: Option<&str>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.sqlite_empty_result_set(
             "sqlx_database_metadata_sqlite_get_attributes",
             &[
@@ -2004,9 +2004,9 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
         table: Option<&str>,
         _unique: bool,
         _approximate: bool,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
-        let table = table
-            .ok_or_else(|| DruidError::DriverError("Invalid table name: 'null'".to_owned()))?;
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
+        let table =
+            table.ok_or_else(|| RdbcError::DriverError("Invalid table name: 'null'".to_owned()))?;
         let labels = &[
             "TABLE_CAT",
             "TABLE_SCHEM",

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use druid::core::{DruidPooledConnection, Pool};
 use druid::dynamic::{DataSourceGroup, DynamicDataSource, SqlHint};
 use druid::sql::{CommonDataSource, DataSource};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::Wrapper;
 
 /// wrapper 层动态 RDBC 数据源，支持主从路由与数据源组热切换。
@@ -34,8 +34,11 @@ impl DynamicRdbcDataSource {
     pub async fn get_connection_for(
         &self,
         hint: SqlHint,
-    ) -> Result<DruidPooledConnection, DruidError> {
-        self.inner.get_connection_for(hint).await
+    ) -> Result<DruidPooledConnection, RdbcError> {
+        self.inner
+            .get_connection_for(hint)
+            .await
+            .map_err(RdbcError::from)
     }
 
     /// 原子切换整个数据源组。
@@ -60,7 +63,7 @@ impl CommonDataSource for DynamicRdbcDataSource {}
 
 #[async_trait]
 impl DataSource for DynamicRdbcDataSource {
-    async fn get_connection(&self) -> Result<DruidPooledConnection, DruidError> {
-        self.inner.get_connection().await
+    async fn get_connection(&self) -> Result<DruidPooledConnection, RdbcError> {
+        self.inner.get_connection().await.map_err(RdbcError::from)
     }
 }

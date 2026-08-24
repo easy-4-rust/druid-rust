@@ -6,7 +6,7 @@ use druid::core::{
     ConnectionRecycleDisposition, DruidPooledConnection, FilterChain, PhysicalConnectionLease,
     Pool as DruidPool, PoolState,
 };
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,9 +43,9 @@ impl SqlxDeadpoolPool {
         max_open: usize,
         acquire_timeout: Duration,
         filter_chain: Option<Arc<FilterChain>>,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         if max_open == 0 {
-            return Err(DruidError::Other(
+            return Err(RdbcError::Other(
                 "deadpool max_open must be greater than zero".to_string(),
             ));
         }
@@ -58,7 +58,7 @@ impl SqlxDeadpoolPool {
             .recycle_timeout(Some(acquire_timeout))
             .runtime(deadpool::Runtime::Tokio1)
             .build()
-            .map_err(|error| DruidError::Other(error.to_string()))?;
+            .map_err(|error| RdbcError::Other(error.to_string()))?;
         Ok(Self::from_pool(
             name,
             url,
@@ -105,18 +105,18 @@ impl SqlxDeadpoolPool {
         self.pool.close();
     }
 
-    fn map_pool_error(error: PoolError<DruidError>) -> DruidError {
+    fn map_pool_error(error: PoolError<RdbcError>) -> RdbcError {
         match error {
-            PoolError::Timeout(_) => DruidError::AcquireTimeout,
+            PoolError::Timeout(_) => RdbcError::AcquireTimeout,
             PoolError::Backend(error) => error,
-            PoolError::Closed => DruidError::PoolClosed,
+            PoolError::Closed => RdbcError::PoolClosed,
             PoolError::NoRuntimeSpecified | PoolError::PostCreateHook(_) => {
-                DruidError::Other(error.to_string())
+                RdbcError::Other(error.to_string())
             }
         }
     }
 
-    async fn acquire(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
+    async fn acquire(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
         self.connect_count.fetch_add(1, Ordering::Relaxed);
         let timeouts = Timeouts {
             wait: Some(timeout),
@@ -168,12 +168,12 @@ impl SqlxDeadpoolPool {
 #[async_trait::async_trait]
 impl DruidPool for SqlxDeadpoolPool {
     /// 获取池化连接。
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
         self.acquire(self.acquire_timeout).await
     }
 
     /// 在指定超时内获取池化连接。
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
         self.acquire(timeout).await
     }
 

@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDateTime, Timelike, Utc};
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::types::Value;
 
 /// Thin date-time wrapper that lets RDBC identify an SQL `TIMESTAMP` value.
@@ -14,22 +14,22 @@ impl Timestamp {
     /// Creates a timestamp from epoch `millis` on the UTC timeline.
     ///
     /// Out-of-range values return `InvalidArgument`. Corresponds to Java: `Timestamp(long)`.
-    pub fn from_millis(millis: i64) -> Result<Self, DruidError> {
+    pub fn from_millis(millis: i64) -> Result<Self, RdbcError> {
         DateTime::<Utc>::from_timestamp_millis(millis)
             .map(|value| Self(value.naive_utc()))
             .ok_or_else(|| {
-                DruidError::InvalidArgument(format!("invalid SQL TIMESTAMP millis: {millis}"))
+                RdbcError::InvalidArgument(format!("invalid SQL TIMESTAMP millis: {millis}"))
             })
     }
 
     /// Parses the RDBC timestamp escape format `yyyy-[m]m-[d]d hh:mm:ss[.f...]`.
     ///
     /// Invalid syntax or fields return `InvalidArgument`. Corresponds to Java: `valueOf(String)`.
-    pub fn value_of(value: &str) -> Result<Self, DruidError> {
+    pub fn value_of(value: &str) -> Result<Self, RdbcError> {
         NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
             .map(Self)
             .map_err(|error| {
-                DruidError::InvalidArgument(format!("invalid RDBC TIMESTAMP '{value}': {error}"))
+                RdbcError::InvalidArgument(format!("invalid RDBC TIMESTAMP '{value}': {error}"))
             })
     }
 
@@ -55,14 +55,14 @@ impl Timestamp {
     ///
     /// The value must be in 0..=999,999,999; otherwise `InvalidArgument` is returned.
     /// Corresponds to Java: `Timestamp#setNanos`.
-    pub fn set_nanos(&mut self, nanos: u32) -> Result<(), DruidError> {
+    pub fn set_nanos(&mut self, nanos: u32) -> Result<(), RdbcError> {
         if nanos > 999_999_999 {
-            return Err(DruidError::InvalidArgument(format!(
+            return Err(RdbcError::InvalidArgument(format!(
                 "nanos must be between 0 and 999999999: {nanos}"
             )));
         }
         self.0 = self.0.with_nanosecond(nanos).ok_or_else(|| {
-            DruidError::InvalidArgument(format!("nanos must be between 0 and 999999999: {nanos}"))
+            RdbcError::InvalidArgument(format!("nanos must be between 0 and 999999999: {nanos}"))
         })?;
         Ok(())
     }

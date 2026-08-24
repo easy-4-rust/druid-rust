@@ -7,8 +7,8 @@
 
 use super::druid_pooled_result_set::DruidPooledResultSetTrace;
 use super::{
-    DruidError, DruidPooledConnection, DruidPooledResultSet, ExecResult, FilterChain,
-    PhysicalResultSet, PhysicalStatement, Row, RowSetResultSet, SqlWarning, StatementExecuteResult,
+    DruidPooledConnection, DruidPooledResultSet, ExecResult, FilterChain, PhysicalResultSet,
+    PhysicalStatement, RdbcError, Row, RowSetResultSet, SqlWarning, StatementExecuteResult,
     StatementExecuteType, StatementGeneratedKeys, Unwrapped, Value, Wrapper,
 };
 use super::{ProxyAttributeValue, ProxyAttributes};
@@ -202,7 +202,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         sql: &str,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         self.ensure_open_for(connection)?;
         self.begin_single_execution(sql, StatementExecuteType::ExecuteQuery);
         let execute_start = Instant::now();
@@ -234,7 +234,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         sql: &str,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.ensure_open_for(connection)?;
         self.begin_single_execution(sql, StatementExecuteType::ExecuteQuery);
         let execute_start = Instant::now();
@@ -269,7 +269,7 @@ impl DruidPooledStatement {
     pub fn wrap_result_set(
         &self,
         physical: Arc<dyn PhysicalResultSet>,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         let result_set = DruidPooledResultSet::new(Arc::clone(&self.inner), physical)?;
         self.add_result_set_trace(result_set.trace());
         Ok(result_set)
@@ -283,7 +283,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         sql: &str,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         self.ensure_open_for(connection)?;
         self.begin_single_execution(sql, StatementExecuteType::ExecuteUpdate);
         let execute_start = Instant::now();
@@ -310,7 +310,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         sql: &str,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.execute_internal(connection, sql, StatementGeneratedKeys::None)
             .await
     }
@@ -324,7 +324,7 @@ impl DruidPooledStatement {
         connection: &mut DruidPooledConnection,
         sql: &str,
         auto_generated_keys: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.execute_internal(
             connection,
             sql,
@@ -339,7 +339,7 @@ impl DruidPooledStatement {
         connection: &mut DruidPooledConnection,
         sql: &str,
         column_indexes: &[i32],
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.execute_internal(
             connection,
             sql,
@@ -354,7 +354,7 @@ impl DruidPooledStatement {
         connection: &mut DruidPooledConnection,
         sql: &str,
         column_names: &[String],
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.execute_internal(
             connection,
             sql,
@@ -370,7 +370,7 @@ impl DruidPooledStatement {
     pub fn result_set(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<DruidPooledResultSet>, DruidError> {
+    ) -> Result<Option<DruidPooledResultSet>, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter_result = self.inner.statement.get_result_set();
         self.classify(connection, getter_result)?;
@@ -402,7 +402,7 @@ impl DruidPooledStatement {
     pub fn generated_keys(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<DruidPooledResultSet, DruidError> {
+    ) -> Result<DruidPooledResultSet, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter_result = self.inner.statement.get_generated_keys();
         self.classify(connection, getter_result)?;
@@ -418,7 +418,7 @@ impl DruidPooledStatement {
     pub fn more_results(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.more_results_internal(connection, None)
     }
 
@@ -430,7 +430,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         current: i32,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.more_results_internal(connection, Some(current))
     }
 
@@ -441,7 +441,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         sql: &str,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let rewritten_sql = self.inner.filter_chain.as_ref().map_or_else(
             || Ok(sql.to_owned()),
@@ -454,10 +454,7 @@ impl DruidPooledStatement {
     /// 清空批处理；已经关闭时与 Java 一样直接成功。
     ///
     /// 对应 Java：`DruidPooledStatement#clearBatch()`。
-    pub fn clear_batch(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    pub fn clear_batch(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         if self.is_closed() {
             return Ok(());
         }
@@ -474,7 +471,7 @@ impl DruidPooledStatement {
     pub async fn execute_batch(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         self.ensure_open_for(connection)?;
         self.begin_batch_execution();
         let batch_result = self.inner.statement.batch();
@@ -510,7 +507,7 @@ impl DruidPooledStatement {
     pub fn update_count(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i64, DruidError> {
+    ) -> Result<i64, RdbcError> {
         self.ensure_open_for(connection)?;
         let getter_result = self.inner.statement.get_update_count();
         self.classify(connection, getter_result)?;
@@ -518,7 +515,7 @@ impl DruidPooledStatement {
     }
 
     /// 返回结果集类型。
-    pub fn result_set_type(&self, connection: &DruidPooledConnection) -> Result<i32, DruidError> {
+    pub fn result_set_type(&self, connection: &DruidPooledConnection) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         Ok(self.inner.statement.options().result_set_type)
     }
@@ -527,7 +524,7 @@ impl DruidPooledStatement {
     pub fn result_set_concurrency(
         &self,
         connection: &DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         Ok(self.inner.statement.options().result_set_concurrency)
     }
@@ -536,7 +533,7 @@ impl DruidPooledStatement {
     pub fn result_set_holdability(
         &self,
         connection: &DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         Ok(self.inner.statement.options().result_set_holdability)
     }
@@ -545,7 +542,7 @@ impl DruidPooledStatement {
     pub fn max_field_size(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.max_field_size();
         self.classify(connection, result)
@@ -556,14 +553,14 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         max: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_max_field_size(max);
         self.classify(connection, result)
     }
 
     /// 返回最大结果行数。
-    pub fn max_rows(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, DruidError> {
+    pub fn max_rows(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.max_rows();
         self.classify(connection, result)
@@ -574,7 +571,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         max: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_max_rows(max);
         self.classify(connection, result)
@@ -585,7 +582,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         enabled: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_escape_processing(enabled);
         self.classify(connection, result)
@@ -595,7 +592,7 @@ impl DruidPooledStatement {
     pub fn query_timeout(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.query_timeout();
         self.classify(connection, result)
@@ -606,14 +603,14 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         seconds: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_query_timeout(seconds);
         self.classify(connection, result)
     }
 
     /// 取消当前执行。
-    pub fn cancel(&mut self, connection: &mut DruidPooledConnection) -> Result<(), DruidError> {
+    pub fn cancel(&mut self, connection: &mut DruidPooledConnection) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.cancel();
         self.classify(connection, result)
@@ -626,15 +623,14 @@ impl DruidPooledStatement {
     pub async fn warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<Option<SqlWarning>, DruidError> {
+    ) -> Result<Option<SqlWarning>, RdbcError> {
         self.ensure_open_for(connection)?;
         let filter_chain = self.inner.filter_chain.clone();
         let result = match filter_chain {
-            Some(filter_chain) => {
-                filter_chain
-                    .statement_warnings(self.inner.statement.as_ref())
-                    .await
-            }
+            Some(filter_chain) => filter_chain
+                .statement_warnings(self.inner.statement.as_ref())
+                .await
+                .map_err(RdbcError::from),
             None => self.inner.statement.warnings(),
         };
         self.classify(connection, result)
@@ -646,15 +642,14 @@ impl DruidPooledStatement {
     pub async fn clear_warnings(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let filter_chain = self.inner.filter_chain.clone();
         let result = match filter_chain {
-            Some(filter_chain) => {
-                filter_chain
-                    .statement_clear_warnings(self.inner.statement.as_ref())
-                    .await
-            }
+            Some(filter_chain) => filter_chain
+                .statement_clear_warnings(self.inner.statement.as_ref())
+                .await
+                .map_err(RdbcError::from),
             None => self.inner.statement.clear_warnings(),
         };
         self.classify(connection, result)
@@ -665,7 +660,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         name: &str,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_cursor_name(name);
         self.classify(connection, result)
@@ -676,7 +671,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         direction: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_fetch_direction(direction);
         self.classify(connection, result)
@@ -686,7 +681,7 @@ impl DruidPooledStatement {
     pub fn fetch_direction(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.fetch_direction();
         self.classify(connection, result)
@@ -697,17 +692,14 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         rows: i32,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_fetch_size(rows);
         self.classify(connection, result)
     }
 
     /// 返回抓取行数。
-    pub fn fetch_size(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<i32, DruidError> {
+    pub fn fetch_size(&mut self, connection: &mut DruidPooledConnection) -> Result<i32, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.fetch_size();
         self.classify(connection, result)
@@ -718,7 +710,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         poolable: bool,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.set_poolable(poolable);
         self.classify(connection, result)
@@ -733,7 +725,7 @@ impl DruidPooledStatement {
     pub fn close_on_completion(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.close_on_completion();
         self.classify(connection, result)
@@ -743,7 +735,7 @@ impl DruidPooledStatement {
     pub fn is_close_on_completion(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let result = self.inner.statement.is_close_on_completion();
         self.classify(connection, result)
@@ -755,7 +747,7 @@ impl DruidPooledStatement {
     pub fn close_with_connection(
         &mut self,
         connection: &mut DruidPooledConnection,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if self.is_closed() {
             return Ok(());
         }
@@ -777,13 +769,13 @@ impl DruidPooledStatement {
         result
     }
 
-    fn ensure_open_for(&self, connection: &DruidPooledConnection) -> Result<(), DruidError> {
+    fn ensure_open_for(&self, connection: &DruidPooledConnection) -> Result<(), RdbcError> {
         if self.is_closed()
             || self.inner.statement.is_closed()
             || !self.inner.lease_active.load(Ordering::Acquire)
             || !connection.is_same_open_lease(&self.inner.lease_active)
         {
-            Err(DruidError::Other("statement is closed".to_string()))
+            Err(RdbcError::Other("statement is closed".to_string()))
         } else {
             Ok(())
         }
@@ -794,7 +786,7 @@ impl DruidPooledStatement {
         connection: &mut DruidPooledConnection,
         sql: &str,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         self.begin_single_execution(sql, StatementExecuteType::Execute);
         let execute_start = Instant::now();
@@ -815,7 +807,7 @@ impl DruidPooledStatement {
         &mut self,
         connection: &mut DruidPooledConnection,
         current: Option<i32>,
-    ) -> Result<bool, DruidError> {
+    ) -> Result<bool, RdbcError> {
         self.ensure_open_for(connection)?;
         let physical_result = self.inner.statement.get_more_results(current);
         self.classify(connection, physical_result)?;
@@ -1037,8 +1029,8 @@ impl DruidPooledStatement {
     fn classify<T>(
         &mut self,
         connection: &mut DruidPooledConnection,
-        result: Result<T, DruidError>,
-    ) -> Result<T, DruidError> {
+        result: Result<T, RdbcError>,
+    ) -> Result<T, RdbcError> {
         let result = connection.classify_result(result);
         if result.is_err() {
             self.record_exception();

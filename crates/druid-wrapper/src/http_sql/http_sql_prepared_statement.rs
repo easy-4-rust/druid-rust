@@ -1,5 +1,5 @@
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
     SqlTextStatement,
@@ -12,7 +12,7 @@ use tokio::sync::watch;
 
 /// HTTP SQL 请求执行期间由 Druid 控制面产生的中断结果。
 pub(crate) enum HttpSqlStatementExecutionError {
-    Driver(DruidError),
+    Driver(RdbcError),
     TimedOut,
     Cancelled,
 }
@@ -44,7 +44,7 @@ impl HttpSqlPreparedStatement {
         execution: F,
     ) -> Result<T, HttpSqlStatementExecutionError>
     where
-        F: Future<Output = Result<T, DruidError>>,
+        F: Future<Output = Result<T, RdbcError>>,
     {
         let generation = *self.cancel_generation.borrow();
         let mut cancellation = self.cancel_generation.subscribe();
@@ -88,23 +88,23 @@ impl PhysicalPreparedStatement for HttpSqlPreparedStatement {
         self
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         self.statement.max_rows()
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         self.statement.set_max_rows(max)
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.statement.query_timeout()
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         self.statement.set_query_timeout(seconds)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         self.statement.cancel()?;
         let next = (*self.cancel_generation.borrow()).wrapping_add(1);
         self.cancel_generation.send_replace(next);
@@ -115,30 +115,30 @@ impl PhysicalPreparedStatement for HttpSqlPreparedStatement {
         &self,
         parameter_index: usize,
         parameter: &PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.parameter_state.set(parameter_index, parameter)
     }
 
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         self.parameter_state.clear_parameters();
         Ok(())
     }
 
-    fn add_batch(&self, params: &[Value]) -> Result<(), DruidError> {
+    fn add_batch(&self, params: &[Value]) -> Result<(), RdbcError> {
         self.parameter_state.add_values(params);
         Ok(())
     }
 
-    fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), DruidError> {
+    fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), RdbcError> {
         self.parameter_state.add_parameters(params)
     }
 
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         self.parameter_state.clear_batches();
         Ok(())
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         self.statement.close()
     }

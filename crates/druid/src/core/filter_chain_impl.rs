@@ -507,7 +507,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_length(self).await
         } else {
-            self.wrapper.raw_clob().length().await
+            self.wrapper
+                .raw_clob()
+                .length()
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -524,6 +528,7 @@ impl<'a> ClobFilterChain<'a> {
                 .raw_clob()
                 .get_sub_string(position, length)
                 .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -532,7 +537,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_get_character_stream(self).await
         } else {
-            self.wrapper.raw_clob().get_character_stream().await
+            self.wrapper
+                .raw_clob()
+                .get_character_stream()
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -541,7 +550,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_get_ascii_stream(self).await
         } else {
-            self.wrapper.raw_clob().get_ascii_stream().await
+            self.wrapper
+                .raw_clob()
+                .get_ascii_stream()
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -558,6 +571,7 @@ impl<'a> ClobFilterChain<'a> {
                 .raw_clob()
                 .position_string(pattern, start)
                 .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -570,7 +584,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_position_clob(self, pattern, start).await
         } else {
-            self.wrapper.raw_clob().position_clob(pattern, start).await
+            self.wrapper
+                .raw_clob()
+                .position_clob(pattern, start)
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -583,7 +601,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_set_string(self, position, value).await
         } else {
-            self.wrapper.raw_clob().set_string(position, value).await
+            self.wrapper
+                .raw_clob()
+                .set_string(position, value)
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -604,6 +626,7 @@ impl<'a> ClobFilterChain<'a> {
                 .raw_clob()
                 .set_string_range(position, value, offset, length)
                 .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -615,7 +638,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_set_ascii_stream(self, position).await
         } else {
-            self.wrapper.raw_clob().set_ascii_stream(position).await
+            self.wrapper
+                .raw_clob()
+                .set_ascii_stream(position)
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -627,7 +654,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_set_character_stream(self, position).await
         } else {
-            self.wrapper.raw_clob().set_character_stream(position).await
+            self.wrapper
+                .raw_clob()
+                .set_character_stream(position)
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -636,7 +667,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_truncate(self, length).await
         } else {
-            self.wrapper.raw_clob().truncate(length).await
+            self.wrapper
+                .raw_clob()
+                .truncate(length)
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -645,7 +680,11 @@ impl<'a> ClobFilterChain<'a> {
         if let Some(filter) = self.next_filter() {
             filter.clob_free(self).await
         } else {
-            self.wrapper.raw_clob().free().await
+            self.wrapper
+                .raw_clob()
+                .free()
+                .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -664,6 +703,7 @@ impl<'a> ClobFilterChain<'a> {
                 .raw_clob()
                 .get_character_stream_range(position, length)
                 .await
+                .map_err(DruidError::from)
         }
     }
 
@@ -790,7 +830,10 @@ impl<'a> PhysicalConnectionCloseFilterChain<'a> {
             self.position += 1;
             filter.connection_close(self).await
         } else {
-            self.factory.close(self.connection).await
+            self.factory
+                .close(self.connection)
+                .await
+                .map_err(DruidError::from)
         }
     }
 }
@@ -815,7 +858,10 @@ impl<'a> DataSourceReleaseConnectionFilterChain<'a> {
                 .data_source_release_connection(self, connection)
                 .await
         } else {
-            connection.recycle_from_data_source_filter().await
+            connection
+                .recycle_from_data_source_filter()
+                .await
+                .map_err(DruidError::from)
         }
     }
 }
@@ -898,7 +944,7 @@ impl<'a> ConnectionLobFilterChain<'a> {
             self.position += 1;
             filter.connection_create_blob(self).await
         } else {
-            self.physical.create_blob().await
+            self.physical.create_blob().await.map_err(DruidError::from)
         }
     }
 
@@ -909,7 +955,7 @@ impl<'a> ConnectionLobFilterChain<'a> {
             self.position += 1;
             filter.connection_create_clob(self).await
         } else {
-            self.physical.create_clob().await
+            self.physical.create_clob().await.map_err(DruidError::from)
         }
     }
 
@@ -920,7 +966,10 @@ impl<'a> ConnectionLobFilterChain<'a> {
             self.position += 1;
             filter.connection_create_n_clob(self).await
         } else {
-            self.physical.create_n_clob().await
+            self.physical
+                .create_n_clob()
+                .await
+                .map_err(DruidError::from)
         }
     }
 }
@@ -965,7 +1014,7 @@ impl<'filters, 'connection> ConnectionDatabaseMetaDataFilterChain<'filters, 'con
             self.position += 1;
             filter.connection_get_meta_data(self)
         } else {
-            self.physical.database_meta_data()
+            self.physical.database_meta_data().map_err(DruidError::from)
         }
     }
 }
@@ -986,7 +1035,7 @@ impl<'a> ConnectionWarningFilterChain<'a> {
             self.position += 1;
             filter.connection_get_warnings(self).await
         } else {
-            self.physical.warnings().await
+            self.physical.warnings().await.map_err(DruidError::from)
         }
     }
 
@@ -997,7 +1046,10 @@ impl<'a> ConnectionWarningFilterChain<'a> {
             self.position += 1;
             filter.connection_clear_warnings(self).await
         } else {
-            self.physical.clear_warnings().await
+            self.physical
+                .clear_warnings()
+                .await
+                .map_err(DruidError::from)
         }
     }
 }
@@ -1051,6 +1103,7 @@ impl<'a> StatementWarningFilterChain<'a> {
                 StatementWarningTarget::Statement(physical) => physical.warnings(),
                 StatementWarningTarget::PreparedStatement(physical) => physical.warnings(),
             }
+            .map_err(DruidError::from)
         }
     }
 
@@ -1065,6 +1118,7 @@ impl<'a> StatementWarningFilterChain<'a> {
                 StatementWarningTarget::Statement(physical) => physical.clear_warnings(),
                 StatementWarningTarget::PreparedStatement(physical) => physical.clear_warnings(),
             }
+            .map_err(DruidError::from)
         }
     }
 }

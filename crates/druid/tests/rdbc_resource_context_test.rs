@@ -1,4 +1,4 @@
-use druid::core::{DruidError, RdbcObject, RdbcTypeMap, Value};
+use druid::core::{RdbcError, RdbcObject, RdbcTypeMap, Value};
 use druid::spi::{
     RdbcRefAccess, RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceContext,
     RdbcResourceFactory, RdbcResourceId, RdbcResourceKind, RdbcResourceOwner, RdbcResourceState,
@@ -25,7 +25,7 @@ impl RdbcResourceAccess for CountingAccess {
         RdbcResourceCapabilities::FREE
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         self.free_count.fetch_add(1, Ordering::SeqCst);
         tokio::task::yield_now().await;
         Ok(())
@@ -45,7 +45,7 @@ impl RdbcResourceOwner for CountingOwner {
         &self,
         _resource_id: &RdbcResourceId,
         _kind: RdbcResourceKind,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.releases.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -54,7 +54,7 @@ impl RdbcResourceOwner for CountingOwner {
         &self,
         _resource_id: &RdbcResourceId,
         _kind: RdbcResourceKind,
-        _error: &DruidError,
+        _error: &RdbcError,
     ) {
         self.failures.fetch_add(1, Ordering::SeqCst);
     }
@@ -76,22 +76,19 @@ impl RdbcResourceAccess for ReadOnlyRefAccess {
 
 #[async_trait::async_trait]
 impl RdbcRefAccess for ReadOnlyRefAccess {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         Ok("schema.kind".to_string())
     }
 
-    async fn object(&self) -> Result<RdbcObject, DruidError> {
-        Err(DruidError::DriverError("read failed".to_string()))
+    async fn object(&self) -> Result<RdbcObject, RdbcError> {
+        Err(RdbcError::DriverError("read failed".to_string()))
     }
 
-    async fn object_with_type_map(
-        &self,
-        _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, DruidError> {
+    async fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, RdbcError> {
         unreachable!("the context does not advertise TYPE_MAP")
     }
 
-    async fn set_object(&self, _value: RdbcObject) -> Result<(), DruidError> {
+    async fn set_object(&self, _value: RdbcObject) -> Result<(), RdbcError> {
         unreachable!("the context does not advertise WRITE")
     }
 }
@@ -148,7 +145,7 @@ async fn handle_enforces_capabilities_reports_failures_and_honors_invalidation()
 
     assert_eq!(
         reference.object().await,
-        Err(DruidError::DriverError("read failed".to_string()))
+        Err(RdbcError::DriverError("read failed".to_string()))
     );
     assert_eq!(owner.failures.load(Ordering::SeqCst), 1);
 

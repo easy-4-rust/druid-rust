@@ -4,7 +4,7 @@
 //! string is a sequence of UTF-16 code units and can contain unpaired surrogates, which a Rust
 //! UTF-8 `String` cannot represent without loss.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use std::fmt;
 
 /// Lossless RDBC string represented as Java-compatible UTF-16 code units.
@@ -44,9 +44,9 @@ impl RdbcString {
     /// Converts the value to a Rust UTF-8 `String` without replacement characters.
     ///
     /// Returns an error when an unpaired surrogate prevents a lossless conversion.
-    pub fn to_rust_string(&self) -> Result<String, DruidError> {
+    pub fn to_rust_string(&self) -> Result<String, RdbcError> {
         String::from_utf16(&self.code_units).map_err(|error| {
-            DruidError::DriverError(format!("RDBC string contains invalid UTF-16: {error}"))
+            RdbcError::DriverError(format!("RDBC string contains invalid UTF-16: {error}"))
         })
     }
 }

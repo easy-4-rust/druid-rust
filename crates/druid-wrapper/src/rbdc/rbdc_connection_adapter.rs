@@ -3,7 +3,7 @@
 use super::rbdc_prepared_statement::RbdcPreparedStatement;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlWarning};
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -14,20 +14,20 @@ use druid_rdbc::types::{Row, Savepoint, Value};
 use futures::StreamExt;
 use std::sync::Arc;
 
-fn parse_rbdc_string(value: rbs::Value, type_name: &str) -> Result<String, DruidError> {
+fn parse_rbdc_string(value: rbs::Value, type_name: &str) -> Result<String, RdbcError> {
     match value {
         rbs::Value::String(value) => Ok(value),
-        actual => Err(DruidError::DriverError(format!(
+        actual => Err(RdbcError::DriverError(format!(
             "RBDC {type_name} extension must contain String, got {actual:?}"
         ))),
     }
 }
 
-fn parse_rbdc_datetime(value: &str) -> Result<NaiveDateTime, DruidError> {
+fn parse_rbdc_datetime(value: &str) -> Result<NaiveDateTime, RdbcError> {
     NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f")
         .or_else(|_| NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f"))
         .or_else(|_| DateTime::parse_from_rfc3339(value).map(|value| value.naive_local()))
-        .map_err(|error| DruidError::DriverError(error.to_string()))
+        .map_err(|error| RdbcError::DriverError(error.to_string()))
 }
 
 /// RBDC 物理连接适配器。
@@ -58,11 +58,11 @@ impl RbdcConnectionAdapter {
         }
     }
 
-    fn driver_error(error: rbdc::Error) -> DruidError {
+    fn driver_error(error: rbdc::Error) -> RdbcError {
         // RBDC 4.9 的公开 `rbdc::Error` 是 `rbs::Error::E(String)`，没有
         // vendor code 或 SQLState。仍须保留“数据库驱动异常”这一结构化边界，
         // 让 ExceptionSorter 可以按消息规则分类，而不是降级成普通错误。
-        DruidError::SqlException(Box::new(
+        RdbcError::SqlException(Box::new(
             SqlException::driver(0, error.to_string()).with_class_name("rbdc::Error"),
         ))
     }
@@ -71,7 +71,7 @@ impl RbdcConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<(Vec<Row>, Vec<String>), DruidError> {
+    ) -> Result<(Vec<Row>, Vec<String>), RdbcError> {
         let mut stream = self
             .connection
             .exec_rows(sql, Self::params_to_rbdc(params))
@@ -123,7 +123,7 @@ impl RbdcConnectionAdapter {
         }
     }
 
-    fn from_rbdc_value(value: rbs::Value) -> Result<Value, DruidError> {
+    fn from_rbdc_value(value: rbs::Value) -> Result<Value, RdbcError> {
         match value {
             rbs::Value::Null => Ok(Value::Null),
             rbs::Value::Bool(value) => Ok(Value::Bool(value)),
@@ -132,49 +132,49 @@ impl RbdcConnectionAdapter {
             rbs::Value::U32(value) => Ok(Value::Int(i64::from(value))),
             rbs::Value::U64(value) => i64::try_from(value)
                 .map(Value::Int)
-                .map_err(|_| DruidError::DriverError("RBDC u64 value exceeds i64".to_string())),
+                .map_err(|_| RdbcError::DriverError("RBDC u64 value exceeds i64".to_string())),
             rbs::Value::F32(value) => Ok(Value::Float(f64::from(value))),
             rbs::Value::F64(value) => Ok(Value::Float(value)),
             rbs::Value::String(value) => Ok(Value::String(value)),
             rbs::Value::Binary(value) => Ok(Value::Bytes(value)),
-            rbs::Value::Array(_) => Err(DruidError::DriverError(
+            rbs::Value::Array(_) => Err(RdbcError::DriverError(
                 "RBDC array value is not represented by druid::core::Value".to_string(),
             )),
-            rbs::Value::Map(_) => Err(DruidError::DriverError(
+            rbs::Value::Map(_) => Err(RdbcError::DriverError(
                 "RBDC map value is not represented by druid::core::Value".to_string(),
             )),
             rbs::Value::Ext("Decimal", value) => parse_rbdc_string(*value, "Decimal")?
                 .parse::<BigDecimal>()
                 .map(Value::Decimal)
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             rbs::Value::Ext("Date", value) => {
                 NaiveDate::parse_from_str(&parse_rbdc_string(*value, "Date")?, "%Y-%m-%d")
                     .map(Value::Date)
-                    .map_err(|error| DruidError::DriverError(error.to_string()))
+                    .map_err(|error| RdbcError::DriverError(error.to_string()))
             }
             rbs::Value::Ext("Time", value) => {
                 NaiveTime::parse_from_str(&parse_rbdc_string(*value, "Time")?, "%H:%M:%S%.f")
                     .map(Value::Time)
-                    .map_err(|error| DruidError::DriverError(error.to_string()))
+                    .map_err(|error| RdbcError::DriverError(error.to_string()))
             }
             rbs::Value::Ext("DateTime", value) => {
                 parse_rbdc_datetime(&parse_rbdc_string(*value, "DateTime")?).map(Value::Timestamp)
             }
             rbs::Value::Ext("Timestamp", value) => {
                 let millis = value.as_i64().ok_or_else(|| {
-                    DruidError::DriverError(
+                    RdbcError::DriverError(
                         "RBDC Timestamp extension must contain integer milliseconds".to_string(),
                     )
                 })?;
                 DateTime::<Utc>::from_timestamp_millis(millis)
                     .map(|value| Value::Timestamp(value.naive_utc()))
                     .ok_or_else(|| {
-                        DruidError::DriverError(format!(
+                        RdbcError::DriverError(format!(
                             "RBDC Timestamp milliseconds {millis} are out of range"
                         ))
                     })
             }
-            rbs::Value::Ext(name, _) => Err(DruidError::DriverError(format!(
+            rbs::Value::Ext(name, _) => Err(RdbcError::DriverError(format!(
                 "RBDC extension value {name} is not represented by druid::core::Value"
             ))),
         }
@@ -184,7 +184,7 @@ impl RbdcConnectionAdapter {
         params.into_iter().map(Self::to_rbdc_value).collect()
     }
 
-    fn validate_savepoint_name(name: &str) -> Result<(), DruidError> {
+    fn validate_savepoint_name(name: &str) -> Result<(), RdbcError> {
         let valid = !name.is_empty()
             && name
                 .bytes()
@@ -192,13 +192,13 @@ impl RbdcConnectionAdapter {
         if valid {
             Ok(())
         } else {
-            Err(DruidError::DriverError(
+            Err(RdbcError::DriverError(
                 "savepoint name must contain only ASCII letters, digits, or '_'".to_string(),
             ))
         }
     }
 
-    async fn execute_control_statement(&mut self, sql: &str) -> Result<(), DruidError> {
+    async fn execute_control_statement(&mut self, sql: &str) -> Result<(), RdbcError> {
         self.connection
             .exec(sql, Vec::new())
             .await
@@ -209,7 +209,7 @@ impl RbdcConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for RbdcConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         let result = self
             .connection
             .exec(sql, Self::params_to_rbdc(params))
@@ -219,7 +219,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             Value::Null => None,
             Value::Int(value) => Some(value),
             other => {
-                return Err(DruidError::DriverError(format!(
+                return Err(RdbcError::DriverError(format!(
                     "RBDC last_insert_id must be an integer or null, got {other}"
                 )));
             }
@@ -231,7 +231,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         })
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.fetch_rows_with_labels(sql, params)
             .await
             .map(|(rows, _)| rows)
@@ -241,7 +241,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let (rows, labels) = self.fetch_rows_with_labels(sql, params).await?;
         Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
     }
@@ -249,9 +249,9 @@ impl PhysicalConnection for RbdcConnectionAdapter {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         if self.closed || self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         // RBDC 的公开 Connection SPI 在 exec 内部完成驱动 prepare/cache，
         // 因此这里保存经过完整 Druid key 区分后的 SQL token。
@@ -262,12 +262,12 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let statement = statement
             .as_any()
             .downcast_ref::<RbdcPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
@@ -279,12 +279,12 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let rbdc_statement = statement
             .as_any()
             .downcast_ref::<RbdcPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
@@ -292,7 +292,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             .take_batches(parameter_sets.len())
             .await?
             .ok_or_else(|| {
-                DruidError::InvalidArgument(
+                RdbcError::InvalidArgument(
                     "RBDC physical prepared batch has not been populated".to_string(),
                 )
             })?;
@@ -303,8 +303,8 @@ impl PhysicalConnection for RbdcConnectionAdapter {
                     update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
                 }
                 Err(error) => {
-                    return Err(DruidError::BatchUpdateException {
-                        update_counts,
+                    return Err(RdbcError::BatchUpdateException {
+                        update_counts: update_counts.into(),
                         cause: Box::new(error),
                     });
                 }
@@ -317,12 +317,12 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let statement = statement
             .as_any()
             .downcast_ref::<RbdcPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
@@ -334,9 +334,9 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         let (rows, labels) = self.fetch_rows_with_labels(statement.sql(), params).await?;
         Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
@@ -346,12 +346,12 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let rbdc_statement = statement
             .as_any()
             .downcast_ref::<RbdcPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "prepared statement was not created by RbdcConnectionAdapter".to_string(),
                 )
             })?;
@@ -361,19 +361,19 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         self.fetch_prepared_result_set(statement, params).await
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         self.connection.begin().await.map_err(Self::driver_error)?;
         self.auto_commit = false;
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         self.connection.commit().await.map_err(Self::driver_error)?;
         self.auto_commit = true;
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         self.connection
             .rollback()
             .await
@@ -382,7 +382,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         Ok(())
     }
 
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         let name = savepoint
             .name
             .clone()
@@ -392,7 +392,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             .await
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         let savepoint = Savepoint {
             id: self.savepoint_sequence,
@@ -403,7 +403,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         Ok(savepoint)
     }
 
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
         Self::validate_savepoint_name(name)?;
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         self.execute_control_statement(&format!("SAVEPOINT {name}"))
@@ -414,7 +414,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         })
     }
 
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         let name = savepoint
             .name
             .clone()
@@ -424,11 +424,11 @@ impl PhysicalConnection for RbdcConnectionAdapter {
             .await
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         self.connection.ping().await.map_err(Self::driver_error)
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.connection.close().await.map_err(Self::driver_error)?;
             self.closed = true;
@@ -454,9 +454,9 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         }
     }
 
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         if self.closed || self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(Box::new(
             super::rbdc_database_meta_data::RbdcDatabaseMetaData::new(&self.driver_name),
@@ -467,7 +467,7 @@ impl PhysicalConnection for RbdcConnectionAdapter {
         self.auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         match (self.auto_commit, auto_commit) {
             (true, false) => self.begin().await,
             (false, true) => self.commit().await,
@@ -480,9 +480,9 @@ impl PhysicalConnection for RbdcConnectionAdapter {
     /// 对应 Java：`java.sql.Connection#getWarnings()`。RBDC 的公开 Connection
     /// SPI 不暴露 JDBC warning 链，因此存活连接返回 `None`；关闭或已丢弃连接
     /// 返回 `ConnectionDiscarded`。
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         if self.closed || self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(None)
     }
@@ -491,9 +491,9 @@ impl PhysicalConnection for RbdcConnectionAdapter {
     ///
     /// 对应 Java：`java.sql.Connection#clearWarnings()`。RBDC 不保留可清理的
     /// warning 状态，存活连接无操作成功。
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         if self.closed || self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(())
     }

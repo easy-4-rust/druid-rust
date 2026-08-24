@@ -3,7 +3,7 @@
 //! 对应 Java：`java.sql.ResultSetMetaData`。eager Adapter 使用列 descriptor，
 //! 真实 driver 使用 `PhysicalResultSetMetaData` 逐方法委托并保留 Wrapper 身份。
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::spi::{
     PhysicalResultSetMetaData, ResultSetColumnMeta, ResultSetColumnType, ResultSetNullability,
     Unwrapped, Wrapper,
@@ -58,7 +58,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列数。对应 Java：`ResultSetMetaData#getColumnCount()`。
-    pub fn column_count(&self) -> Result<usize, DruidError> {
+    pub fn column_count(&self) -> Result<usize, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(columns) => Ok(columns.len()),
             ResultSetMetaDataBackend::Physical(physical) => physical.column_count(),
@@ -66,7 +66,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回 1-based 列标签。
-    pub fn column_label(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn column_label(&self, column_index: usize) -> Result<String, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.label.clone()),
             ResultSetMetaDataBackend::Physical(physical) => physical.column_label(column_index),
@@ -74,7 +74,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回 1-based 列类型。
-    pub fn column_type(&self, column_index: usize) -> Result<ResultSetColumnType, DruidError> {
+    pub fn column_type(&self, column_index: usize) -> Result<ResultSetColumnType, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.column_type),
             ResultSetMetaDataBackend::Physical(physical) => physical.column_type(column_index),
@@ -82,7 +82,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否允许 SQL NULL。
-    pub fn is_nullable(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_nullable(&self, column_index: usize) -> Result<bool, RdbcError> {
         Ok(matches!(
             self.nullability(column_index)?,
             ResultSetNullability::Nullable
@@ -90,7 +90,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回 Java 三态可空性。
-    pub fn nullability(&self, column_index: usize) -> Result<ResultSetNullability, DruidError> {
+    pub fn nullability(&self, column_index: usize) -> Result<ResultSetNullability, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.nullability),
             ResultSetMetaDataBackend::Physical(physical) => physical.nullability(column_index),
@@ -98,12 +98,12 @@ impl ResultSetMetaData {
     }
 
     /// 返回 Java `columnNoNulls/columnNullable/columnNullableUnknown` 数值。
-    pub fn nullable_code(&self, column_index: usize) -> Result<i32, DruidError> {
+    pub fn nullable_code(&self, column_index: usize) -> Result<i32, RdbcError> {
         Ok(self.nullability(column_index)?.rdbc_code())
     }
 
     /// 返回列是否自动递增。
-    pub fn is_auto_increment(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_auto_increment(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.auto_increment),
             ResultSetMetaDataBackend::Physical(physical) => {
@@ -113,7 +113,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否区分大小写。
-    pub fn is_case_sensitive(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_case_sensitive(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.case_sensitive),
             ResultSetMetaDataBackend::Physical(physical) => {
@@ -123,7 +123,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否可用于 WHERE 搜索。
-    pub fn is_searchable(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_searchable(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.searchable),
             ResultSetMetaDataBackend::Physical(physical) => physical.is_searchable(column_index),
@@ -131,7 +131,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否为货币值。
-    pub fn is_currency(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_currency(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.currency),
             ResultSetMetaDataBackend::Physical(physical) => physical.is_currency(column_index),
@@ -139,7 +139,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回数值列是否有符号。
-    pub fn is_signed(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_signed(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.signed),
             ResultSetMetaDataBackend::Physical(physical) => physical.is_signed(column_index),
@@ -147,7 +147,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回最大显示字符数；驱动未知时为零。
-    pub fn column_display_size(&self, column_index: usize) -> Result<usize, DruidError> {
+    pub fn column_display_size(&self, column_index: usize) -> Result<usize, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.display_size),
             ResultSetMetaDataBackend::Physical(physical) => {
@@ -157,7 +157,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回底层列名。
-    pub fn column_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn column_name(&self, column_index: usize) -> Result<String, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.name.clone()),
             ResultSetMetaDataBackend::Physical(physical) => physical.column_name(column_index),
@@ -165,7 +165,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回 schema 名；驱动未知时为空字符串。
-    pub fn schema_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn schema_name(&self, column_index: usize) -> Result<String, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => {
                 Ok(self.column(column_index)?.schema_name.clone())
@@ -175,7 +175,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回数值精度；驱动未知时为零。
-    pub fn precision(&self, column_index: usize) -> Result<usize, DruidError> {
+    pub fn precision(&self, column_index: usize) -> Result<usize, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.precision),
             ResultSetMetaDataBackend::Physical(physical) => physical.precision(column_index),
@@ -183,7 +183,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回小数位数；驱动未知时为零。
-    pub fn scale(&self, column_index: usize) -> Result<usize, DruidError> {
+    pub fn scale(&self, column_index: usize) -> Result<usize, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.scale),
             ResultSetMetaDataBackend::Physical(physical) => physical.scale(column_index),
@@ -191,7 +191,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回表名；驱动未知时为空字符串。
-    pub fn table_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn table_name(&self, column_index: usize) -> Result<String, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => {
                 Ok(self.column(column_index)?.table_name.clone())
@@ -201,7 +201,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回 catalog 名；驱动未知时为空字符串。
-    pub fn catalog_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn catalog_name(&self, column_index: usize) -> Result<String, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => {
                 Ok(self.column(column_index)?.catalog_name.clone())
@@ -211,12 +211,12 @@ impl ResultSetMetaData {
     }
 
     /// 返回 `java.sql.Types` 数值。
-    pub fn rdbc_type(&self, column_index: usize) -> Result<i32, DruidError> {
+    pub fn rdbc_type(&self, column_index: usize) -> Result<i32, RdbcError> {
         Ok(self.column_type(column_index)?.rdbc_type())
     }
 
     /// 返回数据库类型名。
-    pub fn column_type_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn column_type_name(&self, column_index: usize) -> Result<String, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => {
                 Ok(self.column(column_index)?.type_name.clone())
@@ -226,7 +226,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否只读。
-    pub fn is_read_only(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_read_only(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.read_only),
             ResultSetMetaDataBackend::Physical(physical) => physical.is_read_only(column_index),
@@ -234,7 +234,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否可写。
-    pub fn is_writable(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_writable(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => Ok(self.column(column_index)?.writable),
             ResultSetMetaDataBackend::Physical(physical) => physical.is_writable(column_index),
@@ -242,7 +242,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回列是否确定可写。
-    pub fn is_definitely_writable(&self, column_index: usize) -> Result<bool, DruidError> {
+    pub fn is_definitely_writable(&self, column_index: usize) -> Result<bool, RdbcError> {
         match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => {
                 Ok(self.column(column_index)?.definitely_writable)
@@ -254,7 +254,7 @@ impl ResultSetMetaData {
     }
 
     /// 返回 Java typed getter 对应类名。
-    pub fn column_class_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn column_class_name(&self, column_index: usize) -> Result<String, RdbcError> {
         let class_name = match &self.backend {
             ResultSetMetaDataBackend::Columns(_) => self.column(column_index)?.class_name.clone(),
             ResultSetMetaDataBackend::Physical(physical) => {
@@ -269,65 +269,65 @@ impl ResultSetMetaData {
     }
 
     /// 对应 Java `getColumnCount`。
-    pub fn get_column_count(&self) -> Result<usize, DruidError> {
+    pub fn get_column_count(&self) -> Result<usize, RdbcError> {
         self.column_count()
     }
     /// 对应 Java `getColumnLabel`。
-    pub fn get_column_label(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_column_label(&self, column_index: usize) -> Result<String, RdbcError> {
         self.column_label(column_index)
     }
     /// 对应 Java `getColumnName`。
-    pub fn get_column_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_column_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.column_name(column_index)
     }
     /// 对应 Java `getColumnType`。
-    pub fn get_column_type(&self, column_index: usize) -> Result<i32, DruidError> {
+    pub fn get_column_type(&self, column_index: usize) -> Result<i32, RdbcError> {
         self.rdbc_type(column_index)
     }
     /// 对应 Java `getColumnTypeName`。
-    pub fn get_column_type_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_column_type_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.column_type_name(column_index)
     }
     /// 对应 Java `getColumnClassName`。
-    pub fn get_column_class_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_column_class_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.column_class_name(column_index)
     }
     /// 对应 Java `getSchemaName`。
-    pub fn get_schema_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_schema_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.schema_name(column_index)
     }
     /// 对应 Java `getTableName`。
-    pub fn get_table_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_table_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.table_name(column_index)
     }
     /// 对应 Java `getCatalogName`。
-    pub fn get_catalog_name(&self, column_index: usize) -> Result<String, DruidError> {
+    pub fn get_catalog_name(&self, column_index: usize) -> Result<String, RdbcError> {
         self.catalog_name(column_index)
     }
     /// 对应 Java `getPrecision`。
-    pub fn get_precision(&self, column_index: usize) -> Result<usize, DruidError> {
+    pub fn get_precision(&self, column_index: usize) -> Result<usize, RdbcError> {
         self.precision(column_index)
     }
     /// 对应 Java `getScale`。
-    pub fn get_scale(&self, column_index: usize) -> Result<usize, DruidError> {
+    pub fn get_scale(&self, column_index: usize) -> Result<usize, RdbcError> {
         self.scale(column_index)
     }
     /// 对应 Java `getColumnDisplaySize`。
-    pub fn get_column_display_size(&self, column_index: usize) -> Result<usize, DruidError> {
+    pub fn get_column_display_size(&self, column_index: usize) -> Result<usize, RdbcError> {
         self.column_display_size(column_index)
     }
 
-    fn column(&self, column_index: usize) -> Result<&ResultSetColumnMeta, DruidError> {
+    fn column(&self, column_index: usize) -> Result<&ResultSetColumnMeta, RdbcError> {
         let ResultSetMetaDataBackend::Columns(columns) = &self.backend else {
-            return Err(DruidError::Other(
+            return Err(RdbcError::Other(
                 "physical metadata does not expose an eager column descriptor".to_string(),
             ));
         };
         let index = column_index
             .checked_sub(1)
-            .ok_or_else(|| DruidError::InvalidArgument("column_index is 1-based".to_string()))?;
+            .ok_or_else(|| RdbcError::InvalidArgument("column_index is 1-based".to_string()))?;
         columns.get(index).ok_or_else(|| {
-            DruidError::InvalidArgument(format!(
+            RdbcError::InvalidArgument(format!(
                 "column_index {column_index} exceeds metadata width"
             ))
         })

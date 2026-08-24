@@ -4,7 +4,7 @@
 //! 使用 Calendar 的时区解释数据库值；Rust 侧保留时区标识以及“是否调用了
 //! Calendar 重载”，由具体驱动完成时区规则解析。
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 
 /// RDBC 日期时间转换使用的 Calendar 时区。
 ///
@@ -23,10 +23,10 @@ impl RdbcCalendar {
     ///
     /// # 返回
     /// 非空时区标识；空值返回结构化驱动错误。
-    pub fn new(time_zone_id: impl Into<String>) -> Result<Self, DruidError> {
+    pub fn new(time_zone_id: impl Into<String>) -> Result<Self, RdbcError> {
         let time_zone_id = time_zone_id.into();
         if time_zone_id.trim().is_empty() {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "RDBC Calendar time zone id must not be empty".to_string(),
             ));
         }

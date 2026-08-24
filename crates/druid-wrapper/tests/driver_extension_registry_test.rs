@@ -3,7 +3,7 @@
 //! Verifies that druid-wrapper's inventory registrations are visible through
 //! Core's `lookup_driver_extension` by database type.
 
-use druid::core::DruidError;
+use druid::core::RdbcError;
 
 /// Ensure driver extension registrations are linked before tests run.
 fn ensure_extensions() {
@@ -47,7 +47,7 @@ fn unknown_extension_returns_no_driver_extension() {
     let result = druid::core::lookup_driver_extension("nonexistent_db_xyz");
     assert!(result.is_err());
     match result {
-        Err(DruidError::NoDriverExtension { .. }) => {}
+        Err(RdbcError::NoDriverExtension { .. }) => {}
         other => panic!("expected NoDriverExtension, got {other:?}"),
     }
 }

@@ -1,6 +1,6 @@
 //! 扩展 Adapter 共用的 Prepared 参数物化策略。
 
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::resource::{RdbcCharacterLength, RdbcStreamLength};
 use druid_rdbc::spi::PreparedInputParameter;
 use druid_rdbc::types::{RdbcObject, Value};
@@ -13,28 +13,28 @@ use druid_rdbc::types::{RdbcObject, Value};
 pub(crate) struct PreparedParameterMaterializer;
 
 impl PreparedParameterMaterializer {
-    fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, DruidError> {
+    fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, RdbcError> {
         match length {
             RdbcStreamLength::Unspecified => Ok(None),
             RdbcStreamLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument("stream length must not be negative".to_string())
+                RdbcError::InvalidArgument("stream length must not be negative".to_string())
             }),
             RdbcStreamLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument(
+                RdbcError::InvalidArgument(
                     "stream length must be non-negative and fit usize".to_string(),
                 )
             }),
         }
     }
 
-    fn character_length(length: RdbcCharacterLength) -> Result<Option<usize>, DruidError> {
+    fn character_length(length: RdbcCharacterLength) -> Result<Option<usize>, RdbcError> {
         match length {
             RdbcCharacterLength::Unspecified => Ok(None),
             RdbcCharacterLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument("reader length must not be negative".to_string())
+                RdbcError::InvalidArgument("reader length must not be negative".to_string())
             }),
             RdbcCharacterLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument(
+                RdbcError::InvalidArgument(
                     "reader length must be non-negative and fit usize".to_string(),
                 )
             }),
@@ -44,7 +44,7 @@ impl PreparedParameterMaterializer {
     fn read_stream(
         stream: &druid_rdbc::resource::RdbcInputStream,
         length: RdbcStreamLength,
-    ) -> Result<Vec<u8>, DruidError> {
+    ) -> Result<Vec<u8>, RdbcError> {
         let Some(length) = Self::stream_length(length)? else {
             return stream.read_to_end();
         };
@@ -53,7 +53,7 @@ impl PreparedParameterMaterializer {
         while offset < length {
             let read = stream.read(&mut bytes[offset..])?;
             if read == 0 {
-                return Err(DruidError::DriverError(format!(
+                return Err(RdbcError::DriverError(format!(
                     "InputStream ended after {offset} bytes; declared length is {length}"
                 )));
             }
@@ -65,7 +65,7 @@ impl PreparedParameterMaterializer {
     fn read_reader(
         reader: &druid_rdbc::resource::RdbcReader,
         length: RdbcCharacterLength,
-    ) -> Result<String, DruidError> {
+    ) -> Result<String, RdbcError> {
         let Some(length) = Self::character_length(length)? else {
             return reader.read_to_string();
         };
@@ -74,18 +74,18 @@ impl PreparedParameterMaterializer {
         while offset < length {
             let read = reader.read_utf16(&mut code_units[offset..])?;
             if read == 0 {
-                return Err(DruidError::DriverError(format!(
+                return Err(RdbcError::DriverError(format!(
                     "Reader ended after {offset} UTF-16 units; declared length is {length}"
                 )));
             }
             offset += read;
         }
         String::from_utf16(&code_units).map_err(|error| {
-            DruidError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
+            RdbcError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
         })
     }
 
-    fn immediate_rdbc_object(value: &RdbcObject) -> Result<Value, DruidError> {
+    fn immediate_rdbc_object(value: &RdbcObject) -> Result<Value, RdbcError> {
         match value {
             RdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
             RdbcObject::CharacterStream(value) | RdbcObject::NCharacterStream(value) => {
@@ -95,12 +95,12 @@ impl PreparedParameterMaterializer {
         }
     }
 
-    async fn deferred_rdbc_object(value: &RdbcObject) -> Result<Value, DruidError> {
+    async fn deferred_rdbc_object(value: &RdbcObject) -> Result<Value, RdbcError> {
         match value {
             RdbcObject::SqlXml(value) => value.string().await?.to_rust_string().map(Value::String),
             RdbcObject::Blob(value) => {
                 let length = i32::try_from(value.length().await?).map_err(|_| {
-                    DruidError::InvalidArgument(
+                    RdbcError::InvalidArgument(
                         "Blob length exceeds RDBC getBytes int range".to_string(),
                     )
                 })?;
@@ -108,7 +108,7 @@ impl PreparedParameterMaterializer {
             }
             RdbcObject::Clob(value) => {
                 let length = i32::try_from(value.length().await?).map_err(|_| {
-                    DruidError::InvalidArgument(
+                    RdbcError::InvalidArgument(
                         "Clob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
@@ -120,7 +120,7 @@ impl PreparedParameterMaterializer {
             }
             RdbcObject::NClob(value) => {
                 let length = i32::try_from(value.length().await?).map_err(|_| {
-                    DruidError::InvalidArgument(
+                    RdbcError::InvalidArgument(
                         "NClob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
@@ -140,7 +140,7 @@ impl PreparedParameterMaterializer {
     /// the asynchronous execution boundary.
     pub(crate) fn materialize_immediate(
         parameter: &PreparedInputParameter,
-    ) -> Result<Option<Value>, DruidError> {
+    ) -> Result<Option<Value>, RdbcError> {
         if matches!(
             parameter,
             PreparedInputParameter::Blob(Some(_))
@@ -168,7 +168,7 @@ impl PreparedParameterMaterializer {
                     String::from_utf8(bytes)
                         .map(Value::String)
                         .map_err(|error| {
-                            DruidError::DriverError(format!(
+                            RdbcError::DriverError(format!(
                                 "ASCII stream is not valid UTF-8: {error}"
                             ))
                         })
@@ -182,7 +182,7 @@ impl PreparedParameterMaterializer {
                     String::from_utf8(bytes)
                         .map(Value::String)
                         .map_err(|error| {
-                            DruidError::DriverError(format!(
+                            RdbcError::DriverError(format!(
                                 "Unicode stream is not valid UTF-8: {error}"
                             ))
                         })
@@ -216,7 +216,7 @@ impl PreparedParameterMaterializer {
     /// Materializes one complete descriptor at an asynchronous execution boundary.
     pub(crate) async fn materialize(
         parameter: &PreparedInputParameter,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Value, RdbcError> {
         if let Some(value) = Self::materialize_immediate(parameter)? {
             return Ok(value);
         }

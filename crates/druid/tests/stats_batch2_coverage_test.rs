@@ -13,8 +13,8 @@
 use druid::core::{
     AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, DruidError, ExecContext,
     ExecOperation, ExecResult, PreparedInputParameter, PreparedTypeNameArgument,
-    RdbcCalendarArgument, RdbcCharacterLength, RdbcObject, RdbcStreamLength, ResultSetFilter,
-    ResultSetFilterChain, ResultSetFilterContext, Value,
+    RdbcCalendarArgument, RdbcCharacterLength, RdbcError, RdbcObject, RdbcStreamLength,
+    ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext, Value,
 };
 use druid::stats::{RdbcStatManager, StatFilter, StatsCollector};
 use std::collections::HashMap;
@@ -89,13 +89,13 @@ fn make_batch_context<'a>(
 #[derive(Debug)]
 struct EmptyResultSet;
 impl druid::core::PhysicalResultSet for EmptyResultSet {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn is_closed(&self) -> bool {
         false
     }
-    fn next(&self) -> Result<bool, DruidError> {
+    fn next(&self) -> Result<bool, RdbcError> {
         Ok(false)
     }
 }

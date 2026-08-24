@@ -1,7 +1,7 @@
 //! 扩展 Adapter 的物理 Prepared 参数槽。
 
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PreparedInputParameter;
 use druid_rdbc::types::Value;
 use std::sync::Mutex;
@@ -13,7 +13,7 @@ enum StoredPreparedParameter {
 }
 
 impl StoredPreparedParameter {
-    async fn materialize(self) -> Result<Value, DruidError> {
+    async fn materialize(self) -> Result<Value, RdbcError> {
         match self {
             Self::Materialized(value) => Ok(value),
             Self::Deferred(parameter) => {
@@ -48,9 +48,9 @@ impl PreparedParameterState {
         &self,
         parameter_index: usize,
         parameter: &PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         if parameter_index == 0 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "parameterIndex must be at least 1".to_string(),
             ));
         }
@@ -70,7 +70,7 @@ impl PreparedParameterState {
     }
 
     /// 返回连续参数槽的物理值。
-    pub(crate) async fn values(&self, parameter_count: usize) -> Result<Vec<Value>, DruidError> {
+    pub(crate) async fn values(&self, parameter_count: usize) -> Result<Vec<Value>, RdbcError> {
         let parameters = self
             .parameters
             .lock()
@@ -79,7 +79,7 @@ impl PreparedParameterState {
         let parameters = (0..parameter_count)
             .map(|index| {
                 parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
-                    DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
+                    RdbcError::InvalidArgument(format!("parameter {} has not been set", index + 1))
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -110,7 +110,7 @@ impl PreparedParameterState {
     pub(crate) fn add_parameters(
         &self,
         params: &[PreparedInputParameter],
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let parameters = self
             .parameters
             .lock()
@@ -118,7 +118,7 @@ impl PreparedParameterState {
         let snapshot = (0..params.len())
             .map(|index| {
                 parameters.get(index).and_then(Clone::clone).ok_or_else(|| {
-                    DruidError::InvalidArgument(format!("parameter {} has not been set", index + 1))
+                    RdbcError::InvalidArgument(format!("parameter {} has not been set", index + 1))
                 })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -141,7 +141,7 @@ impl PreparedParameterState {
     pub(crate) async fn take_batches(
         &self,
         expected_count: usize,
-    ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
+    ) -> Result<Option<Vec<Vec<Value>>>, RdbcError> {
         let batches = {
             let mut batches = self
                 .batches
@@ -151,7 +151,7 @@ impl PreparedParameterState {
                 return Ok(None);
             }
             if batches.len() != expected_count {
-                return Err(DruidError::InvalidArgument(format!(
+                return Err(RdbcError::InvalidArgument(format!(
                     "physical prepared batch count {}, wrapper batch count {expected_count}",
                     batches.len(),
                 )));

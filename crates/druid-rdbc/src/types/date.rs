@@ -1,6 +1,6 @@
 use chrono::{Local, NaiveDate, TimeZone};
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::types::Value;
 
 /// Thin date wrapper that lets RDBC identify an SQL `DATE` value.
@@ -14,13 +14,13 @@ impl Date {
     /// Normalizes epoch `millis` to SQL `DATE` in the local time zone.
     ///
     /// Returns `InvalidArgument` when the local representation is not unique.
-    pub fn from_millis(millis: i64) -> Result<Self, DruidError> {
+    pub fn from_millis(millis: i64) -> Result<Self, RdbcError> {
         Local
             .timestamp_millis_opt(millis)
             .single()
             .map(|value| Self(value.date_naive()))
             .ok_or_else(|| {
-                DruidError::InvalidArgument(format!(
+                RdbcError::InvalidArgument(format!(
                     "invalid or ambiguous SQL DATE millis: {millis}"
                 ))
             })
@@ -30,11 +30,11 @@ impl Date {
     ///
     /// Invalid syntax or fields return `InvalidArgument`. Corresponds to Java:
     /// `Date#valueOf(String)`.
-    pub fn value_of(value: &str) -> Result<Self, DruidError> {
+    pub fn value_of(value: &str) -> Result<Self, RdbcError> {
         NaiveDate::parse_from_str(value, "%Y-%m-%d")
             .map(Self)
             .map_err(|error| {
-                DruidError::InvalidArgument(format!("invalid RDBC DATE '{value}': {error}"))
+                RdbcError::InvalidArgument(format!("invalid RDBC DATE '{value}': {error}"))
             })
     }
 
@@ -53,7 +53,7 @@ impl Date {
     /// Returns epoch milliseconds for local midnight on this date.
     ///
     /// An ambiguous local midnight returns `InvalidArgument`. Corresponds to inherited `getTime`.
-    pub fn millis(self) -> Result<i64, DruidError> {
+    pub fn millis(self) -> Result<i64, RdbcError> {
         let local = self
             .0
             .and_hms_opt(0, 0, 0)
@@ -63,7 +63,7 @@ impl Date {
             .single()
             .map(|value| value.timestamp_millis())
             .ok_or_else(|| {
-                DruidError::InvalidArgument(format!(
+                RdbcError::InvalidArgument(format!(
                     "ambiguous local midnight for SQL DATE {}",
                     self.0
                 ))

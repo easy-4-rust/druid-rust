@@ -2,7 +2,7 @@
 
 use super::ToastyPreparedStatement;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlWarning};
 use druid_rdbc::resource::{RdbcCharacterLength, RdbcInputStream, RdbcReader, RdbcStreamLength};
 use druid_rdbc::spi::{
@@ -24,11 +24,11 @@ use toasty_core::{
     Schema,
 };
 
-fn parse_naive_datetime(value: &str) -> Result<Value, DruidError> {
+fn parse_naive_datetime(value: &str) -> Result<Value, RdbcError> {
     NaiveDateTime::parse_from_str(value, "%Y-%m-%dT%H:%M:%S%.f")
         .or_else(|_| NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S%.f"))
         .map(Value::Timestamp)
-        .map_err(|error| DruidError::DriverError(error.to_string()))
+        .map_err(|error| RdbcError::DriverError(error.to_string()))
 }
 
 fn read_only_session_sql(driver_name: &str, read_only: bool) -> Option<&'static str> {
@@ -99,35 +99,35 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    fn connection_mut(&mut self) -> Result<&mut Box<dyn ToastyConnection>, DruidError> {
+    fn connection_mut(&mut self) -> Result<&mut Box<dyn ToastyConnection>, RdbcError> {
         if self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.connection
             .as_mut()
-            .ok_or(DruidError::ConnectionDiscarded)
+            .ok_or(RdbcError::ConnectionDiscarded)
     }
 
-    fn driver_error(error: &toasty_core::Error) -> DruidError {
+    fn driver_error(error: &toasty_core::Error) -> RdbcError {
         if error.is_connection_lost() {
-            DruidError::ConnectionDiscarded
+            RdbcError::ConnectionDiscarded
         } else if error.is_driver_operation_failed() {
             // Toasty 0.9 不公开底层驱动的 vendor code/SQLState，但明确区分
             // driver operation failure。保留这一结构化类别与完整消息，不能把
             // 数据库执行错误降级成普通字符串错误。
-            DruidError::SqlException(Box::new(
+            RdbcError::SqlException(Box::new(
                 SqlException::driver(0, error.to_string())
                     .with_class_name("toasty_core::error::DriverOperationFailed"),
             ))
         } else {
-            DruidError::DriverError(error.to_string())
+            RdbcError::DriverError(error.to_string())
         }
     }
 
     async fn execute_operation(
         &mut self,
         operation: Operation,
-    ) -> Result<toasty_core::driver::ExecResponse, DruidError> {
+    ) -> Result<toasty_core::driver::ExecResponse, RdbcError> {
         let schema = Arc::clone(&self.schema);
         self.connection_mut()?
             .exec(&schema, operation)
@@ -135,7 +135,7 @@ impl ToastyConnectionAdapter {
             .map_err(|error| Self::driver_error(&error))
     }
 
-    fn typed_parameter(value: Value) -> Result<TypedValue, DruidError> {
+    fn typed_parameter(value: Value) -> Result<TypedValue, RdbcError> {
         Ok(match value {
             // Druid Value 目前不携带 RDBC targetSqlType；与现有 SQLx/RBDC
             // Adapter 一致，未定型 null 使用通用文本 storage type。
@@ -165,7 +165,7 @@ impl ToastyConnectionAdapter {
                         .format("%Y-%m-%d")
                         .to_string()
                         .parse::<jiff::civil::Date>()
-                        .map_err(|error| DruidError::DriverError(error.to_string()))?,
+                        .map_err(|error| RdbcError::DriverError(error.to_string()))?,
                 ),
                 ty: db::Type::Date,
             },
@@ -175,7 +175,7 @@ impl ToastyConnectionAdapter {
                         .format("%H:%M:%S%.f")
                         .to_string()
                         .parse::<jiff::civil::Time>()
-                        .map_err(|error| DruidError::DriverError(error.to_string()))?,
+                        .map_err(|error| RdbcError::DriverError(error.to_string()))?,
                 ),
                 ty: db::Type::Time(9),
             },
@@ -185,7 +185,7 @@ impl ToastyConnectionAdapter {
                         .format("%Y-%m-%dT%H:%M:%S%.f")
                         .to_string()
                         .parse::<jiff::civil::DateTime>()
-                        .map_err(|error| DruidError::DriverError(error.to_string()))?,
+                        .map_err(|error| RdbcError::DriverError(error.to_string()))?,
                 ),
                 ty: db::Type::DateTime(9),
             },
@@ -200,7 +200,7 @@ impl ToastyConnectionAdapter {
         })
     }
 
-    fn raw_sql(sql: &str, params: Vec<Value>, ret: RawSqlRet) -> Result<Operation, DruidError> {
+    fn raw_sql(sql: &str, params: Vec<Value>, ret: RawSqlRet) -> Result<Operation, RdbcError> {
         Ok(RawSql {
             sql: sql.to_string(),
             params: params
@@ -212,28 +212,28 @@ impl ToastyConnectionAdapter {
         .into())
     }
 
-    fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, DruidError> {
+    fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, RdbcError> {
         match length {
             RdbcStreamLength::Unspecified => Ok(None),
             RdbcStreamLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument("stream length must not be negative".to_string())
+                RdbcError::InvalidArgument("stream length must not be negative".to_string())
             }),
             RdbcStreamLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument(
+                RdbcError::InvalidArgument(
                     "stream length must be non-negative and fit usize".to_string(),
                 )
             }),
         }
     }
 
-    fn character_length(length: RdbcCharacterLength) -> Result<Option<usize>, DruidError> {
+    fn character_length(length: RdbcCharacterLength) -> Result<Option<usize>, RdbcError> {
         match length {
             RdbcCharacterLength::Unspecified => Ok(None),
             RdbcCharacterLength::Int(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument("reader length must not be negative".to_string())
+                RdbcError::InvalidArgument("reader length must not be negative".to_string())
             }),
             RdbcCharacterLength::Long(length) => usize::try_from(length).map(Some).map_err(|_| {
-                DruidError::InvalidArgument(
+                RdbcError::InvalidArgument(
                     "reader length must be non-negative and fit usize".to_string(),
                 )
             }),
@@ -243,7 +243,7 @@ impl ToastyConnectionAdapter {
     fn read_stream(
         stream: &RdbcInputStream,
         length: RdbcStreamLength,
-    ) -> Result<Vec<u8>, DruidError> {
+    ) -> Result<Vec<u8>, RdbcError> {
         let Some(length) = Self::stream_length(length)? else {
             return stream.read_to_end();
         };
@@ -252,7 +252,7 @@ impl ToastyConnectionAdapter {
         while offset < length {
             let read = stream.read(&mut bytes[offset..])?;
             if read == 0 {
-                return Err(DruidError::DriverError(format!(
+                return Err(RdbcError::DriverError(format!(
                     "InputStream ended after {offset} bytes; declared length is {length}"
                 )));
             }
@@ -261,7 +261,7 @@ impl ToastyConnectionAdapter {
         Ok(bytes)
     }
 
-    fn read_reader(reader: &RdbcReader, length: RdbcCharacterLength) -> Result<String, DruidError> {
+    fn read_reader(reader: &RdbcReader, length: RdbcCharacterLength) -> Result<String, RdbcError> {
         let Some(length) = Self::character_length(length)? else {
             return reader.read_to_string();
         };
@@ -270,18 +270,18 @@ impl ToastyConnectionAdapter {
         while offset < length {
             let read = reader.read_utf16(&mut code_units[offset..])?;
             if read == 0 {
-                return Err(DruidError::DriverError(format!(
+                return Err(RdbcError::DriverError(format!(
                     "Reader ended after {offset} UTF-16 units; declared length is {length}"
                 )));
             }
             offset += read;
         }
         String::from_utf16(&code_units).map_err(|error| {
-            DruidError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
+            RdbcError::DriverError(format!("Reader contains invalid UTF-16: {error}"))
         })
     }
 
-    fn immediate_rdbc_object_parameter(value: &RdbcObject) -> Result<Value, DruidError> {
+    fn immediate_rdbc_object_parameter(value: &RdbcObject) -> Result<Value, RdbcError> {
         match value {
             RdbcObject::RowId(value) => Ok(Value::Bytes(value.bytes().to_vec())),
             RdbcObject::CharacterStream(value) | RdbcObject::NCharacterStream(value) => {
@@ -291,13 +291,13 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    async fn deferred_rdbc_object_parameter(value: &RdbcObject) -> Result<Value, DruidError> {
+    async fn deferred_rdbc_object_parameter(value: &RdbcObject) -> Result<Value, RdbcError> {
         match value {
             RdbcObject::SqlXml(value) => value.string().await?.to_rust_string().map(Value::String),
             RdbcObject::Blob(value) => {
                 let length = value.length().await?;
                 let length = i32::try_from(length).map_err(|_| {
-                    DruidError::InvalidArgument(
+                    RdbcError::InvalidArgument(
                         "Blob length exceeds RDBC getBytes int range".to_string(),
                     )
                 })?;
@@ -306,7 +306,7 @@ impl ToastyConnectionAdapter {
             RdbcObject::Clob(value) => {
                 let length = value.length().await?;
                 let length = i32::try_from(length).map_err(|_| {
-                    DruidError::InvalidArgument(
+                    RdbcError::InvalidArgument(
                         "Clob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
@@ -319,7 +319,7 @@ impl ToastyConnectionAdapter {
             RdbcObject::NClob(value) => {
                 let length = value.length().await?;
                 let length = i32::try_from(length).map_err(|_| {
-                    DruidError::InvalidArgument(
+                    RdbcError::InvalidArgument(
                         "NClob length exceeds RDBC getSubString int range".to_string(),
                     )
                 })?;
@@ -335,7 +335,7 @@ impl ToastyConnectionAdapter {
 
     pub(super) fn prepared_parameter_immediate(
         parameter: &PreparedInputParameter,
-    ) -> Result<Option<Value>, DruidError> {
+    ) -> Result<Option<Value>, RdbcError> {
         if matches!(
             parameter,
             PreparedInputParameter::Blob(Some(_))
@@ -363,7 +363,7 @@ impl ToastyConnectionAdapter {
                     String::from_utf8(bytes)
                         .map(Value::String)
                         .map_err(|error| {
-                            DruidError::DriverError(format!(
+                            RdbcError::DriverError(format!(
                                 "ASCII stream is not valid UTF-8: {error}"
                             ))
                         })
@@ -378,7 +378,7 @@ impl ToastyConnectionAdapter {
                     String::from_utf8(bytes)
                         .map(Value::String)
                         .map_err(|error| {
-                            DruidError::DriverError(format!(
+                            RdbcError::DriverError(format!(
                                 "Unicode stream is not valid UTF-8: {error}"
                             ))
                         })
@@ -411,7 +411,7 @@ impl ToastyConnectionAdapter {
 
     pub(super) async fn prepared_parameter(
         parameter: &PreparedInputParameter,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Value, RdbcError> {
         if let Some(value) = Self::prepared_parameter_immediate(parameter)? {
             return Ok(value);
         }
@@ -438,7 +438,7 @@ impl ToastyConnectionAdapter {
 
     async fn converted_prepared_parameters(
         parameters: &[PreparedInputParameter],
-    ) -> Result<Vec<Value>, DruidError> {
+    ) -> Result<Vec<Value>, RdbcError> {
         let mut values = Vec::with_capacity(parameters.len());
         for parameter in parameters {
             values.push(Self::prepared_parameter(parameter).await?);
@@ -449,7 +449,7 @@ impl ToastyConnectionAdapter {
     async fn prepared_parameters(
         statement: &dyn PhysicalPreparedStatement,
         parameters: &[PreparedInputParameter],
-    ) -> Result<Vec<Value>, DruidError> {
+    ) -> Result<Vec<Value>, RdbcError> {
         if let Some(statement) = statement.as_any().downcast_ref::<ToastyPreparedStatement>() {
             statement.materialized_parameters(parameters.len()).await
         } else {
@@ -457,7 +457,7 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    fn value(value: ToastyValue) -> Result<Value, DruidError> {
+    fn value(value: ToastyValue) -> Result<Value, RdbcError> {
         match value {
             ToastyValue::Null => Ok(Value::Null),
             ToastyValue::Bool(value) => Ok(Value::Bool(value)),
@@ -469,7 +469,7 @@ impl ToastyConnectionAdapter {
             ToastyValue::U16(value) => Ok(Value::Int(i64::from(value))),
             ToastyValue::U32(value) => Ok(Value::Int(i64::from(value))),
             ToastyValue::U64(value) => i64::try_from(value).map(Value::Int).map_err(|_| {
-                DruidError::DriverError(
+                RdbcError::DriverError(
                     "Toasty u64 result cannot be represented by crate::core::Value::Int"
                         .to_string(),
                 )
@@ -479,27 +479,27 @@ impl ToastyConnectionAdapter {
             ToastyValue::BigDecimal(value) => Ok(Value::Decimal(value)),
             ToastyValue::Date(value) => NaiveDate::parse_from_str(&value.to_string(), "%Y-%m-%d")
                 .map(Value::Date)
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             ToastyValue::Time(value) => {
                 NaiveTime::parse_from_str(&format!("{value:.9}"), "%H:%M:%S%.f")
                     .map(Value::Time)
-                    .map_err(|error| DruidError::DriverError(error.to_string()))
+                    .map_err(|error| RdbcError::DriverError(error.to_string()))
             }
             ToastyValue::DateTime(value) => parse_naive_datetime(&format!("{value:.9}")),
             ToastyValue::Timestamp(value) => DateTime::parse_from_rfc3339(&value.to_string())
                 .map(|value| Value::Timestamp(value.naive_utc()))
-                .map_err(|error| DruidError::DriverError(error.to_string())),
+                .map_err(|error| RdbcError::DriverError(error.to_string())),
             ToastyValue::String(value) => Ok(Value::String(value)),
             ToastyValue::Bytes(value) => Ok(Value::Bytes(value)),
-            unsupported => Err(DruidError::DriverError(format!(
+            unsupported => Err(RdbcError::DriverError(format!(
                 "Toasty value {unsupported:?} is not represented by crate::core::Value"
             ))),
         }
     }
 
-    fn row(value: ToastyValue) -> Result<Row, DruidError> {
+    fn row(value: ToastyValue) -> Result<Row, RdbcError> {
         let ToastyValue::Record(record) = value else {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "Toasty raw SQL row must be Value::Record, actual={value:?}"
             )));
         };
@@ -510,7 +510,7 @@ impl ToastyConnectionAdapter {
             .map(Row::new)
     }
 
-    fn validate_savepoint_name(name: &str) -> Result<(), DruidError> {
+    fn validate_savepoint_name(name: &str) -> Result<(), RdbcError> {
         let valid = !name.is_empty()
             && name
                 .bytes()
@@ -518,7 +518,7 @@ impl ToastyConnectionAdapter {
         if valid {
             Ok(())
         } else {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "savepoint name must contain only ASCII letters, digits, or '_'".to_string(),
             ))
         }
@@ -535,9 +535,9 @@ impl ToastyConnectionAdapter {
         self.driver_name.eq_ignore_ascii_case("sqlite")
     }
 
-    fn ensure_transaction(&self) -> Result<(), DruidError> {
+    fn ensure_transaction(&self) -> Result<(), RdbcError> {
         if self.auto_commit {
-            Err(DruidError::DriverError(
+            Err(RdbcError::DriverError(
                 "transaction operation requires auto_commit=false".to_string(),
             ))
         } else {
@@ -545,7 +545,7 @@ impl ToastyConnectionAdapter {
         }
     }
 
-    async fn sqlite_last_insert_id(&mut self) -> Result<Option<i64>, DruidError> {
+    async fn sqlite_last_insert_id(&mut self) -> Result<Option<i64>, RdbcError> {
         if !self.is_sqlite() {
             return Ok(None);
         }
@@ -562,7 +562,7 @@ impl ToastyConnectionAdapter {
             .await
             .map_err(|error| Self::driver_error(&error))?;
         let ToastyValue::List(mut rows) = values else {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "SQLite last_insert_rowid() must return a row list, actual={values:?}"
             )));
         };
@@ -572,7 +572,7 @@ impl ToastyConnectionAdapter {
         match row.fields.pop() {
             Some(ToastyValue::I64(0)) | None => Ok(None),
             Some(ToastyValue::I64(value)) => Ok(Some(value)),
-            value => Err(DruidError::DriverError(format!(
+            value => Err(RdbcError::DriverError(format!(
                 "SQLite last_insert_rowid() must return i64, actual={value:?}"
             ))),
         }
@@ -581,12 +581,12 @@ impl ToastyConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for ToastyConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         let response = self
             .execute_operation(Self::raw_sql(sql, params, RawSqlRet::None)?)
             .await?;
         let Rows::Count(rows_affected) = response.values else {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "Toasty statement returned rows instead of an update count".to_string(),
             ));
         };
@@ -603,14 +603,14 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         sql: &str,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if matches!(
             generated_keys,
             StatementGeneratedKeys::ColumnIndexes(_) | StatementGeneratedKeys::ColumnNames(_)
         ) {
             // xerial SQLite 对这两个 RDBC 重载抛 SQLFeatureNotSupportedException；
             // Toasty 0.9 也没有向驱动传递列选择的契约，不能静默忽略参数。
-            return Err(DruidError::UnsupportedOperation {
+            return Err(RdbcError::UnsupportedOperation {
                 operation: "statement_execute_generated_key_columns",
             });
         }
@@ -633,7 +633,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
                     .await
                     .map_err(|error| Self::driver_error(&error))?;
                 let ToastyValue::List(rows) = values else {
-                    return Err(DruidError::DriverError(format!(
+                    return Err(RdbcError::DriverError(format!(
                         "Toasty generic execute query must return a row list, actual={values:?}"
                     )));
                 };
@@ -651,9 +651,9 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         // xerial SQLite 的 PreparedStatement column-index/column-name 重载在
         // prepare 时接受参数，并在 execute 时返回 rowid；Toasty SQLite 没有
@@ -667,7 +667,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let params = Self::prepared_parameters(statement, &parameters).await?;
         self.exec_prepared(statement, params).await
     }
@@ -677,7 +677,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let params = Self::prepared_parameters(statement, &parameters).await?;
         self.execute_prepared(statement, params, generated_keys)
             .await
@@ -687,9 +687,9 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         if statement.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
 
         let materialized_batches =
@@ -706,8 +706,8 @@ impl PhysicalConnection for ToastyConnectionAdapter {
                 materialized.push(
                     Self::converted_prepared_parameters(parameters)
                         .await
-                        .map_err(|error| DruidError::BatchUpdateException {
-                            update_counts: Vec::new(),
+                        .map_err(|error| RdbcError::BatchUpdateException {
+                            update_counts: Vec::<i32>::new().into(),
                             cause: Box::new(error),
                         })?,
                 );
@@ -721,8 +721,8 @@ impl PhysicalConnection for ToastyConnectionAdapter {
                     update_counts.push(i32::try_from(result.rows_affected).unwrap_or(i32::MAX));
                 }
                 Err(error) => {
-                    return Err(DruidError::BatchUpdateException {
-                        update_counts,
+                    return Err(RdbcError::BatchUpdateException {
+                        update_counts: update_counts.into(),
                         cause: Box::new(error),
                     });
                 }
@@ -735,7 +735,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let params = Self::prepared_parameters(statement, &parameters).await?;
         self.fetch_prepared(statement, params).await
     }
@@ -744,7 +744,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let rows = self.fetch_prepared(statement, params).await?;
         Ok(Arc::new(RowSetResultSet::new(rows)))
     }
@@ -753,12 +753,12 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let params = Self::prepared_parameters(statement, &parameters).await?;
         self.fetch_prepared_result_set(statement, params).await
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         let response = self
             .execute_operation(Self::raw_sql(sql, params, RawSqlRet::Infer)?)
             .await?;
@@ -768,7 +768,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
             .await
             .map_err(|error| Self::driver_error(&error))?;
         let ToastyValue::List(rows) = values else {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "Toasty query must return a row list, actual={values:?}"
             )));
         };
@@ -778,16 +778,16 @@ impl PhysicalConnection for ToastyConnectionAdapter {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let _ = self.connection_mut()?;
         // Toasty SQL drivers prepare/cache raw SQL inside Connection#exec。
         // Druid holder 保留逻辑句柄及缓存命中，执行仍走同一物理连接。
         Ok(Arc::new(ToastyPreparedStatement::new(key.sql())))
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "Toasty transaction is already active".to_string(),
             ));
         }
@@ -804,21 +804,21 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         self.ensure_transaction()?;
         self.execute_operation(Transaction::Commit.into()).await?;
         self.auto_commit = true;
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         self.ensure_transaction()?;
         self.execute_operation(Transaction::Rollback.into()).await?;
         self.auto_commit = true;
         Ok(())
     }
 
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         self.ensure_transaction()?;
         let name = Self::savepoint_name(savepoint);
         Self::validate_savepoint_name(&name)?;
@@ -827,7 +827,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         Ok(())
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         self.ensure_transaction()?;
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         let savepoint = Savepoint {
@@ -840,7 +840,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         Ok(savepoint)
     }
 
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
         self.ensure_transaction()?;
         Self::validate_savepoint_name(name)?;
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
@@ -852,7 +852,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         })
     }
 
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         self.ensure_transaction()?;
         let name = Self::savepoint_name(savepoint);
         Self::validate_savepoint_name(&name)?;
@@ -861,14 +861,14 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         self.connection_mut()?
             .ping()
             .await
             .map_err(|error| Self::driver_error(&error))
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         // Toasty Connection SPI 以 Drop 关闭 raw driver connection。
         // SQLite/rusqlite 与网络驱动都会在 drop 时回滚未提交事务。
         self.connection.take();
@@ -894,7 +894,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         }
     }
 
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         self.connection_mut()?;
         Ok(Box::new(
             super::toasty_database_meta_data::ToastyDatabaseMetaData::new(
@@ -909,7 +909,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         self.auto_commit
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         match (self.auto_commit, auto_commit) {
             (true, false) => self.begin().await,
             (false, true) => self.commit().await,
@@ -921,16 +921,16 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         self.read_only
     }
 
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "read_only cannot change while a transaction is active".to_string(),
             ));
         }
         self.connection_mut()?;
         let Some(sql) = read_only_session_sql(self.driver_name, read_only) else {
             if read_only {
-                return Err(DruidError::UnsupportedOperation {
+                return Err(RdbcError::UnsupportedOperation {
                     operation: if self.is_sqlite() {
                         "toasty_sqlite_read_only_transaction"
                     } else {
@@ -957,14 +957,14 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         }
     }
 
-    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
+    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "transaction isolation cannot change while a transaction is active".to_string(),
             ));
         }
         if self.is_sqlite() && level != 8 {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "Toasty SQLite only supports RDBC TRANSACTION_SERIALIZABLE (8)".to_string(),
             ));
         }
@@ -974,7 +974,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
             4 => IsolationLevel::RepeatableRead,
             8 => IsolationLevel::Serializable,
             _ => {
-                return Err(DruidError::InvalidArgument(format!(
+                return Err(RdbcError::InvalidArgument(format!(
                     "unsupported RDBC transaction isolation level: {level}"
                 )));
             }
@@ -982,16 +982,16 @@ impl PhysicalConnection for ToastyConnectionAdapter {
         Ok(())
     }
 
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         if self.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(None)
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         if self.is_closed() {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(())
     }

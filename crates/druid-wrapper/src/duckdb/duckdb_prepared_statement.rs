@@ -1,6 +1,6 @@
 //! `DuckDB` 原生预编译语句句柄。
 
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatementOptions, SqlTextPreparedStatement,
 };
@@ -53,72 +53,72 @@ impl PhysicalPreparedStatement for DuckDbPreparedStatement {
         self.statement.statement_options()
     }
 
-    fn max_field_size(&self) -> Result<i32, DruidError> {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
         self.statement.max_field_size()
     }
 
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError> {
         self.statement.set_max_field_size(max)
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         self.statement.max_rows()
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         self.statement.set_max_rows(max)
     }
 
-    fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError> {
+    fn set_escape_processing(&self, enabled: bool) -> Result<(), RdbcError> {
         self.statement.set_escape_processing(enabled)
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.statement.query_timeout()
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         self.statement.set_query_timeout(seconds)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         self.interrupt_handle.interrupt();
         Ok(())
     }
 
-    fn set_cursor_name(&self, name: &str) -> Result<(), DruidError> {
+    fn set_cursor_name(&self, name: &str) -> Result<(), RdbcError> {
         self.statement.set_cursor_name(name)
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         self.statement.set_fetch_direction(direction)
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         self.statement.fetch_direction()
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         self.statement.set_fetch_size(rows)
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         self.statement.fetch_size()
     }
 
-    fn clear_warnings(&self) -> Result<(), DruidError> {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
         self.statement.clear_warnings()
     }
 
-    fn close_on_completion(&self) -> Result<(), DruidError> {
+    fn close_on_completion(&self) -> Result<(), RdbcError> {
         self.statement.close_on_completion()
     }
 
-    fn is_close_on_completion(&self) -> Result<bool, DruidError> {
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
         self.statement.is_close_on_completion()
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.statement.close()
     }
 

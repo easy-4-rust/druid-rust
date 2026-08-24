@@ -2,7 +2,7 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use druid::core::{
-    DruidError, PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, Value,
+    PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, RdbcError, Value,
 };
 use druid_wrapper::driver::{
     DatabaseConnectionConfig, DriverRuntimeMode, DruidDatabasePoolBuilder, DruidDriverRegistry,
@@ -595,7 +595,7 @@ async fn verify_duckdb_rejected_physical_connection(bad_url: &str) {
     assert!(
         matches!(
             DuckDbConnectionAdapter::connect(&malformed_url).await,
-            Err(DruidError::InvalidArgument(_))
+            Err(RdbcError::InvalidArgument(_))
         ),
         "DuckDB 不支持凭据认证，必须在物理连接前拒绝非法 URL"
     );
@@ -708,7 +708,7 @@ async fn verify_error_classification(
         .await
         .expect_err("不存在的表必须返回结构化驱动错误");
     match error {
-        DruidError::SqlException(exception) => {
+        RdbcError::SqlException(exception) => {
             assert!(
                 exception.error_code() != 0 || exception.sql_state().is_some(),
                 "驱动必须至少保留 vendor code 或 SQLState"
@@ -766,7 +766,7 @@ async fn verify_timeout_and_cancel_if_configured(
     .expect("驱动 query timeout 必须在合同截止时间内完成")
     .expect_err("长查询必须被 query timeout 中断");
     assert!(
-        matches!(timeout_error, DruidError::SqlException(ref exception)
+        matches!(timeout_error, RdbcError::SqlException(ref exception)
             if matches!(exception.sql_state(), Some("HYT00" | "HY008" | "57014"))),
         "timeout 必须保留标准 SQLState，实际为 {timeout_error:?}"
     );
@@ -795,9 +795,9 @@ async fn verify_timeout_and_cancel_if_configured(
         .expect("cancel 合同任务不得 panic")
         .expect_err("长查询必须被显式 cancel 中断");
     assert!(
-        matches!(cancel_error, DruidError::SqlException(ref exception)
+        matches!(cancel_error, RdbcError::SqlException(ref exception)
             if matches!(exception.sql_state(), Some("HY008" | "57014" | "HYT00")))
-            || matches!(cancel_error, DruidError::ConnectionDiscarded),
+            || matches!(cancel_error, RdbcError::ConnectionDiscarded),
         "cancel 必须产生可分类异常或明确丢弃，实际为 {cancel_error:?}"
     );
     true
@@ -895,7 +895,7 @@ async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPoo
     .expect_err("DuckDB 长查询必须触发 query timeout");
     assert!(matches!(
         timeout,
-        DruidError::SqlException(ref exception)
+        RdbcError::SqlException(ref exception)
             if exception.sql_state() == Some("HYT00")
                 && exception.class_name() == "java.sql.SQLTimeoutException"
     ));
@@ -936,7 +936,7 @@ async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPoo
         .expect_err("DuckDB 长查询必须被显式 cancel");
     assert!(matches!(
         cancelled,
-        DruidError::SqlException(ref exception)
+        RdbcError::SqlException(ref exception)
             if exception.sql_state() == Some("HY008")
                 && exception.class_name() == "duckdb::Error::OperationInterrupted"
     ));

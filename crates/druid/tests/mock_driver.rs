@@ -22,10 +22,10 @@ impl MockConnection {
 
 #[async_trait::async_trait]
 impl Connection for MockConnection {
-    async fn exec(&mut self, sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
         if sql == "FAIL" {
-            return Err(DruidError::SqlException(Box::new(SqlException::driver(
+            return Err(RdbcError::SqlException(Box::new(SqlException::driver(
                 9999,
                 "batch failure",
             ))));
@@ -36,22 +36,22 @@ impl Connection for MockConnection {
             row_count: None,
         })
     }
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -72,7 +72,7 @@ impl Driver for MockDriver {
     fn name(&self) -> &'static str {
         "mock"
     }
-    async fn connect(&self, _url: &str) -> Result<Box<dyn Connection>, DruidError> {
+    async fn connect(&self, _url: &str) -> Result<Box<dyn Connection>, RdbcError> {
         Ok(Box::new(MockConnection::new()))
     }
 }
@@ -83,10 +83,10 @@ struct MockFactory;
 
 #[async_trait::async_trait]
 impl ConnectionFactory for MockFactory {
-    async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
         Ok(Box::new(MockConnection::new()))
     }
-    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
         conn.ping().await
     }
 }
@@ -183,11 +183,14 @@ async fn test_connection_default_batch_preserves_partial_counts_and_sql_cause() 
         ])
         .await
         .unwrap_err();
-    assert_eq!(error.batch_update_counts(), Some([1].as_slice()));
+    assert_eq!(
+        error.batch_update_counts().map(|counts| counts.large()),
+        Some([1_i64].as_slice())
+    );
     assert_eq!(error.sql_exception().unwrap().error_code(), 9999);
     assert!(error.to_string().contains("after 1 result"));
     assert_eq!(
-        DruidError::Other("plain".to_string()).batch_update_counts(),
+        RdbcError::Other("plain".to_string()).batch_update_counts(),
         None
     );
 }
@@ -216,7 +219,7 @@ async fn test_connection_default_prepared_batch_reuses_one_statement_in_order() 
         connection
             .exec_prepared_batch(&statement, vec![vec![Value::Int(1)]])
             .await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     );
 }
 
@@ -563,13 +566,13 @@ fn test_row_operations() {
 
 #[test]
 fn test_druid_error_display() {
-    let err = DruidError::AcquireTimeout;
+    let err = RdbcError::AcquireTimeout;
     assert_eq!(format!("{err}"), "acquire connection timed out");
 
-    let err = DruidError::WallViolation("DROP TABLE".into());
+    let err = RdbcError::WallViolation("DROP TABLE".into());
     assert!(format!("{err}").contains("DROP TABLE"));
 
-    let err = DruidError::ConnectionLeaked {
+    let err = RdbcError::ConnectionLeaked {
         id: 42,
         held_for: std::time::Duration::from_mins(5),
     };
@@ -579,8 +582,8 @@ fn test_druid_error_display() {
 
 #[test]
 fn test_druid_error_from_string() {
-    let err: DruidError = "test error".into();
-    assert_eq!(err, DruidError::Other("test error".to_string()));
+    let err: RdbcError = "test error".into();
+    assert_eq!(err, RdbcError::Other("test error".to_string()));
 }
 
 #[test]

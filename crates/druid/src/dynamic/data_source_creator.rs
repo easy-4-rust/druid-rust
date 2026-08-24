@@ -2,7 +2,7 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.DataSourceCreator`。
 
 use super::high_available_data_source::HighAvailableDataSourceInner;
-use crate::core::{DruidError, PhysicalConnectionFactory, Pool};
+use crate::core::{PhysicalConnectionFactory, Pool, RdbcError};
 use crate::pool::DruidPoolBuilder;
 use crate::sql::RdbcUtils;
 use std::sync::Arc;
@@ -39,13 +39,13 @@ impl DataSourceCreator {
             fn connection_url(&self) -> Option<&str> {
                 None
             }
-            async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+            async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
                 panic!("noop factory should not be called")
             }
             async fn validate(
                 &self,
                 _connection: &mut Box<dyn PhysicalConnection>,
-            ) -> Result<(), DruidError> {
+            ) -> Result<(), RdbcError> {
                 Ok(())
             }
         }
@@ -60,11 +60,11 @@ impl DataSourceCreator {
         username: Option<&str>,
         password: Option<&str>,
         high_available_data_source: &Arc<HighAvailableDataSourceInner>,
-    ) -> Result<Arc<dyn Pool>, DruidError> {
+    ) -> Result<Arc<dyn Pool>, RdbcError> {
         let raw_url = url.ok_or_else(|| {
-            DruidError::InvalidArgument(format!("{node_name}.url must not be empty"))
+            RdbcError::InvalidArgument(format!("{node_name}.url must not be empty"))
         })?;
-        let rust_url = RdbcUtils::to_rust_url(raw_url).ok_or(DruidError::UnsupportedOperation {
+        let rust_url = RdbcUtils::to_rust_url(raw_url).ok_or(RdbcError::UnsupportedOperation {
             operation: "ha_node_driver_adapter_required",
         })?;
         let driver_url = Self::apply_credentials(rust_url.as_ref(), username, password)?;
@@ -127,24 +127,24 @@ impl DataSourceCreator {
         raw_url: &str,
         username: Option<&str>,
         password: Option<&str>,
-    ) -> Result<String, DruidError> {
+    ) -> Result<String, RdbcError> {
         if username.is_none() && password.is_none() {
             return Ok(raw_url.to_owned());
         }
         let mut parsed = url::Url::parse(raw_url).map_err(|error| {
-            DruidError::InvalidArgument(format!("invalid database URL for credentials: {error}"))
+            RdbcError::InvalidArgument(format!("invalid database URL for credentials: {error}"))
         })?;
         if parsed.scheme().eq_ignore_ascii_case("sqlite") {
             return Ok(raw_url.to_owned());
         }
         if let Some(username) = username {
             parsed.set_username(username).map_err(|()| {
-                DruidError::InvalidArgument("database URL cannot carry username".to_owned())
+                RdbcError::InvalidArgument("database URL cannot carry username".to_owned())
             })?;
         }
         if let Some(password) = password {
             parsed.set_password(Some(password)).map_err(|()| {
-                DruidError::InvalidArgument("database URL cannot carry password".to_owned())
+                RdbcError::InvalidArgument("database URL cannot carry password".to_owned())
             })?;
         }
         Ok(parsed.into())

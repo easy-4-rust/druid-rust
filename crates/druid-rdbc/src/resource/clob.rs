@@ -1,6 +1,6 @@
 //! Standard Rust mapping for Java `java.sql.Clob`.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use crate::resource::{
     RdbcClobAccess, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcResourceCapabilities,
     RdbcResourceContext, RdbcResourceId, RdbcResourceState, RdbcWriter,
@@ -27,7 +27,7 @@ impl RdbcClob {
     }
 
     /// Returns the character length. Corresponds to `Clob#length()`.
-    pub async fn length(&self) -> Result<i64, DruidError> {
+    pub async fn length(&self) -> Result<i64, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::READ, "Clob#length")?;
         self.context.observe(self.access.length().await)
@@ -38,7 +38,7 @@ impl RdbcClob {
         &self,
         position: i64,
         length: i32,
-    ) -> Result<RdbcString, DruidError> {
+    ) -> Result<RdbcString, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::RANGE,
             "Clob#getSubString",
@@ -48,7 +48,7 @@ impl RdbcClob {
     }
 
     /// Opens the full character stream. Corresponds to `Clob#getCharacterStream()`.
-    pub async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    pub async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::STREAM,
             "Clob#getCharacterStream",
@@ -58,7 +58,7 @@ impl RdbcClob {
     }
 
     /// Opens the ASCII stream. Corresponds to `Clob#getAsciiStream()`.
-    pub async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    pub async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::STREAM,
             "Clob#getAsciiStream",
@@ -71,7 +71,7 @@ impl RdbcClob {
         &self,
         pattern: &RdbcString,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::SEARCH,
             "Clob#position(String,long)",
@@ -85,7 +85,7 @@ impl RdbcClob {
         &self,
         pattern: &RdbcClob,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ | RdbcResourceCapabilities::SEARCH,
             "Clob#position(Clob,long)",
@@ -95,7 +95,7 @@ impl RdbcClob {
     }
 
     /// Writes a string. Corresponds to `Clob#setString(long,String)`.
-    pub async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, DruidError> {
+    pub async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, RdbcError> {
         self.context
             .require(RdbcResourceCapabilities::WRITE, "Clob#setString")?;
         self.context
@@ -109,7 +109,7 @@ impl RdbcClob {
         value: &RdbcString,
         offset: i32,
         length: i32,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::RANGE,
             "Clob#setString(long,String,int,int)",
@@ -122,7 +122,7 @@ impl RdbcClob {
     }
 
     /// Opens a positioned ASCII output stream. Corresponds to `Clob#setAsciiStream(long)`.
-    pub async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    pub async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::STREAM,
             "Clob#setAsciiStream",
@@ -132,7 +132,7 @@ impl RdbcClob {
     }
 
     /// Opens a positioned character writer. Corresponds to `Clob#setCharacterStream(long)`.
-    pub async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, DruidError> {
+    pub async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::STREAM,
             "Clob#setCharacterStream",
@@ -142,7 +142,7 @@ impl RdbcClob {
     }
 
     /// Truncates the Clob. Corresponds to `Clob#truncate(long)`.
-    pub async fn truncate(&self, length: i64) -> Result<(), DruidError> {
+    pub async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::TRUNCATE,
             "Clob#truncate",
@@ -151,7 +151,7 @@ impl RdbcClob {
     }
 
     /// Releases the Clob. Corresponds to `Clob#free()`.
-    pub async fn free(&self) -> Result<(), DruidError> {
+    pub async fn free(&self) -> Result<(), RdbcError> {
         self.context
             .require_capability(RdbcResourceCapabilities::FREE, "Clob#free")?;
         self.context.free(self.access.as_ref()).await
@@ -168,7 +168,7 @@ impl RdbcClob {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcReader, DruidError> {
+    ) -> Result<RdbcReader, RdbcError> {
         self.context.require(
             RdbcResourceCapabilities::READ
                 | RdbcResourceCapabilities::STREAM

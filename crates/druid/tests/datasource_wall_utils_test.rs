@@ -4,7 +4,7 @@
 //! Java 基线：`33824c3dec1612711f9bb4e409319bcab2e4cd0e`。
 
 use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Row, Value,
+    ExecResult, PhysicalConnection, PhysicalConnectionFactory, RdbcError, Row, Value,
 };
 use druid::pool::{DruidDataSource, DruidPool};
 use druid::sql::{WallConfig, WallVisitorUtils};
@@ -19,25 +19,25 @@ use std::time::Duration;
 struct MockConn;
 #[async_trait::async_trait]
 impl PhysicalConnection for MockConn {
-    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _: &str, _: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _: &str, _: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
     fn driver_name(&self) -> &'static str {
@@ -48,10 +48,10 @@ impl PhysicalConnection for MockConn {
 struct MockFactory;
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for MockFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         Ok(Box::new(MockConn))
     }
-    async fn validate(&self, _: &mut Box<dyn PhysicalConnection>) -> Result<(), DruidError> {
+    async fn validate(&self, _: &mut Box<dyn PhysicalConnection>) -> Result<(), RdbcError> {
         Ok(())
     }
 }

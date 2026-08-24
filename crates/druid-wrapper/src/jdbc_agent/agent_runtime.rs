@@ -1,5 +1,5 @@
 use super::{AgentRequest, AgentResponse, JdbcAgentOptions, JdbcAgentRuntimeMetrics};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::fs::File;
@@ -10,7 +10,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::{mpsc, oneshot};
 
-type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<JsonValue, DruidError>>>>>;
+type PendingRequests = Arc<Mutex<HashMap<u64, oneshot::Sender<Result<JsonValue, RdbcError>>>>>;
 
 struct OutboundFrame {
     request_id: u64,
@@ -20,7 +20,7 @@ struct OutboundFrame {
 /// 已发送、等待按 JSON-RPC ID 关联响应的 Agent 请求。
 pub(crate) struct AgentPendingRequest {
     request_id: u64,
-    receiver: oneshot::Receiver<Result<JsonValue, DruidError>>,
+    receiver: oneshot::Receiver<Result<JsonValue, RdbcError>>,
     pending: PendingRequests,
 }
 
@@ -31,10 +31,10 @@ impl AgentPendingRequest {
     }
 
     /// 等待 Agent 响应；传输任务终止时返回连接已丢弃。
-    pub(crate) async fn wait(mut self) -> Result<JsonValue, DruidError> {
+    pub(crate) async fn wait(mut self) -> Result<JsonValue, RdbcError> {
         let result = (&mut self.receiver)
             .await
-            .unwrap_or(Err(DruidError::ConnectionDiscarded));
+            .unwrap_or(Err(RdbcError::ConnectionDiscarded));
         Self::remove_pending(&self.pending, self.request_id);
         result
     }
@@ -75,7 +75,7 @@ impl AgentRuntime {
     pub(crate) async fn start(
         options: &JdbcAgentOptions,
         healthy: Arc<AtomicBool>,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         let mut command = Command::new(options.program());
         command
             .args(options.arguments())
@@ -84,16 +84,16 @@ impl AgentRuntime {
             .stderr(Stdio::inherit())
             .kill_on_drop(true);
         let mut child = command.spawn().map_err(|error| {
-            DruidError::DriverError(format!("failed to spawn JDBC Agent: {error}"))
+            RdbcError::DriverError(format!("failed to spawn JDBC Agent: {error}"))
         })?;
         let stdin = child
             .stdin
             .take()
-            .ok_or_else(|| DruidError::DriverError("JDBC Agent stdin was not piped".to_owned()))?;
+            .ok_or_else(|| RdbcError::DriverError("JDBC Agent stdin was not piped".to_owned()))?;
         let stdout = child
             .stdout
             .take()
-            .ok_or_else(|| DruidError::DriverError("JDBC Agent stdout was not piped".to_owned()))?;
+            .ok_or_else(|| RdbcError::DriverError("JDBC Agent stdout was not piped".to_owned()))?;
         let mut stdout = BufReader::new(stdout);
         let ready = Self::read_json_line(&mut stdout, options.frame_limit()).await?;
         if ready.get("jsonrpc").and_then(JsonValue::as_str) != Some("2.0")
@@ -103,7 +103,7 @@ impl AgentRuntime {
                 .and_then(JsonValue::as_u64)
                 != Some(1)
         {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "JDBC Agent sent an invalid ready notification: {ready}"
             )));
         }
@@ -173,7 +173,7 @@ impl AgentRuntime {
         handshake: &JsonValue,
         artifact_version: &str,
         required_capabilities: &[&str],
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let protocol_version = handshake.get("protocolVersion").and_then(JsonValue::as_u64);
         let agent_version = handshake
             .get("agentVersion")
@@ -211,9 +211,9 @@ impl AgentRuntime {
         &self,
         method: &str,
         params: JsonValue,
-    ) -> Result<AgentPendingRequest, DruidError> {
+    ) -> Result<AgentPendingRequest, RdbcError> {
         if !self.healthy.load(Ordering::Acquire) {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         if method == "shutdown" {
             self.expected_shutdown.store(true, Ordering::Release);
@@ -236,7 +236,7 @@ impl AgentRuntime {
         {
             AgentPendingRequest::remove_pending(&self.pending, request_id);
             self.healthy.store(false, Ordering::Release);
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         Ok(AgentPendingRequest {
             request_id,
@@ -250,7 +250,7 @@ impl AgentRuntime {
         &self,
         method: &str,
         params: JsonValue,
-    ) -> Result<JsonValue, DruidError> {
+    ) -> Result<JsonValue, RdbcError> {
         self.begin_request(method, params)?.wait().await
     }
 
@@ -348,7 +348,7 @@ impl AgentRuntime {
     async fn read_json_line(
         stdout: &mut BufReader<ChildStdout>,
         frame_limit: usize,
-    ) -> Result<JsonValue, DruidError> {
+    ) -> Result<JsonValue, RdbcError> {
         let bytes = Self::read_line(stdout, frame_limit).await?;
         serde_json::from_slice(&bytes).map_err(Self::protocol_error)
     }
@@ -356,14 +356,14 @@ impl AgentRuntime {
     async fn read_line(
         stdout: &mut BufReader<ChildStdout>,
         frame_limit: usize,
-    ) -> Result<Vec<u8>, DruidError> {
+    ) -> Result<Vec<u8>, RdbcError> {
         let mut bytes = Vec::new();
         let length = stdout
             .read_until(b'\n', &mut bytes)
             .await
             .map_err(Self::io_error)?;
         if length == 0 {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "JDBC Agent transport reached EOF".to_owned(),
             ));
         }
@@ -374,7 +374,7 @@ impl AgentRuntime {
             bytes.pop();
         }
         if bytes.len() > frame_limit {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "JDBC Agent frame size {} exceeds configured limit {frame_limit}",
                 bytes.len()
             )));
@@ -382,9 +382,9 @@ impl AgentRuntime {
         Ok(bytes)
     }
 
-    fn validate_frame_size(&self, length: usize) -> Result<(), DruidError> {
+    fn validate_frame_size(&self, length: usize) -> Result<(), RdbcError> {
         if length > self.frame_limit {
-            return Err(DruidError::DriverError(format!(
+            return Err(RdbcError::DriverError(format!(
                 "JDBC Agent frame size {length} exceeds configured limit {}",
                 self.frame_limit
             )));
@@ -408,20 +408,20 @@ impl AgentRuntime {
             .map(|(_, sender)| sender)
             .collect::<Vec<_>>();
         for sender in senders {
-            let _ = sender.send(Err(DruidError::DriverError(message.clone())));
+            let _ = sender.send(Err(RdbcError::DriverError(message.clone())));
         }
     }
 
-    fn io_error(error: std::io::Error) -> DruidError {
-        DruidError::DriverError(format!("JDBC Agent transport error: {error}"))
+    fn io_error(error: std::io::Error) -> RdbcError {
+        RdbcError::DriverError(format!("JDBC Agent transport error: {error}"))
     }
 
-    fn protocol_error(error: serde_json::Error) -> DruidError {
-        DruidError::DriverError(format!("JDBC Agent protocol error: {error}"))
+    fn protocol_error(error: serde_json::Error) -> RdbcError {
+        RdbcError::DriverError(format!("JDBC Agent protocol error: {error}"))
     }
 
-    fn protocol_message(message: impl std::fmt::Display) -> DruidError {
-        DruidError::DriverError(format!("JDBC Agent protocol error: {message}"))
+    fn protocol_message(message: impl std::fmt::Display) -> RdbcError {
+        RdbcError::DriverError(format!("JDBC Agent protocol error: {message}"))
     }
 }
 

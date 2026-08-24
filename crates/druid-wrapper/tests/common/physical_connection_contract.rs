@@ -1,8 +1,8 @@
 //! 外部池与直连 `RDBC` 连接的共同可观察合同。
 
 use druid::core::{
-    DruidError, DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties,
-    PhysicalConnection, SqlException, Value,
+    DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties, PhysicalConnection,
+    RdbcError, SqlException, Value,
 };
 use std::future::Future;
 use std::sync::Arc;
@@ -25,10 +25,10 @@ impl ExceptionSorter for SqliteDatabaseErrorSorter {
 /// 再次获取的可用性。它还分别验证结构化数据库错误、fatal discard、显式 close 的
 /// dirty transaction rollback，以及 Drop 后租约绝不以 dirty 状态泄漏。参数 `acquire`
 /// 每次调用都必须从同一个连接拥有者获取连接。
-pub async fn assert_rdbc_connection_contract<F, Fut>(acquire: F) -> Result<(), DruidError>
+pub async fn assert_rdbc_connection_contract<F, Fut>(acquire: F) -> Result<(), RdbcError>
 where
     F: Fn() -> Fut,
-    Fut: Future<Output = Result<DruidPooledConnection, DruidError>>,
+    Fut: Future<Output = Result<DruidPooledConnection, RdbcError>>,
 {
     let mut connection = acquire().await?;
     connection
@@ -71,10 +71,10 @@ where
 
 /// 断言 driver 数据库错误保留 SQL 异常结构，fatal 分类会即时丢弃当前租约，且下一次
 /// 获取仍可执行真实 SQLite SQL。
-async fn assert_structured_error_and_fatal_reacquire<F, Fut>(acquire: &F) -> Result<(), DruidError>
+async fn assert_structured_error_and_fatal_reacquire<F, Fut>(acquire: &F) -> Result<(), RdbcError>
 where
     F: Fn() -> Fut,
-    Fut: Future<Output = Result<DruidPooledConnection, DruidError>>,
+    Fut: Future<Output = Result<DruidPooledConnection, RdbcError>>,
 {
     let mut connection = acquire().await?;
     connection.set_exception_sorter(Arc::new(SqliteDatabaseErrorSorter));
@@ -127,10 +127,10 @@ where
 /// 断言显式 close 会 rollback 未提交写入，并把干净 lease 交还给同一连接拥有者。
 async fn assert_explicit_close_rolls_back_dirty_transaction<F, Fut>(
     acquire: &F,
-) -> Result<(), DruidError>
+) -> Result<(), RdbcError>
 where
     F: Fn() -> Fut,
-    Fut: Future<Output = Result<DruidPooledConnection, DruidError>>,
+    Fut: Future<Output = Result<DruidPooledConnection, RdbcError>>,
 {
     let mut connection = acquire().await?;
     connection
@@ -162,10 +162,10 @@ where
 /// lease 并重建物理连接，因此下一租约既要回到 auto-commit，也不能再看见脏表。
 async fn assert_dirty_drop_never_leaks_transaction_state<F, Fut>(
     acquire: &F,
-) -> Result<(), DruidError>
+) -> Result<(), RdbcError>
 where
     F: Fn() -> Fut,
-    Fut: Future<Output = Result<DruidPooledConnection, DruidError>>,
+    Fut: Future<Output = Result<DruidPooledConnection, RdbcError>>,
 {
     let mut connection = acquire().await?;
     connection

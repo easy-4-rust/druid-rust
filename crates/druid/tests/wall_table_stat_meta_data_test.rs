@@ -171,60 +171,60 @@ async fn physical_database_meta_data_default_methods() {
     let err = md.all_procedures_are_callable().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_url().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_user_name().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.is_read_only().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_database_product_name().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_driver_name().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.supports_transactions().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_schemas().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.get_schemas().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 
     let err = md.supports_batch_updates().await.unwrap_err();
     assert!(matches!(
         err,
-        druid::core::DruidError::UnsupportedOperation { .. }
+        druid::core::RdbcError::UnsupportedOperation { .. }
     ));
 }

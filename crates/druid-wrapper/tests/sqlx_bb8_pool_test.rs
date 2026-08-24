@@ -93,7 +93,7 @@ async fn bb8_pool_maps_capacity_wait_to_acquire_timeout() {
         .get_timeout(Duration::from_millis(1))
         .await
         .expect_err("second connection must time out");
-    assert_eq!(error, druid::core::DruidError::AcquireTimeout);
+    assert_eq!(error, druid_rdbc::error::RdbcError::AcquireTimeout);
     assert_eq!(pool.state().connect_error_count, 1);
 }
 

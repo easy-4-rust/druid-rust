@@ -2,7 +2,7 @@ use crate::sqlx::deadpool::SqlxDeadpoolPool;
 use crate::WrapperPoolState;
 use druid::core::{DruidPooledConnection, Pool, PoolState};
 use druid::pool::DruidDataSource;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use parking_lot::RwLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -115,26 +115,26 @@ impl ManagedWrapperPool {
         }
     }
 
-    fn ensure_enabled(&self) -> Result<(), DruidError> {
+    fn ensure_enabled(&self) -> Result<(), RdbcError> {
         if self.closed.load(Ordering::Acquire) {
-            return Err(DruidError::PoolClosed);
+            return Err(RdbcError::PoolClosed);
         }
         if self.is_enabled() {
             Ok(())
         } else {
-            Err(DruidError::DataSourceDisabled)
+            Err(RdbcError::DataSourceDisabled)
         }
     }
 }
 
 #[async_trait::async_trait]
 impl Pool for ManagedWrapperPool {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
         self.ensure_enabled()?;
         self.inner.get().await
     }
 
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
         self.ensure_enabled()?;
         self.inner.get_timeout(timeout).await
     }

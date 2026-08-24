@@ -1,7 +1,7 @@
 use crate::toasty::ToastyConnectionFactory;
 use druid::pool::{DruidDataSource, DruidDataSourceFactory};
 use druid::sql::RdbcUtils;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,13 +17,13 @@ impl BasicDataSourceFactory {
     /// 使用 Druid 内置 Toasty factory 创建数据源。
     pub async fn create_data_source(
         properties: &HashMap<String, String>,
-    ) -> Result<DruidDataSource, DruidError> {
+    ) -> Result<DruidDataSource, RdbcError> {
         let properties = DruidDataSourceFactory::resolve_config_properties(properties).await?;
         let url = properties
             .get("url")
-            .ok_or_else(|| DruidError::InvalidArgument("url is required".to_owned()))?;
+            .ok_or_else(|| RdbcError::InvalidArgument("url is required".to_owned()))?;
         let rust_url = RdbcUtils::to_rust_url(url).ok_or_else(|| {
-            DruidError::InvalidArgument(format!("Toasty does not support RDBC URL `{url}`"))
+            RdbcError::InvalidArgument(format!("Toasty does not support RDBC URL `{url}`"))
         })?;
         let factory: Arc<dyn PhysicalConnectionFactory> =
             Arc::new(ToastyConnectionFactory::new(rust_url.as_ref()).await?);
@@ -32,6 +32,7 @@ impl BasicDataSourceFactory {
             .map_or_else(|| "toasty".to_owned(), str::to_owned);
         DruidDataSourceFactory::create_data_source_with_factory(&properties, factory, driver_name)
             .await
+            .map_err(RdbcError::from)
     }
 
     /// 使用扩展物理连接 factory 创建数据源。
@@ -39,8 +40,9 @@ impl BasicDataSourceFactory {
         properties: &HashMap<String, String>,
         factory: Arc<dyn PhysicalConnectionFactory>,
         driver_name: impl Into<String>,
-    ) -> Result<DruidDataSource, DruidError> {
+    ) -> Result<DruidDataSource, RdbcError> {
         DruidDataSourceFactory::create_data_source_with_factory(properties, factory, driver_name)
             .await
+            .map_err(RdbcError::from)
     }
 }

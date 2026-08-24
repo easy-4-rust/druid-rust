@@ -1,21 +1,21 @@
 //! 对应 Java 类：javax.sql.DataSource + com.alibaba.druid.pool.DruidDataSource
 
 use super::druid_pooled_connection::DruidPooledConnection;
-use super::error::DruidError;
+use super::error::RdbcError;
 use super::pool_state::PoolState;
 use std::time::Duration;
 
 /// 连接池 trait，替代 `DataSource`。
 #[async_trait::async_trait]
 pub trait Pool: Send + Sync {
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError>;
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError>;
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError>;
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError>;
 
     /// 为 HA 节点摘除执行资源收尾。
     ///
     /// 返回 `false` 表示仍有活动连接，本轮必须延迟摘除；默认外部 Pool 没有
     /// Druid 生命周期协议，按 Java 对非 `DruidDataSource` 的行为直接允许摘除。
-    async fn close_for_removal_if_idle(&self) -> Result<bool, DruidError> {
+    async fn close_for_removal_if_idle(&self) -> Result<bool, RdbcError> {
         Ok(true)
     }
 

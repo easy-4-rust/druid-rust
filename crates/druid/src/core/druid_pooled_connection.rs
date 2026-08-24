@@ -9,7 +9,7 @@ use super::druid_connection_holder::{DruidConnectionHolder, StatementTrace};
 use super::druid_pooled_callable_statement::DruidPooledCallableStatement;
 use super::druid_pooled_prepared_statement::DruidPooledPreparedStatement;
 use super::druid_pooled_statement::DruidPooledStatement;
-use super::error::DruidError;
+use super::error::{DruidError, RdbcError};
 use super::exception_sorter::ExceptionSorter;
 use super::exec_result::ExecResult;
 use super::fatal_error_handler::FatalErrorHandler;
@@ -562,12 +562,12 @@ impl DruidPooledConnection {
         Arc::clone(&self.execution_running)
     }
 
-    fn begin_execution(&mut self) -> Result<ExecutionRunningGuard, DruidError> {
+    fn begin_execution(&mut self) -> Result<ExecutionRunningGuard, RdbcError> {
         // before Filter 可能短路；先清除上一条物理 SQL，避免 Statement 把前一次
         // 执行文本误认成本次改写结果。
         self.last_execute_sql = None;
         if !self.lease_active.load(Ordering::Acquire) {
-            return Err(DruidError::ConnectionLeaked {
+            return Err(RdbcError::ConnectionLeaked {
                 id: self.id,
                 held_for: self.borrowed_at.elapsed(),
             });
@@ -627,7 +627,7 @@ impl DruidPooledConnection {
         }
     }
 
-    fn record_execution<T>(&mut self, sql: &str, result: &Result<T, DruidError>) {
+    fn record_execution<T>(&mut self, sql: &str, result: &Result<T, RdbcError>) {
         self.last_execute_sql = Some(sql.to_owned());
         if !self.auto_commit() {
             if self.transaction_started_at.is_none() {
@@ -666,11 +666,15 @@ impl DruidPooledConnection {
     /// 对应 Java：
     /// `DruidDataSource#handleConnectionException` → `handleFatalError`。
     /// 非 SQL 错误和未命中 sorter 的 SQL 错误保持连接可复用。
-    pub fn handle_exception(&mut self, error: &DruidError) -> bool {
-        self.handle_exception_with_sql(error, None)
+    pub fn handle_exception<E>(&mut self, error: &E) -> bool
+    where
+        E: Clone + Into<RdbcError>,
+    {
+        let error = error.clone().into();
+        self.handle_exception_with_sql(&error, None)
     }
 
-    fn handle_exception_with_sql(&mut self, error: &DruidError, sql: Option<&str>) -> bool {
+    fn handle_exception_with_sql(&mut self, error: &RdbcError, sql: Option<&str>) -> bool {
         let fatal = self
             .exception_sorter
             .as_ref()
@@ -683,9 +687,10 @@ impl DruidPooledConnection {
                 holder.mark_discarded();
             }
             let fatal_error_handler = self.fatal_error_handler.clone();
-            let on_fatal_error = fatal_error_handler
-                .as_ref()
-                .is_some_and(|handler| handler.handle_fatal_error(error, sql));
+            let on_fatal_error = fatal_error_handler.as_ref().is_some_and(|handler| {
+                let product_error = DruidError::from(error.clone());
+                handler.handle_fatal_error(&product_error, sql)
+            });
             // Java `handleFatalError` 当场执行 discardConnection，而不是等用户
             // 随后 close；这样 activeCount 会在错误返回前释放。
             let refill_requested = self.discard_connection();
@@ -703,19 +708,23 @@ impl DruidPooledConnection {
     /// 对应 Java：`DruidPooledConnection#handleException(Throwable, String)`。
     /// 所有可能产生 `SQLException` 的物理连接和过滤器调用都必须经过本入口，
     /// 使 fatal 判断不会只覆盖 SQL execute/query。
-    pub(crate) fn classify_result<T>(
-        &mut self,
-        result: Result<T, DruidError>,
-    ) -> Result<T, DruidError> {
+    pub(crate) fn classify_result<T, E>(&mut self, result: Result<T, E>) -> Result<T, RdbcError>
+    where
+        E: Into<RdbcError>,
+    {
         self.classify_result_with_sql(result, None)
     }
 
     /// 对数据库操作结果执行异常分类，并保留触发错误的 SQL。
-    pub(crate) fn classify_result_with_sql<T>(
+    pub(crate) fn classify_result_with_sql<T, E>(
         &mut self,
-        result: Result<T, DruidError>,
+        result: Result<T, E>,
         sql: Option<&str>,
-    ) -> Result<T, DruidError> {
+    ) -> Result<T, RdbcError>
+    where
+        E: Into<RdbcError>,
+    {
+        let result = result.map_err(Into::into);
         if let Err(error) = &result {
             if error.sql_exception().is_some() {
                 self.notify_connection_error(error);
@@ -737,7 +746,7 @@ impl DruidPooledConnection {
     /// 对应 Java：`DruidPooledConnection#getMetaData()`。代理公开完整
     /// `DatabaseMetaDataProxyImpl` 方法面，生命周期不得超过当前连接的可变
     /// 借用；连接已归还或 Adapter 不支持时返回精确错误。
-    pub fn database_meta_data(&mut self) -> Result<DatabaseMetaDataProxyImpl<'_>, DruidError> {
+    pub fn database_meta_data(&mut self) -> Result<DatabaseMetaDataProxyImpl<'_>, RdbcError> {
         if !self.auto_commit() {
             self.ensure_transaction_info();
         }
@@ -745,7 +754,7 @@ impl DruidPooledConnection {
         let filter_chain = self.filter_chain.clone();
         let physical = self
             .physical_connection_mut()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+            .ok_or(RdbcError::ConnectionDiscarded)?;
         let raw = match filter_chain {
             Some(filter_chain) => {
                 filter_chain.connection_database_meta_data(physical, connection_id)?
@@ -756,7 +765,7 @@ impl DruidPooledConnection {
     }
 
     /// 返回数据库元数据。对应 Java: `Connection#getMetaData()`。
-    pub fn get_meta_data(&mut self) -> Result<DatabaseMetaDataProxyImpl<'_>, DruidError> {
+    pub fn get_meta_data(&mut self) -> Result<DatabaseMetaDataProxyImpl<'_>, RdbcError> {
         self.database_meta_data()
     }
 
@@ -808,11 +817,8 @@ impl DruidPooledConnection {
     pub fn add_connection_event_listener(
         &self,
         listener: Arc<dyn ConnectionEventListener>,
-    ) -> Result<(), DruidError> {
-        let holder = self
-            .holder
-            .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+    ) -> Result<(), RdbcError> {
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         holder.add_connection_event_listener(listener);
         Ok(())
     }
@@ -823,11 +829,8 @@ impl DruidPooledConnection {
     pub fn remove_connection_event_listener(
         &self,
         listener: &Arc<dyn ConnectionEventListener>,
-    ) -> Result<bool, DruidError> {
-        let holder = self
-            .holder
-            .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+    ) -> Result<bool, RdbcError> {
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         Ok(holder.remove_connection_event_listener(listener))
     }
 
@@ -837,11 +840,8 @@ impl DruidPooledConnection {
     pub fn add_statement_event_listener(
         &self,
         listener: Arc<dyn StatementEventListener>,
-    ) -> Result<(), DruidError> {
-        let holder = self
-            .holder
-            .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+    ) -> Result<(), RdbcError> {
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         holder.add_statement_event_listener(listener);
         Ok(())
     }
@@ -852,11 +852,8 @@ impl DruidPooledConnection {
     pub fn remove_statement_event_listener(
         &self,
         listener: &Arc<dyn StatementEventListener>,
-    ) -> Result<bool, DruidError> {
-        let holder = self
-            .holder
-            .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+    ) -> Result<bool, RdbcError> {
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         Ok(holder.remove_statement_event_listener(listener))
     }
 
@@ -874,7 +871,7 @@ impl DruidPooledConnection {
     ///
     /// 对应 Java：`DruidPooledConnection#createBlob()`。Java Druid 对 Blob
     /// 只做连接状态检查和 `FilterChain` 转发，不创建 `BlobProxy`。
-    pub async fn create_blob(&mut self) -> Result<RdbcBlob, DruidError> {
+    pub async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
         let filter_chain = self
             .filter_chain
             .clone()
@@ -889,7 +886,7 @@ impl DruidPooledConnection {
     ///
     /// 对应 Java：`ConnectionProxyImpl#createClob()` 与
     /// `FilterChainImpl#wrap(ConnectionProxy, Clob)`。
-    pub async fn create_clob(&mut self) -> Result<ClobProxyImpl, DruidError> {
+    pub async fn create_clob(&mut self) -> Result<ClobProxyImpl, RdbcError> {
         let filter_chain = self
             .filter_chain
             .clone()
@@ -904,7 +901,7 @@ impl DruidPooledConnection {
     /// 创建经 Druid `FilterChain` 包装并保持类型身份的 `NClob`。
     ///
     /// 对应 Java：`ConnectionProxyImpl#createNClob()`。
-    pub async fn create_n_clob(&mut self) -> Result<NClobProxyImpl, DruidError> {
+    pub async fn create_n_clob(&mut self) -> Result<NClobProxyImpl, RdbcError> {
         let filter_chain = self
             .filter_chain
             .clone()
@@ -919,7 +916,7 @@ impl DruidPooledConnection {
     /// 创建默认类型、只读并发和当前保持性的普通池化语句。
     ///
     /// 对应 Java：`DruidPooledConnection#createStatement()`。
-    pub async fn create_statement(&mut self) -> Result<DruidPooledStatement, DruidError> {
+    pub async fn create_statement(&mut self) -> Result<DruidPooledStatement, RdbcError> {
         self.create_statement_with_options(PhysicalStatementOptions::default())
             .await
     }
@@ -931,7 +928,7 @@ impl DruidPooledConnection {
         &mut self,
         result_set_type: i32,
         result_set_concurrency: i32,
-    ) -> Result<DruidPooledStatement, DruidError> {
+    ) -> Result<DruidPooledStatement, RdbcError> {
         self.create_statement_with_options(PhysicalStatementOptions {
             result_set_type,
             result_set_concurrency,
@@ -952,7 +949,7 @@ impl DruidPooledConnection {
         result_set_type: i32,
         result_set_concurrency: i32,
         result_set_holdability: i32,
-    ) -> Result<DruidPooledStatement, DruidError> {
+    ) -> Result<DruidPooledStatement, RdbcError> {
         self.create_statement_with_options(PhysicalStatementOptions {
             result_set_type,
             result_set_concurrency,
@@ -964,7 +961,7 @@ impl DruidPooledConnection {
     async fn create_statement_with_options(
         &mut self,
         options: PhysicalStatementOptions,
-    ) -> Result<DruidPooledStatement, DruidError> {
+    ) -> Result<DruidPooledStatement, RdbcError> {
         let result = self
             .physical_mut()?
             .create_physical_statement(options)
@@ -999,10 +996,7 @@ impl DruidPooledConnection {
             self.filter_chain.clone(),
             self.stats_collector.clone(),
         );
-        let holder = self
-            .holder
-            .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         holder.add_statement_trace(StatementTrace::Statement(statement.statement_trace_inner()));
         Ok(statement)
     }
@@ -1011,7 +1005,7 @@ impl DruidPooledConnection {
     pub async fn prepare_statement(
         &mut self,
         sql: &str,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = PreparedStatementKey::new(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1026,7 +1020,7 @@ impl DruidPooledConnection {
         sql: &str,
         result_set_type: i32,
         result_set_concurrency: i32,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = PreparedStatementKey::with_result_set(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1044,7 +1038,7 @@ impl DruidPooledConnection {
         result_set_type: i32,
         result_set_concurrency: i32,
         result_set_holdability: i32,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = PreparedStatementKey::with_result_set_holdability(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1061,7 +1055,7 @@ impl DruidPooledConnection {
         &mut self,
         sql: &str,
         column_indexes: Vec<i32>,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = PreparedStatementKey::with_column_indexes(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1076,7 +1070,7 @@ impl DruidPooledConnection {
         &mut self,
         sql: &str,
         column_names: Vec<String>,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = PreparedStatementKey::with_column_names(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1091,7 +1085,7 @@ impl DruidPooledConnection {
         &mut self,
         sql: &str,
         auto_generated_keys: i32,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = PreparedStatementKey::with_auto_generated_keys(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1107,7 +1101,7 @@ impl DruidPooledConnection {
     pub async fn prepare_call(
         &mut self,
         sql: &str,
-    ) -> Result<DruidPooledCallableStatement, DruidError> {
+    ) -> Result<DruidPooledCallableStatement, RdbcError> {
         let key = PreparedStatementKey::new(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1126,7 +1120,7 @@ impl DruidPooledConnection {
         result_set_type: i32,
         result_set_concurrency: i32,
         result_set_holdability: i32,
-    ) -> Result<DruidPooledCallableStatement, DruidError> {
+    ) -> Result<DruidPooledCallableStatement, RdbcError> {
         let key = PreparedStatementKey::with_result_set_holdability(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1146,7 +1140,7 @@ impl DruidPooledConnection {
         sql: &str,
         result_set_type: i32,
         result_set_concurrency: i32,
-    ) -> Result<DruidPooledCallableStatement, DruidError> {
+    ) -> Result<DruidPooledCallableStatement, RdbcError> {
         let key = PreparedStatementKey::with_result_set(
             Some(sql.to_string()),
             self.current_catalog(),
@@ -1179,12 +1173,12 @@ impl DruidPooledConnection {
         self.recycle_once(ConnectionRecycleDisposition::discard())
     }
 
-    fn physical_mut(&mut self) -> Result<&mut (dyn PhysicalConnection + 'static), DruidError> {
+    fn physical_mut(&mut self) -> Result<&mut (dyn PhysicalConnection + 'static), RdbcError> {
         if !self.lease_active.load(Ordering::Acquire) {
             if let Some(holder) = self.holder.as_mut() {
                 holder.mark_discarded();
             }
-            return Err(DruidError::ConnectionLeaked {
+            return Err(RdbcError::ConnectionLeaked {
                 id: self.id,
                 held_for: self.borrowed_at.elapsed(),
             });
@@ -1192,7 +1186,7 @@ impl DruidPooledConnection {
         self.holder
             .as_mut()
             .and_then(DruidConnectionHolder::physical_connection_mut)
-            .ok_or(DruidError::ConnectionDiscarded)
+            .ok_or(RdbcError::ConnectionDiscarded)
     }
 
     fn current_catalog(&self) -> Option<String> {
@@ -1206,7 +1200,7 @@ impl DruidPooledConnection {
     async fn prepare_statement_from_key(
         &mut self,
         key: PreparedStatementKey,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let statement = self.prepare_from_key(key, false).await?;
         let sql = statement.prepared_statement_holder().key().sql().to_owned();
         if let Some(filter_chain) = &self.filter_chain {
@@ -1228,7 +1222,7 @@ impl DruidPooledConnection {
     async fn prepare_call_from_key(
         &mut self,
         key: PreparedStatementKey,
-    ) -> Result<DruidPooledCallableStatement, DruidError> {
+    ) -> Result<DruidPooledCallableStatement, RdbcError> {
         let mut prepared_statement = self.prepare_from_key(key, true).await?;
         let sql = prepared_statement
             .prepared_statement_holder()
@@ -1247,7 +1241,7 @@ impl DruidPooledConnection {
                 holder.remove_statement_trace(statement_identity);
             }
             drop(prepared_statement);
-            return Err(DruidError::UnsupportedOperation {
+            return Err(RdbcError::UnsupportedOperation {
                 operation: "prepare_physical_call",
             });
         }
@@ -1272,7 +1266,7 @@ impl DruidPooledConnection {
         &mut self,
         key: PreparedStatementKey,
         callable: bool,
-    ) -> Result<DruidPooledPreparedStatement, DruidError> {
+    ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let key = if let Some(filter_chain) = &self.filter_chain {
             let rewritten_sql = filter_chain.prepare_statement_sql(key.sql())?;
             key.with_sql(rewritten_sql)
@@ -1313,7 +1307,7 @@ impl DruidPooledConnection {
             let stats = self
                 .holder
                 .as_ref()
-                .ok_or(DruidError::ConnectionDiscarded)?
+                .ok_or(RdbcError::ConnectionDiscarded)?
                 .prepared_statement_stats()
                 .clone();
             stats.record_prepare();
@@ -1323,7 +1317,7 @@ impl DruidPooledConnection {
         let stats = self
             .holder
             .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?
+            .ok_or(RdbcError::ConnectionDiscarded)?
             .prepared_statement_stats()
             .clone();
         let statement = DruidPooledPreparedStatement::new(
@@ -1339,10 +1333,7 @@ impl DruidPooledConnection {
             self.filter_chain.clone(),
             self.stats_collector.clone(),
         );
-        let holder = self
-            .holder
-            .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)?;
+        let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         holder.add_statement_trace(StatementTrace::Prepared(statement.statement_trace_shared()));
         Ok(statement)
     }
@@ -1399,10 +1390,11 @@ impl DruidPooledConnection {
         }
     }
 
-    fn notify_connection_error(&self, error: &DruidError) {
+    fn notify_connection_error(&self, error: &RdbcError) {
+        let product_error = DruidError::from(error.clone());
         if let Some(holder) = self.holder.as_ref() {
             for listener in holder.connection_event_listeners() {
-                listener.connection_error_occurred(self.id, error);
+                listener.connection_error_occurred(self.id, &product_error);
             }
         }
     }
@@ -1455,7 +1447,7 @@ impl DruidPooledConnection {
                     .holder
                     .as_ref()
                     .and_then(DruidConnectionHolder::physical_connection)
-                    .ok_or(DruidError::ConnectionDiscarded)?;
+                    .ok_or(RdbcError::ConnectionDiscarded)?;
                 (
                     connection.capabilities().transactions,
                     connection.auto_commit(),
@@ -1473,18 +1465,18 @@ impl DruidPooledConnection {
             let keep_isolation = self.keep_underlying_transaction_isolation;
             self.holder
                 .as_mut()
-                .ok_or(DruidError::ConnectionDiscarded)?
+                .ok_or(RdbcError::ConnectionDiscarded)?
                 .reset(keep_isolation)
                 .await?;
 
-            Ok::<(), DruidError>(())
+            Ok::<(), RdbcError>(())
         }
         .await;
 
         if let Err(error) = reset_result {
             // Java recycle 捕获 rollback/reset 异常、丢弃物理连接并记录
             // recycleError，不把回收异常重新抛给 close 调用者。
-            return self.discard_for_recycle_error(error).await;
+            return self.discard_for_recycle_error(error.into()).await;
         }
 
         // Java testConnectionInternal 将 checker 异常折叠为 false；验证失败会销毁
@@ -1521,7 +1513,7 @@ impl DruidPooledConnection {
             _ => Ok(()),
         };
         if let Err(error) = restore_result {
-            return self.discard_for_recycle_error(error).await;
+            return self.discard_for_recycle_error(error.into()).await;
         }
 
         ConnectionRecycleDisposition::Reusable
@@ -1531,7 +1523,7 @@ impl DruidPooledConnection {
     ///
     /// 该方法不再次进入 Filter，避免递归；回收错误按 Java
     /// `DruidDataSource#recycle` 规则折叠为 discard disposition。
-    pub(crate) async fn recycle_from_data_source_filter(&mut self) -> Result<(), DruidError> {
+    pub(crate) async fn recycle_from_data_source_filter(&mut self) -> Result<(), RdbcError> {
         if self.recycled {
             return Ok(());
         }
@@ -1544,7 +1536,7 @@ impl DruidPooledConnection {
 
     async fn discard_for_recycle_error(
         &mut self,
-        error: DruidError,
+        error: RdbcError,
     ) -> ConnectionRecycleDisposition {
         if let Some(holder) = self.holder.as_mut() {
             holder.mark_discarded();
@@ -1552,16 +1544,15 @@ impl DruidPooledConnection {
                 let _ = connection.close().await;
             }
         }
-        ConnectionRecycleDisposition::recycle_error(error)
+        ConnectionRecycleDisposition::recycle_error(error.into())
     }
 
-    async fn before_connection_event(&mut self, event: &ConnectionEvent) -> Result<(), DruidError> {
+    async fn before_connection_event(&mut self, event: &ConnectionEvent) -> Result<(), RdbcError> {
         match &self.filter_chain {
-            Some(filter_chain) => {
-                filter_chain
-                    .before_connection_event_with_identity(self.id, event)
-                    .await
-            }
+            Some(filter_chain) => filter_chain
+                .before_connection_event_with_identity(self.id, event)
+                .await
+                .map_err(RdbcError::from),
             None => Ok(()),
         }
     }
@@ -1571,11 +1562,14 @@ impl DruidPooledConnection {
     /// 对应 Java：`DruidPooledConnection#getWarnings()`。调用穿过完整 Filter
     /// around-chain，但 Java 此 getter 不捕获底层 `SQLException`，因此错误不会
     /// 进入连接 `ExceptionSorter`。
-    pub async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    pub async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         let filter_chain = self.filter_chain.clone();
         let physical = self.physical_mut()?;
         match filter_chain {
-            Some(filter_chain) => filter_chain.connection_warnings(physical).await,
+            Some(filter_chain) => filter_chain
+                .connection_warnings(physical)
+                .await
+                .map_err(RdbcError::from),
             None => physical.warnings().await,
         }
     }
@@ -1585,12 +1579,15 @@ impl DruidPooledConnection {
     /// 对应 Java：`DruidPooledConnection#clearWarnings()`。与 getter 不同，
     /// Java 捕获底层 `SQLException` 并交给 `handleException`，Rust 因此必须
     /// 执行 fatal sorter。
-    pub async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    pub async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         let filter_chain = self.filter_chain.clone();
         let result = {
             let physical = self.physical_mut()?;
             match filter_chain {
-                Some(filter_chain) => filter_chain.connection_clear_warnings(physical).await,
+                Some(filter_chain) => filter_chain
+                    .connection_clear_warnings(physical)
+                    .await
+                    .map_err(RdbcError::from),
                 None => physical.clear_warnings().await,
             }
         };
@@ -1602,7 +1599,7 @@ impl DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
         statement_id: Option<u64>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -1636,8 +1633,9 @@ impl DruidPooledConnection {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.clone().map_err(DruidError::from);
             let after_result = filter_chain
-                .after_execute(&context, &result, start.elapsed())
+                .after_execute(&context, &filter_result, start.elapsed())
                 .await;
             self.classify_result_with_sql(after_result, Some(&context.sql))?;
         }
@@ -1654,7 +1652,7 @@ impl DruidPooledConnection {
         sql: &str,
         generated_keys: StatementGeneratedKeys,
         statement_id: Option<u64>,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let params = Vec::<Value>::new();
         let start = Instant::now();
@@ -1698,7 +1696,7 @@ impl DruidPooledConnection {
                     Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
                     None => Ok(ExecResult::default()),
                 },
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -1718,7 +1716,7 @@ impl DruidPooledConnection {
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
         statement_id: Option<u64>,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let prepared_parameters = params
@@ -1767,7 +1765,7 @@ impl DruidPooledConnection {
                     Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
                     None => Ok(ExecResult::default()),
                 },
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -1784,7 +1782,7 @@ impl DruidPooledConnection {
         parameters: Vec<PreparedInputParameter>,
         generated_keys: StatementGeneratedKeys,
         statement_id: Option<u64>,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
@@ -1833,7 +1831,7 @@ impl DruidPooledConnection {
                     Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
                     None => Ok(ExecResult::default()),
                 },
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -1852,7 +1850,7 @@ impl DruidPooledConnection {
         sql: &str,
         statements: &[String],
         statement_id: Option<u64>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -1888,8 +1886,9 @@ impl DruidPooledConnection {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.clone().map_err(DruidError::from);
             let after_result = filter_chain
-                .after_batch(&context, &result, start.elapsed())
+                .after_batch(&context, &filter_result, start.elapsed())
                 .await;
             self.classify_result_with_sql(after_result, Some(sql))?;
         }
@@ -1906,7 +1905,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: &mut Vec<Vec<PreparedInputParameter>>,
         statement_id: Option<u64>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let snapshot = parameter_sets.clone();
@@ -1955,8 +1954,9 @@ impl DruidPooledConnection {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.clone().map_err(DruidError::from);
             let after_result = filter_chain
-                .after_batch(&context, &result, start.elapsed())
+                .after_batch(&context, &filter_result, start.elapsed())
                 .await;
             self.classify_result_with_sql(after_result, Some(&sql))?;
         }
@@ -1968,7 +1968,7 @@ impl DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
         statement_id: Option<u64>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -2007,7 +2007,7 @@ impl DruidPooledConnection {
                     last_insert_id: None,
                     row_count: Some(rows.len() as u64),
                 }),
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -2026,7 +2026,7 @@ impl DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
         statement_id: Option<u64>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
@@ -2065,7 +2065,7 @@ impl DruidPooledConnection {
                     last_insert_id: None,
                     row_count: None,
                 }),
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -2080,7 +2080,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         statement_id: Option<u64>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let prepared_parameters = params
@@ -2117,8 +2117,9 @@ impl DruidPooledConnection {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.clone().map_err(DruidError::from);
             let after_result = filter_chain
-                .after_execute(&context, &result, start.elapsed())
+                .after_execute(&context, &filter_result, start.elapsed())
                 .await;
             self.classify_result_with_sql(after_result, Some(&sql))?;
         }
@@ -2131,7 +2132,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
         statement_id: Option<u64>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
@@ -2168,8 +2169,9 @@ impl DruidPooledConnection {
             holder.record_execute();
         }
         if let Some(filter_chain) = &filter_chain {
+            let filter_result = result.clone().map_err(DruidError::from);
             let after_result = filter_chain
-                .after_execute(&context, &result, start.elapsed())
+                .after_execute(&context, &filter_result, start.elapsed())
                 .await;
             self.classify_result_with_sql(after_result, Some(&sql))?;
         }
@@ -2181,7 +2183,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         statement_id: Option<u64>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let prepared_parameters = params
@@ -2224,7 +2226,7 @@ impl DruidPooledConnection {
                     last_insert_id: None,
                     row_count: Some(rows.len() as u64),
                 }),
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -2240,7 +2242,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
         statement_id: Option<u64>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let prepared_parameters = params
@@ -2282,7 +2284,7 @@ impl DruidPooledConnection {
                 last_insert_id: None,
                 row_count: None,
             });
-            let filter_result = filter_result.map_err(Clone::clone);
+            let filter_result = filter_result.map_err(|error| DruidError::from(error.clone()));
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
                 .await;
@@ -2297,7 +2299,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
         statement_id: Option<u64>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
@@ -2340,7 +2342,7 @@ impl DruidPooledConnection {
                     last_insert_id: None,
                     row_count: Some(rows.len() as u64),
                 }),
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(DruidError::from(error.clone())),
             };
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
@@ -2356,7 +2358,7 @@ impl DruidPooledConnection {
         statement: &dyn PhysicalPreparedStatement,
         parameters: Vec<PreparedInputParameter>,
         statement_id: Option<u64>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let _execution_running = self.begin_execution()?;
         let sql = statement.sql().to_string();
         let scalar_params = parameters
@@ -2398,7 +2400,7 @@ impl DruidPooledConnection {
                 last_insert_id: None,
                 row_count: None,
             });
-            let filter_result = filter_result.map_err(Clone::clone);
+            let filter_result = filter_result.map_err(|error| DruidError::from(error.clone()));
             let after_result = filter_chain
                 .after_execute(&context, &filter_result, start.elapsed())
                 .await;
@@ -2410,7 +2412,7 @@ impl DruidPooledConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for DruidPooledConnection {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         self.exec_with_filters(sql, params, None).await
     }
 
@@ -2419,24 +2421,24 @@ impl PhysicalConnection for DruidPooledConnection {
         sql: &str,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         if params.is_empty() {
             self.execute_with_filters(sql, generated_keys, None).await
         } else {
-            Err(DruidError::InvalidArgument(
+            Err(RdbcError::InvalidArgument(
                 "DruidPooledStatement generic execute does not accept bind parameters".to_string(),
             ))
         }
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.fetch_with_filters(sql, params, None).await
     }
 
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let result = self.physical_mut()?.prepare_physical_statement(key).await;
         self.classify_result(result)
     }
@@ -2444,7 +2446,7 @@ impl PhysicalConnection for DruidPooledConnection {
     async fn prepare_physical_call(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         let result = self.physical_mut()?.prepare_physical_call(key).await;
         self.classify_result(result)
     }
@@ -2453,7 +2455,7 @@ impl PhysicalConnection for DruidPooledConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         self.exec_prepared_with_filters(statement, params, None)
             .await
     }
@@ -2462,7 +2464,7 @@ impl PhysicalConnection for DruidPooledConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         parameter_sets: Vec<Vec<Value>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         let mut parameter_sets = parameter_sets
             .into_iter()
             .map(|parameters| {
@@ -2480,7 +2482,7 @@ impl PhysicalConnection for DruidPooledConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         mut parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, DruidError> {
+    ) -> Result<Vec<i32>, RdbcError> {
         self.exec_prepared_batch_with_filters(statement, &mut parameter_sets, None)
             .await
     }
@@ -2489,7 +2491,7 @@ impl PhysicalConnection for DruidPooledConnection {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         self.fetch_prepared_with_filters(statement, params, None)
             .await
     }
@@ -2497,7 +2499,7 @@ impl PhysicalConnection for DruidPooledConnection {
     async fn close_prepared_statement(
         &mut self,
         statement: Arc<dyn PhysicalPreparedStatement>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         let result = self
             .physical_mut()?
             .close_prepared_statement(statement)
@@ -2505,7 +2507,7 @@ impl PhysicalConnection for DruidPooledConnection {
         self.classify_result(result)
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         let result = self.physical_mut()?.begin().await;
         let result = self.classify_result(result);
         if result.is_ok() && self.transaction_started_at.is_none() {
@@ -2518,7 +2520,7 @@ impl PhysicalConnection for DruidPooledConnection {
         result
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let result = self.before_connection_event(&ConnectionEvent::Commit).await;
@@ -2546,7 +2548,7 @@ impl PhysicalConnection for DruidPooledConnection {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let result = self
@@ -2576,7 +2578,7 @@ impl PhysicalConnection for DruidPooledConnection {
         Ok(())
     }
 
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         if let Some(stats) = self.stats_collector.as_ref() {
             stats.record_rollback(None);
         }
@@ -2584,22 +2586,22 @@ impl PhysicalConnection for DruidPooledConnection {
         self.classify_result(result)
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         let result = self.physical_mut()?.set_savepoint().await;
         self.classify_result(result)
     }
 
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
         let result = self.physical_mut()?.set_savepoint_named(name).await;
         self.classify_result(result)
     }
 
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         let result = self.physical_mut()?.release_savepoint(savepoint).await;
         self.classify_result(result)
     }
 
-    async fn abort(&mut self) -> Result<(), DruidError> {
+    async fn abort(&mut self) -> Result<(), RdbcError> {
         let before_result = self.before_connection_event(&ConnectionEvent::Abort).await;
         let before_result = self.classify_result(before_result);
         let result = match before_result {
@@ -2616,7 +2618,7 @@ impl PhysicalConnection for DruidPooledConnection {
         result
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         let result = self
             .before_connection_event(&ConnectionEvent::IsValid)
             .await;
@@ -2632,7 +2634,7 @@ impl PhysicalConnection for DruidPooledConnection {
         result
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if self.recycled {
             return Ok(());
         }
@@ -2640,9 +2642,10 @@ impl PhysicalConnection for DruidPooledConnection {
         self.notify_connection_closed();
         let filter_chain = self.filter_chain.clone();
         let release_result = match filter_chain {
-            Some(filter_chain) if !filter_chain.is_empty() => {
-                filter_chain.data_source_release_connection(self).await
-            }
+            Some(filter_chain) if !filter_chain.is_empty() => filter_chain
+                .data_source_release_connection(self)
+                .await
+                .map_err(RdbcError::from),
             _ => self.recycle_from_data_source_filter().await,
         };
         if let Err(error) = release_result {
@@ -2684,7 +2687,7 @@ impl PhysicalConnection for DruidPooledConnection {
             .is_none_or(super::physical_connection::PhysicalConnection::auto_commit)
     }
 
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         let result = self
             .before_connection_event(&ConnectionEvent::SetAutoCommit(auto_commit))
             .await;
@@ -2704,7 +2707,7 @@ impl PhysicalConnection for DruidPooledConnection {
             .is_some_and(super::physical_connection::PhysicalConnection::read_only)
     }
 
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), DruidError> {
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         let result = self
             .before_connection_event(&ConnectionEvent::SetReadOnly(read_only))
             .await;
@@ -2723,7 +2726,7 @@ impl PhysicalConnection for DruidPooledConnection {
             )
     }
 
-    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), DruidError> {
+    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), RdbcError> {
         let result = self
             .before_connection_event(&ConnectionEvent::SetTransactionIsolation(level))
             .await;
@@ -2742,16 +2745,16 @@ impl PhysicalConnection for DruidPooledConnection {
             )
     }
 
-    async fn set_holdability(&mut self, holdability: i32) -> Result<(), DruidError> {
+    async fn set_holdability(&mut self, holdability: i32) -> Result<(), RdbcError> {
         let result = self.physical_mut()?.set_holdability(holdability).await;
         self.classify_result(result)
     }
 
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         DruidPooledConnection::warnings(self).await
     }
 
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         DruidPooledConnection::clear_warnings(self).await
     }
 
@@ -2774,7 +2777,7 @@ impl PhysicalConnection for DruidPooledConnection {
             .and_then(|connection| connection.catalog())
     }
 
-    async fn set_catalog(&mut self, catalog: &str) -> Result<(), DruidError> {
+    async fn set_catalog(&mut self, catalog: &str) -> Result<(), RdbcError> {
         let result = self
             .before_connection_event(&ConnectionEvent::SetCatalog(catalog.to_string()))
             .await;
@@ -2790,7 +2793,7 @@ impl PhysicalConnection for DruidPooledConnection {
             .and_then(|connection| connection.schema())
     }
 
-    async fn set_schema(&mut self, schema: &str) -> Result<(), DruidError> {
+    async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
         let result = self
             .before_connection_event(&ConnectionEvent::SetSchema(schema.to_string()))
             .await;

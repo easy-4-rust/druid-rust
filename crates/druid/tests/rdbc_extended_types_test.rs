@@ -1,8 +1,8 @@
 //! URL/Ref/Array/RowId/SQLXML 平台对象完整资源契约。
 
 use druid::core::{
-    DruidError, PhysicalCharacterWriter, PhysicalResultSet, PhysicalXmlResult, PhysicalXmlSource,
-    RdbcArray, RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcResultSet, RdbcRowId, RdbcString,
+    PhysicalCharacterWriter, PhysicalResultSet, PhysicalXmlResult, PhysicalXmlSource, RdbcArray,
+    RdbcError, RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcResultSet, RdbcRowId, RdbcString,
     RdbcTargetType, RdbcTypeMap, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult,
     RdbcXmlSource, Value,
 };
@@ -19,7 +19,7 @@ struct TestResultSet {
 }
 
 impl PhysicalResultSet for TestResultSet {
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
@@ -42,29 +42,29 @@ struct TestArray {
 }
 
 impl TestArray {
-    fn ensure_open(&self) -> Result<(), DruidError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.freed.load(Ordering::Acquire) {
-            Err(DruidError::DriverError("Array is freed".to_string()))
+            Err(RdbcError::DriverError("Array is freed".to_string()))
         } else {
             Ok(())
         }
     }
 
-    fn range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, DruidError> {
+    fn range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
         self.ensure_open()?;
         let start = index
             .checked_sub(1)
             .and_then(|value| usize::try_from(value).ok())
-            .ok_or_else(|| DruidError::DriverError("invalid Array index".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("invalid Array index".to_string()))?;
         let count = usize::try_from(count)
-            .map_err(|_| DruidError::DriverError("invalid Array count".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("invalid Array count".to_string()))?;
         let end = start
             .checked_add(count)
-            .ok_or_else(|| DruidError::DriverError("Array range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Array range overflow".to_string()))?;
         self.values
             .get(start..end)
             .map(<[RdbcObject]>::to_vec)
-            .ok_or_else(|| DruidError::DriverError("invalid Array range".to_string()))
+            .ok_or_else(|| RdbcError::DriverError("invalid Array range".to_string()))
     }
 }
 
@@ -74,7 +74,7 @@ impl RdbcResourceAccess for TestArray {
         RdbcResourceCapabilities::array()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
@@ -82,17 +82,17 @@ impl RdbcResourceAccess for TestArray {
 
 #[async_trait::async_trait]
 impl RdbcArrayAccess for TestArray {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         self.ensure_open()?;
         Ok("INTEGER".to_string())
     }
 
-    async fn base_type(&self) -> Result<i32, DruidError> {
+    async fn base_type(&self) -> Result<i32, RdbcError> {
         self.ensure_open()?;
         Ok(4)
     }
 
-    async fn values(&self) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values(&self) -> Result<Vec<RdbcObject>, RdbcError> {
         self.ensure_open()?;
         Ok(self.values.clone())
     }
@@ -100,11 +100,11 @@ impl RdbcArrayAccess for TestArray {
     async fn values_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.values().await
     }
 
-    async fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, DruidError> {
+    async fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
         self.range(index, count)
     }
 
@@ -113,11 +113,11 @@ impl RdbcArrayAccess for TestArray {
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, DruidError> {
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.range(index, count)
     }
 
-    async fn result_set(&self) -> Result<RdbcResultSet, DruidError> {
+    async fn result_set(&self) -> Result<RdbcResultSet, RdbcError> {
         self.ensure_open()?;
         Ok(result_set())
     }
@@ -125,11 +125,11 @@ impl RdbcArrayAccess for TestArray {
     async fn result_set_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.result_set().await
     }
 
-    async fn result_set_range(&self, index: i64, count: i32) -> Result<RdbcResultSet, DruidError> {
+    async fn result_set_range(&self, index: i64, count: i32) -> Result<RdbcResultSet, RdbcError> {
         self.range(index, count)?;
         Ok(result_set())
     }
@@ -139,7 +139,7 @@ impl RdbcArrayAccess for TestArray {
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, DruidError> {
+    ) -> Result<RdbcResultSet, RdbcError> {
         self.result_set_range(index, count).await
     }
 }
@@ -169,11 +169,11 @@ impl RdbcResourceAccess for TestRef {
 
 #[async_trait::async_trait]
 impl RdbcRefAccess for TestRef {
-    async fn base_type_name(&self) -> Result<String, DruidError> {
+    async fn base_type_name(&self) -> Result<String, RdbcError> {
         Ok("schema.kind".to_string())
     }
 
-    async fn object(&self) -> Result<RdbcObject, DruidError> {
+    async fn object(&self) -> Result<RdbcObject, RdbcError> {
         Ok(self
             .value
             .lock()
@@ -181,14 +181,11 @@ impl RdbcRefAccess for TestRef {
             .clone())
     }
 
-    async fn object_with_type_map(
-        &self,
-        _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, DruidError> {
+    async fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, RdbcError> {
         self.object().await
     }
 
-    async fn set_object(&self, value: RdbcObject) -> Result<(), DruidError> {
+    async fn set_object(&self, value: RdbcObject) -> Result<(), RdbcError> {
         *self
             .value
             .lock()
@@ -201,15 +198,15 @@ impl RdbcRefAccess for TestRef {
 struct TestCharacterWriter;
 
 impl PhysicalCharacterWriter for TestCharacterWriter {
-    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, DruidError> {
+    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, RdbcError> {
         Ok(code_units.len())
     }
 
-    fn flush(&mut self) -> Result<(), DruidError> {
+    fn flush(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    fn close(&mut self) -> Result<(), DruidError> {
+    fn close(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 }
@@ -229,9 +226,9 @@ struct TestSqlXml {
 }
 
 impl TestSqlXml {
-    fn ensure_open(&self) -> Result<(), DruidError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.freed.load(Ordering::Acquire) {
-            Err(DruidError::DriverError("SQLXML is freed".to_string()))
+            Err(RdbcError::DriverError("SQLXML is freed".to_string()))
         } else {
             Ok(())
         }
@@ -244,7 +241,7 @@ impl RdbcResourceAccess for TestSqlXml {
         RdbcResourceCapabilities::sql_xml()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
@@ -252,19 +249,19 @@ impl RdbcResourceAccess for TestSqlXml {
 
 #[async_trait::async_trait]
 impl RdbcSqlXmlAccess for TestSqlXml {
-    async fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcInputStream::from_bytes(
             self.string().await?.to_rust_string()?.into_bytes(),
         ))
     }
 
-    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    async fn character_stream(&self) -> Result<druid::core::RdbcReader, DruidError> {
+    async fn character_stream(&self) -> Result<druid::core::RdbcReader, RdbcError> {
         self.ensure_open()?;
         Ok(druid::core::RdbcReader::from_utf16(
             self.value
@@ -275,12 +272,12 @@ impl RdbcSqlXmlAccess for TestSqlXml {
         ))
     }
 
-    async fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self) -> Result<RdbcWriter, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcWriter::new(TestCharacterWriter))
     }
 
-    async fn string(&self) -> Result<RdbcString, DruidError> {
+    async fn string(&self) -> Result<RdbcString, RdbcError> {
         self.ensure_open()?;
         Ok(self
             .value
@@ -289,7 +286,7 @@ impl RdbcSqlXmlAccess for TestSqlXml {
             .clone())
     }
 
-    async fn set_string(&self, value: &RdbcString) -> Result<(), DruidError> {
+    async fn set_string(&self, value: &RdbcString) -> Result<(), RdbcError> {
         self.ensure_open()?;
         *self
             .value
@@ -301,7 +298,7 @@ impl RdbcSqlXmlAccess for TestSqlXml {
     async fn source(
         &self,
         _representation: &RdbcXmlRepresentationType,
-    ) -> Result<RdbcXmlSource, DruidError> {
+    ) -> Result<RdbcXmlSource, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcXmlSource::new(Arc::new(TestXmlSource)))
     }
@@ -309,7 +306,7 @@ impl RdbcSqlXmlAccess for TestSqlXml {
     async fn result(
         &self,
         _representation: &RdbcXmlRepresentationType,
-    ) -> Result<RdbcXmlResult, DruidError> {
+    ) -> Result<RdbcXmlResult, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcXmlResult::new(Arc::new(TestXmlResult)))
     }

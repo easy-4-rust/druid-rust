@@ -2,7 +2,7 @@ use super::{
     libsql_prepared_statement::LibSqlStatementExecutionError, LibSqlDatabaseMetaData,
     LibSqlPreparedStatement,
 };
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlWarning};
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -32,9 +32,9 @@ pub struct LibSqlConnectionAdapter {
 
 impl LibSqlConnectionAdapter {
     /// 连接远程 Turso/libSQL 数据库。
-    pub async fn connect(url: &str, token: String) -> Result<Self, DruidError> {
+    pub async fn connect(url: &str, token: String) -> Result<Self, RdbcError> {
         if !url.starts_with("libsql://") && !url.starts_with("https://") {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "Turso/libSQL URL must start with libsql:// or https://".to_owned(),
             ));
         }
@@ -52,16 +52,16 @@ impl LibSqlConnectionAdapter {
         })
     }
 
-    fn connection(&self) -> Result<&::libsql::Connection, DruidError> {
+    fn connection(&self) -> Result<&::libsql::Connection, RdbcError> {
         if self.discarded {
-            return Err(DruidError::ConnectionDiscarded);
+            return Err(RdbcError::ConnectionDiscarded);
         }
         self.connection
             .as_ref()
-            .ok_or(DruidError::ConnectionDiscarded)
+            .ok_or(RdbcError::ConnectionDiscarded)
     }
 
-    fn driver_error(error: ::libsql::Error) -> DruidError {
+    fn driver_error(error: ::libsql::Error) -> RdbcError {
         let message = error.to_string();
         let lower = message.to_ascii_lowercase();
         let (state, fatal) = if lower.contains("unauthorized") || lower.contains("authentication") {
@@ -83,9 +83,9 @@ impl LibSqlConnectionAdapter {
         let exception = SqlException::new(0, Some(state.to_owned()), Some(message))
             .with_class_name("libsql::Error");
         if fatal {
-            DruidError::SqlException(Box::new(exception.recoverable()))
+            RdbcError::SqlException(Box::new(exception.recoverable()))
         } else {
-            DruidError::SqlException(Box::new(exception))
+            RdbcError::SqlException(Box::new(exception))
         }
     }
 
@@ -114,7 +114,7 @@ impl LibSqlConnectionAdapter {
         }
     }
 
-    async fn request(&mut self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, DruidError> {
+    async fn request(&mut self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, RdbcError> {
         let connection = self.connection()?.clone();
         let before_changes = connection.total_changes();
         let mut rows = match connection
@@ -159,9 +159,9 @@ impl LibSqlConnectionAdapter {
         })
     }
 
-    fn record_driver_error(&mut self, error: ::libsql::Error) -> DruidError {
+    fn record_driver_error(&mut self, error: ::libsql::Error) -> RdbcError {
         let error = Self::driver_error(error);
-        if matches!(&error, DruidError::SqlException(exception)
+        if matches!(&error, RdbcError::SqlException(exception)
             if exception.is_recoverable()
                 || exception.sql_state().is_some_and(|state| state.starts_with("08")))
         {
@@ -173,26 +173,26 @@ impl LibSqlConnectionAdapter {
 
     fn prepared(
         statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&LibSqlPreparedStatement, DruidError> {
+    ) -> Result<&LibSqlPreparedStatement, RdbcError> {
         statement
             .as_any()
             .downcast_ref::<LibSqlPreparedStatement>()
             .ok_or_else(|| {
-                DruidError::DriverError("prepared statement belongs to another driver".to_owned())
+                RdbcError::DriverError("prepared statement belongs to another driver".to_owned())
             })
     }
 
     fn controlled<T>(
         &mut self,
         result: Result<T, LibSqlStatementExecutionError>,
-    ) -> Result<T, DruidError> {
+    ) -> Result<T, RdbcError> {
         match result {
             Ok(value) => Ok(value),
             Err(LibSqlStatementExecutionError::Driver(error)) => Err(error),
             Err(LibSqlStatementExecutionError::TimedOut) => {
                 self.discarded = true;
                 self.connection.take();
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     SqlException::new(
                         0,
                         Some("HYT00".to_owned()),
@@ -205,7 +205,7 @@ impl LibSqlConnectionAdapter {
             Err(LibSqlStatementExecutionError::Cancelled) => {
                 self.discarded = true;
                 self.connection.take();
-                Err(DruidError::SqlException(Box::new(
+                Err(RdbcError::SqlException(Box::new(
                     SqlException::new(
                         0,
                         Some("HY008".to_owned()),
@@ -218,7 +218,7 @@ impl LibSqlConnectionAdapter {
         }
     }
 
-    fn savepoint_name(savepoint: &Savepoint) -> Result<String, DruidError> {
+    fn savepoint_name(savepoint: &Savepoint) -> Result<String, RdbcError> {
         let name = savepoint
             .name
             .clone()
@@ -228,7 +228,7 @@ impl LibSqlConnectionAdapter {
                 .chars()
                 .all(|character| character.is_ascii_alphanumeric() || character == '_')
         {
-            return Err(DruidError::InvalidArgument(
+            return Err(RdbcError::InvalidArgument(
                 "invalid libSQL savepoint name".to_owned(),
             ));
         }
@@ -238,7 +238,7 @@ impl LibSqlConnectionAdapter {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for LibSqlConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         let result = self.request(sql, params).await?;
         Ok(ExecResult {
             rows_affected: result.rows_affected,
@@ -252,7 +252,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         sql: &str,
         params: Vec<Value>,
         _keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         let result = self.request(sql, params).await?;
         if result.labels.is_empty() {
             Ok(vec![StatementExecuteResult::Update(ExecResult {
@@ -265,7 +265,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         }
     }
 
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.request(sql, params).await.map(|result| result.rows)
     }
 
@@ -273,7 +273,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         let result = self.request(sql, params).await?;
         Ok(Arc::new(RowSetResultSet::with_column_labels(
             result.rows,
@@ -284,7 +284,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
     async fn prepare_physical_statement(
         &mut self,
         key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, DruidError> {
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
         self.connection()?
             .prepare(key.sql())
             .await
@@ -296,7 +296,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<ExecResult, DruidError> {
+    ) -> Result<ExecResult, RdbcError> {
         let statement = Self::prepared(statement)?;
         let result = statement
             .execute_with_controls(self.request(statement.sql(), params))
@@ -313,7 +313,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         &mut self,
         statement: &dyn PhysicalPreparedStatement,
         params: Vec<Value>,
-    ) -> Result<Vec<Row>, DruidError> {
+    ) -> Result<Vec<Row>, RdbcError> {
         let statement = Self::prepared(statement)?;
         let result = statement
             .execute_with_controls(self.request(statement.sql(), params))
@@ -321,9 +321,9 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         self.controlled(result).map(|result| result.rows)
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         if !self.auto_commit {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "libSQL transaction is already active".to_owned(),
             ));
         }
@@ -331,18 +331,18 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         self.auto_commit = false;
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         self.exec("COMMIT", Vec::new()).await?;
         self.auto_commit = true;
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         self.exec("ROLLBACK", Vec::new()).await?;
         self.auto_commit = true;
         Ok(())
     }
 
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         self.exec(
             &format!("ROLLBACK TO SAVEPOINT {}", Self::savepoint_name(savepoint)?),
             Vec::new(),
@@ -351,7 +351,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         .map(|_| ())
     }
 
-    async fn set_savepoint(&mut self) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         let savepoint = Savepoint {
             id: self.savepoint_sequence,
@@ -365,7 +365,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         Ok(savepoint)
     }
 
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, DruidError> {
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
         self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
         let savepoint = Savepoint {
             id: self.savepoint_sequence,
@@ -379,7 +379,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         Ok(savepoint)
     }
 
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), DruidError> {
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
         self.exec(
             &format!("RELEASE SAVEPOINT {}", Self::savepoint_name(savepoint)?),
             Vec::new(),
@@ -388,10 +388,10 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         .map(|_| ())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         let rows = self.fetch("SELECT 1", Vec::new()).await?;
         if rows.is_empty() {
-            Err(DruidError::ValidationFailed(
+            Err(RdbcError::ValidationFailed(
                 "libSQL validation returned no rows".to_owned(),
             ))
         } else {
@@ -399,7 +399,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         }
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.connection.take();
         Ok(())
     }
@@ -419,14 +419,14 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
             schema: false,
         }
     }
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, DruidError> {
+    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
         self.connection()?;
         Ok(Box::new(LibSqlDatabaseMetaData::new(&self.url)))
     }
     fn auto_commit(&self) -> bool {
         self.auto_commit
     }
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), DruidError> {
+    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
         if auto_commit == self.auto_commit {
             return Ok(());
         }
@@ -436,11 +436,11 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
             self.begin().await
         }
     }
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, DruidError> {
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.connection()?;
         Ok(None)
     }
-    async fn clear_warnings(&mut self) -> Result<(), DruidError> {
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.connection().map(|_| ())
     }
     fn mark_discarded(&mut self) {

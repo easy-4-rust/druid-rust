@@ -1,6 +1,6 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
-use druid::core::{DruidError, RdbcBlob, RdbcInputStream, RdbcObject, RdbcOutputStream};
+use druid::core::{RdbcBlob, RdbcError, RdbcInputStream, RdbcObject, RdbcOutputStream};
 use druid::spi::{
     RdbcBlobAccess, RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory,
 };
@@ -38,32 +38,30 @@ impl InMemoryBlobAccess {
         state: &BlobState,
         position: i64,
         allow_end: bool,
-    ) -> Result<usize, DruidError> {
+    ) -> Result<usize, RdbcError> {
         if state.freed {
-            return Err(DruidError::DriverError("Blob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Blob has been freed".to_string()));
         }
         let start = position
             .checked_sub(1)
             .and_then(|value| usize::try_from(value).ok())
-            .ok_or_else(|| {
-                DruidError::DriverError("Blob position must be one-based".to_string())
-            })?;
+            .ok_or_else(|| RdbcError::DriverError("Blob position must be one-based".to_string()))?;
         let maximum = if allow_end {
             state.bytes.len()
         } else {
             state.bytes.len().saturating_sub(1)
         };
         if (state.bytes.is_empty() && !allow_end) || start > maximum {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "Blob position exceeds its length".to_string(),
             ));
         }
         Ok(start)
     }
 
-    fn checked_length(length: i64) -> Result<usize, DruidError> {
+    fn checked_length(length: i64) -> Result<usize, RdbcError> {
         usize::try_from(length)
-            .map_err(|_| DruidError::DriverError("Blob length must be non-negative".to_string()))
+            .map_err(|_| RdbcError::DriverError("Blob length must be non-negative".to_string()))
     }
 }
 
@@ -137,7 +135,7 @@ impl RdbcResourceAccess for InMemoryBlobAccess {
         RdbcResourceCapabilities::blob()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         let mut state = self.state();
         state.freed = true;
         state.bytes.clear();
@@ -147,35 +145,35 @@ impl RdbcResourceAccess for InMemoryBlobAccess {
 
 #[async_trait::async_trait]
 impl RdbcBlobAccess for InMemoryBlobAccess {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         let state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Blob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Blob has been freed".to_string()));
         }
         i64::try_from(state.bytes.len())
-            .map_err(|_| DruidError::DriverError("Blob length exceeds i64".to_string()))
+            .map_err(|_| RdbcError::DriverError("Blob length exceeds i64".to_string()))
     }
 
-    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, DruidError> {
+    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, position, true)?;
         let length = Self::checked_length(i64::from(length))?;
         let end = start
             .checked_add(length)
             .map(|value| value.min(state.bytes.len()))
-            .ok_or_else(|| DruidError::DriverError("Blob range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Blob range overflow".to_string()))?;
         Ok(state.bytes[start..end].to_vec())
     }
 
-    async fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         let state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Blob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Blob has been freed".to_string()));
         }
         Ok(RdbcInputStream::from_bytes(state.bytes.clone()))
     }
 
-    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, DruidError> {
+    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, start, true)?;
         let result = if pattern.is_empty() {
@@ -189,7 +187,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         result
             .map(|position| {
                 i64::try_from(position + 1)
-                    .map_err(|_| DruidError::DriverError("Blob position exceeds i64".to_string()))
+                    .map_err(|_| RdbcError::DriverError("Blob position exceeds i64".to_string()))
             })
             .transpose()
     }
@@ -198,17 +196,17 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         &self,
         pattern: &RdbcBlob,
         start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         let length = pattern.length().await?;
         let length = i32::try_from(length)
-            .map_err(|_| DruidError::DriverError("pattern Blob is too large".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("pattern Blob is too large".to_string()))?;
         let bytes = pattern.get_bytes(1, length).await?;
         self.position_bytes(&bytes, start).await
     }
 
-    async fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, DruidError> {
+    async fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, RdbcError> {
         let length = i32::try_from(bytes.len())
-            .map_err(|_| DruidError::DriverError("Blob write is too large".to_string()))?;
+            .map_err(|_| RdbcError::DriverError("Blob write is too large".to_string()))?;
         self.set_bytes_range(position, bytes, 0, length).await
     }
 
@@ -218,7 +216,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         bytes: &[u8],
         offset: i32,
         length: i32,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         let mut state = self.state();
         let start = Self::checked_start(&state, position, true)?;
         let offset = Self::checked_length(i64::from(offset))?;
@@ -226,19 +224,19 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         let source_end = offset
             .checked_add(length)
             .filter(|end| *end <= bytes.len())
-            .ok_or_else(|| DruidError::DriverError("Blob source range is invalid".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Blob source range is invalid".to_string()))?;
         let target_end = start
             .checked_add(length)
-            .ok_or_else(|| DruidError::DriverError("Blob target range overflow".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Blob target range overflow".to_string()))?;
         if target_end > state.bytes.len() {
             state.bytes.resize(target_end, 0);
         }
         state.bytes[start..target_end].copy_from_slice(&bytes[offset..source_end]);
         i32::try_from(length)
-            .map_err(|_| DruidError::DriverError("Blob write exceeds i32".to_string()))
+            .map_err(|_| RdbcError::DriverError("Blob write exceeds i32".to_string()))
     }
 
-    async fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         let state = self.state();
         let position = Self::checked_start(&state, position, true)?;
         drop(state);
@@ -248,14 +246,14 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         }))
     }
 
-    async fn truncate(&self, length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
         let mut state = self.state();
         if state.freed {
-            return Err(DruidError::DriverError("Blob has been freed".to_string()));
+            return Err(RdbcError::DriverError("Blob has been freed".to_string()));
         }
         let length = Self::checked_length(length)?;
         if length > state.bytes.len() {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "Blob truncate length exceeds current length".to_string(),
             ));
         }
@@ -267,14 +265,14 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         &self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, position, true)?;
         let length = Self::checked_length(length)?;
         let end = start
             .checked_add(length)
             .filter(|end| *end <= state.bytes.len())
-            .ok_or_else(|| DruidError::DriverError("Blob range is invalid".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("Blob range is invalid".to_string()))?;
         Ok(RdbcInputStream::from_bytes(
             state.bytes[start..end].to_vec(),
         ))

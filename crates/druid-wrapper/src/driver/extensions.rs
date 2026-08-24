@@ -9,7 +9,7 @@ use druid::core::{
     OracleValidConnectionChecker, PgExceptionSorter, PgValidConnectionChecker,
 };
 use druid::spi::driver_extension_descriptor::DriverExtensionDescriptor;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::sync::Arc;
 
@@ -30,7 +30,7 @@ pub fn init() {
 // Factory helpers
 // ---------------------------------------------------------------------------
 
-fn toasty_factory(url: &str) -> Result<Arc<dyn PhysicalConnectionFactory>, DruidError> {
+fn toasty_factory(url: &str) -> Result<Arc<dyn PhysicalConnectionFactory>, RdbcError> {
     // Block on the async ToastyConnectionFactory::new.
     // This is acceptable because inventory items are resolved lazily and
     // the factory is typically called once at pool initialization.

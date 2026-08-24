@@ -6,7 +6,7 @@
 //! `try_get_connection`, `fill_to`, restart, `notify_credentials_changed`.
 
 use druid::core::{
-    DruidError, ExecResult, PhysicalConnection, PhysicalConnectionFactory, Pool, Row, Value,
+    ExecResult, PhysicalConnection, PhysicalConnectionFactory, Pool, RdbcError, Row, Value,
 };
 use druid::pool::{DruidDataSource, DruidPool};
 use druid::stats::DataSourceMonitorable;
@@ -24,25 +24,25 @@ struct FacadeConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for FacadeConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.closed = true;
             self.close_count.fetch_add(1, Ordering::Relaxed);
@@ -63,7 +63,7 @@ struct FacadeFactory {
 
 #[async_trait::async_trait]
 impl PhysicalConnectionFactory for FacadeFactory {
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         self.create_count.fetch_add(1, Ordering::Relaxed);
         Ok(Box::new(FacadeConnection {
             closed: false,
@@ -73,7 +73,7 @@ impl PhysicalConnectionFactory for FacadeFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

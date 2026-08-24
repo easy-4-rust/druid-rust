@@ -5,7 +5,7 @@
 //! `CallableStatement#setBlob(String, InputStream[, long])` without eagerly
 //! materializing the stream into a byte array at the pooling layer.
 
-use crate::compat::DruidError;
+use crate::error::RdbcError;
 use std::fmt;
 use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -61,7 +61,7 @@ impl RdbcInputStream {
     /// # Returns
     /// The number of bytes read, or an error if the stream is closed or the
     /// underlying read operation fails.
-    pub fn read(&self, buffer: &mut [u8]) -> Result<usize, DruidError> {
+    pub fn read(&self, buffer: &mut [u8]) -> Result<usize, RdbcError> {
         let mut state = self
             .inner
             .state
@@ -70,14 +70,14 @@ impl RdbcInputStream {
         let reader = state
             .reader
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("InputStream is closed".to_string()))?;
+            .ok_or_else(|| RdbcError::DriverError("InputStream is closed".to_string()))?;
         reader
             .read(buffer)
-            .map_err(|error| DruidError::DriverError(format!("InputStream read failed: {error}")))
+            .map_err(|error| RdbcError::DriverError(format!("InputStream read failed: {error}")))
     }
 
     /// Reads from the current shared cursor to the end of the stream.
-    pub fn read_to_end(&self) -> Result<Vec<u8>, DruidError> {
+    pub fn read_to_end(&self) -> Result<Vec<u8>, RdbcError> {
         let mut bytes = Vec::new();
         let mut state = self
             .inner
@@ -87,15 +87,15 @@ impl RdbcInputStream {
         let reader = state
             .reader
             .as_mut()
-            .ok_or_else(|| DruidError::DriverError("InputStream is closed".to_string()))?;
-        reader.read_to_end(&mut bytes).map_err(|error| {
-            DruidError::DriverError(format!("InputStream read failed: {error}"))
-        })?;
+            .ok_or_else(|| RdbcError::DriverError("InputStream is closed".to_string()))?;
+        reader
+            .read_to_end(&mut bytes)
+            .map_err(|error| RdbcError::DriverError(format!("InputStream read failed: {error}")))?;
         Ok(bytes)
     }
 
     /// Closes the input stream. Repeated calls are idempotent.
-    pub fn close(&self) -> Result<(), DruidError> {
+    pub fn close(&self) -> Result<(), RdbcError> {
         self.inner
             .state
             .lock()

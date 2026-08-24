@@ -28,7 +28,7 @@ impl MockConnection {
 
 #[async_trait::async_trait]
 impl Connection for MockConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         self.exec_count.fetch_add(1, Ordering::Relaxed);
         Ok(ExecResult {
             rows_affected: 1,
@@ -36,22 +36,22 @@ impl Connection for MockConnection {
             row_count: None,
         })
     }
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(vec![Row::new(vec![Value::Int(1)])])
     }
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -67,12 +67,12 @@ static CREATED: AtomicU64 = AtomicU64::new(0);
 
 #[async_trait::async_trait]
 impl ConnectionFactory for MockFactory {
-    async fn create(&self) -> Result<Box<dyn Connection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
         CREATED.fetch_add(1, Ordering::SeqCst);
         let (conn, _) = MockConnection::new();
         Ok(Box::new(conn))
     }
-    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), DruidError> {
+    async fn validate(&self, conn: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
         conn.ping().await
     }
 }

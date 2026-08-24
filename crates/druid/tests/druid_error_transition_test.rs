@@ -1,12 +1,11 @@
-//! P03 transitional `DruidError` 搬迁的类型身份与独立 golden 行为合同。
+//! P04 `DruidError` 产品所有权与 P03 独立 golden 行为合同。
 
 use std::any::TypeId;
 use std::error::Error;
 use std::time::Duration;
 
-use druid::core::error::DruidError as OldDruidError;
-use druid_rdbc::compat::DruidError as TransitionalDruidError;
-use druid_rdbc::error::{SqlException, SqlExceptionCause};
+use druid::core::error::DruidError as ProductDruidError;
+use druid_rdbc::error::{RdbcError, SqlException, SqlExceptionCause};
 use druid_rdbc::types::RdbcString;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -38,7 +37,7 @@ struct ObservableError {
 
 struct VariantCase {
     name: &'static str,
-    value: TransitionalDruidError,
+    value: ProductDruidError,
     expected: ObservableError,
 }
 
@@ -64,7 +63,7 @@ fn observe_source_chain(error: &(dyn Error + 'static)) -> Vec<SourceObservable> 
     let mut source = error.source();
     while let Some(current) = source {
         let druid_error = current
-            .downcast_ref::<TransitionalDruidError>()
+            .downcast_ref::<ProductDruidError>()
             .expect("DruidError source chain must retain typed DruidError causes");
         chain.push(SourceObservable {
             display: current.to_string(),
@@ -75,7 +74,7 @@ fn observe_source_chain(error: &(dyn Error + 'static)) -> Vec<SourceObservable> 
     chain
 }
 
-fn observe(error: &TransitionalDruidError) -> ObservableError {
+fn observe(error: &ProductDruidError) -> ObservableError {
     ObservableError {
         display: error.to_string(),
         class_name: error.class_name().to_owned(),
@@ -115,29 +114,29 @@ fn source(display: &str, class_name: &str) -> SourceObservable {
     }
 }
 
-fn assert_exhaustive_variant(error: &TransitionalDruidError, expected_name: &str) {
+fn assert_exhaustive_variant(error: &ProductDruidError, expected_name: &str) {
     let actual_name = match error {
-        TransitionalDruidError::PoolClosed => "PoolClosed",
-        TransitionalDruidError::DataSourceClosed { .. } => "DataSourceClosed",
-        TransitionalDruidError::AcquireTimeout => "AcquireTimeout",
-        TransitionalDruidError::GetConnectionTimeout { .. } => "GetConnectionTimeout",
-        TransitionalDruidError::LoginTimeout => "LoginTimeout",
-        TransitionalDruidError::PoolExhausted => "PoolExhausted",
-        TransitionalDruidError::MaxWaitThreadCountExceeded { .. } => "MaxWaitThreadCountExceeded",
-        TransitionalDruidError::ValidationFailed(_) => "ValidationFailed",
-        TransitionalDruidError::ConnectionLeaked { .. } => "ConnectionLeaked",
-        TransitionalDruidError::ConnectionDiscarded => "ConnectionDiscarded",
-        TransitionalDruidError::DriverError(_) => "DriverError",
-        TransitionalDruidError::SqlException(_) => "SqlException",
-        TransitionalDruidError::BatchUpdateException { .. } => "BatchUpdateException",
-        TransitionalDruidError::SqlParseError(_) => "SqlParseError",
-        TransitionalDruidError::WallViolation(_) => "WallViolation",
-        TransitionalDruidError::DataSourceNotFound(_) => "DataSourceNotFound",
-        TransitionalDruidError::DataSourceDisabled => "DataSourceDisabled",
-        TransitionalDruidError::ActiveConnectionsPreventRestart { .. } => {
+        ProductDruidError::PoolClosed => "PoolClosed",
+        ProductDruidError::DataSourceClosed { .. } => "DataSourceClosed",
+        ProductDruidError::AcquireTimeout => "AcquireTimeout",
+        ProductDruidError::GetConnectionTimeout { .. } => "GetConnectionTimeout",
+        ProductDruidError::LoginTimeout => "LoginTimeout",
+        ProductDruidError::PoolExhausted => "PoolExhausted",
+        ProductDruidError::MaxWaitThreadCountExceeded { .. } => "MaxWaitThreadCountExceeded",
+        ProductDruidError::ValidationFailed(_) => "ValidationFailed",
+        ProductDruidError::ConnectionLeaked { .. } => "ConnectionLeaked",
+        ProductDruidError::ConnectionDiscarded => "ConnectionDiscarded",
+        ProductDruidError::DriverError(_) => "DriverError",
+        ProductDruidError::SqlException(_) => "SqlException",
+        ProductDruidError::BatchUpdateException { .. } => "BatchUpdateException",
+        ProductDruidError::SqlParseError(_) => "SqlParseError",
+        ProductDruidError::WallViolation(_) => "WallViolation",
+        ProductDruidError::DataSourceNotFound(_) => "DataSourceNotFound",
+        ProductDruidError::DataSourceDisabled => "DataSourceDisabled",
+        ProductDruidError::ActiveConnectionsPreventRestart { .. } => {
             "ActiveConnectionsPreventRestart"
         }
-        TransitionalDruidError::OnFatalError {
+        ProductDruidError::OnFatalError {
             active_count,
             max_active,
             last_error_time_millis,
@@ -154,34 +153,27 @@ fn assert_exhaustive_variant(error: &TransitionalDruidError, expected_name: &str
             assert!(cause.is_some());
             "OnFatalError"
         }
-        TransitionalDruidError::DataSourceNotAvailable { .. } => "DataSourceNotAvailable",
-        TransitionalDruidError::InvalidArgument(_) => "InvalidArgument",
-        TransitionalDruidError::UnsupportedOperation { .. } => "UnsupportedOperation",
-        TransitionalDruidError::NoDriverExtension { .. } => "NoDriverExtension",
-        TransitionalDruidError::Other(_) => "Other",
+        ProductDruidError::DataSourceNotAvailable { .. } => "DataSourceNotAvailable",
+        ProductDruidError::InvalidArgument(_) => "InvalidArgument",
+        ProductDruidError::UnsupportedOperation { .. } => "UnsupportedOperation",
+        ProductDruidError::NoDriverExtension { .. } => "NoDriverExtension",
+        ProductDruidError::Other(_) => "Other",
+        ProductDruidError::Rdbc(_) => "Rdbc",
     };
     assert_eq!(actual_name, expected_name);
 }
 
 #[test]
-fn old_and_transitional_paths_are_the_same_type_without_conversion() {
-    assert_eq!(
-        TypeId::of::<OldDruidError>(),
-        TypeId::of::<TransitionalDruidError>()
-    );
+fn product_error_is_distinct_and_wraps_rdbc_once() {
+    assert_ne!(TypeId::of::<ProductDruidError>(), TypeId::of::<RdbcError>());
 
-    fn old_to_new_to_old(value: OldDruidError) -> OldDruidError {
-        let new: TransitionalDruidError = value;
-        let old: OldDruidError = new;
-        old
-    }
-
-    let identity: fn(OldDruidError) -> OldDruidError = old_to_new_to_old;
-    let old: Option<OldDruidError> = None;
-    let new: Option<TransitionalDruidError> = old;
-    let old_again: Option<OldDruidError> = new;
-    assert!(old_again.is_none());
-    let _ = identity;
+    let product =
+        ProductDruidError::from(RdbcError::DriverError("driver boundary failed".to_owned()));
+    assert!(matches!(
+        product,
+        ProductDruidError::Rdbc(RdbcError::DriverError(ref message))
+            if message == "driver boundary failed"
+    ));
 }
 
 #[test]
@@ -222,7 +214,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
     let cases = vec![
         VariantCase {
             name: "PoolClosed",
-            value: TransitionalDruidError::PoolClosed,
+            value: ProductDruidError::PoolClosed,
             expected: golden(
                 "connection pool is closed",
                 "druid::PoolClosed",
@@ -233,7 +225,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "DataSourceClosed",
-            value: TransitionalDruidError::DataSourceClosed {
+            value: ProductDruidError::DataSourceClosed {
                 close_time_millis: u64::MAX,
             },
             expected: golden(
@@ -246,7 +238,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "AcquireTimeout",
-            value: TransitionalDruidError::AcquireTimeout,
+            value: ProductDruidError::AcquireTimeout,
             expected: golden(
                 "acquire connection timed out",
                 "druid::AcquireTimeout",
@@ -257,7 +249,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "GetConnectionTimeout",
-            value: TransitionalDruidError::GetConnectionTimeout {
+            value: ProductDruidError::GetConnectionTimeout {
                 wait_millis: 5_000,
                 active_count: 8,
                 max_active: 8,
@@ -265,7 +257,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
                 create_elapsed_millis: Some(750),
                 create_error_count: 2,
                 running_sql: vec![(3, "select 1".to_owned()), (2, "select 2".to_owned())],
-                cause: Some(Box::new(TransitionalDruidError::DriverError(
+                cause: Some(Box::new(ProductDruidError::DriverError(
                     "connect refused".to_owned(),
                 ))),
             },
@@ -279,7 +271,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "LoginTimeout",
-            value: TransitionalDruidError::LoginTimeout,
+            value: ProductDruidError::LoginTimeout,
             expected: golden(
                 "physical connection login timed out",
                 "druid::LoginTimeout",
@@ -290,7 +282,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "PoolExhausted",
-            value: TransitionalDruidError::PoolExhausted,
+            value: ProductDruidError::PoolExhausted,
             expected: golden(
                 "connection pool exhausted",
                 "druid::PoolExhausted",
@@ -301,7 +293,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "MaxWaitThreadCountExceeded",
-            value: TransitionalDruidError::MaxWaitThreadCountExceeded {
+            value: ProductDruidError::MaxWaitThreadCountExceeded {
                 max: 16,
                 current: 17,
             },
@@ -315,7 +307,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "ValidationFailed",
-            value: TransitionalDruidError::ValidationFailed("validation query failed".to_owned()),
+            value: ProductDruidError::ValidationFailed("validation query failed".to_owned()),
             expected: golden(
                 "connection validation failed: validation query failed",
                 "druid::ValidationFailed",
@@ -326,7 +318,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "ConnectionLeaked",
-            value: TransitionalDruidError::ConnectionLeaked {
+            value: ProductDruidError::ConnectionLeaked {
                 id: 42,
                 held_for: Duration::from_secs(30),
             },
@@ -340,7 +332,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "ConnectionDiscarded",
-            value: TransitionalDruidError::ConnectionDiscarded,
+            value: ProductDruidError::ConnectionDiscarded,
             expected: golden(
                 "connection has been discarded",
                 "druid::ConnectionDiscarded",
@@ -351,7 +343,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "DriverError",
-            value: TransitionalDruidError::DriverError("driver failed".to_owned()),
+            value: ProductDruidError::DriverError("driver failed".to_owned()),
             expected: golden(
                 "driver error: driver failed",
                 "druid::DriverError",
@@ -362,7 +354,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "SqlException",
-            value: TransitionalDruidError::SqlException(Box::new(sql_exception)),
+            value: ProductDruidError::SqlException(Box::new(sql_exception)),
             expected: golden(
                 "SQL exception (code=1205, state=40001): deadlock victim",
                 "vendor.DeadlockException",
@@ -416,9 +408,9 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "BatchUpdateException",
-            value: TransitionalDruidError::BatchUpdateException {
+            value: ProductDruidError::BatchUpdateException {
                 update_counts: vec![1, -2, -3],
-                cause: Box::new(TransitionalDruidError::SqlException(Box::new(
+                cause: Box::new(ProductDruidError::SqlException(Box::new(
                     batch_sql_exception,
                 ))),
             },
@@ -448,7 +440,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "SqlParseError",
-            value: TransitionalDruidError::SqlParseError("unexpected token".to_owned()),
+            value: ProductDruidError::SqlParseError("unexpected token".to_owned()),
             expected: golden(
                 "SQL parse error: unexpected token",
                 "druid::SqlParseError",
@@ -459,7 +451,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "WallViolation",
-            value: TransitionalDruidError::WallViolation("blocked statement".to_owned()),
+            value: ProductDruidError::WallViolation("blocked statement".to_owned()),
             expected: golden(
                 "wall violation: blocked statement",
                 "druid::WallViolation",
@@ -470,7 +462,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "DataSourceNotFound",
-            value: TransitionalDruidError::DataSourceNotFound("orders".to_owned()),
+            value: ProductDruidError::DataSourceNotFound("orders".to_owned()),
             expected: golden(
                 "datasource not found: orders",
                 "druid::DataSourceNotFound",
@@ -481,7 +473,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "DataSourceDisabled",
-            value: TransitionalDruidError::DataSourceDisabled,
+            value: ProductDruidError::DataSourceDisabled,
             expected: golden(
                 "datasource is disabled",
                 "com.alibaba.druid.pool.DataSourceDisableException",
@@ -492,7 +484,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "ActiveConnectionsPreventRestart",
-            value: TransitionalDruidError::ActiveConnectionsPreventRestart { active_count: 5 },
+            value: ProductDruidError::ActiveConnectionsPreventRestart { active_count: 5 },
             expected: golden(
                 "can not restart, active connection count not zero: 5",
                 "druid::ActiveConnectionsPreventRestart",
@@ -503,13 +495,13 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "OnFatalError",
-            value: TransitionalDruidError::OnFatalError {
+            value: ProductDruidError::OnFatalError {
                 active_count: 13,
                 max_active: 12,
                 last_error_time_millis: 0,
                 last_sql: Some(RdbcString::from_utf16([0x0041, 0xD800, 0x0042])),
-                cause: Some(Box::new(TransitionalDruidError::DataSourceNotAvailable {
-                    cause: Some(Box::new(TransitionalDruidError::Other(
+                cause: Some(Box::new(ProductDruidError::DataSourceNotAvailable {
+                    cause: Some(Box::new(ProductDruidError::Other(
                         "nested fatal cause".to_owned(),
                     ))),
                 })),
@@ -530,8 +522,8 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "DataSourceNotAvailable",
-            value: TransitionalDruidError::DataSourceNotAvailable {
-                cause: Some(Box::new(TransitionalDruidError::Other(
+            value: ProductDruidError::DataSourceNotAvailable {
+                cause: Some(Box::new(ProductDruidError::Other(
                     "availability cause".to_owned(),
                 ))),
             },
@@ -545,7 +537,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "InvalidArgument",
-            value: TransitionalDruidError::InvalidArgument("bad argument".to_owned()),
+            value: ProductDruidError::InvalidArgument("bad argument".to_owned()),
             expected: golden(
                 "invalid argument: bad argument",
                 "druid::InvalidArgument",
@@ -556,7 +548,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "UnsupportedOperation",
-            value: TransitionalDruidError::UnsupportedOperation { operation: "lob" },
+            value: ProductDruidError::UnsupportedOperation { operation: "lob" },
             expected: golden(
                 "operation is not supported by the physical connection: lob",
                 "druid::UnsupportedOperation",
@@ -567,7 +559,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "NoDriverExtension",
-            value: TransitionalDruidError::NoDriverExtension {
+            value: ProductDruidError::NoDriverExtension {
                 db_type: "postgresql".to_owned(),
             },
             expected: golden(
@@ -580,7 +572,7 @@ fn all_24_variants_match_independently_derived_golden_observables() {
         },
         VariantCase {
             name: "Other",
-            value: TransitionalDruidError::Other("other failure".to_owned()),
+            value: ProductDruidError::Other("other failure".to_owned()),
             expected: golden("other failure", "druid::Other", None, None, vec![]),
         },
     ];
@@ -594,23 +586,23 @@ fn all_24_variants_match_independently_derived_golden_observables() {
 
 #[test]
 fn string_conversions_match_independent_other_variant_goldens() {
-    let from_owned: TransitionalDruidError = String::from("owned failure").into();
+    let from_owned: ProductDruidError = String::from("owned failure").into();
     assert_eq!(
         observe(&from_owned),
         golden("owned failure", "druid::Other", None, None, vec![],)
     );
     assert!(matches!(
         from_owned,
-        TransitionalDruidError::Other(ref message) if message == "owned failure"
+        ProductDruidError::Other(ref message) if message == "owned failure"
     ));
 
-    let from_borrowed: TransitionalDruidError = "borrowed failure".into();
+    let from_borrowed: ProductDruidError = "borrowed failure".into();
     assert_eq!(
         observe(&from_borrowed),
         golden("borrowed failure", "druid::Other", None, None, vec![],)
     );
     assert!(matches!(
         from_borrowed,
-        TransitionalDruidError::Other(ref message) if message == "borrowed failure"
+        ProductDruidError::Other(ref message) if message == "borrowed failure"
     ));
 }

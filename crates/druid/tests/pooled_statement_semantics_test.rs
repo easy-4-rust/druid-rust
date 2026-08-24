@@ -1,9 +1,9 @@
 //! `DruidPooledStatement` 的 Java 对照与真实 `SQLite` 契约测试。
 
 use druid::core::{
-    DruidError, DruidPooledConnection, DruidPooledStatement, ExecResult, PhysicalConnection,
-    PhysicalConnectionFactory, PhysicalStatement, PhysicalStatementOptions, Row, SqlTextStatement,
-    StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper, WrapperExt,
+    DruidPooledConnection, DruidPooledStatement, ExecResult, PhysicalConnection,
+    PhysicalConnectionFactory, PhysicalStatement, PhysicalStatementOptions, RdbcError, Row,
+    SqlTextStatement, StatementExecuteResult, StatementGeneratedKeys, Value, Wrapper, WrapperExt,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::any::TypeId;
@@ -27,7 +27,7 @@ struct MultiResultConnection {
 
 #[async_trait::async_trait]
 impl PhysicalConnection for MultiResultConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, DruidError> {
+    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         Ok(ExecResult::default())
     }
 
@@ -36,7 +36,7 @@ impl PhysicalConnection for MultiResultConnection {
         sql: &str,
         params: Vec<Value>,
         generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, DruidError> {
+    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
         assert_eq!(sql, "MULTI");
         assert!(params.is_empty());
         self.requests
@@ -54,27 +54,27 @@ impl PhysicalConnection for MultiResultConnection {
         ])
     }
 
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, DruidError> {
+    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         Ok(Vec::new())
     }
 
-    async fn begin(&mut self) -> Result<(), DruidError> {
+    async fn begin(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn commit(&mut self) -> Result<(), DruidError> {
+    async fn commit(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn rollback(&mut self) -> Result<(), DruidError> {
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn ping(&mut self) -> Result<(), DruidError> {
+    async fn ping(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<(), DruidError> {
+    async fn close(&mut self) -> Result<(), RdbcError> {
         self.closed = true;
         Ok(())
     }
@@ -239,7 +239,7 @@ async fn sqlite_generic_execute_preserves_first_result_generated_keys_and_more_r
         .unwrap_err();
     assert!(matches!(
         index_error,
-        DruidError::UnsupportedOperation {
+        RdbcError::UnsupportedOperation {
             operation: "statement_execute_generated_key_columns"
         }
     ));
@@ -256,7 +256,7 @@ async fn sqlite_generic_execute_preserves_first_result_generated_keys_and_more_r
                 &names,
             )
             .await,
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "statement_execute_generated_key_columns"
         })
     ));
@@ -271,7 +271,7 @@ async fn sqlite_generic_execute_preserves_first_result_generated_keys_and_more_r
         .expect("非法 current 参数前 ResultSet 必须存在");
     assert!(matches!(
         statement.more_results_with_current(&mut connection, 999),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(
         !still_open.is_closed(),
@@ -364,7 +364,7 @@ async fn statement_overloads_preserve_result_set_options_and_properties() {
     statement.set_poolable(&mut connection, true).unwrap();
     assert!(matches!(
         statement.set_poolable(&mut connection, false),
-        Err(DruidError::UnsupportedOperation {
+        Err(RdbcError::UnsupportedOperation {
             operation: "statement_set_poolable_false"
         })
     ));
@@ -404,7 +404,7 @@ async fn statement_close_and_old_lease_rejection_match_java_lifecycle() {
     assert!(statement.is_closed());
     assert!(matches!(
         statement.execute_query(&mut connection, "SELECT 1").await,
-        Err(DruidError::Other(message)) if message == "statement is closed"
+        Err(RdbcError::Other(message)) if message == "statement is closed"
     ));
 
     let mut old_statement = connection.create_statement().await.unwrap();
@@ -419,7 +419,7 @@ async fn statement_close_and_old_lease_rejection_match_java_lifecycle() {
         old_statement
             .execute_query(&mut next_lease, "SELECT 1")
             .await,
-        Err(DruidError::Other(message)) if message == "statement is closed"
+        Err(RdbcError::Other(message)) if message == "statement is closed"
     ));
 }
 
@@ -465,10 +465,15 @@ async fn statement_errors_batch_failure_and_wrapper_branches_are_observable() {
         .add_batch(&mut connection, "NOT A SQLITE BATCH")
         .unwrap();
     let batch_error = statement.execute_batch(&mut connection).await.unwrap_err();
-    assert_eq!(batch_error.batch_update_counts(), Some([0].as_slice()));
+    assert_eq!(
+        batch_error
+            .batch_update_counts()
+            .map(|counts| counts.large()),
+        Some([0_i64].as_slice())
+    );
     assert!(matches!(
         batch_error,
-        DruidError::BatchUpdateException { .. }
+        RdbcError::BatchUpdateException { .. }
     ));
     assert_eq!(statement.exception_count(), 4);
 
@@ -482,24 +487,24 @@ fn physical_statement_rejects_invalid_values_and_closed_access() {
     let statement = SqlTextStatement::new(PhysicalStatementOptions::default());
     assert!(matches!(
         statement.set_max_field_size(-1),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         statement.set_max_rows(-1),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         statement.set_query_timeout(-1),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     assert!(matches!(
         statement.set_fetch_size(-1),
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     statement.close().unwrap();
     assert!(statement.is_closed());
     assert!(matches!(
         statement.max_rows(),
-        Err(DruidError::Other(message)) if message == "statement is closed"
+        Err(RdbcError::Other(message)) if message == "statement is closed"
     ));
 }

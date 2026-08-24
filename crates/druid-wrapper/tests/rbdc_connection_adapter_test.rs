@@ -3,8 +3,8 @@
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid::core::{
-    ConnectionFactory, DruidError, DruidPooledConnection, DruidPooledPreparedStatement,
-    PhysicalConnection, PreparedStatementKey, PreparedStatementMethodType, RdbcBlob, RdbcClob,
+    ConnectionFactory, DruidPooledConnection, DruidPooledPreparedStatement, PhysicalConnection,
+    PreparedStatementKey, PreparedStatementMethodType, RdbcBlob, RdbcClob, RdbcError,
     RdbcInputStream, RdbcObject, RdbcOutputStream, RdbcReader, RdbcRowId, RdbcString, RdbcUrl,
     RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
@@ -160,8 +160,8 @@ impl rbdc::db::Connection for FakeRbdcConnection {
     }
 }
 
-fn unsupported_resource<T>() -> Result<T, DruidError> {
-    Err(DruidError::UnsupportedOperation {
+fn unsupported_resource<T>() -> Result<T, RdbcError> {
+    Err(RdbcError::UnsupportedOperation {
         operation: "test_resource_operation",
     })
 }
@@ -178,30 +178,26 @@ impl RdbcResourceAccess for FixtureBlob {
         RdbcResourceCapabilities::blob()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         unsupported_resource()
     }
 }
 
 #[async_trait::async_trait]
 impl RdbcBlobAccess for FixtureBlob {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         Ok(self.reported_length)
     }
 
-    async fn get_bytes(&self, _position: i64, _length: i32) -> Result<Vec<u8>, DruidError> {
+    async fn get_bytes(&self, _position: i64, _length: i32) -> Result<Vec<u8>, RdbcError> {
         Ok(self.bytes.clone())
     }
 
-    async fn get_binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         unsupported_resource()
     }
 
-    async fn position_bytes(
-        &self,
-        _pattern: &[u8],
-        _start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    async fn position_bytes(&self, _pattern: &[u8], _start: i64) -> Result<Option<i64>, RdbcError> {
         unsupported_resource()
     }
 
@@ -209,11 +205,11 @@ impl RdbcBlobAccess for FixtureBlob {
         &self,
         _pattern: &RdbcBlob,
         _start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, DruidError> {
+    async fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, RdbcError> {
         unsupported_resource()
     }
 
@@ -223,15 +219,15 @@ impl RdbcBlobAccess for FixtureBlob {
         _bytes: &[u8],
         _offset: i32,
         _length: i32,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
         unsupported_resource()
     }
 
-    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, _length: i64) -> Result<(), RdbcError> {
         unsupported_resource()
     }
 
@@ -239,7 +235,7 @@ impl RdbcBlobAccess for FixtureBlob {
         &self,
         _position: i64,
         _length: i64,
-    ) -> Result<RdbcInputStream, DruidError> {
+    ) -> Result<RdbcInputStream, RdbcError> {
         unsupported_resource()
     }
 }
@@ -256,26 +252,26 @@ impl RdbcResourceAccess for FixtureClob {
         RdbcResourceCapabilities::clob()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         unsupported_resource()
     }
 }
 
 #[async_trait::async_trait]
 impl RdbcClobAccess for FixtureClob {
-    async fn length(&self) -> Result<i64, DruidError> {
+    async fn length(&self) -> Result<i64, RdbcError> {
         Ok(self.reported_length)
     }
 
-    async fn get_sub_string(&self, _position: i64, _length: i32) -> Result<RdbcString, DruidError> {
+    async fn get_sub_string(&self, _position: i64, _length: i32) -> Result<RdbcString, RdbcError> {
         Ok(self.value.clone())
     }
 
-    async fn get_character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
         unsupported_resource()
     }
 
-    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         unsupported_resource()
     }
 
@@ -283,7 +279,7 @@ impl RdbcClobAccess for FixtureClob {
         &self,
         _pattern: &RdbcString,
         _start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         unsupported_resource()
     }
 
@@ -291,11 +287,11 @@ impl RdbcClobAccess for FixtureClob {
         &self,
         _pattern: &RdbcClob,
         _start: i64,
-    ) -> Result<Option<i64>, DruidError> {
+    ) -> Result<Option<i64>, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, DruidError> {
+    async fn set_string(&self, _position: i64, _value: &RdbcString) -> Result<i32, RdbcError> {
         unsupported_resource()
     }
 
@@ -305,19 +301,19 @@ impl RdbcClobAccess for FixtureClob {
         _value: &RdbcString,
         _offset: i32,
         _length: i32,
-    ) -> Result<i32, DruidError> {
+    ) -> Result<i32, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_ascii_stream(&self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self, _position: i64) -> Result<RdbcWriter, RdbcError> {
         unsupported_resource()
     }
 
-    async fn truncate(&self, _length: i64) -> Result<(), DruidError> {
+    async fn truncate(&self, _length: i64) -> Result<(), RdbcError> {
         unsupported_resource()
     }
 
@@ -325,7 +321,7 @@ impl RdbcClobAccess for FixtureClob {
         &self,
         _position: i64,
         _length: i64,
-    ) -> Result<RdbcReader, DruidError> {
+    ) -> Result<RdbcReader, RdbcError> {
         unsupported_resource()
     }
 }
@@ -344,53 +340,53 @@ impl RdbcResourceAccess for FixtureSqlXml {
         RdbcResourceCapabilities::sql_xml()
     }
 
-    async fn free(&self) -> Result<(), DruidError> {
+    async fn free(&self) -> Result<(), RdbcError> {
         unsupported_resource()
     }
 }
 
 #[async_trait::async_trait]
 impl RdbcSqlXmlAccess for FixtureSqlXml {
-    async fn binary_stream(&self) -> Result<RdbcInputStream, DruidError> {
+    async fn binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, DruidError> {
+    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, RdbcError> {
         unsupported_resource()
     }
 
-    async fn character_stream(&self) -> Result<RdbcReader, DruidError> {
+    async fn character_stream(&self) -> Result<RdbcReader, RdbcError> {
         unsupported_resource()
     }
 
-    async fn set_character_stream(&self) -> Result<RdbcWriter, DruidError> {
+    async fn set_character_stream(&self) -> Result<RdbcWriter, RdbcError> {
         unsupported_resource()
     }
 
-    async fn string(&self) -> Result<RdbcString, DruidError> {
+    async fn string(&self) -> Result<RdbcString, RdbcError> {
         if self.fail_string {
-            return Err(DruidError::DriverError(
+            return Err(RdbcError::DriverError(
                 "injected SQLXML string failure".to_string(),
             ));
         }
         Ok(self.value.clone())
     }
 
-    async fn set_string(&self, _value: &RdbcString) -> Result<(), DruidError> {
+    async fn set_string(&self, _value: &RdbcString) -> Result<(), RdbcError> {
         unsupported_resource()
     }
 
     async fn source(
         &self,
         _representation: &RdbcXmlRepresentationType,
-    ) -> Result<RdbcXmlSource, DruidError> {
+    ) -> Result<RdbcXmlSource, RdbcError> {
         unsupported_resource()
     }
 
     async fn result(
         &self,
         _representation: &RdbcXmlRepresentationType,
-    ) -> Result<RdbcXmlResult, DruidError> {
+    ) -> Result<RdbcXmlResult, RdbcError> {
         unsupported_resource()
     }
 }
@@ -613,11 +609,11 @@ async fn rbdc_adapter_preserves_warning_and_connection_state_semantics() {
     connection.mark_discarded();
     assert!(matches!(
         connection.warnings().await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
     assert!(matches!(
         connection.clear_warnings().await,
-        Err(DruidError::ConnectionDiscarded)
+        Err(RdbcError::ConnectionDiscarded)
     ));
 }
 
@@ -718,7 +714,7 @@ async fn rbdc_prepared_resources_preserve_setter_timing_and_batch_snapshots() {
     let short = RdbcInputStream::from_bytes(vec![1, 2]);
     assert!(matches!(
         invalid.set_binary_stream_with_int_length(&mut connection, 1, Some(short.clone()), 3,),
-        Err(DruidError::DriverError(_))
+        Err(RdbcError::DriverError(_))
     ));
     assert!(short.read_to_end().unwrap().is_empty());
     invalid.close_with_connection(&mut connection).unwrap();
@@ -952,7 +948,7 @@ async fn rbdc_prepared_lob_sqlxml_and_object_resources_materialize_at_execution_
     bind_invalid_resource(&mut connection, &mut invalid);
     assert!(matches!(
         invalid.execute_update_bound(&mut connection).await,
-        Err(DruidError::InvalidArgument(_))
+        Err(RdbcError::InvalidArgument(_))
     ));
     invalid.close_with_connection(&mut connection).unwrap();
 
@@ -1004,7 +1000,7 @@ async fn rbdc_driver_failure_preserves_the_publicly_available_structure() {
         .await
         .expect_err("fake RBDC driver must return its database error");
 
-    let DruidError::SqlException(exception) = error else {
+    let RdbcError::SqlException(exception) = error else {
         panic!("RBDC database failure 必须映射为结构化 SqlException");
     };
     assert_eq!(exception.error_code(), 0);

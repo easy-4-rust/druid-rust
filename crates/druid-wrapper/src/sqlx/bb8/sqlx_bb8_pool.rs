@@ -5,7 +5,7 @@ use druid::core::{
     ConnectionRecycleDisposition, DruidPooledConnection, FilterChain, PhysicalConnectionLease,
     Pool, PoolState,
 };
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -43,11 +43,11 @@ impl SqlxBb8Pool {
         max_open: usize,
         acquire_timeout: Duration,
         filter_chain: Option<Arc<FilterChain>>,
-    ) -> Result<Self, DruidError> {
+    ) -> Result<Self, RdbcError> {
         let max_size = u32::try_from(max_open)
             .ok()
             .filter(|value| *value > 0)
-            .ok_or_else(|| DruidError::Other("bb8 max_open must be in 1..=u32::MAX".to_string()))?;
+            .ok_or_else(|| RdbcError::Other("bb8 max_open must be in 1..=u32::MAX".to_string()))?;
         let url = url.into();
         let manager = SqlxBb8ConnectionManager::new(url.clone());
         let pool = bb8::Pool::builder()
@@ -99,13 +99,13 @@ impl SqlxBb8Pool {
         &self.pool
     }
 
-    async fn acquire(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
+    async fn acquire(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
         self.connect_count.fetch_add(1, Ordering::Relaxed);
         let lease = match tokio::time::timeout(timeout, self.pool.get_owned()).await {
             Ok(Ok(lease)) => lease,
             Ok(Err(bb8::RunError::TimedOut)) | Err(_) => {
                 self.connect_error_count.fetch_add(1, Ordering::Relaxed);
-                return Err(DruidError::AcquireTimeout);
+                return Err(RdbcError::AcquireTimeout);
             }
             Ok(Err(bb8::RunError::User(error))) => {
                 self.connect_error_count.fetch_add(1, Ordering::Relaxed);
@@ -150,12 +150,12 @@ impl SqlxBb8Pool {
 #[async_trait::async_trait]
 impl Pool for SqlxBb8Pool {
     /// 获取池化连接。
-    async fn get(&self) -> Result<DruidPooledConnection, DruidError> {
+    async fn get(&self) -> Result<DruidPooledConnection, RdbcError> {
         self.acquire(self.acquire_timeout).await
     }
 
     /// 在指定超时内获取池化连接。
-    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, DruidError> {
+    async fn get_timeout(&self, timeout: Duration) -> Result<DruidPooledConnection, RdbcError> {
         self.acquire(timeout).await
     }
 

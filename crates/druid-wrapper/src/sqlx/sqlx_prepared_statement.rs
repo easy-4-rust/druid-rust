@@ -2,7 +2,7 @@
 
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
     SqlTextStatement,
@@ -20,7 +20,7 @@ use tokio::sync::watch;
 
 /// `SQLx` 语句执行期间由 Druid 控制面产生的中断结果。
 pub(crate) enum SqlxStatementExecutionError {
-    Driver(DruidError),
+    Driver(RdbcError),
     TimedOut,
     Cancelled,
 }
@@ -184,7 +184,7 @@ impl SqlxPreparedStatement {
     /// 在 `SQLx` 物理 setter 边界物化一个完整 JDBC 参数描述符。
     pub(crate) async fn materialize_parameter(
         parameter: &PreparedInputParameter,
-    ) -> Result<Value, DruidError> {
+    ) -> Result<Value, RdbcError> {
         PreparedParameterMaterializer::materialize(parameter).await
     }
 
@@ -192,7 +192,7 @@ impl SqlxPreparedStatement {
     pub(crate) async fn materialized_parameters(
         &self,
         parameter_count: usize,
-    ) -> Result<Vec<Value>, DruidError> {
+    ) -> Result<Vec<Value>, RdbcError> {
         self.parameter_state.values(parameter_count).await
     }
 
@@ -200,7 +200,7 @@ impl SqlxPreparedStatement {
     pub(crate) async fn take_batches(
         &self,
         expected_count: usize,
-    ) -> Result<Option<Vec<Vec<Value>>>, DruidError> {
+    ) -> Result<Option<Vec<Vec<Value>>>, RdbcError> {
         self.parameter_state.take_batches(expected_count).await
     }
 
@@ -213,7 +213,7 @@ impl SqlxPreparedStatement {
         execution: F,
     ) -> Result<T, SqlxStatementExecutionError>
     where
-        F: Future<Output = Result<T, DruidError>>,
+        F: Future<Output = Result<T, RdbcError>>,
     {
         let generation = *self.cancel_generation.borrow();
         let mut cancellation = self.cancel_generation.subscribe();
@@ -257,74 +257,74 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
         self
     }
 
-    fn max_field_size(&self) -> Result<i32, DruidError> {
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
         self.statement.max_field_size()
     }
 
-    fn set_max_field_size(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_field_size(&self, max: i32) -> Result<(), RdbcError> {
         self.statement.set_max_field_size(max)
     }
 
-    fn max_rows(&self) -> Result<i32, DruidError> {
+    fn max_rows(&self) -> Result<i32, RdbcError> {
         self.statement.max_rows()
     }
 
-    fn set_max_rows(&self, max: i32) -> Result<(), DruidError> {
+    fn set_max_rows(&self, max: i32) -> Result<(), RdbcError> {
         self.statement.set_max_rows(max)
     }
 
-    fn set_escape_processing(&self, enabled: bool) -> Result<(), DruidError> {
+    fn set_escape_processing(&self, enabled: bool) -> Result<(), RdbcError> {
         self.statement.set_escape_processing(enabled)
     }
 
-    fn query_timeout(&self) -> Result<i32, DruidError> {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.statement.query_timeout()
     }
 
-    fn set_query_timeout(&self, seconds: i32) -> Result<(), DruidError> {
+    fn set_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
         self.statement.set_query_timeout(seconds)
     }
 
-    fn cancel(&self) -> Result<(), DruidError> {
+    fn cancel(&self) -> Result<(), RdbcError> {
         self.statement.cancel()?;
         let next = (*self.cancel_generation.borrow()).wrapping_add(1);
         self.cancel_generation.send_replace(next);
         Ok(())
     }
 
-    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, DruidError> {
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
         self.statement.warnings()
     }
 
-    fn clear_warnings(&self) -> Result<(), DruidError> {
+    fn clear_warnings(&self) -> Result<(), RdbcError> {
         self.statement.clear_warnings()
     }
 
-    fn set_cursor_name(&self, name: &str) -> Result<(), DruidError> {
+    fn set_cursor_name(&self, name: &str) -> Result<(), RdbcError> {
         self.statement.set_cursor_name(name)
     }
 
-    fn set_fetch_direction(&self, direction: i32) -> Result<(), DruidError> {
+    fn set_fetch_direction(&self, direction: i32) -> Result<(), RdbcError> {
         self.statement.set_fetch_direction(direction)
     }
 
-    fn fetch_direction(&self) -> Result<i32, DruidError> {
+    fn fetch_direction(&self) -> Result<i32, RdbcError> {
         self.statement.fetch_direction()
     }
 
-    fn set_fetch_size(&self, rows: i32) -> Result<(), DruidError> {
+    fn set_fetch_size(&self, rows: i32) -> Result<(), RdbcError> {
         self.statement.set_fetch_size(rows)
     }
 
-    fn fetch_size(&self) -> Result<i32, DruidError> {
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
         self.statement.fetch_size()
     }
 
-    fn close_on_completion(&self) -> Result<(), DruidError> {
+    fn close_on_completion(&self) -> Result<(), RdbcError> {
         self.statement.close_on_completion()
     }
 
-    fn is_close_on_completion(&self) -> Result<bool, DruidError> {
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
         self.statement.is_close_on_completion()
     }
 
@@ -332,30 +332,30 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
         &self,
         parameter_index: usize,
         parameter: &PreparedInputParameter,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         self.parameter_state.set(parameter_index, parameter)
     }
 
-    fn clear_parameters(&self) -> Result<(), DruidError> {
+    fn clear_parameters(&self) -> Result<(), RdbcError> {
         self.parameter_state.clear_parameters();
         Ok(())
     }
 
-    fn add_batch(&self, params: &[Value]) -> Result<(), DruidError> {
+    fn add_batch(&self, params: &[Value]) -> Result<(), RdbcError> {
         self.parameter_state.add_values(params);
         Ok(())
     }
 
-    fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), DruidError> {
+    fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), RdbcError> {
         self.parameter_state.add_parameters(params)
     }
 
-    fn clear_batch(&self) -> Result<(), DruidError> {
+    fn clear_batch(&self) -> Result<(), RdbcError> {
         self.parameter_state.clear_batches();
         Ok(())
     }
 
-    fn close(&self) -> Result<(), DruidError> {
+    fn close(&self) -> Result<(), RdbcError> {
         self.closed.store(true, Ordering::Release);
         self.statement.close()?;
         Ok(())

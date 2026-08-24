@@ -1,5 +1,5 @@
 use super::{HttpSqlConnectionAdapter, HttpSqlProvider};
-use druid_rdbc::compat::DruidError;
+use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 
@@ -47,7 +47,7 @@ impl PhysicalConnectionFactory for HttpSqlConnectionFactory {
         Some(&self.endpoint)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, DruidError> {
+    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
         let mut connection = HttpSqlConnectionAdapter::new(
             self.provider,
             self.endpoint.clone(),
@@ -61,7 +61,7 @@ impl PhysicalConnectionFactory for HttpSqlConnectionFactory {
     async fn validate(
         &self,
         connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), DruidError> {
+    ) -> Result<(), RdbcError> {
         connection.ping().await
     }
 }

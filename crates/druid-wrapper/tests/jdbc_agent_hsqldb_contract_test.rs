@@ -1,7 +1,7 @@
 #![cfg(feature = "jdbc-agent")]
 
 use druid::core::{
-    DruidError, PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, Value,
+    PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, RdbcError, Value,
 };
 use druid_wrapper::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use std::path::PathBuf;
@@ -91,7 +91,7 @@ async fn jdbc_agent_hsqldb_contract_when_configured() {
         .await
         .expect_err("a duplicate key in a JDBC batch must fail");
     match batch_error {
-        DruidError::BatchUpdateException {
+        RdbcError::BatchUpdateException {
             update_counts,
             cause,
         } => {
@@ -99,7 +99,7 @@ async fn jdbc_agent_hsqldb_contract_when_configured() {
                 !update_counts.is_empty(),
                 "the Agent must preserve JDBC partial update counts"
             );
-            assert!(matches!(*cause, DruidError::SqlException(_)));
+            assert!(matches!(*cause, RdbcError::SqlException(_)));
         }
         error => panic!("expected BatchUpdateException, got {error:?}"),
     }
