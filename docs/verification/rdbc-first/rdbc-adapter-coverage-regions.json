@@ -1,0 +1,1062 @@
+{
+  "schema_version": "task4-compiler-coverage-v1",
+  "families": [
+    {
+      "family": "DUCKDB",
+      "test_target": "test:duckdb_connection_adapter_test",
+      "test_id": "duckdb_standard_factory_emits_typed_runtime_trace",
+      "profile": "all-features",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.duckdb.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/tests/duckdb_connection_adapter_test.rs",
+          "source_sha256": "3dbe5e1a7afb99365c54525249d9f53618e28f54793b010c69272d0805157e85",
+          "function_name": "duckdb_standard_factory_emits_typed_runtime_trace",
+          "region_line": "druid_wrapper::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 41,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs",
+          "source_sha256": "90e442b5e94a97119b8f37333fd4df76a6713b241046e6fbc49e5c59b15c416f",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs",
+          "source_sha256": "90e442b5e94a97119b8f37333fd4df76a6713b241046e6fbc49e5c59b15c416f",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs",
+          "source_sha256": "8ce6250d687ca86ff303e63a4ac80d50f7a3ce657a400c018dce6ffb4f1fbd0d",
+          "function_name": "standard_execute_update_core",
+          "region_line": "let result = self.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 27,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "execute_update",
+          "region_line": "executor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "set_parameter",
+          "region_line": "executor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "execute_prepared_query",
+          "region_line": "executor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "next",
+          "region_line": "executor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 26,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "meta_data",
+          "region_line": "executor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 22,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+          "source_sha256": "2edef6b82fa3d0fc3c8a4520fbbab0413b9a444139d24701388993bdf4b85693",
+          "function_name": "database_product_name",
+          "region_line": "self.executor.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+          "source_sha256": "ff1eae16c66dfc41154e82737afba0fd9c7ff0bea0b9b83347c7b7e6e5829997",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    },
+    {
+      "family": "HTTP_SQL",
+      "test_target": "lib",
+      "test_id": "http_sql::http_sql_connection_factory::tests::http_sql_standard_factory_uses_deterministic_transport_owned_core",
+      "profile": "all-features",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.http-sql.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
+          "source_sha256": "fa65c312a860c6d81a88f208fd1ccc7d90d9b8a45ce029158485cbcf8ff59ef5",
+          "function_name": "http_sql_standard_factory_uses_deterministic_transport_owned_core",
+          "region_line": "crate::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 37,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
+          "source_sha256": "fa65c312a860c6d81a88f208fd1ccc7d90d9b8a45ce029158485cbcf8ff59ef5",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
+          "source_sha256": "fa65c312a860c6d81a88f208fd1ccc7d90d9b8a45ce029158485cbcf8ff59ef5",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/http_sql/http_sql_connection_adapter.rs",
+          "source_sha256": "dad8a68a6e1c6a072e76c2884b13ef2f3773162fabdf29b39285493c1b114c20",
+          "function_name": "standard_execute_update_core",
+          "region_line": "let result = self.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 27,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "execute_update",
+          "region_line": "executor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "set_parameter",
+          "region_line": "executor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "execute_prepared_query",
+          "region_line": "executor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "next",
+          "region_line": "executor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 26,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "meta_data",
+          "region_line": "executor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 22,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+          "source_sha256": "2edef6b82fa3d0fc3c8a4520fbbab0413b9a444139d24701388993bdf4b85693",
+          "function_name": "database_product_name",
+          "region_line": "self.executor.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+          "source_sha256": "ff1eae16c66dfc41154e82737afba0fd9c7ff0bea0b9b83347c7b7e6e5829997",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    },
+    {
+      "family": "JDBC_AGENT",
+      "test_target": "lib",
+      "test_id": "jdbc_agent::jdbc_agent_connection_factory::tests::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+      "profile": "all-features",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.jdbc-agent.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
+          "source_sha256": "3c583007af4e9ce13b0561cc295796e0ee4aae7c4deea1c440d72ad1c97736b2",
+          "function_name": "jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+          "region_line": "crate::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 37,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
+          "source_sha256": "3c583007af4e9ce13b0561cc295796e0ee4aae7c4deea1c440d72ad1c97736b2",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
+          "source_sha256": "3c583007af4e9ce13b0561cc295796e0ee4aae7c4deea1c440d72ad1c97736b2",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs",
+          "source_sha256": "03c1e6b9f5e9b1d8ed298806a97e59e088f3b89e74ed5ab53c24821bb6cfb853",
+          "function_name": "standard_execute_update_core",
+          "region_line": "let result = self.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 27,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "execute_update",
+          "region_line": "executor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "set_parameter",
+          "region_line": "executor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "execute_prepared_query",
+          "region_line": "executor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "next",
+          "region_line": "executor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 26,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "meta_data",
+          "region_line": "executor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 22,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+          "source_sha256": "2edef6b82fa3d0fc3c8a4520fbbab0413b9a444139d24701388993bdf4b85693",
+          "function_name": "database_product_name",
+          "region_line": "self.executor.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+          "source_sha256": "ff1eae16c66dfc41154e82737afba0fd9c7ff0bea0b9b83347c7b7e6e5829997",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    },
+    {
+      "family": "LIBSQL",
+      "test_target": "lib",
+      "test_id": "libsql::libsql_connection_factory::tests::libsql_standard_factory_uses_deterministic_transport_owned_core",
+      "profile": "all-features",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.libsql.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
+          "source_sha256": "5992c58d927743a817ec59e111242b97dc7aada7748403a6a1674f1d049ca9d7",
+          "function_name": "libsql_standard_factory_uses_deterministic_transport_owned_core",
+          "region_line": "crate::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 37,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
+          "source_sha256": "5992c58d927743a817ec59e111242b97dc7aada7748403a6a1674f1d049ca9d7",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
+          "source_sha256": "5992c58d927743a817ec59e111242b97dc7aada7748403a6a1674f1d049ca9d7",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/libsql/libsql_connection_adapter.rs",
+          "source_sha256": "90b7c470884c855704715d58cffc3f2ea6c93ceadd691f67f9e7fdec0a045762",
+          "function_name": "standard_execute_update_core",
+          "region_line": "let result = self.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 27,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "execute_update",
+          "region_line": "executor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "set_parameter",
+          "region_line": "executor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "execute_prepared_query",
+          "region_line": "executor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "next",
+          "region_line": "executor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 26,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "meta_data",
+          "region_line": "executor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 22,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+          "source_sha256": "2edef6b82fa3d0fc3c8a4520fbbab0413b9a444139d24701388993bdf4b85693",
+          "function_name": "database_product_name",
+          "region_line": "self.executor.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+          "source_sha256": "ff1eae16c66dfc41154e82737afba0fd9c7ff0bea0b9b83347c7b7e6e5829997",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    },
+    {
+      "family": "RBDC",
+      "test_target": "test:rbdc_connection_adapter_test",
+      "test_id": "rbdc_standard_factory_emits_typed_runtime_trace",
+      "profile": "default",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.rbdc.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs",
+          "source_sha256": "f5e8df13bed46fe23a274dea188cb02d0ff8827e3cb5ba8852e759a02b0edb1e",
+          "function_name": "rbdc_standard_factory_emits_typed_runtime_trace",
+          "region_line": "druid_wrapper::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 41,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs",
+          "source_sha256": "67bf72517daf788783059cf29973a86bfebbb12b9941b824dea6ebf8ff9231a4",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs",
+          "source_sha256": "67bf72517daf788783059cf29973a86bfebbb12b9941b824dea6ebf8ff9231a4",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/rbdc/rbdc_connection_adapter.rs",
+          "source_sha256": "67d69db39afe762d7f396cb7019c7b948ad59d5408c1a6253c0a8aa76758023a",
+          "function_name": "standard_execute_update_core",
+          "region_line": "let result = self.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 27,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "execute_update",
+          "region_line": "executor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "set_parameter",
+          "region_line": "executor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "execute_prepared_query",
+          "region_line": "executor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "next",
+          "region_line": "executor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 26,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "meta_data",
+          "region_line": "executor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 22,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+          "source_sha256": "2edef6b82fa3d0fc3c8a4520fbbab0413b9a444139d24701388993bdf4b85693",
+          "function_name": "database_product_name",
+          "region_line": "self.executor.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+          "source_sha256": "ff1eae16c66dfc41154e82737afba0fd9c7ff0bea0b9b83347c7b7e6e5829997",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    },
+    {
+      "family": "SQLX",
+      "test_target": "test:statement_executor_ownership_test",
+      "test_id": "sqlx_standard_factory_emits_typed_runtime_trace",
+      "profile": "default",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.sqlx.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/tests/statement_executor_ownership_test.rs",
+          "source_sha256": "f03b5ad38f8faad590d5693bfd4d22ecf0455d63b2163080dce9a59be844aa3f",
+          "function_name": "sqlx_standard_factory_emits_typed_runtime_trace",
+          "region_line": "druid_wrapper::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 41,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs",
+          "source_sha256": "6a0de526516db4f211a0ac45008162eb9ed40a027d7cb4db96ac3bf71664bdbf",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs",
+          "source_sha256": "6a0de526516db4f211a0ac45008162eb9ed40a027d7cb4db96ac3bf71664bdbf",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+          "source_sha256": "58366a282fd9cc6bd404f10ef1cef84eeb43aada6ed2c0b7ea9cb5438e388910",
+          "function_name": "execute_update",
+          "region_line": "let result = connection.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 33,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+          "source_sha256": "412f3e774f1726ac5c524059fad986727d667f5dd394ed2512ba0fa80f52f6d3",
+          "function_name": "owned_statement",
+          "region_line": "actor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 15,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+          "source_sha256": "412f3e774f1726ac5c524059fad986727d667f5dd394ed2512ba0fa80f52f6d3",
+          "function_name": "execute_update",
+          "region_line": "actor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 15,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+          "source_sha256": "412f3e774f1726ac5c524059fad986727d667f5dd394ed2512ba0fa80f52f6d3",
+          "function_name": "owned_prepared_statement",
+          "region_line": "actor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 15,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+          "source_sha256": "412f3e774f1726ac5c524059fad986727d667f5dd394ed2512ba0fa80f52f6d3",
+          "function_name": "set_parameter",
+          "region_line": "actor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 15,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+          "source_sha256": "412f3e774f1726ac5c524059fad986727d667f5dd394ed2512ba0fa80f52f6d3",
+          "function_name": "execute_prepared_query",
+          "region_line": "actor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 15,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+          "source_sha256": "1df8971a600f19f05c635efd05ab379ca9e45938521808a8324357a4ae75ad9b",
+          "function_name": "next",
+          "region_line": "actor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+          "source_sha256": "1df8971a600f19f05c635efd05ab379ca9e45938521808a8324357a4ae75ad9b",
+          "function_name": "meta_data",
+          "region_line": "actor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs",
+          "source_sha256": "2e24037f53614431f4c5fc213e4434578afef4764a91ef6f2daf81ebc5672e08",
+          "function_name": "database_product_name",
+          "region_line": "self.actor_core()?.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 28,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+          "source_sha256": "58366a282fd9cc6bd404f10ef1cef84eeb43aada6ed2c0b7ea9cb5438e388910",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    },
+    {
+      "family": "TOASTY",
+      "test_target": "test:toasty_connection_adapter_test",
+      "test_id": "toasty_standard_factory_emits_typed_runtime_trace",
+      "profile": "default",
+      "trace_version": "task4-runtime-trace-v1",
+      "trace_evidence_id": "task4.toasty.runtime-trace-v1",
+      "coverage_version": "task4-compiler-coverage-v1",
+      "requirements": [
+        {
+          "requirement_id": "EXACT_TEST_IDENTITY",
+          "source_path": "crates/druid-wrapper/tests/toasty_connection_adapter_test.rs",
+          "source_sha256": "1f71b845739a4b1006a4ee48479eed37f796297fdf4b496ad83035a90aa7e3ff",
+          "function_name": "toasty_standard_factory_emits_typed_runtime_trace",
+          "region_line": "wrapper::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();",
+          "region_occurrence": 1,
+          "region_column": 35,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_FACTORY_CREATE",
+          "source_path": "crates/druid-wrapper/src/toasty/toasty_connection_factory.rs",
+          "source_sha256": "749dc1f26d2d64908d0dc62728d9f30effafc03def395eb16e380998c5d27dc0",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_factory_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_CONNECTION_CREATE",
+          "source_path": "crates/druid-wrapper/src/toasty/toasty_connection_factory.rs",
+          "source_sha256": "749dc1f26d2d64908d0dc62728d9f30effafc03def395eb16e380998c5d27dc0",
+          "function_name": "create_adapter_core",
+          "region_line": "trace.task4_trace_connection_create();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "FAMILY_EXECUTOR",
+          "source_path": "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+          "source_sha256": "f889516b0c84bad0a41d2331aba1f39714da4b8f864fcb72c0ba26e3f48379b2",
+          "function_name": "standard_execute_update_core",
+          "region_line": "let result = self.execute_update_core(sql, values).await?;",
+          "region_occurrence": 1,
+          "region_column": 27,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_statement_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "STATEMENT_UPDATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+          "source_sha256": "b74ab53f26f564cf8ad9fb5cf559e2515e818332740c2954b41e179c80b33b60",
+          "function_name": "execute_update",
+          "region_line": "executor.task4_trace_statement_update();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_CREATE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "new",
+          "region_line": "executor.task4_trace_prepared_create();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PARAMETER_SET",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "set_parameter",
+          "region_line": "executor.task4_trace_parameter_set();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "PREPARED_QUERY",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+          "source_sha256": "d375d292f7bbeb975ba95de50e892e186af88d6f4d96ae96405511931a854108",
+          "function_name": "execute_prepared_query",
+          "region_line": "executor.task4_trace_prepared_query();",
+          "region_occurrence": 1,
+          "region_column": 18,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_NEXT",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "next",
+          "region_line": "executor.task4_trace_result_next();",
+          "region_occurrence": 1,
+          "region_column": 26,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "RESULT_SET_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+          "source_sha256": "24b0b7477fc412810090eafd2293418032a8d34e724d1c56e39b90852ac4b5d0",
+          "function_name": "meta_data",
+          "region_line": "executor.task4_trace_result_set_metadata();",
+          "region_occurrence": 1,
+          "region_column": 22,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "DATABASE_METADATA",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+          "source_sha256": "2edef6b82fa3d0fc3c8a4520fbbab0413b9a444139d24701388993bdf4b85693",
+          "function_name": "database_product_name",
+          "region_line": "self.executor.task4_trace_database_metadata();",
+          "region_occurrence": 1,
+          "region_column": 23,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "CONNECTION_CLOSE",
+          "source_path": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+          "source_sha256": "ff1eae16c66dfc41154e82737afba0fd9c7ff0bea0b9b83347c7b7e6e5829997",
+          "function_name": "close",
+          "region_line": "trace.task4_trace_connection_close();",
+          "region_occurrence": 1,
+          "region_column": 19,
+          "minimum_count": 1
+        },
+        {
+          "requirement_id": "TRACE_VALIDATION_SUCCESS",
+          "source_path": "crates/druid-wrapper/src/task4_runtime_trace.rs",
+          "source_sha256": "b694e17d28e253d0fbf5485200399055d9e55e536f1759616c847275b2a6bf8a",
+          "function_name": "verify_and_emit",
+          "region_line": "Ok(())",
+          "region_occurrence": 1,
+          "region_column": 5,
+          "minimum_count": 1
+        }
+      ]
+    }
+  ]
+}

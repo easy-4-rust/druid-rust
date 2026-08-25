@@ -1004,3 +1004,152 @@ The round changes only the typed trace/caller chain、verifier/self-tests and ap
 artifacts。No Cargo/lock、Task 5、Physical deletion、admin、unsafe or manual Send/Sync change is
 included。The three review findings have an implementation disposition of **ADDRESSED, pending
 independent re-review**；Task 5 remains blocked。
+
+## 23. Compiler Coverage Evidence Recovery implementation（base `f4c2711`）
+
+This append-only section supersedes Section 22 only for the load-bearing completion/trust claim.
+The typed trace protocol and seven production-bound evidence tests remain unchanged；the marker、
+challenge text、libtest summary and test/helper output are diagnostic only. Task 5 remains blocked
+pending a fresh independent review.
+
+### 23.1 Strict RED -> GREEN evidence
+
+The unchanged `f4c2711` verifier had `20/20 PASS` but no compiler-coverage contract. Ten permanent
+coverage groups plus two parent-exit process-group subcases first produced `12` expected failures in
+a `31`-test run：
+
+- a structurally matching marker with zero production coverage；
+- a test that only creates/drops Futures；
+- an exit-zero path that never reaches typed validation success；
+- coverage from another exact test/family；
+- combined or stale profile/report evidence；
+- a zero-count common stage、missing `verify_and_emit` success region、wrong family factory and
+  wrong source/function identity；
+- duplicate/reordered manifest bindings；
+- timeout/output overflow after the direct parent had already exited。
+
+The first GREEN pass was `31/31`. Scoped self-review then found one additional cleanup boundary：a
+successful direct parent could exit after spawning a descendant that redirected both pipes. That
+new permanent case failed against the first implementation，then passed after final cleanup always
+targets the start-time PGID. Final self evidence is `31/31 PASS` both normally and with
+`-W error::ResourceWarning`；no pipe/resource warning remains.
+
+### 23.2 Compiler coverage is the trust anchor
+
+Every `RUNTIME_TRACE` EvidenceSpec now runs exactly one command shape：
+
+```text
+cargo llvm-cov test --json --output-path <unique>/coverage.json \
+  --offline --locked --color never -p druid-wrapper \
+  <default|--all-features> <--lib|--test exact-target> <exact-test-id> \
+  -- --exact --nocapture
+```
+
+- each execution owns a fresh `TemporaryDirectory` and a unique `CARGO_TARGET_DIR`；no profraw、
+  profdata、build dir or report path is reused across exact tests；
+- the verifier requires fresh non-empty `.profraw` files、exactly one fresh `.profdata` and one fresh
+  bounded JSON report beneath that run directory；missing tool/profile/report is
+  `NOT_RUN/ERROR`，never PASS；
+- command output is capped at `1 MiB`，JSON at `32 MiB`，and each cold build/test has a `600 s`
+  deadline；
+- the PGID is captured immediately after `Popen(start_new_session=True)` and is killed in normal、
+  timeout、overflow and exception cleanup even if the direct cargo parent has already exited；pipes
+  are closed deterministically and the direct child is reaped；
+- `cargo-llvm-cov 0.8.7` successfully resolved the Rust toolchain LLVM programs and exported LLVM
+  coverage JSON `3.1.0` under rustc LLVM `22.1.6`。No global/shared target workaround was used。
+
+`verify_and_emit` still consumes opaque typed probe/expectation values and validates the exact
+same-family、same-instance、ordered 11-stage trace. Acceptance now requires compiler coverage of its
+final `Ok(())` success region. `DRUID_TASK4_RUNTIME_TRACE` remains useful diagnostics；the verifier
+does not set a per-run output challenge and does not parse marker/libtest text for completion.
+Complete source closure、callsite multiset and output ownership remain only defense-in-depth.
+
+### 23.3 Checked manifest and exact identities
+
+`rdbc-adapter-runtime-traces.tsv` has a new field-exact coverage binding：
+
+- all `29 RUNTIME_TRACE` rows carry `task4-compiler-coverage-v1` plus the same ordered 14-requirement
+  set；
+- the two DataSource Wrapper rows remain `COMPILE_IDENTITY` and carry `-` for runtime coverage；
+- all 31 rows still bind source/trait -> exact target/test/profile/category/family/trace version /
+  evidence id before the eight executions are deduplicated。
+
+The canonical `rdbc-adapter-coverage-regions.json` contains seven ordered family records and exactly
+`14` requirements per family (`98` total)：exact test identity、factory create、connection create、
+family executor、Statement create/update、Prepared create/set/query、ResultSet next/metadata、live
+DatabaseMetaData、connection close and typed validation success. Every requirement records exact
+source path、SHA-256、source function、full source line、occurrence、column and positive minimum count.
+The manifest rejects missing/extra/duplicate/reordered families or requirements and any wrong
+test/profile/version/evidence/source/function/region binding.
+
+Compiler filenames are normalized only by exact path-component prefix removal；substring file or
+function identities are never accepted. Rust async lowering does not always assign a standalone
+counter to each straight-line call line. In that case the verifier truthfully requires a positive
+compiler region/count inside the one exact enclosing source function while the hashed manifest and
+typed callsite multiset pin the call line；the separately covered typed-validation success region
+proves the ordered stages completed. It does not claim that LLVM emitted an independent counter for
+every source line.
+
+The exact-test identity requirement is exclusive：the expected test must have a positive count and
+all other six evidence-test identities must be zero or absent. This rejects another test/family and
+combined reports in addition to the fresh unique-directory checks.
+
+### 23.4 Seven-family exact evidence
+
+Each family was first run independently during implementation and then all seven were rerun through
+the final live verifier after the normal-exit PGID correction：
+
+| Family | Profile / exact target | Compiler evidence | External boundary |
+| --- | --- | --- | --- |
+| SQLx SQLite | default integration | `14/14 PASS` | configured PASS |
+| Toasty SQLite | default integration | `14/14 PASS` | configured PASS |
+| RBDC deterministic driver | default integration | `14/14 PASS` | real external DB NOT_RUN |
+| DuckDB memory | all-features integration | `14/14 PASS` | configured PASS |
+| HTTP SQL deterministic transport | all-features lib | `14/14 PASS` | real service NOT_RUN |
+| libSQL deterministic transport | all-features lib | `14/14 PASS` | real service NOT_RUN |
+| JDBC Agent deterministic connector | all-features lib | `14/14 PASS` | jars/service NOT_RUN |
+
+The final live verifier output is：
+
+```text
+WRAPPER_STANDARD_ADAPTERS_LIVE=31
+WRAPPER_STANDARD_CONSUMERS_CLOSED=21
+FAMILY_COMMON_PREPARED_CHAINS_LIVE=6
+SQLX_OWNED_ACTOR_LIVE=1
+RUNTIME_TRACE_FAMILIES_LIVE=7
+RUNTIME_TRACE_PROTOCOL=task4-runtime-trace-v1
+COMPILER_COVERAGE_FAMILIES_LIVE=7
+COMPILER_COVERAGE_PROTOCOL=task4-compiler-coverage-v1
+NONBEHAVIOR_IDENTITY_ROWS=2
+```
+
+### 23.5 Fresh final gates and hashes
+
+- wrapper verifier self/live：`31/31 PASS` plus the exact output above；
+- denominator self/live：`41/41 PASS`，Physical `73`、adapter `55`、checked consumers `3557`；
+- semantic self/live：`16/16 PASS + 52/17/0`，and adapter-live reran the complete compiler-coverage
+  verifier before emitting its counts；
+- purity self/transitional：`103/103 PASS + live29`；
+- wrapper default and all-feature complete test matrices：every test binary PASS；default/all-feature
+  all-target checks and workspace all-target/all-feature check PASS；
+- `druid-rdbc` all-target/all-feature tests `20/20`、doc `1/1` and Clippy `-D warnings` PASS；
+- wrapper scoped no-deps Clippy、docs/doctests、Python byte-compile/Black、rustfmt and diff check
+  PASS；
+- dependency-aware wrapper Clippy remains deliberately non-GREEN only at the two unchanged Task 5
+  lines `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`。
+
+```text
+ADAPTER_LIVE_TSV_SHA256=350f6b6350f7c75fbf88aa15872f14faaa7cdb9c90faa0c3d5d03ea8442b6410
+RUNTIME_TRACE_TSV_SHA256=e55610f3b29b45d1144a903441f64bd20a5b6444a1b388162ce96ad35eb6ceb4
+COVERAGE_REGION_MANIFEST_SHA256=3bc58dcd295464f9a6f32db251ace8c46c37be2a796f8e4a31ed9139e725f43b
+CONSUMER_LIVE_TSV_SHA256=241a2d42b74e27ae2b0e41729d3088e94f464bfe7984699073a20f834ce908bc
+SEMANTIC_LIVE_TSV_SHA256=4588212080ef8006cfa9cd6a13427e9867f39bef13b2f985d6350e545352bf21
+```
+
+### 23.6 Scope and submission state
+
+The recovery changes only the Task 4 verifier/self-tests、runtime/coverage evidence manifests and
+append-only Task 4 report/ledger. `task4_runtime_trace.rs` and all production adapters/tests remain
+byte-unchanged from `f4c2711`；no Cargo/lock、Task 5、Physical deletion、admin、unsafe or manual
+Send/Sync change is included. C1/N2 have an implementation disposition of **ADDRESSED, pending
+independent review**. This is not `REVIEW CLEAR`；Task 5 remains blocked and no push is authorized.

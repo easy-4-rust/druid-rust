@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
-import secrets
 import selectors
 import signal
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,9 @@ DEFAULT_ADAPTERS = Path("docs/verification/rdbc-first/rdbc-adapter-implementatio
 DEFAULT_RUNTIME_EVIDENCE = Path(
     "docs/verification/rdbc-first/rdbc-adapter-runtime-traces.tsv"
 )
+DEFAULT_COVERAGE_MANIFEST = Path(
+    "docs/verification/rdbc-first/rdbc-adapter-coverage-regions.json"
+)
 DEFAULT_CONSUMERS = Path("docs/verification/rdbc-first/rdbc-production-consumers.tsv")
 TASK = "P04_TASK_4_ADAPTER_CUTOVER"
 LIVE_ADAPTER_STATE = "STANDARD_IMPL_LIVE"
@@ -33,8 +37,12 @@ COMPILE_IDENTITY_CATEGORY = "COMPILE_IDENTITY"
 TRACE_VERSION = "task4-runtime-trace-v1"
 TRACE_MARKER = "DRUID_TASK4_RUNTIME_TRACE"
 TRACE_CHALLENGE_ENV = "DRUID_TASK4_TRACE_CHALLENGE"
+COVERAGE_VERSION = "task4-compiler-coverage-v1"
+LLVM_COVERAGE_JSON_TYPE = "llvm.coverage.json.export"
+LLVM_COVERAGE_JSON_VERSION = "3.1.0"
 DEFAULT_EVIDENCE_TIMEOUT_SECONDS = 600.0
 DEFAULT_EVIDENCE_OUTPUT_LIMIT = 1_048_576
+DEFAULT_COVERAGE_REPORT_LIMIT = 33_554_432
 RUNTIME_EVIDENCE_HEADER = (
     "source_path",
     "target_trait",
@@ -46,6 +54,8 @@ RUNTIME_EVIDENCE_HEADER = (
     "trace_family",
     "trace_version",
     "trace_evidence_id",
+    "coverage_version",
+    "coverage_requirement_ids",
 )
 TRACE_FAMILIES = {
     "SQLX",
@@ -78,6 +88,24 @@ TRACE_STAGES = (
     "DatabaseMetadata",
     "ConnectionClose",
 )
+COVERAGE_REQUIREMENT_IDS = (
+    "EXACT_TEST_IDENTITY",
+    "FAMILY_FACTORY_CREATE",
+    "FAMILY_CONNECTION_CREATE",
+    "FAMILY_EXECUTOR",
+    "STATEMENT_CREATE",
+    "STATEMENT_UPDATE",
+    "PREPARED_CREATE",
+    "PARAMETER_SET",
+    "PREPARED_QUERY",
+    "RESULT_NEXT",
+    "RESULT_SET_METADATA",
+    "DATABASE_METADATA",
+    "CONNECTION_CLOSE",
+    "TRACE_VALIDATION_SUCCESS",
+)
+COVERAGE_REQUIREMENT_SET = ",".join(COVERAGE_REQUIREMENT_IDS)
+COVERAGE_FAMILY_ORDER = tuple(sorted(TRACE_FAMILIES))
 TRACE_STAGE_METHODS = {
     "FactoryCreate": "task4_trace_factory_create",
     "ConnectionCreate": "task4_trace_connection_create",
@@ -108,35 +136,97 @@ TRACE_RECORD_METHODS = {
     )
 }
 TRACE_RECORD_CALLSITE_COUNTS = {
-    ("crates/druid-wrapper/src/standard_adapter_statement.rs", "task4_trace_statement_create"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_statement.rs", "task4_trace_statement_update"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_prepared_statement.rs", "task4_trace_prepared_create"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_prepared_statement.rs", "task4_trace_parameter_set"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_prepared_statement.rs", "task4_trace_prepared_query"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_result_set.rs", "task4_trace_result_next"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_result_set.rs", "task4_trace_result_set_metadata"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_database_meta_data.rs", "task4_trace_database_metadata"): 1,
-    ("crates/druid-wrapper/src/standard_adapter_executor.rs", "task4_trace_connection_close"): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_statement.rs",
+        "task4_trace_statement_create",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_statement.rs",
+        "task4_trace_statement_update",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+        "task4_trace_prepared_create",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+        "task4_trace_parameter_set",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+        "task4_trace_prepared_query",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+        "task4_trace_result_next",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+        "task4_trace_result_set_metadata",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+        "task4_trace_database_metadata",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_executor.rs",
+        "task4_trace_connection_close",
+    ): 1,
     **{
         ("crates/druid-wrapper/src/standard_adapter_executor.rs", method): 1
         for method in TRACE_RECORD_METHODS
         if method
-        not in {"task4_trace_factory_create", "task4_trace_connection_create", "task4_trace_connection_close"}
+        not in {
+            "task4_trace_factory_create",
+            "task4_trace_connection_create",
+            "task4_trace_connection_close",
+        }
     },
-    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_statement_create"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_statement_update"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_prepared_create"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_parameter_set"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_prepared_query"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_next"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_set_metadata"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs", "task4_trace_database_metadata"): 1,
-    ("crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs", "task4_trace_connection_close"): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+        "task4_trace_statement_create",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+        "task4_trace_statement_update",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+        "task4_trace_prepared_create",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+        "task4_trace_parameter_set",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+        "task4_trace_prepared_query",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+        "task4_trace_result_next",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+        "task4_trace_result_set_metadata",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs",
+        "task4_trace_database_metadata",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+        "task4_trace_connection_close",
+    ): 1,
     **{
         ("crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs", method): 1
         for method in TRACE_RECORD_METHODS
         if method
-        not in {"task4_trace_factory_create", "task4_trace_connection_create", "task4_trace_connection_close"}
+        not in {
+            "task4_trace_factory_create",
+            "task4_trace_connection_create",
+            "task4_trace_connection_close",
+        }
     },
     **{
         (factory_file, "task4_trace_factory_create"): 1
@@ -205,13 +295,59 @@ TRACE_CALLSITE_FUNCTIONS = {
     family: {
         "FactoryCreate": "create_adapter_core",
         "ConnectionCreate": "create_adapter_core",
-        **(
-            SQLX_STAGE_FUNCTIONS
-            if family == "SQLX"
-            else COMMON_STAGE_FUNCTIONS
-        ),
+        **(SQLX_STAGE_FUNCTIONS if family == "SQLX" else COMMON_STAGE_FUNCTIONS),
     }
     for family in FAMILY_FACTORY_FILES
+}
+COVERAGE_STAGE_REQUIREMENTS = {
+    "FAMILY_FACTORY_CREATE": "FactoryCreate",
+    "FAMILY_CONNECTION_CREATE": "ConnectionCreate",
+    "STATEMENT_CREATE": "StatementCreate",
+    "STATEMENT_UPDATE": "StatementUpdate",
+    "PREPARED_CREATE": "PreparedCreate",
+    "PARAMETER_SET": "ParameterSet",
+    "PREPARED_QUERY": "PreparedQuery",
+    "RESULT_NEXT": "ResultNext",
+    "RESULT_SET_METADATA": "ResultSetMetadata",
+    "DATABASE_METADATA": "DatabaseMetadata",
+    "CONNECTION_CLOSE": "ConnectionClose",
+}
+FAMILY_EXECUTOR_RULES = {
+    "SQLX": (
+        "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+        "execute_update",
+        "let result = connection.execute_update_core(sql, values).await?;",
+    ),
+    "TOASTY": (
+        "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+        "standard_execute_update_core",
+        "let result = self.execute_update_core(sql, values).await?;",
+    ),
+    "RBDC": (
+        "crates/druid-wrapper/src/rbdc/rbdc_connection_adapter.rs",
+        "standard_execute_update_core",
+        "let result = self.execute_update_core(sql, values).await?;",
+    ),
+    "DUCKDB": (
+        "crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs",
+        "standard_execute_update_core",
+        "let result = self.execute_update_core(sql, values).await?;",
+    ),
+    "HTTP_SQL": (
+        "crates/druid-wrapper/src/http_sql/http_sql_connection_adapter.rs",
+        "standard_execute_update_core",
+        "let result = self.execute_update_core(sql, values).await?;",
+    ),
+    "LIBSQL": (
+        "crates/druid-wrapper/src/libsql/libsql_connection_adapter.rs",
+        "standard_execute_update_core",
+        "let result = self.execute_update_core(sql, values).await?;",
+    ),
+    "JDBC_AGENT": (
+        "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs",
+        "standard_execute_update_core",
+        "let result = self.execute_update_core(sql, values).await?;",
+    ),
 }
 OUTPUT_MACROS = {"print", "println", "eprint", "eprintln", "dbg"}
 DIRECT_OUTPUT_IDENTIFIERS = {
@@ -319,6 +455,8 @@ class AdapterRow:
     trace_family: str = "HTTP_SQL"
     trace_version: str = TRACE_VERSION
     trace_evidence_id: str = "task4.fixture.runtime-trace-v1"
+    coverage_version: str = COVERAGE_VERSION
+    coverage_requirement_ids: str = COVERAGE_REQUIREMENT_SET
 
 
 @dataclass(frozen=True, order=True)
@@ -332,6 +470,35 @@ class EvidenceSpec:
     family: str
     version: str
     evidence_id: str
+    coverage_version: str = COVERAGE_VERSION
+
+
+@dataclass(frozen=True)
+class CoverageRequirement:
+    """One exact compiler source/function/region obligation."""
+
+    requirement_id: str
+    source_path: Path
+    source_sha256: str
+    function_name: str
+    region_line: str
+    region_occurrence: int
+    region_column: int
+    minimum_count: int
+
+
+@dataclass(frozen=True)
+class CoverageFamilySpec:
+    """Compiler-coverage contract for one exact family evidence test."""
+
+    family: str
+    test_target: str
+    test_id: str
+    profile: str
+    trace_version: str
+    trace_evidence_id: str
+    coverage_version: str
+    requirements: tuple[CoverageRequirement, ...]
 
 
 @dataclass(frozen=True)
@@ -350,7 +517,9 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
     if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw:
         fail(f"TSV must have exactly one LF final newline: {path}")
     rows = list(csv.DictReader(raw.decode("utf-8").splitlines(), delimiter="\t"))
-    if not rows or any(None in row or any(value == "" for value in row.values()) for row in rows):
+    if not rows or any(
+        None in row or any(value == "" for value in row.values()) for row in rows
+    ):
         fail(f"TSV contains an empty or malformed row: {path}")
     return rows
 
@@ -391,27 +560,33 @@ def task_adapter_rows(path: Path, evidence_path: Path) -> list[AdapterRow]:
             standard_core_evidence=row["standard_core_evidence"],
             behavior_evidence=row["behavior_evidence"],
             state=row["state"],
-            behavior_test_target=evidence_by_key[(row["source_path"], row["target_trait"])][
-                "cargo_test_target"
-            ],
+            behavior_test_target=evidence_by_key[
+                (row["source_path"], row["target_trait"])
+            ]["cargo_test_target"],
             cargo_test_id=evidence_by_key[(row["source_path"], row["target_trait"])][
                 "cargo_test_id"
             ],
             behavior_profile=evidence_by_key[(row["source_path"], row["target_trait"])][
                 "behavior_profile"
             ],
-            evidence_category=evidence_by_key[(row["source_path"], row["target_trait"])][
-                "evidence_category"
-            ],
+            evidence_category=evidence_by_key[
+                (row["source_path"], row["target_trait"])
+            ]["evidence_category"],
             trace_family=evidence_by_key[(row["source_path"], row["target_trait"])][
                 "trace_family"
             ],
             trace_version=evidence_by_key[(row["source_path"], row["target_trait"])][
                 "trace_version"
             ],
-            trace_evidence_id=evidence_by_key[(row["source_path"], row["target_trait"])][
-                "trace_evidence_id"
+            trace_evidence_id=evidence_by_key[
+                (row["source_path"], row["target_trait"])
+            ]["trace_evidence_id"],
+            coverage_version=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "coverage_version"
             ],
+            coverage_requirement_ids=evidence_by_key[
+                (row["source_path"], row["target_trait"])
+            ]["coverage_requirement_ids"],
         )
         for row in selected
     ]
@@ -555,7 +730,9 @@ def mask_rust_comments_and_literals(source: str) -> str:
             continue
         if source[index] == "'":
             cursor = index + 1
-            if cursor < len(source) and (source[cursor].isalpha() or source[cursor] == "_"):
+            if cursor < len(source) and (
+                source[cursor].isalpha() or source[cursor] == "_"
+            ):
                 cursor += 1
                 while cursor < len(source) and (
                     source[cursor].isalnum() or source[cursor] == "_"
@@ -572,7 +749,9 @@ def mask_rust_comments_and_literals(source: str) -> str:
     return "".join(masked)
 
 
-def function_line_ranges(source: str, function_name: str) -> tuple[tuple[int, int], ...]:
+def function_line_ranges(
+    source: str, function_name: str
+) -> tuple[tuple[int, int], ...]:
     """Return brace-balanced line regions for every function with one exact name."""
 
     masked = mask_rust_comments_and_literals(source)
@@ -597,6 +776,578 @@ def function_line_ranges(source: str, function_name: str) -> tuple[tuple[int, in
         end_line = masked.count("\n", 0, cursor) + 1
         ranges.append((start_line, end_line))
     return tuple(ranges)
+
+
+def evidence_test_source_path(family: str) -> Path:
+    """Return the exact Rust source that owns one manifest-bound evidence test."""
+
+    target, _, _, _, _ = CANONICAL_EVIDENCE_BINDINGS[family]
+    if target == "lib":
+        return Path(FAMILY_FACTORY_FILES[family])
+    if not target.startswith("test:"):
+        fail(f"coverage evidence target is unknown: {family}: {target}")
+    return Path("crates/druid-wrapper/tests") / f"{target.removeprefix('test:')}.rs"
+
+
+def canonical_coverage_source_function(
+    family: str, requirement_id: str
+) -> tuple[Path, str]:
+    """Map a coverage requirement to one exact source and source-level function."""
+
+    if requirement_id == "EXACT_TEST_IDENTITY":
+        return (
+            evidence_test_source_path(family),
+            CANONICAL_EVIDENCE_BINDINGS[family][1].rsplit("::", 1)[-1],
+        )
+    if requirement_id == "FAMILY_EXECUTOR":
+        path, function_name, _ = FAMILY_EXECUTOR_RULES[family]
+        return Path(path), function_name
+    if requirement_id == "TRACE_VALIDATION_SUCCESS":
+        return (
+            Path("crates/druid-wrapper/src/task4_runtime_trace.rs"),
+            "verify_and_emit",
+        )
+    stage = COVERAGE_STAGE_REQUIREMENTS.get(requirement_id)
+    if stage is None:
+        fail(f"coverage requirement id is unknown: {requirement_id}")
+    return (
+        Path(TRACE_CALLSITE_RULES[family][stage]),
+        TRACE_CALLSITE_FUNCTIONS[family][stage],
+    )
+
+
+def resolve_coverage_requirement_point(
+    root: Path, requirement: CoverageRequirement
+) -> tuple[int, int]:
+    """Resolve an exact manifest line inside exactly one named Rust function."""
+
+    path = root / requirement.source_path
+    if not path.is_file():
+        fail(f"coverage requirement source is missing: {requirement.source_path}")
+    raw = path.read_bytes()
+    observed_sha = hashlib.sha256(raw).hexdigest()
+    if observed_sha != requirement.source_sha256:
+        fail(
+            "coverage requirement source hash is stale: "
+            f"{requirement.source_path}: {observed_sha} != {requirement.source_sha256}"
+        )
+    source = raw.decode("utf-8")
+    ranges = function_line_ranges(source, requirement.function_name)
+    matches: list[tuple[int, int]] = []
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        if line.strip() != requirement.region_line:
+            continue
+        containing = [
+            region for region in ranges if region[0] <= line_number <= region[1]
+        ]
+        if len(containing) == 1:
+            if (
+                requirement.region_column <= 0
+                or requirement.region_column > len(line)
+                or line[requirement.region_column - 1].isspace()
+            ):
+                fail(
+                    "coverage requirement region column is invalid: "
+                    f"{requirement.source_path}:{line_number}:"
+                    f"{requirement.region_column}"
+                )
+            matches.append((line_number, requirement.region_column))
+    if requirement.region_occurrence <= 0 or requirement.region_occurrence > len(
+        matches
+    ):
+        fail(
+            "coverage requirement region occurrence is not exact: "
+            f"{requirement.source_path}:{requirement.function_name}:"
+            f"{requirement.region_line!r}: occurrence={requirement.region_occurrence}:"
+            f"matches={matches}"
+        )
+    return matches[requirement.region_occurrence - 1]
+
+
+def coverage_region_anchor(requirement_id: str) -> str:
+    """Return the exact source token whose compiler region must be positive."""
+
+    if requirement_id == "EXACT_TEST_IDENTITY":
+        return "verify_and_emit"
+    if requirement_id == "FAMILY_EXECUTOR":
+        return "execute_update_core"
+    if requirement_id == "TRACE_VALIDATION_SUCCESS":
+        return "Ok"
+    stage = COVERAGE_STAGE_REQUIREMENTS.get(requirement_id)
+    if stage is None:
+        fail(f"coverage requirement id is unknown: {requirement_id}")
+    return TRACE_STAGE_METHODS[stage]
+
+
+def validate_coverage_manifest(
+    root: Path, family_specs: tuple[CoverageFamilySpec, ...]
+) -> None:
+    """Validate canonical order, bindings, source hashes, functions, and region identities."""
+
+    families = tuple(spec.family for spec in family_specs)
+    if families != COVERAGE_FAMILY_ORDER:
+        fail(
+            "coverage manifest family order or duplicate denominator is invalid: "
+            f"{families} != {COVERAGE_FAMILY_ORDER}"
+        )
+    if len(set(families)) != len(families):
+        fail("coverage manifest contains a duplicate family mapping")
+    for family_spec in family_specs:
+        family = family_spec.family
+        target, test_id, profile, _, evidence_id = CANONICAL_EVIDENCE_BINDINGS[family]
+        actual_binding = (
+            family_spec.test_target,
+            family_spec.test_id,
+            family_spec.profile,
+            family_spec.trace_version,
+            family_spec.trace_evidence_id,
+            family_spec.coverage_version,
+        )
+        expected_binding = (
+            target,
+            test_id,
+            profile,
+            TRACE_VERSION,
+            evidence_id,
+            COVERAGE_VERSION,
+        )
+        if actual_binding != expected_binding:
+            fail(
+                "coverage manifest exact test/profile/evidence binding is invalid: "
+                f"{family}: {actual_binding!r} != {expected_binding!r}"
+            )
+        requirement_ids = tuple(
+            requirement.requirement_id for requirement in family_spec.requirements
+        )
+        if requirement_ids != COVERAGE_REQUIREMENT_IDS:
+            fail(
+                "coverage manifest requirement order or duplicate mapping is invalid: "
+                f"{family}: {requirement_ids} != {COVERAGE_REQUIREMENT_IDS}"
+            )
+        for requirement in family_spec.requirements:
+            if requirement.minimum_count != 1:
+                fail(
+                    "coverage requirement minimum count must be exactly one: "
+                    f"{family}:{requirement.requirement_id}"
+                )
+            expected_occurrence = 1
+            if requirement.region_occurrence != expected_occurrence:
+                fail(
+                    "coverage requirement region occurrence is not canonical: "
+                    f"{family}:{requirement.requirement_id}:"
+                    f"{requirement.region_occurrence} != {expected_occurrence}"
+                )
+            expected_path, expected_function = canonical_coverage_source_function(
+                family, requirement.requirement_id
+            )
+            if (
+                requirement.source_path != expected_path
+                or requirement.function_name != expected_function
+            ):
+                fail(
+                    "coverage requirement source/function identity is not canonical: "
+                    f"{family}:{requirement.requirement_id}:"
+                    f"{requirement.source_path}:{requirement.function_name} != "
+                    f"{expected_path}:{expected_function}"
+                )
+            line_number, _ = resolve_coverage_requirement_point(root, requirement)
+            anchor = coverage_region_anchor(requirement.requirement_id)
+            source_line = (
+                (root / requirement.source_path)
+                .read_text(encoding="utf-8")
+                .splitlines()[line_number - 1]
+            )
+            expected_column = source_line.find(anchor) + 1
+            if (
+                expected_column <= 0
+                or source_line.count(anchor) != 1
+                or requirement.region_column != expected_column
+            ):
+                fail(
+                    "coverage requirement region column/anchor is not exact: "
+                    f"{family}:{requirement.requirement_id}:"
+                    f"{requirement.region_column} != {expected_column}"
+                )
+            tokens = tuple(
+                token.text.removeprefix("r#")
+                for token in tokenize(requirement.region_line)
+            )
+            if requirement.requirement_id == "EXACT_TEST_IDENTITY":
+                if "verify_and_emit" not in tokens:
+                    fail(
+                        "exact test identity region must call typed verify_and_emit: "
+                        f"{family}:{requirement.region_line!r}"
+                    )
+            elif requirement.requirement_id == "FAMILY_EXECUTOR":
+                expected_line = FAMILY_EXECUTOR_RULES[family][2]
+                if requirement.region_line != expected_line:
+                    fail(
+                        "family executor coverage region is not exact: "
+                        f"{family}:{requirement.region_line!r} != {expected_line!r}"
+                    )
+            elif requirement.requirement_id == "TRACE_VALIDATION_SUCCESS":
+                if requirement.region_line != "Ok(())":
+                    fail("typed trace validation-success coverage region is not exact")
+            else:
+                stage = COVERAGE_STAGE_REQUIREMENTS[requirement.requirement_id]
+                method = TRACE_STAGE_METHODS[stage]
+                if method not in tokens:
+                    fail(
+                        "coverage stage region does not call its exact typed stage: "
+                        f"{family}:{requirement.requirement_id}:{line_number}:{method}"
+                    )
+
+
+def load_coverage_manifest(
+    root: Path, path: Path = DEFAULT_COVERAGE_MANIFEST
+) -> tuple[CoverageFamilySpec, ...]:
+    """Load the canonical compiler-coverage manifest and validate all source identities."""
+
+    manifest_path = root / path
+    raw = manifest_path.read_bytes()
+    if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw:
+        fail(f"coverage manifest must have exactly one LF final newline: {path}")
+    try:
+        document = json.loads(raw)
+    except json.JSONDecodeError as error:
+        fail(f"coverage manifest JSON is malformed: {error}")
+    if not isinstance(document, dict) or set(document) != {
+        "schema_version",
+        "families",
+    }:
+        fail("coverage manifest root schema is not exact")
+    if document["schema_version"] != COVERAGE_VERSION:
+        fail("coverage manifest schema version is not canonical")
+    raw_families = document["families"]
+    if not isinstance(raw_families, list):
+        fail("coverage manifest families must be an ordered list")
+    family_specs: list[CoverageFamilySpec] = []
+    for raw_family in raw_families:
+        family_keys = {
+            "family",
+            "test_target",
+            "test_id",
+            "profile",
+            "trace_version",
+            "trace_evidence_id",
+            "coverage_version",
+            "requirements",
+        }
+        if not isinstance(raw_family, dict) or set(raw_family) != family_keys:
+            fail("coverage manifest family schema is not exact")
+        raw_requirements = raw_family["requirements"]
+        if not isinstance(raw_requirements, list):
+            fail("coverage manifest requirements must be an ordered list")
+        requirements: list[CoverageRequirement] = []
+        for raw_requirement in raw_requirements:
+            requirement_keys = {
+                "requirement_id",
+                "source_path",
+                "source_sha256",
+                "function_name",
+                "region_line",
+                "region_occurrence",
+                "region_column",
+                "minimum_count",
+            }
+            if (
+                not isinstance(raw_requirement, dict)
+                or set(raw_requirement) != requirement_keys
+            ):
+                fail("coverage manifest requirement schema is not exact")
+            if not re.fullmatch(r"[0-9a-f]{64}", raw_requirement["source_sha256"]):
+                fail("coverage manifest source SHA-256 is malformed")
+            requirements.append(
+                CoverageRequirement(
+                    requirement_id=raw_requirement["requirement_id"],
+                    source_path=Path(raw_requirement["source_path"]),
+                    source_sha256=raw_requirement["source_sha256"],
+                    function_name=raw_requirement["function_name"],
+                    region_line=raw_requirement["region_line"],
+                    region_occurrence=raw_requirement["region_occurrence"],
+                    region_column=raw_requirement["region_column"],
+                    minimum_count=raw_requirement["minimum_count"],
+                )
+            )
+        family_specs.append(
+            CoverageFamilySpec(
+                family=raw_family["family"],
+                test_target=raw_family["test_target"],
+                test_id=raw_family["test_id"],
+                profile=raw_family["profile"],
+                trace_version=raw_family["trace_version"],
+                trace_evidence_id=raw_family["trace_evidence_id"],
+                coverage_version=raw_family["coverage_version"],
+                requirements=tuple(requirements),
+            )
+        )
+    result = tuple(family_specs)
+    validate_coverage_manifest(root, result)
+    canonical = json.dumps(document, ensure_ascii=False, indent=2) + "\n"
+    if raw != canonical.encode("utf-8"):
+        fail("coverage manifest JSON bytes are not canonical")
+    return result
+
+
+def normalize_compiler_path(
+    filename: object,
+    known_paths: tuple[Path, ...],
+    *,
+    require_match: bool = False,
+) -> Path | None:
+    """Normalize only compiler-added path prefixes using exact path components."""
+
+    if not isinstance(filename, str) or not filename:
+        fail("compiler coverage filename is missing")
+    components = tuple(part for part in filename.replace("\\", "/").split("/") if part)
+    matches = [
+        path
+        for path in known_paths
+        if len(components) >= len(path.parts)
+        and components[-len(path.parts) :] == tuple(path.parts)
+    ]
+    if not matches and not require_match:
+        return None
+    if len(matches) != 1:
+        fail(
+            "compiler coverage source path does not exactly match one manifest path: "
+            f"{filename!r}: {matches}"
+        )
+    return matches[0]
+
+
+def region_contains_point(region: list[object], point: tuple[int, int]) -> bool:
+    """Return whether one exact LLVM region contains a 1-based source point."""
+
+    if len(region) != 8 or any(
+        isinstance(value, bool) or not isinstance(value, int) for value in region
+    ):
+        fail(f"compiler coverage region schema is invalid: {region!r}")
+    start = (region[0], region[1])
+    end = (region[2], region[3])
+    return start <= point < end
+
+
+def coverage_requirement_count(
+    root: Path,
+    requirement: CoverageRequirement,
+    functions: list[object],
+    known_paths: tuple[Path, ...],
+) -> int:
+    """Return the maximum positive compiler count at one exact function region point."""
+
+    point = resolve_coverage_requirement_point(root, requirement)
+    source = (root / requirement.source_path).read_text(encoding="utf-8")
+    containing_ranges = [
+        region
+        for region in function_line_ranges(source, requirement.function_name)
+        if region[0] <= point[0] <= region[1]
+    ]
+    if len(containing_ranges) != 1:
+        fail(
+            "coverage requirement function range is not exact: "
+            f"{requirement.source_path}:{requirement.function_name}:{point}"
+        )
+    function_start, function_end = containing_ranges[0]
+    point_counts: list[int] = []
+    function_counts: list[int] = []
+    for function in functions:
+        if not isinstance(function, dict) or set(function) != {
+            "name",
+            "count",
+            "filenames",
+            "regions",
+            "branches",
+            "mcdc_records",
+        }:
+            fail("compiler coverage function schema is not exact")
+        filenames = function["filenames"]
+        regions = function["regions"]
+        if (
+            not isinstance(function["name"], str)
+            or isinstance(function["count"], bool)
+            or not isinstance(function["count"], int)
+            or not isinstance(filenames, list)
+            or not isinstance(regions, list)
+        ):
+            fail("compiler coverage function types are invalid")
+        normalized = tuple(
+            normalize_compiler_path(filename, known_paths) for filename in filenames
+        )
+        for region in regions:
+            if not isinstance(region, list):
+                fail("compiler coverage region is not an array")
+            if len(region) != 8:
+                fail("compiler coverage region width is not exact")
+            file_id = region[5]
+            if isinstance(file_id, bool) or not isinstance(file_id, int):
+                fail("compiler coverage region file id is invalid")
+            if file_id < 0 or file_id >= len(normalized):
+                fail("compiler coverage region file id exceeds filenames")
+            if normalized[file_id] != requirement.source_path:
+                continue
+            region_count = region[4]
+            if function["count"] <= 0 or region_count <= 0:
+                continue
+            if region_contains_point(region, point):
+                point_counts.append(region_count)
+            if function_start <= region[0] <= region[2] <= function_end:
+                function_counts.append(min(function["count"], region_count))
+    # Rust async lowering does not assign a standalone counter to every straight-line
+    # callsite. In that case the exact source callsite remains hash/manifest checked and
+    # the compiler count is taken from its one containing source function. The separately
+    # covered typed validation-success branch proves that all ordered stage calls completed.
+    return max(point_counts or function_counts, default=0)
+
+
+def validate_compiler_coverage(
+    root: Path,
+    expected_spec: EvidenceSpec,
+    family_specs: tuple[CoverageFamilySpec, ...],
+    report: dict[str, object],
+) -> None:
+    """Require isolated compiler execution counts for one exact family evidence test."""
+
+    if expected_spec.category != RUNTIME_TRACE_CATEGORY:
+        fail("compiler coverage is only valid for Task 4 runtime family evidence")
+    matching = [spec for spec in family_specs if spec.family == expected_spec.family]
+    if len(matching) != 1:
+        fail(f"compiler coverage family binding is not unique: {expected_spec.family}")
+    family_spec = matching[0]
+    expected_binding = (
+        expected_spec.test_target,
+        expected_spec.test_id,
+        expected_spec.profile,
+        expected_spec.version,
+        expected_spec.evidence_id,
+        expected_spec.coverage_version,
+    )
+    actual_binding = (
+        family_spec.test_target,
+        family_spec.test_id,
+        family_spec.profile,
+        family_spec.trace_version,
+        family_spec.trace_evidence_id,
+        family_spec.coverage_version,
+    )
+    if actual_binding != expected_binding:
+        fail(
+            "compiler coverage test/profile/evidence binding does not match the manifest: "
+            f"{actual_binding!r} != {expected_binding!r}"
+        )
+    if not isinstance(report, dict) or set(report) != {
+        "cargo_llvm_cov",
+        "data",
+        "type",
+        "version",
+    }:
+        fail("compiler coverage report root schema is not exact")
+    if (
+        report["type"] != LLVM_COVERAGE_JSON_TYPE
+        or report["version"] != LLVM_COVERAGE_JSON_VERSION
+    ):
+        fail("compiler coverage JSON type/version is unsupported")
+    tool = report["cargo_llvm_cov"]
+    if not isinstance(tool, dict) or set(tool) != {"version", "manifest_path"}:
+        fail("cargo-llvm-cov report metadata schema is not exact")
+    if not isinstance(tool["version"], str) or not re.fullmatch(
+        r"\d+\.\d+\.\d+", tool["version"]
+    ):
+        fail("cargo-llvm-cov report version is invalid")
+    normalize_compiler_path(
+        tool["manifest_path"], (Path("Cargo.toml"),), require_match=True
+    )
+    data = report["data"]
+    if not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], dict):
+        fail("compiler coverage report must contain one data object")
+    if set(data[0]) != {"files", "functions", "totals"}:
+        fail("compiler coverage data schema is not exact")
+    functions = data[0]["functions"]
+    if not isinstance(functions, list):
+        fail("compiler coverage functions must be an array")
+    known_paths = tuple(
+        dict.fromkeys(
+            requirement.source_path
+            for spec in family_specs
+            for requirement in spec.requirements
+        )
+    )
+    positive_identities: list[str] = []
+    for candidate in family_specs:
+        identities = [
+            requirement
+            for requirement in candidate.requirements
+            if requirement.requirement_id == "EXACT_TEST_IDENTITY"
+        ]
+        if len(identities) != 1:
+            fail(f"coverage exact-test identity is not unique: {candidate.family}")
+        count = coverage_requirement_count(root, identities[0], functions, known_paths)
+        if count > 0:
+            positive_identities.append(candidate.family)
+    if positive_identities != [expected_spec.family]:
+        fail(
+            "compiler coverage report is stale, combined, or from another exact test/family: "
+            f"positive identities={positive_identities}, expected={[expected_spec.family]}"
+        )
+    for requirement in family_spec.requirements:
+        count = coverage_requirement_count(root, requirement, functions, known_paths)
+        if count < requirement.minimum_count:
+            fail(
+                "compiler coverage requirement has zero or missing execution count: "
+                f"{expected_spec.family}:{requirement.requirement_id}:"
+                f"{requirement.source_path}:{requirement.function_name}:"
+                f"{requirement.region_line!r}"
+            )
+
+
+def load_fresh_coverage_report(
+    report_path: Path,
+    *,
+    run_directory: Path,
+    started_at_ns: int,
+) -> dict[str, object]:
+    """Read one bounded report created after this unique exact-test run started."""
+
+    expected_path = run_directory / "coverage.json"
+    if report_path.resolve() != expected_path.resolve():
+        fail("compiler coverage report path is not the unique run-owned location")
+    if not report_path.is_file():
+        fail("compiler coverage report is missing (NOT_RUN/ERROR)")
+    stat = report_path.stat()
+    if stat.st_mtime_ns < started_at_ns:
+        fail("compiler coverage report is stale for this exact-test run")
+    if stat.st_size <= 0 or stat.st_size > DEFAULT_COVERAGE_REPORT_LIMIT:
+        fail(
+            "compiler coverage report size is empty or exceeds the bounded limit: "
+            f"{stat.st_size}"
+        )
+    try:
+        report = json.loads(report_path.read_bytes())
+    except json.JSONDecodeError as error:
+        fail(f"compiler coverage report JSON is malformed: {error}")
+    if not isinstance(report, dict):
+        fail("compiler coverage report root is not an object")
+    return report
+
+
+def verify_coverage_profile_artifacts(run_directory: Path, started_at_ns: int) -> None:
+    """Require fresh profraw/profdata artifacts beneath the unique run target only."""
+
+    target = run_directory / "target" / "llvm-cov-target"
+    profiles = tuple(sorted(target.glob("*.profraw")))
+    merged = tuple(sorted(target.glob("*.profdata")))
+    if not profiles or len(merged) != 1:
+        fail(
+            "compiler coverage profile data is absent or combined outside one run: "
+            f"profraw={len(profiles)}, profdata={len(merged)}"
+        )
+    for artifact in (*profiles, *merged):
+        if artifact.stat().st_mtime_ns < started_at_ns or not artifact.is_file():
+            fail(f"compiler coverage profile artifact is stale: {artifact}")
+        try:
+            artifact.resolve().relative_to(run_directory.resolve())
+        except ValueError:
+            fail(f"compiler coverage profile escaped its unique run: {artifact}")
 
 
 def validate_runtime_trace_output(
@@ -639,7 +1390,11 @@ def validate_runtime_trace_output(
     if payload["family"] != expected_family or expected_family not in TRACE_FAMILIES:
         fail("runtime trace family does not match the TSV binding")
     instance_id = payload["instance_id"]
-    if isinstance(instance_id, bool) or not isinstance(instance_id, int) or instance_id <= 0:
+    if (
+        isinstance(instance_id, bool)
+        or not isinstance(instance_id, int)
+        or instance_id <= 0
+    ):
         fail("runtime trace instance id must be a positive integer")
     events = payload["events"]
     if not isinstance(events, list) or len(events) != len(TRACE_STAGES):
@@ -662,7 +1417,11 @@ def validate_runtime_trace_output(
         caller_line = event["caller_line"]
         if not isinstance(caller_file, str) or not caller_file:
             fail("runtime trace caller file is missing")
-        if isinstance(caller_line, bool) or not isinstance(caller_line, int) or caller_line <= 0:
+        if (
+            isinstance(caller_line, bool)
+            or not isinstance(caller_line, int)
+            or caller_line <= 0
+        ):
             fail("runtime trace caller line is invalid")
         expected_file = TRACE_CALLSITE_RULES[expected_family].get(event["stage"])
         normalized_file = caller_file.replace("\\", "/")
@@ -681,7 +1440,9 @@ def validate_runtime_trace_output(
                 fail(f"runtime trace caller source is missing: {expected_file}")
             source_lines = source_path.read_text(encoding="utf-8").splitlines()
             if caller_line > len(source_lines):
-                fail(f"runtime trace caller line exceeds source: {expected_file}:{caller_line}")
+                fail(
+                    f"runtime trace caller line exceeds source: {expected_file}:{caller_line}"
+                )
             method = TRACE_STAGE_METHODS[event["stage"]]
             if method not in source_lines[caller_line - 1]:
                 fail(
@@ -736,22 +1497,28 @@ def verify_trace_record_callsites(root: Path) -> None:
             for key, count in observed.items()
             if count != TRACE_RECORD_CALLSITE_COUNTS.get(key, 0)
         }
-        fail(f"runtime trace record callsite multiset drift: missing={missing}, extra={extra}")
+        fail(
+            f"runtime trace record callsite multiset drift: missing={missing}, extra={extra}"
+        )
 
     track_caller_sources = (
         source_root / "task4_runtime_trace.rs",
         source_root / "standard_adapter_executor.rs",
         source_root / "sqlx/sqlx_connection_actor.rs",
     )
-    combined = "\n".join(path.read_text(encoding="utf-8") for path in track_caller_sources)
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in track_caller_sources
+    )
     required_track_caller = ("record", *sorted(TRACE_RECORD_METHODS))
     for method in required_track_caller:
         definitions = len(re.findall(rf"\bfn\s+{re.escape(method)}\s*\(", combined))
-        tracked = len(re.findall(
-            rf"#\s*\[\s*track_caller\s*\]\s*"
-            rf"(?:pub(?:\([^)]*\))?\s+)?fn\s+{re.escape(method)}\s*\(",
-            combined,
-        ))
+        tracked = len(
+            re.findall(
+                rf"#\s*\[\s*track_caller\s*\]\s*"
+                rf"(?:pub(?:\([^)]*\))?\s+)?fn\s+{re.escape(method)}\s*\(",
+                combined,
+            )
+        )
         if not definitions or tracked != definitions:
             fail(
                 "runtime trace record chain lacks #[track_caller] on every hop: "
@@ -767,10 +1534,15 @@ def evidence_source(root: Path, spec: EvidenceSpec) -> tuple[Path, str]:
         candidates = [
             path
             for path in (root / "crates/druid-wrapper/src").rglob("*.rs")
-            if re.search(rf"\bfn\s+{re.escape(function_name)}\s*\(", path.read_text(encoding="utf-8"))
+            if re.search(
+                rf"\bfn\s+{re.escape(function_name)}\s*\(",
+                path.read_text(encoding="utf-8"),
+            )
         ]
         if len(candidates) != 1:
-            fail(f"runtime evidence lib test source is not exact: {spec.test_id}: {candidates}")
+            fail(
+                f"runtime evidence lib test source is not exact: {spec.test_id}: {candidates}"
+            )
         source = candidates[0].read_text(encoding="utf-8")
         function_offset = source.find(f"fn {function_name}")
         test_module_offset = source.rfind("#[cfg(test)]", 0, function_offset)
@@ -798,7 +1570,7 @@ def source_module_dependencies(path: Path, source: str) -> tuple[Path, ...]:
     explicit_modules: set[str] = set()
     path_pattern = re.compile(
         r'#\s*\[\s*path\s*=\s*"([^"\r\n]+)"\s*\]\s*'
-        r'(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;'
+        r"(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;"
     )
     for relative, module_name in path_pattern.findall(source):
         explicit_modules.add(module_name)
@@ -807,8 +1579,7 @@ def source_module_dependencies(path: Path, source: str) -> tuple[Path, ...]:
             fail(f"evidence #[path] module is missing: {path}: {relative}")
         dependencies.add(dependency)
     module_pattern = re.compile(
-        r"(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+"
-        r"([A-Za-z_][A-Za-z0-9_]*)\s*;"
+        r"(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+" r"([A-Za-z_][A-Za-z0-9_]*)\s*;"
     )
     for module_name in module_pattern.findall(source):
         if module_name in explicit_modules:
@@ -819,10 +1590,18 @@ def source_module_dependencies(path: Path, source: str) -> tuple[Path, ...]:
             bases = (path.parent / path.stem, path.parent)
         candidates: list[Path] = []
         for base in bases:
-            candidates.extend((base / f"{module_name}.rs", base / module_name / "mod.rs"))
-        existing = tuple(dict.fromkeys(candidate.resolve() for candidate in candidates if candidate.is_file()))
+            candidates.extend(
+                (base / f"{module_name}.rs", base / module_name / "mod.rs")
+            )
+        existing = tuple(
+            dict.fromkeys(
+                candidate.resolve() for candidate in candidates if candidate.is_file()
+            )
+        )
         if len(existing) != 1:
-            fail(f"evidence module edge is missing or ambiguous: {path}: mod {module_name}: {existing}")
+            fail(
+                f"evidence module edge is missing or ambiguous: {path}: mod {module_name}: {existing}"
+            )
         dependencies.add(existing[0])
     literal_includes = re.findall(r'include\s*!\s*\(\s*"([^"\r\n]+)"\s*\)', source)
     include_invocations = len(re.findall(r"\binclude\s*!\s*\(", source))
@@ -874,7 +1653,10 @@ def verify_untrusted_evidence_source(
             violations.add(f"direct output API {token}")
         if token in TRACE_RECORD_METHODS:
             violations.add(f"trace record API {token}")
-        if token in {"verify_and_emit", "enable_task4_runtime_trace"} and not allow_trace_api:
+        if (
+            token in {"verify_and_emit", "enable_task4_runtime_trace"}
+            and not allow_trace_api
+        ):
             violations.add(f"trace verification API {token}")
         if token in {"RuntimeTraceEmitter", "TraceStage", "TraceEvent"}:
             violations.add(f"trace internal {token}")
@@ -900,7 +1682,9 @@ def verify_untrusted_evidence_source(
     if TRACE_CHALLENGE_ENV in source:
         violations.add("trace challenge access")
     if violations:
-        fail(f"untrusted evidence source can forge runtime completion: {path}: {sorted(violations)}")
+        fail(
+            f"untrusted evidence source can forge runtime completion: {path}: {sorted(violations)}"
+        )
 
 
 def verify_root_trace_api_regions(path: Path, source: str, function_name: str) -> None:
@@ -908,12 +1692,16 @@ def verify_root_trace_api_regions(path: Path, source: str, function_name: str) -
 
     ranges = function_line_ranges(source, function_name)
     if len(ranges) != 1:
-        fail(f"evidence root does not contain one exact test function region: {path}:{function_name}")
+        fail(
+            f"evidence root does not contain one exact test function region: {path}:{function_name}"
+        )
     for line_number, line in enumerate(source.splitlines(), start=1):
         if "verify_and_emit" not in line and "enable_task4_runtime_trace" not in line:
             continue
         if not any(start <= line_number <= end for start, end in ranges):
-            fail(f"trace verification API escaped exact evidence function: {path}:{line_number}")
+            fail(
+                f"trace verification API escaped exact evidence function: {path}:{line_number}"
+            )
 
 
 def verify_production_trace_output_ownership(root: Path) -> None:
@@ -931,22 +1719,36 @@ def verify_production_trace_output_ownership(root: Path) -> None:
                 if token in OUTPUT_MACROS and tokens[index + 1] == "!"
             ]
             if output_calls != ["eprintln"]:
-                fail(f"typed trace owner must have one eprintln marker sink: {output_calls}")
+                fail(
+                    f"typed trace owner must have one eprintln marker sink: {output_calls}"
+                )
             continue
         if TRACE_MARKER in source:
-            fail(f"runtime trace marker escaped its typed owner: {path.relative_to(root)}")
+            fail(
+                f"runtime trace marker escaped its typed owner: {path.relative_to(root)}"
+            )
         for index, token in enumerate(tokens[:-1]):
             if token in OUTPUT_MACROS and tokens[index + 1] == "!":
-                fail(f"production source may forge evidence output: {path.relative_to(root)}:{token}!")
-        if re.search(r"(?:std\s*::\s*io\s*::|\bio\s*::\s*)(?:stdout|stderr)\s*\(", source):
-            fail(f"production source may access evidence output streams: {path.relative_to(root)}")
+                fail(
+                    f"production source may forge evidence output: {path.relative_to(root)}:{token}!"
+                )
+        if re.search(
+            r"(?:std\s*::\s*io\s*::|\bio\s*::\s*)(?:stdout|stderr)\s*\(", source
+        ):
+            fail(
+                f"production source may access evidence output streams: {path.relative_to(root)}"
+            )
         if any(token in {"from_raw_fd", "as_raw_fd"} for token in tokens):
-            fail(f"production source may access raw evidence descriptors: {path.relative_to(root)}")
+            fail(
+                f"production source may access raw evidence descriptors: {path.relative_to(root)}"
+            )
         if any(
             tokens[index : index + 3] == ("process", "::", "exit")
             for index in range(len(tokens) - 2)
         ):
-            fail(f"production source may terminate evidence process: {path.relative_to(root)}")
+            fail(
+                f"production source may terminate evidence process: {path.relative_to(root)}"
+            )
 
 
 def verify_evidence_source_closure(root: Path, spec: EvidenceSpec) -> None:
@@ -972,17 +1774,45 @@ def verify_evidence_source_closure(root: Path, spec: EvidenceSpec) -> None:
         )
 
 
-def cargo_evidence_command(spec: EvidenceSpec) -> list[str]:
+def cargo_evidence_command(
+    spec: EvidenceSpec, coverage_report_path: Path | None = None
+) -> list[str]:
     """Build the one exact Cargo command declared by a TSV evidence row."""
 
-    command = [
-        "cargo",
-        "test",
-        "--offline",
-        "--locked",
-        "-p",
-        "druid-wrapper",
-    ]
+    if spec.category == RUNTIME_TRACE_CATEGORY:
+        if coverage_report_path is None:
+            fail(
+                "runtime compiler coverage command requires one unique JSON report path"
+            )
+        command = [
+            "cargo",
+            "llvm-cov",
+            "test",
+            "--json",
+            "--output-path",
+            str(coverage_report_path),
+            "--offline",
+            "--locked",
+            "--color",
+            "never",
+            "-p",
+            "druid-wrapper",
+        ]
+    elif spec.category == COMPILE_IDENTITY_CATEGORY:
+        if coverage_report_path is not None:
+            fail("compile identity evidence must not claim a runtime coverage report")
+        command = [
+            "cargo",
+            "test",
+            "--offline",
+            "--locked",
+            "--color",
+            "never",
+            "-p",
+            "druid-wrapper",
+        ]
+    else:
+        fail(f"Task 4 evidence category is unknown: {spec.category}")
     if spec.profile == "all-features":
         command.append("--all-features")
     elif spec.profile != "default":
@@ -1000,17 +1830,23 @@ def cargo_evidence_command(spec: EvidenceSpec) -> list[str]:
     return command
 
 
-def kill_process_group(process: subprocess.Popen[bytes]) -> None:
+def kill_process_group(
+    process: subprocess.Popen[bytes], process_group_id: int | None
+) -> None:
     """Kill one evidence process and all children in its isolated process group."""
 
-    if process.poll() is not None:
-        return
-    if os.name == "posix":
+    if os.name == "posix" and process_group_id is not None:
         try:
-            os.killpg(process.pid, signal.SIGKILL)
+            os.killpg(process_group_id, signal.SIGKILL)
         except ProcessLookupError:
             pass
-    else:
+        except PermissionError:
+            # macOS can retain a just-killed process group containing only a reaped
+            # parent/zombie briefly and report EPERM on the second deterministic cleanup.
+            # A live direct parent must never hide an authorization failure.
+            if process.poll() is None:
+                raise
+    elif process.poll() is None:
         process.kill()
 
 
@@ -1035,8 +1871,9 @@ def run_bounded_process(
         text=False,
         start_new_session=os.name == "posix",
     )
+    process_group_id = process.pid if os.name == "posix" else None
     if process.stdout is None or process.stderr is None:
-        kill_process_group(process)
+        kill_process_group(process, process_group_id)
         fail("bounded process did not expose stdout/stderr pipes")
     selector = selectors.DefaultSelector()
     selector.register(process.stdout, selectors.EVENT_READ, "stdout")
@@ -1047,7 +1884,7 @@ def run_bounded_process(
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                kill_process_group(process)
+                kill_process_group(process, process_group_id)
                 process.wait()
                 fail(f"evidence process timed out after {timeout_seconds:.3f}s")
             events = selector.select(min(remaining, 0.05))
@@ -1059,7 +1896,7 @@ def run_bounded_process(
                     continue
                 buffers[key.data].extend(chunk)
                 if sum(len(buffer) for buffer in buffers.values()) > output_limit:
-                    kill_process_group(process)
+                    kill_process_group(process, process_group_id)
                     process.wait()
                     fail(f"evidence process exceeded output limit {output_limit}")
             if process.poll() is not None and not events:
@@ -1068,8 +1905,11 @@ def run_bounded_process(
         returncode = process.wait()
     finally:
         selector.close()
+        # The direct cargo parent may already be reaped while a descendant has closed
+        # inherited pipes and continues running. Always target the start-time PGID;
+        # `killpg` safely returns ESRCH when the group is already empty.
+        kill_process_group(process, process_group_id)
         if process.poll() is None:
-            kill_process_group(process)
             process.wait()
         for stream in (process.stdout, process.stderr):
             if stream is not None and not stream.closed:
@@ -1081,40 +1921,70 @@ def run_bounded_process(
     )
 
 
-def execute_evidence(root: Path, spec: EvidenceSpec) -> None:
-    """Run one exact declared test and validate its runtime-trace or compile-identity outcome."""
+def execute_evidence(
+    root: Path,
+    spec: EvidenceSpec,
+    coverage_family_specs: tuple[CoverageFamilySpec, ...] = (),
+) -> None:
+    """Run one exact test; runtime completion is anchored only in fresh compiler coverage."""
 
     verify_evidence_source_closure(root, spec)
-    challenge = secrets.token_hex(32)
     environment = os.environ.copy()
-    environment[TRACE_CHALLENGE_ENV] = challenge
-    try:
-        result = run_bounded_process(
-            cargo_evidence_command(spec),
-            cwd=root,
-            timeout_seconds=DEFAULT_EVIDENCE_TIMEOUT_SECONDS,
-            output_limit=DEFAULT_EVIDENCE_OUTPUT_LIMIT,
-            env=environment,
-        )
-    except VerificationError as error:
-        fail(f"exact Task 4 evidence process failed: {spec.test_id}: {error}")
-    output = f"{result.stdout}\n{result.stderr}"
-    if result.returncode != 0:
-        fail(f"exact Task 4 evidence test failed: {spec.test_id}: {output.strip()}")
-    if spec.category == RUNTIME_TRACE_CATEGORY:
-        validate_runtime_trace_output(
-            output,
-            spec.evidence_id,
-            spec.family,
-            spec.version,
-            challenge,
-            root,
-        )
-    elif spec.category == COMPILE_IDENTITY_CATEGORY:
-        if TRACE_MARKER in output:
-            fail(f"nonbehavior identity evidence forged runtime behavior: {spec.test_id}")
-    else:
+    environment.pop(TRACE_CHALLENGE_ENV, None)
+    if spec.category == COMPILE_IDENTITY_CATEGORY:
+        try:
+            result = run_bounded_process(
+                cargo_evidence_command(spec),
+                cwd=root,
+                timeout_seconds=DEFAULT_EVIDENCE_TIMEOUT_SECONDS,
+                output_limit=DEFAULT_EVIDENCE_OUTPUT_LIMIT,
+                env=environment,
+            )
+        except (OSError, VerificationError) as error:
+            fail(f"compile identity evidence NOT_RUN/ERROR: {spec.test_id}: {error}")
+        output = f"{result.stdout}\n{result.stderr}"
+        if result.returncode != 0:
+            fail(f"compile identity evidence ERROR: {spec.test_id}: {output.strip()}")
+        return
+    if spec.category != RUNTIME_TRACE_CATEGORY:
         fail(f"Task 4 evidence category is unknown: {spec.category}")
+    if not coverage_family_specs:
+        fail("compiler coverage manifest is missing (NOT_RUN/ERROR)")
+    with tempfile.TemporaryDirectory(
+        prefix=f"druid-task4-{spec.family.lower()}-coverage-"
+    ) as temporary:
+        run_directory = Path(temporary)
+        report_path = run_directory / "coverage.json"
+        environment["CARGO_TARGET_DIR"] = str(run_directory / "target")
+        started_at_ns = time.time_ns()
+        try:
+            result = run_bounded_process(
+                cargo_evidence_command(spec, report_path),
+                cwd=root,
+                timeout_seconds=DEFAULT_EVIDENCE_TIMEOUT_SECONDS,
+                output_limit=DEFAULT_EVIDENCE_OUTPUT_LIMIT,
+                env=environment,
+            )
+        except (OSError, VerificationError) as error:
+            fail(
+                "compiler coverage exact run NOT_RUN/ERROR: " f"{spec.test_id}: {error}"
+            )
+        output = f"{result.stdout}\n{result.stderr}"
+        if result.returncode != 0:
+            fail(
+                "compiler coverage exact run ERROR: "
+                f"{spec.test_id}: {output.strip()}"
+            )
+        report = load_fresh_coverage_report(
+            report_path,
+            run_directory=run_directory,
+            started_at_ns=started_at_ns,
+        )
+        verify_coverage_profile_artifacts(run_directory, started_at_ns)
+        validate_compiler_coverage(root, spec, coverage_family_specs, report)
+        # The marker remains useful diagnostic output, but neither its presence nor its
+        # challenge text participates in acceptance. The covered final success region in
+        # `verify_and_emit` is the trust anchor for typed sequence validation.
 
 
 def adapter_row_family(row: AdapterRow) -> str:
@@ -1153,6 +2023,8 @@ def verify_row_evidence_bindings(rows: list[AdapterRow]) -> None:
                 "-",
                 "-",
                 behavior,
+                "-",
+                "-",
             )
         else:
             target, test_id, profile, behavior, evidence_id = (
@@ -1167,6 +2039,8 @@ def verify_row_evidence_bindings(rows: list[AdapterRow]) -> None:
                 TRACE_VERSION,
                 evidence_id,
                 behavior,
+                COVERAGE_VERSION,
+                COVERAGE_REQUIREMENT_SET,
             )
         actual = (
             row.behavior_test_target,
@@ -1177,6 +2051,8 @@ def verify_row_evidence_bindings(rows: list[AdapterRow]) -> None:
             row.trace_version,
             row.trace_evidence_id,
             row.behavior_evidence,
+            row.coverage_version,
+            row.coverage_requirement_ids,
         )
         if actual != expected:
             fail(
@@ -1198,6 +2074,7 @@ def evidence_specs(rows: list[AdapterRow]) -> tuple[EvidenceSpec, ...]:
             row.trace_family,
             row.trace_version,
             row.trace_evidence_id,
+            row.coverage_version,
         )
         for row in rows
         if row.state == LIVE_ADAPTER_STATE
@@ -1207,16 +2084,29 @@ def evidence_specs(rows: list[AdapterRow]) -> tuple[EvidenceSpec, ...]:
     if len(runtime) != 7 or {spec.family for spec in runtime} != TRACE_FAMILIES:
         fail(f"Task 4 must bind exactly seven family runtime traces: {runtime}")
     if len(identity) != 1:
-        fail(f"Task 4 DataSource Wrapper identity must use one independent exact test: {identity}")
+        fail(
+            f"Task 4 DataSource Wrapper identity must use one independent exact test: {identity}"
+        )
     if sum(row.evidence_category == COMPILE_IDENTITY_CATEGORY for row in rows) != 2:
-        fail("Task 4 must classify exactly two DataSource rows as nonbehavior identity evidence")
+        fail(
+            "Task 4 must classify exactly two DataSource rows as nonbehavior identity evidence"
+        )
     for spec in runtime:
-        if spec.version != TRACE_VERSION or spec.family not in TRACE_FAMILIES:
+        if (
+            spec.version != TRACE_VERSION
+            or spec.family not in TRACE_FAMILIES
+            or spec.coverage_version != COVERAGE_VERSION
+        ):
             fail(f"runtime trace binding is not canonical: {spec}")
         if spec.evidence_id in {"", "-"}:
             fail(f"runtime trace evidence id is missing: {spec}")
     for spec in identity:
-        if (spec.family, spec.version, spec.evidence_id) != ("-", "-", "-"):
+        if (spec.family, spec.version, spec.evidence_id, spec.coverage_version) != (
+            "-",
+            "-",
+            "-",
+            "-",
+        ):
             fail(f"compile identity row must not claim runtime trace fields: {spec}")
     exact_bindings: dict[tuple[str, str, str], EvidenceSpec] = {}
     evidence_ids: set[str] = set()
@@ -1224,11 +2114,52 @@ def evidence_specs(rows: list[AdapterRow]) -> tuple[EvidenceSpec, ...]:
         key = (spec.test_target, spec.test_id, spec.profile)
         previous = exact_bindings.setdefault(key, spec)
         if previous != spec:
-            fail(f"one exact Cargo test/profile is bound to conflicting evidence: {key}")
+            fail(
+                f"one exact Cargo test/profile is bound to conflicting evidence: {key}"
+            )
         if spec.category == RUNTIME_TRACE_CATEGORY and spec.evidence_id in evidence_ids:
             fail(f"runtime trace evidence id is duplicated: {spec.evidence_id}")
         evidence_ids.add(spec.evidence_id)
     return tuple(sorted(specs))
+
+
+def verify_coverage_manifest_bindings(
+    specs: tuple[EvidenceSpec, ...],
+    coverage_family_specs: tuple[CoverageFamilySpec, ...],
+) -> None:
+    """Bind every runtime EvidenceSpec to one field-exact coverage family contract."""
+
+    runtime = tuple(spec for spec in specs if spec.category == RUNTIME_TRACE_CATEGORY)
+    if tuple(sorted(spec.family for spec in runtime)) != COVERAGE_FAMILY_ORDER:
+        fail("runtime evidence and compiler coverage family denominators differ")
+    coverage_by_family = {spec.family: spec for spec in coverage_family_specs}
+    if len(coverage_by_family) != len(coverage_family_specs):
+        fail("compiler coverage manifest contains duplicate family bindings")
+    for spec in runtime:
+        coverage = coverage_by_family.get(spec.family)
+        if coverage is None:
+            fail(f"compiler coverage family mapping is missing: {spec.family}")
+        actual = (
+            coverage.test_target,
+            coverage.test_id,
+            coverage.profile,
+            coverage.trace_version,
+            coverage.trace_evidence_id,
+            coverage.coverage_version,
+        )
+        expected = (
+            spec.test_target,
+            spec.test_id,
+            spec.profile,
+            spec.version,
+            spec.evidence_id,
+            spec.coverage_version,
+        )
+        if actual != expected:
+            fail(
+                "runtime row is not field-exact with compiler coverage manifest: "
+                f"{spec.family}: {actual!r} != {expected!r}"
+            )
 
 
 def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
@@ -1236,10 +2167,13 @@ def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
 
     concrete = concrete_type(type_name)
     leaf = target_trait.rsplit("::", 1)[-1]
-    return re.search(
-        rf"impl_standard_wrapper!\s*\(\s*{re.escape(concrete)}(?:\s*<[^;)]*>)?\s*=>\s*{re.escape(leaf)}\s*\)",
-        source,
-    ) is not None
+    return (
+        re.search(
+            rf"impl_standard_wrapper!\s*\(\s*{re.escape(concrete)}(?:\s*<[^;)]*>)?\s*=>\s*{re.escape(leaf)}\s*\)",
+            source,
+        )
+        is not None
+    )
 
 
 def verify_adapter_source(root: Path, row: AdapterRow) -> None:
@@ -1252,10 +2186,14 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
     tokens = code_tokens(source)
     current = extract_impl_bodies(source, row.current_trait, row.implementation_type)
     if not current and row.current_trait.rsplit("::", 1)[-1] != "Wrapper":
-        fail(f"temporary Physical impl missing: {row.implementation_type} in {row.source_path}")
+        fail(
+            f"temporary Physical impl missing: {row.implementation_type} in {row.source_path}"
+        )
     if row.state != LIVE_ADAPTER_STATE:
         if row.state != "CURRENT_IMPL_TARGET_PLANNED":
-            fail(f"adapter inventory row has unknown state: {row.implementation_type}: {row.state}")
+            fail(
+                f"adapter inventory row has unknown state: {row.implementation_type}: {row.state}"
+            )
         return
     standard_path = root / row.standard_source_path
     if not standard_path.is_file():
@@ -1270,9 +2208,13 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
             "executor_core",
         )
         if any(marker not in standard_source for marker in required):
-            fail(f"common canonical Prepared behavior is incomplete: {row.implementation_type}")
+            fail(
+                f"common canonical Prepared behavior is incomplete: {row.implementation_type}"
+            )
         owner = row.standard_core_evidence.split("::", 1)[0]
-        family_sources = list((root / "crates/druid-wrapper/src").rglob("*connection*.rs"))
+        family_sources = list(
+            (root / "crates/druid-wrapper/src").rglob("*connection*.rs")
+        )
         owner_source = next(
             (
                 candidate.read_text(encoding="utf-8")
@@ -1289,7 +2231,9 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
                 "StandardAdapterPreparedStatement::new",
             )
         ):
-            fail(f"family prepared executor provenance is missing: {row.implementation_type}")
+            fail(
+                f"family prepared executor provenance is missing: {row.implementation_type}"
+            )
         return
     target_leaf = row.target_trait.rsplit("::", 1)[-1]
     standard = extract_impl_bodies(source, row.target_trait, row.implementation_type)
@@ -1301,18 +2245,33 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
             f"canonical adapter implements only Physical*: {row.implementation_type} "
             f"missing {row.target_trait}"
         )
-    canonical_path = row.target_trait.replace("druid_rdbc::", "druid_rdbc :: ").replace("::", " :: ")
-    canonical_import = row.target_trait.rsplit("::", 1)[0].replace("::", " :: ") + f" :: {target_leaf}"
-    macro_provenance = "druid_rdbc :: impl_standard_wrapper" in tokens and f"=> {target_leaf}" in tokens
-    if canonical_path not in tokens and canonical_import not in tokens and not macro_provenance:
-        fail(f"standard impl lacks canonical trait provenance: {row.implementation_type}")
+    canonical_path = row.target_trait.replace("druid_rdbc::", "druid_rdbc :: ").replace(
+        "::", " :: "
+    )
+    canonical_import = (
+        row.target_trait.rsplit("::", 1)[0].replace("::", " :: ") + f" :: {target_leaf}"
+    )
+    macro_provenance = (
+        "druid_rdbc :: impl_standard_wrapper" in tokens
+        and f"=> {target_leaf}" in tokens
+    )
+    if (
+        canonical_path not in tokens
+        and canonical_import not in tokens
+        and not macro_provenance
+    ):
+        fail(
+            f"standard impl lacks canonical trait provenance: {row.implementation_type}"
+        )
     if re.search(rf"\btrait\s+{re.escape(target_leaf)}\b", source):
         fail(f"local same-leaf trait shadows canonical identity: {target_leaf}")
     if re.search(r"#\s*\[\s*cfg\s*\(\s*any\s*\(\s*\)\s*\)\s*\]\s*impl", source):
         fail(f"canonical impl is production-disabled: {row.implementation_type}")
     for body in standard:
         if not code_tokens(body).strip():
-            fail(f"canonical impl inherits only empty/default behavior: {row.implementation_type}")
+            fail(
+                f"canonical impl inherits only empty/default behavior: {row.implementation_type}"
+            )
         if "Physical" in body:
             fail(f"standard impl delegates back to Physical: {row.implementation_type}")
         markers = [marker for marker in SQL_EXECUTION_MARKERS if marker in body]
@@ -1322,8 +2281,12 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
                 "standard impl duplicates SQL/default/error logic instead of delegating one core: "
                 f"{row.implementation_type}: {markers}"
             )
-    current_cores = set().union(*(core_calls(body) for body in current)) if current else set()
-    standard_cores = set().union(*(core_calls(body) for body in standard)) if standard else set()
+    current_cores = (
+        set().union(*(core_calls(body) for body in current)) if current else set()
+    )
+    standard_cores = (
+        set().union(*(core_calls(body) for body in standard)) if standard else set()
+    )
     if target_leaf in {"ConnectionFactory", "DatabaseMetaData", "ResultSet"}:
         transitive_factory_core = (
             target_leaf == "ConnectionFactory"
@@ -1331,12 +2294,19 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
             and standard
             and "create_adapter_core" in standard[0]
         )
-        if not current_cores.intersection(standard_cores) and not transitive_factory_core:
-            fail(f"standard and Physical impls use split cores: {row.implementation_type}")
+        if (
+            not current_cores.intersection(standard_cores)
+            and not transitive_factory_core
+        ):
+            fail(
+                f"standard and Physical impls use split cores: {row.implementation_type}"
+            )
     if target_leaf == "Connection":
         required = ("create_statement", "prepare_statement")
         if not standard or any(name not in standard[0] for name in required):
-            fail(f"connection lacks required standard handle behavior: {row.implementation_type}")
+            fail(
+                f"connection lacks required standard handle behavior: {row.implementation_type}"
+            )
         family_connections = {
             "RbdcConnectionAdapter",
             "ToastyConnectionAdapter",
@@ -1347,21 +2317,32 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
         }
         if row.implementation_type == "SqlxConnectionAdapter":
             if "standard_actor_core" not in standard[0]:
-                fail("SQLx connection does not create handles from its owned actor core")
+                fail(
+                    "SQLx connection does not create handles from its owned actor core"
+                )
         elif concrete_type(row.implementation_type) in family_connections and (
-            f"impl AdapterExecutionCore for {concrete_type(row.implementation_type)}" not in source
+            f"impl AdapterExecutionCore for {concrete_type(row.implementation_type)}"
+            not in source
             or "StandardAdapterStatement::new" not in standard[0]
             or "StandardAdapterPreparedStatement::new" not in standard[0]
         ):
-            fail(f"family connection lacks owned executor provenance: {row.implementation_type}")
+            fail(
+                f"family connection lacks owned executor provenance: {row.implementation_type}"
+            )
     required_methods = {
-        "PreparedStatement": ("set_parameter", "execute_prepared_query", "execute_prepared_update"),
+        "PreparedStatement": (
+            "set_parameter",
+            "execute_prepared_query",
+            "execute_prepared_update",
+        ),
         "ResultSet": ("next", "value", "close"),
         "DatabaseMetaData": ("database_product_name",),
         "ConnectionFactory": ("create",),
     }.get(target_leaf, ())
     if standard and any(method not in standard[0] for method in required_methods):
-        fail(f"canonical impl lacks required behavior: {row.implementation_type}: {required_methods}")
+        fail(
+            f"canonical impl lacks required behavior: {row.implementation_type}: {required_methods}"
+        )
     owner, _, methods = row.standard_core_evidence.partition("::")
     production_sources = "\n".join(
         candidate.read_text(encoding="utf-8")
@@ -1379,19 +2360,29 @@ def verify_consumer_rows(root: Path, path: Path) -> int:
     rows = [
         row
         for row in read_tsv(path)
-        if row["target_task"] == TASK and row["source_path"].startswith("crates/druid-wrapper/")
+        if row["target_task"] == TASK
+        and row["source_path"].startswith("crates/druid-wrapper/")
     ]
     if len(rows) != 21:
-        fail(f"Task 4 wrapper consumer denominator drift: expected 21 rows, found {len(rows)}")
+        fail(
+            f"Task 4 wrapper consumer denominator drift: expected 21 rows, found {len(rows)}"
+        )
     for row in rows:
         if row["state"] != LIVE_CONSUMER_STATE:
-            fail(f"Task 4 wrapper consumer is not CLOSED: {row['source_path']}: {row['symbol']}")
+            fail(
+                f"Task 4 wrapper consumer is not CLOSED: {row['source_path']}: {row['symbol']}"
+            )
         source = root / row["source_path"]
         if not source.is_file():
             fail(f"Task 4 wrapper consumer source is missing: {row['source_path']}")
         old_leaf = row["old_path"].rsplit("::", 1)[-1]
-        if re.search(rf"\b{re.escape(old_leaf)}\b", code_tokens(source.read_text(encoding="utf-8"))):
-            fail(f"closed legacy consumer still exists in source: {row['source_path']}: {old_leaf}")
+        if re.search(
+            rf"\b{re.escape(old_leaf)}\b",
+            code_tokens(source.read_text(encoding="utf-8")),
+        ):
+            fail(
+                f"closed legacy consumer still exists in source: {row['source_path']}: {old_leaf}"
+            )
     return len(rows)
 
 
@@ -1413,13 +2404,19 @@ def verify_sqlx_ownership(root: Path) -> None:
     if missing:
         fail(f"SQLx actor ownership evidence is incomplete: {missing}")
     prepared = code_tokens(
-        (root / "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs").read_text(encoding="utf-8")
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs").read_text(
+            encoding="utf-8"
+        )
     )
     result_set = code_tokens(
-        (root / "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs").read_text(encoding="utf-8")
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs").read_text(
+            encoding="utf-8"
+        )
     )
     metadata = code_tokens(
-        (root / "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs").read_text(encoding="utf-8")
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs").read_text(
+            encoding="utf-8"
+        )
     )
     if "Arc < SqlxConnectionActor >" not in prepared:
         fail("SQLx Statement/PreparedStatement does not own its executor actor")
@@ -1429,7 +2426,10 @@ def verify_sqlx_ownership(root: Path) -> None:
         fail("SQLx live DatabaseMetaData does not own its actor")
     if "ResultSetMetaDataSnapshot" not in result_set or not any(
         marker in result_set
-        for marker in ("Arc < dyn ResultSetMetaData >", "Arc < dyn StandardResultSetMetaData >")
+        for marker in (
+            "Arc < dyn ResultSetMetaData >",
+            "Arc < dyn StandardResultSetMetaData >",
+        )
     ):
         fail("SQLx ResultSet metadata is not an immutable Arc snapshot")
     if "Arc < dyn ParameterMetaData >" not in prepared:
@@ -1440,6 +2440,7 @@ def verify_repository(
     root: Path,
     adapters_path: Path = DEFAULT_ADAPTERS,
     runtime_evidence_path: Path = DEFAULT_RUNTIME_EVIDENCE,
+    coverage_manifest_path: Path = DEFAULT_COVERAGE_MANIFEST,
     consumers_path: Path = DEFAULT_CONSUMERS,
 ) -> tuple[int, int, int]:
     """Verify source identity, anti-forgery, and exact runtime evidence for Task 4."""
@@ -1451,8 +2452,10 @@ def verify_repository(
     verify_sqlx_ownership(root)
     verify_trace_record_callsites(root)
     specs = evidence_specs(adapters)
+    coverage_family_specs = load_coverage_manifest(root, coverage_manifest_path)
+    verify_coverage_manifest_bindings(specs, coverage_family_specs)
     for spec in specs:
-        execute_evidence(root, spec)
+        execute_evidence(root, spec, coverage_family_specs)
     return (
         sum(row.state == LIVE_ADAPTER_STATE for row in adapters),
         consumers,
@@ -1464,10 +2467,14 @@ def main() -> int:
     """CLI entry point."""
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument(
+        "--root", type=Path, default=Path(__file__).resolve().parents[1]
+    )
     arguments = parser.parse_args()
     try:
-        adapter_count, consumer_count, trace_count = verify_repository(arguments.root.resolve())
+        adapter_count, consumer_count, trace_count = verify_repository(
+            arguments.root.resolve()
+        )
     except (OSError, UnicodeError, VerificationError) as error:
         print(f"WRAPPER_STANDARD_IMPLS_FAIL={error}")
         return 1
@@ -1477,6 +2484,8 @@ def main() -> int:
     print("SQLX_OWNED_ACTOR_LIVE=1")
     print(f"RUNTIME_TRACE_FAMILIES_LIVE={trace_count}")
     print(f"RUNTIME_TRACE_PROTOCOL={TRACE_VERSION}")
+    print(f"COMPILER_COVERAGE_FAMILIES_LIVE={trace_count}")
+    print(f"COMPILER_COVERAGE_PROTOCOL={COVERAGE_VERSION}")
     print("NONBEHAVIOR_IDENTITY_ROWS=2")
     return 0
 

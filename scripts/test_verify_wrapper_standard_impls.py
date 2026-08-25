@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import inspect
 import os
+import signal
 import shutil
 import tempfile
 import time
@@ -71,7 +73,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "use druid_rdbc::connection::Connection;\n"
             "impl PhysicalConnection for DemoConnection {}\n"
             "impl Connection for DemoConnection {\n"
-            " async fn create_statement(&mut self) { sqlx::query(\"select 1\").execute(); }\n"
+            ' async fn create_statement(&mut self) { sqlx::query("select 1").execute(); }\n'
             "}\n"
         )
         with self.assertRaisesRegex(VerificationError, "duplicates SQL"):
@@ -116,7 +118,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             with self.assertRaises(VerificationError):
                 verify_adapter_source(self.root, self.row)
 
-    def test_rejects_standard_to_physical_local_leaf_cfg_disabled_and_alias_identity(self) -> None:
+    def test_rejects_standard_to_physical_local_leaf_cfg_disabled_and_alias_identity(
+        self,
+    ) -> None:
         fixtures = (
             "impl PhysicalConnection for DemoConnection {}\n"
             "impl Connection for DemoConnection { fn run(&mut self) { PhysicalConnection::run(self); } }\n",
@@ -181,7 +185,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "instance_id": instance_id,
             "events": events,
         }
-        return "DRUID_TASK4_RUNTIME_TRACE\t" + json.dumps(payload, separators=(",", ":"))
+        return "DRUID_TASK4_RUNTIME_TRACE\t" + json.dumps(
+            payload, separators=(",", ":")
+        )
 
     def validate_marker(self, output: str) -> None:
         validate_runtime_trace_output(
@@ -191,6 +197,164 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             TRACE_VERSION,
             "nonce-a",
         )
+
+    def synthetic_coverage_fixture(
+        self,
+        active: dict[str, set[str]],
+    ) -> tuple[EvidenceSpec, tuple[object, ...], dict[str, object]]:
+        """Build exact compiler-coverage JSON without reusing verifier production logic."""
+
+        requirement_type = getattr(verifier, "CoverageRequirement", None)
+        family_type = getattr(verifier, "CoverageFamilySpec", None)
+        requirement_ids = getattr(verifier, "COVERAGE_REQUIREMENT_IDS", None)
+        coverage_version = getattr(verifier, "COVERAGE_VERSION", None)
+        self.assertIsNotNone(
+            requirement_type, "compiler coverage requirement type is missing"
+        )
+        self.assertIsNotNone(family_type, "compiler coverage family type is missing")
+        self.assertIsNotNone(
+            requirement_ids, "compiler coverage denominator is missing"
+        )
+        self.assertIsNotNone(coverage_version, "compiler coverage version is missing")
+        if (
+            requirement_type is None
+            or family_type is None
+            or requirement_ids is None
+            or coverage_version is None
+        ):
+            self.fail("compiler coverage API is incomplete")
+
+        wrapper = self.root / "crates/druid-wrapper"
+        wrapper.mkdir(parents=True, exist_ok=True)
+        (self.root / "Cargo.toml").write_text("[workspace]\n", encoding="utf-8")
+        family_specs: list[object] = []
+        functions: list[dict[str, object]] = []
+        files: list[dict[str, object]] = []
+        bindings = {
+            "HTTP_SQL": (
+                "lib",
+                "http_sql_exact_test",
+                "all-features",
+                "task4.http-sql.runtime-trace-v1",
+            ),
+            "LIBSQL": (
+                "lib",
+                "libsql_exact_test",
+                "all-features",
+                "task4.libsql.runtime-trace-v1",
+            ),
+        }
+        for family, (target, test_id, profile, evidence_id) in bindings.items():
+            relative = Path(
+                f"crates/druid-wrapper/src/{family.lower()}_synthetic_coverage.rs"
+            )
+            source = self.root / relative
+            source.parent.mkdir(parents=True, exist_ok=True)
+            lines: list[str] = []
+            identities: list[tuple[str, str, str, int, int]] = []
+            for requirement_id in requirement_ids:
+                function_name = f"{family.lower()}_{requirement_id.lower()}"
+                region_line = f"{function_name}_region();"
+                lines.extend((f"fn {function_name}() {{", f"    {region_line}", "}"))
+                line_number = len(lines) - 1
+                column = 5
+                identities.append(
+                    (requirement_id, function_name, region_line, line_number, column)
+                )
+            source_text = "\n".join(lines) + "\n"
+            source.write_text(source_text, encoding="utf-8")
+            digest = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+            requirements: list[object] = []
+            segments: list[list[object]] = []
+            for (
+                requirement_id,
+                function_name,
+                region_line,
+                line_number,
+                column,
+            ) in identities:
+                count = int(requirement_id in active.get(family, set()))
+                requirements.append(
+                    requirement_type(
+                        requirement_id=requirement_id,
+                        source_path=relative,
+                        source_sha256=digest,
+                        function_name=function_name,
+                        region_line=region_line,
+                        region_occurrence=1,
+                        region_column=5,
+                        minimum_count=1,
+                    )
+                )
+                functions.append(
+                    {
+                        "name": f"_synthetic_{family}_{requirement_id}",
+                        "count": count,
+                        "filenames": [str(source)],
+                        "branches": [],
+                        "mcdc_records": [],
+                        "regions": [
+                            [
+                                line_number,
+                                column,
+                                line_number,
+                                column + len(region_line),
+                                count,
+                                0,
+                                0,
+                                0,
+                            ]
+                        ],
+                    }
+                )
+                segments.append([line_number, column, count, True, True, False])
+            files.append({"filename": str(source), "segments": segments, "summary": {}})
+            family_specs.append(
+                family_type(
+                    family=family,
+                    test_target=target,
+                    test_id=test_id,
+                    profile=profile,
+                    trace_version=TRACE_VERSION,
+                    trace_evidence_id=evidence_id,
+                    coverage_version=coverage_version,
+                    requirements=tuple(requirements),
+                )
+            )
+        expected = EvidenceSpec(
+            "lib",
+            "http_sql_exact_test",
+            "all-features",
+            "RUNTIME_TRACE",
+            "HTTP_SQL",
+            TRACE_VERSION,
+            "task4.http-sql.runtime-trace-v1",
+        )
+        report: dict[str, object] = {
+            "cargo_llvm_cov": {
+                "version": "0.8.7",
+                "manifest_path": str(self.root / "Cargo.toml"),
+            },
+            "data": [{"files": files, "functions": functions, "totals": {}}],
+            "type": "llvm.coverage.json.export",
+            "version": "3.1.0",
+        }
+        return expected, tuple(family_specs), report
+
+    def assert_coverage_rejected(
+        self,
+        active: dict[str, set[str]],
+        pattern: str,
+    ) -> None:
+        """Require the future compiler-coverage validator to fail closed."""
+
+        validator = getattr(verifier, "validate_compiler_coverage", None)
+        self.assertIsNotNone(validator, "compiler coverage validator is missing")
+        if validator is None:
+            return
+        expected, family_specs, report = self.synthetic_coverage_fixture(active)
+        with self.assertRaisesRegex(VerificationError, pattern):
+            validator(self.root, expected, family_specs, report)
 
     def test_runtime_trace_output_is_typed_exact_and_fail_closed(self) -> None:
         self.validate_marker(self.marker())
@@ -215,7 +379,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 "crates/druid-wrapper/tests/helper.rs",
                 1,
             ),
-            "wrong-caller-line": self.marker().replace('"caller_line":1', '"caller_line":0', 1),
+            "wrong-caller-line": self.marker().replace(
+                '"caller_line":1', '"caller_line":0', 1
+            ),
             "no-marker": "test result: ok. 1 passed; 0 failed; 0 ignored;",
             "duplicate-lines": self.marker() + "\n" + self.marker(),
         }
@@ -224,7 +390,182 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 with self.assertRaises(VerificationError):
                     self.validate_marker(output)
 
-    def test_runtime_trace_source_hygiene_rejects_fake_marker_and_recording(self) -> None:
+    def test_matching_runtime_record_without_production_coverage_is_rejected(
+        self,
+    ) -> None:
+        """A matching diagnostic marker never substitutes for compiler coverage."""
+
+        self.assertIn("DRUID_TASK4_RUNTIME_TRACE", self.marker())
+        self.assert_coverage_rejected(
+            {"HTTP_SQL": {"EXACT_TEST_IDENTITY"}},
+            "coverage requirement",
+        )
+
+    def test_dropped_future_has_test_identity_but_no_production_coverage(self) -> None:
+        """Creating and dropping Futures cannot satisfy a production execution gate."""
+
+        self.assert_coverage_rejected(
+            {"HTTP_SQL": {"EXACT_TEST_IDENTITY"}},
+            "FAMILY_FACTORY_CREATE",
+        )
+
+    def test_early_process_exit_cannot_skip_trace_validation_success_coverage(
+        self,
+    ) -> None:
+        """An exit-zero path after operations still lacks the typed validation-success region."""
+
+        requirement_ids = getattr(verifier, "COVERAGE_REQUIREMENT_IDS", ())
+        active = set(requirement_ids).difference({"TRACE_VALIDATION_SUCCESS"})
+        self.assert_coverage_rejected(
+            {"HTTP_SQL": active},
+            "TRACE_VALIDATION_SUCCESS",
+        )
+
+    def test_coverage_from_another_exact_test_or_family_is_rejected(self) -> None:
+        """A LIBSQL exact run cannot be credited to the HTTP SQL manifest row."""
+
+        requirement_ids = set(getattr(verifier, "COVERAGE_REQUIREMENT_IDS", ()))
+        self.assert_coverage_rejected(
+            {"LIBSQL": requirement_ids},
+            "another exact test|coverage requirement",
+        )
+
+    def test_combined_or_stale_coverage_profile_is_rejected(self) -> None:
+        """One report may contain one exact evidence identity and must be fresh to its run."""
+
+        validator = getattr(verifier, "validate_compiler_coverage", None)
+        loader = getattr(verifier, "load_fresh_coverage_report", None)
+        self.assertIsNotNone(validator, "compiler coverage validator is missing")
+        self.assertIsNotNone(loader, "fresh compiler coverage loader is missing")
+        if validator is None or loader is None:
+            return
+        requirement_ids = set(verifier.COVERAGE_REQUIREMENT_IDS)
+        expected, family_specs, report = self.synthetic_coverage_fixture(
+            {"HTTP_SQL": requirement_ids, "LIBSQL": requirement_ids}
+        )
+        with self.assertRaisesRegex(VerificationError, "combined"):
+            validator(self.root, expected, family_specs, report)
+
+        run_directory = self.root / "coverage-run"
+        run_directory.mkdir()
+        report_path = run_directory / "coverage.json"
+        report_path.write_text(json.dumps(report), encoding="utf-8")
+        old_time = time.time() - 60
+        os.utime(report_path, (old_time, old_time))
+        with self.assertRaisesRegex(VerificationError, "stale"):
+            loader(
+                report_path,
+                run_directory=run_directory,
+                started_at_ns=time.time_ns(),
+            )
+
+    def test_missing_common_stage_callsite_coverage_is_rejected(self) -> None:
+        """A zero-count Statement update stage makes the exact family evidence incomplete."""
+
+        requirement_ids = set(getattr(verifier, "COVERAGE_REQUIREMENT_IDS", ()))
+        requirement_ids.discard("STATEMENT_UPDATE")
+        self.assert_coverage_rejected(
+            {"HTTP_SQL": requirement_ids},
+            "STATEMENT_UPDATE",
+        )
+
+    def test_missing_trace_validation_success_region_is_rejected(self) -> None:
+        """All operation stages without post-validation success remain non-evidence."""
+
+        requirement_ids = set(getattr(verifier, "COVERAGE_REQUIREMENT_IDS", ()))
+        requirement_ids.discard("TRACE_VALIDATION_SUCCESS")
+        self.assert_coverage_rejected(
+            {"HTTP_SQL": requirement_ids},
+            "TRACE_VALIDATION_SUCCESS",
+        )
+
+    def test_wrong_family_factory_manifest_mapping_is_rejected(self) -> None:
+        """A family cannot point its factory requirement at another adapter family."""
+
+        repository = Path(__file__).resolve().parents[1]
+        loader = getattr(verifier, "load_coverage_manifest", None)
+        manifest_validator = getattr(verifier, "validate_coverage_manifest", None)
+        self.assertIsNotNone(loader, "coverage manifest loader is missing")
+        self.assertIsNotNone(
+            manifest_validator, "coverage manifest validator is missing"
+        )
+        if loader is None or manifest_validator is None:
+            return
+        family_specs = loader(repository)
+        http_index = next(
+            index
+            for index, spec in enumerate(family_specs)
+            if spec.family == "HTTP_SQL"
+        )
+        http = family_specs[http_index]
+        requirements = list(http.requirements)
+        factory_index = next(
+            index
+            for index, requirement in enumerate(requirements)
+            if requirement.requirement_id == "FAMILY_FACTORY_CREATE"
+        )
+        libsql_factory = repository / verifier.FAMILY_FACTORY_FILES["LIBSQL"]
+        requirements[factory_index] = replace(
+            requirements[factory_index],
+            source_path=Path(verifier.FAMILY_FACTORY_FILES["LIBSQL"]),
+            source_sha256=hashlib.sha256(libsql_factory.read_bytes()).hexdigest(),
+        )
+        mutated = list(family_specs)
+        mutated[http_index] = replace(http, requirements=tuple(requirements))
+        with self.assertRaisesRegex(VerificationError, "factory|source"):
+            manifest_validator(repository, tuple(mutated))
+
+    def test_duplicate_or_reordered_coverage_manifest_mapping_is_rejected(self) -> None:
+        """Manifest family and requirement arrays are canonical ordered denominators."""
+
+        repository = Path(__file__).resolve().parents[1]
+        loader = getattr(verifier, "load_coverage_manifest", None)
+        manifest_validator = getattr(verifier, "validate_coverage_manifest", None)
+        self.assertIsNotNone(loader, "coverage manifest loader is missing")
+        self.assertIsNotNone(
+            manifest_validator, "coverage manifest validator is missing"
+        )
+        if loader is None or manifest_validator is None:
+            return
+        family_specs = loader(repository)
+        with self.assertRaisesRegex(VerificationError, "duplicate|order"):
+            manifest_validator(repository, (*family_specs, family_specs[0]))
+        first = family_specs[0]
+        reordered = replace(
+            first,
+            requirements=tuple(reversed(first.requirements)),
+        )
+        with self.assertRaisesRegex(VerificationError, "order"):
+            manifest_validator(repository, (reordered, *family_specs[1:]))
+
+    def test_wrong_coverage_file_or_function_identity_is_rejected(self) -> None:
+        """Coverage identity uses exact source components and exact function region."""
+
+        validator = getattr(verifier, "validate_compiler_coverage", None)
+        self.assertIsNotNone(validator, "compiler coverage validator is missing")
+        if validator is None:
+            return
+        requirement_ids = set(getattr(verifier, "COVERAGE_REQUIREMENT_IDS", ()))
+        expected, family_specs, report = self.synthetic_coverage_fixture(
+            {"HTTP_SQL": requirement_ids}
+        )
+        data = report["data"]
+        self.assertIsInstance(data, list)
+        if not isinstance(data, list):
+            return
+        functions = data[0]["functions"]
+        self.assertIsInstance(functions, list)
+        if not isinstance(functions, list):
+            return
+        functions[0]["filenames"] = [str(self.root / "wrong-prefix/not-the-source.rs")]
+        with self.assertRaisesRegex(
+            VerificationError, "source|function|coverage requirement|another exact test"
+        ):
+            validator(self.root, expected, family_specs, report)
+
+    def test_runtime_trace_source_hygiene_rejects_fake_marker_and_recording(
+        self,
+    ) -> None:
         fixtures = {
             "fake-marker": 'fn runs() { eprintln!("DRUID_TASK4_RUNTIME_TRACE\\t{}"); }',
             "fake-record": "fn send(trace: Trace) { trace.task4_trace_result_next(); }",
@@ -235,7 +576,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 with self.assertRaises(VerificationError):
                     verify_runtime_trace_source_hygiene(Path(f"{label}.rs"), source)
 
-    def test_exit_zero_without_marker_rejects_all_reviewer_execution_bypasses(self) -> None:
+    def test_exit_zero_without_marker_rejects_all_reviewer_execution_bypasses(
+        self,
+    ) -> None:
         """Dropped futures, process exit, bare matches, and pre-chain assert all emit no trace."""
 
         integration = self.root / "crates/druid-wrapper/tests/reviewer_bypass.rs"
@@ -270,9 +613,12 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             with self.subTest(test_id=test_id), patch(
                 "verify_wrapper_standard_impls.verify_evidence_source_closure"
             ), patch(
-                "verify_wrapper_standard_impls.run_bounded_process", return_value=completed
+                "verify_wrapper_standard_impls.run_bounded_process",
+                return_value=completed,
             ):
-                with self.assertRaisesRegex(VerificationError, "exactly one"):
+                with self.assertRaisesRegex(
+                    VerificationError, "coverage manifest|NOT_RUN/ERROR"
+                ):
                     execute_evidence(self.root, spec)
 
     def test_exact_runner_rejects_nonzero_and_missing_libtest_completion(self) -> None:
@@ -296,7 +642,8 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             with patch(
                 "verify_wrapper_standard_impls.verify_evidence_source_closure"
             ), patch(
-                "verify_wrapper_standard_impls.run_bounded_process", return_value=completed
+                "verify_wrapper_standard_impls.run_bounded_process",
+                return_value=completed,
             ):
                 with self.assertRaises(VerificationError):
                     execute_evidence(self.root, spec)
@@ -321,13 +668,20 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             TRACE_VERSION,
             "task4.http-sql.runtime-trace-v1",
         )
+        report = self.root / "coverage.json"
         self.assertEqual(
-            cargo_evidence_command(spec),
+            cargo_evidence_command(spec, report),
             [
                 "cargo",
+                "llvm-cov",
                 "test",
+                "--json",
+                "--output-path",
+                str(report),
                 "--offline",
                 "--locked",
+                "--color",
+                "never",
                 "-p",
                 "druid-wrapper",
                 "--all-features",
@@ -340,11 +694,15 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             ],
         )
 
-    def test_complete_source_closure_rejects_helper_marker_fake_summary_and_exit(self) -> None:
+    def test_complete_source_closure_rejects_helper_marker_fake_summary_and_exit(
+        self,
+    ) -> None:
         """A sibling helper cannot forge marker/completion output outside the root test file."""
 
         checker = getattr(verifier, "verify_evidence_source_closure", None)
-        self.assertIsNotNone(checker, "complete Rust evidence source-closure gate is missing")
+        self.assertIsNotNone(
+            checker, "complete Rust evidence source-closure gate is missing"
+        )
         if checker is None:
             return
         tests = self.root / "crates/druid-wrapper/tests"
@@ -356,10 +714,10 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         (tests / "helper.rs").write_text(
             "use std::io::Write;\n"
             "pub fn emit() {\n"
-            " let prefix = [\"DRUID_TASK4\", \"_RUNTIME_TRACE\"].concat();\n"
+            ' let prefix = ["DRUID_TASK4", "_RUNTIME_TRACE"].concat();\n'
             " let mut stderr = std::io::stderr();\n"
-            " writeln!(stderr, \"{}\\t{}\", prefix, \"{}\").unwrap();\n"
-            " println!(\"test result: ok. 1 passed; 0 failed; 0 ignored;\");\n"
+            ' writeln!(stderr, "{}\\t{}", prefix, "{}").unwrap();\n'
+            ' println!("test result: ok. 1 passed; 0 failed; 0 ignored;");\n'
             " std::process::exit(0);\n"
             "}\n",
             encoding="utf-8",
@@ -376,7 +734,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaises(VerificationError):
             checker(self.root, spec)
 
-    def test_record_provenance_rejects_allowed_file_helper_and_unapproved_ufcs(self) -> None:
+    def test_record_provenance_rejects_allowed_file_helper_and_unapproved_ufcs(
+        self,
+    ) -> None:
         """Path allowlisting cannot authorize helper, macro, or UFCS stage recording."""
 
         repository_source = (
@@ -390,8 +750,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
         original = allowed.read_text(encoding="utf-8")
         allowed.write_text(
-            original
-            + "\nfn helper(trace: &RuntimeTraceEmitter) {\n"
+            original + "\nfn helper(trace: &RuntimeTraceEmitter) {\n"
             " trace.task4_trace_parameter_set();\n"
             "}\n",
             encoding="utf-8",
@@ -410,7 +769,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaises(VerificationError):
             verify_trace_record_callsites(self.root)
 
-    def test_runtime_manifest_rejects_http_libsql_family_binding_swap_before_dedup(self) -> None:
+    def test_runtime_manifest_rejects_http_libsql_family_binding_swap_before_dedup(
+        self,
+    ) -> None:
         """Every source row, not just the seven-spec set, owns one canonical family binding."""
 
         repository = Path(__file__).resolve().parents[1]
@@ -426,9 +787,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             donor = (
                 libsql
                 if "http_sql/" in row.source_path.as_posix()
-                else http
-                if "libsql/" in row.source_path.as_posix()
-                else None
+                else http if "libsql/" in row.source_path.as_posix() else None
             )
             if donor is None:
                 return row
@@ -445,7 +804,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaises(VerificationError):
             evidence_specs([swapped(row) for row in rows])
 
-    def test_runner_is_offline_locked_bounded_and_kills_hanging_process_group(self) -> None:
+    def test_runner_is_offline_locked_bounded_and_kills_hanging_process_group(
+        self,
+    ) -> None:
         """Evidence execution cannot resolve online, run forever, or emit unbounded output."""
 
         spec = EvidenceSpec(
@@ -457,7 +818,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             TRACE_VERSION,
             "task4.http-sql.runtime-trace-v1",
         )
-        command = cargo_evidence_command(spec)
+        command = cargo_evidence_command(spec, self.root / "coverage.json")
         self.assertIn("--offline", command)
         self.assertIn("--locked", command)
         runner = getattr(verifier, "run_bounded_process", None)
@@ -489,7 +850,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 child_alive = False
                 break
             time.sleep(0.05)
-        self.assertFalse(child_alive, f"evidence child process survived group kill: {child_pid}")
+        self.assertFalse(
+            child_alive, f"evidence child process survived group kill: {child_pid}"
+        )
         with self.assertRaisesRegex(VerificationError, "output limit"):
             runner(
                 ["python3", "-c", "print('x' * 10000)"],
@@ -498,17 +861,116 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 output_limit=1024,
             )
 
-    def test_runtime_marker_requires_per_run_challenge_and_caller_provenance(self) -> None:
-        """An old structurally valid marker cannot satisfy a fresh verifier run."""
+    @unittest.skipUnless(os.name == "posix", "process groups require POSIX")
+    def test_runner_kills_captured_process_group_after_direct_parent_exits(
+        self,
+    ) -> None:
+        """Timeout and overflow cleanup use the start-time PGID after cargo has exited."""
+
+        runner = getattr(verifier, "run_bounded_process", None)
+        self.assertIsNotNone(runner, "bounded process-group runner is missing")
+        if runner is None:
+            return
+        for label, child_body, expected_error in (
+            ("timeout", "import time; time.sleep(10)", "timed out"),
+            (
+                "overflow",
+                "import sys,time; sys.stdout.write('x'*10000); sys.stdout.flush(); time.sleep(10)",
+                "output limit",
+            ),
+        ):
+            with self.subTest(label=label):
+                child_pid_file = self.root / f"{label}-orphan.pid"
+                parent_script = (
+                    "import subprocess; "
+                    f"child=subprocess.Popen(['python3','-c',{child_body!r}]); "
+                    f"open({str(child_pid_file)!r},'w').write(str(child.pid))"
+                )
+                child_pid: int | None = None
+                try:
+                    with self.assertRaisesRegex(VerificationError, expected_error):
+                        runner(
+                            ["python3", "-c", parent_script],
+                            cwd=self.root,
+                            timeout_seconds=0.2 if label == "timeout" else 2.0,
+                            output_limit=4096 if label == "timeout" else 1024,
+                        )
+                    child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+                    child_alive = True
+                    for _ in range(20):
+                        try:
+                            os.kill(child_pid, 0)
+                        except ProcessLookupError:
+                            child_alive = False
+                            break
+                        time.sleep(0.05)
+                    self.assertFalse(
+                        child_alive,
+                        f"evidence descendant survived captured PGID cleanup: {child_pid}",
+                    )
+                finally:
+                    if child_pid is not None:
+                        try:
+                            os.kill(child_pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
+        detached_pid_file = self.root / "successful-parent-detached-child.pid"
+        detached_child = "import time; time.sleep(10)"
+        successful_parent = (
+            "import subprocess; "
+            "child=subprocess.Popen("
+            f"['python3','-c',{detached_child!r}],"
+            "stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); "
+            f"open({str(detached_pid_file)!r},'w').write(str(child.pid))"
+        )
+        detached_pid: int | None = None
+        try:
+            completed = runner(
+                ["python3", "-c", successful_parent],
+                cwd=self.root,
+                timeout_seconds=2.0,
+                output_limit=4096,
+            )
+            self.assertEqual(completed.returncode, 0)
+            detached_pid = int(detached_pid_file.read_text(encoding="utf-8"))
+            detached_alive = True
+            for _ in range(20):
+                try:
+                    os.kill(detached_pid, 0)
+                except ProcessLookupError:
+                    detached_alive = False
+                    break
+                time.sleep(0.05)
+            self.assertFalse(
+                detached_alive,
+                "successful direct parent left a detached process-group descendant",
+            )
+        finally:
+            if detached_pid is not None:
+                try:
+                    os.kill(detached_pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_runtime_marker_parser_is_diagnostic_not_the_coverage_anchor(self) -> None:
+        """Diagnostic marker parsing remains exact but coverage accepts no output text."""
 
         parameters = inspect.signature(validate_runtime_trace_output).parameters
         self.assertIn("expected_challenge", parameters)
+        coverage_parameters = inspect.signature(
+            verifier.validate_compiler_coverage
+        ).parameters
+        self.assertNotIn("output", coverage_parameters)
+        self.assertNotIn("challenge", coverage_parameters)
         self.assertIsNotNone(
             getattr(verifier, "TRACE_CALLSITE_RULES", None),
             "typed caller provenance rules are missing",
         )
 
-    def test_caller_line_must_remain_inside_the_exact_production_function_region(self) -> None:
+    def test_caller_line_must_remain_inside_the_exact_production_function_region(
+        self,
+    ) -> None:
         """A same-file helper call is not a valid factory execution callsite."""
 
         repository = Path(__file__).resolve().parents[1]
@@ -521,7 +983,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             destination = self.root / relative
             if relative not in copied:
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                destination.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+                destination.write_text(
+                    source.read_text(encoding="utf-8"), encoding="utf-8"
+                )
                 copied.add(relative)
             method = verifier.TRACE_STAGE_METHODS[event["stage"]]
             call_lines = [
@@ -531,7 +995,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 )
                 if f".{method}(" in line
             ]
-            self.assertTrue(call_lines, f"missing canonical callsite {relative}:{method}")
+            self.assertTrue(
+                call_lines, f"missing canonical callsite {relative}:{method}"
+            )
             event["caller_line"] = call_lines[0]
         marker = "DRUID_TASK4_RUNTIME_TRACE\t" + json.dumps(
             payload, separators=(",", ":")
