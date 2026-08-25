@@ -209,6 +209,28 @@ no_std/nonexistent std macro为rustc已阻断的非承载边界，可在Importan
 
 ### Round 5 implementer response（pending independent re-review）
 
+- Commit `92c0e9e972b5fc0e28cef1d35f00dc272a79e75d`；16个compile-valid RED关闭。
+- Unified local-binding-first resolver覆盖ordinary/associated/generic/derive/proc-attribute/
+  function-like macro；parent ordinary use不再继承child，textual macro规则独立。
+- GREEN purity `103/103 + live29`，完整recovery gates PASS；状态仅pending review。
+
+## Recovery fix round 5 independent re-review — REVIEW CLEAR
+
+Independent reviewer未发现新的 Critical或load-bearing Important。最终 disposition：Wrapper永久
+合同、Wrapper hygiene、recursive reachable ModuleScopeIndex、lexical generics/ranges、nested item/
+macro/lifetime、function/block invocation、approved macro provenance、ordinary/derive/proc/function
+统一root provenance与parent-use child边界全部 `ADDRESSED`。Task 3 recovery完成，Task 4可以开始。
+
+Final independent evidence：purity `103/103 + live29`；semantic `13/13 + 52/17/0`；Task2
+`37/37 + 73/55/3559`及consumer SHA保持；RDBC `20/20`、Wrapper `3/3`、DruidError `4/4`、
+external consumer `2/2`、workspace check、Clippy、rustdoc/doctest、fmt/Python/diff全部PASS。
+
+Deferred non-load-bearing Minors：stable rustc阻断的macro2、unknown未导入attribute/derive、no_std
+缺std、不存在standard macro；block use被误传播到内部local mod的合法代码误杀；历史
+`rdbc_error.rs` identical-arm scope hygiene。它们不构成purity漏放，可进入Task4/final backlog。
+
+### Round 5 implementer response（pending independent re-review）
+
 - Base：`148648300464d0b2434b7e6684212e7a706119f0`；仅修改两份purity scripts与本组
   append-only状态文件，Wrapper production、Task4、Physical、Cargo、admin均未修改。
 - Strict TDD在production改动前将self-test从`83`扩为`103`项；旧实现产生`16`个fresh RED：

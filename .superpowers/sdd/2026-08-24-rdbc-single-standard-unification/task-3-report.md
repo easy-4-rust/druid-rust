@@ -476,6 +476,21 @@ Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均�
 `REVIEW CLEAR`。已知 `druid-admin` supervisor exact failure继续作为非 RDBC 外部风险记录，不能
 把 workspace broad tests伪报为 GREEN。
 
+## Breaker recovery completion
+
+用户批准的原子 recovery 最终在 `92c0e9e972b5fc0e28cef1d35f00dc272a79e75d` 后获得独立
+`REVIEW CLEAR`。完整过程与逐轮证据见 `task-3-recovery-report.md` 和
+`task-3-recovery-review.md`。
+
+- Wrapper 17 variants、6 inheritance groups、generic与精确compile-fail永久合同：ADDRESSED。
+- Recursive ModuleScopeIndex、lexical generic/item/macro provenance、ordinary/derive/proc/function
+  root provenance：ADDRESSED。
+- Final purity `103/103 + live29`；Task2 `73/55/3559`和consumer SHA保持。
+- RDBC `20/20`、Wrapper `3/3`、semantic/error/external/workspace check/Clippy/docs/fmt均PASS。
+- 仅park非load-bearing误杀/rustc-blocked Minors；known admin broad failure仍未伪报GREEN。
+
+最终状态：**TASK3_COMPLETE_REVIEW_CLEAR**。Task 4可以开始。
+
 ## Breaker recovery implementation（append-only）
 
 - Recovery base：`981336ac5c87b3e9d7e92e6cae691b21c4036c05`；用户批准当前 `main` atomic
