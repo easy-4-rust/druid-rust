@@ -140,59 +140,125 @@ impl RuntimeTraceEmitter {
         });
     }
 
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_factory_create(&self) {
+        self.record(TraceStage::FactoryCreate);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_connection_create(&self) {
+        self.record(TraceStage::ConnectionCreate);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_statement_create(&self) {
+        self.record(TraceStage::StatementCreate);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_statement_update(&self) {
+        self.record(TraceStage::StatementUpdate);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_prepared_create(&self) {
+        self.record(TraceStage::PreparedCreate);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_parameter_set(&self) {
+        self.record(TraceStage::ParameterSet);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_prepared_query(&self) {
+        self.record(TraceStage::PreparedQuery);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_result_next(&self) {
+        self.record(TraceStage::ResultNext);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_result_set_metadata(&self) {
+        self.record(TraceStage::ResultSetMetadata);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_database_metadata(&self) {
+        self.record(TraceStage::DatabaseMetadata);
+    }
+
+    #[inline(never)]
+    #[track_caller]
+    fn task4_coverage_anchor_connection_close(&self) {
+        self.record(TraceStage::ConnectionClose);
+    }
+
     #[track_caller]
     pub(crate) fn task4_trace_factory_create(&self) {
-        self.record(TraceStage::FactoryCreate);
+        self.task4_coverage_anchor_factory_create();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_connection_create(&self) {
-        self.record(TraceStage::ConnectionCreate);
+        self.task4_coverage_anchor_connection_create();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_statement_create(&self) {
-        self.record(TraceStage::StatementCreate);
+        self.task4_coverage_anchor_statement_create();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_statement_update(&self) {
-        self.record(TraceStage::StatementUpdate);
+        self.task4_coverage_anchor_statement_update();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_prepared_create(&self) {
-        self.record(TraceStage::PreparedCreate);
+        self.task4_coverage_anchor_prepared_create();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_parameter_set(&self) {
-        self.record(TraceStage::ParameterSet);
+        self.task4_coverage_anchor_parameter_set();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_prepared_query(&self) {
-        self.record(TraceStage::PreparedQuery);
+        self.task4_coverage_anchor_prepared_query();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_result_next(&self) {
-        self.record(TraceStage::ResultNext);
+        self.task4_coverage_anchor_result_next();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_result_set_metadata(&self) {
-        self.record(TraceStage::ResultSetMetadata);
+        self.task4_coverage_anchor_result_set_metadata();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_database_metadata(&self) {
-        self.record(TraceStage::DatabaseMetadata);
+        self.task4_coverage_anchor_database_metadata();
     }
 
     #[track_caller]
     pub(crate) fn task4_trace_connection_close(&self) {
-        self.record(TraceStage::ConnectionClose);
+        self.task4_coverage_anchor_connection_close();
     }
 }
 
@@ -319,6 +385,11 @@ struct SerializableTrace {
     events: Vec<SerializableTraceEvent>,
 }
 
+#[inline(never)]
+fn task4_coverage_anchor_validation_success() {
+    std::hint::black_box(TRACE_VERSION);
+}
+
 /// 验证一条完整 typed trace，并输出唯一机器可读 evidence record。
 ///
 /// 参数 `probe` 与 `expectation` 均被消费；只有 exact typed validation 成功后才会序列化并输出
@@ -379,5 +450,6 @@ pub fn verify_and_emit(
     })?;
     state.emitted = true;
     eprintln!("{TRACE_MARKER}\t{encoded}");
+    task4_coverage_anchor_validation_success();
     Ok(())
 }

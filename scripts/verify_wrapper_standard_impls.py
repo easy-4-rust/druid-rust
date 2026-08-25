@@ -37,7 +37,7 @@ COMPILE_IDENTITY_CATEGORY = "COMPILE_IDENTITY"
 TRACE_VERSION = "task4-runtime-trace-v1"
 TRACE_MARKER = "DRUID_TASK4_RUNTIME_TRACE"
 TRACE_CHALLENGE_ENV = "DRUID_TASK4_TRACE_CHALLENGE"
-COVERAGE_VERSION = "task4-compiler-coverage-v1"
+COVERAGE_VERSION = "task4-compiler-coverage-v2"
 LLVM_COVERAGE_JSON_TYPE = "llvm.coverage.json.export"
 LLVM_COVERAGE_JSON_VERSION = "3.1.0"
 DEFAULT_EVIDENCE_TIMEOUT_SECONDS = 600.0
@@ -90,22 +90,30 @@ TRACE_STAGES = (
 )
 COVERAGE_REQUIREMENT_IDS = (
     "EXACT_TEST_IDENTITY",
-    "FAMILY_FACTORY_CREATE",
-    "FAMILY_CONNECTION_CREATE",
-    "FAMILY_EXECUTOR",
-    "STATEMENT_CREATE",
-    "STATEMENT_UPDATE",
-    "PREPARED_CREATE",
-    "PARAMETER_SET",
-    "PREPARED_QUERY",
-    "RESULT_NEXT",
-    "RESULT_SET_METADATA",
-    "DATABASE_METADATA",
-    "CONNECTION_CLOSE",
+    "FAMILY_FACTORY_FUNCTION",
+    "FAMILY_EXECUTOR_FUNCTION",
+    "STAGE_FACTORY_CREATE",
+    "STAGE_CONNECTION_CREATE",
+    "STAGE_STATEMENT_CREATE",
+    "STAGE_STATEMENT_UPDATE",
+    "STAGE_PREPARED_CREATE",
+    "STAGE_PARAMETER_SET",
+    "STAGE_PREPARED_QUERY",
+    "STAGE_RESULT_NEXT",
+    "STAGE_RESULT_SET_METADATA",
+    "STAGE_DATABASE_METADATA",
+    "STAGE_CONNECTION_CLOSE",
     "TRACE_VALIDATION_SUCCESS",
 )
 COVERAGE_REQUIREMENT_SET = ",".join(COVERAGE_REQUIREMENT_IDS)
 COVERAGE_FAMILY_ORDER = tuple(sorted(TRACE_FAMILIES))
+COVERAGE_REQUIREMENT_KINDS = {
+    "TEST_IDENTITY_FUNCTION",
+    "FAMILY_FACTORY_FUNCTION",
+    "FAMILY_EXECUTOR_FUNCTION",
+    "STAGE_ANCHOR_FUNCTION",
+    "TRACE_VALIDATION_SUCCESS_FUNCTION",
+}
 TRACE_STAGE_METHODS = {
     "FactoryCreate": "task4_trace_factory_create",
     "ConnectionCreate": "task4_trace_connection_create",
@@ -300,55 +308,62 @@ TRACE_CALLSITE_FUNCTIONS = {
     for family in FAMILY_FACTORY_FILES
 }
 COVERAGE_STAGE_REQUIREMENTS = {
-    "FAMILY_FACTORY_CREATE": "FactoryCreate",
-    "FAMILY_CONNECTION_CREATE": "ConnectionCreate",
-    "STATEMENT_CREATE": "StatementCreate",
-    "STATEMENT_UPDATE": "StatementUpdate",
-    "PREPARED_CREATE": "PreparedCreate",
-    "PARAMETER_SET": "ParameterSet",
-    "PREPARED_QUERY": "PreparedQuery",
-    "RESULT_NEXT": "ResultNext",
-    "RESULT_SET_METADATA": "ResultSetMetadata",
-    "DATABASE_METADATA": "DatabaseMetadata",
-    "CONNECTION_CLOSE": "ConnectionClose",
+    "STAGE_FACTORY_CREATE": "FactoryCreate",
+    "STAGE_CONNECTION_CREATE": "ConnectionCreate",
+    "STAGE_STATEMENT_CREATE": "StatementCreate",
+    "STAGE_STATEMENT_UPDATE": "StatementUpdate",
+    "STAGE_PREPARED_CREATE": "PreparedCreate",
+    "STAGE_PARAMETER_SET": "ParameterSet",
+    "STAGE_PREPARED_QUERY": "PreparedQuery",
+    "STAGE_RESULT_NEXT": "ResultNext",
+    "STAGE_RESULT_SET_METADATA": "ResultSetMetadata",
+    "STAGE_DATABASE_METADATA": "DatabaseMetadata",
+    "STAGE_CONNECTION_CLOSE": "ConnectionClose",
 }
 FAMILY_EXECUTOR_RULES = {
     "SQLX": (
         "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
         "execute_update",
-        "let result = connection.execute_update_core(sql, values).await?;",
     ),
     "TOASTY": (
         "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
         "standard_execute_update_core",
-        "let result = self.execute_update_core(sql, values).await?;",
     ),
     "RBDC": (
         "crates/druid-wrapper/src/rbdc/rbdc_connection_adapter.rs",
         "standard_execute_update_core",
-        "let result = self.execute_update_core(sql, values).await?;",
     ),
     "DUCKDB": (
         "crates/druid-wrapper/src/duckdb/duckdb_connection_adapter.rs",
         "standard_execute_update_core",
-        "let result = self.execute_update_core(sql, values).await?;",
     ),
     "HTTP_SQL": (
         "crates/druid-wrapper/src/http_sql/http_sql_connection_adapter.rs",
         "standard_execute_update_core",
-        "let result = self.execute_update_core(sql, values).await?;",
     ),
     "LIBSQL": (
         "crates/druid-wrapper/src/libsql/libsql_connection_adapter.rs",
         "standard_execute_update_core",
-        "let result = self.execute_update_core(sql, values).await?;",
     ),
     "JDBC_AGENT": (
         "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection.rs",
         "standard_execute_update_core",
-        "let result = self.execute_update_core(sql, values).await?;",
     ),
 }
+TRACE_COVERAGE_ANCHOR_FUNCTIONS = {
+    "FactoryCreate": "task4_coverage_anchor_factory_create",
+    "ConnectionCreate": "task4_coverage_anchor_connection_create",
+    "StatementCreate": "task4_coverage_anchor_statement_create",
+    "StatementUpdate": "task4_coverage_anchor_statement_update",
+    "PreparedCreate": "task4_coverage_anchor_prepared_create",
+    "ParameterSet": "task4_coverage_anchor_parameter_set",
+    "PreparedQuery": "task4_coverage_anchor_prepared_query",
+    "ResultNext": "task4_coverage_anchor_result_next",
+    "ResultSetMetadata": "task4_coverage_anchor_result_set_metadata",
+    "DatabaseMetadata": "task4_coverage_anchor_database_metadata",
+    "ConnectionClose": "task4_coverage_anchor_connection_close",
+}
+TRACE_VALIDATION_SUCCESS_ANCHOR = "task4_coverage_anchor_validation_success"
 OUTPUT_MACROS = {"print", "println", "eprint", "eprintln", "dbg"}
 DIRECT_OUTPUT_IDENTIFIERS = {
     "stdout",
@@ -475,15 +490,15 @@ class EvidenceSpec:
 
 @dataclass(frozen=True)
 class CoverageRequirement:
-    """One exact compiler source/function/region obligation."""
+    """One exact compiler function obligation bound to checked Rust source."""
 
     requirement_id: str
+    requirement_kind: str
     source_path: Path
     source_sha256: str
-    function_name: str
-    region_line: str
-    region_occurrence: int
-    region_column: int
+    source_function: str
+    compiler_function_name: str
+    anchor_id: str
     minimum_count: int
 
 
@@ -789,100 +804,55 @@ def evidence_test_source_path(family: str) -> Path:
     return Path("crates/druid-wrapper/tests") / f"{target.removeprefix('test:')}.rs"
 
 
-def canonical_coverage_source_function(
+def canonical_coverage_requirement(
     family: str, requirement_id: str
-) -> tuple[Path, str]:
-    """Map a coverage requirement to one exact source and source-level function."""
+) -> tuple[str, Path, str, str]:
+    """Map one obligation to exact kind/source function/stable anchor identity."""
 
     if requirement_id == "EXACT_TEST_IDENTITY":
         return (
+            "TEST_IDENTITY_FUNCTION",
             evidence_test_source_path(family),
             CANONICAL_EVIDENCE_BINDINGS[family][1].rsplit("::", 1)[-1],
+            f"test_identity.{family.lower()}",
         )
-    if requirement_id == "FAMILY_EXECUTOR":
-        path, function_name, _ = FAMILY_EXECUTOR_RULES[family]
-        return Path(path), function_name
+    if requirement_id == "FAMILY_FACTORY_FUNCTION":
+        return (
+            "FAMILY_FACTORY_FUNCTION",
+            Path(FAMILY_FACTORY_FILES[family]),
+            "create_adapter_core",
+            f"family_factory.{family.lower()}",
+        )
+    if requirement_id == "FAMILY_EXECUTOR_FUNCTION":
+        path, source_function = FAMILY_EXECUTOR_RULES[family]
+        return (
+            "FAMILY_EXECUTOR_FUNCTION",
+            Path(path),
+            source_function,
+            f"family_executor.{family.lower()}",
+        )
     if requirement_id == "TRACE_VALIDATION_SUCCESS":
         return (
+            "TRACE_VALIDATION_SUCCESS_FUNCTION",
             Path("crates/druid-wrapper/src/task4_runtime_trace.rs"),
-            "verify_and_emit",
+            TRACE_VALIDATION_SUCCESS_ANCHOR,
+            "typed_validation.success",
         )
     stage = COVERAGE_STAGE_REQUIREMENTS.get(requirement_id)
     if stage is None:
         fail(f"coverage requirement id is unknown: {requirement_id}")
     return (
-        Path(TRACE_CALLSITE_RULES[family][stage]),
-        TRACE_CALLSITE_FUNCTIONS[family][stage],
+        "STAGE_ANCHOR_FUNCTION",
+        Path("crates/druid-wrapper/src/task4_runtime_trace.rs"),
+        TRACE_COVERAGE_ANCHOR_FUNCTIONS[stage],
+        f"typed_stage.{stage}",
     )
-
-
-def resolve_coverage_requirement_point(
-    root: Path, requirement: CoverageRequirement
-) -> tuple[int, int]:
-    """Resolve an exact manifest line inside exactly one named Rust function."""
-
-    path = root / requirement.source_path
-    if not path.is_file():
-        fail(f"coverage requirement source is missing: {requirement.source_path}")
-    raw = path.read_bytes()
-    observed_sha = hashlib.sha256(raw).hexdigest()
-    if observed_sha != requirement.source_sha256:
-        fail(
-            "coverage requirement source hash is stale: "
-            f"{requirement.source_path}: {observed_sha} != {requirement.source_sha256}"
-        )
-    source = raw.decode("utf-8")
-    ranges = function_line_ranges(source, requirement.function_name)
-    matches: list[tuple[int, int]] = []
-    for line_number, line in enumerate(source.splitlines(), start=1):
-        if line.strip() != requirement.region_line:
-            continue
-        containing = [
-            region for region in ranges if region[0] <= line_number <= region[1]
-        ]
-        if len(containing) == 1:
-            if (
-                requirement.region_column <= 0
-                or requirement.region_column > len(line)
-                or line[requirement.region_column - 1].isspace()
-            ):
-                fail(
-                    "coverage requirement region column is invalid: "
-                    f"{requirement.source_path}:{line_number}:"
-                    f"{requirement.region_column}"
-                )
-            matches.append((line_number, requirement.region_column))
-    if requirement.region_occurrence <= 0 or requirement.region_occurrence > len(
-        matches
-    ):
-        fail(
-            "coverage requirement region occurrence is not exact: "
-            f"{requirement.source_path}:{requirement.function_name}:"
-            f"{requirement.region_line!r}: occurrence={requirement.region_occurrence}:"
-            f"matches={matches}"
-        )
-    return matches[requirement.region_occurrence - 1]
-
-
-def coverage_region_anchor(requirement_id: str) -> str:
-    """Return the exact source token whose compiler region must be positive."""
-
-    if requirement_id == "EXACT_TEST_IDENTITY":
-        return "verify_and_emit"
-    if requirement_id == "FAMILY_EXECUTOR":
-        return "execute_update_core"
-    if requirement_id == "TRACE_VALIDATION_SUCCESS":
-        return "Ok"
-    stage = COVERAGE_STAGE_REQUIREMENTS.get(requirement_id)
-    if stage is None:
-        fail(f"coverage requirement id is unknown: {requirement_id}")
-    return TRACE_STAGE_METHODS[stage]
 
 
 def validate_coverage_manifest(
     root: Path, family_specs: tuple[CoverageFamilySpec, ...]
 ) -> None:
-    """Validate canonical order, bindings, source hashes, functions, and region identities."""
+    """Validate canonical order and exact compiler/source function identities."""
 
     families = tuple(spec.family for spec in family_specs)
     if families != COVERAGE_FAMILY_ORDER:
@@ -924,78 +894,71 @@ def validate_coverage_manifest(
                 "coverage manifest requirement order or duplicate mapping is invalid: "
                 f"{family}: {requirement_ids} != {COVERAGE_REQUIREMENT_IDS}"
             )
+        compiler_names: set[str] = set()
         for requirement in family_spec.requirements:
             if requirement.minimum_count != 1:
                 fail(
                     "coverage requirement minimum count must be exactly one: "
                     f"{family}:{requirement.requirement_id}"
                 )
-            expected_occurrence = 1
-            if requirement.region_occurrence != expected_occurrence:
+            if requirement.requirement_kind not in COVERAGE_REQUIREMENT_KINDS:
                 fail(
-                    "coverage requirement region occurrence is not canonical: "
+                    "coverage requirement kind is unknown: "
                     f"{family}:{requirement.requirement_id}:"
-                    f"{requirement.region_occurrence} != {expected_occurrence}"
+                    f"{requirement.requirement_kind}"
                 )
-            expected_path, expected_function = canonical_coverage_source_function(
-                family, requirement.requirement_id
+            expected_kind, expected_path, expected_function, expected_anchor = (
+                canonical_coverage_requirement(family, requirement.requirement_id)
             )
             if (
-                requirement.source_path != expected_path
-                or requirement.function_name != expected_function
+                requirement.requirement_kind != expected_kind
+                or requirement.source_path != expected_path
+                or requirement.source_function != expected_function
+                or requirement.anchor_id != expected_anchor
             ):
                 fail(
-                    "coverage requirement source/function identity is not canonical: "
+                    "coverage requirement kind/source/function/anchor is not canonical: "
                     f"{family}:{requirement.requirement_id}:"
-                    f"{requirement.source_path}:{requirement.function_name} != "
-                    f"{expected_path}:{expected_function}"
+                    f"{requirement.requirement_kind}:{requirement.source_path}:"
+                    f"{requirement.source_function}:{requirement.anchor_id} != "
+                    f"{expected_kind}:{expected_path}:{expected_function}:{expected_anchor}"
                 )
-            line_number, _ = resolve_coverage_requirement_point(root, requirement)
-            anchor = coverage_region_anchor(requirement.requirement_id)
-            source_line = (
-                (root / requirement.source_path)
-                .read_text(encoding="utf-8")
-                .splitlines()[line_number - 1]
-            )
-            expected_column = source_line.find(anchor) + 1
-            if (
-                expected_column <= 0
-                or source_line.count(anchor) != 1
-                or requirement.region_column != expected_column
+            if not requirement.compiler_function_name or any(
+                character.isspace() for character in requirement.compiler_function_name
             ):
                 fail(
-                    "coverage requirement region column/anchor is not exact: "
-                    f"{family}:{requirement.requirement_id}:"
-                    f"{requirement.region_column} != {expected_column}"
+                    "coverage compiler function identity is empty or malformed: "
+                    f"{family}:{requirement.requirement_id}"
                 )
-            tokens = tuple(
-                token.text.removeprefix("r#")
-                for token in tokenize(requirement.region_line)
+            if requirement.compiler_function_name in compiler_names:
+                fail(
+                    "coverage compiler function identity is duplicate or ambiguous: "
+                    f"{family}:{requirement.compiler_function_name}"
+                )
+            compiler_names.add(requirement.compiler_function_name)
+            path = root / requirement.source_path
+            if not path.is_file():
+                fail(
+                    f"coverage requirement source is missing: {requirement.source_path}"
+                )
+            raw = path.read_bytes()
+            observed_sha = hashlib.sha256(raw).hexdigest()
+            if observed_sha != requirement.source_sha256:
+                fail(
+                    "coverage requirement source hash is stale: "
+                    f"{requirement.source_path}: {observed_sha} != "
+                    f"{requirement.source_sha256}"
+                )
+            source_ranges = function_line_ranges(
+                raw.decode("utf-8"), requirement.source_function
             )
-            if requirement.requirement_id == "EXACT_TEST_IDENTITY":
-                if "verify_and_emit" not in tokens:
-                    fail(
-                        "exact test identity region must call typed verify_and_emit: "
-                        f"{family}:{requirement.region_line!r}"
-                    )
-            elif requirement.requirement_id == "FAMILY_EXECUTOR":
-                expected_line = FAMILY_EXECUTOR_RULES[family][2]
-                if requirement.region_line != expected_line:
-                    fail(
-                        "family executor coverage region is not exact: "
-                        f"{family}:{requirement.region_line!r} != {expected_line!r}"
-                    )
-            elif requirement.requirement_id == "TRACE_VALIDATION_SUCCESS":
-                if requirement.region_line != "Ok(())":
-                    fail("typed trace validation-success coverage region is not exact")
-            else:
-                stage = COVERAGE_STAGE_REQUIREMENTS[requirement.requirement_id]
-                method = TRACE_STAGE_METHODS[stage]
-                if method not in tokens:
-                    fail(
-                        "coverage stage region does not call its exact typed stage: "
-                        f"{family}:{requirement.requirement_id}:{line_number}:{method}"
-                    )
+            if len(source_ranges) != 1:
+                fail(
+                    "coverage source function is missing or ambiguous: "
+                    f"{family}:{requirement.requirement_id}:"
+                    f"{requirement.source_path}:{requirement.source_function}:"
+                    f"{source_ranges}"
+                )
 
 
 def load_coverage_manifest(
@@ -1042,12 +1005,12 @@ def load_coverage_manifest(
         for raw_requirement in raw_requirements:
             requirement_keys = {
                 "requirement_id",
+                "requirement_kind",
                 "source_path",
                 "source_sha256",
-                "function_name",
-                "region_line",
-                "region_occurrence",
-                "region_column",
+                "source_function",
+                "compiler_function_name",
+                "anchor_id",
                 "minimum_count",
             }
             if (
@@ -1060,12 +1023,12 @@ def load_coverage_manifest(
             requirements.append(
                 CoverageRequirement(
                     requirement_id=raw_requirement["requirement_id"],
+                    requirement_kind=raw_requirement["requirement_kind"],
                     source_path=Path(raw_requirement["source_path"]),
                     source_sha256=raw_requirement["source_sha256"],
-                    function_name=raw_requirement["function_name"],
-                    region_line=raw_requirement["region_line"],
-                    region_occurrence=raw_requirement["region_occurrence"],
-                    region_column=raw_requirement["region_column"],
+                    source_function=raw_requirement["source_function"],
+                    compiler_function_name=raw_requirement["compiler_function_name"],
+                    anchor_id=raw_requirement["anchor_id"],
                     minimum_count=raw_requirement["minimum_count"],
                 )
             )
@@ -1116,41 +1079,23 @@ def normalize_compiler_path(
     return matches[0]
 
 
-def region_contains_point(region: list[object], point: tuple[int, int]) -> bool:
-    """Return whether one exact LLVM region contains a 1-based source point."""
-
-    if len(region) != 8 or any(
-        isinstance(value, bool) or not isinstance(value, int) for value in region
-    ):
-        fail(f"compiler coverage region schema is invalid: {region!r}")
-    start = (region[0], region[1])
-    end = (region[2], region[3])
-    return start <= point < end
-
-
 def coverage_requirement_count(
     root: Path,
     requirement: CoverageRequirement,
     functions: list[object],
     known_paths: tuple[Path, ...],
 ) -> int:
-    """Return the maximum positive compiler count at one exact function region point."""
+    """Return one exact compiler function count without any region/function fallback."""
 
-    point = resolve_coverage_requirement_point(root, requirement)
     source = (root / requirement.source_path).read_text(encoding="utf-8")
-    containing_ranges = [
-        region
-        for region in function_line_ranges(source, requirement.function_name)
-        if region[0] <= point[0] <= region[1]
-    ]
-    if len(containing_ranges) != 1:
+    source_ranges = function_line_ranges(source, requirement.source_function)
+    if len(source_ranges) != 1:
         fail(
-            "coverage requirement function range is not exact: "
-            f"{requirement.source_path}:{requirement.function_name}:{point}"
+            "coverage source function is missing or ambiguous: "
+            f"{requirement.source_path}:{requirement.source_function}:{source_ranges}"
         )
-    function_start, function_end = containing_ranges[0]
-    point_counts: list[int] = []
-    function_counts: list[int] = []
+    function_start, function_end = source_ranges[0]
+    exact_matches: list[tuple[dict[str, object], tuple[Path | None, ...]]] = []
     for function in functions:
         if not isinstance(function, dict) or set(function) != {
             "name",
@@ -1174,6 +1119,10 @@ def coverage_requirement_count(
         normalized = tuple(
             normalize_compiler_path(filename, known_paths) for filename in filenames
         )
+        if function["name"] == requirement.compiler_function_name and normalized == (
+            requirement.source_path,
+        ):
+            exact_matches.append((function, normalized))
         for region in regions:
             if not isinstance(region, list):
                 fail("compiler coverage region is not an array")
@@ -1184,20 +1133,33 @@ def coverage_requirement_count(
                 fail("compiler coverage region file id is invalid")
             if file_id < 0 or file_id >= len(normalized):
                 fail("compiler coverage region file id exceeds filenames")
-            if normalized[file_id] != requirement.source_path:
-                continue
-            region_count = region[4]
-            if function["count"] <= 0 or region_count <= 0:
-                continue
-            if region_contains_point(region, point):
-                point_counts.append(region_count)
-            if function_start <= region[0] <= region[2] <= function_end:
-                function_counts.append(min(function["count"], region_count))
-    # Rust async lowering does not assign a standalone counter to every straight-line
-    # callsite. In that case the exact source callsite remains hash/manifest checked and
-    # the compiler count is taken from its one containing source function. The separately
-    # covered typed validation-success branch proves that all ordered stage calls completed.
-    return max(point_counts or function_counts, default=0)
+    if not exact_matches:
+        return 0
+    if len(exact_matches) != 1:
+        fail(
+            "compiler coverage function identity is duplicate or ambiguous: "
+            f"{requirement.anchor_id}:{requirement.compiler_function_name}:"
+            f"matches={len(exact_matches)}"
+        )
+    function, normalized = exact_matches[0]
+    source_regions: list[list[object]] = []
+    for region in function["regions"]:
+        file_id = region[5]
+        if (
+            normalized[file_id] == requirement.source_path
+            and function_start <= region[0] <= region[2] <= function_end
+        ):
+            source_regions.append(region)
+    if not source_regions:
+        fail(
+            "compiler function identity does not map to its exact source function: "
+            f"{requirement.anchor_id}:{requirement.compiler_function_name}:"
+            f"{requirement.source_path}:{requirement.source_function}"
+        )
+    function_count = function["count"]
+    if function_count <= 0 or not any(region[4] > 0 for region in source_regions):
+        return 0
+    return function_count
 
 
 def validate_compiler_coverage(
@@ -1295,8 +1257,9 @@ def validate_compiler_coverage(
             fail(
                 "compiler coverage requirement has zero or missing execution count: "
                 f"{expected_spec.family}:{requirement.requirement_id}:"
-                f"{requirement.source_path}:{requirement.function_name}:"
-                f"{requirement.region_line!r}"
+                f"{requirement.requirement_kind}:{requirement.anchor_id}:"
+                f"{requirement.source_path}:{requirement.source_function}:"
+                f"{requirement.compiler_function_name}"
             )
 
 
@@ -1509,7 +1472,11 @@ def verify_trace_record_callsites(root: Path) -> None:
     combined = "\n".join(
         path.read_text(encoding="utf-8") for path in track_caller_sources
     )
-    required_track_caller = ("record", *sorted(TRACE_RECORD_METHODS))
+    required_track_caller = (
+        "record",
+        *sorted(TRACE_RECORD_METHODS),
+        *sorted(TRACE_COVERAGE_ANCHOR_FUNCTIONS.values()),
+    )
     for method in required_track_caller:
         definitions = len(re.findall(rf"\bfn\s+{re.escape(method)}\s*\(", combined))
         tracked = len(
@@ -1524,6 +1491,39 @@ def verify_trace_record_callsites(root: Path) -> None:
                 "runtime trace record chain lacks #[track_caller] on every hop: "
                 f"{method}: tracked={tracked}, definitions={definitions}"
             )
+    trace_source = (source_root / "task4_runtime_trace.rs").read_text(encoding="utf-8")
+    for stage, anchor in TRACE_COVERAGE_ANCHOR_FUNCTIONS.items():
+        inline_definitions = len(
+            re.findall(
+                rf"#\s*\[\s*inline\s*\(\s*never\s*\)\s*\]\s*"
+                rf"#\s*\[\s*track_caller\s*\]\s*fn\s+{re.escape(anchor)}\s*\(",
+                trace_source,
+            )
+        )
+        calls = len(re.findall(rf"\.\s*{re.escape(anchor)}\s*\(", trace_source))
+        if inline_definitions != 1 or calls != 1:
+            fail(
+                "typed stage coverage anchor is missing, duplicated, or bypassable: "
+                f"{stage}:{anchor}:definitions={inline_definitions}:calls={calls}"
+            )
+    success_definitions = len(
+        re.findall(
+            rf"#\s*\[\s*inline\s*\(\s*never\s*\)\s*\]\s*"
+            rf"fn\s+{re.escape(TRACE_VALIDATION_SUCCESS_ANCHOR)}\s*\(",
+            trace_source,
+        )
+    )
+    success_occurrences = len(
+        re.findall(
+            rf"\b{re.escape(TRACE_VALIDATION_SUCCESS_ANCHOR)}\s*\(",
+            trace_source,
+        )
+    )
+    if success_definitions != 1 or success_occurrences != 2:
+        fail(
+            "typed validation-success coverage anchor is missing, duplicated, or bypassable: "
+            f"definitions={success_definitions}:occurrences={success_occurrences}"
+        )
 
 
 def evidence_source(root: Path, spec: EvidenceSpec) -> tuple[Path, str]:

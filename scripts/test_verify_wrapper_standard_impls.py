@@ -277,12 +277,30 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 requirements.append(
                     requirement_type(
                         requirement_id=requirement_id,
+                        requirement_kind=(
+                            "TEST_IDENTITY_FUNCTION"
+                            if requirement_id == "EXACT_TEST_IDENTITY"
+                            else (
+                                "FAMILY_FACTORY_FUNCTION"
+                                if requirement_id == "FAMILY_FACTORY_FUNCTION"
+                                else (
+                                    "FAMILY_EXECUTOR_FUNCTION"
+                                    if requirement_id == "FAMILY_EXECUTOR_FUNCTION"
+                                    else (
+                                        "TRACE_VALIDATION_SUCCESS_FUNCTION"
+                                        if requirement_id == "TRACE_VALIDATION_SUCCESS"
+                                        else "STAGE_ANCHOR_FUNCTION"
+                                    )
+                                )
+                            )
+                        ),
                         source_path=relative,
                         source_sha256=digest,
-                        function_name=function_name,
-                        region_line=region_line,
-                        region_occurrence=1,
-                        region_column=5,
+                        source_function=function_name,
+                        compiler_function_name=(
+                            f"_synthetic_{family}_{requirement_id}"
+                        ),
+                        anchor_id=f"synthetic.{family}.{requirement_id}",
                         minimum_count=1,
                     )
                 )
@@ -356,6 +374,54 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, pattern):
             validator(self.root, expected, family_specs, report)
 
+    def assert_same_function_region_fallback_rejected(
+        self, requirement_id: str
+    ) -> None:
+        """A positive sibling region must not replace one zero exact target region."""
+
+        requirement_ids = set(verifier.COVERAGE_REQUIREMENT_IDS)
+        expected, family_specs, report = self.synthetic_coverage_fixture(
+            {"HTTP_SQL": requirement_ids}
+        )
+        functions = report["data"][0]["functions"]
+        target_name = f"_synthetic_HTTP_SQL_{requirement_id}"
+        target = next(
+            function for function in functions if function["name"] == target_name
+        )
+        exact_region = target["regions"][0]
+        target["count"] = 0
+        exact_region[4] = 0
+        functions.append(
+            {
+                "name": f"_synthetic_unrelated_{requirement_id}",
+                "count": 1,
+                "filenames": list(target["filenames"]),
+                "branches": [],
+                "mcdc_records": [],
+                "regions": [
+                    [
+                        exact_region[0] - 1,
+                        1,
+                        exact_region[0] - 1,
+                        3,
+                        1,
+                        0,
+                        0,
+                        0,
+                    ]
+                ],
+            }
+        )
+        pattern = (
+            "another exact test|EXACT_TEST_IDENTITY.*zero|zero.*EXACT_TEST_IDENTITY"
+            if requirement_id == "EXACT_TEST_IDENTITY"
+            else f"{requirement_id}.*zero|zero.*{requirement_id}"
+        )
+        with self.assertRaisesRegex(VerificationError, pattern):
+            verifier.validate_compiler_coverage(
+                self.root, expected, family_specs, report
+            )
+
     def test_runtime_trace_output_is_typed_exact_and_fail_closed(self) -> None:
         self.validate_marker(self.marker())
         malformed = {
@@ -390,6 +456,109 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 with self.assertRaises(VerificationError):
                     self.validate_marker(output)
 
+    def test_exact_test_identity_rejects_positive_sibling_function_region(self) -> None:
+        """The exact test identity region cannot borrow another region's count."""
+
+        self.assert_same_function_region_fallback_rejected("EXACT_TEST_IDENTITY")
+
+    def test_stage_rejects_positive_sibling_caller_function_region(self) -> None:
+        """A stage anchor at zero cannot borrow its caller function's positive count."""
+
+        self.assert_same_function_region_fallback_rejected("STAGE_STATEMENT_UPDATE")
+
+    def test_validation_success_rejects_positive_sibling_verify_region(self) -> None:
+        """Entering verify_and_emit cannot replace its zero success exit."""
+
+        self.assert_same_function_region_fallback_rejected("TRACE_VALIDATION_SUCCESS")
+
+    def test_duplicate_exact_coverage_function_is_ambiguous(self) -> None:
+        """Two compiler functions for one exact identity must fail closed."""
+
+        requirement_ids = set(verifier.COVERAGE_REQUIREMENT_IDS)
+        expected, family_specs, report = self.synthetic_coverage_fixture(
+            {"HTTP_SQL": requirement_ids}
+        )
+        functions = report["data"][0]["functions"]
+        target = next(
+            function
+            for function in functions
+            if function["name"] == "_synthetic_HTTP_SQL_STAGE_STATEMENT_UPDATE"
+        )
+        functions.append(json.loads(json.dumps(target)))
+        with self.assertRaisesRegex(VerificationError, "duplicate|ambiguous"):
+            verifier.validate_compiler_coverage(
+                self.root, expected, family_specs, report
+            )
+
+    def test_missing_exact_stage_anchor_function_is_rejected(self) -> None:
+        """An absent compiler function cannot satisfy a present source anchor."""
+
+        requirement_ids = set(verifier.COVERAGE_REQUIREMENT_IDS)
+        expected, family_specs, report = self.synthetic_coverage_fixture(
+            {"HTTP_SQL": requirement_ids}
+        )
+        functions = report["data"][0]["functions"]
+        functions[:] = [
+            function
+            for function in functions
+            if function["name"] != "_synthetic_HTTP_SQL_STAGE_STATEMENT_UPDATE"
+        ]
+        with self.assertRaisesRegex(
+            VerificationError,
+            "STAGE_STATEMENT_UPDATE.*zero|zero.*STAGE_STATEMENT_UPDATE",
+        ):
+            verifier.validate_compiler_coverage(
+                self.root, expected, family_specs, report
+            )
+
+    def test_wrong_source_hash_or_compiler_function_identity_is_rejected(self) -> None:
+        """Neither stale source bytes nor a different exact function can be credited."""
+
+        repository = Path(__file__).resolve().parents[1]
+        canonical = verifier.load_coverage_manifest(repository)
+        first = canonical[0]
+        stale = replace(
+            first.requirements[0],
+            source_sha256="0" * 64,
+        )
+        with self.assertRaisesRegex(VerificationError, "source hash is stale"):
+            verifier.validate_coverage_manifest(
+                repository,
+                (
+                    replace(
+                        first,
+                        requirements=(stale, *first.requirements[1:]),
+                    ),
+                    *canonical[1:],
+                ),
+            )
+
+        requirement_ids = set(verifier.COVERAGE_REQUIREMENT_IDS)
+        expected, family_specs, report = self.synthetic_coverage_fixture(
+            {"HTTP_SQL": requirement_ids}
+        )
+        http = family_specs[0]
+        stage_index = next(
+            index
+            for index, requirement in enumerate(http.requirements)
+            if requirement.requirement_id == "STAGE_STATEMENT_UPDATE"
+        )
+        requirements = list(http.requirements)
+        requirements[stage_index] = replace(
+            requirements[stage_index],
+            compiler_function_name="_synthetic_wrong_exact_function",
+        )
+        with self.assertRaisesRegex(
+            VerificationError,
+            "STAGE_STATEMENT_UPDATE.*zero|zero.*STAGE_STATEMENT_UPDATE",
+        ):
+            verifier.validate_compiler_coverage(
+                self.root,
+                expected,
+                (replace(http, requirements=tuple(requirements)), *family_specs[1:]),
+                report,
+            )
+
     def test_matching_runtime_record_without_production_coverage_is_rejected(
         self,
     ) -> None:
@@ -406,7 +575,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
 
         self.assert_coverage_rejected(
             {"HTTP_SQL": {"EXACT_TEST_IDENTITY"}},
-            "FAMILY_FACTORY_CREATE",
+            "FAMILY_FACTORY_FUNCTION",
         )
 
     def test_early_process_exit_cannot_skip_trace_validation_success_coverage(
@@ -463,10 +632,10 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         """A zero-count Statement update stage makes the exact family evidence incomplete."""
 
         requirement_ids = set(getattr(verifier, "COVERAGE_REQUIREMENT_IDS", ()))
-        requirement_ids.discard("STATEMENT_UPDATE")
+        requirement_ids.discard("STAGE_STATEMENT_UPDATE")
         self.assert_coverage_rejected(
             {"HTTP_SQL": requirement_ids},
-            "STATEMENT_UPDATE",
+            "STAGE_STATEMENT_UPDATE",
         )
 
     def test_missing_trace_validation_success_region_is_rejected(self) -> None:
@@ -502,7 +671,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         factory_index = next(
             index
             for index, requirement in enumerate(requirements)
-            if requirement.requirement_id == "FAMILY_FACTORY_CREATE"
+            if requirement.requirement_id == "FAMILY_FACTORY_FUNCTION"
         )
         libsql_factory = repository / verifier.FAMILY_FACTORY_FILES["LIBSQL"]
         requirements[factory_index] = replace(
@@ -768,6 +937,42 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
         with self.assertRaises(VerificationError):
             verify_trace_record_callsites(self.root)
+
+    def test_stage_and_validation_anchor_source_must_be_unique(self) -> None:
+        """Compiler-visible anchor definitions and calls cannot disappear or duplicate."""
+
+        repository_source = (
+            Path(__file__).resolve().parents[1] / "crates/druid-wrapper/src"
+        )
+        temporary_source = self.root / "crates/druid-wrapper/src"
+        shutil.copytree(repository_source, temporary_source, dirs_exist_ok=True)
+        trace_path = temporary_source / "task4_runtime_trace.rs"
+        original = trace_path.read_text(encoding="utf-8")
+        stage_call = "self.task4_coverage_anchor_statement_update();"
+        success_call = "task4_coverage_anchor_validation_success();"
+        fixtures = {
+            "missing-stage": original.replace(stage_call, "", 1),
+            "duplicate-stage": original.replace(
+                stage_call,
+                f"{stage_call}\n        {stage_call}",
+                1,
+            ),
+            "missing-success": original.replace(success_call, "", 1),
+            "duplicate-success": original.replace(
+                success_call,
+                f"{success_call}\n    {success_call}",
+                1,
+            ),
+        }
+        for label, source in fixtures.items():
+            with self.subTest(label=label):
+                trace_path.write_text(source, encoding="utf-8")
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    "coverage anchor.*missing|missing.*coverage anchor|bypassable",
+                ):
+                    verify_trace_record_callsites(self.root)
+        trace_path.write_text(original, encoding="utf-8")
 
     def test_runtime_manifest_rejects_http_libsql_family_binding_swap_before_dedup(
         self,

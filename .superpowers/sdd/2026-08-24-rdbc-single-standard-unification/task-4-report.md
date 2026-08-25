@@ -1153,3 +1153,145 @@ append-only Task 4 report/ledger. `task4_runtime_trace.rs` and all production ad
 byte-unchanged from `f4c2711`；no Cargo/lock、Task 5、Physical deletion、admin、unsafe or manual
 Send/Sync change is included. C1/N2 have an implementation disposition of **ADDRESSED, pending
 independent review**. This is not `REVIEW CLEAR`；Task 5 remains blocked and no push is authorized.
+
+## 24. Compiler-coverage independent-review correction（append-only）
+
+Independent review of `f4c2711..d942cda` corrected the Section 23 completion claim. The prior
+same-process marker/challenge path、31-row binding、offline/locked runner、missing/stale/combined
+artifact handling and POSIX PGID cleanup are **ADDRESSED**. One new load-bearing Critical remains：
+
+```python
+return max(point_counts or function_counts, default=0)
+```
+
+When the exact manifest point has count `0` or is absent，the fallback accepts any positive region
+inside the enclosing source function. Fresh review fixtures were accepted with
+`TRACE_VALIDATION_SUCCESS` or `STATEMENT_UPDATE` at zero while an unrelated sibling region was
+positive. Thus compiler coverage became the right trust source but the selected coverage identity
+was still fail-open. The final review verdict for `d942cda` is **FIX_REQUIRED**；C1/N2 remains open
+and Task 5 remains blocked.
+
+## 25. Compiler Coverage exact-function fix round 2/5（base `d942cda`）
+
+This append records only the exact-function recovery for the Section 24 Critical. It does not claim
+independent `REVIEW CLEAR`.
+
+### 25.1 Fresh RED -> GREEN
+
+Three same-source-function fixtures first failed against `d942cda`：
+
+- exact test identity count `0` with an unrelated positive sibling region；
+- StatementUpdate target count `0` with its caller/source function otherwise covered；
+- typed validation-success target count `0` while another `verify_and_emit` region was positive。
+
+All three were incorrectly accepted. A fourth fresh fixture duplicated the same compiler function
+identity and was also accepted. After the implementation，the permanent suite additionally rejects
+missing exact functions、wrong source/hash/compiler function、stale reports and missing/duplicate
+source anchors. Final verifier self-test result is `38/38 PASS`，including
+`-W error::ResourceWarning`.
+
+### 25.2 Explicit exact-only requirement kinds
+
+Coverage protocol is now `task4-compiler-coverage-v2`. Every requirement declares one of five
+closed kinds：
+
+```text
+TEST_IDENTITY_FUNCTION
+FAMILY_FACTORY_FUNCTION
+FAMILY_EXECUTOR_FUNCTION
+STAGE_ANCHOR_FUNCTION
+TRACE_VALIDATION_SUCCESS_FUNCTION
+```
+
+The validator compares all of the following exactly：requirement id/kind、stable anchor id、checked
+source SHA-256、source-level function、complete compiler mangled function name and the normalized
+filename tuple. Compiler paths permit only exact path-component prefix removal；function names use
+full equality，never substring matching.
+
+For an expected requirement，an absent/zero function returns zero and fails the family. More than
+one function with the same exact compiler identity and source tuple is ambiguous and fails. The
+selected LLVM function must contain regions belonging to the one exact checked source-function
+range，and both its function count and at least one such region count must be positive. There is no
+point、line、sibling-region or enclosing-function fallback.
+
+The exact evidence-test function remains exclusive：only the declared family test identity may be
+positive；another or combined test/family report fails before production requirements are credited.
+
+### 25.3 Compiler-visible typed anchors
+
+`task4_runtime_trace.rs` adds eleven private
+`#[inline(never)] #[track_caller] task4_coverage_anchor_*` functions. Each existing
+`task4_trace_*` method must call its corresponding anchor exactly once；the anchor itself performs
+the typed `record(TraceStage::...)` side effect. It is therefore both compiler-visible and
+unavoidable on the honest stage path，while the full `track_caller` chain preserves the production
+caller file/line used by typed family/instance validation.
+
+After every event/family/instance/order check、serialization and marker emission succeeds，
+`verify_and_emit` uniquely calls private `#[inline(never)]
+task4_coverage_anchor_validation_success`. Error/early-return paths cannot call it. Static source
+fitness rejects missing/duplicate stage and validation anchor definitions or calls；the coverage
+manifest independently requires every anchor's exact compiler function count.
+
+Fresh SQLx LLVM inspection showed every one of the 11 stage anchors plus validation-success as one
+independent function with count `1`. Default and all-feature reports showed the same property；no
+anchor needed a line counter fallback、alternate shape or inlining workaround.
+
+### 25.4 Manifest and seven-family evidence
+
+The v2 coverage manifest has seven ordered family records and `15` exact functions per family
+（`105` total）：one exact test identity、one family factory entry、one family executor entry、eleven
+typed stage anchors and one typed validation-success anchor. The 29 runtime rows bind the v2 ordered
+requirement set；the two DataSource rows remain compile identity with `-` coverage fields.
+
+All seven families first produced fresh isolated reports used to freeze exact compiler identities，
+then were independently rerun through the final live verifier. A first DuckDB probe returned
+`errno=28` while six completed probe targets were deliberately retained. Only those exact temporary
+probe targets were cleaned with `cargo clean` while their JSON reports were retained；about `40 GiB`
+was recovered，and DuckDB reran PASS. The workspace target and source were not cleaned. Final live
+and semantic runs used automatic per-family TemporaryDirectory cleanup and had no space failure.
+
+Final live output：
+
+```text
+WRAPPER_STANDARD_ADAPTERS_LIVE=31
+WRAPPER_STANDARD_CONSUMERS_CLOSED=21
+FAMILY_COMMON_PREPARED_CHAINS_LIVE=6
+SQLX_OWNED_ACTOR_LIVE=1
+RUNTIME_TRACE_FAMILIES_LIVE=7
+RUNTIME_TRACE_PROTOCOL=task4-runtime-trace-v1
+COMPILER_COVERAGE_FAMILIES_LIVE=7
+COMPILER_COVERAGE_PROTOCOL=task4-compiler-coverage-v2
+NONBEHAVIOR_IDENTITY_ROWS=2
+```
+
+### 25.5 Fresh gates and hashes
+
+- verifier self/live：`38/38 PASS + 31/21/6/1/runtime7/coverage7/identity2`；
+- denominator self/live：`41/41 PASS + Physical 73 / adapter 55 / consumers 3557`；
+- semantic self/live：`16/16 PASS + 52/17/UNKNOWN 0`；adapter-live internally reran the complete
+  v2 coverage verifier；
+- purity self/transitional：`103/103 PASS + STANDARD_FILES 29`；
+- wrapper default/all-feature complete test matrices、default/all-feature all-target checks and
+  workspace all-target/all-feature check PASS；
+- `druid-rdbc` all-target/all-feature `20/20`、doc `1/1` and Clippy `-D warnings` PASS；
+- wrapper scoped no-deps Clippy、docs/doctests、Python byte-compile/Black、rustfmt and diff check
+  PASS；
+- dependency-aware wrapper Clippy remains deliberately non-GREEN only at unchanged Task 5 lines
+  `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`。
+
+```text
+ADAPTER_LIVE_TSV_SHA256=350f6b6350f7c75fbf88aa15872f14faaa7cdb9c90faa0c3d5d03ea8442b6410
+RUNTIME_TRACE_TSV_SHA256=106323e17904d377172986ce7464a54de60b4bb575e5f67e333e37f16188a3ec
+COVERAGE_FUNCTION_MANIFEST_SHA256=f7b3d4b429fe9e5c4bfe954082f0518d8e78635f6f7cc21bde1ffcd40f2307c9
+TRACE_SOURCE_SHA256=4dd93a1fc9f6d23f10659195724ced0f79018528d96b312bdebfa018dc65089e
+CONSUMER_LIVE_TSV_SHA256=241a2d42b74e27ae2b0e41729d3088e94f464bfe7984699073a20f834ce908bc
+SEMANTIC_LIVE_TSV_SHA256=4588212080ef8006cfa9cd6a13427e9867f39bef13b2f985d6350e545352bf21
+```
+
+### 25.6 Scope and submission state
+
+The round changes only `task4_runtime_trace.rs`、Task 4 verifier/self-tests、runtime/coverage
+manifests and append-only report/ledger. No family adapter/test behavior、Cargo/lock、Task 5、Physical
+deletion、admin、unsafe or manual Send/Sync change is included. Previous marker/runner/row issues and
+the new exact-region fallback have implementation dispositions of **ADDRESSED, pending independent
+review**. Task 5 remains blocked；no push is authorized.
