@@ -46,13 +46,21 @@ pub(crate) trait StandardExecutor: Send + Sync {
     async fn close(&self) -> Result<(), RdbcError>;
     fn is_closed(&self) -> bool;
 
+    #[track_caller]
     fn task4_trace_statement_create(&self);
+    #[track_caller]
     fn task4_trace_statement_update(&self);
+    #[track_caller]
     fn task4_trace_prepared_create(&self);
+    #[track_caller]
     fn task4_trace_parameter_set(&self);
+    #[track_caller]
     fn task4_trace_prepared_query(&self);
+    #[track_caller]
     fn task4_trace_result_next(&self);
+    #[track_caller]
     fn task4_trace_result_set_metadata(&self);
+    #[track_caller]
     fn task4_trace_database_metadata(&self);
 
     fn ensure_open(&self) -> Result<(), RdbcError> {
@@ -76,12 +84,6 @@ impl<C> OwnedAdapterExecutor<C> {
             connection: Mutex::new(Some(connection)),
             closed: AtomicBool::new(false),
             runtime_trace,
-        }
-    }
-
-    fn trace(&self, observe: impl FnOnce(&RuntimeTraceEmitter)) {
-        if let Some(trace) = &self.runtime_trace {
-            observe(trace);
         }
     }
 }
@@ -124,7 +126,9 @@ where
         };
         connection.standard_close_connection_core().await?;
         guard.take();
-        self.trace(RuntimeTraceEmitter::task4_trace_connection_close);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_connection_close();
+        }
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
@@ -133,36 +137,60 @@ where
         self.closed.load(Ordering::Acquire)
     }
 
+    #[track_caller]
     fn task4_trace_statement_create(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_statement_create);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_statement_create();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_statement_update(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_statement_update);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_statement_update();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_prepared_create(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_prepared_create);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_prepared_create();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_parameter_set(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_parameter_set);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_parameter_set();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_prepared_query(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_prepared_query);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_prepared_query();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_result_next(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_result_next);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_result_next();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_result_set_metadata(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_result_set_metadata);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_result_set_metadata();
+        }
     }
 
+    #[track_caller]
     fn task4_trace_database_metadata(&self) {
-        self.trace(RuntimeTraceEmitter::task4_trace_database_metadata);
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_database_metadata();
+        }
     }
 }
 

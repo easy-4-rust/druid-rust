@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 const TRACE_VERSION: &str = "task4-runtime-trace-v1";
 const TRACE_MARKER: &str = "DRUID_TASK4_RUNTIME_TRACE";
+const TRACE_CHALLENGE_ENV: &str = "DRUID_TASK4_TRACE_CHALLENGE";
+const STANDALONE_CHALLENGE: &str = "standalone-test-no-verifier";
 static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,6 +101,8 @@ struct TraceEvent {
     family: FamilyId,
     instance_id: u64,
     stage: TraceStage,
+    caller_file: &'static str,
+    caller_line: u32,
 }
 
 #[derive(Debug, Default)]
@@ -124,54 +128,69 @@ impl fmt::Debug for RuntimeTraceEmitter {
 }
 
 impl RuntimeTraceEmitter {
+    #[track_caller]
     fn record(&self, stage: TraceStage) {
+        let caller = std::panic::Location::caller();
         self.state.lock().events.push(TraceEvent {
             family: self.family,
             instance_id: self.instance_id,
             stage,
+            caller_file: caller.file(),
+            caller_line: caller.line(),
         });
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_factory_create(&self) {
         self.record(TraceStage::FactoryCreate);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_connection_create(&self) {
         self.record(TraceStage::ConnectionCreate);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_statement_create(&self) {
         self.record(TraceStage::StatementCreate);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_statement_update(&self) {
         self.record(TraceStage::StatementUpdate);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_prepared_create(&self) {
         self.record(TraceStage::PreparedCreate);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_parameter_set(&self) {
         self.record(TraceStage::ParameterSet);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_prepared_query(&self) {
         self.record(TraceStage::PreparedQuery);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_result_next(&self) {
         self.record(TraceStage::ResultNext);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_result_set_metadata(&self) {
         self.record(TraceStage::ResultSetMetadata);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_database_metadata(&self) {
         self.record(TraceStage::DatabaseMetadata);
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_connection_close(&self) {
         self.record(TraceStage::ConnectionClose);
     }
@@ -286,12 +305,15 @@ struct SerializableTraceEvent {
     family: &'static str,
     instance_id: u64,
     stage: &'static str,
+    caller_file: &'static str,
+    caller_line: u32,
 }
 
 #[derive(Serialize)]
 struct SerializableTrace {
     evidence_id: &'static str,
     version: &'static str,
+    challenge: String,
     family: &'static str,
     instance_id: u64,
     events: Vec<SerializableTraceEvent>,
@@ -334,6 +356,8 @@ pub fn verify_and_emit(
     let payload = SerializableTrace {
         evidence_id: expectation.evidence_id,
         version: TRACE_VERSION,
+        challenge: std::env::var(TRACE_CHALLENGE_ENV)
+            .unwrap_or_else(|_| STANDALONE_CHALLENGE.to_owned()),
         family: expectation.family.as_str(),
         instance_id: expectation.instance_id,
         events: state
@@ -343,6 +367,8 @@ pub fn verify_and_emit(
                 family: event.family.as_str(),
                 instance_id: event.instance_id,
                 stage: event.stage.as_str(),
+                caller_file: event.caller_file,
+                caller_line: event.caller_line,
             })
             .collect(),
     };

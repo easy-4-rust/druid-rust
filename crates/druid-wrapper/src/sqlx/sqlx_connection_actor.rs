@@ -43,48 +43,56 @@ impl SqlxConnectionActor {
         })
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_statement_create(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_statement_create();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_statement_update(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_statement_update();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_prepared_create(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_prepared_create();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_parameter_set(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_parameter_set();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_prepared_query(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_prepared_query();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_result_next(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_result_next();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_result_set_metadata(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_result_set_metadata();
         }
     }
 
+    #[track_caller]
     pub(crate) fn task4_trace_database_metadata(&self) {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_database_metadata();

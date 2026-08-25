@@ -857,3 +857,150 @@ artifacts. It does not change Cargo topology/lock、Task 5 Druid holder/proxies�
 druid-admin、unsafe or manual Send/Sync. C1/N2 have an implementation disposition of **ADDRESSED,
 pending independent runtime-trace re-review**. Task 5 remains blocked until that review returns
 `REVIEW CLEAR`.
+
+## 21. Typed runtime-trace independent-review correction（append-only）
+
+Independent review of `876d438..f0409af` returned **FIX_REQUIRED** with `1 Critical + 2 Important
++ 0 Minor`。The prior Section 20 implementation disposition is superseded only for its verifier-proof
+claim：C1/N2 are **NOT ADDRESSED / load-bearing**，while current production family behavior、I1、I2、
+I3、I4、M1 and N1 remain **ADDRESSED with no reviewed regression**。
+
+- Critical：repository-authored helper/module/macro output can forge a structurally valid marker and
+  a fake libtest summary before `process::exit(0)`；record provenance is also bypassable from an
+  allowed-file helper or an unapproved UFCS call。
+- Important：the 31-row manifest is validated only after deduplication，so swapping complete HTTP SQL
+  and libSQL family/test/id bindings preserves the same seven-spec set。
+- Important：the exact Cargo runner is not offline/locked，has no hard timeout/process-group cleanup，
+  and has no bounded stdout/stderr policy。
+
+Review package `review-876d438..f0409af.diff` is byte-exact for the reviewed commit and has SHA-256
+`6a30d35384382d894f262f71cab7746d214a3e317311a287b4a0453f8a2b04c9`。The checked typed trace core
+itself retains its valid 11-stage family/instance/close invariants，and all seven current evidence
+tests remain genuine production-bound tests；the open defect is provenance enforcement under
+adversarial mutation。Fix round 1/5 owns only complete source closure + caller provenance/challenge，
+row-by-row family binding，and bounded offline runner hardening。Task 5 remains blocked pending a new
+independent `REVIEW CLEAR`。
+
+## 22. Runtime-trace fix round 1/5 implementation（base `f0409af`）
+
+This append-only section records the scoped fix for the `1 Critical + 2 Important` review
+correction. It does not claim review clear；Task 5 remains blocked pending a fresh independent
+re-review。
+
+### 22.1 Architecture choice and permanent RED -> GREEN
+
+The minimum reviewed design uses a complete repository source closure、typed caller provenance and a
+per-run challenge，rather than introducing a new Cargo evidence feature/external testkit surface。
+An external harness would require moving or publicly feature-gating the private RBDC driver fake and
+three remote transport/connector seams；that is materially larger than the provenance-only finding。
+
+Five new self-test groups first failed against `f0409af`：
+
+- a sibling `mod helper` could emit computed marker/fake libtest text and call `process::exit(0)`；
+- a helper in an allowed production file and an unapproved UFCS record call were accepted；
+- swapping every HTTP SQL/libSQL runtime family binding preserved the same deduplicated spec set；
+- Cargo lacked offline/locked flags and no bounded process runner existed；
+- marker validation had neither a challenge nor caller-region rules。
+
+The final verifier self-test is `20/20 PASS`。Permanent tests also execute a real hanging parent that
+spawns a child and prove process-group termination within the test deadline，exercise the output cap，
+and reject a same-file caller line outside the exact production function region。
+
+### 22.2 Complete source closure and output ownership
+
+- integration evidence starts at its exact `tests/<target>.rs`；unit evidence resolves the exact
+  `cfg(test)` module source；
+- conventional `mod`、inline module content、literal `#[path]` and literal `include!` edges are
+  recursively closed；missing、ambiguous、dynamic include and repository-root escape fail closed；
+- the corresponding production library closure is recursively rooted at `src/lib.rs`，so unrelated
+  CLI binary output is not confused with the linked library；
+- the exact evidence root may call only `enable_task4_runtime_trace` / `verify_and_emit` inside its
+  manifest-bound test function；reachable helpers/fakes cannot access marker output、record、verify、
+  emitter、event、stage、challenge or process termination APIs；
+- the sole production marker/output sink remains `task4_runtime_trace.rs`。Production library modules
+  cannot print evidence、open process stdout/stderr directly、use raw output descriptors or terminate
+  the process。
+
+This closes the reviewer helper-module and fake completion reproductions without accepting a repo-
+printed libtest summary as proof。
+
+### 22.3 Typed caller provenance and Rust privacy boundary
+
+`RuntimeTraceEmitter::record` and every stage wrapper hop now use `#[track_caller]`。Each event adds
+`caller_file` and `caller_line`；the live validator requires：
+
+1. the exact family/stage production file category；
+2. the exact source line containing that stage call；
+3. that line lies inside the expected factory/common-handle/SQLx actor function region。
+
+The static gate recognizes both method and UFCS syntax and compares the entire record-callsite
+multiset/count against the reviewed production set；a helper、macro or function-pointer relocation
+changes the multiset。It also requires every definition in the emitter -> dyn `StandardExecutor` /
+SQLx actor chain to carry `#[track_caller]`。
+
+Rust module visibility cannot express a friend set spanning sibling factory、common handle and SQLx
+actor modules。Therefore the emitter remains `pub(crate)` internally，while external tests receive no
+emitter and crate-internal test/fake use is prevented by the complete source closure、exact static
+callsite multiset and runtime caller region together。No event/family constructor or probe accessor
+became public。
+
+### 22.4 Per-run challenge and bounded runner
+
+- each runtime execution receives a fresh 256-bit hex challenge；only the typed `verify_and_emit`
+  serializer reads it and includes it in the exact marker schema；an old/wrong challenge fails；
+- runtime completion now requires Cargo exit 0 plus exactly one challenge-matching typed marker；
+  repo-authored `test result: ok` text is neither parsed nor trusted；
+- the two DataSource rows remain nonbehavior `COMPILE_IDENTITY` and use offline/locked compile-only
+  `--no-run` evidence with zero marker；
+- every Cargo command uses `--offline --locked` and its fixed default/all-feature target；
+- each process runs in an isolated process group with a 600-second cold-build hard deadline and a
+  1 MiB combined stdout/stderr cap；timeout/overflow kills the process group and descendants before
+  returning a stable `VerificationError`。The first 120-second probe correctly killed a cold
+  DuckDB/Turso build；the documented 600-second cap preserves fail-closed behavior while allowing the
+  measured cold all-feature build（about 3m20s）。
+
+### 22.5 Row-by-row binding and live evidence
+
+Before deduplicating to eight executions，all 31 rows derive an immutable family from their adapter
+source path and compare this exact tuple：target、test id、profile、category、family、version、evidence
+id and recorded behavior evidence。HTTP SQL/libSQL permutation、alias、missing、duplicate、extra and
+reordered rows fail before execution。
+
+Fresh runtime evidence remains：
+
+```text
+WRAPPER_STANDARD_ADAPTERS_LIVE=31
+WRAPPER_STANDARD_CONSUMERS_CLOSED=21
+FAMILY_COMMON_PREPARED_CHAINS_LIVE=6
+SQLX_OWNED_ACTOR_LIVE=1
+RUNTIME_TRACE_FAMILIES_LIVE=7
+NONBEHAVIOR_IDENTITY_ROWS=2
+```
+
+All seven family tests emit one challenge-bound 11-stage marker with exact caller provenance；the
+external HTTP SQL/libSQL/JDBC services and real external RBDC database remain honestly NOT_RUN。
+
+### 22.6 Fresh full gates、hashes and submission state
+
+- verifier self/live：`20/20 PASS` plus `31/21/6/1/trace7/identity2`；
+- denominator self/live：`41/41 PASS`，Physical `73`、adapter `55`、active `3536`、checked `3557`；
+- semantic self/live：`16/16 PASS + 52/17/0`；purity：`103/103 PASS + live29`；
+- wrapper complete default and all-feature matrices：every test binary PASS；
+- scoped wrapper no-deps Clippy、workspace all-target/all-feature check、druid-rdbc `20/20` + doc
+  `1/1` + Clippy、wrapper docs/doctests、Python byte-compile、rustfmt and diff check：PASS；
+- dependency-aware wrapper Clippy remains deliberately non-GREEN only at the same untouched Task 5
+  lines `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`。
+
+The evidence TSV bytes do not change in this round：
+
+```text
+ADAPTER_LIVE_TSV_SHA256=350f6b6350f7c75fbf88aa15872f14faaa7cdb9c90faa0c3d5d03ea8442b6410
+RUNTIME_TRACE_TSV_SHA256=a2b5f213c28b2363679d30967014dd6bd6facae8f12850d1e101def522f61f4d
+CONSUMER_LIVE_TSV_SHA256=241a2d42b74e27ae2b0e41729d3088e94f464bfe7984699073a20f834ce908bc
+SEMANTIC_LIVE_TSV_SHA256=4588212080ef8006cfa9cd6a13427e9867f39bef13b2f985d6350e545352bf21
+```
+
+The round changes only the typed trace/caller chain、verifier/self-tests and append-only SDD
+artifacts。No Cargo/lock、Task 5、Physical deletion、admin、unsafe or manual Send/Sync change is
+included。The three review findings have an implementation disposition of **ADDRESSED, pending
+independent re-review**；Task 5 remains blocked。

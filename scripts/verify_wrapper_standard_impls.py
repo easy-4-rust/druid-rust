@@ -6,8 +6,13 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
+import secrets
+import selectors
+import signal
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
@@ -27,6 +32,9 @@ RUNTIME_TRACE_CATEGORY = "RUNTIME_TRACE"
 COMPILE_IDENTITY_CATEGORY = "COMPILE_IDENTITY"
 TRACE_VERSION = "task4-runtime-trace-v1"
 TRACE_MARKER = "DRUID_TASK4_RUNTIME_TRACE"
+TRACE_CHALLENGE_ENV = "DRUID_TASK4_TRACE_CHALLENGE"
+DEFAULT_EVIDENCE_TIMEOUT_SECONDS = 600.0
+DEFAULT_EVIDENCE_OUTPUT_LIMIT = 1_048_576
 RUNTIME_EVIDENCE_HEADER = (
     "source_path",
     "target_trait",
@@ -48,6 +56,15 @@ TRACE_FAMILIES = {
     "LIBSQL",
     "JDBC_AGENT",
 }
+FAMILY_FACTORY_FILES = {
+    "SQLX": "crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs",
+    "TOASTY": "crates/druid-wrapper/src/toasty/toasty_connection_factory.rs",
+    "RBDC": "crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs",
+    "DUCKDB": "crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs",
+    "HTTP_SQL": "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
+    "LIBSQL": "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
+    "JDBC_AGENT": "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
+}
 TRACE_STAGES = (
     "FactoryCreate",
     "ConnectionCreate",
@@ -61,6 +78,19 @@ TRACE_STAGES = (
     "DatabaseMetadata",
     "ConnectionClose",
 )
+TRACE_STAGE_METHODS = {
+    "FactoryCreate": "task4_trace_factory_create",
+    "ConnectionCreate": "task4_trace_connection_create",
+    "StatementCreate": "task4_trace_statement_create",
+    "StatementUpdate": "task4_trace_statement_update",
+    "PreparedCreate": "task4_trace_prepared_create",
+    "ParameterSet": "task4_trace_parameter_set",
+    "PreparedQuery": "task4_trace_prepared_query",
+    "ResultNext": "task4_trace_result_next",
+    "ResultSetMetadata": "task4_trace_result_set_metadata",
+    "DatabaseMetadata": "task4_trace_database_metadata",
+    "ConnectionClose": "task4_trace_connection_close",
+}
 TRACE_RECORD_METHODS = {
     f"task4_trace_{name}"
     for name in (
@@ -77,24 +107,178 @@ TRACE_RECORD_METHODS = {
         "connection_close",
     )
 }
-TRACE_RECORD_ALLOWED_PATHS = {
-    "crates/druid-wrapper/src/standard_adapter_executor.rs",
-    "crates/druid-wrapper/src/standard_adapter_statement.rs",
-    "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
-    "crates/druid-wrapper/src/standard_adapter_result_set.rs",
-    "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
-    "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
-    "crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs",
-    "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
-    "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
-    "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs",
-    "crates/druid-wrapper/src/toasty/toasty_connection_factory.rs",
-    "crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs",
-    "crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs",
-    "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
-    "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
-    "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
+TRACE_RECORD_CALLSITE_COUNTS = {
+    ("crates/druid-wrapper/src/standard_adapter_statement.rs", "task4_trace_statement_create"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_statement.rs", "task4_trace_statement_update"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_prepared_statement.rs", "task4_trace_prepared_create"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_prepared_statement.rs", "task4_trace_parameter_set"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_prepared_statement.rs", "task4_trace_prepared_query"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_result_set.rs", "task4_trace_result_next"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_result_set.rs", "task4_trace_result_set_metadata"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_database_meta_data.rs", "task4_trace_database_metadata"): 1,
+    ("crates/druid-wrapper/src/standard_adapter_executor.rs", "task4_trace_connection_close"): 1,
+    **{
+        ("crates/druid-wrapper/src/standard_adapter_executor.rs", method): 1
+        for method in TRACE_RECORD_METHODS
+        if method
+        not in {"task4_trace_factory_create", "task4_trace_connection_create", "task4_trace_connection_close"}
+    },
+    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_statement_create"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_statement_update"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_prepared_create"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_parameter_set"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs", "task4_trace_prepared_query"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_next"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs", "task4_trace_result_set_metadata"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs", "task4_trace_database_metadata"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs", "task4_trace_connection_close"): 1,
+    **{
+        ("crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs", method): 1
+        for method in TRACE_RECORD_METHODS
+        if method
+        not in {"task4_trace_factory_create", "task4_trace_connection_create", "task4_trace_connection_close"}
+    },
+    **{
+        (factory_file, "task4_trace_factory_create"): 1
+        for factory_file in FAMILY_FACTORY_FILES.values()
+    },
+    **{
+        (factory_file, "task4_trace_connection_create"): (
+            2 if family == "LIBSQL" else 1
+        )
+        for family, factory_file in FAMILY_FACTORY_FILES.items()
+    },
 }
+COMMON_STAGE_FILES = {
+    "StatementCreate": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+    "StatementUpdate": "crates/druid-wrapper/src/standard_adapter_statement.rs",
+    "PreparedCreate": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+    "ParameterSet": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+    "PreparedQuery": "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+    "ResultNext": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+    "ResultSetMetadata": "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+    "DatabaseMetadata": "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+    "ConnectionClose": "crates/druid-wrapper/src/standard_adapter_executor.rs",
+}
+SQLX_STAGE_FILES = {
+    "StatementCreate": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+    "StatementUpdate": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+    "PreparedCreate": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+    "ParameterSet": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+    "PreparedQuery": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+    "ResultNext": "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+    "ResultSetMetadata": "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+    "DatabaseMetadata": "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs",
+    "ConnectionClose": "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+}
+COMMON_STAGE_FUNCTIONS = {
+    "StatementCreate": "new",
+    "StatementUpdate": "execute_update",
+    "PreparedCreate": "new",
+    "ParameterSet": "set_parameter",
+    "PreparedQuery": "execute_prepared_query",
+    "ResultNext": "next",
+    "ResultSetMetadata": "meta_data",
+    "DatabaseMetadata": "database_product_name",
+    "ConnectionClose": "close",
+}
+SQLX_STAGE_FUNCTIONS = {
+    "StatementCreate": "owned_statement",
+    "StatementUpdate": "execute_update",
+    "PreparedCreate": "owned_prepared_statement",
+    "ParameterSet": "set_parameter",
+    "PreparedQuery": "execute_prepared_query",
+    "ResultNext": "next",
+    "ResultSetMetadata": "meta_data",
+    "DatabaseMetadata": "database_product_name",
+    "ConnectionClose": "close",
+}
+TRACE_CALLSITE_RULES = {
+    family: {
+        "FactoryCreate": factory_file,
+        "ConnectionCreate": factory_file,
+        **(SQLX_STAGE_FILES if family == "SQLX" else COMMON_STAGE_FILES),
+    }
+    for family, factory_file in FAMILY_FACTORY_FILES.items()
+}
+TRACE_CALLSITE_FUNCTIONS = {
+    family: {
+        "FactoryCreate": "create_adapter_core",
+        "ConnectionCreate": "create_adapter_core",
+        **(
+            SQLX_STAGE_FUNCTIONS
+            if family == "SQLX"
+            else COMMON_STAGE_FUNCTIONS
+        ),
+    }
+    for family in FAMILY_FACTORY_FILES
+}
+OUTPUT_MACROS = {"print", "println", "eprint", "eprintln", "dbg"}
+DIRECT_OUTPUT_IDENTIFIERS = {
+    "stdout",
+    "stderr",
+    "write_all",
+    "write_fmt",
+    "from_raw_fd",
+    "as_raw_fd",
+}
+CANONICAL_EVIDENCE_BINDINGS = {
+    "SQLX": (
+        "test:statement_executor_ownership_test",
+        "sqlx_standard_factory_emits_typed_runtime_trace",
+        "default",
+        "statement_executor_ownership_test::sqlx_standard_factory_emits_typed_runtime_trace",
+        "task4.sqlx.runtime-trace-v1",
+    ),
+    "TOASTY": (
+        "test:toasty_connection_adapter_test",
+        "toasty_standard_factory_emits_typed_runtime_trace",
+        "default",
+        "toasty_connection_adapter_test::toasty_standard_factory_emits_typed_runtime_trace",
+        "task4.toasty.runtime-trace-v1",
+    ),
+    "RBDC": (
+        "test:rbdc_connection_adapter_test",
+        "rbdc_standard_factory_emits_typed_runtime_trace",
+        "default",
+        "rbdc_connection_adapter_test::rbdc_standard_factory_emits_typed_runtime_trace",
+        "task4.rbdc.runtime-trace-v1",
+    ),
+    "DUCKDB": (
+        "test:duckdb_connection_adapter_test",
+        "duckdb_standard_factory_emits_typed_runtime_trace",
+        "all-features",
+        "duckdb_connection_adapter_test::duckdb_standard_factory_emits_typed_runtime_trace",
+        "task4.duckdb.runtime-trace-v1",
+    ),
+    "HTTP_SQL": (
+        "lib",
+        "http_sql::http_sql_connection_factory::tests::http_sql_standard_factory_uses_deterministic_transport_owned_core",
+        "all-features",
+        "http_sql::http_sql_connection_factory::tests::http_sql_standard_factory_uses_deterministic_transport_owned_core",
+        "task4.http-sql.runtime-trace-v1",
+    ),
+    "LIBSQL": (
+        "lib",
+        "libsql::libsql_connection_factory::tests::libsql_standard_factory_uses_deterministic_transport_owned_core",
+        "all-features",
+        "libsql::libsql_connection_factory::tests::libsql_standard_factory_uses_deterministic_transport_owned_core",
+        "task4.libsql.runtime-trace-v1",
+    ),
+    "JDBC_AGENT": (
+        "lib",
+        "jdbc_agent::jdbc_agent_connection_factory::tests::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+        "all-features",
+        "jdbc_agent::jdbc_agent_connection_factory::tests::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+        "task4.jdbc-agent.runtime-trace-v1",
+    ),
+}
+IDENTITY_EVIDENCE_BINDING = (
+    "test:standard_adapter_conformance_test",
+    "catalog_data_sources_implement_canonical_wrapper_identity",
+    "default",
+    "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
+)
 SQL_EXECUTION_MARKERS = (
     "sqlx::query",
     ".fetch_all(",
@@ -148,6 +332,15 @@ class EvidenceSpec:
     family: str
     version: str
     evidence_id: str
+
+
+@dataclass(frozen=True)
+class BoundedProcessResult:
+    """One bounded child-process result with capped decoded output."""
+
+    returncode: int
+    stdout: str
+    stderr: str
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -281,11 +474,138 @@ def core_calls(body: str) -> set[str]:
     return set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*_core)\s*\(", body))
 
 
+def mask_rust_comments_and_literals(source: str) -> str:
+    """Blank comments and literals while preserving byte offsets and newlines."""
+
+    masked = list(source)
+
+    def blank(start: int, end: int) -> None:
+        for offset in range(start, end):
+            if masked[offset] not in {"\n", "\r"}:
+                masked[offset] = " "
+
+    def quoted_end(start: int, quote: str) -> int:
+        cursor = start + 1
+        escaped = False
+        while cursor < len(source):
+            character = source[cursor]
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                return cursor + 1
+            cursor += 1
+        fail("unterminated Rust literal while resolving caller region")
+
+    index = 0
+    while index < len(source):
+        if source.startswith("//", index):
+            end = source.find("\n", index + 2)
+            end = len(source) if end < 0 else end
+            blank(index, end)
+            index = end
+            continue
+        if source.startswith("/*", index):
+            depth = 1
+            cursor = index + 2
+            while cursor < len(source) and depth:
+                if source.startswith("/*", cursor):
+                    depth += 1
+                    cursor += 2
+                elif source.startswith("*/", cursor):
+                    depth -= 1
+                    cursor += 2
+                else:
+                    cursor += 1
+            if depth:
+                fail("unterminated Rust block comment while resolving caller region")
+            blank(index, cursor)
+            index = cursor
+            continue
+        raw_prefix = None
+        if source.startswith("br", index):
+            raw_prefix = 2
+        elif source.startswith("r", index):
+            raw_prefix = 1
+        if raw_prefix is not None:
+            cursor = index + raw_prefix
+            hashes = 0
+            while cursor < len(source) and source[cursor] == "#":
+                hashes += 1
+                cursor += 1
+            if cursor < len(source) and source[cursor] == '"':
+                terminator = '"' + "#" * hashes
+                end = source.find(terminator, cursor + 1)
+                if end < 0:
+                    fail("unterminated Rust raw string while resolving caller region")
+                end += len(terminator)
+                blank(index, end)
+                index = end
+                continue
+        if source.startswith('b"', index):
+            end = quoted_end(index + 1, '"')
+            blank(index, end)
+            index = end
+            continue
+        if source[index] == '"':
+            end = quoted_end(index, '"')
+            blank(index, end)
+            index = end
+            continue
+        if source[index] == "'":
+            cursor = index + 1
+            if cursor < len(source) and (source[cursor].isalpha() or source[cursor] == "_"):
+                cursor += 1
+                while cursor < len(source) and (
+                    source[cursor].isalnum() or source[cursor] == "_"
+                ):
+                    cursor += 1
+                if cursor >= len(source) or source[cursor] != "'":
+                    index = cursor
+                    continue
+            end = quoted_end(index, "'")
+            blank(index, end)
+            index = end
+            continue
+        index += 1
+    return "".join(masked)
+
+
+def function_line_ranges(source: str, function_name: str) -> tuple[tuple[int, int], ...]:
+    """Return brace-balanced line regions for every function with one exact name."""
+
+    masked = mask_rust_comments_and_literals(source)
+    ranges: list[tuple[int, int]] = []
+    pattern = re.compile(rf"\bfn\s+{re.escape(function_name)}\s*(?:<[^{{;]*>)?\(")
+    for match in pattern.finditer(masked):
+        opening = masked.find("{", match.end())
+        if opening < 0:
+            continue
+        semicolon = masked.find(";", match.end(), opening)
+        if semicolon >= 0:
+            continue
+        depth = 1
+        cursor = opening + 1
+        while cursor < len(masked) and depth:
+            depth += masked[cursor] == "{"
+            depth -= masked[cursor] == "}"
+            cursor += 1
+        if depth:
+            fail(f"unbalanced function body while resolving {function_name}")
+        start_line = masked.count("\n", 0, match.start()) + 1
+        end_line = masked.count("\n", 0, cursor) + 1
+        ranges.append((start_line, end_line))
+    return tuple(ranges)
+
+
 def validate_runtime_trace_output(
     output: str,
     expected_evidence_id: str,
     expected_family: str,
     expected_version: str,
+    expected_challenge: str,
+    root: Path | None = None,
 ) -> None:
     """Require exactly one complete, same-family, same-instance typed trace record."""
 
@@ -300,13 +620,22 @@ def validate_runtime_trace_output(
         payload = json.loads(marker_lines[0][len(prefix) :])
     except json.JSONDecodeError as error:
         fail(f"runtime trace JSON is malformed: {error}")
-    required_keys = {"evidence_id", "version", "family", "instance_id", "events"}
+    required_keys = {
+        "evidence_id",
+        "version",
+        "challenge",
+        "family",
+        "instance_id",
+        "events",
+    }
     if not isinstance(payload, dict) or set(payload) != required_keys:
         fail("runtime trace payload schema is not exact")
     if payload["evidence_id"] != expected_evidence_id:
         fail("runtime trace evidence id does not match the TSV binding")
     if payload["version"] != expected_version or expected_version != TRACE_VERSION:
         fail("runtime trace protocol version is not the unique Task 4 version")
+    if payload["challenge"] != expected_challenge:
+        fail("runtime trace challenge does not match this verifier run")
     if payload["family"] != expected_family or expected_family not in TRACE_FAMILIES:
         fail("runtime trace family does not match the TSV binding")
     instance_id = payload["instance_id"]
@@ -317,61 +646,117 @@ def validate_runtime_trace_output(
         fail("runtime trace event denominator is incomplete or duplicated")
     observed_stages: list[str] = []
     for event in events:
-        if not isinstance(event, dict) or set(event) != {"family", "instance_id", "stage"}:
+        if not isinstance(event, dict) or set(event) != {
+            "family",
+            "instance_id",
+            "stage",
+            "caller_file",
+            "caller_line",
+        }:
             fail("runtime trace event schema is not exact")
         if event["family"] != expected_family or event["instance_id"] != instance_id:
             fail("runtime trace splices different family or connection instances")
         if not isinstance(event["stage"], str):
             fail("runtime trace stage is not typed as a string label")
+        caller_file = event["caller_file"]
+        caller_line = event["caller_line"]
+        if not isinstance(caller_file, str) or not caller_file:
+            fail("runtime trace caller file is missing")
+        if isinstance(caller_line, bool) or not isinstance(caller_line, int) or caller_line <= 0:
+            fail("runtime trace caller line is invalid")
+        expected_file = TRACE_CALLSITE_RULES[expected_family].get(event["stage"])
+        normalized_file = caller_file.replace("\\", "/")
+        marker = "crates/druid-wrapper/"
+        marker_index = normalized_file.find(marker)
+        if marker_index >= 0:
+            normalized_file = normalized_file[marker_index:]
+        if normalized_file != expected_file:
+            fail(
+                "runtime trace caller file does not match its production category: "
+                f"{event['stage']}: {normalized_file} != {expected_file}"
+            )
+        if root is not None:
+            source_path = root / expected_file
+            if not source_path.is_file():
+                fail(f"runtime trace caller source is missing: {expected_file}")
+            source_lines = source_path.read_text(encoding="utf-8").splitlines()
+            if caller_line > len(source_lines):
+                fail(f"runtime trace caller line exceeds source: {expected_file}:{caller_line}")
+            method = TRACE_STAGE_METHODS[event["stage"]]
+            if method not in source_lines[caller_line - 1]:
+                fail(
+                    "runtime trace caller line is outside its exact production callsite: "
+                    f"{expected_file}:{caller_line}:{method}"
+                )
+            function_name = TRACE_CALLSITE_FUNCTIONS[expected_family][event["stage"]]
+            ranges = function_line_ranges(
+                source_path.read_text(encoding="utf-8"), function_name
+            )
+            if not any(start <= caller_line <= end for start, end in ranges):
+                fail(
+                    "runtime trace caller line is outside its production function region: "
+                    f"{expected_file}:{caller_line}:{function_name}:{ranges}"
+                )
         observed_stages.append(event["stage"])
     if tuple(observed_stages) != TRACE_STAGES:
         fail("runtime trace stages are missing, duplicated, or out of order")
 
 
 def verify_runtime_trace_source_hygiene(path: Path, source: str) -> None:
-    """Reject marker/event/record construction from evidence tests and I/O doubles."""
+    """Apply the structural untrusted-source policy to tests and I/O doubles."""
 
-    forbidden_literals = (
-        TRACE_MARKER,
-        "RuntimeTraceEmitter",
-        "TraceStage",
-        "TraceEvent",
-        "record_stage",
-        *TRACE_STAGES,
-    )
-    found = [literal for literal in forbidden_literals if literal in source]
-    tokens = tuple(token.text for token in tokenize(source))
-    found.extend(method for method in TRACE_RECORD_METHODS if method in tokens)
-    if found:
-        fail(f"runtime evidence source may not forge trace internals: {path}: {sorted(set(found))}")
+    verify_untrusted_evidence_source(path, source)
 
 
 def verify_trace_record_callsites(root: Path) -> None:
-    """Allow typed stage recording only at approved production execution modules."""
+    """Require the exact production callsite multiset, including method and UFCS syntax."""
 
     source_root = root / "crates/druid-wrapper/src"
+    observed: dict[tuple[str, str], int] = {}
     for path in source_root.rglob("*.rs"):
         relative = path.relative_to(root).as_posix()
         source = path.read_text(encoding="utf-8")
-        tokens = tuple(token.text for token in tokenize(source))
-        calls = {
-            tokens[index + 1]
-            for index in range(len(tokens) - 2)
-            if tokens[index] == "."
-            and tokens[index + 1] in TRACE_RECORD_METHODS
-            and tokens[index + 2] == "("
+        for method in TRACE_RECORD_METHODS:
+            calls = len(
+                re.findall(
+                    rf"(?:\.|::)\s*{re.escape(method)}\s*\(",
+                    source,
+                )
+            )
+            if calls:
+                observed[(relative, method)] = calls
+    if observed != TRACE_RECORD_CALLSITE_COUNTS:
+        missing = {
+            key: count - observed.get(key, 0)
+            for key, count in TRACE_RECORD_CALLSITE_COUNTS.items()
+            if observed.get(key, 0) != count
         }
-        if calls and relative not in TRACE_RECORD_ALLOWED_PATHS:
-            fail(f"runtime trace record callsite is outside production allowlist: {relative}: {sorted(calls)}")
-        test_region = source.find("#[cfg(test)]")
-        if test_region >= 0:
-            verify_runtime_trace_source_hygiene(Path(relative), source[test_region:])
-    trace_module = source_root / "task4_runtime_trace.rs"
-    for path in source_root.rglob("*.rs"):
-        if path == trace_module:
-            continue
-        if TRACE_MARKER in path.read_text(encoding="utf-8"):
-            fail(f"runtime trace marker serialization escaped its owner module: {path.relative_to(root)}")
+        extra = {
+            key: count - TRACE_RECORD_CALLSITE_COUNTS.get(key, 0)
+            for key, count in observed.items()
+            if count != TRACE_RECORD_CALLSITE_COUNTS.get(key, 0)
+        }
+        fail(f"runtime trace record callsite multiset drift: missing={missing}, extra={extra}")
+
+    track_caller_sources = (
+        source_root / "task4_runtime_trace.rs",
+        source_root / "standard_adapter_executor.rs",
+        source_root / "sqlx/sqlx_connection_actor.rs",
+    )
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in track_caller_sources)
+    required_track_caller = ("record", *sorted(TRACE_RECORD_METHODS))
+    for method in required_track_caller:
+        definitions = len(re.findall(rf"\bfn\s+{re.escape(method)}\s*\(", combined))
+        tracked = len(re.findall(
+            rf"#\s*\[\s*track_caller\s*\]\s*"
+            rf"(?:pub(?:\([^)]*\))?\s+)?fn\s+{re.escape(method)}\s*\(",
+            combined,
+        ))
+        if not definitions or tracked != definitions:
+            fail(
+                "runtime trace record chain lacks #[track_caller] on every hop: "
+                f"{method}: tracked={tracked}, definitions={definitions}"
+            )
 
 
 def evidence_source(root: Path, spec: EvidenceSpec) -> tuple[Path, str]:
@@ -404,10 +789,200 @@ def evidence_source(root: Path, spec: EvidenceSpec) -> tuple[Path, str]:
     return path, source
 
 
+def source_module_dependencies(path: Path, source: str) -> tuple[Path, ...]:
+    """Resolve literal mod/#[path]/include! edges from one Rust source file."""
+
+    if re.search(r"cfg_attr\s*\([^)]*\bpath\s*=", source, re.DOTALL):
+        fail(f"evidence source contains conditional #[path] routing: {path}")
+    dependencies: set[Path] = set()
+    explicit_modules: set[str] = set()
+    path_pattern = re.compile(
+        r'#\s*\[\s*path\s*=\s*"([^"\r\n]+)"\s*\]\s*'
+        r'(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;'
+    )
+    for relative, module_name in path_pattern.findall(source):
+        explicit_modules.add(module_name)
+        dependency = (path.parent / relative).resolve()
+        if not dependency.is_file():
+            fail(f"evidence #[path] module is missing: {path}: {relative}")
+        dependencies.add(dependency)
+    module_pattern = re.compile(
+        r"(?m)^\s*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+"
+        r"([A-Za-z_][A-Za-z0-9_]*)\s*;"
+    )
+    for module_name in module_pattern.findall(source):
+        if module_name in explicit_modules:
+            continue
+        if path.name in {"lib.rs", "main.rs", "mod.rs"} or "tests" in path.parts:
+            bases = (path.parent, path.parent / path.stem)
+        else:
+            bases = (path.parent / path.stem, path.parent)
+        candidates: list[Path] = []
+        for base in bases:
+            candidates.extend((base / f"{module_name}.rs", base / module_name / "mod.rs"))
+        existing = tuple(dict.fromkeys(candidate.resolve() for candidate in candidates if candidate.is_file()))
+        if len(existing) != 1:
+            fail(f"evidence module edge is missing or ambiguous: {path}: mod {module_name}: {existing}")
+        dependencies.add(existing[0])
+    literal_includes = re.findall(r'include\s*!\s*\(\s*"([^"\r\n]+)"\s*\)', source)
+    include_invocations = len(re.findall(r"\binclude\s*!\s*\(", source))
+    if include_invocations != len(literal_includes):
+        fail(f"evidence source contains a non-literal include!: {path}")
+    for relative in literal_includes:
+        dependency = (path.parent / relative).resolve()
+        if not dependency.is_file():
+            fail(f"evidence include! source is missing: {path}: {relative}")
+        dependencies.add(dependency)
+    return tuple(sorted(dependencies))
+
+
+def recursive_source_closure(seed: Path) -> tuple[Path, ...]:
+    """Return the complete literal Rust module/include closure rooted at one source file."""
+
+    pending = [seed.resolve()]
+    visited: set[Path] = set()
+    while pending:
+        path = pending.pop()
+        if path in visited:
+            continue
+        if not path.is_file():
+            fail(f"evidence source closure file is missing: {path}")
+        visited.add(path)
+        source = path.read_text(encoding="utf-8")
+        pending.extend(
+            dependency
+            for dependency in source_module_dependencies(path, source)
+            if dependency not in visited
+        )
+    return tuple(sorted(visited))
+
+
+def verify_untrusted_evidence_source(
+    path: Path,
+    source: str,
+    *,
+    allow_trace_api: bool = False,
+) -> None:
+    """Reject output, completion, trace internals, and record access in untrusted evidence code."""
+
+    tokens = tuple(token.text.removeprefix("r#") for token in tokenize(source))
+    violations: set[str] = set()
+    for index, token in enumerate(tokens):
+        if token in OUTPUT_MACROS:
+            violations.add(f"output macro {token}!")
+        if token in DIRECT_OUTPUT_IDENTIFIERS:
+            violations.add(f"direct output API {token}")
+        if token in TRACE_RECORD_METHODS:
+            violations.add(f"trace record API {token}")
+        if token in {"verify_and_emit", "enable_task4_runtime_trace"} and not allow_trace_api:
+            violations.add(f"trace verification API {token}")
+        if token in {"RuntimeTraceEmitter", "TraceStage", "TraceEvent"}:
+            violations.add(f"trace internal {token}")
+        if (
+            token == "process"
+            and index + 2 < len(tokens)
+            and tokens[index + 1 : index + 3] == ("::", "exit")
+        ):
+            violations.add("process::exit")
+        if token == "exit" and index > 0 and tokens[index - 1] == ".":
+            violations.add("process exit method")
+    allowed_trace_names = {"task4_runtime_trace", "verify_and_emit"}
+    trace_names = {
+        token
+        for token in tokens
+        if token.startswith("Trace")
+        or token.startswith("RuntimeTrace")
+        or token == "task4_runtime_trace"
+    }
+    unexpected_trace_names = trace_names.difference(allowed_trace_names)
+    if unexpected_trace_names:
+        violations.update(f"trace access {name}" for name in unexpected_trace_names)
+    if TRACE_CHALLENGE_ENV in source:
+        violations.add("trace challenge access")
+    if violations:
+        fail(f"untrusted evidence source can forge runtime completion: {path}: {sorted(violations)}")
+
+
+def verify_root_trace_api_regions(path: Path, source: str, function_name: str) -> None:
+    """Keep trace setup/emission API calls inside the one exact manifest-bound test function."""
+
+    ranges = function_line_ranges(source, function_name)
+    if len(ranges) != 1:
+        fail(f"evidence root does not contain one exact test function region: {path}:{function_name}")
+    for line_number, line in enumerate(source.splitlines(), start=1):
+        if "verify_and_emit" not in line and "enable_task4_runtime_trace" not in line:
+            continue
+        if not any(start <= line_number <= end for start, end in ranges):
+            fail(f"trace verification API escaped exact evidence function: {path}:{line_number}")
+
+
+def verify_production_trace_output_ownership(root: Path) -> None:
+    """Keep marker/output ownership in the typed trace module across all production sources."""
+
+    source_root = root / "crates/druid-wrapper/src"
+    trace_owner = source_root / "task4_runtime_trace.rs"
+    for path in recursive_source_closure(source_root / "lib.rs"):
+        source = path.read_text(encoding="utf-8")
+        tokens = tuple(token.text.removeprefix("r#") for token in tokenize(source))
+        if path == trace_owner:
+            output_calls = [
+                token
+                for index, token in enumerate(tokens[:-1])
+                if token in OUTPUT_MACROS and tokens[index + 1] == "!"
+            ]
+            if output_calls != ["eprintln"]:
+                fail(f"typed trace owner must have one eprintln marker sink: {output_calls}")
+            continue
+        if TRACE_MARKER in source:
+            fail(f"runtime trace marker escaped its typed owner: {path.relative_to(root)}")
+        for index, token in enumerate(tokens[:-1]):
+            if token in OUTPUT_MACROS and tokens[index + 1] == "!":
+                fail(f"production source may forge evidence output: {path.relative_to(root)}:{token}!")
+        if re.search(r"(?:std\s*::\s*io\s*::|\bio\s*::\s*)(?:stdout|stderr)\s*\(", source):
+            fail(f"production source may access evidence output streams: {path.relative_to(root)}")
+        if any(token in {"from_raw_fd", "as_raw_fd"} for token in tokens):
+            fail(f"production source may access raw evidence descriptors: {path.relative_to(root)}")
+        if any(
+            tokens[index : index + 3] == ("process", "::", "exit")
+            for index in range(len(tokens) - 2)
+        ):
+            fail(f"production source may terminate evidence process: {path.relative_to(root)}")
+
+
+def verify_evidence_source_closure(root: Path, spec: EvidenceSpec) -> None:
+    """Verify the exact test plus every reachable helper and the crate production closure."""
+
+    verify_production_trace_output_ownership(root)
+    path, root_source = evidence_source(root, spec)
+    function_name = spec.test_id.rsplit("::", 1)[-1]
+    verify_untrusted_evidence_source(
+        path.relative_to(root), root_source, allow_trace_api=True
+    )
+    verify_root_trace_api_regions(path.relative_to(root), root_source, function_name)
+    closure_seed = path
+    for dependency in recursive_source_closure(closure_seed):
+        if dependency == path.resolve():
+            continue
+        try:
+            relative = dependency.relative_to(root)
+        except ValueError:
+            fail(f"evidence source closure escapes repository root: {dependency}")
+        verify_untrusted_evidence_source(
+            relative, dependency.read_text(encoding="utf-8"), allow_trace_api=False
+        )
+
+
 def cargo_evidence_command(spec: EvidenceSpec) -> list[str]:
     """Build the one exact Cargo command declared by a TSV evidence row."""
 
-    command = ["cargo", "test", "-p", "druid-wrapper"]
+    command = [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "druid-wrapper",
+    ]
     if spec.profile == "all-features":
         command.append("--all-features")
     elif spec.profile != "default":
@@ -418,29 +993,123 @@ def cargo_evidence_command(spec: EvidenceSpec) -> list[str]:
         command.extend(["--test", spec.test_target.removeprefix("test:")])
     else:
         fail(f"runtime evidence Cargo target is unknown: {spec.test_target}")
-    command.extend([spec.test_id, "--", "--exact", "--nocapture"])
+    if spec.category == COMPILE_IDENTITY_CATEGORY:
+        command.append("--no-run")
+    else:
+        command.extend([spec.test_id, "--", "--exact", "--nocapture"])
     return command
+
+
+def kill_process_group(process: subprocess.Popen[bytes]) -> None:
+    """Kill one evidence process and all children in its isolated process group."""
+
+    if process.poll() is not None:
+        return
+    if os.name == "posix":
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    else:
+        process.kill()
+
+
+def run_bounded_process(
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout_seconds: float,
+    output_limit: int,
+    env: dict[str, str] | None = None,
+) -> BoundedProcessResult:
+    """Run one isolated process with a deadline, process-group kill, and output cap."""
+
+    if timeout_seconds <= 0 or output_limit <= 0:
+        fail("bounded process requires positive timeout and output limit")
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=False,
+        start_new_session=os.name == "posix",
+    )
+    if process.stdout is None or process.stderr is None:
+        kill_process_group(process)
+        fail("bounded process did not expose stdout/stderr pipes")
+    selector = selectors.DefaultSelector()
+    selector.register(process.stdout, selectors.EVENT_READ, "stdout")
+    selector.register(process.stderr, selectors.EVENT_READ, "stderr")
+    buffers = {"stdout": bytearray(), "stderr": bytearray()}
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                kill_process_group(process)
+                process.wait()
+                fail(f"evidence process timed out after {timeout_seconds:.3f}s")
+            events = selector.select(min(remaining, 0.05))
+            for key, _ in events:
+                chunk = os.read(key.fileobj.fileno(), 65_536)
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                buffers[key.data].extend(chunk)
+                if sum(len(buffer) for buffer in buffers.values()) > output_limit:
+                    kill_process_group(process)
+                    process.wait()
+                    fail(f"evidence process exceeded output limit {output_limit}")
+            if process.poll() is not None and not events:
+                # Pipes may still contain a final chunk; keep draining until EOF.
+                continue
+        returncode = process.wait()
+    finally:
+        selector.close()
+        if process.poll() is None:
+            kill_process_group(process)
+            process.wait()
+        for stream in (process.stdout, process.stderr):
+            if stream is not None and not stream.closed:
+                stream.close()
+    return BoundedProcessResult(
+        returncode,
+        bytes(buffers["stdout"]).decode("utf-8", errors="replace"),
+        bytes(buffers["stderr"]).decode("utf-8", errors="replace"),
+    )
 
 
 def execute_evidence(root: Path, spec: EvidenceSpec) -> None:
     """Run one exact declared test and validate its runtime-trace or compile-identity outcome."""
 
-    path, source = evidence_source(root, spec)
-    verify_runtime_trace_source_hygiene(path.relative_to(root), source)
-    result = subprocess.run(
-        cargo_evidence_command(spec),
-        cwd=root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    verify_evidence_source_closure(root, spec)
+    challenge = secrets.token_hex(32)
+    environment = os.environ.copy()
+    environment[TRACE_CHALLENGE_ENV] = challenge
+    try:
+        result = run_bounded_process(
+            cargo_evidence_command(spec),
+            cwd=root,
+            timeout_seconds=DEFAULT_EVIDENCE_TIMEOUT_SECONDS,
+            output_limit=DEFAULT_EVIDENCE_OUTPUT_LIMIT,
+            env=environment,
+        )
+    except VerificationError as error:
+        fail(f"exact Task 4 evidence process failed: {spec.test_id}: {error}")
     output = f"{result.stdout}\n{result.stderr}"
     if result.returncode != 0:
         fail(f"exact Task 4 evidence test failed: {spec.test_id}: {output.strip()}")
-    if not re.search(r"test result: ok\. 1 passed; 0 failed; 0 ignored;", output):
-        fail(f"exact Task 4 evidence test did not complete through libtest: {spec.test_id}")
     if spec.category == RUNTIME_TRACE_CATEGORY:
-        validate_runtime_trace_output(output, spec.evidence_id, spec.family, spec.version)
+        validate_runtime_trace_output(
+            output,
+            spec.evidence_id,
+            spec.family,
+            spec.version,
+            challenge,
+            root,
+        )
     elif spec.category == COMPILE_IDENTITY_CATEGORY:
         if TRACE_MARKER in output:
             fail(f"nonbehavior identity evidence forged runtime behavior: {spec.test_id}")
@@ -448,9 +1117,78 @@ def execute_evidence(root: Path, spec: EvidenceSpec) -> None:
         fail(f"Task 4 evidence category is unknown: {spec.category}")
 
 
+def adapter_row_family(row: AdapterRow) -> str:
+    """Derive one immutable family identity from the adapter source owner."""
+
+    source = row.source_path.as_posix()
+    families = {
+        "/sqlx/": "SQLX",
+        "/toasty/": "TOASTY",
+        "/rbdc/": "RBDC",
+        "/duckdb/": "DUCKDB",
+        "/http_sql/": "HTTP_SQL",
+        "/libsql/": "LIBSQL",
+        "/jdbc_agent/": "JDBC_AGENT",
+        "/rdbc/": "IDENTITY",
+    }
+    matches = [family for fragment, family in families.items() if fragment in source]
+    if len(matches) != 1:
+        fail(f"Task 4 adapter row has no unique source family: {row.source_path}")
+    return matches[0]
+
+
+def verify_row_evidence_bindings(rows: list[AdapterRow]) -> None:
+    """Compare all 31 source rows to their canonical family binding before deduplication."""
+
+    for row in rows:
+        family = adapter_row_family(row)
+        if family == "IDENTITY":
+            target, test_id, profile, behavior = IDENTITY_EVIDENCE_BINDING
+            expected = (
+                target,
+                test_id,
+                profile,
+                COMPILE_IDENTITY_CATEGORY,
+                "-",
+                "-",
+                "-",
+                behavior,
+            )
+        else:
+            target, test_id, profile, behavior, evidence_id = (
+                CANONICAL_EVIDENCE_BINDINGS[family]
+            )
+            expected = (
+                target,
+                test_id,
+                profile,
+                RUNTIME_TRACE_CATEGORY,
+                family,
+                TRACE_VERSION,
+                evidence_id,
+                behavior,
+            )
+        actual = (
+            row.behavior_test_target,
+            row.cargo_test_id,
+            row.behavior_profile,
+            row.evidence_category,
+            row.trace_family,
+            row.trace_version,
+            row.trace_evidence_id,
+            row.behavior_evidence,
+        )
+        if actual != expected:
+            fail(
+                "Task 4 runtime evidence row is not bound to its source family: "
+                f"{row.source_path}: expected={expected!r}, actual={actual!r}"
+            )
+
+
 def evidence_specs(rows: list[AdapterRow]) -> tuple[EvidenceSpec, ...]:
     """Validate row bindings and return one deterministic set of exact tests to execute."""
 
+    verify_row_evidence_bindings(rows)
     specs = {
         EvidenceSpec(
             row.behavior_test_target,
