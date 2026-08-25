@@ -149,3 +149,21 @@ nested shadow/range/lifetime controls。Task 4继续 blocked。
 - Rust keyword + unary `!`从invocation index排除，raw identifier不获得豁免。
 - Fresh RED `6`，GREEN purity `61/61 + live29`；完整recovery gates PASS。状态
   `FIX_ROUND_3_IMPLEMENTED_PENDING_REREVIEW`。
+
+## Recovery fix round 3 independent re-review（append-only）
+
+Reviewed fix commit: `00711d7cda7cc581321b386b23a7cbc5ee6e44a5`
+
+Verdict remains **FIX_REQUIRED**。Lexical item namespace Minor 已 `ADDRESSED`；macro invocation
+Important 仍为 `PARTIAL`。当前 allowlist只比较 canonicalized name，没有证明macro binding来源，
+因此以下真实可编译路径仍被 purity接受：
+
+- local `macro_rules! impl_standard_wrapper` lexical-shadow批准的crate-root macro；
+- local `macro_rules! format` 后 bare `format!()`；
+- raw `r#impl_standard_wrapper!()`；
+- private helper macro re-export后 `use crate::evil as std; std::assert!()`。
+
+Round 4必须把批准判断从名称匹配升级为provenance resolution：`crate::impl_standard_wrapper!`
+只允许可证明的crate-root export；bare批准宏不得被local definition/import shadow；std/core/alloc
+qualified macro必须确认当前位置未被binding/alias shadow，或使用unshadowable absolute provenance。
+永久fixture必须同时覆盖上述负向和真实正向。Task 4继续 blocked。
