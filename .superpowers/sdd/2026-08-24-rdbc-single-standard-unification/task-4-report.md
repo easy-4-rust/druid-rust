@@ -1295,3 +1295,20 @@ manifests and append-only report/ledger. No family adapter/test behavior、Cargo
 deletion、admin、unsafe or manual Send/Sync change is included. Previous marker/runner/row issues and
 the new exact-region fallback have implementation dispositions of **ADDRESSED, pending independent
 review**. Task 5 remains blocked；no push is authorized.
+
+## 26. Independent compiler-coverage re-review — REVIEW CLEAR
+
+Independent scoped re-review of `d942cda..b697259` returned **REVIEW CLEAR**：
+
+- the prior exact-region fallback Critical is `ADDRESSED`；no new Critical/Important/Minor finding；
+- coverage v2 accepts only exact full compiler function identities and rejects zero/missing target
+  functions even when sibling regions/functions are positive；duplicate/ambiguous identities reject；
+- all 11 stage anchors execute the typed record side effect，and validation-success executes only after
+  the full family/instance/order validation succeeds；
+- fresh verifier `38/38`、representative SQLx default and HTTP SQL all-feature isolated coverage、
+  denominator `41/41 + 73/55/3557`、semantic `16/16 + 52/17/0`、purity `103/103 + live29`、wrapper
+  default/all-feature、RDBC/workspace/scoped quality gates PASS；
+- the complete current seven-family evidence is internally consistent；external services remain
+  honest `NOT_RUN`，and the two unchanged Druid warnings transfer to Task 5。
+
+Final status：**TASK4_COMPLETE_REVIEW_CLEAR**。Task 5可以开始。
