@@ -129,6 +129,38 @@ class ModuleScope:
     macro_edges: list[ModuleMacroEdge] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class LexicalGenericScope:
+    """Type/const/lifetime generic bindings valid only in one declaration range."""
+
+    declaration_kind: str
+    source: Path
+    start: int
+    end: int
+    type_bindings: frozenset[str]
+    const_bindings: frozenset[str]
+    lifetime_bindings: frozenset[str]
+
+
+@dataclass(frozen=True)
+class DeclarationScope:
+    """One item declaration range that can stop enclosing function-generic capture."""
+
+    declaration_kind: str
+    start: int
+    end: int
+
+
+@dataclass(frozen=True)
+class GenericBoundSite:
+    """One bound root that must resolve under the normal canonical path policy."""
+
+    source: Path
+    token_index: int
+    path: tuple[str, ...]
+    absolute: bool
+
+
 @dataclass
 class SourceUnit:
     """Tokenized Rust source plus delimiter and reachable-scope indexes."""
@@ -138,6 +170,9 @@ class SourceUnit:
     matching: dict[int, int]
     reverse_matching: dict[int, int]
     scopes: list[ModuleScope] = field(default_factory=list)
+    lexical_generic_scopes: list[LexicalGenericScope] = field(default_factory=list)
+    declaration_scopes: list[DeclarationScope] = field(default_factory=list)
+    generic_bound_sites: list[GenericBoundSite] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -209,6 +244,333 @@ def attribute_ranges(unit: SourceUnit) -> tuple[tuple[int, int], ...]:
     return tuple(ranges)
 
 
+def macro_definition_ranges(unit: SourceUnit) -> tuple[tuple[int, int], ...]:
+    """Return macro_rules definition ranges whose generated declarations are not lexical source."""
+
+    ranges: list[tuple[int, int]] = []
+    tokens = unit.tokens
+    index = 0
+    while index + 3 < len(tokens):
+        if (
+            tokens[index].text != "macro_rules"
+            or tokens[index + 1].text != "!"
+            or tokens[index + 2].kind != "IDENT"
+            or tokens[index + 3].text not in DELIMITER_PAIRS
+        ):
+            index += 1
+            continue
+        end = unit.matching.get(index + 3)
+        if end is None:
+            fail(f"unterminated macro_rules definition in {unit.relative}")
+        ranges.append((index, end + 1))
+        index = end + 1
+    return tuple(ranges)
+
+
+def angle_close(unit: SourceUnit, opening: int, limit: int) -> int:
+    """Find a declaration generic list's closing angle without treating function arrows as closes."""
+
+    tokens = unit.tokens
+    depth = 1
+    cursor = opening + 1
+    while cursor < limit:
+        token = tokens[cursor].text
+        if token in DELIMITER_PAIRS:
+            end = unit.matching.get(cursor)
+            if end is None or end >= limit:
+                fail(f"generic delimiter escapes declaration in {unit.relative}")
+            cursor = end + 1
+            continue
+        if token == "<":
+            depth += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            depth -= 1
+            if depth == 0:
+                return cursor
+        cursor += 1
+    fail(f"unterminated generic parameter list in {unit.relative}")
+
+
+def declaration_generic_open(tokens: list[Token], index: int, limit: int) -> int | None:
+    """Return the `<` that declares generics for one supported Rust item keyword."""
+
+    keyword = tokens[index].text
+    if keyword == "impl":
+        candidate = index + 1
+    elif keyword in {"enum", "fn", "struct", "trait", "type", "union"}:
+        if index + 1 >= limit or tokens[index + 1].kind != "IDENT":
+            return None
+        candidate = index + 2
+    else:
+        return None
+    if candidate < limit and tokens[candidate].text == "<":
+        return candidate
+    return None
+
+
+def declaration_end(unit: SourceUnit, index: int, limit: int) -> int:
+    """Return one Rust item's half-open lexical range ending at its body or semicolon."""
+
+    tokens = unit.tokens
+    cursor = index + 1
+    angle_depth = 0
+    while cursor < limit:
+        token = tokens[cursor].text
+        if token in {"(", "["}:
+            end = unit.matching.get(cursor)
+            if end is None or end >= limit:
+                fail(f"item delimiter escapes source range in {unit.relative}")
+            cursor = end + 1
+            continue
+        if token == "<":
+            angle_depth += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            angle_depth = max(0, angle_depth - 1)
+        elif token == "{" and angle_depth == 0:
+            end = unit.matching.get(cursor)
+            if end is None or end >= limit:
+                fail(f"item body escapes source range in {unit.relative}")
+            return end + 1
+        elif token == ";" and angle_depth == 0:
+            return cursor + 1
+        cursor += 1
+    fail(f"unterminated declaration in {unit.relative} at token {index}")
+
+
+def split_top_level_ranges(
+    unit: SourceUnit, start: int, end: int, separator: str
+) -> tuple[tuple[int, int], ...]:
+    """Split a token range at one separator outside delimiters and nested angle arguments."""
+
+    tokens = unit.tokens
+    ranges: list[tuple[int, int]] = []
+    segment_start = start
+    cursor = start
+    angle_depth = 0
+    while cursor < end:
+        token = tokens[cursor].text
+        if token in DELIMITER_PAIRS:
+            closing = unit.matching.get(cursor)
+            if closing is None or closing >= end:
+                fail(f"delimiter escapes bounded syntax in {unit.relative}")
+            cursor = closing + 1
+            continue
+        if token == "<":
+            angle_depth += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            angle_depth = max(0, angle_depth - 1)
+        elif token == separator and angle_depth == 0:
+            ranges.append((segment_start, cursor))
+            segment_start = cursor + 1
+        cursor += 1
+    ranges.append((segment_start, end))
+    return tuple(ranges)
+
+
+def generic_bound_sites_in_predicate(
+    unit: SourceUnit, start: int, end: int
+) -> tuple[GenericBoundSite, ...]:
+    """Extract each top-level trait/type root after a generic predicate colon."""
+
+    tokens = unit.tokens
+    colon: int | None = None
+    cursor = start
+    angle_depth = 0
+    while cursor < end:
+        token = tokens[cursor].text
+        if token in DELIMITER_PAIRS:
+            closing = unit.matching.get(cursor)
+            if closing is None or closing >= end:
+                fail(f"generic predicate delimiter escapes range in {unit.relative}")
+            cursor = closing + 1
+            continue
+        if token == "<":
+            angle_depth += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            angle_depth = max(0, angle_depth - 1)
+        elif token == ":" and angle_depth == 0:
+            colon = cursor
+            break
+        cursor += 1
+    if colon is None:
+        return ()
+
+    bound_end = end
+    cursor = colon + 1
+    angle_depth = 0
+    while cursor < end:
+        token = tokens[cursor].text
+        if token in DELIMITER_PAIRS:
+            closing = unit.matching.get(cursor)
+            if closing is None or closing >= end:
+                fail(f"generic bound delimiter escapes range in {unit.relative}")
+            cursor = closing + 1
+            continue
+        if token == "<":
+            angle_depth += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            angle_depth = max(0, angle_depth - 1)
+        elif token == "=" and angle_depth == 0:
+            bound_end = cursor
+            break
+        cursor += 1
+
+    sites: list[GenericBoundSite] = []
+    for bound_start, bound_stop in split_top_level_ranges(
+        unit, colon + 1, bound_end, "+"
+    ):
+        cursor = bound_start
+        while cursor < bound_stop and tokens[cursor].text in {"?", "~", "const"}:
+            cursor += 1
+        if cursor < bound_stop and tokens[cursor].text == "for":
+            cursor += 1
+            if cursor >= bound_stop or tokens[cursor].text != "<":
+                fail(f"for bound lacks lifetime list in {unit.relative}")
+            cursor = angle_close(unit, cursor, bound_stop) + 1
+        if cursor >= bound_stop or tokens[cursor].kind == "LIFETIME":
+            continue
+        absolute = tokens[cursor].text == "::"
+        if absolute:
+            cursor += 1
+        if cursor >= bound_stop or tokens[cursor].kind != "IDENT":
+            fail(f"unknown generic bound syntax in {unit.relative} at token {cursor}")
+        path_start = cursor
+        path = [canonical_identifier(tokens[cursor])]
+        cursor += 1
+        while (
+            cursor + 1 < bound_stop
+            and tokens[cursor].text == "::"
+            and tokens[cursor + 1].kind == "IDENT"
+        ):
+            path.append(canonical_identifier(tokens[cursor + 1]))
+            cursor += 2
+        sites.append(
+            GenericBoundSite(unit.relative, path_start, tuple(path), absolute)
+        )
+    return tuple(sites)
+
+
+def where_bound_sites(
+    unit: SourceUnit, generic_closing: int, declaration_stop: int
+) -> tuple[GenericBoundSite, ...]:
+    """Extract bound roots from a declaration's top-level where predicates."""
+
+    tokens = unit.tokens
+    cursor = generic_closing + 1
+    where_index: int | None = None
+    header_end = declaration_stop
+    angle_depth = 0
+    while cursor < declaration_stop:
+        token = tokens[cursor].text
+        if token in {"(", "["}:
+            closing = unit.matching.get(cursor)
+            if closing is None or closing >= declaration_stop:
+                fail(f"where header delimiter escapes declaration in {unit.relative}")
+            cursor = closing + 1
+            continue
+        if token == "<":
+            angle_depth += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            angle_depth = max(0, angle_depth - 1)
+        elif token == "where" and angle_depth == 0 and where_index is None:
+            where_index = cursor
+        elif token in {"{", ";"} and angle_depth == 0:
+            header_end = cursor
+            break
+        cursor += 1
+    if where_index is None:
+        return ()
+    sites: list[GenericBoundSite] = []
+    for predicate_start, predicate_end in split_top_level_ranges(
+        unit, where_index + 1, header_end, ","
+    ):
+        sites.extend(
+            generic_bound_sites_in_predicate(unit, predicate_start, predicate_end)
+        )
+    return tuple(sites)
+
+
+def generic_parameter_bindings(
+    unit: SourceUnit, opening: int, closing: int
+) -> tuple[
+    frozenset[str],
+    frozenset[str],
+    frozenset[str],
+    tuple[GenericBoundSite, ...],
+]:
+    """Classify top-level type, const, and lifetime parameters from one generic list."""
+
+    tokens = unit.tokens
+    segments: list[tuple[int, int]] = []
+    start = opening + 1
+    cursor = start
+    nested_angles = 0
+    while cursor < closing:
+        token = tokens[cursor].text
+        if token in DELIMITER_PAIRS:
+            end = unit.matching.get(cursor)
+            if end is None or end > closing:
+                fail(f"generic parameter delimiter escapes list in {unit.relative}")
+            cursor = end + 1
+            continue
+        if token == "<":
+            nested_angles += 1
+        elif token == ">" and (cursor == 0 or tokens[cursor - 1].text != "-"):
+            nested_angles = max(0, nested_angles - 1)
+        elif token == "," and nested_angles == 0:
+            segments.append((start, cursor))
+            start = cursor + 1
+        cursor += 1
+    segments.append((start, closing))
+
+    type_bindings: set[str] = set()
+    const_bindings: set[str] = set()
+    lifetime_bindings: set[str] = set()
+    bound_sites: list[GenericBoundSite] = []
+    for segment_start, segment_end in segments:
+        cursor = segment_start
+        while cursor < segment_end and tokens[cursor].text == "#":
+            bracket = cursor + 1 + int(
+                cursor + 1 < segment_end and tokens[cursor + 1].text == "!"
+            )
+            end = unit.matching.get(bracket)
+            if end is None or end >= segment_end:
+                fail(f"generic parameter attribute escapes segment in {unit.relative}")
+            cursor = end + 1
+        if cursor >= segment_end:
+            continue
+        if tokens[cursor].kind == "LIFETIME":
+            lifetime_bindings.add(tokens[cursor].text)
+            bound_sites.extend(
+                generic_bound_sites_in_predicate(unit, segment_start, segment_end)
+            )
+            continue
+        if tokens[cursor].text == "const":
+            if cursor + 1 >= segment_end or tokens[cursor + 1].kind != "IDENT":
+                fail(f"const generic lacks a name in {unit.relative}")
+            const_bindings.add(canonical_identifier(tokens[cursor + 1]))
+            bound_sites.extend(
+                generic_bound_sites_in_predicate(unit, segment_start, segment_end)
+            )
+            continue
+        if tokens[cursor].kind == "IDENT":
+            type_bindings.add(canonical_identifier(tokens[cursor]))
+            bound_sites.extend(
+                generic_bound_sites_in_predicate(unit, segment_start, segment_end)
+            )
+            continue
+        fail(f"unknown generic parameter syntax in {unit.relative} at token {cursor}")
+    duplicate = (type_bindings & const_bindings) or (type_bindings & lifetime_bindings)
+    if duplicate:
+        fail(f"ambiguous generic binding in {unit.relative}: {sorted(duplicate)}")
+    return (
+        frozenset(type_bindings),
+        frozenset(const_bindings),
+        frozenset(lifetime_bindings),
+        tuple(bound_sites),
+    )
+
+
 class ModuleScopeIndex:
     """Two-pass reachable Rust module/binding index rooted at src/lib.rs."""
 
@@ -232,6 +594,8 @@ class ModuleScopeIndex:
         if missing:
             fail(f"standard scaffold is incomplete or unreachable from lib.rs: {missing}")
         self.canonical_roots = tuple(sorted(root_names))
+        self.index_lexical_generic_scopes()
+        self.verify_generic_bound_sites()
         for scope in self.scopes.values():
             if scope.identity and scope.identity[0] in self.canonical_roots:
                 for name in scope.bindings:
@@ -277,6 +641,13 @@ class ModuleScopeIndex:
         """Return whether the item keyword has any pub visibility qualifier."""
 
         previous = index - 1
+        while previous >= scope.start and unit.tokens[previous].text in {
+            "async",
+            "const",
+            "default",
+            "unsafe",
+        }:
+            previous -= 1
         if previous < scope.start:
             return False
         if unit.tokens[previous].text == "pub":
@@ -399,14 +770,34 @@ class ModuleScopeIndex:
                 index = end + 1
                 continue
             if token.text in item_keywords and index + 1 < scope.end:
-                if token.text == "fn" and index > scope.start and tokens[index - 1].text == "const":
-                    pass
-                elif tokens[index + 1].kind == "IDENT":
+                if tokens[index + 1].kind == "IDENT":
                     name = canonical_identifier(tokens[index + 1])
                     if name in scope.children or name in scope.bindings or name in scope.local_items:
                         fail(f"ambiguous local item binding in {scope.source}: {name}")
                     scope.local_items[name] = LocalItem(self.public_before(unit, index, scope))
+                index = declaration_end(unit, index, scope.end)
+                continue
+            if token.text == "impl":
+                index = declaration_end(unit, index, scope.end)
+                continue
             elif token.text in {"const", "static"}:
+                if token.text == "const":
+                    function_cursor = index + 1
+                    while function_cursor < scope.end and tokens[function_cursor].text in {
+                        "async",
+                        "unsafe",
+                    }:
+                        function_cursor += 1
+                    if function_cursor < scope.end and tokens[function_cursor].text == "extern":
+                        function_cursor += 1
+                        if (
+                            function_cursor < scope.end
+                            and tokens[function_cursor].kind == "STRING"
+                        ):
+                            function_cursor += 1
+                    if function_cursor < scope.end and tokens[function_cursor].text == "fn":
+                        index += 1
+                        continue
                 cursor = index + 1
                 if cursor < scope.end and tokens[cursor].text == "mut":
                     cursor += 1
@@ -416,10 +807,20 @@ class ModuleScopeIndex:
                         scope.local_items.setdefault(
                             name, LocalItem(self.public_before(unit, index, scope))
                         )
+                index = declaration_end(unit, index, scope.end)
+                continue
             elif token.text == "macro_rules" and index + 2 < scope.end:
                 if tokens[index + 1].text == "!" and tokens[index + 2].kind == "IDENT":
                     name = canonical_identifier(tokens[index + 2])
                     scope.local_items.setdefault(name, LocalItem(False))
+                    opening = index + 3
+                    if opening >= scope.end or tokens[opening].text not in DELIMITER_PAIRS:
+                        fail(f"unknown macro_rules declaration in {scope.source}")
+                    end = unit.matching.get(opening)
+                    if end is None or end >= scope.end:
+                        fail(f"macro_rules body escapes module range in {scope.source}")
+                    index = end + 1
+                    continue
 
             macro = self.module_macro_path(tokens, index, scope.end)
             if macro is not None and token.text != "macro_rules":
@@ -428,6 +829,129 @@ class ModuleScopeIndex:
                 index = bang + 1
                 continue
             index += 1
+
+    def index_lexical_generic_scopes(self) -> None:
+        """Index generic bindings and exact declaration ranges in reachable canonical sources."""
+
+        for unit in self.sources.values():
+            if not any(
+                scope.identity and scope.identity[0] in self.canonical_roots
+                for scope in unit.scopes
+            ):
+                continue
+            excluded = sorted((*macro_definition_ranges(unit), *attribute_ranges(unit)))
+            excluded_cursor = 0
+            index = 0
+            while index < len(unit.tokens):
+                while (
+                    excluded_cursor < len(excluded)
+                    and excluded[excluded_cursor][1] <= index
+                ):
+                    excluded_cursor += 1
+                if (
+                    excluded_cursor < len(excluded)
+                    and excluded[excluded_cursor][0] <= index < excluded[excluded_cursor][1]
+                ):
+                    index = excluded[excluded_cursor][1]
+                    continue
+                declaration_kind = unit.tokens[index].text
+                if declaration_kind not in {
+                    "enum",
+                    "fn",
+                    "impl",
+                    "struct",
+                    "trait",
+                    "type",
+                    "union",
+                }:
+                    index += 1
+                    continue
+                named_declaration = declaration_kind != "impl" and (
+                    index + 1 < len(unit.tokens)
+                    and unit.tokens[index + 1].kind == "IDENT"
+                )
+                opening = declaration_generic_open(unit.tokens, index, len(unit.tokens))
+                if not named_declaration and opening is None:
+                    index += 1
+                    continue
+                end = declaration_end(unit, index, len(unit.tokens))
+                unit.declaration_scopes.append(
+                    DeclarationScope(declaration_kind, index, end)
+                )
+                if opening is None:
+                    index += 1
+                    continue
+                closing = angle_close(unit, opening, len(unit.tokens))
+                (
+                    type_bindings,
+                    const_bindings,
+                    lifetime_bindings,
+                    inline_bound_sites,
+                ) = generic_parameter_bindings(unit, opening, closing)
+                unit.generic_bound_sites.extend(inline_bound_sites)
+                unit.generic_bound_sites.extend(
+                    where_bound_sites(unit, closing, end)
+                )
+                if type_bindings or const_bindings or lifetime_bindings:
+                    unit.lexical_generic_scopes.append(
+                        LexicalGenericScope(
+                            unit.tokens[index].text,
+                            unit.relative,
+                            index,
+                            end,
+                            type_bindings,
+                            const_bindings,
+                            lifetime_bindings,
+                        )
+                    )
+                index += 1
+
+    def verify_generic_bound_sites(self) -> None:
+        """Resolve inline/where bound roots without weakening the canonical path policy."""
+
+        for unit in self.sources.values():
+            for site in unit.generic_bound_sites:
+                self.resolve_path(
+                    self.scope_for(site.source, site.token_index),
+                    site.path,
+                    absolute=site.absolute,
+                    canonical=True,
+                    source=site.source,
+                    token_index=site.token_index,
+                )
+
+    def lexical_binding_kind(
+        self, source: Path | None, token_index: int | None, name: str
+    ) -> str | None:
+        """Resolve the innermost range-scoped generic binding at one source token."""
+
+        if source is None or token_index is None:
+            return None
+        unit = self.sources.get(source)
+        if unit is None:
+            return None
+        candidates = [
+            scope
+            for scope in unit.lexical_generic_scopes
+            if scope.start <= token_index < scope.end
+            and (
+                name in scope.type_bindings
+                or name in scope.const_bindings
+            )
+        ]
+        for lexical_scope in sorted(
+            candidates, key=lambda scope: (scope.end - scope.start, -scope.start)
+        ):
+            if lexical_scope.declaration_kind == "fn" and any(
+                lexical_scope.start < declaration.start <= token_index < declaration.end
+                for declaration in unit.declaration_scopes
+            ):
+                continue
+            if name in lexical_scope.type_bindings:
+                return "type"
+            if name in lexical_scope.const_bindings:
+                return "const"
+        return None
 
     @staticmethod
     def module_macro_path(
@@ -479,6 +1003,8 @@ class ModuleScopeIndex:
             absolute=binding.absolute,
             canonical=canonical,
             resolving=resolving,
+            source=binding.source,
+            token_index=binding.token_index,
         )
         resolving.remove(recursion_key)
         self.binding_cache[cache_key] = target
@@ -527,6 +1053,8 @@ class ModuleScopeIndex:
         absolute: bool,
         canonical: bool,
         resolving: set[tuple[tuple[str, ...], str]] | None = None,
+        source: Path | None = None,
+        token_index: int | None = None,
     ) -> ResolvedTarget:
         """Resolve crate/self/N-super/bare paths uniformly for use and non-use sites."""
 
@@ -563,6 +1091,11 @@ class ModuleScopeIndex:
         elif first in ALLOWED_EXTERNAL_IMPORT_ROOTS or first in RUST_PRELUDE_ROOTS:
             return ResolvedTarget("external", external_root=first)
         else:
+            lexical_kind = self.lexical_binding_kind(source, token_index, first)
+            if lexical_kind == "type":
+                return ResolvedTarget("generic_type", scope.identity if scope else ())
+            if lexical_kind == "const":
+                fail(f"const generic cannot be an associated path root in {source}: {first}")
             if scope is None:
                 if canonical:
                     fail(f"unknown path root without reachable module scope: {first}")
@@ -624,6 +1157,8 @@ class ModuleScopeIndex:
                 edge.path,
                 absolute=False,
                 canonical=True,
+                source=edge.source,
+                token_index=edge.token_index,
             )
             if (
                 edge.path[-1] in ALLOWED_CRATE_ITEMS
@@ -749,7 +1284,14 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
                 fail(f"empty canonical import in {relative}")
             if path[-1] == "*":
                 fail(f"wildcard import is forbidden in canonical source: {relative}")
-            index.resolve_path(scope, path, absolute=absolute, canonical=True)
+            index.resolve_path(
+                scope,
+                path,
+                absolute=absolute,
+                canonical=True,
+                source=relative,
+                token_index=cursor,
+            )
         covered.update(range(cursor, end + 1))
         cursor = end + 1
 
@@ -761,7 +1303,14 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
             continue
         path, absolute, end = parsed
         scope = index.scope_for(relative, cursor)
-        index.resolve_path(scope, path, absolute=absolute, canonical=True)
+        index.resolve_path(
+            scope,
+            path,
+            absolute=absolute,
+            canonical=True,
+            source=relative,
+            token_index=cursor,
+        )
         cursor = max(cursor + 1, end)
 
 

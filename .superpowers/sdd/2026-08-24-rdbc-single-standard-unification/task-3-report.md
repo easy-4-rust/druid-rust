@@ -494,3 +494,26 @@ Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均�
 - 完整实现/RED/GREEN/命令证据：`task-3-recovery-report.md`。
 - 状态：`RECOVERY_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`；历史 admin supervisor风险不变；
   Task 4在原 reviewer 返回 `REVIEW CLEAR` 前继续 blocked。
+
+### Recovery independent-review correction / fix round 1/5
+
+- 审查事实源：`task-3-recovery-review.md`；reviewed commit `5335485`；verdict
+  `FIX_REQUIRED`。
+- Wrapper evidence与hook/dead-arm Minor均 `ADDRESSED`；reachable `ModuleScopeIndex` 为
+  `PARTIAL`，`1 Important open`，无新 Critical。
+- 独立复现：function/impl generic合法 `T::Item` 均被 purity verifier误杀为
+  `unknown path root ... T`。根因是缺少 declaration-range lexical type/const generic bindings。
+- 本轮基线 `5335485`；严格 RED→GREEN，仅修 lexical generic scope；Task 4、Physical、Wrapper
+  production、Cargo、admin保持不动。Task 4继续 blocked。
+
+### Recovery fix round 1/5 implementation
+
+- 有效 fresh RED `10`：六组合法 type-generic `T::Item`误杀、const generic module-scope泄漏、
+  function generic进入nested item、inline/where unknown bare bound漏放。
+- GREEN：`LexicalGenericScope + DeclarationScope + GenericBoundSite`；type/const/lifetime分类、
+  exact declaration ranges、nested function item barrier、inline/where bound canonical resolution。
+- Purity `47/47 + live29`；Wrapper `3/3`保持；完整semantic/Task2/error/workspace check/
+  Clippy/rustdoc/doctest/fmt gates均PASS，73/55/3559与consumer SHA不变。
+- Scope：只修改 purity verifier/tests与append-only recovery artifacts；review事实源
+  `task-3-recovery-review.md`纳入交付。状态 `FIX_ROUND_1_IMPLEMENTED_PENDING_REREVIEW`，Task 4
+  继续 blocked。

@@ -362,6 +362,243 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "Mystery|unknown|root"):
             verify_tree(self.root, phase="transitional")
 
+    def test_accepts_function_type_generic_associated_path(self) -> None:
+        """A function type parameter is a legal associated-path root inside its declaration."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub fn value<T: Assoc>() { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_impl_type_generic_associated_path(self) -> None:
+        """An impl type parameter remains bound throughout the impl body."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub struct Subject<T>(T);\n"
+            "impl<T: Assoc> Subject<T> { pub fn value(_: T::Item) {} }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_associated_method_type_generic_path(self) -> None:
+        """A method's own type parameter is bound inside an otherwise non-generic impl."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub struct Subject;\n"
+            "impl Subject { pub fn value<T: Assoc>(_: T::Item) {} }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_trait_type_generic_associated_path(self) -> None:
+        """A trait type parameter remains bound throughout its item body."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub trait GenericTrait<T: Assoc> { fn value(_: Option<T::Item>); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_struct_type_generic_associated_path(self) -> None:
+        """A struct type parameter remains bound throughout its field body."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub struct GenericStruct<T: Assoc> { value: Option<T::Item> }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_type_alias_generic_associated_path(self) -> None:
+        """A type-alias parameter remains bound through the alias expression."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub type GenericAlias<T: Assoc> = Option<T::Item>;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_where_clause_generic_associated_path(self) -> None:
+        """A type parameter remains bound in its declaration's where clause and body."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub fn value<T>() where T: Assoc, T::Item: Sized { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_lifetime_with_type_generic_associated_path(self) -> None:
+        """Lifetime parameters are retained syntactically but never treated as path roots."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub fn borrow<'a, T: Assoc>(value: &'a T::Item) -> &'a T::Item { value }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_const_generic_in_associated_path_arguments(self) -> None:
+        """A const parameter is legal inside a type-rooted associated path in its function range."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub struct ConstCarrier<const WIDTH: usize>;\n"
+            "impl<const WIDTH: usize> ConstCarrier<WIDTH> { pub const VALUE: usize = WIDTH; }\n"
+            "pub fn width<const WIDTH: usize>() { let _ = ConstCarrier::<WIDTH>::VALUE; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_rejects_const_generic_as_associated_path_root(self) -> None:
+        """A const generic binding is a value and cannot masquerade as a type path root."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn invalid<const WIDTH: usize>() { let _ = WIDTH::Item; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "WIDTH|const|unknown|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_undeclared_generic_like_associated_root(self) -> None:
+        """An uppercase identifier is not a generic binding without a lexical declaration."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn value() { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "unknown|root|T"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_external_trait_in_generic_projection(self) -> None:
+        """A legal T binding cannot hide a backend trait in a qualified projection."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn value<T>() { let _: Option<<T as sqlx::ExternalTrait>::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "sqlx|external|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_unknown_root_in_generic_bound(self) -> None:
+        """Generic binding collection never turns an unknown bound path into a legal root."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn value<T: Unknown::Trait>() { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "Unknown|unknown|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_unknown_bare_generic_bound(self) -> None:
+        """A bare bound name must resolve; capitalization is not source proof."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn value<T: MissingBound>() { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "MissingBound|unknown|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_unknown_bare_where_bound(self) -> None:
+        """A where-clause bound follows the same canonical root policy as inline bounds."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn value<T>() where T: MissingBound { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "MissingBound|unknown|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_transitional_root_in_generic_bound(self) -> None:
+        """A generic bound cannot enter the transitional resource hierarchy."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn value<T: crate::resource::Blob>() { let _: Option<T::Item> = None; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "resource|transitional"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_function_generic_binding_after_its_range(self) -> None:
+        """A function generic cannot leak into a following module item."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub fn declares<T: Assoc>() {}\n"
+            "pub type Escaped = T::Item;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "unknown|root|T"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_function_generic_inside_nested_item(self) -> None:
+        """A nested item cannot capture a generic declared by its enclosing function."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub fn outer<T: Assoc>() { fn nested() { let _: Option<T::Item> = None; } }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "unknown|root|T|nested"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_impl_generic_binding_after_its_range(self) -> None:
+        """An impl generic cannot leak into a following module item."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub struct Subject<T>(T);\n"
+            "impl<T: Assoc> Subject<T> {}\n"
+            "pub type Escaped = T::Item;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "unknown|root|T"):
+            verify_tree(self.root, phase="transitional")
+
     def test_rejects_unknown_module_scope_macro_edge(self) -> None:
         """An unknown module-scope macro may generate hidden module edges and fails closed."""
 

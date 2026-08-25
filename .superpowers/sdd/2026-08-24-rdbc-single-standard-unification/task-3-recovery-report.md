@@ -189,3 +189,117 @@ workspace test伪报 GREEN；本恢复以 workspace all-target/all-feature `carg
   `RECOVERY_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`。原 reviewer 返回 `REVIEW CLEAR` 前，Task 4
   继续 blocked；不宣称 adapter/logical LIVE、Physical removal、JDBC compliance或 broad workspace
   test GREEN。
+
+## 8. Independent review correction / recovery fix round 1/5
+
+本段 append-only correction明确 supersede上一节“已满足 brief清单”的实现者判断。
+
+- 独立审查事实源：`task-3-recovery-review.md`。
+- Reviewed recovery commit：`53354859615c5f582c180048913476e96a8bd4e6`。
+- Verdict：`FIX_REQUIRED`。
+- Wrapper permanent contract：`ADDRESSED`。
+- Wrapper hook documentation / unreachable arms Minor：`ADDRESSED`。
+- Reachable `ModuleScopeIndex`：`PARTIAL`，仍有 `1 Important open`；无新 Critical。
+
+独立 probe证明合法 function/impl generic `T::Item` 均被报：
+
+```text
+unknown path root in connection/contract.rs: T
+```
+
+根因是当前索引只有 module-level items/bindings/prelude，没有为 fn/impl/trait/type及相关声明
+记录 lexical type/const generic bindings与 half-open source ranges。本 fix round 只处理该
+Important：range内允许已声明 `T::Assoc` / const-generic相关路径，range外保持 fail closed；
+generic bounds中的 external/unknown/transitional paths继续走 canonical policy。Task 4保持 blocked。
+
+### Fix round 1 strict TDD RED
+
+仅新增永久 purity fixtures，未修改 verifier production：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 39 tests
+FAILED (errors=5)
+```
+
+`34 PASS / 5 RED`。五个合法正向分别是 function generic、impl generic、trait generic、type
+alias generic、lifetime + type generic；全部稳定失败于：
+
+```text
+VerificationError: unknown path root in connection/contract.rs: T
+```
+
+独立 negative controls在同一旧实现上已经按预期通过：undeclared `T::Item`、
+`<T as sqlx::ExternalTrait>::Item`、unknown generic bound、`crate::resource` transitional bound、
+function generic range结束后泄漏。Const generic作为 type-rooted associated path argument的正向也通过。
+因此 RED 原因是缺失 lexical type binding，不是 fixture语法、external policy或 module graph错误。
+
+补充 struct/const generic probes 后新增 `2` 个 focused RED：struct field中的合法 `T::Item`
+同样误杀；而函数 `const WIDTH` 被旧 `scan_scope` 错记为 module-level const item，导致非法
+`WIDTH::Item` 被漏放。Fix round 1有效 RED总数因此为 `7`：六个 lexical type-generic正向误杀，
+一个 const-generic range泄漏。最小修复必须既建立range binding，也阻止generic declaration
+tokens污染module-level local item表。
+
+自审的 nested-item probe再发现 `1` 个 focused RED：function generic `T` 被错误允许进入内部
+`fn nested()`，但 Rust nested item不能捕获 enclosing function generic。有效 RED总数更新为 `8`。
+Impl/trait generics必须继续对associated items可见，因此修复需要 declaration hierarchy barrier，
+不能简单禁止所有嵌套range。
+
+Bound-policy自审再新增 `2` 个 focused RED：inline `T: MissingBound` 与 where-clause
+`where T: MissingBound` 均被大小写漏放。有效 RED总数更新为 `10`。因此“bounds继续走
+canonical policy”不仅覆盖qualified paths，还必须解析bare bound roots；合法local/prelude/type
+generic bounds继续允许。
+
+### Fix round 1 GREEN implementation
+
+Verifier现在新增两层range模型：
+
+1. `LexicalGenericScope`记录 fn/impl/trait/type/struct/enum/union declaration kind、source、
+   half-open token range、type/const/lifetime bindings。`T::Assoc` 仅在最内层有效 type binding
+   range内放行；const binding作为path root明确拒绝，lifetime保留但永不成为path root。
+2. `DeclarationScope`作为nested-item barrier：enclosing function generic不能进入内部 item；
+   impl/trait generic仍可供associated methods/types使用。Function/impl generic在 declaration结束后
+   不泄漏。
+
+Module first pass跳过完整item headers/bodies与 `macro_rules` definitions，避免把 `const WIDTH`
+generic错误登记为module item。Lexical index排除macro-generated token ranges，不把macro matcher中的
+`impl<$generic>`当真实源码声明。
+
+`GenericBoundSite`独立提取inline generic与top-level where predicates的bare/qualified bound roots：
+
+- local items、prelude traits、其他合法type generic可以解析；
+- unknown bare/qualified、external backend与 `compat/resource/spi` transitional roots继续使用同一
+  canonical resolver并 fail closed；
+- `<T as sqlx::ExternalTrait>::Item` 仍由普通qualified-path scan拒绝。
+
+Focused GREEN：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 47 tests ... OK
+
+python3 scripts/verify_rdbc_single_standard_purity.py --phase transitional
+STANDARD_FILES=29
+PURITY_PHASE=transitional
+```
+
+### Fix round 1 fresh gates
+
+| Gate | Result |
+| :--- | :--- |
+| Python `py_compile` | PASS |
+| purity self/live | `47/47`；`STANDARD_FILES=29` |
+| druid-rdbc all-target/all-feature | `20/20`，其中 Wrapper `3/3` |
+| JDBC semantic self/live | `13/13`；`52/17/UNKNOWN=0` |
+| Task 2 identity/live | `37/37`；`73/55/3559` |
+| consumer SHA | `b1b420d61a8c5824d45eb3c59feecedb10795db803b4b3d20ece0509a1c72c59` |
+| DruidError transition | `4/4` |
+| external RDBC consumer | `2/2` |
+| workspace all-target/all-feature check | PASS |
+| scoped Clippy `-D warnings` | PASS |
+| rustdoc / doctest | PASS / `1/1` |
+| rustfmt / diff check | PASS |
+
+自审未发现新的 scoped correctness finding。没有修改 Wrapper production、Task4、Physical、Cargo、
+admin或verification artifacts。Known admin broad-test failure未运行、未伪报GREEN。本轮状态为
+`FIX_ROUND_1_IMPLEMENTED_PENDING_REREVIEW`；原 reviewer复核前 Task 4继续 blocked。
