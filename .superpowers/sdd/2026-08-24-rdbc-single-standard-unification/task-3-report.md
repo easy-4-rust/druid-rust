@@ -475,3 +475,22 @@ conventional modules、显式 re-export、任意 `self/super` 与 attribute-scop
 Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均修复且独立 re-review 返回
 `REVIEW CLEAR`。已知 `druid-admin` supervisor exact failure继续作为非 RDBC 外部风险记录，不能
 把 workspace broad tests伪报为 GREEN。
+
+## Breaker recovery implementation（append-only）
+
+- Recovery base：`981336ac5c87b3e9d7e92e6cae691b21c4036c05`；用户批准当前 `main` atomic
+  recovery；未使用 worktree、branch switch、reset、amend 或 push。
+- Purity fresh RED：首轮 26 tests 中 `14 PASS / 12 RED`；自审另有 backend attribute漏放与
+  descendant-private-parent误杀两个 focused RED。最终 reachable `ModuleScopeIndex` self-tests
+  `28/28`，live `STANDARD_FILES=29`。
+- Wrapper永久证据：`3/3`；17 variants + Wrapper exact identity、六组 inheritance、复杂
+  ResultSet generics、unknown/None、concrete WrapperExt、wrong-variant E0277、dyn-core E0277。
+- Wrapper hooks已 `#[doc(hidden)]`，macro usage/multi-role规则已写入公共文档，六个不可达旧 arms
+  已删除；core仍无 `Any/as_any/Object`。
+- Fresh gates：semantic `13/13 + 52/17/0`；Task2 `37/37 + 73/55/3559`；consumer SHA
+  `b1b420d61a8c5824d45eb3c59feecedb10795db803b4b3d20ece0509a1c72c59`；druid-rdbc
+  `20/20`；DruidError `4/4`；external consumer `2/2`；workspace all-feature check、Clippy、
+  rustdoc、doctest、fmt/diff均 PASS。
+- 完整实现/RED/GREEN/命令证据：`task-3-recovery-report.md`。
+- 状态：`RECOVERY_IMPLEMENTED_PENDING_INDEPENDENT_REVIEW`；历史 admin supervisor风险不变；
+  Task 4在原 reviewer 返回 `REVIEW CLEAR` 前继续 blocked。
