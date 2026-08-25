@@ -28,10 +28,14 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "i16", "i32", "i64", "i128", "isize", "str", "std", "u8", "u16", "u32",
     "u64", "u128", "usize",
 }
-ALLOWED_CRATE_ITEMS = {"impl_standard_wrapper"}
-ALLOWED_BARE_MACROS = {"format", "impl_standard_wrapper"}
+ALLOWED_BARE_PRELUDE_MACROS = {"format"}
 ALLOWED_QUALIFIED_MACRO_ROOTS = {"alloc", "core", "std"}
-ALLOWED_CRATE_MACROS = {("crate", "impl_standard_wrapper")}
+CANONICAL_CRATE_MACRO_SCOPES = {
+    "impl_standard_wrapper": ("wrapper", "wrapper"),
+}
+CANONICAL_CRATE_MACRO_SOURCES = {
+    "impl_standard_wrapper": Path("wrapper/wrapper.rs"),
+}
 FORBIDDEN_TRANSITIONAL_PATH_ROOTS = {"compat", "resource", "spi"}
 RUST_PRELUDE_ROOTS = {
     "Box", "Clone", "Copy", "Default", "DoubleEndedIterator", "Drop", "Eq", "Err",
@@ -91,6 +95,8 @@ class LocalItem:
     """One named item declared directly in a Rust module scope."""
 
     public: bool
+    declaration_kind: str
+    namespace: str
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,8 @@ class ModuleScope:
     end: int
     parent: tuple[str, ...] | None
     public: bool
+    declared_at_source: Path | None = None
+    declared_at_index: int | None = None
     children: dict[str, tuple[str, ...]] = field(default_factory=dict)
     child_visibility: dict[str, bool] = field(default_factory=dict)
     bindings: dict[str, UseBinding] = field(default_factory=dict)
@@ -183,6 +191,37 @@ class MacroInvocationSite:
 
     source: Path
     token_index: int
+    end: int
+    path: tuple[str, ...]
+    absolute: bool
+    raw: bool
+
+
+@dataclass(frozen=True)
+class MacroDefinition:
+    """One macro_rules binding with exact textual and path-export provenance."""
+
+    name: str
+    source: Path
+    start: int
+    end: int
+    scope_identity: tuple[str, ...] | None
+    active_start: int
+    active_end: int
+    module_scoped: bool
+    exported: bool
+    raw: bool
+
+
+@dataclass(frozen=True)
+class LexicalUseBinding:
+    """One use/import binding active throughout its exact enclosing block."""
+
+    name: str
+    source: Path
+    token_index: int
+    start: int
+    end: int
     path: tuple[str, ...]
     absolute: bool
 
@@ -202,6 +241,8 @@ class SourceUnit:
     generic_bound_sites: list[GenericBoundSite] = field(default_factory=list)
     macro_invocations: list[MacroInvocationSite] = field(default_factory=list)
     macro_invocations_indexed: bool = False
+    lexical_use_bindings: list[LexicalUseBinding] = field(default_factory=list)
+    macro_provenance_indexed: bool = False
 
 
 @dataclass(frozen=True)
@@ -263,6 +304,14 @@ def attribute_ranges(unit: SourceUnit) -> tuple[tuple[int, int], ...]:
         for cursor in range(bracket + 1, end):
             if (
                 tokens[cursor].kind == "IDENT"
+                and canonical_identifier(tokens[cursor]) == "macro_use"
+            ):
+                fail(
+                    "#[macro_use] creates untracked macro provenance in "
+                    f"{unit.relative}"
+                )
+            if (
+                tokens[cursor].kind == "IDENT"
                 and canonical_identifier(tokens[cursor]) == "path"
                 and cursor + 1 < end
                 and tokens[cursor + 1].text == "="
@@ -318,6 +367,7 @@ def macro_invocation_sites(unit: SourceUnit) -> tuple[MacroInvocationSite, ...]:
             index += 1
             continue
         path = [canonical_identifier(tokens[cursor])]
+        raw = tokens[cursor].text.startswith("r#")
         cursor += 1
         while (
             cursor + 1 < len(tokens)
@@ -325,6 +375,7 @@ def macro_invocation_sites(unit: SourceUnit) -> tuple[MacroInvocationSite, ...]:
             and tokens[cursor].text == "::"
             and tokens[cursor + 1].kind == "IDENT"
         ):
+            raw = raw or tokens[cursor + 1].text.startswith("r#")
             path.append(canonical_identifier(tokens[cursor + 1]))
             cursor += 2
         if cursor < len(tokens) and cursor not in excluded and tokens[cursor].text == "!":
@@ -339,8 +390,10 @@ def macro_invocation_sites(unit: SourceUnit) -> tuple[MacroInvocationSite, ...]:
                 MacroInvocationSite(
                     unit.relative,
                     start,
+                    cursor + 1,
                     tuple(path),
                     absolute,
+                    raw,
                 )
             )
             index = cursor + 1
@@ -661,6 +714,8 @@ class ModuleScopeIndex:
         self.sources: dict[Path, SourceUnit] = {}
         self.scopes: dict[tuple[str, ...], ModuleScope] = {}
         self.binding_cache: dict[tuple[tuple[str, ...], str, bool], ResolvedTarget] = {}
+        self.macro_definitions: list[MacroDefinition] = []
+        self.exported_macros: dict[str, MacroDefinition] = {}
         crate_root = Path("lib.rs")
         if not (root / crate_root).is_file():
             fail("standard scaffold is incomplete: ['lib.rs']")
@@ -677,13 +732,14 @@ class ModuleScopeIndex:
             fail(f"standard scaffold is incomplete or unreachable from lib.rs: {missing}")
         self.canonical_roots = tuple(sorted(root_names))
         self.index_lexical_generic_scopes()
+        for unit in tuple(self.sources.values()):
+            self.ensure_macro_provenance_index(unit)
         self.index_and_verify_macro_invocations()
         self.verify_generic_bound_sites()
         for scope in self.scopes.values():
             if scope.identity and scope.identity[0] in self.canonical_roots:
                 for name in scope.bindings:
                     self.resolve_binding(scope, name, canonical=True, resolving=set())
-                self.verify_macro_edges(scope)
 
     def source(self, relative: Path) -> SourceUnit:
         """Load and tokenize one UTF-8 source exactly once."""
@@ -710,12 +766,23 @@ class ModuleScopeIndex:
         end: int,
         parent: tuple[str, ...] | None,
         public: bool,
+        declared_at_source: Path | None = None,
+        declared_at_index: int | None = None,
     ) -> ModuleScope:
         """Register one unique reachable module identity and source range."""
 
         if identity in self.scopes:
             fail(f"ambiguous module identity: {'::'.join(identity) or 'crate'}")
-        scope = ModuleScope(identity, source, start, end, parent, public)
+        scope = ModuleScope(
+            identity,
+            source,
+            start,
+            end,
+            parent,
+            public,
+            declared_at_source,
+            declared_at_index,
+        )
         self.scopes[identity] = scope
         self.source(source).scopes.append(scope)
         return scope
@@ -809,7 +876,14 @@ class ModuleScopeIndex:
                     relative = self.external_module_source(identity)
                     child_unit = self.source(relative)
                     child = self.register_scope(
-                        identity, relative, 0, len(child_unit.tokens), scope.identity, public
+                        identity,
+                        relative,
+                        0,
+                        len(child_unit.tokens),
+                        scope.identity,
+                        public,
+                        scope.source,
+                        index,
                     )
                     self.add_child(scope, name, child, public)
                     self.scan_scope(child)
@@ -820,7 +894,14 @@ class ModuleScopeIndex:
                     if end is None or end >= scope.end:
                         fail(f"unterminated inline module {name} in {scope.source}")
                     child = self.register_scope(
-                        identity, scope.source, index + 3, end, scope.identity, public
+                        identity,
+                        scope.source,
+                        index + 3,
+                        end,
+                        scope.identity,
+                        public,
+                        scope.source,
+                        index,
                     )
                     self.add_child(scope, name, child, public)
                     self.scan_scope(child)
@@ -842,7 +923,7 @@ class ModuleScopeIndex:
                         fail(f"empty canonical import in {scope.source}")
                     if path[-1] == "*":
                         fail(f"wildcard import is forbidden in canonical source: {scope.source}")
-                    name = entry.alias or path[-1]
+                    name = (entry.alias or path[-1]).removeprefix("r#")
                     if name == "_":
                         continue
                     self.add_binding(
@@ -857,7 +938,11 @@ class ModuleScopeIndex:
                     name = canonical_identifier(tokens[index + 1])
                     if name in scope.children or name in scope.bindings or name in scope.local_items:
                         fail(f"ambiguous local item binding in {scope.source}: {name}")
-                    scope.local_items[name] = LocalItem(self.public_before(unit, index, scope))
+                    scope.local_items[name] = LocalItem(
+                        self.public_before(unit, index, scope),
+                        token.text,
+                        "value" if token.text == "fn" else "type",
+                    )
                 index = declaration_end(unit, index, scope.end)
                 continue
             if token.text == "impl":
@@ -888,14 +973,22 @@ class ModuleScopeIndex:
                     name = canonical_identifier(tokens[cursor])
                     if name != "_":
                         scope.local_items.setdefault(
-                            name, LocalItem(self.public_before(unit, index, scope))
+                            name,
+                            LocalItem(
+                                self.public_before(unit, index, scope),
+                                token.text,
+                                "value",
+                            ),
                         )
                 index = declaration_end(unit, index, scope.end)
                 continue
             elif token.text == "macro_rules" and index + 2 < scope.end:
                 if tokens[index + 1].text == "!" and tokens[index + 2].kind == "IDENT":
                     name = canonical_identifier(tokens[index + 2])
-                    scope.local_items.setdefault(name, LocalItem(False))
+                    scope.local_items.setdefault(
+                        name,
+                        LocalItem(False, "macro_rules", "macro"),
+                    )
                     opening = index + 3
                     if opening >= scope.end or tokens[opening].text not in DELIMITER_PAIRS:
                         fail(f"unknown macro_rules declaration in {scope.source}")
@@ -1077,34 +1170,364 @@ class ModuleScopeIndex:
                 )
 
     def index_and_verify_macro_invocations(self) -> None:
-        """Apply the explicit macro allowlist to every canonical invocation site."""
+        """Resolve every canonical macro invocation to trusted binding provenance."""
 
         for unit in self.sources.values():
             if not any(
-                scope.identity and scope.identity[0] in self.canonical_roots
+                not scope.identity
+                or scope.identity[0] in self.canonical_roots
                 for scope in unit.scopes
             ):
                 continue
             self.verify_macro_invocations(unit)
 
-    @staticmethod
-    def verify_macro_invocations(unit: SourceUnit) -> None:
-        """Reject every invocation not proven by the finite canonical macro allowlist."""
+    def ensure_macro_provenance_index(self, unit: SourceUnit) -> None:
+        """Index macro definitions/import ranges before resolving an invocation."""
 
+        if unit.macro_provenance_indexed:
+            return
+        self.verify_extern_crate_provenance(unit)
+        self.index_macro_definitions(unit)
+        self.index_lexical_use_bindings(unit)
+        unit.macro_provenance_indexed = True
+
+    @staticmethod
+    def has_direct_attribute(unit: SourceUnit, item_start: int, name: str) -> bool:
+        """Return whether a consecutive attribute attached to one item names `name`."""
+
+        by_end = {end: (start, end) for start, end in attribute_ranges(unit)}
+        cursor = item_start
+        found = False
+        while cursor in by_end:
+            start, end = by_end[cursor]
+            bracket = start + 1
+            if bracket < end and unit.tokens[bracket].text == "!":
+                bracket += 1
+            attribute_name = bracket + 1
+            found = found or bool(
+                attribute_name < end
+                and unit.tokens[attribute_name].kind == "IDENT"
+                and canonical_identifier(unit.tokens[attribute_name]) == name
+            )
+            cursor = start
+        return found
+
+    def index_macro_definitions(self, unit: SourceUnit) -> None:
+        """Record textual ranges and exact macro_export origins for one source."""
+
+        module_boundaries = {
+            (scope.start - 1, scope.end)
+            for scope in unit.scopes
+            if scope.start > 0
+            and unit.tokens[scope.start - 1].text == "{"
+        }
+        for start, end in macro_definition_ranges(unit):
+            name_token = unit.tokens[start + 2]
+            name = canonical_identifier(name_token)
+            scope = self.scope_for(unit.relative, start)
+            containing_blocks = [
+                (opening, closing)
+                for opening, closing in unit.matching.items()
+                if unit.tokens[opening].text == "{"
+                and opening < start
+                and end <= closing
+            ]
+            block = max(containing_blocks, key=lambda pair: pair[0], default=None)
+            module_scoped = block is None or block in module_boundaries
+            active_end = (
+                scope.end
+                if module_scoped and scope is not None
+                else len(unit.tokens)
+                if module_scoped
+                else block[1]
+            )
+            definition = MacroDefinition(
+                name,
+                unit.relative,
+                start,
+                end,
+                scope.identity if scope is not None else None,
+                end,
+                active_end,
+                module_scoped,
+                self.has_direct_attribute(unit, start, "macro_export"),
+                name_token.text.startswith("r#"),
+            )
+            self.macro_definitions.append(definition)
+            if not definition.exported:
+                continue
+            if name in self.exported_macros:
+                fail(f"ambiguous exported macro provenance: {name}")
+            self.exported_macros[name] = definition
+
+    @staticmethod
+    def verify_extern_crate_provenance(unit: SourceUnit) -> None:
+        """Allow only exact, unaliased trusted standard-library extern declarations."""
+
+        excluded = {
+            cursor
+            for start, end in (*macro_definition_ranges(unit), *attribute_ranges(unit))
+            for cursor in range(start, end)
+        }
+        tokens = unit.tokens
+        index = 0
+        while index + 2 < len(tokens):
+            if index in excluded or tokens[index].text != "extern" or tokens[index + 1].text != "crate":
+                index += 1
+                continue
+            crate_token = tokens[index + 2]
+            if crate_token.kind != "IDENT":
+                fail(f"extern crate lacks a provable root in {unit.relative}")
+            crate_name = canonical_identifier(crate_token)
+            cursor = index + 3
+            if cursor < len(tokens) and tokens[cursor].text == "as":
+                fail(
+                    "extern crate aliases cannot prove standard macro provenance in "
+                    f"{unit.relative}: {crate_name}"
+                )
+            if cursor >= len(tokens) or tokens[cursor].text != ";":
+                fail(f"extern crate is not terminated in {unit.relative}: {crate_name}")
+            if crate_token.text.startswith("r#") or crate_name not in ALLOWED_QUALIFIED_MACRO_ROOTS:
+                fail(f"extern crate is forbidden in {unit.relative}: {crate_name}")
+            index = cursor + 1
+
+    def index_lexical_use_bindings(self, unit: SourceUnit) -> None:
+        """Record use aliases inside functions/blocks with exact block ranges."""
+
+        module_use_starts = {
+            start
+            for scope in unit.scopes
+            for start, _ in scope.use_ranges
+        }
+        excluded = {
+            cursor
+            for start, end in (*macro_definition_ranges(unit), *attribute_ranges(unit))
+            for cursor in range(start, end)
+        }
+        module_boundaries = {
+            (scope.start - 1, scope.end)
+            for scope in unit.scopes
+            if scope.start > 0 and unit.tokens[scope.start - 1].text == "{"
+        }
+        tokens = unit.tokens
+        index = 0
+        while index < len(tokens):
+            if index in excluded or tokens[index].text != "use" or index in module_use_starts:
+                index += 1
+                continue
+            try:
+                entries, end = parse_use_tree(tokens, index + 1)
+            except Exception as error:
+                fail(f"cannot parse lexical macro import in {unit.relative}: {error}")
+            if end >= len(tokens) or tokens[end].text != ";":
+                fail(f"lexical use item is not terminated in {unit.relative}")
+            blocks = [
+                (opening, closing)
+                for opening, closing in unit.matching.items()
+                if tokens[opening].text == "{"
+                and opening < index < closing
+                and (opening, closing) not in module_boundaries
+            ]
+            block = max(blocks, key=lambda pair: pair[0], default=None)
+            if block is None:
+                fail(f"lexical use has no provable block scope in {unit.relative}")
+            absolute = index + 1 < len(tokens) and tokens[index + 1].text == "::"
+            for entry in entries:
+                path = tuple(part.removeprefix("r#") for part in entry.path)
+                if not path or path[-1] == "*":
+                    fail(f"unprovable lexical macro import in {unit.relative}")
+                name = (entry.alias or path[-1]).removeprefix("r#")
+                if name == "_":
+                    continue
+                binding = LexicalUseBinding(
+                    name,
+                    unit.relative,
+                    index,
+                    block[0] + 1,
+                    block[1],
+                    path,
+                    absolute,
+                )
+                if any(
+                    current.name == binding.name
+                    and current.start == binding.start
+                    and current.end == binding.end
+                    for current in unit.lexical_use_bindings
+                ):
+                    fail(
+                        f"ambiguous lexical macro binding in {unit.relative}: {name}"
+                    )
+                unit.lexical_use_bindings.append(binding)
+            index = end + 1
+
+    def macro_definition_active(
+        self, definition: MacroDefinition, site: MacroInvocationSite
+    ) -> bool:
+        """Apply macro_rules textual order, block range, and child-module propagation."""
+
+        if not definition.module_scoped:
+            return (
+                definition.source == site.source
+                and definition.active_start <= site.token_index < definition.active_end
+            )
+        invocation_scope = self.scope_for(site.source, site.token_index)
+        if invocation_scope is None or definition.scope_identity is None:
+            return (
+                definition.source == site.source
+                and definition.active_start <= site.token_index < definition.active_end
+            )
+        if invocation_scope.identity == definition.scope_identity:
+            return (
+                definition.source == site.source
+                and definition.active_start <= site.token_index < definition.active_end
+            )
+        if invocation_scope.identity[: len(definition.scope_identity)] != definition.scope_identity:
+            return False
+        child_identity = invocation_scope.identity[: len(definition.scope_identity) + 1]
+        child = self.scopes.get(child_identity)
+        return bool(
+            child is not None
+            and child.declared_at_source == definition.source
+            and child.declared_at_index is not None
+            and definition.end <= child.declared_at_index
+        )
+
+    def lexical_use_shadow(
+        self, site: MacroInvocationSite, name: str
+    ) -> LexicalUseBinding | None:
+        """Return the innermost active lexical import with the requested name."""
+
+        unit = self.sources.get(site.source)
+        if unit is None:
+            return None
+        candidates = [
+            binding
+            for binding in unit.lexical_use_bindings
+            if binding.name == name and binding.start <= site.token_index < binding.end
+        ]
+        return min(candidates, key=lambda binding: binding.end - binding.start, default=None)
+
+    def module_path_shadow(
+        self, site: MacroInvocationSite, name: str
+    ) -> str | None:
+        """Return a module/type/import provenance that shadows one relative path root."""
+
+        scope = self.scope_for(site.source, site.token_index)
+        if scope is not None:
+            identity = scope.identity
+            while True:
+                candidate = self.scopes[identity]
+                if name in candidate.bindings:
+                    return f"use binding in {candidate.source}"
+                if name in candidate.children:
+                    return f"module binding in {candidate.source}"
+                item = candidate.local_items.get(name)
+                if item is not None and item.namespace == "type":
+                    return f"type binding in {candidate.source}"
+                if not identity:
+                    break
+                identity = identity[:-1]
+        lexical_use = self.lexical_use_shadow(site, name)
+        if lexical_use is not None:
+            return f"lexical use binding in {lexical_use.source}"
+        lexical_item = self.lexical_item_binding(site.source, site.token_index, name)
+        if lexical_item is not None and lexical_item.namespace in {"module", "type"}:
+            return f"lexical {lexical_item.namespace} binding in {lexical_item.source}"
+        return None
+
+    def bare_macro_shadow(
+        self, site: MacroInvocationSite, name: str
+    ) -> str | None:
+        """Return textual/path-based provenance shadowing a standard-prelude macro."""
+
+        for definition in self.macro_definitions:
+            if definition.name == name and self.macro_definition_active(definition, site):
+                return f"textual macro definition in {definition.source}"
+        scope = self.scope_for(site.source, site.token_index)
+        if scope is not None:
+            identity = scope.identity
+            while True:
+                candidate = self.scopes[identity]
+                if name in candidate.bindings:
+                    return f"macro-capable use binding in {candidate.source}"
+                if not identity:
+                    break
+                identity = identity[:-1]
+        lexical_use = self.lexical_use_shadow(site, name)
+        if lexical_use is not None:
+            return f"lexical macro-capable use binding in {lexical_use.source}"
+        if name in self.exported_macros:
+            return f"crate-root exported macro in {self.exported_macros[name].source}"
+        return None
+
+    def prove_canonical_crate_macro(self, site: MacroInvocationSite, name: str) -> None:
+        """Require the exact checked macro_export definition, never a same-name re-export."""
+
+        expected_scope = CANONICAL_CRATE_MACRO_SCOPES.get(name)
+        expected_source = CANONICAL_CRATE_MACRO_SOURCES.get(name)
+        definition = self.exported_macros.get(name)
+        root_scope = self.scopes[()]
+        if (
+            expected_scope is None
+            or expected_source is None
+            or definition is None
+            or definition.scope_identity != expected_scope
+            or definition.source != expected_source
+            or not definition.module_scoped
+            or definition.raw
+            or name in root_scope.bindings
+        ):
+            fail(
+                "crate macro lacks canonical definition provenance in "
+                f"{site.source}: {name}!"
+            )
+
+    def verify_macro_invocation(self, site: MacroInvocationSite) -> None:
+        """Approve a macro only after resolving raw/textual/path binding provenance."""
+
+        rendered = "::".join(site.path)
+        if site.raw:
+            fail(f"raw macro identifier has unprovable provenance in {site.source}: {rendered}!")
+        if len(site.path) == 1:
+            name = site.path[0]
+            if name == "impl_standard_wrapper":
+                fail(
+                    "bare impl_standard_wrapper macro provenance is ambiguous; "
+                    f"use crate::impl_standard_wrapper! in {site.source}"
+                )
+            if name in ALLOWED_BARE_PRELUDE_MACROS:
+                shadow = self.bare_macro_shadow(site, name)
+                if shadow is not None:
+                    fail(
+                        f"bare macro is shadowed in {site.source}: {name}! ({shadow})"
+                    )
+                return
+        if not site.absolute and site.path == ("crate", "impl_standard_wrapper"):
+            self.prove_canonical_crate_macro(site, "impl_standard_wrapper")
+            return
+        if len(site.path) >= 2 and site.path[0] in ALLOWED_QUALIFIED_MACRO_ROOTS:
+            if not site.absolute:
+                shadow = self.module_path_shadow(site, site.path[0])
+                if shadow is not None:
+                    fail(
+                        "qualified standard macro root is shadowed in "
+                        f"{site.source}: {rendered}! ({shadow})"
+                    )
+            return
+        fail(
+            f"macro invocation has no canonical binding provenance in {site.source}: "
+            f"{rendered}!"
+        )
+
+    def verify_macro_invocations(self, unit: SourceUnit) -> None:
+        """Reject every invocation whose resolved binding is not explicitly trusted."""
+
+        self.ensure_macro_provenance_index(unit)
         if not unit.macro_invocations_indexed:
             unit.macro_invocations.extend(macro_invocation_sites(unit))
             unit.macro_invocations_indexed = True
         for site in unit.macro_invocations:
-            if len(site.path) == 1 and site.path[0] in ALLOWED_BARE_MACROS:
-                continue
-            if site.path in ALLOWED_CRATE_MACROS:
-                continue
-            if len(site.path) >= 2 and site.path[0] in ALLOWED_QUALIFIED_MACRO_ROOTS:
-                continue
-            fail(
-                f"macro invocation is not in the canonical allowlist in {site.source}: "
-                f"{'::'.join(site.path)}!"
-            )
+            self.verify_macro_invocation(site)
 
     def lexical_binding_kind(
         self, source: Path | None, token_index: int | None, name: str
@@ -1244,8 +1667,6 @@ class ModuleScopeIndex:
             if require_public and not item.public:
                 fail(f"item is not reachable: crate::{'::'.join(module.identity + (name,))}")
             return ResolvedTarget("item", module.identity)
-        if module.identity == () and name in ALLOWED_CRATE_ITEMS:
-            return ResolvedTarget("item", ())
         fail(f"absent child/binding/re-export: crate::{'::'.join(module.identity + (name,))}")
 
     def resolve_path(
@@ -1360,32 +1781,6 @@ class ModuleScopeIndex:
                 f"{'::'.join(target.module)} via {'::'.join(path)}"
             )
 
-    def verify_macro_edges(self, scope: ModuleScope) -> None:
-        """Allow only the reviewed macro that emits Wrapper impls at module scope."""
-
-        for edge in scope.macro_edges:
-            if edge.path[-1] == "include":
-                fail(f"include! escapes reachable module discovery in {edge.source}")
-            target = self.resolve_path(
-                scope,
-                edge.path,
-                absolute=False,
-                canonical=True,
-                source=edge.source,
-                token_index=edge.token_index,
-            )
-            if (
-                edge.path[-1] in ALLOWED_CRATE_ITEMS
-                and target.kind == "item"
-                and target.module == ()
-            ):
-                continue
-            fail(
-                "unknown macro-generated module edge in "
-                f"{edge.source}: {'::'.join(edge.path)}!"
-            )
-
-
 def discover_standard_files(index: ModuleScopeIndex) -> tuple[Path, ...]:
     """Keep every physical Rust file under canonical roots in the pollution denominator."""
 
@@ -1495,6 +1890,8 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
     index.verify_macro_invocations(unit)
 
     covered: set[int] = set(macro_indexes)
+    for site in unit.macro_invocations:
+        covered.update(range(site.token_index, site.end))
     cursor = 0
     while cursor < len(tokens):
         if cursor in macro_indexes:

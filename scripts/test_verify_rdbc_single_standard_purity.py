@@ -91,6 +91,39 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             if diagnostic is not None:
                 self.assertIn(diagnostic, stderr)
 
+    def install_canonical_wrapper_macro(self) -> None:
+        """Install the checked canonical crate-root export in its real module identity."""
+
+        wrapper_root = self.root / "wrapper/mod.rs"
+        wrapper_root.write_text(
+            wrapper_root.read_text(encoding="utf-8") + "pub mod wrapper;\n",
+            encoding="utf-8",
+        )
+        (self.root / "wrapper/wrapper.rs").write_text(
+            "#[macro_export]\n"
+            "macro_rules! impl_standard_wrapper {\n"
+            "    ($($tokens:tt)*) => {};\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+    def install_private_macro_alias_module(self) -> str:
+        """Install a private helper macro re-exported through `crate::evil::assert`."""
+
+        source = (
+            "macro_rules! private_assert { ($($tokens:tt)*) => {}; }\n"
+            "pub(crate) use private_assert as helper_assert;\n"
+            "mod evil {\n"
+            "    pub(crate) use crate::helper_assert as assert;\n"
+            "}\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(
+            lib.read_text(encoding="utf-8") + source,
+            encoding="utf-8",
+        )
+        return source
+
     def test_accepts_complete_pure_standard_tree(self) -> None:
         """The positive control contains only standard declarations."""
 
@@ -711,6 +744,19 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "macro|unknown|root"):
             verify_tree(self.root, phase="transitional")
 
+    def test_rejects_unknown_crate_root_macro_edge(self) -> None:
+        """A crate-root invocation cannot generate unindexed canonical module edges."""
+
+        attack = (
+            "macro_rules! make_standard { () => {}; }\n"
+            "make_standard!();\n"
+        )
+        self.assert_rustc(attack, succeeds=True)
+        lib = self.root / "lib.rs"
+        lib.write_text(lib.read_text(encoding="utf-8") + attack, encoding="utf-8")
+        with self.assertRaisesRegex(VerificationError, "make_standard|macro|provenance"):
+            verify_tree(self.root, phase="transitional")
+
     def test_accepts_uninvoked_macro_rules_generic_looking_body(self) -> None:
         """Unexpanded macro arms and nested delimiters do not create runtime path roots."""
 
@@ -790,6 +836,563 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "mystery|macro|allow"):
             verify_tree(self.root, phase="transitional")
+
+    def test_rejects_local_impl_standard_wrapper_shadow(self) -> None:
+        """A local textual macro cannot impersonate the approved crate-root export."""
+
+        rust_source = (
+            "macro_rules! impl_standard_wrapper { () => {}; }\n"
+            "pub fn run() { impl_standard_wrapper!(); }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "impl_standard_wrapper|macro|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_local_format_shadow(self) -> None:
+        """Bare format resolves to an active textual definition before the standard prelude."""
+
+        rust_source = (
+            "macro_rules! format { ($($tokens:tt)*) => { String::new() }; }\n"
+            "pub fn run() { let _ = format!(\"{}\", 1); }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "format|macro|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_imported_bare_format_shadow(self) -> None:
+        """A path-imported macro named format shadows the standard-prelude candidate."""
+
+        attack = (
+            "macro_rules! private_format { ($($tokens:tt)*) => { String::new() }; }\n"
+            "pub(crate) use private_format as helper_format;\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(lib.read_text(encoding="utf-8") + attack, encoding="utf-8")
+        rust_source = (
+            attack
+            + "mod connection {\n"
+            "    use crate::helper_format as format;\n"
+            "    pub fn run() { let _ = format!(\"{}\", 1); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::helper_format as format;\n"
+            "pub fn run() { let _ = format!(\"{}\", 1); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "format|import|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_imported_bare_impl_standard_wrapper_shadow(self) -> None:
+        """A path-imported same-name macro cannot satisfy the canonical wrapper contract."""
+
+        attack = (
+            "macro_rules! private_wrapper { () => {}; }\n"
+            "pub(crate) use private_wrapper as helper_wrapper;\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(lib.read_text(encoding="utf-8") + attack, encoding="utf-8")
+        rust_source = (
+            attack
+            + "mod connection {\n"
+            "    use crate::helper_wrapper as impl_standard_wrapper;\n"
+            "    pub fn run() { impl_standard_wrapper!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::helper_wrapper as impl_standard_wrapper;\n"
+            "pub fn run() { impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(
+            VerificationError,
+            "impl_standard_wrapper|import|canonical|provenance",
+        ):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_macro_use_scope_injection(self) -> None:
+        """macro_use injects untracked textual bindings and therefore fails closed."""
+
+        rust_source = (
+            "#[macro_use]\n"
+            "mod evil {\n"
+            "    macro_rules! format { ($($tokens:tt)*) => { String::new() }; }\n"
+            "}\n"
+            "pub fn run() { let _ = format!(\"{}\", 1); }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "macro_use|macro|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_raw_approved_macro_name(self) -> None:
+        """A raw identifier cannot bypass provenance by canonicalizing to an approved name."""
+
+        self.install_canonical_wrapper_macro()
+        rust_source = (
+            "pub mod wrapper {\n"
+            "    pub mod wrapper {\n"
+            "        #[macro_export]\n"
+            "        macro_rules! impl_standard_wrapper { ($($tokens:tt)*) => {}; }\n"
+            "    }\n"
+            "}\n"
+            "mod connection {\n"
+            "    use crate::impl_standard_wrapper;\n"
+            "    pub fn run() { r#impl_standard_wrapper!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::impl_standard_wrapper;\n"
+            "pub fn run() { r#impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "raw|impl_standard_wrapper|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_private_helper_reexport_shadowing_std(self) -> None:
+        """A grouped alias to a private macro re-export cannot impersonate std."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::{evil as std};\n"
+            "    pub fn run() { std::assert!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::{evil as std};\n"
+            "pub fn run() { std::assert!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|macro|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_private_helper_reexport_shadowing_core(self) -> None:
+        """A local alias named core does not have core-macro provenance."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::evil as core;\n"
+            "    pub fn run() { core::assert!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as core;\n"
+            "pub fn run() { core::assert!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "core|macro|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_private_helper_reexport_shadowing_alloc(self) -> None:
+        """A local alias named alloc does not have alloc-macro provenance."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::evil as alloc;\n"
+            "    pub fn run() { alloc::assert!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as alloc;\n"
+            "pub fn run() { alloc::assert!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "alloc|macro|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_same_name_pub_use_chain_as_canonical_macro(self) -> None:
+        """A same-name macro re-export chain is not the canonical wrapper definition."""
+
+        attack = (
+            "macro_rules! private_wrapper { () => {}; }\n"
+            "pub(crate) use private_wrapper as first_export;\n"
+            "mod first {\n"
+            "    pub(crate) use crate::first_export as second_export;\n"
+            "}\n"
+            "mod second {\n"
+            "    pub(crate) use crate::first::second_export as impl_standard_wrapper;\n"
+            "}\n"
+            "pub(crate) use second::impl_standard_wrapper;\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(lib.read_text(encoding="utf-8") + attack, encoding="utf-8")
+        rust_source = (
+            attack
+            + "mod connection {\n"
+            "    pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "impl_standard_wrapper|canonical|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_conditional_macro_export_provenance(self) -> None:
+        """cfg_attr macro_export is conditional and cannot prove the canonical root binding."""
+
+        wrapper_root = self.root / "wrapper/mod.rs"
+        wrapper_root.write_text(
+            wrapper_root.read_text(encoding="utf-8") + "pub mod wrapper;\n",
+            encoding="utf-8",
+        )
+        conditional_macro = (
+            "#[cfg_attr(all(), macro_export)]\n"
+            "macro_rules! impl_standard_wrapper { ($($tokens:tt)*) => {}; }\n"
+        )
+        (self.root / "wrapper/wrapper.rs").write_text(
+            conditional_macro,
+            encoding="utf-8",
+        )
+        rust_source = (
+            "pub mod wrapper { pub mod wrapper {\n"
+            + conditional_macro
+            + "} }\n"
+            "mod connection {\n"
+            "    pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "impl_standard_wrapper|canonical|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_right_scope_macro_from_wrong_source(self) -> None:
+        """The canonical module identity alone cannot replace its checked source origin."""
+
+        wrapper_root = self.root / "wrapper/mod.rs"
+        inline_macro = (
+            "pub mod wrapper {\n"
+            "    #[macro_export]\n"
+            "    macro_rules! impl_standard_wrapper { ($($tokens:tt)*) => {}; }\n"
+            "}\n"
+        )
+        wrapper_root.write_text(
+            wrapper_root.read_text(encoding="utf-8") + inline_macro,
+            encoding="utf-8",
+        )
+        rust_source = (
+            "pub mod wrapper {\n"
+            + inline_macro
+            + "}\n"
+            "mod connection {\n"
+            "    pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "impl_standard_wrapper|source|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_non_module_canonical_macro_export(self) -> None:
+        """A non-local macro_export cannot impersonate the module-level canonical definition."""
+
+        wrapper_root = self.root / "wrapper/mod.rs"
+        wrapper_root.write_text(
+            wrapper_root.read_text(encoding="utf-8") + "pub mod wrapper;\n",
+            encoding="utf-8",
+        )
+        nested_export = (
+            "pub fn define() {\n"
+            "    #[macro_export]\n"
+            "    macro_rules! impl_standard_wrapper { ($($tokens:tt)*) => {}; }\n"
+            "}\n"
+        )
+        (self.root / "wrapper/wrapper.rs").write_text(
+            nested_export,
+            encoding="utf-8",
+        )
+        rust_source = (
+            "pub mod wrapper { pub mod wrapper {\n"
+            + nested_export
+            + "} }\n"
+            "pub fn run() { crate::impl_standard_wrapper!(); }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "impl_standard_wrapper|module|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_lexical_use_alias_shadowing_std(self) -> None:
+        """A function/block use alias shadows std only inside its lexical range."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "pub fn run() {\n"
+            "    if true { use crate::evil as std; std::assert!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() {\n"
+            "    if true { use crate::evil as std; std::assert!(); }\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|lexical|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_parent_textual_macro_inside_nested_inline_module(self) -> None:
+        """Textual macro scope propagates from a parent into later inline descendants."""
+
+        rust_source = (
+            "macro_rules! format { () => { String::new() }; }\n"
+            "pub mod outer {\n"
+            "    pub mod inner { pub fn run() { let _ = format!(); } }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "format|textual|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_parent_textual_macro_inside_external_child_module(self) -> None:
+        """Textual macro scope propagates into an external child declared after it."""
+
+        rust_source = (
+            "macro_rules! format { () => { String::new() }; }\n"
+            "pub mod child { pub fn run() { let _ = format!(); } }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "macro_rules! format { () => { String::new() }; }\n"
+            "pub mod child;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        child = self.root / "connection/contract/child.rs"
+        child.parent.mkdir(parents=True, exist_ok=True)
+        child.write_text(
+            "pub fn run() { let _ = format!(); }\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "format|textual|shadow|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_shadowed_approved_macro_across_source_positions(self) -> None:
+        """Definition, type, impl, closure, nested, and cfg sites all receive provenance checks."""
+
+        sources = (
+            (
+                "definition",
+                "macro_rules! format { () => { () }; }\n"
+                "pub const GENERATED: () = format!();\n",
+            ),
+            (
+                "type",
+                "macro_rules! format { () => { u8 }; }\n"
+                "pub type Generated = format!();\n",
+            ),
+            (
+                "impl",
+                "pub struct Subject;\n"
+                "macro_rules! format { () => { pub fn generated() {} }; }\n"
+                "impl Subject { format!(); }\n",
+            ),
+            (
+                "closure",
+                "macro_rules! format { () => { () }; }\n"
+                "pub fn run() { let generated = || format!(); generated(); }\n",
+            ),
+            (
+                "nested",
+                "macro_rules! format { () => { () }; }\n"
+                "pub fn run() { if true { { format!(); } } }\n",
+            ),
+            (
+                "cfg",
+                "#[cfg(any())]\n"
+                "pub fn hidden() { impl_standard_wrapper!(); }\n",
+            ),
+        )
+        source = self.root / "connection/contract.rs"
+        for position, rust_source in sources:
+            with self.subTest(position=position):
+                self.assert_rustc(rust_source, succeeds=True)
+                source.write_text(
+                    rust_source + "pub trait Contract: Send {}\n",
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    VerificationError,
+                    "format|impl_standard_wrapper|macro|shadow|provenance",
+                ):
+                    verify_tree(self.root, phase="transitional")
+
+    def test_accepts_proven_canonical_macro_despite_local_textual_shadow(self) -> None:
+        """crate:: qualification ignores textual shadow and resolves the reviewed export."""
+
+        self.install_canonical_wrapper_macro()
+        rust_source = (
+            "pub mod wrapper {\n"
+            "    pub mod wrapper {\n"
+            "        #[macro_export]\n"
+            "        macro_rules! impl_standard_wrapper { ($($tokens:tt)*) => {}; }\n"
+            "    }\n"
+            "}\n"
+            "mod connection {\n"
+            "    macro_rules! impl_standard_wrapper { () => {}; }\n"
+            "    pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "macro_rules! impl_standard_wrapper { () => {}; }\n"
+            "pub fn run() { crate::impl_standard_wrapper!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_unshadowed_std_core_alloc_and_format_macros(self) -> None:
+        """Proven standard roots and the unshadowed format prelude remain available."""
+
+        lib = self.root / "lib.rs"
+        lib.write_text("extern crate alloc;\n" + lib.read_text(encoding="utf-8"), encoding="utf-8")
+        rust_source = (
+            "extern crate alloc;\n"
+            "pub fn allowed() {\n"
+            "    std::assert!(true);\n"
+            "    core::assert!(true);\n"
+            "    let _: alloc::vec::Vec<u8> = alloc::vec![1];\n"
+            "    let _ = format!(\"{}\", 1);\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source.removeprefix("extern crate alloc;\n")
+            + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_macro_after_textual_and_alias_shadow_ranges_end(self) -> None:
+        """Textual and use shadows stop at block end and do not poison later invocations."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "pub fn allowed() {\n"
+            "    { macro_rules! format { () => { String::new() }; } }\n"
+            "    { use crate::evil as std; }\n"
+            "    let _ = format!(\"{}\", 1);\n"
+            "    std::assert!(true);\n"
+            "}\n"
+            "pub fn before_shadow() {\n"
+            "    let _ = format!(\"{}\", 1);\n"
+            "    macro_rules! format { () => { String::new() }; }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source.removeprefix(helper_source) + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_absolute_std_macro_despite_relative_alias(self) -> None:
+        """Leading absolute standard roots ignore same-name relative aliases."""
+
+        helper_source = self.install_private_macro_alias_module()
+        lib = self.root / "lib.rs"
+        lib.write_text("extern crate alloc;\n" + lib.read_text(encoding="utf-8"), encoding="utf-8")
+        rust_source = (
+            "extern crate alloc;\n"
+            + helper_source
+            + "mod connection {\n"
+            "    use crate::evil as std;\n"
+            "    use crate::evil as core;\n"
+            "    use crate::evil as alloc;\n"
+            "    pub fn run() {\n"
+            "        ::std::assert!(true);\n"
+            "        ::core::assert!(true);\n"
+            "        let _: ::alloc::vec::Vec<u8> = ::alloc::vec![1];\n"
+            "    }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as std;\n"
+            "use crate::evil as core;\n"
+            "use crate::evil as alloc;\n"
+            "pub fn run() {\n"
+            "    ::std::assert!(true);\n"
+            "    ::core::assert!(true);\n"
+            "    let _: ::alloc::vec::Vec<u8> = ::alloc::vec![1];\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
 
     def test_accepts_explicitly_allowlisted_macro_invocations(self) -> None:
         """Qualified std/core and the reviewed bare format macro remain available."""

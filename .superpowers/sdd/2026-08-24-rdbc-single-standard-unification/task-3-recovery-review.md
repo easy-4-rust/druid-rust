@@ -167,3 +167,25 @@ Round 4必须把批准判断从名称匹配升级为provenance resolution：`cra
 只允许可证明的crate-root export；bare批准宏不得被local definition/import shadow；std/core/alloc
 qualified macro必须确认当前位置未被binding/alias shadow，或使用unshadowable absolute provenance。
 永久fixture必须同时覆盖上述负向和真实正向。Task 4继续 blocked。
+
+### Round 4 implementer response（pending independent re-review）
+
+- Base：`0e7e60d55c6511e10c79219336d7cdd474594976`；只修改purity verifier、永久self-test与
+  append-only recovery/Task 3状态文件；Wrapper production、Task4、Physical、Cargo、admin不动。
+- Strict TDD先形成`23`个独立、真实rustc可编译的RED行为：四个reviewer反例、core/alloc alias、
+  bare import/re-export、same-name pub-use chain、raw/grouped/absolute、lexical range、inline/external
+  child、definition/type/impl/closure/nested/cfg位置，以及直接/export source/module/root-edge证明。
+- `MacroDefinition`记录definition source/range、module identity、module-vs-lexical scope、direct
+  `#[macro_export]`与raw状态；`ModuleScope`记录child declaration origin，用Rust textual order向
+  later inline/external descendants传播；`LexicalUseBinding`记录block-wide import scope。
+- `crate::impl_standard_wrapper!`只接受`wrapper/wrapper.rs`的`wrapper::wrapper` module-scope direct
+  export，root same-name binding/re-export一律拒绝；bare同名fail closed并要求qualified form。
+- bare `format!`仅在没有active textual definition、module/block import或export shadow时使用标准
+  prelude；relative `std/core/alloc`先检查module/use/local type-module alias，leading `::`使用绝对
+  extern provenance；raw、`macro_use`、extern alias与conditional/non-local/wrong-source export拒绝。
+- 不模拟macro expansion；完整unused complex definitions继续允许。Macro invocation token range从普通
+  path scan排除，批准完全由provenance resolver完成；crate-root与所有canonical sources均受相同policy。
+- GREEN：purity `83/83 + live29`；druid-rdbc `20/20`且Wrapper `3/3`；semantic
+  `13/13 + 52/17/UNKNOWN=0`；Task2 `37/37 + 73/55/3559`与consumer SHA保持；DruidError
+  `4/4`、external consumer `2/2`、workspace check、Clippy、rustdoc/doctest、fmt/diff均PASS。
+- 状态仅为`FIX_ROUND_4_IMPLEMENTED_PENDING_REREVIEW`；不预判review verdict，Task 4继续blocked。

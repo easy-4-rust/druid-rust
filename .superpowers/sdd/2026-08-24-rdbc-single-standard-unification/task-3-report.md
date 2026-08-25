@@ -553,3 +553,18 @@ Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均�
   namespace；non-raw keyword unary-not排除。
 - Purity `61/61 + live29`；完整recovery gates全PASS，73/55/3559与consumer SHA不变。
 - 状态 `FIX_ROUND_3_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续 blocked。
+
+### Recovery fix round 3 re-review correction / round 4/5 implementation
+
+- Reviewer对`00711d7`仍判`FIX_REQUIRED`：namespace Minor addressed；macro allowlist只证明name、
+  不证明binding provenance，仍有`1 load-bearing Important`。Round 4基线为`0e7e60d`。
+- Fresh RED共`23`个真实rustc可编译行为，覆盖local/raw/import/re-export approved-name shadow、
+  std/core/alloc grouped/alias/absolute roots、lexical/inline/external scope、六类source position、
+  same-name pub-use chain、conditional/wrong-source/non-module export与crate-root edge。
+- GREEN改为`MacroDefinition + MacroInvocationSite + LexicalUseBinding` provenance resolution；
+  canonical wrapper macro必须是`wrapper/wrapper.rs`中`wrapper::wrapper` module-scope direct
+  `#[macro_export]`，bare同名fail closed；unshadowed format/std/core/alloc保持。
+- Purity `83/83 + live29`；完整semantic/Task2/error/Rust quality gates PASS，73/55/3559与consumer
+  SHA不变；known admin broad failure未跑/未伪报。
+- Scope只有purity verifier/tests与append-only artifacts；状态
+  `FIX_ROUND_4_IMPLEMENTED_PENDING_REREVIEW`。Task 4继续blocked。

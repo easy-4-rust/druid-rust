@@ -466,3 +466,94 @@ PURITY_PHASE=transitional
 自审未发现新的scoped finding。Wrapper production、Task4、Physical、Cargo、admin与verification
 artifacts无diff；known admin broad failure未跑/未伪报。状态
 `FIX_ROUND_3_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续 blocked。
+
+## 11. Recovery fix round 3 review correction / round 4/5
+
+本段append-only correction supersede上一节“自审未发现新的scoped finding”。独立review对
+`00711d7`的结论仍为`FIX_REQUIRED`：namespace Minor已`ADDRESSED`，macro invocation Important
+仍为`PARTIAL`。根因是round 3按canonicalized name allowlist放行，没有解析macro binding来源；
+local/raw approved-name shadow与`std/core/alloc` alias均可编译地绕过purity。
+
+Round 4基线为`0e7e60d55c6511e10c79219336d7cdd474594976`，只拥有purity verifier、self-test与
+append-only recovery artifacts。没有修改Wrapper production、Task4、Physical、Cargo、admin或
+verification manifests。
+
+### Round 4 strict TDD RED
+
+先只新增永久self-test，production verifier未改。每个攻击在purity断言前都由真实
+`rustc 1.97.1 --edition=2021 --crate-type=lib`证明可编译；初始核心命令返回
+`VerificationError not raised`，不是fixture语法错误。
+
+有效RED共`23`个独立行为：
+
+1. 四个reviewer反例：local `impl_standard_wrapper`、local `format`、raw approved name、private
+   helper macro re-export后grouped `std` alias；
+2. `core`/`alloc` alias variants、bare imported `format`/`impl_standard_wrapper`、same-name多跳
+   `pub use` chain与`macro_use`注入；
+3. function/block lexical alias、parent textual macro进入nested inline/external child，以及
+   definition/const、type、impl、closure、nested block、cfg-disabled六个invocation位置；
+4. 自审追加四个load-bearing RED：`cfg_attr(..., macro_export)`冒充direct export、正确module
+   identity但错误source、crate-root macro edge未受canonical scan、function-local non-module
+   `#[macro_export]`冒充canonical definition。
+
+新增正向controls在implementation前已通过：真实`wrapper/wrapper.rs` direct export的
+`crate::impl_standard_wrapper!`（即使local textual同名）、unshadowed `format/std/core/alloc`、
+textual/use shadow range结束与definition前恢复、relative alias存在时`::std/core/alloc`绝对路径。
+
+### Round 4 GREEN implementation
+
+1. `MacroInvocationSite`保留完整path、absolute/raw flag与half-open invocation range；approved path
+   不再依赖ordinary name resolver或字符串allowlist。
+2. `MacroDefinition`记录definition source/range、module identity、module/lexical scope、direct
+   `#[macro_export]`与raw状态；`ModuleScope`记录external/inline child的parent declaration source/index，
+   因此textual macro严格按definition之后、block结束、later child propagation生效。
+3. `LexicalUseBinding`记录function/const/closure/nested block内use binding的整个block range；
+   `LocalItem`保留value/type/macro namespace，module与lexical root shadow不会退化成名字猜测。
+4. `crate::impl_standard_wrapper!`只接受scope=`wrapper::wrapper`、source=`wrapper/wrapper.rs`、
+   module-scoped、non-raw、direct `#[macro_export]`且crate root无same-name use/re-export的definition。
+   bare同名一律fail closed并要求qualified form。
+5. bare `format!`只在无active textual definition、module/block import/re-export及crate export shadow
+   时使用标准prelude。relative `std/core/alloc`在放行前查module/use/local type-module root shadow；
+   leading `::`按Rust 2021 extern-prelude绝对路径处理。raw invocation、`macro_use`、extern alias、
+   conditional/non-local/wrong-source export全部拒绝。
+6. crate-root与canonical source均进入macro provenance gate；unknown/bare/local/external invocation
+   继续fail closed。Macro definition body不展开、不解释；unused复杂definition保持正向。
+
+最终focused GREEN：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 83 tests ... OK
+
+python3 scripts/verify_rdbc_single_standard_purity.py --phase transitional
+STANDARD_FILES=29
+PURITY_PHASE=transitional
+```
+
+### Round 4 fresh gates
+
+| Gate | Result |
+| :--- | :--- |
+| Python `py_compile` | PASS |
+| purity self/live | `83/83`；`STANDARD_FILES=29` |
+| druid-rdbc all-target/all-feature | `20/20`，Wrapper `3/3` |
+| JDBC semantic self/live | `13/13`；`52/17/UNKNOWN=0` |
+| Task 2 identity/live | `37/37`；`73/55/3559` |
+| consumer SHA | `b1b420d61a8c5824d45eb3c59feecedb10795db803b4b3d20ece0509a1c72c59` |
+| DruidError / external consumer | `4/4`；`2/2` |
+| workspace all-target/all-feature check | PASS |
+| scoped Clippy `-D warnings` | PASS |
+| rustdoc / doctest | PASS / `1/1` |
+| rustfmt / diff | PASS |
+
+### Round 4 self-review / residual boundary
+
+- Mutation coverage：退化为name-only、忽略raw、忽略module/block alias、放宽conditional/wrong-source/
+  non-module export或跳过crate root，至少一个永久fixture会失败。
+- 机制不模拟macro expansion；这不是“证明任意macro body安全”。只有命名的canonical export与
+  unshadowed标准宏root可调用，其他definition外invocationfail closed；macro body继续由源码审查、
+  pollution token gate及Rust compile contracts约束。
+- Wrapper production、Task4、Physical、Cargo、admin和verification manifests均无diff。Known admin
+  broad supervisor failure未运行、未伪报GREEN。
+- 状态为`FIX_ROUND_4_IMPLEMENTED_PENDING_REREVIEW`。原reviewer返回`REVIEW CLEAR`前，Task 4继续
+  blocked；本实现者不宣称Important已独立关闭。
