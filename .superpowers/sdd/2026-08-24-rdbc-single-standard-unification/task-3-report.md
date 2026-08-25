@@ -517,3 +517,21 @@ Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均�
 - Scope：只修改 purity verifier/tests与append-only recovery artifacts；review事实源
   `task-3-recovery-review.md`纳入交付。状态 `FIX_ROUND_1_IMPLEMENTED_PENDING_REREVIEW`，Task 4
   继续 blocked。
+
+### Recovery fix round 1 re-review correction / round 2/5
+
+- Reviewer verdict仍为 `FIX_REQUIRED`；round 1 `PARTIAL`，`1 Important open`，无新
+  Critical/Minor。
+- 三个子路径：nested item binding/call、macro_rules definition普通path scan、lifetime associated
+  root漏拒绝。
+- Round 2基线 `7f0154f`，只修上述purity边界；Task 4、Physical、Wrapper production、Cargo、
+  admin保持不动，Task 4继续 blocked。
+
+### Recovery fix round 2/5 implementation
+
+- Fresh RED `4`：nested shadow/call、nested local item matrix、macro definition body误扫、lifetime
+  root漏拒绝。
+- GREEN：function/block `LexicalItemScope`、完整 macro definition covered ranges、显式
+  `LIFETIME + ::` rejection；range/capture与actual/unknown macro负向保持。
+- Purity `54/54 + live29`；其余完整recovery gates全PASS，73/55/3559与consumer SHA不变。
+- 状态 `FIX_ROUND_2_IMPLEMENTED_PENDING_REREVIEW`；Task 4继续 blocked。

@@ -149,6 +149,17 @@ class DeclarationScope:
     declaration_kind: str
     start: int
     end: int
+    name: str | None
+
+
+@dataclass(frozen=True)
+class LexicalItemScope:
+    """One nested function/block item binding and its exact containing block range."""
+
+    name: str
+    source: Path
+    start: int
+    end: int
 
 
 @dataclass(frozen=True)
@@ -172,6 +183,7 @@ class SourceUnit:
     scopes: list[ModuleScope] = field(default_factory=list)
     lexical_generic_scopes: list[LexicalGenericScope] = field(default_factory=list)
     declaration_scopes: list[DeclarationScope] = field(default_factory=list)
+    lexical_item_scopes: list[LexicalItemScope] = field(default_factory=list)
     generic_bound_sites: list[GenericBoundSite] = field(default_factory=list)
 
 
@@ -875,8 +887,18 @@ class ModuleScopeIndex:
                     index += 1
                     continue
                 end = declaration_end(unit, index, len(unit.tokens))
+                declaration_name = (
+                    canonical_identifier(unit.tokens[index + 1])
+                    if named_declaration
+                    else None
+                )
                 unit.declaration_scopes.append(
-                    DeclarationScope(declaration_kind, index, end)
+                    DeclarationScope(
+                        declaration_kind,
+                        index,
+                        end,
+                        declaration_name,
+                    )
                 )
                 if opening is None:
                     index += 1
@@ -905,6 +927,60 @@ class ModuleScopeIndex:
                         )
                     )
                 index += 1
+            self.index_lexical_item_scopes(unit)
+
+    @staticmethod
+    def index_lexical_item_scopes(unit: SourceUnit) -> None:
+        """Bind nested items throughout their nearest enclosing function/block range."""
+
+        bindable_kinds = {"enum", "fn", "struct", "trait", "type", "union"}
+        for declaration in unit.declaration_scopes:
+            if (
+                declaration.name is None
+                or declaration.declaration_kind not in bindable_kinds
+            ):
+                continue
+            parents = [
+                parent
+                for parent in unit.declaration_scopes
+                if parent.start < declaration.start
+                and declaration.end <= parent.end
+            ]
+            if not parents:
+                continue
+            parent = min(parents, key=lambda item: item.end - item.start)
+            if parent.declaration_kind != "fn":
+                continue
+            blocks = [
+                (opening, closing)
+                for opening, closing in unit.matching.items()
+                if unit.tokens[opening].text == "{"
+                and parent.start < opening < declaration.start
+                and declaration.end <= closing < parent.end
+            ]
+            if not blocks:
+                fail(
+                    f"nested item has no containing function/block range in {unit.relative}: "
+                    f"{declaration.name}"
+                )
+            opening, closing = max(blocks, key=lambda pair: pair[0])
+            lexical_scope = LexicalItemScope(
+                declaration.name,
+                unit.relative,
+                opening + 1,
+                closing,
+            )
+            if any(
+                existing.name == lexical_scope.name
+                and existing.start == lexical_scope.start
+                and existing.end == lexical_scope.end
+                for existing in unit.lexical_item_scopes
+            ):
+                fail(
+                    f"ambiguous nested item binding in {unit.relative}: "
+                    f"{lexical_scope.name}"
+                )
+            unit.lexical_item_scopes.append(lexical_scope)
 
     def verify_generic_bound_sites(self) -> None:
         """Resolve inline/where bound roots without weakening the canonical path policy."""
@@ -952,6 +1028,21 @@ class ModuleScopeIndex:
             if name in lexical_scope.const_bindings:
                 return "const"
         return None
+
+    def lexical_item_bound(
+        self, source: Path | None, token_index: int | None, name: str
+    ) -> bool:
+        """Return whether a nested item name is visible in the current block range."""
+
+        if source is None or token_index is None:
+            return False
+        unit = self.sources.get(source)
+        if unit is None:
+            return False
+        return any(
+            scope.name == name and scope.start <= token_index < scope.end
+            for scope in unit.lexical_item_scopes
+        )
 
     @staticmethod
     def module_macro_path(
@@ -1096,6 +1187,8 @@ class ModuleScopeIndex:
                 return ResolvedTarget("generic_type", scope.identity if scope else ())
             if lexical_kind == "const":
                 fail(f"const generic cannot be an associated path root in {source}: {first}")
+            if self.lexical_item_bound(source, token_index, first):
+                return ResolvedTarget("lexical_item", scope.identity if scope else ())
             if scope is None:
                 if canonical:
                     fail(f"unknown path root without reachable module scope: {first}")
@@ -1200,6 +1293,12 @@ def parse_candidate_path(
 
     if index in covered:
         return None
+    if (
+        tokens[index].kind == "LIFETIME"
+        and index + 1 < len(tokens)
+        and tokens[index + 1].text == "::"
+    ):
+        fail(f"lifetime cannot be an associated path root: {tokens[index].text}")
     absolute = False
     if tokens[index].text == "::":
         if index > 0 and tokens[index - 1].text in {">", ")", "]"}:
@@ -1249,8 +1348,16 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
         matching, reverse = delimiter_index(tokens, relative)
         unit = SourceUnit(relative, tokens, matching, reverse)
     attribute_ranges(unit)
+    macro_ranges = macro_definition_ranges(unit)
+    macro_indexes = {
+        cursor
+        for start, end in macro_ranges
+        for cursor in range(start, end)
+    }
     tokens = unit.tokens
     for cursor, token in enumerate(tokens):
+        if cursor in macro_indexes:
+            continue
         name = token.text.removeprefix("r#")
         if name == "include" and cursor + 1 < len(tokens) and tokens[cursor + 1].text == "!":
             fail(f"include! escapes reachable module discovery in {relative}")
@@ -1264,9 +1371,12 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
             if crate_name not in ALLOWED_EXTERNAL_IMPORT_ROOTS:
                 fail(f"extern crate is forbidden in {relative}: {crate_name}")
 
-    covered: set[int] = set()
+    covered: set[int] = set(macro_indexes)
     cursor = 0
     while cursor < len(tokens):
+        if cursor in macro_indexes:
+            cursor += 1
+            continue
         if tokens[cursor].text != "use":
             cursor += 1
             continue

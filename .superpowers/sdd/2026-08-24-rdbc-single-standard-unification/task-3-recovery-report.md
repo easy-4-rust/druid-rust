@@ -303,3 +303,81 @@ PURITY_PHASE=transitional
 自审未发现新的 scoped correctness finding。没有修改 Wrapper production、Task4、Physical、Cargo、
 admin或verification artifacts。Known admin broad-test failure未运行、未伪报GREEN。本轮状态为
 `FIX_ROUND_1_IMPLEMENTED_PENDING_REREVIEW`；原 reviewer复核前 Task 4继续 blocked。
+
+## 9. Recovery fix round 1 review correction / round 2/5
+
+本段 append-only correction supersede“自审未发现新finding”。原 reviewer对 `7f0154f` 的结论为
+`FIX_REQUIRED`：round 1 `PARTIAL`，仍有 `1 Important open`，无新 Critical/Minor。
+
+开放子路径：
+
+- nested function自己的shadow generic合法，但outer call `inner::<T>()` 缺少block-local item binding；
+- 普通path scan没有跳过完整 `macro_rules!` definition range；
+- `LIFETIME + ::` 未被candidate parser显式拒绝。
+
+Round 2只修这三项；nested item非法捕获outer generic、unknown macro invocation、external macro
+path与合法lifetime/HRTB controls必须保持。Task 4继续 blocked。
+
+### Fix round 2 strict TDD RED
+
+只新增永久fixtures，production verifier未改：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 54 tests
+FAILED (failures=1, errors=3)
+```
+
+`50 PASS / 4 RED`：
+
+1. nested generic shadow + outer call报 `unknown path root ... inner`；
+2. nested local function/struct/type control首先报 `unknown path root ... helper`；
+3. 未调用、多arm、nested-brace macro definition中的 `T::Item` 报 `unknown path root ... T`；
+4. 非法 `LIFETIME + ::` (`'a::Item`) 未抛错，被错误 ACCEPT。
+
+同一旧实现上，nested binding range泄漏、nested item非法捕获outer T、actual external macro、
+unknown module-scope macro、char literal/loop label与既有47项均按预期。因此 RED精确对应round 2
+三个子路径，不是fixture语法或既有contract回归。
+
+### Fix round 2 GREEN implementation
+
+1. `LexicalItemScope` 从已有 `DeclarationScope` 推导nested fn/struct/trait/type/enum/union name，并
+   绑定到最近 enclosing function/block half-open range。Block item在声明前后均可解析；离开block
+   立即失效。Nested function自己的shadow generic有效，outer function generic仍被declaration
+   barrier阻断，不能被nested item捕获。
+2. `verify_file_paths` 把完整 `macro_rules! name <delimiter> ...` definition indexes加入covered
+   ranges；include/extern/use/ordinary path第二遍均不解释unexpanded token body。Module-scope macro
+   invocation gate未放松；definition外实际 `sqlx::query!`继续拒绝。
+3. Candidate parser在任何普通path resolution之前显式识别 `Token(kind=LIFETIME) + ::` 并拒绝；
+   CHAR与single-colon label不匹配该形状，合法lifetime/HRTB不回归。
+
+Focused GREEN：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 54 tests ... OK
+
+python3 scripts/verify_rdbc_single_standard_purity.py --phase transitional
+STANDARD_FILES=29
+PURITY_PHASE=transitional
+```
+
+### Fix round 2 fresh gates
+
+| Gate | Result |
+| :--- | :--- |
+| Python `py_compile` | PASS |
+| purity self/live | `54/54`；`STANDARD_FILES=29` |
+| druid-rdbc all-target/all-feature | `20/20`，Wrapper `3/3` |
+| JDBC semantic self/live | `13/13`；`52/17/UNKNOWN=0` |
+| Task 2 identity/live | `37/37`；`73/55/3559` |
+| consumer SHA | `b1b420d61a8c5824d45eb3c59feecedb10795db803b4b3d20ece0509a1c72c59` |
+| DruidError / external consumer | `4/4`；`2/2` |
+| workspace all-target/all-feature check | PASS |
+| scoped Clippy `-D warnings` | PASS |
+| rustdoc / doctest | PASS / `1/1` |
+| rustfmt / diff | PASS |
+
+自审未发现新的 scoped finding。Wrapper production、Task4、Physical、Cargo、admin与verification
+artifacts均无diff；known admin broad failure未跑/未伪报。本轮状态
+`FIX_ROUND_2_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续 blocked。

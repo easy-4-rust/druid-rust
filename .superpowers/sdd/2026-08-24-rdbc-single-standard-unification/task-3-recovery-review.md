@@ -84,3 +84,36 @@ adapter paths.
 
 No Task4, Physical, Cargo, verification artifact, or admin scope leak was found. The known admin
 broad-test risk remains isolated and must not be reported green.
+
+## Recovery fix round 1 independent re-review（append-only）
+
+Reviewed fix commit: `7f0154fc1afaceacde36adf090c1760e7f376e34`
+
+Verdict remains **FIX_REQUIRED**. The lexical generic Important is **PARTIAL**；无新 Critical或
+独立 Minor。Round 1已正确覆盖 fn/impl/trait/struct/type alias/associated method generics、where/
+range isolation、const generic root规则、nested generic bounds/HRTB、unknown/transitional bounds，
+且 purity `47/47 + live29`。
+
+同一 Important仍有三个开放子路径：
+
+1. 合法 nested item shadowing + call `inner::<T>()` 因 block-local item binding未建模，被报
+   `unknown path root ... inner`；inner自身shadow T合法，仍不得捕获outer T。
+2. `macro_rules!` definition range虽从lexical generic index排除，但普通qualified-path第二遍仍扫描
+   generic-looking macro body，未调用macro也会因 `T::Item`误杀。
+3. Tokenizer的 `LIFETIME + ::` 未进入candidate parser，非法 `'a::Item` 被 ACCEPT；合法 lifetime
+   bounds/HRTB必须继续通过。
+
+Round 2最小修复必须记录function/block nested item binding range、只跳过完整macro definition而不
+放松unknown macro invocation、显式拒绝lifetime root，并保留全部47项与完整recovery gates。
+Task 4继续 blocked。
+
+### Round 2 implementer response（pending independent re-review）
+
+- `LexicalItemScope` 为nearest enclosing function/block记录nested fn/struct/type等item bindings；
+  nested shadow generic与outer `inner::<T>()`通过，nested item捕获outer generic及block-end泄漏仍拒绝。
+- 普通include/extern/use/qualified-path scan统一跳过 `macro_definition_ranges`完整token range；实际
+  external macro与unknown module-scope invocation仍拒绝。
+- `parse_candidate_path` 显式拒绝 `LIFETIME + ::`；合法 lifetime bounds/HRTB、char literal与
+  single-colon loop label保持。
+- Fresh RED `4`，GREEN purity `54/54 + live29`；完整recovery gates PASS。状态仅为
+  `FIX_ROUND_2_IMPLEMENTED_PENDING_REREVIEW`，不预判review verdict。

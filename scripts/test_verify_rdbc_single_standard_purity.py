@@ -584,6 +584,53 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "unknown|root|T|nested"):
             verify_tree(self.root, phase="transitional")
 
+    def test_accepts_nested_generic_item_shadow_and_outer_call(self) -> None:
+        """A nested function owns its shadow generic and is callable from its enclosing block."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Assoc { type Item; }\n"
+            "pub fn outer<T: Assoc>() {\n"
+            "    fn inner<T: Assoc>() { let _: Option<T::Item> = None; }\n"
+            "    inner::<T>();\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_nested_local_function_struct_and_type_bindings(self) -> None:
+        """Function, struct, and type items bind throughout their containing block."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn outer() {\n"
+            "    fn helper<T>() {}\n"
+            "    struct Local;\n"
+            "    impl Local { const VALUE: usize = 1; }\n"
+            "    type Alias = Local;\n"
+            "    helper::<u8>();\n"
+            "    let _ = Local::VALUE;\n"
+            "    let _ = Alias::VALUE;\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_rejects_nested_item_binding_after_block_range(self) -> None:
+        """A block-local item binding cannot leak into a following function."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn outer() { fn inner<T>() {} inner::<u8>(); }\n"
+            "pub fn escape() { inner::<u8>(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "inner|unknown|root|range"):
+            verify_tree(self.root, phase="transitional")
+
     def test_rejects_impl_generic_binding_after_its_range(self) -> None:
         """An impl generic cannot leak into a following module item."""
 
@@ -610,6 +657,63 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "macro|unknown|root"):
             verify_tree(self.root, phase="transitional")
+
+    def test_accepts_uninvoked_macro_rules_generic_looking_body(self) -> None:
+        """Unexpanded macro arms and nested delimiters do not create runtime path roots."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "macro_rules! generated_items {\n"
+            "    ($name:ident) => {{\n"
+            "        fn $name<T>() {\n"
+            "            if true { { let _: Option<T::Item> = None; } }\n"
+            "        }\n"
+            "    }};\n"
+            "    ($($token:tt)*) => {{{ $($token)* }}};\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_rejects_actual_external_macro_path(self) -> None:
+        """Skipping definitions never permits an actual backend macro invocation."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            'pub fn query() { let _ = sqlx::query!("select 1"); }\n'
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "sqlx|external|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_lifetime_as_associated_path_root(self) -> None:
+        """A lifetime token followed by :: is never a type or module path root."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn invalid<'a>() { let _ = 'a::Item; }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "lifetime|'a|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_accepts_char_literal_and_loop_label_boundaries(self) -> None:
+        """Character literals and single-colon loop labels are not lifetime path roots."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn labels<'a>(value: &'a str) -> &'a str {\n"
+            "    'outer: loop { break 'outer; }\n"
+            "    let _character = 'a';\n"
+            "    value\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
 
     def test_rejects_non_allowlisted_backend_import(self) -> None:
         """Canonical files accept only std and declared druid-rdbc module imports."""
