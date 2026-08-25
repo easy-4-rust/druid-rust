@@ -8,8 +8,8 @@ use druid::core::{
     SqlTextStatement, SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use druid::spi::{
-    RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
-    RdbcResourceFactory,
+    RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, ResourceHandleFactory,
+    ResourceOperations,
 };
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -43,8 +43,8 @@ struct LeaseBlobAccess;
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for LeaseBlobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::blob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::blob()
     }
 }
 
@@ -65,8 +65,8 @@ struct LeaseClobAccess;
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for LeaseClobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::clob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::clob()
     }
 }
 
@@ -426,9 +426,9 @@ fn delegation_resources() -> Arc<DelegationResources> {
         statement: Arc::new(SqlTextStatement::new(PhysicalStatementOptions::default())),
         prepared_statement: Arc::new(SqlTextPreparedStatement::new("UPDATE delegated prepared")),
         callable_statement: Arc::new(SqlTextPreparedStatement::new("CALL delegated")),
-        blob: RdbcResourceFactory::blob(Arc::new(LeaseBlobAccess)),
-        clob: RdbcResourceFactory::clob(Arc::new(LeaseClobAccess)),
-        n_clob: RdbcResourceFactory::n_clob(Arc::new(LeaseClobAccess)),
+        blob: ResourceHandleFactory::blob(Arc::new(LeaseBlobAccess)),
+        clob: ResourceHandleFactory::clob(Arc::new(LeaseClobAccess)),
+        n_clob: ResourceHandleFactory::n_clob(Arc::new(LeaseClobAccess)),
     })
 }
 

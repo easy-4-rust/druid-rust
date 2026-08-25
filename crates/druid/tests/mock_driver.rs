@@ -184,7 +184,9 @@ async fn test_connection_default_batch_preserves_partial_counts_and_sql_cause() 
         .await
         .unwrap_err();
     assert_eq!(
-        error.batch_update_counts().map(|counts| counts.large()),
+        error
+            .batch_update_counts()
+            .map(druid_rdbc::error::BatchUpdateCounts::large),
         Some([1_i64].as_slice())
     );
     assert_eq!(error.sql_exception().unwrap().error_code(), 9999);

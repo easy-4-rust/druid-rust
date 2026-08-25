@@ -4,6 +4,8 @@
 
 use super::{PhysicalDatabaseMetaData, RdbcError};
 use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// 借用当前物理连接的数据库元数据代理。
 ///
@@ -12,7 +14,9 @@ use std::ops::{Deref, DerefMut};
 /// 生命周期保证 metadata 不会超过其物理连接租约。除源实现的三个历史委托
 /// 分支外，其余 173 个方法通过 `Deref/DerefMut` 直接到达 raw SPI。
 pub struct DatabaseMetaDataProxyImpl<'connection> {
-    raw: Box<dyn PhysicalDatabaseMetaData + 'connection>,
+    raw: Option<Box<dyn PhysicalDatabaseMetaData + 'connection>>,
+    standard: Option<Box<dyn druid_rdbc::metadata::DatabaseMetaData>>,
+    lease_active: Arc<AtomicBool>,
     connection_id: u64,
 }
 
@@ -23,7 +27,26 @@ impl<'connection> DatabaseMetaDataProxyImpl<'connection> {
     /// - `raw`：驱动 Adapter 创建的真实 metadata SPI。
     /// - `connection_id`：当前 `DruidPooledConnection` 的稳定 ID。
     pub fn new(raw: Box<dyn PhysicalDatabaseMetaData + 'connection>, connection_id: u64) -> Self {
-        Self { raw, connection_id }
+        Self {
+            raw: Some(raw),
+            standard: None,
+            lease_active: Arc::new(AtomicBool::new(true)),
+            connection_id,
+        }
+    }
+
+    /// 创建拥有 logical lease/actor 的 canonical live metadata proxy。
+    pub(crate) fn new_standard(
+        standard: Box<dyn druid_rdbc::metadata::DatabaseMetaData>,
+        connection_id: u64,
+        lease_active: Arc<AtomicBool>,
+    ) -> DatabaseMetaDataProxyImpl<'static> {
+        DatabaseMetaDataProxyImpl {
+            raw: None,
+            standard: Some(standard),
+            lease_active,
+            connection_id,
+        }
     }
 
     /// 返回产生 metadata 的池化连接 ID。
@@ -37,34 +60,38 @@ impl<'connection> DatabaseMetaDataProxyImpl<'connection> {
 
     /// 返回 raw 物理 metadata SPI。
     #[must_use]
-    pub fn raw(&self) -> &dyn PhysicalDatabaseMetaData {
-        self.raw.as_ref()
+    pub fn raw(&self) -> &(dyn PhysicalDatabaseMetaData + 'connection) {
+        self.raw
+            .as_deref()
+            .expect("physical metadata constructor owns raw metadata")
     }
 
     /// 返回 raw 物理 metadata SPI 的可变引用。
-    pub fn raw_mut(&mut self) -> &mut dyn PhysicalDatabaseMetaData {
-        self.raw.as_mut()
+    pub fn raw_mut(&mut self) -> &mut (dyn PhysicalDatabaseMetaData + 'connection) {
+        self.raw
+            .as_deref_mut()
+            .expect("physical metadata constructor owns raw metadata")
     }
 
     /// 保留 Java 源实现的历史委托：
     /// `storesLowerCaseIdentifiers()` 实际调用
     /// `storesMixedCaseIdentifiers()`。
     pub async fn stores_lower_case_identifiers(&mut self) -> Result<bool, RdbcError> {
-        self.raw.stores_mixed_case_identifiers().await
+        self.raw_mut().stores_mixed_case_identifiers().await
     }
 
     /// 保留 Java 源实现的历史委托：
     /// `storesMixedCaseIdentifiers()` 实际调用
     /// `supportsMixedCaseIdentifiers()`。
     pub async fn stores_mixed_case_identifiers(&mut self) -> Result<bool, RdbcError> {
-        self.raw.supports_mixed_case_identifiers().await
+        self.raw_mut().supports_mixed_case_identifiers().await
     }
 
     /// 保留 Java 源实现的历史委托：
     /// `storesUpperCaseQuotedIdentifiers()` 实际调用
     /// `storesUpperCaseIdentifiers()`。
     pub async fn stores_upper_case_quoted_identifiers(&mut self) -> Result<bool, RdbcError> {
-        self.raw.stores_upper_case_identifiers().await
+        self.raw_mut().stores_upper_case_identifiers().await
     }
 }
 
@@ -73,6 +100,7 @@ impl std::fmt::Debug for DatabaseMetaDataProxyImpl<'_> {
         formatter
             .debug_struct("DatabaseMetaDataProxyImpl")
             .field("connection_id", &self.connection_id)
+            .field("standard", &self.standard.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -81,12 +109,55 @@ impl<'connection> Deref for DatabaseMetaDataProxyImpl<'connection> {
     type Target = dyn PhysicalDatabaseMetaData + 'connection;
 
     fn deref(&self) -> &Self::Target {
-        self.raw.as_ref()
+        self.raw()
     }
 }
 
 impl DerefMut for DatabaseMetaDataProxyImpl<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.raw.as_mut()
+        self.raw_mut()
+    }
+}
+
+impl druid_rdbc::wrapper::Wrapper for DatabaseMetaDataProxyImpl<'static> {
+    fn wrapper_view(&self) -> &dyn druid_rdbc::wrapper::Wrapper {
+        self
+    }
+
+    fn canonical_unwrap(
+        &self,
+        target: std::any::TypeId,
+    ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
+        (target == std::any::TypeId::of::<dyn druid_rdbc::metadata::DatabaseMetaData>()).then_some(
+            druid_rdbc::wrapper::StandardUnwrapped::DatabaseMetaData(self),
+        )
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::metadata::DatabaseMetaData for DatabaseMetaDataProxyImpl<'static> {
+    async fn database_product_name(&mut self) -> Result<String, RdbcError> {
+        if !self.lease_active.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        self.standard
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .database_product_name()
+            .await
+    }
+
+    async fn tables(
+        &mut self,
+        query: druid_rdbc::metadata::TablesQuery,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        if !self.lease_active.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        self.standard
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .tables(query)
+            .await
     }
 }

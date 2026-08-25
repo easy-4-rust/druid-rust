@@ -1300,24 +1300,20 @@ impl<'a> ResultSetFilterChain<'a> {
         if self.position < self.filters.len() {
             let filter = Arc::clone(&self.filters[self.position]);
             self.position += 1;
-            filter
-                .result_set_update_object_with_scale_or_length(
-                    self,
-                    column_index,
+            filter.result_set_update_object_with_scale_or_length(
+                self,
+                column_index,
+                value,
+                scale_or_length,
+            )
+        } else {
+            Ok(self.physical.update_value(
+                column_index,
+                &ResultSetUpdate::ObjectWithScaleOrLength {
                     value,
                     scale_or_length,
-                )
-                .map_err(DruidError::from)
-        } else {
-            self.physical
-                .update_value(
-                    column_index,
-                    &ResultSetUpdate::ObjectWithScaleOrLength {
-                        value,
-                        scale_or_length,
-                    },
-                )
-                .map_err(DruidError::from)
+                },
+            )?)
         }
     }
 

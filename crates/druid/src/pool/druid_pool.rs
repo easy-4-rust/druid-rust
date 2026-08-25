@@ -16,7 +16,8 @@ use crate::core::{
     MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker,
     OracleExceptionSorter, OracleValidConnectionChecker, PgExceptionSorter,
     PgValidConnectionChecker, PhoenixExceptionSorter, PhysicalConnectionFactory, PoolState,
-    RdbcError, SybaseExceptionSorter, ValidConnectionChecker,
+    RdbcError, StandardConnectionFactoryCompatibility, SybaseExceptionSorter,
+    ValidConnectionChecker,
 };
 use crate::sql::WallProvider;
 use crate::stats::{DruidDataSourceStatValue, StatsCollector};
@@ -161,6 +162,19 @@ impl DataSourceStatSnapshotContext {
 }
 
 impl DruidPool {
+    /// 从 canonical standard factory 创建 Druid native pool。
+    pub fn new_standard(
+        name: String,
+        driver_name: String,
+        factory: Arc<dyn druid_rdbc::driver::ConnectionFactory>,
+        config: super::config::PoolInnerConfig,
+        filter_chain: Option<Arc<FilterChain>>,
+    ) -> Self {
+        let compatibility: Arc<dyn PhysicalConnectionFactory> =
+            Arc::new(StandardConnectionFactoryCompatibility::new(factory));
+        Self::new(name, driver_name, compatibility, config, filter_chain)
+    }
+
     pub fn new(
         name: String,
         driver_name: String,

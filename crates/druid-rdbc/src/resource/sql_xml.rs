@@ -2,9 +2,8 @@
 
 use crate::error::RdbcError;
 use crate::resource::{
-    RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcResourceCapabilities, RdbcResourceContext,
-    RdbcResourceId, RdbcResourceState, RdbcSqlXmlAccess, RdbcWriter, RdbcXmlRepresentationType,
-    RdbcXmlResult, RdbcXmlSource,
+    RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcSqlXmlAccess, RdbcWriter,
+    RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, ResourceLifecycle, ResourceOperations,
 };
 use crate::types::RdbcString;
 use std::fmt;
@@ -14,13 +13,13 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct RdbcSqlXml {
     access: Arc<dyn RdbcSqlXmlAccess>,
-    context: Arc<RdbcResourceContext>,
+    context: Arc<ResourceLifecycle>,
 }
 
 impl RdbcSqlXml {
     pub(crate) fn from_parts(
         access: Arc<dyn RdbcSqlXmlAccess>,
-        context: Arc<RdbcResourceContext>,
+        context: Arc<ResourceLifecycle>,
     ) -> Self {
         Self { access, context }
     }
@@ -28,7 +27,7 @@ impl RdbcSqlXml {
     /// Releases the XML resource. Corresponds to `SQLXML#free()`.
     pub async fn free(&self) -> Result<(), RdbcError> {
         self.context
-            .require_capability(RdbcResourceCapabilities::FREE, "SQLXML#free")?;
+            .require_capability(ResourceOperations::FREE, "SQLXML#free")?;
         self.context.free(self.access.as_ref()).await
     }
 
@@ -41,7 +40,7 @@ impl RdbcSqlXml {
     /// Returns a binary input stream. Corresponds to `SQLXML#getBinaryStream()`.
     pub async fn binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::STREAM,
+            ResourceOperations::READ | ResourceOperations::STREAM,
             "SQLXML#getBinaryStream",
         )?;
         self.context.observe(self.access.binary_stream().await)
@@ -55,7 +54,7 @@ impl RdbcSqlXml {
     /// Returns a binary output stream. Corresponds to `SQLXML#setBinaryStream()`.
     pub async fn set_binary_stream(&self) -> Result<RdbcOutputStream, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::STREAM,
+            ResourceOperations::WRITE | ResourceOperations::STREAM,
             "SQLXML#setBinaryStream",
         )?;
         self.context.observe(self.access.set_binary_stream().await)
@@ -64,7 +63,7 @@ impl RdbcSqlXml {
     /// Returns a character reader. Corresponds to `SQLXML#getCharacterStream()`.
     pub async fn character_stream(&self) -> Result<RdbcReader, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::STREAM,
+            ResourceOperations::READ | ResourceOperations::STREAM,
             "SQLXML#getCharacterStream",
         )?;
         self.context.observe(self.access.character_stream().await)
@@ -78,7 +77,7 @@ impl RdbcSqlXml {
     /// Returns a character writer. Corresponds to `SQLXML#setCharacterStream()`.
     pub async fn set_character_stream(&self) -> Result<RdbcWriter, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::STREAM,
+            ResourceOperations::WRITE | ResourceOperations::STREAM,
             "SQLXML#setCharacterStream",
         )?;
         self.context
@@ -88,7 +87,7 @@ impl RdbcSqlXml {
     /// Returns the XML string. Corresponds to `SQLXML#getString()`.
     pub async fn string(&self) -> Result<RdbcString, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::READ, "SQLXML#getString")?;
+            .require(ResourceOperations::READ, "SQLXML#getString")?;
         self.context.observe(self.access.string().await)
     }
 
@@ -100,7 +99,7 @@ impl RdbcSqlXml {
     /// Sets the XML string. Corresponds to `SQLXML#setString(String)`.
     pub async fn set_string(&self, value: &RdbcString) -> Result<(), RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::WRITE, "SQLXML#setString")?;
+            .require(ResourceOperations::WRITE, "SQLXML#setString")?;
         self.context.observe(self.access.set_string(value).await)
     }
 
@@ -110,7 +109,7 @@ impl RdbcSqlXml {
         representation: &RdbcXmlRepresentationType,
     ) -> Result<RdbcXmlSource, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::READ, "SQLXML#getSource")?;
+            .require(ResourceOperations::READ, "SQLXML#getSource")?;
         self.context
             .observe(self.access.source(representation).await)
     }
@@ -121,26 +120,20 @@ impl RdbcSqlXml {
         representation: &RdbcXmlRepresentationType,
     ) -> Result<RdbcXmlResult, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::WRITE, "SQLXML#setResult")?;
+            .require(ResourceOperations::WRITE, "SQLXML#setResult")?;
         self.context
             .observe(self.access.result(representation).await)
     }
 
     /// Returns the driver-neutral resource identifier.
     #[must_use]
-    pub fn resource_id(&self) -> &RdbcResourceId {
-        self.context.resource_id()
-    }
-
-    /// Returns the current shared resource state.
-    #[must_use]
-    pub fn state(&self) -> RdbcResourceState {
-        self.context.state()
+    pub fn resource_id(&self) -> &str {
+        self.context.resource_id().as_str()
     }
 
     /// Returns the operations enabled for this SQLXML instance.
     #[must_use]
-    pub fn capabilities(&self) -> RdbcResourceCapabilities {
+    pub fn capabilities(&self) -> ResourceOperations {
         self.context.capabilities()
     }
 }

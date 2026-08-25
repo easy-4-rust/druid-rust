@@ -412,7 +412,8 @@ fn error_batch_update_counts_some() {
         cause: Box::new(DruidError::Other("fail".to_owned())),
     };
     assert_eq!(
-        e.batch_update_counts().map(|counts| counts.jdbc_i32()),
+        e.batch_update_counts()
+            .map(druid_rdbc::error::BatchUpdateCounts::jdbc_i32),
         Some(vec![1, -3, 2])
     );
 }

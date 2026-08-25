@@ -3,12 +3,12 @@
 //! 连接池内部状态：空闲队列、活跃计数、等待通知。
 
 use crate::core::fatal_error_handler::FatalErrorHandler;
+use crate::core::physical_connection_info::PhysicalConnectionInfo;
 use crate::core::Value as RdbcValue;
 use crate::core::{
     ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, FilterChain,
     PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
-    PhysicalConnectionInfo, PreparedStatementCacheStats, RdbcString, StatementGeneratedKeys,
-    ValidConnectionCheckerAdapter,
+    PreparedStatementCacheStats, RdbcString, StatementGeneratedKeys, ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, RdbcUtils};
 use crate::stats::StatsCollector;
@@ -20,7 +20,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
 
-use super::connection_close_worker::ConnectionCloseCommand;
+use super::connection_close_worker::{ConnectionCloseCommand, ConnectionCloseTarget};
 
 /// `DruidAbstractDataSource` fatal-error 字段的同锁状态。
 ///
@@ -756,6 +756,7 @@ impl PoolInner {
                 .await
                 {
                     Ok(result) => result
+                        .and_then(PhysicalConnectionInfo::from_compat)
                         .map(|connection_info| {
                             PhysicalConnectionConnectResult::new(connection_info, self.next_id())
                         })
@@ -767,6 +768,7 @@ impl PoolInner {
                 .factory
                 .create_info_with_properties(&connection_properties)
                 .await
+                .and_then(PhysicalConnectionInfo::from_compat)
                 .map(|connection_info| {
                     PhysicalConnectionConnectResult::new(connection_info, self.next_id())
                 })
@@ -979,7 +981,7 @@ impl PoolInner {
     /// `MySQL` variables 查询，创建流程就不再追加 validation query。
     async fn initialize_sqls_and_variables(
         &self,
-        connection_info: &mut crate::core::PhysicalConnectionInfo,
+        connection_info: &mut PhysicalConnectionInfo,
     ) -> Result<bool, DruidError> {
         let mut variables = self.config.init_variants.then(HashMap::new);
         let mut global_variables = self.config.init_global_variants.then(HashMap::new);
@@ -1190,6 +1192,10 @@ impl PoolInner {
         let physical_age = holder.physical_age();
         holder.mark_discarded();
         holder.clear_statement_cache();
+        if holder.has_standard_connection() {
+            self.destroy_standard_holder(connection_id, physical_age, holder);
+            return;
+        }
         if let Some(connection) = holder.take_physical_connection() {
             self.destroy_connection(connection_id, physical_age, connection);
         } else {
@@ -1210,7 +1216,7 @@ impl PoolInner {
             let command = ConnectionCloseCommand {
                 connection_id,
                 physical_age,
-                connection,
+                connection: ConnectionCloseTarget::Physical(connection),
             };
             if let Err(error) = sender.send(Some(command)) {
                 // worker 已退出时，Drop 仍会释放 driver 资源；禁止重新 spawn
@@ -1221,6 +1227,27 @@ impl PoolInner {
             // 只有直接构造公开 PoolInner 的测试/低层调用会走到这里；canonical
             // DruidPool 在对外可借用前必定安装 worker。
             drop(connection);
+        }
+    }
+
+    fn destroy_standard_holder(
+        &self,
+        connection_id: u64,
+        physical_age: Duration,
+        holder: DruidConnectionHolder,
+    ) {
+        self.record_destroy();
+        if let Some(sender) = self.close_sender.read().clone() {
+            let command = ConnectionCloseCommand {
+                connection_id,
+                physical_age,
+                connection: ConnectionCloseTarget::Standard(Box::new(holder)),
+            };
+            if let Err(error) = sender.send(Some(command)) {
+                drop(error.0);
+            }
+        } else {
+            drop(holder);
         }
     }
 
@@ -1250,6 +1277,16 @@ impl PoolInner {
         holder.mark_discarded();
         holder.clear_statement_cache();
         self.record_destroy();
+        if holder.has_standard_connection() {
+            if let Err(error) = holder.close_standard_connection().await {
+                tracing::warn!(
+                    %error,
+                    connection_id,
+                    "close standard connection immediately failed"
+                );
+            }
+            return;
+        }
         if let Some(mut connection) = holder.take_physical_connection() {
             let filter_chain = self.filter_chain.read().clone();
             let result = match filter_chain {

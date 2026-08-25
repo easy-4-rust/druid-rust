@@ -477,7 +477,6 @@ fn main() {
     bidirectional_dyn_identity!(druid::core::physical_result_set_meta_data::PhysicalResultSetMetaData, druid_rdbc::spi::PhysicalResultSetMetaData);
     bidirectional_dyn_identity!(druid::core::rdbc_result_set::PhysicalResultSet, druid_rdbc::spi::PhysicalResultSet);
     bidirectional_owned_identity!(druid::core::physical_connection_capabilities::PhysicalConnectionCapabilities, druid_rdbc::spi::PhysicalConnectionCapabilities);
-    bidirectional_owned_identity!(druid::core::physical_connection_info::PhysicalConnectionInfo, druid_rdbc::spi::PhysicalConnectionInfo);
     bidirectional_owned_identity!(druid::core::physical_statement::PhysicalStatementOptions, druid_rdbc::spi::PhysicalStatementOptions);
     bidirectional_owned_identity!(druid::core::physical_statement::StatementGeneratedKeys, druid_rdbc::spi::StatementGeneratedKeys);
     bidirectional_owned_identity!(druid::core::physical_statement::StatementExecuteResult, druid_rdbc::spi::StatementExecuteResult);
@@ -487,8 +486,6 @@ fn main() {
     bidirectional_owned_identity!(druid::core::rdbc_result_set::RowSetResultSet, druid_rdbc::spi::RowSetResultSet);
     bidirectional_owned_identity!(druid::core::prepared_input_parameter::PreparedInputParameter, druid_rdbc::spi::PreparedInputParameter);
     bidirectional_owned_identity!(druid::core::prepared_input_parameter::PreparedTypeNameArgument, druid_rdbc::spi::PreparedTypeNameArgument);
-    bidirectional_owned_identity!(druid::core::prepared_statement_key::PreparedStatementKey, druid_rdbc::spi::PreparedStatementKey);
-    bidirectional_owned_identity!(druid::core::prepared_statement_key::PreparedStatementMethodType, druid_rdbc::spi::PreparedStatementMethodType);
     bidirectional_owned_identity!(druid::core::result_set_meta_data::ResultSetMetaData, druid_rdbc::spi::ResultSetMetaData);
     bidirectional_owned_identity!(
         druid::sql::result_set_meta_data::ResultSetMetaData,
@@ -507,14 +504,9 @@ fn main() {
     bidirectional_dyn_identity!(druid::spi::RdbcNClobAccess, druid_rdbc::resource::RdbcNClobAccess);
     bidirectional_dyn_identity!(druid::spi::RdbcRefAccess, druid_rdbc::resource::RdbcRefAccess);
     bidirectional_dyn_identity!(druid::spi::RdbcResourceAccess, druid_rdbc::resource::RdbcResourceAccess);
-    bidirectional_dyn_identity!(druid::spi::RdbcResourceOwner, druid_rdbc::resource::RdbcResourceOwner);
     bidirectional_dyn_identity!(druid::spi::RdbcSqlXmlAccess, druid_rdbc::resource::RdbcSqlXmlAccess);
-    bidirectional_owned_identity!(druid::spi::RdbcResourceCapabilities, druid_rdbc::resource::RdbcResourceCapabilities);
-    bidirectional_owned_identity!(druid::spi::RdbcResourceContext, druid_rdbc::resource::RdbcResourceContext);
-    bidirectional_owned_identity!(druid::spi::RdbcResourceFactory, druid_rdbc::resource::RdbcResourceFactory);
-    bidirectional_owned_identity!(druid::spi::RdbcResourceId, druid_rdbc::resource::RdbcResourceId);
-    bidirectional_owned_identity!(druid::spi::RdbcResourceKind, druid_rdbc::resource::RdbcResourceKind);
-    bidirectional_owned_identity!(druid::spi::RdbcResourceState, druid_rdbc::resource::RdbcResourceState);
+    bidirectional_owned_identity!(druid::spi::ResourceOperations, druid_rdbc::resource::ResourceOperations);
+    bidirectional_owned_identity!(druid::spi::ResourceHandleFactory, druid_rdbc::resource::ResourceHandleFactory);
 
     bidirectional_owned_identity!(druid::sql::array::RdbcArray, druid_rdbc::resource::RdbcArray);
     bidirectional_owned_identity!(druid::sql::Array, druid_rdbc::resource::Array);

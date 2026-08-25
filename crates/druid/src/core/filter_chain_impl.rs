@@ -473,7 +473,7 @@ pub struct PhysicalConnectionCloseFilterChain<'a> {
 /// 初始化、校验和入池前暂以阶段对象持有 raw connection，同时保留相同 ID
 /// 分配时点。
 pub struct PhysicalConnectionConnectResult {
-    connection_info: super::PhysicalConnectionInfo,
+    connection_info: super::physical_connection_info::PhysicalConnectionInfo,
     connection_id: u64,
 }
 
@@ -719,7 +719,7 @@ impl<'a> ClobFilterChain<'a> {
 impl PhysicalConnectionConnectResult {
     /// 由无 Filter 的 canonical 池末端构造建连结果。
     pub(crate) const fn new(
-        connection_info: super::PhysicalConnectionInfo,
+        connection_info: super::physical_connection_info::PhysicalConnectionInfo,
         connection_id: u64,
     ) -> Self {
         Self {
@@ -736,7 +736,9 @@ impl PhysicalConnectionConnectResult {
 
     /// 拆分连接阶段对象与 ID。
     #[must_use]
-    pub fn into_parts(self) -> (super::PhysicalConnectionInfo, u64) {
+    pub(crate) fn into_parts(
+        self,
+    ) -> (super::physical_connection_info::PhysicalConnectionInfo, u64) {
         (self.connection_info, self.connection_id)
     }
 }
@@ -792,6 +794,10 @@ impl<'a> PhysicalConnectionConnectFilterChain<'a> {
             } else {
                 self.factory.create_info_with_properties(properties).await?
             };
+            let connection_info =
+                super::physical_connection_info::PhysicalConnectionInfo::from_compat(
+                    connection_info,
+                )?;
             let connection_id = (self.next_connection_id)();
             Ok(PhysicalConnectionConnectResult::new(
                 connection_info,

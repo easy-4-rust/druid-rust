@@ -1,9 +1,7 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
 use druid::core::{RdbcBlob, RdbcError, RdbcInputStream, RdbcObject, RdbcOutputStream};
-use druid::spi::{
-    RdbcBlobAccess, RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory,
-};
+use druid::spi::{RdbcBlobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations};
 use std::io::{Error, Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -131,8 +129,8 @@ impl Write for BlobWriteCursor {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for InMemoryBlobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::blob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::blob()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -280,7 +278,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
 }
 
 fn blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
-    RdbcResourceFactory::blob(Arc::new(InMemoryBlobAccess::new(bytes)))
+    ResourceHandleFactory::blob(Arc::new(InMemoryBlobAccess::new(bytes)))
 }
 
 #[test]
@@ -311,9 +309,7 @@ async fn blob_delegates_complete_rdbc_resource_contract_without_eager_materializ
     let value = blob(b"abcdef".to_vec());
     assert_eq!(value, value.clone());
     assert_ne!(value, blob(b"abcdef".to_vec()));
-    assert!(value
-        .capabilities()
-        .contains(RdbcResourceCapabilities::STREAM));
+    assert!(value.capabilities().contains(ResourceOperations::STREAM));
     assert!(format!("{value:?}").contains("RdbcBlob"));
     assert_eq!(format!("{}", RdbcObject::Blob(value.clone())), "<Blob>");
     assert_eq!(value.length().await.unwrap(), 6);

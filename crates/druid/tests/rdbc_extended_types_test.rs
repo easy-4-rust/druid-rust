@@ -7,8 +7,8 @@ use druid::core::{
     RdbcXmlSource, Value,
 };
 use druid::spi::{
-    RdbcArrayAccess, RdbcRefAccess, RdbcResourceAccess, RdbcResourceCapabilities,
-    RdbcResourceFactory, RdbcSqlXmlAccess,
+    RdbcArrayAccess, RdbcRefAccess, RdbcResourceAccess, RdbcSqlXmlAccess, ResourceHandleFactory,
+    ResourceOperations,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -70,8 +70,8 @@ impl TestArray {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestArray {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::array()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::array()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -145,7 +145,7 @@ impl RdbcArrayAccess for TestArray {
 }
 
 fn array() -> RdbcArray {
-    RdbcResourceFactory::array(Arc::new(TestArray {
+    ResourceHandleFactory::array(Arc::new(TestArray {
         values: vec![
             RdbcObject::from(Value::Int(10)),
             RdbcObject::from(Value::Int(20)),
@@ -162,8 +162,8 @@ struct TestRef {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestRef {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::reference()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::reference()
     }
 }
 
@@ -237,8 +237,8 @@ impl TestSqlXml {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestSqlXml {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::sql_xml()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::sql_xml()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -368,7 +368,7 @@ async fn array_and_ref_preserve_complete_rdbc_operations_and_identity() {
     assert!(value.is_freed());
     assert!(value.values().await.is_err());
 
-    let reference = RdbcResourceFactory::reference(Arc::new(TestRef {
+    let reference = ResourceHandleFactory::reference(Arc::new(TestRef {
         value: Mutex::new(RdbcObject::from(Value::Int(1))),
     }));
     assert_eq!(reference, reference.clone());
@@ -398,7 +398,7 @@ async fn row_id_url_and_sql_xml_preserve_values_streams_and_resource_lifecycle()
     assert_eq!(url.external_form(), "https://example.test/a?b=1#c");
     assert_eq!(url, druid::core::RdbcUrl::from(url.external_form()));
 
-    let xml = RdbcResourceFactory::sql_xml(Arc::new(TestSqlXml {
+    let xml = ResourceHandleFactory::sql_xml(Arc::new(TestSqlXml {
         value: Mutex::new(RdbcString::from("<root>值</root>")),
         freed: AtomicBool::new(false),
     }));

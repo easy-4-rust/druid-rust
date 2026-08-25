@@ -1,7 +1,7 @@
 bitflags::bitflags! {
     /// Operations supported by one concrete RDBC resource instance.
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-    pub struct RdbcResourceCapabilities: u16 {
+    pub struct ResourceOperations: u16 {
         /// Reads scalar or materialized resource content.
         const READ = 1 << 0;
         /// Mutates resource content.
@@ -23,7 +23,7 @@ bitflags::bitflags! {
     }
 }
 
-impl RdbcResourceCapabilities {
+impl ResourceOperations {
     /// Complete capability set for an RDBC `Array` implementation.
     #[must_use]
     pub const fn array() -> Self {

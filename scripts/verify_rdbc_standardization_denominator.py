@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import hashlib
+import re
 import subprocess
 import sys
 import unicodedata
@@ -22,7 +24,10 @@ P03_MANIFEST = Path("docs/verification/rdbc-first/rdbc-physical-standardization.
 DEFAULT_ADAPTERS = Path("docs/verification/rdbc-first/rdbc-adapter-implementations.tsv")
 DEFAULT_CONSUMERS = Path("docs/verification/rdbc-first/rdbc-production-consumers.tsv")
 TASK4_PRE_CUTOVER_COMMIT = "8252a20f882fd3ade9a99d202c0e697a35307e45"
-TASK4_CLOSED_HISTORY_SHA256 = "bcc50e12e484a78bff19e578e362f25e4a382259be1ec53aadef53f7f01eca14"
+TASK4_CLOSED_HISTORY_SHA256 = (
+    "bcc50e12e484a78bff19e578e362f25e4a382259be1ec53aadef53f7f01eca14"
+)
+TASK5_PRE_CUTOVER_COMMIT = "d1ccc8e3005a3a71638766ee701af99594fc43ed"
 PHYSICAL_HEADER = (
     "old_path\tclassification\ttarget_path\tcompatibility\tsource_file\t"
     "normalized_signature\ttarget_task"
@@ -37,10 +42,14 @@ ADAPTER_HEADER = (
     "standard_core_evidence\tbehavior_evidence\tstate"
 )
 CONSUMER_HEADER = (
-    "source_path\toccurrence_kind\tsymbol\told_path\ttarget_path\t"
-    "target_task\tstate"
+    "source_path\toccurrence_kind\tsymbol\told_path\ttarget_path\t" "target_task\tstate"
 )
-CLASSIFICATIONS = {"MERGE_STANDARD", "RDBC_EXTENSION", "DRUID_INTERNAL", "CONCRETE_IMPL"}
+CLASSIFICATIONS = {
+    "MERGE_STANDARD",
+    "RDBC_EXTENSION",
+    "DRUID_INTERNAL",
+    "CONCRETE_IMPL",
+}
 OCCURRENCE_KINDS = {"IMPORT", "TYPE", "TRAIT_OBJECT", "IMPL", "CALL"}
 PRODUCTION_ROOTS = (
     Path("crates/druid-rdbc/src"),
@@ -182,13 +191,25 @@ def parse_physical_payload(payload: bytes, *, allow_legacy: bool) -> list[Physic
         fields = line.split("\t")
         if len(fields) != 7 or any(not field for field in fields):
             fail(f"physical row {line_number} must have seven non-empty fields")
-        old_path, classification, target_path, compatibility, source_file, signature, last = fields
+        (
+            old_path,
+            classification,
+            target_path,
+            compatibility,
+            source_file,
+            signature,
+            last,
+        ) = fields
         if old_path in seen:
             fail(f"physical row {line_number} duplicates {old_path}")
         seen.add(old_path)
         if classification not in CLASSIFICATIONS:
-            fail(f"physical row {line_number} has unknown classification {classification}")
-        target_task = target_task_for(old_path, classification, target_path) if legacy else last
+            fail(
+                f"physical row {line_number} has unknown classification {classification}"
+            )
+        target_task = (
+            target_task_for(old_path, classification, target_path) if legacy else last
+        )
         rows.append(
             PhysicalRow(
                 old_path,
@@ -222,8 +243,7 @@ def canonical_tsv_lines(payload: bytes, label: str) -> list[str]:
     if not payload.endswith(b"\n") or payload.endswith(b"\n\n"):
         fail(f"{label} manifest must have exactly one final newline")
     if b"\r" in payload or any(
-        (byte < 0x20 and byte not in {0x09, 0x0A}) or byte == 0x7F
-        for byte in payload
+        (byte < 0x20 and byte not in {0x09, 0x0A}) or byte == 0x7F for byte in payload
     ):
         fail(f"{label} manifest contains a forbidden control byte")
     try:
@@ -271,7 +291,10 @@ def parse_adapter_payload(payload: bytes) -> list[AdapterRow]:
     rows = parse_dataclass_tsv(payload, ADAPTER_HEADER, AdapterRow, "adapter")
     for row in rows:
         if row.state == "STANDARD_IMPL_LIVE":
-            if row.target_task != "P04_TASK_4_ADAPTER_CUTOVER" or row.owner != "WRAPPER_ADAPTER":
+            if (
+                row.target_task != "P04_TASK_4_ADAPTER_CUTOVER"
+                or row.owner != "WRAPPER_ADAPTER"
+            ):
                 fail("adapter LIVE state is only valid for Task 4 wrapper rows")
             if any(
                 value == "-"
@@ -282,7 +305,9 @@ def parse_adapter_payload(payload: bytes) -> list[AdapterRow]:
                     row.behavior_evidence,
                 )
             ):
-                fail("adapter LIVE row lacks canonical implementation/core/behavior evidence")
+                fail(
+                    "adapter LIVE row lacks canonical implementation/core/behavior evidence"
+                )
         elif row.state != "CURRENT_IMPL_TARGET_PLANNED":
             fail(f"adapter row has unknown state: {row.state}")
     if payload != render_adapter_rows(tuple(rows)):
@@ -309,6 +334,13 @@ def parse_consumer_payload(payload: bytes) -> list[ConsumerRow]:
                 or not row.source_path.startswith("crates/druid-wrapper/")
             ):
                 fail("consumer CLOSED state is only valid for Task 4 wrapper rows")
+        elif row.state in {
+            "DRUID_INTERNAL_REFERENCE_CLOSED",
+            "TASK6_COMPATIBILITY_PENDING",
+            "TASK7_RESOURCE_OPERATIONS_PENDING",
+        }:
+            if row.target_task != "P04_TASK_5_DRUID_INTERNALIZATION":
+                fail("Druid Task 5 disposition is only valid for Task 5 rows")
         elif row.state != "CURRENT_REFERENCE_TARGET_PLANNED":
             fail(f"consumer row has unknown state: {row.state}")
     if payload != render_consumer_rows(tuple(rows)):
@@ -572,10 +604,26 @@ def generic_angle_closing(tokens: list[object], start: int) -> int | None:
         elif paren == bracket == brace == 0 and text == ">":
             depth -= 1
             if depth == 0:
-                follower = tokens[cursor + 1].text if cursor + 1 < len(tokens) else "<eof>"
+                follower = (
+                    tokens[cursor + 1].text if cursor + 1 < len(tokens) else "<eof>"
+                )
                 if follower in {
-                    "::", "(", ")", "[", "]", "{", "}", ",", ";", "+", ":", "=",
-                    "where", "for", "as", "<eof>",
+                    "::",
+                    "(",
+                    ")",
+                    "[",
+                    "]",
+                    "{",
+                    "}",
+                    ",",
+                    ";",
+                    "+",
+                    ":",
+                    "=",
+                    "where",
+                    "for",
+                    "as",
+                    "<eof>",
                 }:
                     return cursor
                 return None
@@ -592,7 +640,7 @@ def next_rust_node_end(tokens: list[object], start: int) -> int:
     cursor = start
     while cursor < len(tokens):
         text = tokens[cursor].text
-        if text == "(" :
+        if text == "(":
             paren += 1
         elif text == ")":
             paren = max(0, paren - 1)
@@ -634,7 +682,11 @@ def production_excluded_indexes(tokens: list[object]) -> set[int]:
             continue
         group_start = index
         constraints: list[CfgExpr] = []
-        while index + 1 < len(tokens) and tokens[index].text == "#" and tokens[index + 1].text == "[":
+        while (
+            index + 1 < len(tokens)
+            and tokens[index].text == "#"
+            and tokens[index + 1].text == "["
+        ):
             depth = 1
             bracket_end = index + 2
             while bracket_end < len(tokens) and depth:
@@ -677,7 +729,12 @@ def scan_public_items(root: Path) -> dict[str, tuple[str, str]]:
                     continue
                 kind_token = tokens[index + 1]
                 name_token = tokens[index + 2]
-                if kind_token.kind != "IDENT" or kind_token.text not in {"trait", "struct", "enum", "type"}:
+                if kind_token.kind != "IDENT" or kind_token.text not in {
+                    "trait",
+                    "struct",
+                    "enum",
+                    "type",
+                }:
                     continue
                 if name_token.kind != "IDENT":
                     fail(f"public {kind_token.text} lacks a name in {relative}")
@@ -697,7 +754,9 @@ def scan_public_items(root: Path) -> dict[str, tuple[str, str]]:
 STANDARD_RESOURCE_NAMES = {"Array", "Blob", "Clob", "NClob", "Ref", "SqlXml"}
 
 
-def classify_new_resource(old_path: str, source_file: str, signature: str) -> PhysicalRow:
+def classify_new_resource(
+    old_path: str, source_file: str, signature: str
+) -> PhysicalRow:
     """Classify a current resource item absent from the frozen 48-row P03 subset."""
 
     name = old_path.rsplit("::", 1)[1]
@@ -711,7 +770,9 @@ def classify_new_resource(old_path: str, source_file: str, signature: str) -> Ph
         base = name.removeprefix("Physical")
         target = f"druid_rdbc::extensions::{base}"
         compatibility = "MOVE_AND_RETAIN_UNTIL_P04_TASK6"
-    elif kind == "enum" and (name.endswith("Length") or name.endswith("RepresentationType")):
+    elif kind == "enum" and (
+        name.endswith("Length") or name.endswith("RepresentationType")
+    ):
         classification = "RDBC_EXTENSION"
         target = f"druid_rdbc::extensions::{name.removeprefix('Rdbc')}"
         compatibility = "MOVE_AND_RETAIN_UNTIL_P04_TASK6"
@@ -732,16 +793,36 @@ def classify_new_resource(old_path: str, source_file: str, signature: str) -> Ph
     )
 
 
-def derive_physical_rows(root: Path) -> tuple[PhysicalRow, ...]:
+def derive_physical_rows(
+    root: Path,
+    *,
+    allow_task5_internalized: bool = False,
+) -> tuple[PhysicalRow, ...]:
     """Union the immutable P03 subset with every current live public declaration."""
 
     baseline = p03_baseline_rows(root)
     current = scan_public_items(root)
     missing_baseline = sorted(set(baseline) - set(current))
-    if missing_baseline:
+    allowed_missing = {
+        old_path
+        for old_path, row in baseline.items()
+        if row.classification == "DRUID_INTERNAL"
+        and row.target_task == "P04_TASK_5_DRUID_INTERNALIZATION"
+    }
+    if missing_baseline and not (
+        allow_task5_internalized and set(missing_baseline) <= allowed_missing
+    ):
         fail(f"P03 physical denominator disappeared from source: {missing_baseline}")
     rows: list[PhysicalRow] = []
+    if allow_task5_internalized:
+        rows.extend(baseline[old_path] for old_path in missing_baseline)
+    task7_replacements = {
+        "druid_rdbc::resource::ResourceOperations",
+        "druid_rdbc::resource::ResourceHandleFactory",
+    }
     for old_path, (source_file, signature) in current.items():
+        if allow_task5_internalized and old_path in task7_replacements:
+            continue
         if old_path in baseline:
             row = baseline[old_path]
             if row.source_file != source_file or row.normalized_signature != signature:
@@ -752,7 +833,9 @@ def derive_physical_rows(root: Path) -> tuple[PhysicalRow, ...]:
             rows.append(row)
         else:
             if "::resource::" not in old_path:
-                fail(f"new unreviewed spi item is outside the P03 denominator: {old_path}")
+                fail(
+                    f"new unreviewed spi item is outside the P03 denominator: {old_path}"
+                )
             rows.append(classify_new_resource(old_path, source_file, signature))
     return tuple(sorted(rows))
 
@@ -778,7 +861,7 @@ def module_context(path: Path) -> tuple[str, ...]:
     except ValueError:
         fail(f"production path has no crates/<name>/src module context: {path}")
     crate_name = parts[crates_index + 1].replace("-", "_")
-    relative = list(parts[source_index + 1:])
+    relative = list(parts[source_index + 1 :])
     if not relative:
         fail(f"production source path has no file name: {path}")
     file_name = relative.pop()
@@ -820,7 +903,10 @@ def proven_old_path(
     """Resolve only an old path or a source-proven facade/re-export prefix."""
 
     candidates: list[tuple[int, str]] = []
-    for qualified, old_path in {**{old: old for old in mapping}, **proven_paths}.items():
+    for qualified, old_path in {
+        **{old: old for old in mapping},
+        **proven_paths,
+    }.items():
         qualified_parts = tuple(qualified.split("::"))
         if qualified_parts == parts[: len(qualified_parts)]:
             candidates.append((len(qualified_parts), old_path))
@@ -857,7 +943,13 @@ def classify_occurrence(tokens: list[object], index: int) -> str:
 def declaration_name(tokens: list[object], index: int) -> bool:
     """Return whether an identifier is the name being declared, not a consumer."""
 
-    return index > 0 and tokens[index - 1].text in {"trait", "struct", "enum", "type", "mod"}
+    return index > 0 and tokens[index - 1].text in {
+        "trait",
+        "struct",
+        "enum",
+        "type",
+        "mod",
+    }
 
 
 def old_path_from_tokens(
@@ -878,12 +970,20 @@ def old_path_from_tokens(
         return bindings[name], start
     parts = (name,)
     cursor = start
-    while cursor + 2 < len(tokens) and tokens[cursor + 1].text == "::" and tokens[cursor + 2].kind == "IDENT":
+    while (
+        cursor + 2 < len(tokens)
+        and tokens[cursor + 1].text == "::"
+        and tokens[cursor + 2].kind == "IDENT"
+    ):
         parts += (canonical_name(tokens[cursor + 2]),)
         cursor += 2
     parts = expanded_path(parts, aliases, context)
     old_path = proven_old_path(parts, mapping, proven_paths)
-    if old_path is None and parts and parts[0] not in {"druid", "druid_rdbc", "druid_wrapper"}:
+    if (
+        old_path is None
+        and parts
+        and parts[0] not in {"druid", "druid_rdbc", "druid_wrapper"}
+    ):
         old_path = proven_old_path(context + parts, mapping, proven_paths)
     return old_path, cursor
 
@@ -935,13 +1035,25 @@ def build_proven_reexports(
                     expanded = expanded_path(entry.path, aliases, context)
                     if expanded and expanded[-1] == "*":
                         prefix = "::".join(expanded[:-1])
-                        if public and any(key == prefix or key.startswith(prefix + "::") for key in proven):
-                            fail(f"wildcard re-export can hide standardized symbols in {path}")
+                        if public and any(
+                            key == prefix or key.startswith(prefix + "::")
+                            for key in proven
+                        ):
+                            fail(
+                                f"wildcard re-export can hide standardized symbols in {path}"
+                            )
                         continue
                     old_path = proven_old_path(expanded, mapping, proven)
-                    if old_path is None and expanded and expanded[0] not in {
-                        "druid", "druid_rdbc", "druid_wrapper",
-                    }:
+                    if (
+                        old_path is None
+                        and expanded
+                        and expanded[0]
+                        not in {
+                            "druid",
+                            "druid_rdbc",
+                            "druid_wrapper",
+                        }
+                    ):
                         old_path = proven_old_path(context + expanded, mapping, proven)
                     bound = entry.alias or (expanded[-1] if expanded else "")
                     if old_path is not None and public:
@@ -969,12 +1081,20 @@ def derive_trait_methods(
     for row in physical:
         if not row.normalized_signature.startswith("trait "):
             continue
+        source = root / row.source_file
+        if (
+            not source.is_file()
+            and row.target_task == "P04_TASK_5_DRUID_INTERNALIZATION"
+        ):
+            methods[row.old_path] = set()
+            continue
         name = row.old_path.rsplit("::", 1)[1]
-        tokens = rust_tokens((root / row.source_file).read_text(encoding="utf-8"))
+        tokens = rust_tokens(source.read_text(encoding="utf-8"))
         excluded = production_excluded_indexes(tokens)
         trait_index = next(
             (
-                index for index in range(len(tokens) - 1)
+                index
+                for index in range(len(tokens) - 1)
                 if tokens[index].text == "trait"
                 and tokens[index + 1].kind == "IDENT"
                 and canonical_name(tokens[index + 1]) == name
@@ -1133,16 +1253,22 @@ def normalize_type_identity(
             base_search_start = associated_end
     else:
         angle_start = next(
-            (index for index in range(identity_start, end) if tokens[index].text == "<"),
+            (
+                index
+                for index in range(identity_start, end)
+                if tokens[index].text == "<"
+            ),
             None,
         )
         if angle_start is not None:
             base_search_end = angle_start
     base_index = next(
         (
-            index for index in range(base_search_end - 1, base_search_start - 1, -1)
+            index
+            for index in range(base_search_end - 1, base_search_start - 1, -1)
             if tokens[index].kind == "IDENT"
-            and canonical_name(tokens[index]) not in {"mut", "dyn", "crate", "self", "super"}
+            and canonical_name(tokens[index])
+            not in {"mut", "dyn", "crate", "self", "super"}
         ),
         None,
     )
@@ -1286,7 +1412,9 @@ def derive_impl_scopes(
         if identity is None:
             continue
         type_name, base_name = identity
-        scopes.append(ImplScope(type_name, base_name, opening + 1, brace_pairs[opening]))
+        scopes.append(
+            ImplScope(type_name, base_name, opening + 1, brace_pairs[opening])
+        )
     return scopes
 
 
@@ -1294,7 +1422,11 @@ def enclosing_impl(index: int, impl_scopes: list[ImplScope]) -> ImplScope | None
     """Return the narrowest impl containing one token index."""
 
     candidates = [scope for scope in impl_scopes if scope.start <= index < scope.end]
-    return min(candidates, key=lambda scope: scope.end - scope.start) if candidates else None
+    return (
+        min(candidates, key=lambda scope: scope.end - scope.start)
+        if candidates
+        else None
+    )
 
 
 def derive_function_scopes(
@@ -1308,7 +1440,11 @@ def derive_function_scopes(
 
     scopes: list[FunctionScope] = []
     for fn_index in range(len(tokens) - 1):
-        if fn_index in excluded or tokens[fn_index].text != "fn" or tokens[fn_index + 1].kind != "IDENT":
+        if (
+            fn_index in excluded
+            or tokens[fn_index].text != "fn"
+            or tokens[fn_index + 1].kind != "IDENT"
+        ):
             continue
         params_start = fn_index + 2
         while params_start < len(tokens) and tokens[params_start].text != "(":
@@ -1347,7 +1483,11 @@ def innermost_brace_scope(
         for opening, closing in brace_pairs.items()
         if opening < index < closing
     ]
-    return min(candidates, key=lambda pair: pair[1] - pair[0]) if candidates else (index, fallback_end)
+    return (
+        min(candidates, key=lambda pair: pair[1] - pair[0])
+        if candidates
+        else (index, fallback_end)
+    )
 
 
 def unique_trait_or_none(paths: set[str]) -> str | None:
@@ -1500,7 +1640,9 @@ def outer_pair(
     return None
 
 
-def pattern_identifiers(tokens: list[object], start: int, end: int) -> list[tuple[int, str]]:
+def pattern_identifiers(
+    tokens: list[object], start: int, end: int
+) -> list[tuple[int, str]]:
     """Return binding identifiers from a simple/tuple pattern, excluding paths and keywords."""
 
     ignored = {"mut", "ref", "self", "Self", "crate", "super", "_"}
@@ -1546,8 +1688,17 @@ def typed_pattern_bindings(
             for pattern_range, type_range in zip(patterns, types, strict=True):
                 result.extend(
                     typed_pattern_bindings(
-                        tokens, *pattern_range, *type_range, paren_pairs, bracket_pairs,
-                        aliases, imports, mapping, context, proven_paths, trait_paths,
+                        tokens,
+                        *pattern_range,
+                        *type_range,
+                        paren_pairs,
+                        bracket_pairs,
+                        aliases,
+                        imports,
+                        mapping,
+                        context,
+                        proven_paths,
+                        trait_paths,
                     )
                 )
             return result
@@ -1561,15 +1712,31 @@ def typed_pattern_bindings(
             for pattern_range, type_range in zip(patterns, types, strict=True):
                 result.extend(
                     typed_pattern_bindings(
-                        tokens, *pattern_range, *type_range, paren_pairs, bracket_pairs,
-                        aliases, imports, mapping, context, proven_paths, trait_paths,
+                        tokens,
+                        *pattern_range,
+                        *type_range,
+                        paren_pairs,
+                        bracket_pairs,
+                        aliases,
+                        imports,
+                        mapping,
+                        context,
+                        proven_paths,
+                        trait_paths,
                     )
                 )
             return result
     trait_path = unique_trait_or_none(
         signature_trait_paths(
-            tokens, type_start, type_end, aliases, imports, mapping, context,
-            proven_paths, trait_paths,
+            tokens,
+            type_start,
+            type_end,
+            aliases,
+            imports,
+            mapping,
+            context,
+            proven_paths,
+            trait_paths,
         )
     )
     return [
@@ -1597,14 +1764,20 @@ def derive_receiver_proofs(
     impl_scopes = derive_impl_scopes(
         tokens, brace_pairs, excluded, context, identity_imports
     )
-    functions = derive_function_scopes(tokens, paren_pairs, brace_pairs, impl_scopes, excluded)
+    functions = derive_function_scopes(
+        tokens, paren_pairs, brace_pairs, impl_scopes, excluded
+    )
     bindings: list[ReceiverBinding] = []
     accessors: dict[tuple[str | None, str], str] = {}
 
     # Struct fields are visible only in impls of that exact self type.
     struct_fields: dict[str, list[tuple[str, str | None, int]]] = {}
     for index in range(len(tokens) - 1):
-        if index in excluded or tokens[index].text != "struct" or tokens[index + 1].kind != "IDENT":
+        if (
+            index in excluded
+            or tokens[index].text != "struct"
+            or tokens[index + 1].kind != "IDENT"
+        ):
             continue
         name = canonical_name(tokens[index + 1])
         opening = index + 2
@@ -1629,18 +1802,37 @@ def derive_receiver_proofs(
                 while end < closing and tokens[end].text != ",":
                     end += 1
                 resolved = signature_trait_paths(
-                    tokens, cursor + 2, end, aliases, imports, mapping, context,
-                    proven_paths, trait_paths,
+                    tokens,
+                    cursor + 2,
+                    end,
+                    aliases,
+                    imports,
+                    mapping,
+                    context,
+                    proven_paths,
+                    trait_paths,
                 )
-                fields.append((canonical_name(tokens[cursor]), unique_trait_or_none(resolved), cursor))
+                fields.append(
+                    (
+                        canonical_name(tokens[cursor]),
+                        unique_trait_or_none(resolved),
+                        cursor,
+                    )
+                )
                 cursor = end
             cursor += 1
         struct_fields[name] = fields
     for scope in impl_scopes:
-        for field_name, trait_path, declaration in struct_fields.get(scope.base_name, []):
+        for field_name, trait_path, declaration in struct_fields.get(
+            scope.base_name, []
+        ):
             bindings.append(
                 ReceiverBinding(
-                    field_name, trait_path, declaration, scope.start, scope.end,
+                    field_name,
+                    trait_path,
+                    declaration,
+                    scope.start,
+                    scope.end,
                     f"field:{scope.type_name}:{field_name}",
                 )
             )
@@ -1654,14 +1846,27 @@ def derive_receiver_proofs(
             if colon is None:
                 continue
             for declaration, name, trait_path in typed_pattern_bindings(
-                tokens, param_start, colon, colon + 1, param_end,
-                paren_pairs, bracket_pairs, aliases, imports, mapping, context,
-                proven_paths, trait_paths,
+                tokens,
+                param_start,
+                colon,
+                colon + 1,
+                param_end,
+                paren_pairs,
+                bracket_pairs,
+                aliases,
+                imports,
+                mapping,
+                context,
+                proven_paths,
+                trait_paths,
             ):
                 bindings.append(
                     ReceiverBinding(
-                        name, trait_path, declaration,
-                        function.body_start, function.body_end,
+                        name,
+                        trait_path,
+                        declaration,
+                        function.body_start,
+                        function.body_end,
                         f"parameter:{function.name}:{name}:{declaration}",
                     )
                 )
@@ -1674,8 +1879,15 @@ def derive_receiver_proofs(
             arrow += 1
         if arrow + 1 < function.body_start:
             resolved = signature_trait_paths(
-                tokens, arrow + 2, function.body_start - 1, aliases, imports,
-                mapping, context, proven_paths, trait_paths,
+                tokens,
+                arrow + 2,
+                function.body_start - 1,
+                aliases,
+                imports,
+                mapping,
+                context,
+                proven_paths,
+                trait_paths,
             )
             trait_path = unique_trait_or_none(resolved)
             if trait_path is not None:
@@ -1691,7 +1903,10 @@ def derive_receiver_proofs(
             if cursor in excluded or tokens[cursor].text != "let":
                 cursor += 1
                 continue
-            if cursor > function.body_start and tokens[cursor - 1].text in {"if", "while"}:
+            if cursor > function.body_start and tokens[cursor - 1].text in {
+                "if",
+                "while",
+            }:
                 cursor += 1
                 continue
             pattern_start = cursor + 1
@@ -1705,33 +1920,57 @@ def derive_receiver_proofs(
             local_bindings: list[tuple[int, str, str | None]]
             if colon is not None:
                 local_bindings = typed_pattern_bindings(
-                    tokens, pattern_start, colon, colon + 1, equals,
-                    paren_pairs, bracket_pairs, aliases, imports, mapping,
-                    context, proven_paths, trait_paths,
+                    tokens,
+                    pattern_start,
+                    colon,
+                    colon + 1,
+                    equals,
+                    paren_pairs,
+                    bracket_pairs,
+                    aliases,
+                    imports,
+                    mapping,
+                    context,
+                    proven_paths,
+                    trait_paths,
                 )
             else:
                 local_bindings = [
                     (index, name, None)
-                    for index, name in pattern_identifiers(tokens, pattern_start, pattern_end)
+                    for index, name in pattern_identifiers(
+                        tokens, pattern_start, pattern_end
+                    )
                 ]
             inferred_trait: str | None = None
-            if colon is None and equals < function.body_end and tokens[equals].text == "=":
+            if (
+                colon is None
+                and equals < function.body_end
+                and tokens[equals].text == "="
+            ):
                 rhs_end = equals + 1
                 while rhs_end < function.body_end and tokens[rhs_end].text != ";":
                     rhs_end += 1
                 for rhs_index in range(equals + 1, rhs_end - 1):
-                    if tokens[rhs_index].kind != "IDENT" or tokens[rhs_index + 1].text != "(":
+                    if (
+                        tokens[rhs_index].kind != "IDENT"
+                        or tokens[rhs_index + 1].text != "("
+                    ):
                         continue
                     key = (function.impl_type, canonical_name(tokens[rhs_index]))
                     if key in accessors:
                         inferred_trait = accessors[key]
                         break
-            scope_start, scope_end = innermost_brace_scope(cursor, brace_pairs, function.body_end)
+            scope_start, scope_end = innermost_brace_scope(
+                cursor, brace_pairs, function.body_end
+            )
             for declaration, name, trait_path in local_bindings:
                 bindings.append(
                     ReceiverBinding(
-                        name, trait_path or inferred_trait, declaration,
-                        max(scope_start, declaration), scope_end,
+                        name,
+                        trait_path or inferred_trait,
+                        declaration,
+                        max(scope_start, declaration),
+                        scope_end,
                         f"local:{function.name}:{name}:{declaration}",
                     )
                 )
@@ -1758,25 +1997,45 @@ def derive_receiver_proofs(
                 closure_end = brace_pairs.get(body_token, function.body_end)
             else:
                 closure_start = body_token
-                closure_end = expression_scope_end(tokens, body_token, function.body_end)
-            for param_start, param_end in split_top_level_ranges(tokens, cursor + 1, closing_pipe):
+                closure_end = expression_scope_end(
+                    tokens, body_token, function.body_end
+                )
+            for param_start, param_end in split_top_level_ranges(
+                tokens, cursor + 1, closing_pipe
+            ):
                 colon = top_level_token_index(tokens, param_start, param_end, ":")
                 closure_bindings = (
                     typed_pattern_bindings(
-                        tokens, param_start, colon, colon + 1, param_end,
-                        paren_pairs, bracket_pairs, aliases, imports, mapping, context,
-                        proven_paths, trait_paths,
+                        tokens,
+                        param_start,
+                        colon,
+                        colon + 1,
+                        param_end,
+                        paren_pairs,
+                        bracket_pairs,
+                        aliases,
+                        imports,
+                        mapping,
+                        context,
+                        proven_paths,
+                        trait_paths,
                     )
                     if colon is not None
                     else [
                         (index, name, None)
-                        for index, name in pattern_identifiers(tokens, param_start, param_end)
+                        for index, name in pattern_identifiers(
+                            tokens, param_start, param_end
+                        )
                     ]
                 )
                 for declaration, name, trait_path in closure_bindings:
                     bindings.append(
                         ReceiverBinding(
-                            name, trait_path, declaration, closure_start, closure_end,
+                            name,
+                            trait_path,
+                            declaration,
+                            closure_start,
+                            closure_end,
                             f"closure:{function.name}:{name}:{declaration}",
                         )
                     )
@@ -1785,7 +2044,11 @@ def derive_receiver_proofs(
     # Enum variant patterns carry their payload trait into one match arm.
     variant_traits: dict[tuple[str, str], str] = {}
     for index in range(len(tokens) - 2):
-        if index in excluded or tokens[index].text != "enum" or tokens[index + 1].kind != "IDENT":
+        if (
+            index in excluded
+            or tokens[index].text != "enum"
+            or tokens[index + 1].kind != "IDENT"
+        ):
             continue
         enum_name = canonical_name(tokens[index + 1])
         opening = index + 2
@@ -1796,21 +2059,36 @@ def derive_receiver_proofs(
         closing = brace_pairs[opening]
         cursor = opening + 1
         while cursor + 1 < closing:
-            if tokens[cursor].kind == "IDENT" and tokens[cursor + 1].text == "(" and cursor + 1 in paren_pairs:
+            if (
+                tokens[cursor].kind == "IDENT"
+                and tokens[cursor + 1].text == "("
+                and cursor + 1 in paren_pairs
+            ):
                 end = paren_pairs[cursor + 1]
                 resolved = signature_trait_paths(
-                    tokens, cursor + 2, end, aliases, imports, mapping, context,
-                    proven_paths, trait_paths,
+                    tokens,
+                    cursor + 2,
+                    end,
+                    aliases,
+                    imports,
+                    mapping,
+                    context,
+                    proven_paths,
+                    trait_paths,
                 )
                 trait_path = unique_trait_or_none(resolved)
                 if trait_path is not None:
-                    variant_traits[(enum_name, canonical_name(tokens[cursor]))] = trait_path
+                    variant_traits[(enum_name, canonical_name(tokens[cursor]))] = (
+                        trait_path
+                    )
                 cursor = end
             cursor += 1
     for index in range(len(tokens) - 5):
         if (
-            tokens[index].kind != "IDENT" or tokens[index + 1].text != "::"
-            or tokens[index + 2].kind != "IDENT" or tokens[index + 3].text != "("
+            tokens[index].kind != "IDENT"
+            or tokens[index + 1].text != "::"
+            or tokens[index + 2].kind != "IDENT"
+            or tokens[index + 3].text != "("
         ):
             continue
         key = (canonical_name(tokens[index]), canonical_name(tokens[index + 2]))
@@ -1819,7 +2097,11 @@ def derive_receiver_proofs(
             continue
         closing = paren_pairs[index + 3]
         pattern_names = pattern_identifiers(tokens, index + 4, closing)
-        if index >= 2 and tokens[index - 1].text == "let" and tokens[index - 2].text in {"if", "while"}:
+        if (
+            index >= 2
+            and tokens[index - 1].text == "let"
+            and tokens[index - 2].text in {"if", "while"}
+        ):
             body = closing + 1
             while body < len(tokens) and tokens[body].text != "{":
                 if tokens[body].text == ";":
@@ -1829,7 +2111,11 @@ def derive_receiver_proofs(
                 for binding_index, name in pattern_names:
                     bindings.append(
                         ReceiverBinding(
-                            name, trait_path, binding_index, body + 1, brace_pairs[body],
+                            name,
+                            trait_path,
+                            binding_index,
+                            body + 1,
+                            brace_pairs[body],
                             f"control-pattern:{tokens[index - 2].text}:{key[0]}::{key[1]}"
                             f":{name}:{binding_index}",
                         )
@@ -1842,7 +2128,11 @@ def derive_receiver_proofs(
         for binding_index, name in pattern_names:
             bindings.append(
                 ReceiverBinding(
-                    name, trait_path, binding_index, closing + 1, arm_end,
+                    name,
+                    trait_path,
+                    binding_index,
+                    closing + 1,
+                    arm_end,
                     f"pattern:{key[0]}::{key[1]}:{name}:{binding_index}",
                 )
             )
@@ -1859,7 +2149,8 @@ def receiver_binding_at(
     """Resolve the nearest lexical declaration; unrelated shadow blocks outer proofs."""
 
     candidates = [
-        binding for binding in bindings
+        binding
+        for binding in bindings
         if binding.name == name
         and binding.declaration_index < call_index
         and binding.scope_start <= call_index < binding.scope_end
@@ -1880,8 +2171,10 @@ def receiver_binding_at(
     best = candidates[0]
     best_key = (best.scope_end - best.scope_start, best.declaration_index)
     tied = [
-        binding for binding in candidates
-        if (binding.scope_end - binding.scope_start, binding.declaration_index) == best_key
+        binding
+        for binding in candidates
+        if (binding.scope_end - binding.scope_start, binding.declaration_index)
+        == best_key
     ]
     if len({binding.trait_path for binding in tied}) > 1:
         return None
@@ -1921,7 +2214,9 @@ def receiver_call_rows(
                 and tokens[receiver_index - 1].text == "."
                 and tokens[receiver_index - 2].text == "self"
             )
-            is_bare_receiver = receiver_index == 0 or tokens[receiver_index - 1].text != "."
+            is_bare_receiver = (
+                receiver_index == 0 or tokens[receiver_index - 1].text != "."
+            )
             binding = None
             if is_self_field and owner is not None:
                 binding = receiver_binding_at(
@@ -1963,7 +2258,9 @@ def receiver_call_rows(
                 accessor_name = canonical_name(tokens[accessor_index])
                 trait_path = accessors.get((owner_name, accessor_name))
                 if trait_path is not None:
-                    proof_identity = f"accessor:{owner_name or '<module>'}:{accessor_name}"
+                    proof_identity = (
+                        f"accessor:{owner_name or '<module>'}:{accessor_name}"
+                    )
         if trait_path is None:
             continue
         method = canonical_name(tokens[method_index])
@@ -2038,18 +2335,28 @@ def implementation_rows(
             bracket += text == "["
             bracket -= text == "]"
             type_end += 1
-        implementation_type = "".join(token.text for token in tokens[type_start:type_end])
+        implementation_type = "".join(
+            token.text for token in tokens[type_start:type_end]
+        )
         if not implementation_type:
             fail(f"trait impl has no implementation type in {path}")
         owner = (
-            "RDBC_CURRENT_IMPL" if path.parts[:2] == ("crates", "druid-rdbc")
-            else "WRAPPER_ADAPTER" if path.parts[:2] == ("crates", "druid-wrapper")
-            else "DRUID_LOGICAL_OR_PROXY"
+            "RDBC_CURRENT_IMPL"
+            if path.parts[:2] == ("crates", "druid-rdbc")
+            else (
+                "WRAPPER_ADAPTER"
+                if path.parts[:2] == ("crates", "druid-wrapper")
+                else "DRUID_LOGICAL_OR_PROXY"
+            )
         )
         target_task = (
-            "P04_TASK_4_ADAPTER_CUTOVER" if owner == "WRAPPER_ADAPTER"
-            else "P04_TASK_5_LOGICAL_CUTOVER" if owner == "DRUID_LOGICAL_OR_PROXY"
-            else tasks[trait_path]
+            "P04_TASK_4_ADAPTER_CUTOVER"
+            if owner == "WRAPPER_ADAPTER"
+            else (
+                "P04_TASK_5_LOGICAL_CUTOVER"
+                if owner == "DRUID_LOGICAL_OR_PROXY"
+                else tasks[trait_path]
+            )
         )
         target_trait = mapping[trait_path]
         standard_type = implementation_type
@@ -2104,7 +2411,9 @@ def implementation_rows(
             }
             if implementation_type in prepared_families:
                 standard_type = "StandardAdapterPreparedStatement"
-                standard_source = "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs"
+                standard_source = (
+                    "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs"
+                )
                 standard_core, behavior = prepared_families[implementation_type]
             elif implementation_type == "SqlxPreparedStatement":
                 standard_core = "SqlxConnectionActor::execute_query/execute_update"
@@ -2120,7 +2429,9 @@ def implementation_rows(
             elif target_trait.endswith("::DatabaseMetaData"):
                 standard_core = f"{implementation_type.split('<', 1)[0]}::database_product_name_core"
             elif target_trait.endswith("::ResultSet"):
-                standard_core = f"{implementation_type}::next_core/value_core/close_core"
+                standard_core = (
+                    f"{implementation_type}::next_core/value_core/close_core"
+                )
             elif target_trait.endswith("::Wrapper"):
                 standard_core = f"{implementation_type}::canonical_unwrap"
                 behavior = "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity"
@@ -2179,7 +2490,8 @@ def scan_source_text(
         if declarations.get(old_path) == path.as_posix():
             name = old_path.rsplit("::", 1)[1]
             if any(
-                token.kind == "IDENT" and canonical_name(token) == name
+                token.kind == "IDENT"
+                and canonical_name(token) == name
                 and declaration_name(tokens, index)
                 for index, token in enumerate(tokens)
             ):
@@ -2194,8 +2506,10 @@ def scan_source_text(
         if index in excluded:
             continue
         if (
-            tokens[index].text == "extern" and tokens[index + 1].text == "crate"
-            and tokens[index + 2].kind == "IDENT" and tokens[index + 3].text == "as"
+            tokens[index].text == "extern"
+            and tokens[index + 1].text == "crate"
+            and tokens[index + 2].kind == "IDENT"
+            and tokens[index + 3].text == "as"
             and tokens[index + 4].kind == "IDENT"
         ):
             root_name = canonical_name(tokens[index + 2])
@@ -2231,7 +2545,9 @@ def scan_source_text(
                     tuple(old.split("::"))[: len(wildcard_prefix)] == wildcard_prefix
                     for old in mapping
                 ):
-                    fail(f"wildcard import can hide standardized symbols in {path}: {'::'.join(expanded)}")
+                    fail(
+                        f"wildcard import can hide standardized symbols in {path}: {'::'.join(expanded)}"
+                    )
                 continue
             alias = entry.alias
             if expanded:
@@ -2244,9 +2560,16 @@ def scan_source_text(
                     # exact identity proof; keep the name deliberately unresolved.
                     identity_imports.pop(bound_identity, None)
             old_path = proven_old_path(expanded, mapping, proven)
-            if old_path is None and expanded and expanded[0] not in {
-                "druid", "druid_rdbc", "druid_wrapper",
-            }:
+            if (
+                old_path is None
+                and expanded
+                and expanded[0]
+                not in {
+                    "druid",
+                    "druid_rdbc",
+                    "druid_wrapper",
+                }
+            ):
                 old_path = proven_old_path(context + expanded, mapping, proven)
             if old_path is not None:
                 bound = alias or expanded[-1]
@@ -2271,7 +2594,11 @@ def scan_source_text(
                 aliases[alias or expanded[-1]] = expanded
 
     for token_index, token in enumerate(tokens):
-        if token_index in covered or token.kind != "IDENT" or declaration_name(tokens, token_index):
+        if (
+            token_index in covered
+            or token.kind != "IDENT"
+            or declaration_name(tokens, token_index)
+        ):
             continue
         old_path, end = old_path_from_tokens(
             tokens, token_index, aliases, bindings, mapping, context, proven
@@ -2348,18 +2675,30 @@ def production_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
-def derive_live_manifests(root: Path, legacy_physical: Path = P03_MANIFEST) -> LiveManifests:
+def derive_live_manifests(
+    root: Path,
+    legacy_physical: Path = P03_MANIFEST,
+    *,
+    phase: str = "transitional",
+) -> LiveManifests:
     """Derive all three tables from the immutable P03 base and current production tokens."""
 
     # The argument is retained so the documented command names the artifact being refreshed.
     # The denominator itself comes from Git P03 plus current source, never from mutable TSV rows.
     _ = legacy_physical
-    physical = derive_physical_rows(root)
+    if phase not in {"transitional", "task5"}:
+        fail(f"unknown denominator phase: {phase}")
+    physical = derive_physical_rows(
+        root,
+        allow_task5_internalized=phase == "task5",
+    )
     mapping = {row.old_path: row.target_path for row in physical}
     tasks = {row.old_path: row.target_task for row in physical}
     declaration_paths = {row.old_path: row.source_file for row in physical}
     trait_paths = {
-        row.old_path for row in physical if row.normalized_signature.startswith("trait ")
+        row.old_path
+        for row in physical
+        if row.normalized_signature.startswith("trait ")
     }
     proven_paths = build_proven_reexports(root, mapping, declaration_paths)
     trait_methods = derive_trait_methods(root, physical)
@@ -2529,7 +2868,48 @@ def pinned_task4_closed_consumers(root: Path) -> tuple[ConsumerRow, ...]:
     return pinned
 
 
-def require_task4_adapter_payload(path: Path, live: tuple[AdapterRow, ...]) -> tuple[AdapterRow, ...]:
+def pinned_task5_consumers(root: Path) -> tuple[ConsumerRow, ...]:
+    """Load the complete source-derived Task 5 denominator from its authorized base."""
+
+    source = DEFAULT_CONSUMERS.as_posix()
+    result = subprocess.run(
+        ["git", "show", f"{TASK5_PRE_CUTOVER_COMMIT}:{source}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        fail(
+            f"cannot load pinned Task 5 consumer history: {detail or 'git show failed'}"
+        )
+    rows = tuple(
+        row
+        for row in parse_consumer_payload(result.stdout)
+        if row.target_task == "P04_TASK_5_DRUID_INTERNALIZATION"
+    )
+    if len(rows) != 357:
+        fail(f"pinned Task 5 consumer denominator expected 357 rows, found {len(rows)}")
+    return rows
+
+
+def task5_consumer_identity(row: ConsumerRow) -> tuple[str, str, str, str, str, str]:
+    """Compare source occurrences while permitting honest token-coordinate movement."""
+
+    symbol = re.sub(r"@(?:qualified-)?token=.*$", "", row.symbol)
+    return (
+        row.source_path,
+        row.occurrence_kind,
+        symbol,
+        row.old_path,
+        row.target_path,
+        row.target_task,
+    )
+
+
+def require_task4_adapter_payload(
+    path: Path, live: tuple[AdapterRow, ...]
+) -> tuple[AdapterRow, ...]:
     """Require exact source impl rows while allowing only Task 4 state advancement."""
 
     if not path.is_file():
@@ -2556,10 +2936,59 @@ def require_task4_consumer_payload(
     closed = tuple(row for row in checked if row.state == "STANDARD_REFERENCE_CLOSED")
     pinned_closed = pinned_task4_closed_consumers(root)
     if closed != pinned_closed:
-        fail("Task 4 historical CLOSED consumers do not match pinned 8252a20 identities")
-    active = tuple(row for row in checked if row.state != "STANDARD_REFERENCE_CLOSED")
+        fail(
+            "Task 4 historical CLOSED consumers do not match pinned 8252a20 identities"
+        )
+    task5_all = tuple(
+        row for row in checked if row.target_task == "P04_TASK_5_DRUID_INTERNALIZATION"
+    )
+    task5_baseline = pinned_task5_consumers(root)
+    checked_task5_identities = Counter(map(task5_consumer_identity, task5_all))
+    baseline_task5_identities = Counter(map(task5_consumer_identity, task5_baseline))
+    if baseline_task5_identities - checked_task5_identities:
+        fail("Task 5 LIVE/CLOSED consumers omit the pinned dynamic denominator")
+    additions = checked_task5_identities - baseline_task5_identities
+    task6_addition_paths = {
+        "crates/druid/src/core/mod.rs",
+        "crates/druid/src/core/physical_connection_info.rs",
+        "crates/druid/src/core/prepared_statement_key.rs",
+        "crates/druid/src/spi/mod.rs",
+        "crates/druid/src/spi/rdbc_resource_capabilities.rs",
+        "crates/druid/src/spi/rdbc_resource_context.rs",
+        "crates/druid/src/spi/rdbc_resource_factory.rs",
+        "crates/druid/src/spi/rdbc_resource_id.rs",
+        "crates/druid/src/spi/rdbc_resource_kind.rs",
+        "crates/druid/src/spi/rdbc_resource_owner.rs",
+        "crates/druid/src/spi/rdbc_resource_state.rs",
+    }
+    if any(
+        not (
+            identity[0].startswith("crates/druid/src/core/compat/")
+            or identity[0] in task6_addition_paths
+        )
+        for identity in additions
+    ):
+        fail("Task 5 consumer was added outside the Task 6 compatibility boundary")
+    task5_state_counts = Counter(row.state for row in task5_all)
+    if task5_state_counts["DRUID_INTERNAL_REFERENCE_CLOSED"] != 180:
+        fail(
+            "Task 5 consumer manifest must contain exactly 180 internalized CLOSED rows"
+        )
+    if task5_state_counts["TASK7_RESOURCE_OPERATIONS_PENDING"] != 108:
+        fail("Task 5 consumer manifest must contain exactly 108 Task 7 handoff rows")
+    if task5_state_counts["TASK6_COMPATIBILITY_PENDING"] < 69:
+        fail("Task 5 consumer manifest lost the 69-row Task 6 compatibility floor")
+    active = tuple(
+        row
+        for row in checked
+        if row.state != "STANDARD_REFERENCE_CLOSED"
+        and row.target_task != "P04_TASK_5_DRUID_INTERNALIZATION"
+    )
     normalized_active = normalize_consumer_phase(active)
-    if normalized_active != live:
+    live_non_task5 = tuple(
+        row for row in live if row.target_task != "P04_TASK_5_DRUID_INTERNALIZATION"
+    )
+    if normalized_active != live_non_task5:
         fail("active consumer manifest rows do not match the live denominator")
     live_identities = {
         (row.source_path, row.occurrence_kind, row.old_path, row.target_path)
@@ -2569,7 +2998,15 @@ def require_task4_consumer_payload(
         identity = (row.source_path, row.occurrence_kind, row.old_path, row.target_path)
         if identity in live_identities:
             fail(f"closed consumer still exists in live source: {identity}")
-    return tuple(sorted((*normalized_active, *normalize_consumer_phase(closed))))
+    return tuple(
+        sorted(
+            (
+                *normalized_active,
+                *normalize_consumer_phase(closed),
+                *normalize_consumer_phase(task5_all),
+            )
+        )
+    )
 
 
 def verify_denominator(
@@ -2582,7 +3019,7 @@ def verify_denominator(
 ) -> LiveManifests:
     """Compare all checked-in artifacts byte-for-byte with a fresh live derivation."""
 
-    live = live or derive_live_manifests(root, physical_path)
+    live = live or derive_live_manifests(root, physical_path, phase="task5")
     physical = physical_path if physical_path.is_absolute() else root / physical_path
     adapters = adapter_path if adapter_path.is_absolute() else root / adapter_path
     consumers = consumer_path if consumer_path.is_absolute() else root / consumer_path
@@ -2594,7 +3031,9 @@ def verify_denominator(
         "physical",
     )
     projected_adapters = require_task4_adapter_payload(adapters, live.adapters)
-    projected_consumers = require_task4_consumer_payload(root, consumers, live.consumers)
+    projected_consumers = require_task4_consumer_payload(
+        root, consumers, live.consumers
+    )
     return LiveManifests(live.physical, projected_adapters, projected_consumers)
 
 
@@ -2659,9 +3098,13 @@ def main() -> int:
     root = repository_root()
     try:
         if arguments.emit_live:
-            live = emit_live(root, arguments.physical, arguments.adapters, arguments.consumers)
+            live = emit_live(
+                root, arguments.physical, arguments.adapters, arguments.consumers
+            )
         else:
-            live = verify_denominator(root, arguments.physical, arguments.adapters, arguments.consumers)
+            live = verify_denominator(
+                root, arguments.physical, arguments.adapters, arguments.consumers
+            )
     except VerificationError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

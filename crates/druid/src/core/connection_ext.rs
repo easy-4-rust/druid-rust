@@ -5,7 +5,8 @@ use super::meta_data::MetaData;
 use super::physical_connection::PhysicalConnection;
 use super::physical_prepared_statement::PhysicalPreparedStatement;
 use super::physical_statement::{PhysicalStatement, PhysicalStatementOptions};
-use super::prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
+use super::prepared_statement_key::PreparedStatementKey;
+use super::prepared_statement_method_type::PreparedStatementMethodType;
 use super::SqlWarning;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -33,7 +34,8 @@ pub trait ConnectionExt: PhysicalConnection {
             self.catalog().map(ToOwned::to_owned),
             PreparedStatementMethodType::M1,
         )?;
-        self.prepare_physical_statement(&key).await
+        let compatibility = super::compat::physical_prepared_statement_key(&key)?;
+        self.prepare_physical_statement(&compatibility).await
     }
 
     /// 创建 `CallableStatement` 对象。
@@ -46,7 +48,8 @@ pub trait ConnectionExt: PhysicalConnection {
             self.catalog().map(ToOwned::to_owned),
             PreparedStatementMethodType::Precall1,
         )?;
-        self.prepare_physical_call(&key).await
+        let compatibility = super::compat::physical_prepared_statement_key(&key)?;
+        self.prepare_physical_call(&compatibility).await
     }
 
     /// 返回数据库与驱动元数据。

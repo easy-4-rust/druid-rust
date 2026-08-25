@@ -6,6 +6,7 @@
 //! 与 `defaultAutoCommit` 字段，以及 `DruidConnectionHolder#reset()`。
 
 use super::{DruidError, PhysicalConnection};
+use druid_rdbc::connection::Connection as StandardConnection;
 
 /// 物理连接进入连接池时的默认状态。
 ///
@@ -18,6 +19,8 @@ pub struct ConnectionDefaults {
     read_only: bool,
     holdability: i32,
     transaction_isolation: u8,
+    catalog: Option<String>,
+    schema: Option<String>,
 }
 
 impl Default for ConnectionDefaults {
@@ -27,6 +30,8 @@ impl Default for ConnectionDefaults {
             read_only: false,
             holdability: 0,
             transaction_isolation: 2,
+            catalog: None,
+            schema: None,
         }
     }
 }
@@ -44,7 +49,23 @@ impl ConnectionDefaults {
             read_only: connection.read_only(),
             holdability: connection.holdability(),
             transaction_isolation: connection.transaction_isolation(),
+            catalog: connection.catalog().map(ToOwned::to_owned),
+            schema: connection.schema().map(ToOwned::to_owned),
         }
+    }
+
+    /// 从 canonical standard connection 捕获 Druid 回收所需默认状态。
+    pub(crate) fn capture_standard(
+        connection: &dyn StandardConnection,
+    ) -> Result<Self, DruidError> {
+        Ok(Self {
+            auto_commit: connection.auto_commit()?,
+            read_only: connection.read_only()?,
+            holdability: 0,
+            transaction_isolation: 2,
+            catalog: connection.catalog()?,
+            schema: connection.schema()?,
+        })
     }
 
     /// 返回默认自动提交状态。
@@ -65,6 +86,49 @@ impl ConnectionDefaults {
     /// 返回默认事务隔离级别。
     pub fn transaction_isolation(&self) -> u8 {
         self.transaction_isolation
+    }
+
+    /// 返回首次进入池时的 catalog。
+    pub(crate) fn catalog(&self) -> Option<&str> {
+        self.catalog.as_deref()
+    }
+
+    /// 返回首次进入池时的 schema。
+    pub(crate) fn schema(&self) -> Option<&str> {
+        self.schema.as_deref()
+    }
+
+    /// 判断 canonical standard connection 是否需要异步回收复位。
+    pub(crate) fn standard_needs_reset(
+        &self,
+        connection: &dyn StandardConnection,
+    ) -> Result<bool, DruidError> {
+        let capabilities = connection.capabilities();
+        Ok(connection.read_only()? != self.read_only
+            || connection.auto_commit()? != self.auto_commit
+            || (capabilities.catalogs && connection.catalog()?.as_deref() != self.catalog())
+            || (capabilities.schemas && connection.schema()?.as_deref() != self.schema()))
+    }
+
+    /// 按 Druid holder 顺序恢复 canonical standard connection 状态。
+    pub(crate) async fn reset_standard_state(
+        &self,
+        connection: &mut dyn StandardConnection,
+    ) -> Result<(), DruidError> {
+        let capabilities = connection.capabilities();
+        if connection.read_only()? != self.read_only {
+            connection.set_read_only(self.read_only).await?;
+        }
+        if capabilities.catalogs && connection.catalog()?.as_deref() != self.catalog() {
+            connection.set_catalog(self.catalog()).await?;
+        }
+        if capabilities.schemas && connection.schema()?.as_deref() != self.schema() {
+            connection.set_schema(self.schema()).await?;
+        }
+        if connection.auto_commit()? != self.auto_commit {
+            connection.set_auto_commit(self.auto_commit).await?;
+        }
+        Ok(())
     }
 
     /// 判断连接是否需要异步复位。

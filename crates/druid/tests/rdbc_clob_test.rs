@@ -5,8 +5,7 @@ use druid::core::{
     RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
 use druid::spi::{
-    RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
-    RdbcResourceFactory,
+    RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations,
 };
 use std::io::{Error, Write};
 use std::sync::{Arc, Mutex};
@@ -132,8 +131,8 @@ impl Write for ClobAsciiWriter {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for InMemoryClobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::clob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::clob()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -310,11 +309,11 @@ impl RdbcClobAccess for InMemoryClobAccess {
 impl RdbcNClobAccess for InMemoryClobAccess {}
 
 fn clob(value: impl Into<RdbcString>) -> RdbcClob {
-    RdbcResourceFactory::clob(Arc::new(InMemoryClobAccess::new(value.into())))
+    ResourceHandleFactory::clob(Arc::new(InMemoryClobAccess::new(value.into())))
 }
 
 fn n_clob(value: impl Into<RdbcString>) -> RdbcNClob {
-    RdbcResourceFactory::n_clob(Arc::new(InMemoryClobAccess::new(value.into())))
+    ResourceHandleFactory::n_clob(Arc::new(InMemoryClobAccess::new(value.into())))
 }
 
 #[derive(Debug)]
@@ -406,9 +405,7 @@ async fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
     assert_eq!(value, value.clone());
     assert_ne!(value, clob("abcdef"));
     assert!(format!("{value:?}").contains("RdbcClob"));
-    assert!(value
-        .capabilities()
-        .contains(RdbcResourceCapabilities::STREAM));
+    assert!(value.capabilities().contains(ResourceOperations::STREAM));
     assert_eq!(value.length().await.unwrap(), 6);
     assert_eq!(
         value
@@ -520,9 +517,7 @@ async fn clob_and_n_clob_delegate_complete_rdbc_character_resource_contract() {
             .unwrap(),
         "国家"
     );
-    assert!(national
-        .capabilities()
-        .contains(RdbcResourceCapabilities::READ));
+    assert!(national.capabilities().contains(ResourceOperations::READ));
     assert!(format!("{national:?}").contains("RdbcNClob"));
     assert_eq!(format!("{}", RdbcObject::Clob(value.clone())), "<Clob>");
     assert_eq!(format!("{}", RdbcObject::NClob(national)), "<NClob>");

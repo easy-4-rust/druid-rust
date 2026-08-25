@@ -1,9 +1,7 @@
 //! Standard Rust mapping for Java `java.sql.Ref`.
 
 use crate::error::RdbcError;
-use crate::resource::{
-    RdbcRefAccess, RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceId, RdbcResourceState,
-};
+use crate::resource::{RdbcRefAccess, ResourceLifecycle, ResourceOperations};
 use crate::types::{RdbcObject, RdbcTypeMap};
 use std::fmt;
 use std::sync::Arc;
@@ -12,13 +10,13 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct RdbcRef {
     access: Arc<dyn RdbcRefAccess>,
-    context: Arc<RdbcResourceContext>,
+    context: Arc<ResourceLifecycle>,
 }
 
 impl RdbcRef {
     pub(crate) fn from_parts(
         access: Arc<dyn RdbcRefAccess>,
-        context: Arc<RdbcResourceContext>,
+        context: Arc<ResourceLifecycle>,
     ) -> Self {
         Self { access, context }
     }
@@ -26,7 +24,7 @@ impl RdbcRef {
     /// Returns the fully qualified SQL type name. Corresponds to `Ref#getBaseTypeName()`.
     pub async fn base_type_name(&self) -> Result<String, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::READ, "Ref#getBaseTypeName")?;
+            .require(ResourceOperations::READ, "Ref#getBaseTypeName")?;
         self.context.observe(self.access.base_type_name().await)
     }
 
@@ -38,7 +36,7 @@ impl RdbcRef {
     /// Reads the referenced object using the driver's default type map.
     pub async fn object(&self) -> Result<RdbcObject, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::READ, "Ref#getObject")?;
+            .require(ResourceOperations::READ, "Ref#getObject")?;
         self.context.observe(self.access.object().await)
     }
 
@@ -53,7 +51,7 @@ impl RdbcRef {
         type_map: &RdbcTypeMap,
     ) -> Result<RdbcObject, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::TYPE_MAP,
+            ResourceOperations::READ | ResourceOperations::TYPE_MAP,
             "Ref#getObject(Map)",
         )?;
         self.context
@@ -71,25 +69,19 @@ impl RdbcRef {
     /// Replaces the referenced object. Corresponds to `Ref#setObject(Object)`.
     pub async fn set_object(&self, value: RdbcObject) -> Result<(), RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::WRITE, "Ref#setObject")?;
+            .require(ResourceOperations::WRITE, "Ref#setObject")?;
         self.context.observe(self.access.set_object(value).await)
     }
 
     /// Returns the driver-neutral resource identifier.
     #[must_use]
-    pub fn resource_id(&self) -> &RdbcResourceId {
-        self.context.resource_id()
-    }
-
-    /// Returns the current shared resource state.
-    #[must_use]
-    pub fn state(&self) -> RdbcResourceState {
-        self.context.state()
+    pub fn resource_id(&self) -> &str {
+        self.context.resource_id().as_str()
     }
 
     /// Returns the operations enabled for this Ref instance.
     #[must_use]
-    pub fn capabilities(&self) -> RdbcResourceCapabilities {
+    pub fn capabilities(&self) -> ResourceOperations {
         self.context.capabilities()
     }
 }

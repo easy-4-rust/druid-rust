@@ -2,15 +2,9 @@ use std::fmt;
 
 /// Stable driver or Agent identifier for a connection-bound RDBC resource.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct RdbcResourceId(String);
+pub(crate) struct ResourceIdentity(String);
 
-impl RdbcResourceId {
-    /// Creates an identifier supplied by a driver or remote Agent.
-    #[must_use]
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
+impl ResourceIdentity {
     /// Creates a locally unique identifier for a detached or materialized resource.
     #[must_use]
     pub fn local() -> Self {
@@ -24,16 +18,16 @@ impl RdbcResourceId {
     }
 }
 
-impl fmt::Debug for RdbcResourceId {
+impl fmt::Debug for ResourceIdentity {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_tuple("RdbcResourceId")
+            .debug_tuple("ResourceIdentity")
             .field(&self.0)
             .finish()
     }
 }
 
-impl fmt::Display for RdbcResourceId {
+impl fmt::Display for ResourceIdentity {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(&self.0)
     }

@@ -575,6 +575,7 @@ pub struct DruidPooledResultSet {
     prepared_statement: Option<DruidPooledPreparedStatementHandle>,
     callable_statement: Option<DruidPooledCallableStatementHandle>,
     physical: Arc<dyn PhysicalResultSet>,
+    standard: Option<tokio::sync::Mutex<Box<dyn druid_rdbc::result_set::ResultSet>>>,
     closed: Arc<AtomicBool>,
     cursor_index: AtomicI32,
     filter_chain: Option<Arc<FilterChain>>,
@@ -618,6 +619,7 @@ impl DruidPooledResultSet {
             prepared_statement: None,
             callable_statement: None,
             physical,
+            standard: None,
             closed: Arc::new(AtomicBool::new(false)),
             cursor_index: AtomicI32::new(0),
             filter_chain,
@@ -641,6 +643,41 @@ impl DruidPooledResultSet {
             result_set.hidden_columns = hidden_columns;
         }
         Ok(result_set)
+    }
+
+    /// 包装 canonical standard ResultSet，并保留 Druid logical Statement 身份。
+    pub(crate) fn new_standard(
+        statement: Arc<DruidPooledStatementInner>,
+        standard: Box<dyn druid_rdbc::result_set::ResultSet>,
+    ) -> Result<Self, RdbcError> {
+        let filter_chain = statement.filter_chain.clone();
+        let statement_handle = DruidPooledStatement::from_inner(Arc::clone(&statement));
+        let result_set_id = statement.result_set_id_seed.fetch_add(1, Ordering::AcqRel);
+        let filter_context = Arc::new(
+            ResultSetFilterContext::with_identity_sql_and_execute_elapsed(
+                statement.connection_id,
+                statement.id,
+                result_set_id,
+                statement_handle.last_sql(),
+                statement_handle.last_execute_elapsed(),
+            ),
+        );
+        Ok(Self {
+            id: result_set_id,
+            attributes: super::ProxyAttributes::default(),
+            statement: statement_handle,
+            prepared_statement: None,
+            callable_statement: None,
+            physical: Arc::new(super::RowSetResultSet::new(Vec::new())),
+            standard: Some(tokio::sync::Mutex::new(standard)),
+            closed: Arc::new(AtomicBool::new(false)),
+            cursor_index: AtomicI32::new(0),
+            filter_chain,
+            filter_context,
+            logic_column_map: None,
+            physical_column_map: None,
+            hidden_columns: None,
+        })
     }
 
     pub(crate) fn with_prepared_statement(
@@ -4238,6 +4275,16 @@ impl DruidPooledResultSet {
         }
     }
 
+    fn ensure_standard_open(&self) -> Result<(), RdbcError> {
+        if self.closed.load(Ordering::Acquire)
+            || !self.statement.inner.lease_active.load(Ordering::Acquire)
+        {
+            Err(RdbcError::ConnectionDiscarded)
+        } else {
+            Ok(())
+        }
+    }
+
     fn classify<T>(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -4290,6 +4337,87 @@ impl Wrapper for DruidPooledResultSet {
         }
         (iface == TypeId::of::<dyn PhysicalResultSet>())
             .then(|| Unwrapped::ResultSet(self.physical.as_ref()))
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(DruidPooledResultSet => ResultSet);
+
+#[async_trait::async_trait]
+impl druid_rdbc::result_set::ResultSet for DruidPooledResultSet {
+    async fn next(&mut self) -> Result<bool, RdbcError> {
+        self.ensure_standard_open()?;
+        let more = self
+            .standard
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .next()
+            .await?;
+        if more {
+            let cursor = self.cursor_index.fetch_add(1, Ordering::AcqRel) + 1;
+            self.filter_context.record_fetch_row_count(cursor);
+        }
+        Ok(more)
+    }
+
+    fn value(&self, column: druid_rdbc::result_set::ColumnIndex) -> Result<Value, RdbcError> {
+        self.ensure_standard_open()?;
+        self.standard
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
+            .value(column)
+    }
+
+    fn meta_data(&self) -> Result<Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, RdbcError> {
+        self.ensure_standard_open()?;
+        self.standard
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
+            .meta_data()
+    }
+
+    fn was_null(&self) -> Result<bool, RdbcError> {
+        self.ensure_standard_open()?;
+        self.standard
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
+            .was_null()
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if self.closed.swap(true, Ordering::AcqRel) {
+            return Ok(());
+        }
+        self.standard
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .close()
+            .await?;
+        self.filter_context.increment_close_count();
+        self.statement
+            .record_fetch_row_count(self.filter_context.fetch_row_count());
+        Ok(())
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        if self.closed.load(Ordering::Acquire)
+            || !self.statement.inner.lease_active.load(Ordering::Acquire)
+        {
+            return Ok(true);
+        }
+        self.standard
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
+            .is_closed()
     }
 }
 

@@ -1,4 +1,5 @@
 use crate::error::RdbcError;
+use crate::error::SqlWarning;
 use crate::extensions::ConnectionCapabilities;
 use crate::metadata::DatabaseMetaData;
 use crate::statement::{CallableStatement, PreparedStatement, Statement, StatementOptions};
@@ -78,6 +79,62 @@ pub trait Connection: Wrapper + Send + 'static {
     fn auto_commit(&self) -> Result<bool, RdbcError> {
         Err(RdbcError::UnsupportedOperation {
             operation: "connection_auto_commit",
+        })
+    }
+
+    /// 返回当前只读状态。
+    fn read_only(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_read_only",
+        })
+    }
+
+    /// 设置当前只读状态。
+    async fn set_read_only(&mut self, _read_only: bool) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_set_read_only",
+        })
+    }
+
+    /// 返回当前 catalog；`None` 保留 JDBC `null` 语义。
+    fn catalog(&self) -> Result<Option<String>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_catalog",
+        })
+    }
+
+    /// 设置当前 catalog；`None` 保留 JDBC `null` 语义。
+    async fn set_catalog(&mut self, _catalog: Option<&str>) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_set_catalog",
+        })
+    }
+
+    /// 返回当前 schema；`None` 保留 JDBC `null` 语义。
+    fn schema(&self) -> Result<Option<String>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_schema",
+        })
+    }
+
+    /// 设置当前 schema；`None` 保留 JDBC `null` 语义。
+    async fn set_schema(&mut self, _schema: Option<&str>) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_set_schema",
+        })
+    }
+
+    /// 返回当前 JDBC warning 链。
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_warnings",
+        })
+    }
+
+    /// 清理当前 JDBC warning 链。
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_clear_warnings",
         })
     }
 

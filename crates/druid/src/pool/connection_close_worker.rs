@@ -4,7 +4,9 @@
 //! `PhysicalConnection::close` 是 async，`Drop` 不能直接 await。本对象把脏
 //! Drop 的关闭请求交给每个 `DruidPool` 唯一 worker，并由 pool 保存 `JoinHandle`。
 
-use crate::core::{DruidError, FilterChain, PhysicalConnection, PhysicalConnectionFactory};
+use crate::core::{
+    DruidConnectionHolder, DruidError, FilterChain, PhysicalConnection, PhysicalConnectionFactory,
+};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -16,7 +18,13 @@ pub(crate) struct ConnectionCloseCommand {
     /// 从物理连接建立完成到提交关闭命令的寿命。
     pub(crate) physical_age: Duration,
     /// 待关闭的原始驱动连接。
-    pub(crate) connection: Box<dyn PhysicalConnection>,
+    pub(crate) connection: ConnectionCloseTarget,
+}
+
+/// Task 5 迁移期的唯一 raw close payload；Task 6 删除 Physical variant。
+pub(crate) enum ConnectionCloseTarget {
+    Physical(Box<dyn PhysicalConnection>),
+    Standard(Box<DruidConnectionHolder>),
 }
 
 /// 顺序执行物理连接关闭的池内 worker。
@@ -47,25 +55,30 @@ impl ConnectionCloseWorker {
     pub(crate) fn spawn(mut self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             while let Some(command) = self.receiver.recv().await {
-                let Some(mut command) = command else {
+                let Some(command) = command else {
                     break;
                 };
-                let result = match &self.filter_chain {
-                    Some(filter_chain) if !filter_chain.is_empty() => {
-                        filter_chain
-                            .physical_connection_close(
-                                self.factory.as_ref(),
-                                &mut command.connection,
-                                command.connection_id,
-                                command.physical_age,
-                            )
+                let result = match command.connection {
+                    ConnectionCloseTarget::Physical(mut connection) => match &self.filter_chain {
+                        Some(filter_chain) if !filter_chain.is_empty() => {
+                            filter_chain
+                                .physical_connection_close(
+                                    self.factory.as_ref(),
+                                    &mut connection,
+                                    command.connection_id,
+                                    command.physical_age,
+                                )
+                                .await
+                        }
+                        _ => self
+                            .factory
+                            .close(&mut connection)
                             .await
+                            .map_err(DruidError::from),
+                    },
+                    ConnectionCloseTarget::Standard(mut holder) => {
+                        holder.close_standard_connection().await
                     }
-                    _ => self
-                        .factory
-                        .close(&mut command.connection)
-                        .await
-                        .map_err(DruidError::from),
                 };
                 if let Err(error) = result {
                     tracing::warn!(

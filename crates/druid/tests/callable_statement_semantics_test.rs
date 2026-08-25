@@ -8,6 +8,7 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use druid::core::prepared_statement_method_type::PreparedStatementMethodType as DruidPreparedStatementMethodType;
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidPooledCallableStatement, DruidPooledCallableStatementHandle,
@@ -22,7 +23,7 @@ use druid::core::{
 use druid::pool::DruidPool;
 use druid::spi::{
     RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
-    RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceFactory, RdbcSqlXmlAccess,
+    RdbcResourceAccess, RdbcSqlXmlAccess, ResourceHandleFactory, ResourceOperations,
 };
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
@@ -52,8 +53,8 @@ impl TestBlobAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestBlobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::blob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::blob()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -160,7 +161,7 @@ impl RdbcBlobAccess for TestBlobAccess {
 }
 
 fn test_blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
-    RdbcResourceFactory::blob(Arc::new(TestBlobAccess {
+    ResourceHandleFactory::blob(Arc::new(TestBlobAccess {
         bytes: bytes.into(),
         freed: AtomicBool::new(false),
     }))
@@ -194,8 +195,8 @@ impl TestClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestClobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::clob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::clob()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -325,14 +326,14 @@ impl RdbcClobAccess for TestClobAccess {
 impl RdbcNClobAccess for TestClobAccess {}
 
 fn test_clob(value: &str) -> RdbcClob {
-    RdbcResourceFactory::clob(Arc::new(TestClobAccess {
+    ResourceHandleFactory::clob(Arc::new(TestClobAccess {
         code_units: value.encode_utf16().collect(),
         freed: AtomicBool::new(false),
     }))
 }
 
 fn test_n_clob(value: &str) -> RdbcNClob {
-    RdbcResourceFactory::n_clob(Arc::new(TestClobAccess {
+    ResourceHandleFactory::n_clob(Arc::new(TestClobAccess {
         code_units: value.encode_utf16().collect(),
         freed: AtomicBool::new(false),
     }))
@@ -343,8 +344,8 @@ struct TestRefAccess;
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestRefAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::reference()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::reference()
     }
 }
 
@@ -372,8 +373,8 @@ struct TestArrayAccess;
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestArrayAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::array()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::array()
     }
 }
 
@@ -443,8 +444,8 @@ struct TestSqlXmlAccess;
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for TestSqlXmlAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::sql_xml()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::sql_xml()
     }
 }
 
@@ -517,10 +518,10 @@ impl TestCallableStatement {
         let clob = test_clob("callable-clob");
         let n_clob = test_n_clob("国家字符");
         let url = RdbcUrl::new("https://example.test/callable");
-        let reference = RdbcResourceFactory::reference(Arc::new(TestRefAccess));
-        let array = RdbcResourceFactory::array(Arc::new(TestArrayAccess));
+        let reference = ResourceHandleFactory::reference(Arc::new(TestRefAccess));
+        let array = ResourceHandleFactory::array(Arc::new(TestArrayAccess));
         let row_id = RdbcRowId::new(vec![1, 2, 3]);
-        let sql_xml = RdbcResourceFactory::sql_xml(Arc::new(TestSqlXmlAccess));
+        let sql_xml = ResourceHandleFactory::sql_xml(Arc::new(TestSqlXmlAccess));
         Self {
             sql: sql.into(),
             closed: AtomicBool::new(false),
@@ -1098,7 +1099,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     let binary_stream_long = RdbcInputStream::from_bytes(vec![3, 4, 5]);
     assert_eq!(
         callable.key().method_type(),
-        PreparedStatementMethodType::Precall1
+        DruidPreparedStatementMethodType::Precall1
     );
     callable.register_out_parameter(1, 4).unwrap();
     callable.register_out_parameter_with_scale(2, 3, 2).unwrap();
@@ -1989,7 +1990,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         .unwrap();
     assert_eq!(
         held.key().method_type(),
-        PreparedStatementMethodType::Precall2
+        DruidPreparedStatementMethodType::Precall2
     );
     assert_eq!(held.key().result_set_type(), 1004);
     assert_eq!(held.key().result_set_concurrency(), 1007);
@@ -2002,7 +2003,7 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         .unwrap();
     assert_eq!(
         result_set.key().method_type(),
-        PreparedStatementMethodType::Precall3
+        DruidPreparedStatementMethodType::Precall3
     );
     assert_eq!(result_set.key().result_set_type(), 1003);
     assert_eq!(result_set.key().result_set_concurrency(), 1008);

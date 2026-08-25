@@ -4,7 +4,8 @@
 //! 来源文件：
 //! `core/src/main/java/com/alibaba/druid/pool/PreparedStatementHolder.java`。
 
-use super::{PhysicalPreparedStatement, PreparedStatementKey};
+use super::prepared_statement_key::PreparedStatementKey;
+use super::PhysicalPreparedStatement;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::Arc;
 

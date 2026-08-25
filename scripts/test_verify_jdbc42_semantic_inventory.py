@@ -82,7 +82,9 @@ def write_fixture(root: Path) -> tuple[Path, Path]:
             }
         )
     source_manifest_sha256 = hashlib.sha256(
-        (json.dumps(objects, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+        (json.dumps(objects, sort_keys=True, separators=(",", ":")) + "\n").encode(
+            "utf-8"
+        )
     ).hexdigest()
     oracle = root / "oracle.json"
     oracle.write_text(
@@ -98,11 +100,19 @@ def write_fixture(root: Path) -> tuple[Path, Path]:
                 "packages": {
                     "java.sql": {
                         "object_count": 52,
-                        "objects": [item for item in objects if item["fqcn"].startswith("java.sql.")],
+                        "objects": [
+                            item
+                            for item in objects
+                            if item["fqcn"].startswith("java.sql.")
+                        ],
                     },
                     "javax.sql": {
                         "object_count": 17,
-                        "objects": [item for item in objects if item["fqcn"].startswith("javax.sql.")],
+                        "objects": [
+                            item
+                            for item in objects
+                            if item["fqcn"].startswith("javax.sql.")
+                        ],
                     },
                 },
                 "semantic_sha256": hashlib.sha256(semantic.read_bytes()).hexdigest(),
@@ -143,8 +153,12 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             encoding="utf-8",
         )
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
-        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload["semantic_sha256"] = hashlib.sha256(
+            self.semantic.read_bytes()
+        ).hexdigest()
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
 
     def write_rows_preserve_oracle(self, rows: list[list[str]]) -> None:
         """Write a later-phase fixture while retaining the frozen planned denominator hash."""
@@ -174,7 +188,9 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             self.oracle,
             expected_source_manifest_sha256=self.source_manifest_sha256,
         )
-        self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
+        self.assertEqual(
+            (52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown)
+        )
 
     def test_accepts_declared_target_without_live_implementation_claims(self) -> None:
         """Task 3 may declare a canonical target while adapter/logical states stay planned."""
@@ -188,7 +204,9 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             self.oracle,
             expected_source_manifest_sha256=self.source_manifest_sha256,
         )
-        self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
+        self.assertEqual(
+            (52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown)
+        )
 
     def test_adapter_live_phase_normalizes_to_frozen_denominator(self) -> None:
         """Task 4 may advance only its adapter evidence columns without rewriting the oracle hash."""
@@ -208,7 +226,9 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             adapter_live_entries={"java.sql.Type00"},
             require_adapter_evidence=False,
         )
-        self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
+        self.assertEqual(
+            (52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown)
+        )
 
     def test_adapter_live_phase_rejects_missing_live_state_or_path(self) -> None:
         """A Task 4 row cannot be LIVE with a missing path or remain PLANNED."""
@@ -224,16 +244,106 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
                 require_adapter_evidence=False,
             )
 
-    def test_rejects_unknown_phase_fail_closed(self) -> None:
-        """No unimplemented future phase may silently reuse planned validation."""
+    def test_logical_live_phase_normalizes_adapter_and_logical_columns(self) -> None:
+        """Task 5 may advance only its exact logical rows over retained Task 4 evidence."""
 
-        with self.assertRaisesRegex(VerificationError, "unknown semantic verification phase"):
+        rows = self.rows()
+        rows[0][15] = "PLANNED"
+        self.write_rows(rows)
+        rows = self.rows()
+        rows[0][12] = "crates/druid-wrapper/src/live.rs::LiveAdapter"
+        rows[0][13] = "LIVE"
+        rows[0][14] = "crates/druid/src/core/live.rs::DruidLogical"
+        rows[0][15] = "LIVE"
+        rows[0][16] = "V1_LIVE"
+        rows[0][17] = "LIVE"
+        self.write_rows_preserve_oracle(rows)
+        summary = verify_inventory(
+            self.root,
+            self.semantic,
+            self.oracle,
+            expected_source_manifest_sha256=self.source_manifest_sha256,
+            phase="logical-live",
+            adapter_live_entries={"java.sql.Type00"},
+            logical_live_entries={"java.sql.Type00"},
+            require_adapter_evidence=False,
+            require_logical_evidence=False,
+        )
+        self.assertEqual(
+            (52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown)
+        )
+        adapter_summary = verify_inventory(
+            self.root,
+            self.semantic,
+            self.oracle,
+            expected_source_manifest_sha256=self.source_manifest_sha256,
+            phase="adapter-live",
+            adapter_live_entries={"java.sql.Type00"},
+            logical_live_entries={"java.sql.Type00"},
+            require_adapter_evidence=False,
+            require_logical_evidence=False,
+        )
+        self.assertEqual(
+            (52, 17, 0),
+            (
+                adapter_summary.java_sql,
+                adapter_summary.javax_sql,
+                adapter_summary.unknown,
+            ),
+        )
+
+    def test_logical_live_rejects_planned_path_missing_and_unselected_live(
+        self,
+    ) -> None:
+        """Logical LIVE requires one real path and is forbidden outside the exact Task 5 set."""
+
+        rows = self.rows()
+        rows[0][15] = "PLANNED"
+        self.write_rows(rows)
+        with self.assertRaises(VerificationError):
             verify_inventory(
                 self.root,
                 self.semantic,
                 self.oracle,
                 expected_source_manifest_sha256=self.source_manifest_sha256,
                 phase="logical-live",
+                adapter_live_entries=set(),
+                logical_live_entries={"java.sql.Type00"},
+                require_adapter_evidence=False,
+                require_logical_evidence=False,
+            )
+
+        rows = self.rows()
+        rows[1][14] = "crates/druid/src/core/fake.rs::FakeLogical"
+        rows[1][15] = "LIVE"
+        rows[1][16] = "V1_LIVE"
+        rows[1][17] = "LIVE"
+        self.write_rows_preserve_oracle(rows)
+        with self.assertRaises(VerificationError):
+            verify_inventory(
+                self.root,
+                self.semantic,
+                self.oracle,
+                expected_source_manifest_sha256=self.source_manifest_sha256,
+                phase="logical-live",
+                adapter_live_entries=set(),
+                logical_live_entries={"java.sql.Type00"},
+                require_adapter_evidence=False,
+                require_logical_evidence=False,
+            )
+
+    def test_rejects_unknown_phase_fail_closed(self) -> None:
+        """No unimplemented future phase may silently reuse logical validation."""
+
+        with self.assertRaisesRegex(
+            VerificationError, "unknown semantic verification phase"
+        ):
+            verify_inventory(
+                self.root,
+                self.semantic,
+                self.oracle,
+                expected_source_manifest_sha256=self.source_manifest_sha256,
+                phase="final-live",
             )
 
     def test_require_standard_entries_rejects_task2_only_inventory(self) -> None:
@@ -289,7 +399,9 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
 
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
         payload["archive_sha256"] = "0" * 64
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
     def test_rejects_oracle_source_manifest_drift(self) -> None:
@@ -297,7 +409,9 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
 
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
         payload["source_manifest_sha256"] = "0" * 64
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
     def test_rejects_extra_and_duplicate_json_keys(self) -> None:
@@ -306,11 +420,13 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         original = self.oracle.read_text(encoding="utf-8")
         payload = json.loads(original)
         payload["extra"] = "not part of the oracle schema"
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
         self.oracle.write_text(
-            original.replace("{\n", "{\n  \"archive_size\": 94004963,\n", 1),
+            original.replace("{\n", '{\n  "archive_size": 94004963,\n', 1),
             encoding="utf-8",
         )
         self.assert_rejected()
@@ -319,7 +435,9 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         """Semantically equal JSON with alternate whitespace is not canonical oracle evidence."""
 
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
-        self.oracle.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+        self.oracle.write_text(
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
     def test_rejects_noncanonical_or_control_bearing_semantic_tsv(self) -> None:
@@ -328,18 +446,34 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         canonical = self.semantic.read_bytes()
         self.semantic.write_bytes(canonical.replace(b"\n", b"\r\n"))
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
-        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload["semantic_sha256"] = hashlib.sha256(
+            self.semantic.read_bytes()
+        ).hexdigest()
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
-        self.semantic.write_bytes(canonical.replace(b"synthetic verifier fixture", b"synthetic\x01fixture", 1))
-        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.semantic.write_bytes(
+            canonical.replace(b"synthetic verifier fixture", b"synthetic\x01fixture", 1)
+        )
+        payload["semantic_sha256"] = hashlib.sha256(
+            self.semantic.read_bytes()
+        ).hexdigest()
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
-        self.semantic.write_bytes(canonical.replace(b"synthetic verifier fixture", b"synthetic\x7ffixture", 1))
-        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        self.semantic.write_bytes(
+            canonical.replace(b"synthetic verifier fixture", b"synthetic\x7ffixture", 1)
+        )
+        payload["semantic_sha256"] = hashlib.sha256(
+            self.semantic.read_bytes()
+        ).hexdigest()
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
         self.semantic.write_bytes(
@@ -349,11 +483,17 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
                 1,
             )
         )
-        payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
-        self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload["semantic_sha256"] = hashlib.sha256(
+            self.semantic.read_bytes()
+        ).hexdigest()
+        self.oracle.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         self.assert_rejected()
 
-    def test_archive_discovery_uses_source_entries_not_a_manual_object_list(self) -> None:
+    def test_archive_discovery_uses_source_entries_not_a_manual_object_list(
+        self,
+    ) -> None:
         """Adding a Java source file changes the discovered denominator without code edits."""
 
         archive = self.root / "oracle.tar.gz"
@@ -373,18 +513,24 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
                 member.size = len(source)
                 bundle.addfile(member, BytesIO(source))
         first = discover_java_records(archive, enforce_jdbc42_counts=False)
-        self.assertEqual(["java.sql.Alpha", "javax.sql.Beta"], [row.fqcn for row in first])
+        self.assertEqual(
+            ["java.sql.Alpha", "javax.sql.Beta"], [row.fqcn for row in first]
+        )
 
         with tarfile.open(archive, "w:gz") as bundle:
             for name in ("Alpha", "Gamma"):
-                source = f"package java.sql; public interface {name} {{}}".encode("utf-8")
+                source = f"package java.sql; public interface {name} {{}}".encode(
+                    "utf-8"
+                )
                 member = tarfile.TarInfo(
                     f"jdk8u-test/jdk/src/share/classes/java/sql/{name}.java"
                 )
                 member.size = len(source)
                 bundle.addfile(member, BytesIO(source))
         second = discover_java_records(archive, enforce_jdbc42_counts=False)
-        self.assertEqual(["java.sql.Alpha", "java.sql.Gamma"], [row.fqcn for row in second])
+        self.assertEqual(
+            ["java.sql.Alpha", "java.sql.Gamma"], [row.fqcn for row in second]
+        )
 
 
 if __name__ == "__main__":

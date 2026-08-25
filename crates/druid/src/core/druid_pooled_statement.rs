@@ -22,6 +22,8 @@ pub(crate) struct DruidPooledStatementInner {
     pub(crate) connection_id: u64,
     pub(crate) id: u64,
     pub(crate) statement: Arc<dyn PhysicalStatement>,
+    pub(crate) standard_statement:
+        Option<tokio::sync::Mutex<Box<dyn druid_rdbc::statement::Statement>>>,
     pub(crate) result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
     attributes: ProxyAttributes,
@@ -90,6 +92,7 @@ impl DruidPooledStatement {
                 connection_id,
                 id,
                 statement,
+                standard_statement: None,
                 result_set_id_seed,
                 metadata_id_seed,
                 attributes: ProxyAttributes::default(),
@@ -114,6 +117,36 @@ impl DruidPooledStatement {
                 }),
             }),
         }
+    }
+
+    /// 包装 owned canonical Statement；不借用创建它的 logical connection。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_standard(
+        statement: Box<dyn druid_rdbc::statement::Statement>,
+        connection_id: u64,
+        id: u64,
+        result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        lease_active: Arc<AtomicBool>,
+        filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Option<Arc<StatsCollector>>,
+    ) -> Self {
+        let mut result = Self::new(
+            Arc::new(super::SqlTextStatement::new(
+                super::PhysicalStatementOptions::default(),
+            )),
+            connection_id,
+            id,
+            result_set_id_seed,
+            metadata_id_seed,
+            lease_active,
+            filter_chain,
+            stats_collector,
+        );
+        Arc::get_mut(&mut result.inner)
+            .expect("new standard statement has one owner")
+            .standard_statement = Some(tokio::sync::Mutex::new(statement));
+        result
     }
 
     pub(crate) fn from_inner(inner: Arc<DruidPooledStatementInner>) -> Self {
@@ -781,6 +814,17 @@ impl DruidPooledStatement {
         }
     }
 
+    fn ensure_standard_open(&self) -> Result<(), RdbcError> {
+        if self.is_closed()
+            || !self.inner.lease_active.load(Ordering::Acquire)
+            || self.inner.standard_statement.is_none()
+        {
+            Err(RdbcError::Other("statement is closed".to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
     async fn execute_internal(
         &mut self,
         connection: &mut DruidPooledConnection,
@@ -1149,6 +1193,161 @@ impl Wrapper for DruidPooledStatement {
         }
         (self.inner.statement.as_any().type_id() == iface)
             .then(|| Unwrapped::Object(self.inner.statement.as_any()))
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(DruidPooledStatement => Statement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for DruidPooledStatement {
+    async fn execute_query(
+        &mut self,
+        sql: &str,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.ensure_standard_open()?;
+        self.begin_single_execution(sql, StatementExecuteType::ExecuteQuery);
+        let started = Instant::now();
+        let raw = self
+            .inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .lock()
+            .await
+            .execute_query(sql)
+            .await?;
+        self.state_mut().last_execute_elapsed = Some(started.elapsed());
+        Ok(Box::new(DruidPooledResultSet::new_standard(
+            Arc::clone(&self.inner),
+            raw,
+        )?))
+    }
+
+    async fn execute_update(
+        &mut self,
+        sql: &str,
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<i64, RdbcError> {
+        self.ensure_standard_open()?;
+        self.begin_single_execution(sql, StatementExecuteType::ExecuteUpdate);
+        let started = Instant::now();
+        let count = self
+            .inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .lock()
+            .await
+            .execute_update(sql, generated_keys)
+            .await?;
+        let mut state = self.state_mut();
+        state.last_execute_elapsed = Some(started.elapsed());
+        state.update_count = count;
+        Ok(count)
+    }
+
+    async fn execute(
+        &mut self,
+        sql: &str,
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
+        self.ensure_standard_open()?;
+        self.begin_single_execution(sql, StatementExecuteType::Execute);
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .lock()
+            .await
+            .execute(sql, generated_keys)
+            .await
+    }
+
+    fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
+        self.ensure_standard_open()?;
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
+            .add_batch(sql)
+    }
+
+    fn clear_batch(&mut self) -> Result<(), RdbcError> {
+        self.ensure_standard_open()?;
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
+            .clear_batch()
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.ensure_standard_open()?;
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .lock()
+            .await
+            .execute_batch()
+            .await
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if self.is_closed() {
+            return Ok(());
+        }
+        let result = self
+            .inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .lock()
+            .await
+            .close()
+            .await;
+        if result.is_ok() {
+            self.clear_result_sets();
+            self.state_mut().closed = true;
+        }
+        result
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        if self.is_closed() || !self.inner.lease_active.load(Ordering::Acquire) {
+            return Ok(true);
+        }
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
+            .is_closed()
+    }
+
+    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
+            .warning_messages()
+    }
+
+    fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
+            .clear_warnings()
     }
 }
 

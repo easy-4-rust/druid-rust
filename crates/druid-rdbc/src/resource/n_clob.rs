@@ -2,8 +2,8 @@
 
 use crate::error::RdbcError;
 use crate::resource::{
-    RdbcClob, RdbcInputStream, RdbcNClobAccess, RdbcOutputStream, RdbcReader,
-    RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceId, RdbcResourceState, RdbcWriter,
+    RdbcClob, RdbcInputStream, RdbcNClobAccess, RdbcOutputStream, RdbcReader, RdbcWriter,
+    ResourceLifecycle, ResourceOperations,
 };
 use crate::types::RdbcString;
 use std::fmt;
@@ -21,7 +21,7 @@ pub struct RdbcNClob {
 impl RdbcNClob {
     pub(crate) fn from_parts(
         access: Arc<dyn RdbcNClobAccess>,
-        context: Arc<RdbcResourceContext>,
+        context: Arc<ResourceLifecycle>,
     ) -> Self {
         let clob_access: Arc<dyn crate::resource::RdbcClobAccess> = access;
         Self {
@@ -132,19 +132,13 @@ impl RdbcNClob {
 
     /// Returns the driver-neutral resource identifier.
     #[must_use]
-    pub fn resource_id(&self) -> &RdbcResourceId {
+    pub fn resource_id(&self) -> &str {
         self.clob.resource_id()
-    }
-
-    /// Returns the current shared resource state.
-    #[must_use]
-    pub fn state(&self) -> RdbcResourceState {
-        self.clob.state()
     }
 
     /// Returns the operations enabled for this `NClob` instance.
     #[must_use]
-    pub fn capabilities(&self) -> RdbcResourceCapabilities {
+    pub fn capabilities(&self) -> ResourceOperations {
         self.clob.capabilities()
     }
 }
@@ -154,7 +148,7 @@ impl fmt::Debug for RdbcNClob {
         formatter
             .debug_struct("RdbcNClob")
             .field("resource_id", &self.resource_id())
-            .field("state", &self.state())
+            .field("freed", &self.is_freed())
             .field("capabilities", &self.capabilities())
             .finish()
     }

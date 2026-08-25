@@ -86,7 +86,9 @@ fn observe(error: &ProductDruidError) -> ObservableError {
             );
             observe_sql(&cloned)
         }),
-        batch_update_counts: error.batch_update_counts().map(|counts| counts.jdbc_i32()),
+        batch_update_counts: error
+            .batch_update_counts()
+            .map(druid_rdbc::error::BatchUpdateCounts::jdbc_i32),
         source_chain: observe_source_chain(error),
     }
 }

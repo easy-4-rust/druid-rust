@@ -1658,7 +1658,7 @@ async fn concurrent_logical_statements_preserve_java_in_use_and_lru_semantics() 
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .keys_in_lru_order()
             .iter()
-            .map(PreparedStatementKey::sql)
+            .map(druid::core::prepared_statement_key::PreparedStatementKey::sql)
             .collect::<Vec<_>>(),
         vec!["select 3", "select 4", "select 0"]
     );

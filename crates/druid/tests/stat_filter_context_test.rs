@@ -468,7 +468,7 @@ async fn global_context_is_singleton_and_stat_filter_emits_real_sqlite_events() 
     assert_eq!(
         batch_error
             .batch_update_counts()
-            .map(|counts| counts.large()),
+            .map(druid_rdbc::error::BatchUpdateCounts::large),
         Some([1_i64].as_slice())
     );
     assert!(batch_error.sql_exception().is_some());

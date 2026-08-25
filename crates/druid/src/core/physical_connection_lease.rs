@@ -1,10 +1,11 @@
 //! 外部连接池租约到物理连接 SPI 的透明桥接。
 
+use super::compat::physical_prepared_statement_key_type;
 use super::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
     PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement, PhysicalStatementOptions,
-    PreparedInputParameter, PreparedStatementKey, RdbcBlob, RdbcClob, RdbcError, RdbcNClob, Row,
-    Savepoint, SqlWarning, StatementExecuteResult, StatementGeneratedKeys, Value,
+    PreparedInputParameter, RdbcBlob, RdbcClob, RdbcError, RdbcNClob, Row, Savepoint, SqlWarning,
+    StatementExecuteResult, StatementGeneratedKeys, Value,
 };
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
@@ -63,6 +64,24 @@ where
             .await
     }
 
+    async fn prepare_physical_statement(
+        &mut self,
+        key: &physical_prepared_statement_key_type!(),
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        self.physical_connection_mut()
+            .prepare_physical_statement(key)
+            .await
+    }
+
+    async fn prepare_physical_call(
+        &mut self,
+        key: &physical_prepared_statement_key_type!(),
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        self.physical_connection_mut()
+            .prepare_physical_call(key)
+            .await
+    }
+
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
         self.physical_connection_mut().exec(sql, params).await
     }
@@ -96,24 +115,6 @@ where
     ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
         self.physical_connection_mut()
             .fetch_result_set(sql, params)
-            .await
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        self.physical_connection_mut()
-            .prepare_physical_statement(key)
-            .await
-    }
-
-    async fn prepare_physical_call(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        self.physical_connection_mut()
-            .prepare_physical_call(key)
             .await
     }
 

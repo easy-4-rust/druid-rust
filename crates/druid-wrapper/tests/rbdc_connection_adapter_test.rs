@@ -9,8 +9,8 @@ use druid::core::{
     RdbcUrl, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Value,
 };
 use druid::spi::{
-    RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
-    RdbcResourceFactory, RdbcSqlXmlAccess,
+    RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcSqlXmlAccess,
+    ResourceHandleFactory, ResourceOperations,
 };
 use druid_wrapper::rbdc::RbdcConnectionAdapter;
 use druid_wrapper::rbdc::RbdcConnectionFactory;
@@ -257,8 +257,8 @@ struct FixtureBlob {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for FixtureBlob {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::blob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::blob()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -331,8 +331,8 @@ struct FixtureClob {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for FixtureClob {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::clob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::clob()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -419,8 +419,8 @@ struct FixtureSqlXml {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for FixtureSqlXml {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::sql_xml()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::sql_xml()
     }
 
     async fn free(&self) -> Result<(), RdbcError> {
@@ -1030,7 +1030,7 @@ fn bind_invalid_resource(
         .set_blob(
             connection,
             1,
-            Some(RdbcResourceFactory::blob(Arc::new(FixtureBlob {
+            Some(ResourceHandleFactory::blob(Arc::new(FixtureBlob {
                 reported_length: oversized,
                 bytes: Vec::new(),
             }))),
@@ -1045,19 +1045,19 @@ fn bind_valid_resource_objects(
     connection: &mut DruidPooledConnection,
     statement: &mut DruidPooledPreparedStatement,
 ) {
-    let blob = RdbcResourceFactory::blob(Arc::new(FixtureBlob {
+    let blob = ResourceHandleFactory::blob(Arc::new(FixtureBlob {
         reported_length: 2,
         bytes: vec![40, 41],
     }));
-    let clob = RdbcResourceFactory::clob(Arc::new(FixtureClob {
+    let clob = ResourceHandleFactory::clob(Arc::new(FixtureClob {
         reported_length: 4,
         value: RdbcString::from("clob"),
     }));
-    let n_clob = RdbcResourceFactory::n_clob(Arc::new(FixtureClob {
+    let n_clob = ResourceHandleFactory::n_clob(Arc::new(FixtureClob {
         reported_length: 1,
         value: RdbcString::from("国"),
     }));
-    let sql_xml = RdbcResourceFactory::sql_xml(Arc::new(FixtureSqlXml {
+    let sql_xml = ResourceHandleFactory::sql_xml(Arc::new(FixtureSqlXml {
         value: RdbcString::from("<x/>"),
         fail_string: false,
     }));

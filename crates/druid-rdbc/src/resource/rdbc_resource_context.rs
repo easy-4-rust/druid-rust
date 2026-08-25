@@ -1,88 +1,66 @@
 use crate::error::RdbcError;
 use crate::resource::{
-    RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceId, RdbcResourceKind,
-    RdbcResourceOwner, RdbcResourceState,
+    RdbcResourceAccess, ResourceIdentity, ResourceLifecycleState, ResourceOperations, ResourceType,
 };
 use std::fmt;
 use std::sync::atomic::{AtomicU8, Ordering};
-use std::sync::Arc;
 use tokio::sync::Notify;
 
 /// Shared identity, capability, connection-ownership, and lifecycle state for an RDBC resource.
-pub struct RdbcResourceContext {
-    resource_id: RdbcResourceId,
-    kind: RdbcResourceKind,
-    capabilities: RdbcResourceCapabilities,
-    owner: Option<Arc<dyn RdbcResourceOwner>>,
+pub(crate) struct ResourceLifecycle {
+    resource_id: ResourceIdentity,
+    kind: ResourceType,
+    capabilities: ResourceOperations,
     state: AtomicU8,
     state_changed: Notify,
 }
 
-impl RdbcResourceContext {
-    /// Creates a connection-bound resource context owned by a pool or driver adapter.
-    #[must_use]
-    pub fn new(
-        resource_id: RdbcResourceId,
-        kind: RdbcResourceKind,
-        capabilities: RdbcResourceCapabilities,
-        owner: Arc<dyn RdbcResourceOwner>,
-    ) -> Self {
-        Self {
-            resource_id,
-            kind,
-            capabilities,
-            owner: Some(owner),
-            state: AtomicU8::new(RdbcResourceState::Open.code()),
-            state_changed: Notify::new(),
-        }
-    }
-
+impl ResourceLifecycle {
     /// Creates a locally identified resource that does not pin a pooled connection.
     #[must_use]
-    pub fn detached(kind: RdbcResourceKind, capabilities: RdbcResourceCapabilities) -> Self {
+    pub fn detached(kind: ResourceType, capabilities: ResourceOperations) -> Self {
         Self {
-            resource_id: RdbcResourceId::local(),
+            resource_id: ResourceIdentity::local(),
             kind,
             capabilities,
-            owner: None,
-            state: AtomicU8::new(RdbcResourceState::Open.code()),
+            state: AtomicU8::new(ResourceLifecycleState::Open.code()),
             state_changed: Notify::new(),
         }
     }
 
     /// Returns the stable resource identifier.
     #[must_use]
-    pub fn resource_id(&self) -> &RdbcResourceId {
+    pub fn resource_id(&self) -> &ResourceIdentity {
         &self.resource_id
     }
 
     /// Returns the standard resource kind.
     #[must_use]
-    pub const fn kind(&self) -> RdbcResourceKind {
+    pub const fn kind(&self) -> ResourceType {
         self.kind
     }
 
     /// Returns the enabled operation set.
     #[must_use]
-    pub const fn capabilities(&self) -> RdbcResourceCapabilities {
+    pub const fn capabilities(&self) -> ResourceOperations {
         self.capabilities
     }
 
     /// Returns the current lifecycle state.
     #[must_use]
-    pub fn state(&self) -> RdbcResourceState {
-        RdbcResourceState::from_code(self.state.load(Ordering::Acquire))
+    pub fn state(&self) -> ResourceLifecycleState {
+        ResourceLifecycleState::from_code(self.state.load(Ordering::Acquire))
     }
 
     /// Returns whether the resource has been explicitly released.
     #[must_use]
     pub fn is_freed(&self) -> bool {
-        self.state() == RdbcResourceState::Freed
+        self.state() == ResourceLifecycleState::Freed
     }
 
     /// Rejects access after release or owner invalidation.
     pub fn ensure_open(&self) -> Result<(), RdbcError> {
-        if self.state() == RdbcResourceState::Open {
+        if self.state() == ResourceLifecycleState::Open {
             Ok(())
         } else {
             Err(RdbcError::rdbc_resource_closed(self.kind.standard_name()))
@@ -92,7 +70,7 @@ impl RdbcResourceContext {
     /// Requires an operation capability and an open resource.
     pub fn require(
         &self,
-        capability: RdbcResourceCapabilities,
+        capability: ResourceOperations,
         operation: &'static str,
     ) -> Result<(), RdbcError> {
         self.ensure_open()?;
@@ -102,7 +80,7 @@ impl RdbcResourceContext {
     /// Requires an operation capability without changing `free()` idempotence semantics.
     pub fn require_capability(
         &self,
-        capability: RdbcResourceCapabilities,
+        capability: ResourceOperations,
         operation: &'static str,
     ) -> Result<(), RdbcError> {
         if self.capabilities.contains(capability) {
@@ -112,13 +90,8 @@ impl RdbcResourceContext {
         }
     }
 
-    /// Preserves an access result while notifying the owner about failures.
+    /// Preserves the typed access result without introducing Druid owner callbacks.
     pub fn observe<T>(&self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
-        if let Err(error) = &result {
-            if let Some(owner) = &self.owner {
-                owner.resource_failed(&self.resource_id, self.kind, error);
-            }
-        }
         result
     }
 
@@ -133,19 +106,19 @@ impl RdbcResourceContext {
             tokio::pin!(state_changed);
             state_changed.as_mut().enable();
             match self.state() {
-                RdbcResourceState::Freed => return Ok(()),
-                RdbcResourceState::Invalid => {
+                ResourceLifecycleState::Freed => return Ok(()),
+                ResourceLifecycleState::Invalid => {
                     return Err(RdbcError::rdbc_resource_closed(self.kind.standard_name()));
                 }
-                RdbcResourceState::Releasing => {
+                ResourceLifecycleState::Releasing => {
                     state_changed.await;
                 }
-                RdbcResourceState::Open => {
+                ResourceLifecycleState::Open => {
                     if self
                         .state
                         .compare_exchange(
-                            RdbcResourceState::Open.code(),
-                            RdbcResourceState::Releasing.code(),
+                            ResourceLifecycleState::Open.code(),
+                            ResourceLifecycleState::Releasing.code(),
                             Ordering::AcqRel,
                             Ordering::Acquire,
                         )
@@ -159,51 +132,26 @@ impl RdbcResourceContext {
 
         if let Err(error) = access.free().await {
             self.state
-                .store(RdbcResourceState::Open.code(), Ordering::Release);
+                .store(ResourceLifecycleState::Open.code(), Ordering::Release);
             self.state_changed.notify_waiters();
-            if let Some(owner) = &self.owner {
-                owner.resource_failed(&self.resource_id, self.kind, &error);
-            }
             return Err(error);
         }
 
-        let owner_result = if let Some(owner) = &self.owner {
-            owner.resource_released(&self.resource_id, self.kind).await
-        } else {
-            Ok(())
-        };
         self.state
-            .store(RdbcResourceState::Freed.code(), Ordering::Release);
+            .store(ResourceLifecycleState::Freed.code(), Ordering::Release);
         self.state_changed.notify_waiters();
-        owner_result
-    }
-
-    /// Invalidates the resource when its owning connection or transaction ends.
-    pub fn invalidate(&self) {
-        self.state
-            .store(RdbcResourceState::Invalid.code(), Ordering::Release);
-        self.state_changed.notify_waiters();
+        Ok(())
     }
 }
 
-impl fmt::Debug for RdbcResourceContext {
+impl fmt::Debug for ResourceLifecycle {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
-            .debug_struct("RdbcResourceContext")
+            .debug_struct("ResourceLifecycle")
             .field("resource_id", &self.resource_id)
             .field("kind", &self.kind)
             .field("capabilities", &self.capabilities)
             .field("state", &self.state())
             .finish_non_exhaustive()
-    }
-}
-
-impl Drop for RdbcResourceContext {
-    fn drop(&mut self) {
-        if self.state() == RdbcResourceState::Open {
-            if let Some(owner) = &self.owner {
-                owner.resource_abandoned(&self.resource_id, self.kind);
-            }
-        }
     }
 }

@@ -1,7 +1,7 @@
 /// Lifecycle state shared by all clones of an RDBC resource handle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum RdbcResourceState {
+pub(crate) enum ResourceLifecycleState {
     /// The resource accepts operations.
     Open,
     /// One task is releasing the resource.
@@ -12,7 +12,7 @@ pub enum RdbcResourceState {
     Invalid,
 }
 
-impl RdbcResourceState {
+impl ResourceLifecycleState {
     pub(crate) const fn code(self) -> u8 {
         match self {
             Self::Open => 0,

@@ -11,12 +11,11 @@ use druid::core::{
 use druid::pool::{DruidDataSourceFactory, DruidPool, DruidPoolBuilder};
 use druid::spi::{
     RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
-    RdbcResourceAccess, RdbcResourceCapabilities, RdbcResourceContext, RdbcResourceFactory,
-    RdbcResourceId, RdbcResourceKind, RdbcResourceOwner, RdbcResourceState, RdbcSqlXmlAccess,
+    RdbcResourceAccess, RdbcSqlXmlAccess, ResourceHandleFactory, ResourceOperations,
 };
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -1125,311 +1124,44 @@ async fn close_worker_with_filter_chain() {
 }
 
 // ===========================================================================
-// 24. spi: RdbcResourceKind standard_name
-// ===========================================================================
-
-#[test]
-fn spi_resource_kind_standard_name() {
-    assert_eq!(RdbcResourceKind::Array.standard_name(), "Array");
-    assert_eq!(RdbcResourceKind::Blob.standard_name(), "Blob");
-    assert_eq!(RdbcResourceKind::Clob.standard_name(), "Clob");
-    assert_eq!(RdbcResourceKind::NClob.standard_name(), "NClob");
-    assert_eq!(RdbcResourceKind::Ref.standard_name(), "Ref");
-    assert_eq!(RdbcResourceKind::SqlXml.standard_name(), "SQLXML");
-}
-
-// ===========================================================================
-// 25. spi: RdbcResourceId
-// ===========================================================================
-
-#[test]
-fn spi_resource_id_new_and_display() {
-    let id = RdbcResourceId::new("test-id-123");
-    assert_eq!(id.as_str(), "test-id-123");
-    assert_eq!(format!("{id}"), "test-id-123");
-    assert_eq!(format!("{id:?}"), "RdbcResourceId(\"test-id-123\")");
-}
-
-#[test]
-fn spi_resource_id_local_is_unique() {
-    let id1 = RdbcResourceId::local();
-    let id2 = RdbcResourceId::local();
-    assert_ne!(id1, id2);
-    assert!(!id1.as_str().is_empty());
-}
-
-// ===========================================================================
-// 26. spi: RdbcResourceCapabilities
+// 26. spi: ResourceOperations
 // ===========================================================================
 
 #[test]
 fn spi_resource_capabilities_presets() {
-    let array = RdbcResourceCapabilities::array();
-    assert!(array.contains(RdbcResourceCapabilities::READ));
-    assert!(array.contains(RdbcResourceCapabilities::RANGE));
-    assert!(array.contains(RdbcResourceCapabilities::TYPE_MAP));
-    assert!(array.contains(RdbcResourceCapabilities::RESULT_SET));
-    assert!(array.contains(RdbcResourceCapabilities::FREE));
+    let array = ResourceOperations::array();
+    assert!(array.contains(ResourceOperations::READ));
+    assert!(array.contains(ResourceOperations::RANGE));
+    assert!(array.contains(ResourceOperations::TYPE_MAP));
+    assert!(array.contains(ResourceOperations::RESULT_SET));
+    assert!(array.contains(ResourceOperations::FREE));
 
-    let blob = RdbcResourceCapabilities::blob();
-    assert!(blob.contains(RdbcResourceCapabilities::READ));
-    assert!(blob.contains(RdbcResourceCapabilities::WRITE));
-    assert!(blob.contains(RdbcResourceCapabilities::SEARCH));
-    assert!(blob.contains(RdbcResourceCapabilities::TRUNCATE));
-    assert!(blob.contains(RdbcResourceCapabilities::STREAM));
+    let blob = ResourceOperations::blob();
+    assert!(blob.contains(ResourceOperations::READ));
+    assert!(blob.contains(ResourceOperations::WRITE));
+    assert!(blob.contains(ResourceOperations::SEARCH));
+    assert!(blob.contains(ResourceOperations::TRUNCATE));
+    assert!(blob.contains(ResourceOperations::STREAM));
 
-    let clob = RdbcResourceCapabilities::clob();
-    assert!(clob.contains(RdbcResourceCapabilities::READ));
-    assert!(clob.contains(RdbcResourceCapabilities::WRITE));
-    assert!(clob.contains(RdbcResourceCapabilities::TRUNCATE));
+    let clob = ResourceOperations::clob();
+    assert!(clob.contains(ResourceOperations::READ));
+    assert!(clob.contains(ResourceOperations::WRITE));
+    assert!(clob.contains(ResourceOperations::TRUNCATE));
 
-    let reference = RdbcResourceCapabilities::reference();
-    assert!(reference.contains(RdbcResourceCapabilities::READ));
-    assert!(reference.contains(RdbcResourceCapabilities::WRITE));
-    assert!(reference.contains(RdbcResourceCapabilities::TYPE_MAP));
+    let reference = ResourceOperations::reference();
+    assert!(reference.contains(ResourceOperations::READ));
+    assert!(reference.contains(ResourceOperations::WRITE));
+    assert!(reference.contains(ResourceOperations::TYPE_MAP));
 
-    let sql_xml = RdbcResourceCapabilities::sql_xml();
-    assert!(sql_xml.contains(RdbcResourceCapabilities::READ));
-    assert!(sql_xml.contains(RdbcResourceCapabilities::WRITE));
-    assert!(sql_xml.contains(RdbcResourceCapabilities::STREAM));
-    assert!(sql_xml.contains(RdbcResourceCapabilities::FREE));
+    let sql_xml = ResourceOperations::sql_xml();
+    assert!(sql_xml.contains(ResourceOperations::READ));
+    assert!(sql_xml.contains(ResourceOperations::WRITE));
+    assert!(sql_xml.contains(ResourceOperations::STREAM));
+    assert!(sql_xml.contains(ResourceOperations::FREE));
 }
 
 // ===========================================================================
-// 27. spi: RdbcResourceContext
-// ===========================================================================
-
-struct MockOwner {
-    released: AtomicBool,
-    failed: AtomicBool,
-    abandoned: AtomicBool,
-}
-
-impl MockOwner {
-    fn new() -> Self {
-        Self {
-            released: AtomicBool::new(false),
-            failed: AtomicBool::new(false),
-            abandoned: AtomicBool::new(false),
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl RdbcResourceOwner for MockOwner {
-    async fn resource_released(
-        &self,
-        _resource_id: &RdbcResourceId,
-        _kind: RdbcResourceKind,
-    ) -> Result<(), RdbcError> {
-        self.released.store(true, Ordering::Relaxed);
-        Ok(())
-    }
-    fn resource_failed(
-        &self,
-        _resource_id: &RdbcResourceId,
-        _kind: RdbcResourceKind,
-        _error: &RdbcError,
-    ) {
-        self.failed.store(true, Ordering::Relaxed);
-    }
-    fn resource_abandoned(&self, _resource_id: &RdbcResourceId, _kind: RdbcResourceKind) {
-        self.abandoned.store(true, Ordering::Relaxed);
-    }
-}
-
-struct MockAccess {
-    capabilities: RdbcResourceCapabilities,
-    free_called: AtomicBool,
-}
-
-impl MockAccess {
-    fn new(capabilities: RdbcResourceCapabilities) -> Self {
-        Self {
-            capabilities,
-            free_called: AtomicBool::new(false),
-        }
-    }
-}
-
-impl std::fmt::Debug for MockAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MockAccess").finish()
-    }
-}
-
-#[async_trait::async_trait]
-impl RdbcResourceAccess for MockAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        self.capabilities
-    }
-    async fn free(&self) -> Result<(), RdbcError> {
-        self.free_called.store(true, Ordering::Relaxed);
-        Ok(())
-    }
-}
-
-#[tokio::test]
-async fn spi_resource_context_new_and_state() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-1"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::blob(),
-        owner,
-    );
-    assert_eq!(ctx.kind(), RdbcResourceKind::Blob);
-    assert_eq!(ctx.state(), RdbcResourceState::Open);
-    assert!(!ctx.is_freed());
-    assert!(ctx.ensure_open().is_ok());
-}
-
-#[tokio::test]
-async fn spi_resource_context_detached() {
-    let ctx =
-        RdbcResourceContext::detached(RdbcResourceKind::Array, RdbcResourceCapabilities::array());
-    assert_eq!(ctx.kind(), RdbcResourceKind::Array);
-    assert_eq!(ctx.state(), RdbcResourceState::Open);
-    assert!(!ctx.resource_id().as_str().is_empty());
-}
-
-#[tokio::test]
-async fn spi_resource_context_ensure_open_after_invalidate() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-inv"),
-        RdbcResourceKind::Clob,
-        RdbcResourceCapabilities::clob(),
-        owner,
-    );
-    ctx.invalidate();
-    assert_eq!(ctx.state(), RdbcResourceState::Invalid);
-    assert!(!ctx.is_freed());
-    assert!(ctx.ensure_open().is_err());
-}
-
-#[tokio::test]
-async fn spi_resource_context_require_capability() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-req"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::blob(),
-        owner,
-    );
-    assert!(ctx.require(RdbcResourceCapabilities::READ, "read").is_ok());
-    assert!(ctx
-        .require(RdbcResourceCapabilities::WRITE, "write")
-        .is_ok());
-    assert!(ctx
-        .require(RdbcResourceCapabilities::RESULT_SET, "resultset")
-        .is_err());
-}
-
-#[tokio::test]
-async fn spi_resource_context_observe_notifies_owner_on_error() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-observe"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::blob(),
-        Arc::clone(&owner) as Arc<dyn RdbcResourceOwner>,
-    );
-    let result: Result<(), RdbcError> = Err(RdbcError::Other("test error".to_owned()));
-    let _ = ctx.observe(result);
-    assert!(owner.failed.load(Ordering::Relaxed));
-}
-
-#[tokio::test]
-async fn spi_resource_context_free_succeeds() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-free"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::FREE,
-        Arc::clone(&owner) as Arc<dyn RdbcResourceOwner>,
-    );
-    let access = Arc::new(MockAccess::new(RdbcResourceCapabilities::blob()));
-    ctx.free(access.as_ref()).await.unwrap();
-    assert_eq!(ctx.state(), RdbcResourceState::Freed);
-    assert!(access.free_called.load(Ordering::Relaxed));
-    assert!(owner.released.load(Ordering::Relaxed));
-}
-
-#[tokio::test]
-async fn spi_resource_context_free_idempotent() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-free-idem"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::blob(),
-        owner,
-    );
-    let access = Arc::new(MockAccess::new(RdbcResourceCapabilities::blob()));
-    ctx.free(access.as_ref()).await.unwrap();
-    ctx.free(access.as_ref()).await.unwrap();
-}
-
-#[tokio::test]
-async fn spi_resource_context_free_invalid_returns_error() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-free-inv"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::blob(),
-        owner,
-    );
-    ctx.invalidate();
-    let access = MockAccess::new(RdbcResourceCapabilities::blob());
-    let result = ctx.free(&access).await;
-    assert!(result.is_err());
-}
-
-#[test]
-fn spi_resource_context_debug() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = RdbcResourceContext::new(
-        RdbcResourceId::new("ctx-dbg"),
-        RdbcResourceKind::SqlXml,
-        RdbcResourceCapabilities::sql_xml(),
-        owner,
-    );
-    let debug = format!("{ctx:?}");
-    assert!(debug.contains("RdbcResourceContext"));
-    assert!(debug.contains("SqlXml"));
-}
-
-#[test]
-fn spi_resource_context_drop_abandoned() {
-    let owner = Arc::new(MockOwner::new());
-    {
-        let _ctx = RdbcResourceContext::new(
-            RdbcResourceId::new("ctx-drop"),
-            RdbcResourceKind::Blob,
-            RdbcResourceCapabilities::blob(),
-            Arc::clone(&owner) as Arc<dyn RdbcResourceOwner>,
-        );
-    }
-    assert!(owner.abandoned.load(Ordering::Relaxed));
-}
-
-#[test]
-fn spi_resource_context_drop_freed_not_abandoned() {
-    let owner = Arc::new(MockOwner::new());
-    {
-        let ctx = RdbcResourceContext::new(
-            RdbcResourceId::new("ctx-drop-freed"),
-            RdbcResourceKind::Blob,
-            RdbcResourceCapabilities::blob(),
-            Arc::clone(&owner) as Arc<dyn RdbcResourceOwner>,
-        );
-        ctx.invalidate();
-    }
-    assert!(!owner.abandoned.load(Ordering::Relaxed));
-}
-
-// ===========================================================================
-// 28. spi: RdbcResourceFactory
+// 28. spi: ResourceHandleFactory
 // ===========================================================================
 
 struct StubArrayAccess;
@@ -1442,8 +1174,8 @@ impl std::fmt::Debug for StubArrayAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for StubArrayAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::array()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::array()
     }
 }
 
@@ -1470,8 +1202,8 @@ impl std::fmt::Debug for StubBlobAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for StubBlobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::blob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::blob()
     }
 }
 
@@ -1495,8 +1227,8 @@ impl std::fmt::Debug for StubClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for StubClobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::clob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::clob()
     }
 }
 
@@ -1524,8 +1256,8 @@ impl std::fmt::Debug for StubNClobAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for StubNClobAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::clob()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::clob()
     }
 }
 
@@ -1555,8 +1287,8 @@ impl std::fmt::Debug for StubRefAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for StubRefAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::reference()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::reference()
     }
 }
 
@@ -1580,8 +1312,8 @@ impl std::fmt::Debug for StubSqlXmlAccess {
 
 #[async_trait::async_trait]
 impl RdbcResourceAccess for StubSqlXmlAccess {
-    fn capabilities(&self) -> RdbcResourceCapabilities {
-        RdbcResourceCapabilities::sql_xml()
+    fn capabilities(&self) -> ResourceOperations {
+        ResourceOperations::sql_xml()
     }
 }
 
@@ -1595,80 +1327,37 @@ impl RdbcSqlXmlAccess for StubSqlXmlAccess {
 #[test]
 fn spi_factory_detached_array() {
     let access = Arc::new(StubArrayAccess);
-    let _array = RdbcResourceFactory::array(access);
+    let _array = ResourceHandleFactory::array(access);
 }
 
 #[test]
 fn spi_factory_detached_blob() {
     let access = Arc::new(StubBlobAccess);
-    let _blob = RdbcResourceFactory::blob(access);
+    let _blob = ResourceHandleFactory::blob(access);
 }
 
 #[test]
 fn spi_factory_detached_clob() {
     let access = Arc::new(StubClobAccess);
-    let _clob = RdbcResourceFactory::clob(access);
+    let _clob = ResourceHandleFactory::clob(access);
 }
 
 #[test]
 fn spi_factory_detached_n_clob() {
     let access = Arc::new(StubNClobAccess);
-    let _n_clob = RdbcResourceFactory::n_clob(access);
+    let _n_clob = ResourceHandleFactory::n_clob(access);
 }
 
 #[test]
 fn spi_factory_detached_reference() {
     let access = Arc::new(StubRefAccess);
-    let _reference = RdbcResourceFactory::reference(access);
+    let _reference = ResourceHandleFactory::reference(access);
 }
 
 #[test]
 fn spi_factory_detached_sql_xml() {
     let access = Arc::new(StubSqlXmlAccess);
-    let _sql_xml = RdbcResourceFactory::sql_xml(access);
-}
-
-#[test]
-fn spi_factory_context_wrong_kind_returns_error() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = Arc::new(RdbcResourceContext::new(
-        RdbcResourceId::new("wrong-kind"),
-        RdbcResourceKind::Blob,
-        RdbcResourceCapabilities::blob(),
-        owner,
-    ));
-    let access = Arc::new(StubArrayAccess);
-    let result = RdbcResourceFactory::array_with_context(ctx, access);
-    assert!(result.is_err());
-}
-
-#[test]
-fn spi_factory_context_excess_capabilities_returns_error() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = Arc::new(RdbcResourceContext::new(
-        RdbcResourceId::new("excess-caps"),
-        RdbcResourceKind::Array,
-        RdbcResourceCapabilities::READ | RdbcResourceCapabilities::RESULT_SET,
-        owner,
-    ));
-    let access = Arc::new(StubArrayAccess);
-    let result = RdbcResourceFactory::array_with_context(ctx, access);
-    assert!(result.is_ok());
-}
-
-#[test]
-fn spi_factory_context_closed_returns_error() {
-    let owner = Arc::new(MockOwner::new());
-    let ctx = Arc::new(RdbcResourceContext::new(
-        RdbcResourceId::new("closed-ctx"),
-        RdbcResourceKind::Array,
-        RdbcResourceCapabilities::array(),
-        owner,
-    ));
-    ctx.invalidate();
-    let access = Arc::new(StubArrayAccess);
-    let result = RdbcResourceFactory::array_with_context(ctx, access);
-    assert!(result.is_err());
+    let _sql_xml = ResourceHandleFactory::sql_xml(access);
 }
 
 // ===========================================================================
@@ -1677,8 +1366,8 @@ fn spi_factory_context_closed_returns_error() {
 
 #[tokio::test]
 async fn spi_resource_access_default_free_returns_ok() {
-    let access = MockAccess::new(RdbcResourceCapabilities::READ);
-    assert!(<MockAccess as RdbcResourceAccess>::free(&access)
+    let access = StubArrayAccess;
+    assert!(<StubArrayAccess as RdbcResourceAccess>::free(&access)
         .await
         .is_ok());
 }

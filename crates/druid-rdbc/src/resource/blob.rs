@@ -2,8 +2,7 @@
 
 use crate::error::RdbcError;
 use crate::resource::{
-    RdbcBlobAccess, RdbcInputStream, RdbcOutputStream, RdbcResourceCapabilities,
-    RdbcResourceContext, RdbcResourceId, RdbcResourceState,
+    RdbcBlobAccess, RdbcInputStream, RdbcOutputStream, ResourceLifecycle, ResourceOperations,
 };
 use std::fmt;
 use std::sync::Arc;
@@ -14,13 +13,13 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct RdbcBlob {
     access: Arc<dyn RdbcBlobAccess>,
-    context: Arc<RdbcResourceContext>,
+    context: Arc<ResourceLifecycle>,
 }
 
 impl RdbcBlob {
     pub(crate) fn from_parts(
         access: Arc<dyn RdbcBlobAccess>,
-        context: Arc<RdbcResourceContext>,
+        context: Arc<ResourceLifecycle>,
     ) -> Self {
         Self { access, context }
     }
@@ -28,14 +27,14 @@ impl RdbcBlob {
     /// Returns the Blob length. Corresponds to `Blob#length()`.
     pub async fn length(&self) -> Result<i64, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::READ, "Blob#length")?;
+            .require(ResourceOperations::READ, "Blob#length")?;
         self.context.observe(self.access.length().await)
     }
 
     /// Reads a 1-based byte range. Corresponds to `Blob#getBytes(long,int)`.
     pub async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::RANGE,
+            ResourceOperations::READ | ResourceOperations::RANGE,
             "Blob#getBytes",
         )?;
         self.context
@@ -45,7 +44,7 @@ impl RdbcBlob {
     /// Opens the full binary stream. Corresponds to `Blob#getBinaryStream()`.
     pub async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::STREAM,
+            ResourceOperations::READ | ResourceOperations::STREAM,
             "Blob#getBinaryStream",
         )?;
         self.context.observe(self.access.get_binary_stream().await)
@@ -58,7 +57,7 @@ impl RdbcBlob {
         start: i64,
     ) -> Result<Option<i64>, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::SEARCH,
+            ResourceOperations::READ | ResourceOperations::SEARCH,
             "Blob#position(byte[],long)",
         )?;
         self.context
@@ -72,7 +71,7 @@ impl RdbcBlob {
         start: i64,
     ) -> Result<Option<i64>, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ | RdbcResourceCapabilities::SEARCH,
+            ResourceOperations::READ | ResourceOperations::SEARCH,
             "Blob#position(Blob,long)",
         )?;
         self.context
@@ -82,7 +81,7 @@ impl RdbcBlob {
     /// Writes all bytes. Corresponds to `Blob#setBytes(long,byte[])`.
     pub async fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, RdbcError> {
         self.context
-            .require(RdbcResourceCapabilities::WRITE, "Blob#setBytes")?;
+            .require(ResourceOperations::WRITE, "Blob#setBytes")?;
         self.context
             .observe(self.access.set_bytes(position, bytes).await)
     }
@@ -96,7 +95,7 @@ impl RdbcBlob {
         length: i32,
     ) -> Result<i32, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::RANGE,
+            ResourceOperations::WRITE | ResourceOperations::RANGE,
             "Blob#setBytes(long,byte[],int,int)",
         )?;
         self.context.observe(
@@ -109,7 +108,7 @@ impl RdbcBlob {
     /// Opens a positioned output stream. Corresponds to `Blob#setBinaryStream(long)`.
     pub async fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::STREAM,
+            ResourceOperations::WRITE | ResourceOperations::STREAM,
             "Blob#setBinaryStream",
         )?;
         self.context
@@ -119,7 +118,7 @@ impl RdbcBlob {
     /// Truncates the Blob. Corresponds to `Blob#truncate(long)`.
     pub async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::WRITE | RdbcResourceCapabilities::TRUNCATE,
+            ResourceOperations::WRITE | ResourceOperations::TRUNCATE,
             "Blob#truncate",
         )?;
         self.context.observe(self.access.truncate(length).await)
@@ -128,7 +127,7 @@ impl RdbcBlob {
     /// Releases the Blob. Corresponds to `Blob#free()`.
     pub async fn free(&self) -> Result<(), RdbcError> {
         self.context
-            .require_capability(RdbcResourceCapabilities::FREE, "Blob#free")?;
+            .require_capability(ResourceOperations::FREE, "Blob#free")?;
         self.context.free(self.access.as_ref()).await
     }
 
@@ -145,9 +144,7 @@ impl RdbcBlob {
         length: i64,
     ) -> Result<RdbcInputStream, RdbcError> {
         self.context.require(
-            RdbcResourceCapabilities::READ
-                | RdbcResourceCapabilities::STREAM
-                | RdbcResourceCapabilities::RANGE,
+            ResourceOperations::READ | ResourceOperations::STREAM | ResourceOperations::RANGE,
             "Blob#getBinaryStream(long,long)",
         )?;
         self.context
@@ -156,19 +153,13 @@ impl RdbcBlob {
 
     /// Returns the driver-neutral resource identifier.
     #[must_use]
-    pub fn resource_id(&self) -> &RdbcResourceId {
-        self.context.resource_id()
-    }
-
-    /// Returns the current shared resource state.
-    #[must_use]
-    pub fn state(&self) -> RdbcResourceState {
-        self.context.state()
+    pub fn resource_id(&self) -> &str {
+        self.context.resource_id().as_str()
     }
 
     /// Returns the operations enabled for this Blob instance.
     #[must_use]
-    pub fn capabilities(&self) -> RdbcResourceCapabilities {
+    pub fn capabilities(&self) -> ResourceOperations {
         self.context.capabilities()
     }
 }

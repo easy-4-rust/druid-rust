@@ -25,7 +25,8 @@ use super::physical_statement::{
 };
 use super::prepared_input_parameter::PreparedInputParameter;
 use super::prepared_statement_holder::PreparedStatementHolder;
-use super::prepared_statement_key::{PreparedStatementKey, PreparedStatementMethodType};
+use super::prepared_statement_key::PreparedStatementKey;
+use super::prepared_statement_method_type::PreparedStatementMethodType;
 use super::proxy_attributes::{ProxyAttributeValue, ProxyAttributes};
 use super::rdbc_result_set::PhysicalResultSet;
 use super::row::Row;
@@ -52,6 +53,11 @@ pub type DruidConnectionReturnCallback =
 /// 兼容旧构造入口的物理连接回收回调。
 pub type PhysicalConnectionReturnCallback =
     Box<dyn FnOnce(Box<dyn PhysicalConnection>, u64, ConnectionRecycleDisposition) -> bool + Send>;
+
+/// 外部连接池 canonical standard lease 的一次性归还回调。
+pub type StandardConnectionReturnCallback = Box<
+    dyn FnOnce(Box<dyn druid_rdbc::connection::Connection>, ConnectionRecycleDisposition) + Send,
+>;
 
 /// 一次数据库执行的运行中标记，离开作用域时无条件复位。
 struct ExecutionRunningGuard {
@@ -101,6 +107,7 @@ pub struct DruidPooledConnection {
     filter_chain: Option<Arc<FilterChain>>,
     keep_underlying_transaction_isolation: bool,
     recycle_validator: Option<Arc<dyn PhysicalConnectionFactory>>,
+    standard_test_on_return: bool,
     exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     fatal_error_handler: Option<Arc<dyn FatalErrorHandler>>,
     return_connection: Option<DruidConnectionReturnCallback>,
@@ -319,7 +326,7 @@ impl DruidPooledConnection {
         recycle_validator: Option<Arc<dyn PhysicalConnectionFactory>>,
         return_connection: PhysicalConnectionReturnCallback,
     ) -> Self {
-        let holder = DruidConnectionHolder::with_connection_and_defaults(
+        let holder = DruidConnectionHolder::with_external_physical_connection_and_defaults(
             physical_connection,
             id,
             Duration::ZERO,
@@ -378,6 +385,7 @@ impl DruidPooledConnection {
             filter_chain,
             keep_underlying_transaction_isolation,
             recycle_validator,
+            standard_test_on_return: false,
             exception_sorter: None,
             fatal_error_handler: None,
             return_connection: Some(return_connection),
@@ -402,6 +410,65 @@ impl DruidPooledConnection {
             last_execute_sql: None,
             attributes: ProxyAttributes::default(),
         }
+    }
+
+    /// 使用 canonical standard holder 创建 native-pool logical connection。
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_standard_holder(
+        holder: DruidConnectionHolder,
+        data_source: String,
+        filter_chain: Option<Arc<FilterChain>>,
+        keep_underlying_transaction_isolation: bool,
+        test_on_return: bool,
+        return_connection: DruidConnectionReturnCallback,
+    ) -> Self {
+        let mut connection = Self::with_holder(
+            holder,
+            data_source,
+            filter_chain,
+            keep_underlying_transaction_isolation,
+            None,
+            return_connection,
+        );
+        connection.standard_test_on_return = test_on_return;
+        connection
+    }
+
+    /// 从 bb8/deadpool 等 external standard lease 创建 logical connection。
+    ///
+    /// external owner 的 holder 永远不会进入 native pool callback。
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_external_standard_connection(
+        connection: Box<dyn druid_rdbc::connection::Connection>,
+        id: u64,
+        data_source: String,
+        filter_chain: Option<Arc<FilterChain>>,
+        external_return: StandardConnectionReturnCallback,
+        native_return: DruidConnectionReturnCallback,
+    ) -> Result<Self, DruidError> {
+        let holder = DruidConnectionHolder::with_external_standard_connection(
+            connection,
+            id,
+            Duration::ZERO,
+            0,
+        )?;
+        Ok(Self::with_standard_holder(
+            holder,
+            data_source,
+            filter_chain,
+            false,
+            false,
+            Box::new(move |mut holder, disposition| {
+                if holder.is_external_lease() {
+                    if let Some(connection) = holder.take_standard_connection() {
+                        external_return(connection, disposition);
+                    }
+                    false
+                } else {
+                    native_return(holder, disposition)
+                }
+            }),
+        ))
     }
 
     /// 返回连接 ID。
@@ -1189,7 +1256,41 @@ impl DruidPooledConnection {
             .ok_or(RdbcError::ConnectionDiscarded)
     }
 
+    fn standard_mut(
+        &mut self,
+    ) -> Result<&mut (dyn druid_rdbc::connection::Connection + 'static), RdbcError> {
+        if !self.lease_active.load(Ordering::Acquire) {
+            if let Some(holder) = self.holder.as_mut() {
+                holder.mark_discarded();
+            }
+            return Err(RdbcError::ConnectionLeaked {
+                id: self.id,
+                held_for: self.borrowed_at.elapsed(),
+            });
+        }
+        self.holder
+            .as_mut()
+            .and_then(DruidConnectionHolder::standard_connection_mut)
+            .ok_or(RdbcError::ConnectionDiscarded)
+    }
+
+    fn standard_ref(
+        &self,
+    ) -> Result<&(dyn druid_rdbc::connection::Connection + 'static), RdbcError> {
+        self.holder
+            .as_ref()
+            .and_then(DruidConnectionHolder::standard_connection)
+            .ok_or(RdbcError::ConnectionDiscarded)
+    }
+
     fn current_catalog(&self) -> Option<String> {
+        if let Some(connection) = self
+            .holder
+            .as_ref()
+            .and_then(DruidConnectionHolder::standard_connection)
+        {
+            return connection.catalog().ok().flatten();
+        }
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::physical_connection)
@@ -1293,10 +1394,15 @@ impl DruidPooledConnection {
         let statement_holder = if let Some(statement_holder) = cached {
             statement_holder
         } else {
+            let compatibility_key = super::compat::physical_prepared_statement_key(&key)?;
             let result = if callable {
-                self.physical_mut()?.prepare_physical_call(&key).await
+                self.physical_mut()?
+                    .prepare_physical_call(&compatibility_key)
+                    .await
             } else {
-                self.physical_mut()?.prepare_physical_statement(&key).await
+                self.physical_mut()?
+                    .prepare_physical_statement(&compatibility_key)
+                    .await
             };
             let statement = self.classify_result(result)?;
             let query_timeout = self.effective_query_timeout();
@@ -1410,6 +1516,18 @@ impl DruidPooledConnection {
             return ConnectionRecycleDisposition::discard();
         };
         let defaults = holder.defaults().clone();
+        if holder.has_standard_connection() {
+            let unusable_or_dirty = holder.standard_connection().is_none_or(|connection| {
+                connection.is_closed().unwrap_or(true)
+                    || defaults.standard_needs_reset(connection).unwrap_or(true)
+                    || self.standard_test_on_return
+            });
+            if unusable_or_dirty {
+                holder.mark_discarded();
+                return ConnectionRecycleDisposition::discard();
+            }
+            return ConnectionRecycleDisposition::Reusable;
+        }
         let Some(connection) = holder.physical_connection_mut() else {
             return ConnectionRecycleDisposition::discard();
         };
@@ -1431,6 +1549,13 @@ impl DruidPooledConnection {
                 holder.mark_discarded();
             }
             return ConnectionRecycleDisposition::discard();
+        }
+        if self
+            .holder
+            .as_ref()
+            .is_some_and(DruidConnectionHolder::has_standard_connection)
+        {
+            return self.prepare_standard_for_recycle().await;
         }
         let already_unusable = self
             .holder
@@ -1476,7 +1601,7 @@ impl DruidPooledConnection {
         if let Err(error) = reset_result {
             // Java recycle 捕获 rollback/reset 异常、丢弃物理连接并记录
             // recycleError，不把回收异常重新抛给 close 调用者。
-            return self.discard_for_recycle_error(error.into()).await;
+            return self.discard_for_recycle_error(error).await;
         }
 
         // Java testConnectionInternal 将 checker 异常折叠为 false；验证失败会销毁
@@ -1519,6 +1644,61 @@ impl DruidPooledConnection {
         ConnectionRecycleDisposition::Reusable
     }
 
+    async fn prepare_standard_for_recycle(&mut self) -> ConnectionRecycleDisposition {
+        let reset_result = async {
+            let (supports_transactions, auto_commit, read_only) = {
+                let connection = self.standard_ref()?;
+                (
+                    connection.capabilities().transactions,
+                    connection.auto_commit()?,
+                    connection.read_only()?,
+                )
+            };
+            if supports_transactions && !auto_commit && !read_only {
+                self.before_connection_event(&ConnectionEvent::Rollback)
+                    .await?;
+                self.standard_mut()?.rollback().await?;
+            }
+            self.holder
+                .as_mut()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .reset(false)
+                .await?;
+            Ok::<(), RdbcError>(())
+        }
+        .await;
+        if let Err(error) = reset_result {
+            return self.discard_for_recycle_error(error).await;
+        }
+
+        if self.standard_test_on_return {
+            let validation = match self.standard_mut() {
+                Ok(connection) => connection.is_valid(1).await,
+                Err(error) => Err(error),
+            };
+            if !matches!(validation, Ok(true)) {
+                if let Some(holder) = self.holder.as_mut() {
+                    holder.mark_discarded();
+                }
+                return ConnectionRecycleDisposition::discard();
+            }
+            if let Some(holder) = self.holder.as_ref() {
+                holder.record_valid();
+            }
+        }
+
+        let restore_result = match self.holder.as_mut() {
+            Some(holder) if holder.should_restore_schema_on_recycle() => {
+                holder.restore_initial_schema().await
+            }
+            _ => Ok(()),
+        };
+        if let Err(error) = restore_result {
+            return self.discard_for_recycle_error(error.into()).await;
+        }
+        ConnectionRecycleDisposition::Reusable
+    }
+
     /// `dataSource_releaseConnection` around-chain 的末端回收动作。
     ///
     /// 该方法不再次进入 Filter，避免递归；回收错误按 Java
@@ -1540,8 +1720,10 @@ impl DruidPooledConnection {
     ) -> ConnectionRecycleDisposition {
         if let Some(holder) = self.holder.as_mut() {
             holder.mark_discarded();
-            if let Some(connection) = holder.physical_connection_mut() {
-                let _ = connection.close().await;
+            if !holder.has_standard_connection() {
+                if let Some(connection) = holder.physical_connection_mut() {
+                    let _ = connection.close().await;
+                }
             }
         }
         ConnectionRecycleDisposition::recycle_error(error.into())
@@ -1555,6 +1737,34 @@ impl DruidPooledConnection {
                 .map_err(RdbcError::from),
             None => Ok(()),
         }
+    }
+
+    async fn close_logical_once(&mut self) -> Result<(), RdbcError> {
+        if self.recycled {
+            return Ok(());
+        }
+
+        self.notify_connection_closed();
+        let filter_chain = self.filter_chain.clone();
+        let release_result = match filter_chain {
+            Some(filter_chain) if !filter_chain.is_empty() => filter_chain
+                .data_source_release_connection(self)
+                .await
+                .map_err(RdbcError::from),
+            _ => self.recycle_from_data_source_filter().await,
+        };
+        if let Err(error) = release_result {
+            if !self.recycled {
+                self.connection_closed_notified = false;
+            }
+            return Err(error);
+        }
+        if !self.recycled {
+            self.lease_active.store(false, Ordering::Release);
+            self.recycled = true;
+            self.return_connection.take();
+        }
+        Ok(())
     }
 
     /// 返回连接警告链。
@@ -2410,6 +2620,187 @@ impl DruidPooledConnection {
     }
 }
 
+druid_rdbc::impl_standard_wrapper!(DruidPooledConnection => Connection);
+
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for DruidPooledConnection {
+    async fn create_statement(
+        &mut self,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        let statement = self.standard_mut()?.create_statement(options).await?;
+        Ok(Box::new(DruidPooledStatement::new_standard(
+            statement,
+            self.id,
+            self.next_statement_id(),
+            Arc::clone(&self.result_set_id_seed),
+            Arc::clone(&self.metadata_id_seed),
+            Arc::clone(&self.lease_active),
+            self.filter_chain.clone(),
+            self.stats_collector.clone(),
+        )))
+    }
+
+    async fn prepare_statement(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        let key = PreparedStatementKey::standard(
+            sql,
+            self.current_catalog(),
+            PreparedStatementMethodType::M1,
+            options,
+            druid_rdbc::statement::GeneratedKeys::None,
+        )?;
+        let cache = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_statement_pool();
+        let cached = cache.lock().await.take(&key);
+        let statement = match cached {
+            Some(statement) => statement,
+            None => self.standard_mut()?.prepare_statement(sql, options).await?,
+        };
+        Ok(Box::new(DruidPooledPreparedStatement::new_standard(
+            statement,
+            sql,
+            key,
+            cache,
+            self.id,
+            self.next_statement_id(),
+            Arc::clone(&self.result_set_id_seed),
+            Arc::clone(&self.metadata_id_seed),
+            Arc::clone(&self.lease_active),
+            self.filter_chain.clone(),
+            self.stats_collector.clone(),
+        )))
+    }
+
+    async fn prepare_call(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::CallableStatement>, RdbcError> {
+        let statement = self.standard_mut()?.prepare_call(sql, options).await?;
+        Ok(Box::new(DruidPooledCallableStatement::new_standard(
+            statement,
+            sql,
+            self.id,
+            self.next_statement_id(),
+            Arc::clone(&self.result_set_id_seed),
+            Arc::clone(&self.metadata_id_seed),
+            Arc::clone(&self.lease_active),
+            self.filter_chain.clone(),
+            self.stats_collector.clone(),
+        )))
+    }
+
+    async fn database_meta_data(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
+        let raw = self.standard_mut()?.database_meta_data().await?;
+        Ok(Box::new(DatabaseMetaDataProxyImpl::new_standard(
+            raw,
+            self.id,
+            Arc::clone(&self.lease_active),
+        )))
+    }
+
+    async fn commit(&mut self) -> Result<(), RdbcError> {
+        self.before_connection_event(&ConnectionEvent::Commit)
+            .await?;
+        let result = self.standard_mut()?.commit().await;
+        self.classify_result(result)
+    }
+
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
+        self.before_connection_event(&ConnectionEvent::Rollback)
+            .await?;
+        let result = self.standard_mut()?.rollback().await;
+        self.classify_result(result)
+    }
+
+    async fn set_auto_commit(&mut self, enabled: bool) -> Result<(), RdbcError> {
+        self.before_connection_event(&ConnectionEvent::SetAutoCommit(enabled))
+            .await?;
+        let result = self.standard_mut()?.set_auto_commit(enabled).await;
+        self.classify_result(result)
+    }
+
+    fn auto_commit(&self) -> Result<bool, RdbcError> {
+        self.standard_ref()?.auto_commit()
+    }
+
+    fn read_only(&self) -> Result<bool, RdbcError> {
+        self.standard_ref()?.read_only()
+    }
+
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
+        self.before_connection_event(&ConnectionEvent::SetReadOnly(read_only))
+            .await?;
+        let result = self.standard_mut()?.set_read_only(read_only).await;
+        self.classify_result(result)
+    }
+
+    fn catalog(&self) -> Result<Option<String>, RdbcError> {
+        self.standard_ref()?.catalog()
+    }
+
+    async fn set_catalog(&mut self, catalog: Option<&str>) -> Result<(), RdbcError> {
+        self.before_connection_event(&ConnectionEvent::SetCatalog(
+            catalog.unwrap_or_default().to_string(),
+        ))
+        .await?;
+        let result = self.standard_mut()?.set_catalog(catalog).await;
+        self.classify_result(result)
+    }
+
+    fn schema(&self) -> Result<Option<String>, RdbcError> {
+        self.standard_ref()?.schema()
+    }
+
+    async fn set_schema(&mut self, schema: Option<&str>) -> Result<(), RdbcError> {
+        self.before_connection_event(&ConnectionEvent::SetSchema(
+            schema.unwrap_or_default().to_string(),
+        ))
+        .await?;
+        let initial_schema = self.standard_ref()?.schema()?;
+        if let Some(holder) = self.holder.as_ref() {
+            holder.remember_initial_schema(initial_schema);
+        }
+        let result = self.standard_mut()?.set_schema(schema).await;
+        self.classify_result(result)
+    }
+
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
+        self.standard_mut()?.warnings().await
+    }
+
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.standard_mut()?.clear_warnings().await
+    }
+
+    fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
+        self.standard_ref()
+            .map(druid_rdbc::connection::Connection::capabilities)
+            .unwrap_or_default()
+    }
+
+    async fn is_valid(&mut self, timeout_seconds: u32) -> Result<bool, RdbcError> {
+        self.standard_mut()?.is_valid(timeout_seconds).await
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        self.close_logical_once().await
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.recycled)
+    }
+}
+
 #[async_trait::async_trait]
 impl PhysicalConnection for DruidPooledConnection {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
@@ -2433,22 +2824,6 @@ impl PhysicalConnection for DruidPooledConnection {
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.fetch_with_filters(sql, params, None).await
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        let result = self.physical_mut()?.prepare_physical_statement(key).await;
-        self.classify_result(result)
-    }
-
-    async fn prepare_physical_call(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        let result = self.physical_mut()?.prepare_physical_call(key).await;
-        self.classify_result(result)
     }
 
     async fn exec_prepared(
@@ -2635,36 +3010,7 @@ impl PhysicalConnection for DruidPooledConnection {
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        if self.recycled {
-            return Ok(());
-        }
-
-        self.notify_connection_closed();
-        let filter_chain = self.filter_chain.clone();
-        let release_result = match filter_chain {
-            Some(filter_chain) if !filter_chain.is_empty() => filter_chain
-                .data_source_release_connection(self)
-                .await
-                .map_err(RdbcError::from),
-            _ => self.recycle_from_data_source_filter().await,
-        };
-        if let Err(error) = release_result {
-            if !self.recycled {
-                // Java 在 Filter 到达 recycle 末端前报错时不会设置 disable；
-                // 下一次 close 会重新通知 ConnectionEventListener 并重试整条链。
-                self.connection_closed_notified = false;
-            }
-            return Err(error);
-        }
-        if !self.recycled {
-            // Java Filter 成功短路后 close 仍设置 disable=true，但 holder 不会
-            // 被数据源回收。标记逻辑租约关闭并丢弃 return callback，保留相同
-            // active-count 泄漏责任，不由 Drop 悄悄修复自定义 Filter。
-            self.lease_active.store(false, Ordering::Release);
-            self.recycled = true;
-            self.return_connection.take();
-        }
-        Ok(())
+        self.close_logical_once().await
     }
 
     fn is_closed(&self) -> bool {

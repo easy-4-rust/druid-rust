@@ -22,7 +22,6 @@ from verify_rdbc_standardization_denominator import (  # noqa: E402
     VerificationError,
     ConsumerRow,
     derive_live_manifests,
-    emit_live,
     render_adapter_rows,
     render_consumer_rows,
     render_physical_rows,
@@ -40,13 +39,30 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.live = derive_live_manifests(
             REPOSITORY_ROOT,
-            REPOSITORY_ROOT / "docs/verification/rdbc-first/rdbc-physical-standardization.tsv",
+            REPOSITORY_ROOT
+            / "docs/verification/rdbc-first/rdbc-physical-standardization.tsv",
+            phase="task5",
         )
-        checked = parse_consumer_payload(
-            (REPOSITORY_ROOT / "docs/verification/rdbc-first/rdbc-production-consumers.tsv").read_bytes()
+        cls.physical_payload = (
+            REPOSITORY_ROOT
+            / "docs/verification/rdbc-first/rdbc-physical-standardization.tsv"
+        ).read_bytes()
+        cls.adapter_payload = (
+            REPOSITORY_ROOT
+            / "docs/verification/rdbc-first/rdbc-adapter-implementations.tsv"
+        ).read_bytes()
+        cls.consumer_payload = (
+            REPOSITORY_ROOT
+            / "docs/verification/rdbc-first/rdbc-production-consumers.tsv"
+        ).read_bytes()
+        cls.manifest_adapters = tuple(
+            standardizer.parse_adapter_payload(cls.adapter_payload)
         )
+        cls.manifest_consumers = tuple(parse_consumer_payload(cls.consumer_payload))
         cls.closed_consumers = tuple(
-            row for row in checked if row.state == "STANDARD_REFERENCE_CLOSED"
+            row
+            for row in cls.manifest_consumers
+            if row.state == "STANDARD_REFERENCE_CLOSED"
         )
 
     def setUp(self) -> None:
@@ -55,11 +71,9 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         self.physical = self.root / "physical.tsv"
         self.adapters = self.root / "adapters.tsv"
         self.consumers = self.root / "consumers.tsv"
-        self.physical.write_bytes(render_physical_rows(self.live.physical))
-        self.adapters.write_bytes(render_adapter_rows(self.live.adapters))
-        self.consumers.write_bytes(
-            render_consumer_rows(tuple(sorted((*self.live.consumers, *self.closed_consumers))))
-        )
+        self.physical.write_bytes(self.physical_payload)
+        self.adapters.write_bytes(self.adapter_payload)
+        self.consumers.write_bytes(self.consumer_payload)
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
@@ -94,23 +108,26 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         """Task 4 may advance its wrapper rows while every source-derived field stays exact."""
 
         adapters = tuple(
-            replace(row, state="STANDARD_IMPL_LIVE")
-            if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
-            and row.owner == "WRAPPER_ADAPTER"
-            else row
-            for row in self.live.adapters
+            (
+                replace(row, state="STANDARD_IMPL_LIVE")
+                if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
+                and row.owner == "WRAPPER_ADAPTER"
+                else row
+            )
+            for row in self.manifest_adapters
         )
         consumers = tuple(
-            replace(row, state="STANDARD_REFERENCE_LIVE")
-            if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
-            and row.source_path.startswith("crates/druid-wrapper/")
-            else row
-            for row in self.live.consumers
+            (
+                replace(row, state="STANDARD_REFERENCE_LIVE")
+                if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
+                and row.source_path.startswith("crates/druid-wrapper/")
+                and row.state != "STANDARD_REFERENCE_CLOSED"
+                else row
+            )
+            for row in self.manifest_consumers
         )
         self.adapters.write_bytes(render_adapter_rows(adapters))
-        self.consumers.write_bytes(
-            render_consumer_rows(tuple(sorted((*consumers, *self.closed_consumers))))
-        )
+        self.consumers.write_bytes(render_consumer_rows(tuple(sorted(consumers))))
         self.verify()
 
     def test_rejects_live_state_on_wrong_target_or_unknown_state(self) -> None:
@@ -129,7 +146,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "only valid for Task 4"):
             self.verify()
 
-        self.adapters.write_bytes(render_adapter_rows(self.live.adapters))
+        self.adapters.write_bytes(self.adapter_payload)
         consumer_lines = self.consumers.read_text(encoding="utf-8").splitlines()
         fields = consumer_lines[1].split("\t")
         fields[-1] = "UNKNOWN_LIVE"
@@ -144,10 +161,15 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         for mutation in (
             lambda lines: lines[:-1],
             lambda lines: lines + [lines[1]],
-            lambda lines: lines + [lines[1].replace("druid_rdbc::", "druid_rdbc::fake::", 1)],
-            lambda lines: [lines[0], lines[1].replace("MERGE_STANDARD", "UNKNOWN"), *lines[2:]],
+            lambda lines: lines
+            + [lines[1].replace("druid_rdbc::", "druid_rdbc::fake::", 1)],
+            lambda lines: [
+                lines[0],
+                lines[1].replace("MERGE_STANDARD", "UNKNOWN"),
+                *lines[2:],
+            ],
         ):
-            self.physical.write_bytes(render_physical_rows(self.live.physical))
+            self.physical.write_bytes(self.physical_payload)
             self.mutate_lines(self.physical, mutation)
             with self.assertRaises(VerificationError):
                 self.verify()
@@ -170,9 +192,13 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         for mutation in (
             lambda lines: lines[:-1],
             lambda lines: lines + [lines[1]],
-            lambda lines: [lines[0], lines[1].replace("crates/", "crates/fake/", 1), *lines[2:]],
+            lambda lines: [
+                lines[0],
+                lines[1].replace("crates/", "crates/fake/", 1),
+                *lines[2:],
+            ],
         ):
-            self.adapters.write_bytes(render_adapter_rows(self.live.adapters))
+            self.adapters.write_bytes(self.adapter_payload)
             self.mutate_lines(self.adapters, mutation)
             with self.assertRaises(VerificationError):
                 self.verify()
@@ -185,9 +211,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             lambda lines: lines + [lines[1]],
             lambda lines: lines + [lines[1].replace("crates/", "crates/fake/", 1)],
         ):
-            self.consumers.write_bytes(
-                render_consumer_rows(tuple(sorted((*self.live.consumers, *self.closed_consumers))))
-            )
+            self.consumers.write_bytes(self.consumer_payload)
             self.mutate_lines(self.consumers, mutation)
             with self.assertRaises(VerificationError):
                 self.verify()
@@ -203,18 +227,24 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             )
             for index, row in enumerate(self.closed_consumers)
         )
+        retained = tuple(
+            row
+            for row in self.manifest_consumers
+            if row.state != "STANDARD_REFERENCE_CLOSED"
+        )
         self.consumers.write_bytes(
-            render_consumer_rows(tuple(sorted((*self.live.consumers, *fabricated))))
+            render_consumer_rows(tuple(sorted((*retained, *fabricated))))
         )
         with self.assertRaisesRegex(VerificationError, "historical"):
             self.verify()
 
-    def test_emit_live_preserves_exact_closed_history(self) -> None:
-        """Refreshing active source rows must retain the immutable Task 4 audit history."""
+    def test_checked_task5_manifest_preserves_exact_closed_history(self) -> None:
+        """The Task 5 checked denominator retains immutable Task 4 audit history."""
 
-        emit_live(REPOSITORY_ROOT, self.physical, self.adapters, self.consumers)
         emitted = parse_consumer_payload(self.consumers.read_bytes())
-        closed = tuple(row for row in emitted if row.state == "STANDARD_REFERENCE_CLOSED")
+        closed = tuple(
+            row for row in emitted if row.state == "STANDARD_REFERENCE_CLOSED"
+        )
         self.assertEqual(self.closed_consumers, closed)
 
     def test_comments_strings_and_raw_strings_do_not_create_occurrences(self) -> None:
@@ -223,13 +253,15 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         mapping = {
             "druid_rdbc::spi::PhysicalConnection": "druid_rdbc::connection::Connection",
         }
-        source = '''
+        source = """
 // PhysicalConnection and druid_rdbc::spi::PhysicalConnection
 const NORMAL: &str = "PhysicalConnection";
 const RAW: &str = r###"druid_rdbc::spi::PhysicalConnection"###;
 const BYTE_RAW: &[u8] = br#"PhysicalConnection"#;
-'''
-        occurrences, implementations = scan_source_text(Path("crates/druid/src/literal.rs"), source, mapping)
+"""
+        occurrences, implementations = scan_source_text(
+            Path("crates/druid/src/literal.rs"), source, mapping
+        )
         self.assertEqual([], occurrences)
         self.assertEqual([], implementations)
 
@@ -240,15 +272,17 @@ const BYTE_RAW: &[u8] = br#"PhysicalConnection"#;
             "druid_rdbc::spi::PhysicalConnection": "druid_rdbc::connection::Connection",
             "druid_rdbc::spi::PhysicalStatement": "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 extern crate druid_rdbc as rr;
 use rr::spi::{r#PhysicalConnection as PC, PhysicalStatement as PS};
 fn accepts(connection: Box<dyn PC>, statement: &PS) {
     let _ = PC::is_closed(connection.as_ref());
     let _ = statement;
 }
-'''
-        occurrences, _ = scan_source_text(Path("crates/druid/src/aliases.rs"), source, mapping)
+"""
+        occurrences, _ = scan_source_text(
+            Path("crates/druid/src/aliases.rs"), source, mapping
+        )
         kinds = [row.occurrence_kind for row in occurrences]
         self.assertEqual(2, kinds.count("IMPORT"))
         self.assertIn("TRAIT_OBJECT", kinds)
@@ -260,7 +294,8 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
 
         ufcs_path = "crates/druid-rdbc/src/spi/physical_prepared_statement.rs"
         ufcs = [
-            row for row in self.live.consumers
+            row
+            for row in self.live.consumers
             if row.source_path == ufcs_path
             and row.old_path == "druid_rdbc::spi::PhysicalStatement"
             and row.occurrence_kind == "CALL"
@@ -270,7 +305,8 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
 
         dyn_path = "crates/druid/src/core/druid_pooled_prepared_statement.rs"
         qualified = [
-            row for row in self.live.consumers
+            row
+            for row in self.live.consumers
             if row.source_path == dyn_path
             and row.old_path == "druid_rdbc::spi::PhysicalPreparedStatement"
             and "@qualified-token=" in row.symbol
@@ -279,11 +315,12 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
         self.assertIn("TRAIT_OBJECT", {row.occurrence_kind for row in qualified})
 
     def test_live_scan_includes_proven_physical_mut_receiver_calls(self) -> None:
-        """The typed physical_mut accessor must account for all 35 current trait calls."""
+        """The typed physical_mut accessor accounts for all 33 post-Task5 physical calls."""
 
         source_path = "crates/druid/src/core/druid_pooled_connection.rs"
         receiver_calls = [
-            row for row in self.live.consumers
+            row
+            for row in self.live.consumers
             if row.source_path == source_path
             and row.old_path == "druid_rdbc::spi::PhysicalConnection"
             and row.occurrence_kind == "CALL"
@@ -291,9 +328,10 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
             and (
                 "@binding=accessor:druid::core::druid_pooled_connection::"
                 "DruidPooledConnection:physical_mut@"
-            ) in row.symbol
+            )
+            in row.symbol
         ]
-        self.assertEqual(35, len(receiver_calls))
+        self.assertEqual(33, len(receiver_calls))
         names = [row.symbol.split("@", 1)[0] for row in receiver_calls]
         self.assertEqual(1, names.count("commit"))
         self.assertEqual(2, names.count("rollback"))
@@ -303,13 +341,16 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
 
         source_path = "crates/druid/src/core/filter_chain_impl.rs"
         rows = [
-            row for row in self.live.consumers
+            row
+            for row in self.live.consumers
             if row.source_path == source_path and "@receiver=" in row.symbol
         ]
         observed = {}
         for row in rows:
             method = row.symbol.split("@", 1)[0]
-            observed[(row.old_path, method)] = observed.get((row.old_path, method), 0) + 1
+            observed[(row.old_path, method)] = (
+                observed.get((row.old_path, method), 0) + 1
+            )
         connection = "druid_rdbc::spi::PhysicalConnection"
         statement = "druid_rdbc::spi::PhysicalStatement"
         prepared = "druid_rdbc::spi::PhysicalPreparedStatement"
@@ -324,20 +365,25 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
         self.assertEqual(1, observed.get((prepared, "warnings"), 0))
         self.assertEqual(1, observed.get((prepared, "clear_warnings"), 0))
 
-    def test_physical_connection_lease_generic_impl_accessors_cover_all_calls(self) -> None:
+    def test_physical_connection_lease_generic_impl_accessors_cover_all_calls(
+        self,
+    ) -> None:
         """Inherent and trait impls of PhysicalConnectionLease<L> share one normalized identity."""
 
         source_path = "crates/druid/src/core/physical_connection_lease.rs"
         rows = [
-            row for row in self.live.consumers
+            row
+            for row in self.live.consumers
             if row.source_path == source_path
             and row.old_path == "druid_rdbc::spi::PhysicalConnection"
             and row.occurrence_kind == "CALL"
             and (
                 "@binding=accessor:druid::core::physical_connection_lease::"
                 "PhysicalConnectionLease<_G0>:physical_connection"
-            ) in row.symbol
+            )
+            in row.symbol
         ]
+        # The two preparation calls remain only through the Task 6 compatibility type macro.
         self.assertEqual(52, len(rows))
 
     def test_receiver_expression_distinguishes_self_field_from_parameter(self) -> None:
@@ -349,7 +395,7 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 struct Holder<'a> { physical: &'a dyn PhysicalConnection }
 impl<'a> Holder<'a> {
@@ -358,17 +404,22 @@ impl<'a> Holder<'a> {
         physical.warnings();
     }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/field_vs_parameter.rs"), source, mapping,
+            Path("crates/druid/src/field_vs_parameter.rs"),
+            source,
+            mapping,
             trait_paths={connection, statement},
             trait_methods={connection: {"commit"}, statement: {"warnings"}},
         )
         calls = sorted(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
-        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+        self.assertEqual(
+            sorted([(connection, "commit"), (statement, "warnings")]), calls
+        )
 
     def test_destructuring_closure_and_control_flow_patterns_are_scoped(self) -> None:
         """Destructured params, closure params, if/while-let and match arms retain identities."""
@@ -379,7 +430,7 @@ impl<'a> Holder<'a> {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 enum Target<'a> {
     Connection(&'a dyn PhysicalConnection),
@@ -406,9 +457,11 @@ fn control_shadow(physical: &dyn PhysicalConnection) {
     if let UnrelatedTarget::Other(physical) = unrelated_target() { physical.commit(); }
     physical.rollback();
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/pattern_scopes.rs"), source, mapping,
+            Path("crates/druid/src/pattern_scopes.rs"),
+            source,
+            mapping,
             trait_paths={connection, statement},
             trait_methods={
                 connection: {"commit", "rollback"},
@@ -417,7 +470,8 @@ fn control_shadow(physical: &dyn PhysicalConnection) {
         )
         observed = Counter(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
         self.assertEqual(2, observed[(connection, "commit")])
         self.assertEqual(4, observed[(connection, "rollback")])
@@ -433,7 +487,7 @@ fn control_shadow(physical: &dyn PhysicalConnection) {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 struct Holder<T>(T);
 struct Other<T>(T);
@@ -449,17 +503,22 @@ impl<T> self::Other<T> {
 impl<T> Other<T> {
     fn run(&self) { self.physical().warnings(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/generic_impl_accessors.rs"), source, mapping,
+            Path("crates/druid/src/generic_impl_accessors.rs"),
+            source,
+            mapping,
             trait_paths={connection, statement},
             trait_methods={connection: {"commit"}, statement: {"warnings"}},
         )
         calls = sorted(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
-        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+        self.assertEqual(
+            sorted([(connection, "commit"), (statement, "warnings")]), calls
+        )
 
     def test_qualified_same_base_impls_keep_distinct_accessor_owners(self) -> None:
         """a::Holder<T> and b::Holder<T> cannot collapse to one Holder<T> identity."""
@@ -470,7 +529,7 @@ impl<T> Other<T> {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 impl<T> a::Holder<T> {
     fn physical(&self) -> &dyn PhysicalConnection { todo!() }
@@ -480,19 +539,26 @@ impl<T> b::Holder<T> {
     fn physical(&self) -> &dyn PhysicalStatement { todo!() }
     fn run(&self) { self.physical().warnings(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/qualified_same_base.rs"), source, mapping,
+            Path("crates/druid/src/qualified_same_base.rs"),
+            source,
+            mapping,
             trait_paths={connection, statement},
             trait_methods={connection: {"commit"}, statement: {"warnings"}},
         )
         calls = sorted(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
-        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+        self.assertEqual(
+            sorted([(connection, "commit"), (statement, "warnings")]), calls
+        )
 
-    def test_qualified_associated_self_impls_keep_distinct_accessor_owners(self) -> None:
+    def test_qualified_associated_self_impls_keep_distinct_accessor_owners(
+        self,
+    ) -> None:
         """Qualified <T as Assoc>::Out self types retain their complete identity."""
 
         connection = "druid_rdbc::spi::PhysicalConnection"
@@ -501,7 +567,7 @@ impl<T> b::Holder<T> {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 impl<T> Runner for <T as a::Assoc>::Out {
     fn physical(&self) -> &dyn PhysicalConnection { todo!() }
@@ -511,17 +577,22 @@ impl<T> Runner for <T as b::Assoc>::Out {
     fn physical(&self) -> &dyn PhysicalStatement { todo!() }
     fn run(&self) { self.physical().warnings(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/qualified_associated_self.rs"), source, mapping,
+            Path("crates/druid/src/qualified_associated_self.rs"),
+            source,
+            mapping,
             trait_paths={connection, statement},
             trait_methods={connection: {"commit"}, statement: {"warnings"}},
         )
         calls = sorted(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
-        self.assertEqual(sorted([(connection, "commit"), (statement, "warnings")]), calls)
+        self.assertEqual(
+            sorted([(connection, "commit"), (statement, "warnings")]), calls
+        )
 
     def test_impl_self_paths_expand_from_source_module_context(self) -> None:
         """crate/self/super impl owners share their source-relative canonical identity."""
@@ -532,7 +603,7 @@ impl<T> Runner for <T as b::Assoc>::Out {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 impl<T> super::Holder<T> {
     fn physical(&self) -> &dyn PhysicalConnection { todo!() }
@@ -558,9 +629,11 @@ impl<T> a::Other<T> {
 impl<T> b::Other<T> {
     fn run(&self) { self.physical().commit(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/child/mod.rs"), source, mapping,
+            Path("crates/druid/src/child/mod.rs"),
+            source,
+            mapping,
             trait_paths={connection, statement},
             trait_methods={
                 connection: {"commit", "rollback"},
@@ -569,18 +642,21 @@ impl<T> b::Other<T> {
         )
         calls = sorted(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
         self.assertEqual(
-            sorted([
-                (connection, "commit"),
-                (connection, "rollback"),
-                (statement, "warnings"),
-            ]),
+            sorted(
+                [
+                    (connection, "commit"),
+                    (connection, "rollback"),
+                    (statement, "warnings"),
+                ]
+            ),
             calls,
         )
 
-        repeated_source = '''
+        repeated_source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 impl<T> super::super::RepeatedHolder<T> {
     fn physical(&self) -> &dyn PhysicalConnection { todo!() }
@@ -594,7 +670,7 @@ impl<T> Accessor for <T as super::super::RepeatedAssoc>::Out {
 impl<T> Runner for <T as crate::RepeatedAssoc>::Out {
     fn run(&self) { self.physical().warnings(); }
 }
-'''
+"""
         repeated_occurrences, _ = scan_source_text(
             Path("crates/druid/src/child/grandchild/mod.rs"),
             repeated_source,
@@ -604,7 +680,8 @@ impl<T> Runner for <T as crate::RepeatedAssoc>::Out {
         )
         repeated_calls = sorted(
             (row.old_path, row.symbol.split("@", 1)[0])
-            for row in repeated_occurrences if "@receiver=" in row.symbol
+            for row in repeated_occurrences
+            if "@receiver=" in row.symbol
         )
         self.assertEqual(
             sorted([(connection, "commit"), (statement, "warnings")]),
@@ -616,7 +693,7 @@ impl<T> Runner for <T as crate::RepeatedAssoc>::Out {
 
         connection = "druid_rdbc::spi::PhysicalConnection"
         mapping = {connection: "druid_rdbc::connection::Connection"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalConnection;
 impl<T> self::Holder<T> {
     fn physical(&self) -> &dyn PhysicalConnection { todo!() }
@@ -624,7 +701,7 @@ impl<T> self::Holder<T> {
 impl<T> crate::Holder<T> {
     fn run(&self) { self.physical().commit(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
             Path("crates/druid/src/child/mod.rs"),
             source,
@@ -632,17 +709,17 @@ impl<T> crate::Holder<T> {
             trait_paths={connection},
             trait_methods={connection: {"commit"}},
         )
-        receiver_calls = [
-            row for row in occurrences if "@receiver=" in row.symbol
-        ]
+        receiver_calls = [row for row in occurrences if "@receiver=" in row.symbol]
         self.assertEqual([], receiver_calls)
 
-    def test_unresolved_external_type_does_not_merge_with_current_crate_type(self) -> None:
+    def test_unresolved_external_type_does_not_merge_with_current_crate_type(
+        self,
+    ) -> None:
         """An unproven external::Holder cannot lend accessors to crate::external::Holder."""
 
         statement = "druid_rdbc::spi::PhysicalStatement"
         mapping = {statement: "druid_rdbc::statement::Statement"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalStatement;
 impl<T> external::Holder<T> {
     fn physical(&self) -> &dyn PhysicalStatement { todo!() }
@@ -650,7 +727,7 @@ impl<T> external::Holder<T> {
 impl<T> crate::external::Holder<T> {
     fn run(&self) { self.physical().warnings(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
             Path("crates/druid/src/consumer.rs"),
             source,
@@ -658,9 +735,7 @@ impl<T> crate::external::Holder<T> {
             trait_paths={statement},
             trait_methods={statement: {"warnings"}},
         )
-        receiver_calls = [
-            row for row in occurrences if "@receiver=" in row.symbol
-        ]
+        receiver_calls = [row for row in occurrences if "@receiver=" in row.symbol]
         self.assertEqual([], receiver_calls)
 
     def test_source_proven_crate_import_keeps_absolute_self_type_identity(self) -> None:
@@ -668,7 +743,7 @@ impl<T> crate::external::Holder<T> {
 
         connection = "druid_rdbc::spi::PhysicalConnection"
         mapping = {connection: "druid_rdbc::connection::Connection"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalConnection;
 use crate::Holder;
 impl<T> Holder<T> {
@@ -677,7 +752,7 @@ impl<T> Holder<T> {
 impl<T> crate::Holder<T> {
     fn run(&self) { self.physical().commit(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
             Path("crates/druid/src/child/mod.rs"),
             source,
@@ -685,9 +760,7 @@ impl<T> crate::Holder<T> {
             trait_paths={connection},
             trait_methods={connection: {"commit"}},
         )
-        receiver_calls = [
-            row for row in occurrences if "@receiver=" in row.symbol
-        ]
+        receiver_calls = [row for row in occurrences if "@receiver=" in row.symbol]
         self.assertEqual(1, len(receiver_calls))
         self.assertIn("accessor:druid::Holder<_G0>:physical", receiver_calls[0].symbol)
 
@@ -696,30 +769,35 @@ impl<T> crate::Holder<T> {
 
         connection = "druid_rdbc::spi::PhysicalConnection"
         mapping = {connection: "druid_rdbc::connection::Connection"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalConnection;
 fn run(physical: &dyn PhysicalConnection) {
     let closure = |physical| dispatch(unrelated(), physical.commit());
     physical.rollback();
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/non_block_closure.rs"), source, mapping,
+            Path("crates/druid/src/non_block_closure.rs"),
+            source,
+            mapping,
             trait_paths={connection},
             trait_methods={connection: {"commit", "rollback"}},
         )
         methods = [
             row.symbol.split("@", 1)[0]
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         ]
         self.assertEqual(["rollback"], methods)
 
-    def test_non_block_closure_scope_ignores_turbofish_and_nested_delimiters(self) -> None:
+    def test_non_block_closure_scope_ignores_turbofish_and_nested_delimiters(
+        self,
+    ) -> None:
         """Turbofish, tuple, and macro commas remain inside an untyped closure shadow."""
 
         connection = "druid_rdbc::spi::PhysicalConnection"
         mapping = {connection: "druid_rdbc::connection::Connection"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalConnection;
 fn run(physical: &dyn PhysicalConnection) {
     let closure = |physical| dispatch::<Left, Right>(
@@ -727,15 +805,18 @@ fn run(physical: &dyn PhysicalConnection) {
     );
     physical.rollback();
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/non_block_closure_turbofish.rs"), source, mapping,
+            Path("crates/druid/src/non_block_closure_turbofish.rs"),
+            source,
+            mapping,
             trait_paths={connection},
             trait_methods={connection: {"commit", "rollback"}},
         )
         methods = [
             row.symbol.split("@", 1)[0]
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         ]
         self.assertEqual(["rollback"], methods)
 
@@ -744,7 +825,7 @@ fn run(physical: &dyn PhysicalConnection) {
 
         connection = "druid_rdbc::spi::PhysicalConnection"
         mapping = {connection: "druid_rdbc::connection::Connection"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalConnection;
 enum Target<'a> { Connection(&'a dyn PhysicalConnection) }
 fn run(target: Target<'_>) {
@@ -752,15 +833,18 @@ fn run(target: Target<'_>) {
         Target::Connection(physical) if physical.commit() => physical.rollback(),
     }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
-            Path("crates/druid/src/match_guard.rs"), source, mapping,
+            Path("crates/druid/src/match_guard.rs"),
+            source,
+            mapping,
             trait_paths={connection},
             trait_methods={connection: {"commit", "rollback"}},
         )
         methods = sorted(
             row.symbol.split("@", 1)[0]
-            for row in occurrences if "@receiver=" in row.symbol
+            for row in occurrences
+            if "@receiver=" in row.symbol
         )
         self.assertEqual(["commit", "rollback"], methods)
 
@@ -770,7 +854,9 @@ fn run(target: Target<'_>) {
         mapping = {
             "druid_rdbc::spi::PhysicalConnection": "druid_rdbc::connection::Connection",
         }
-        source = "use unrelated::PhysicalConnection; fn inspect(_: PhysicalConnection) {}"
+        source = (
+            "use unrelated::PhysicalConnection; fn inspect(_: PhysicalConnection) {}"
+        )
         occurrences, implementations = scan_source_text(
             Path("crates/druid/src/unrelated.rs"), source, mapping
         )
@@ -783,7 +869,9 @@ fn run(target: Target<'_>) {
         mapping = {
             "druid_rdbc::spi::PhysicalConnection": "druid_rdbc::connection::Connection",
         }
-        source = "struct PhysicalConnection; impl PhysicalConnection { fn close(&self) {} }"
+        source = (
+            "struct PhysicalConnection; impl PhysicalConnection { fn close(&self) {} }"
+        )
         occurrences, implementations = scan_source_text(
             Path("crates/druid/src/local_shadow.rs"), source, mapping
         )
@@ -795,7 +883,7 @@ fn run(target: Target<'_>) {
 
         old_path = "druid_rdbc::spi::PhysicalConnection"
         mapping = {old_path: "druid_rdbc::connection::Connection"}
-        source = '''
+        source = """
 use druid_rdbc::spi::PhysicalConnection;
 fn physical_mut(&mut self) -> Result<&mut dyn PhysicalConnection, Error> { unreachable!() }
 fn production(&mut self) { self.physical_mut()?.commit(); }
@@ -804,7 +892,7 @@ mod tests {
     use super::*;
     fn test_only(&mut self) { self.physical_mut()?.rollback(); }
 }
-'''
+"""
         occurrences, _ = scan_source_text(
             Path("crates/druid/src/cfg_fixture.rs"),
             source,
@@ -828,7 +916,7 @@ mod tests {
             connection: "druid_rdbc::connection::Connection",
             statement: "druid_rdbc::statement::Statement",
         }
-        source = '''
+        source = """
 use druid_rdbc::spi::{PhysicalConnection, PhysicalStatement};
 struct Other;
 fn connection_path(physical: &dyn PhysicalConnection) {
@@ -842,7 +930,7 @@ fn connection_path(physical: &dyn PhysicalConnection) {
 fn statement_path(physical: &dyn PhysicalStatement) {
     physical.warnings();
 }
-'''
+"""
         occurrences, _ = scan_source_text(
             Path("crates/druid/src/scoped_receivers.rs"),
             source,
@@ -872,26 +960,29 @@ fn statement_path(physical: &dyn PhysicalStatement) {
     def test_cfg_predicates_share_exact_all_any_production_model(self) -> None:
         """test and all(test, ...) are excluded; any(test, feature) remains production-capable."""
 
-        source = '''
+        source = """
 #[cfg(test)] pub struct ExactOnly;
 #[cfg(all(test, feature = "x"))] pub struct AllOnly;
 #[cfg(any(test, feature = "x"))] pub struct AnyVisible;
-'''
+"""
         tokens = standardizer.rust_tokens(source)
         excluded = standardizer.production_excluded_indexes(tokens)
         positions = {
             token.text: index
             for index, token in enumerate(tokens)
-            if token.kind == "IDENT" and token.text in {"ExactOnly", "AllOnly", "AnyVisible"}
+            if token.kind == "IDENT"
+            and token.text in {"ExactOnly", "AllOnly", "AnyVisible"}
         }
         self.assertIn(positions["ExactOnly"], excluded)
         self.assertIn(positions["AllOnly"], excluded)
         self.assertNotIn(positions["AnyVisible"], excluded)
 
-    def test_cfg_test_false_satisfiability_handles_not_cfg_attr_and_conjunctions(self) -> None:
+    def test_cfg_test_false_satisfiability_handles_not_cfg_attr_and_conjunctions(
+        self,
+    ) -> None:
         """Double-not, cfg_attr and multiple cfg constraints use test=false satisfiability."""
 
-        source = '''
+        source = """
 #[cfg(not(test))] fn NotTestVisible() {}
 #[cfg(not(not(test)))] fn DoubleNotOnly() {}
 #[cfg_attr(not(test), cfg(test))] fn CfgAttrOnly() {}
@@ -899,11 +990,12 @@ fn statement_path(physical: &dyn PhysicalStatement) {
 #[cfg(any(test, feature = "x"))]
 #[cfg(not(feature = "x"))]
 fn ConjunctionOnly() {}
-'''
+"""
         tokens = standardizer.rust_tokens(source)
         excluded = standardizer.production_excluded_indexes(tokens)
         positions = {
-            token.text: index for index, token in enumerate(tokens)
+            token.text: index
+            for index, token in enumerate(tokens)
             if token.kind == "IDENT" and token.text.endswith(("Visible", "Only"))
         }
         self.assertNotIn(positions["NotTestVisible"], excluded)
@@ -912,26 +1004,31 @@ fn ConjunctionOnly() {}
         self.assertNotIn(positions["CfgAttrVisible"], excluded)
         self.assertIn(positions["ConjunctionOnly"], excluded)
 
-    def test_nested_cfg_attr_is_recursively_converted_to_effective_constraint(self) -> None:
+    def test_nested_cfg_attr_is_recursively_converted_to_effective_constraint(
+        self,
+    ) -> None:
         """Nested cfg_attr implications exclude test-only nodes without consuming a live sibling."""
 
-        source = '''
+        source = """
 #[cfg_attr(all(), cfg_attr(not(test), cfg(test)))] fn NestedOnly() {}
 fn LiveSibling() {}
-'''
+"""
         tokens = standardizer.rust_tokens(source)
         excluded = standardizer.production_excluded_indexes(tokens)
         positions = {
-            token.text: index for index, token in enumerate(tokens)
+            token.text: index
+            for index, token in enumerate(tokens)
             if token.kind == "IDENT" and token.text in {"NestedOnly", "LiveSibling"}
         }
         self.assertIn(positions["NestedOnly"], excluded)
         self.assertNotIn(positions["LiveSibling"], excluded)
 
-    def test_cfg_node_boundaries_distinguish_comparisons_from_generic_arguments(self) -> None:
+    def test_cfg_node_boundaries_distinguish_comparisons_from_generic_arguments(
+        self,
+    ) -> None:
         """Const, macro and statement comparisons end at their own node boundaries."""
 
-        source = '''
+        source = """
 #[cfg(test)] const CHECK: bool = 1 < 2;
 fn live_after_const() {}
 fn run() {
@@ -940,14 +1037,22 @@ fn run() {
     #[cfg(test)] left < right;
     live_after_statement();
 }
-'''
+"""
         tokens = standardizer.rust_tokens(source)
         excluded = standardizer.production_excluded_indexes(tokens)
         positions = {
-            token.text: index for index, token in enumerate(tokens)
-            if token.kind == "IDENT" and token.text in {
-                "CHECK", "live_after_const", "check", "live_after_macro",
-                "left", "right", "live_after_statement",
+            token.text: index
+            for index, token in enumerate(tokens)
+            if token.kind == "IDENT"
+            and token.text
+            in {
+                "CHECK",
+                "live_after_const",
+                "check",
+                "live_after_macro",
+                "left",
+                "right",
+                "live_after_statement",
             }
         }
         for name in ("CHECK", "check", "left", "right"):
@@ -955,10 +1060,12 @@ fn run() {
         for name in ("live_after_const", "live_after_macro", "live_after_statement"):
             self.assertNotIn(positions[name], excluded)
 
-    def test_cfg_attribute_binds_only_comma_terminated_field_or_variant_node(self) -> None:
+    def test_cfg_attribute_binds_only_comma_terminated_field_or_variant_node(
+        self,
+    ) -> None:
         """A test-only field/variant cannot consume its live sibling or following function."""
 
-        source = '''
+        source = """
 #[derive(Clone)]
 struct Fields {
     #[cfg(test)] hidden: u8,
@@ -970,12 +1077,14 @@ enum Variants {
     Live(u8),
 }
 fn following() {}
-'''
+"""
         tokens = standardizer.rust_tokens(source)
         excluded = standardizer.production_excluded_indexes(tokens)
         positions = {
-            token.text: index for index, token in enumerate(tokens)
-            if token.kind == "IDENT" and token.text in {"hidden", "live", "Hidden", "Live", "following"}
+            token.text: index
+            for index, token in enumerate(tokens)
+            if token.kind == "IDENT"
+            and token.text in {"hidden", "live", "Hidden", "Live", "following"}
         }
         self.assertIn(positions["hidden"], excluded)
         self.assertNotIn(positions["live"], excluded)
@@ -994,7 +1103,7 @@ fn following() {}
             resource.mkdir(parents=True)
             source_path = spi / "fixture.rs"
             source_path.write_text(
-                '''
+                """
 #[cfg(test)] pub struct TestOnly;
 #[cfg(all(test, feature = "x"))] pub struct AllOnly;
 #[cfg(any(test, feature = "x"))] pub struct AnyVisible;
@@ -1004,7 +1113,7 @@ pub trait VisibleTrait {
     #[cfg(all(test, feature = "x"))] fn hidden_all(&self);
     #[cfg(any(test, feature = "x"))] fn visible_any(&self);
 }
-''',
+""",
                 encoding="utf-8",
             )
             public = standardizer.scan_public_items(root)

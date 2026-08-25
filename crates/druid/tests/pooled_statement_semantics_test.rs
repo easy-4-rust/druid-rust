@@ -468,7 +468,7 @@ async fn statement_errors_batch_failure_and_wrapper_branches_are_observable() {
     assert_eq!(
         batch_error
             .batch_update_counts()
-            .map(|counts| counts.large()),
+            .map(druid_rdbc::error::BatchUpdateCounts::large),
         Some([0_i64].as_slice())
     );
     assert!(matches!(

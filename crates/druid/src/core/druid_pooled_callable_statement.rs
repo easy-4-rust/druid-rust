@@ -5,14 +5,15 @@
 //! 来源文件：
 //! `core/src/main/java/com/alibaba/druid/pool/DruidPooledCallableStatement.java`。
 
+use super::prepared_statement_key::PreparedStatementKey;
 use super::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidPooledConnection, DruidPooledPreparedStatement,
     DruidPooledPreparedStatementHandle, DruidPooledResultSet, DruidPooledStatement, ExecResult,
-    PhysicalCallableStatement, PhysicalPreparedStatement, PreparedStatementKey, RdbcArray,
-    RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject,
-    RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap,
-    RdbcUrl, Row, Unwrapped, Value, Wrapper,
+    PhysicalCallableStatement, PhysicalPreparedStatement, RdbcArray, RdbcBlob, RdbcCharacterLength,
+    RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader, RdbcRef, RdbcRowId,
+    RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row, Unwrapped, Value,
+    Wrapper,
 };
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -25,6 +26,8 @@ use std::any::{Any, TypeId};
 /// `PhysicalCallableStatement`。
 pub struct DruidPooledCallableStatement {
     prepared_statement: DruidPooledPreparedStatement,
+    standard_callable:
+        Option<tokio::sync::Mutex<Box<dyn druid_rdbc::statement::CallableStatement>>>,
 }
 
 /// `ResultSet#getStatement()` 返回的 `CallableStatement` 共享身份句柄。
@@ -149,7 +152,174 @@ impl std::fmt::Debug for DruidPooledCallableStatement {
         formatter
             .debug_struct("DruidPooledCallableStatement")
             .field("prepared_statement", &self.prepared_statement)
+            .field("standard_callable", &self.standard_callable.is_some())
             .finish()
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(DruidPooledCallableStatement => CallableStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for DruidPooledCallableStatement {
+    async fn execute_query(
+        &mut self,
+        sql: &str,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.ensure_standard_callable()?;
+        let raw = self
+            .standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .execute_query(sql)
+            .await?;
+        Ok(Box::new(DruidPooledResultSet::new_standard(
+            self.prepared_statement.standard_statement_inner(),
+            raw,
+        )?))
+    }
+
+    async fn execute_update(
+        &mut self,
+        sql: &str,
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<i64, RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .execute_update(sql, generated_keys)
+            .await
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if self.is_closed() {
+            return Ok(());
+        }
+        let result = self
+            .standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .close()
+            .await;
+        if result.is_ok() {
+            self.prepared_statement.close()?;
+        }
+        result
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        if self.is_closed() || self.prepared_statement.ensure_open().is_err() {
+            return Ok(true);
+        }
+        self.standard_callable
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .is_closed()
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
+    fn set_parameter(
+        &mut self,
+        parameter: druid_rdbc::statement::PreparedParameter,
+    ) -> Result<(), RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .set_parameter(parameter)
+    }
+
+    fn clear_parameters(&mut self) -> Result<(), RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .clear_parameters()
+    }
+
+    async fn execute_prepared_query(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.ensure_standard_callable()?;
+        let raw = self
+            .standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .execute_prepared_query()
+            .await?;
+        Ok(Box::new(DruidPooledResultSet::new_standard(
+            self.prepared_statement.standard_statement_inner(),
+            raw,
+        )?))
+    }
+
+    async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .execute_prepared_update()
+            .await
+    }
+
+    async fn execute_prepared(
+        &mut self,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .execute_prepared()
+            .await
+    }
+
+    fn parameter_meta_data(
+        &self,
+    ) -> Result<std::sync::Arc<dyn druid_rdbc::metadata::ParameterMetaData>, RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .parameter_meta_data()
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::CallableStatement for DruidPooledCallableStatement {
+    fn register_out_parameter(
+        &mut self,
+        parameter: druid_rdbc::statement::CallableOutParameter,
+    ) -> Result<(), RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .get_mut()
+            .register_out_parameter(parameter)
+    }
+
+    fn out_value(&self, index: druid_rdbc::statement::ParameterIndex) -> Result<Value, RdbcError> {
+        self.ensure_standard_callable()?;
+        self.standard_callable
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .out_value(index)
     }
 }
 
@@ -161,7 +331,47 @@ impl DruidPooledCallableStatement {
     }
 
     pub(crate) fn new(prepared_statement: DruidPooledPreparedStatement) -> Self {
-        Self { prepared_statement }
+        Self {
+            prepared_statement,
+            standard_callable: None,
+        }
+    }
+
+    fn ensure_standard_callable(&self) -> Result<(), RdbcError> {
+        self.prepared_statement.ensure_open()?;
+        if self.standard_callable.is_none() {
+            Err(RdbcError::ConnectionDiscarded)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// 包装 owned canonical CallableStatement。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_standard(
+        callable: Box<dyn druid_rdbc::statement::CallableStatement>,
+        sql: &str,
+        connection_id: u64,
+        statement_id: u64,
+        result_set_id_seed: std::sync::Arc<std::sync::atomic::AtomicU64>,
+        metadata_id_seed: std::sync::Arc<std::sync::atomic::AtomicU64>,
+        lease_active: std::sync::Arc<std::sync::atomic::AtomicBool>,
+        filter_chain: Option<std::sync::Arc<super::FilterChain>>,
+        stats_collector: Option<std::sync::Arc<crate::stats::StatsCollector>>,
+    ) -> Self {
+        Self {
+            prepared_statement: DruidPooledPreparedStatement::new_standard_shell(
+                sql,
+                connection_id,
+                statement_id,
+                result_set_id_seed,
+                metadata_id_seed,
+                lease_active,
+                filter_chain,
+                stats_collector,
+            ),
+            standard_callable: Some(tokio::sync::Mutex::new(callable)),
+        }
     }
 
     /// 返回完整缓存键。

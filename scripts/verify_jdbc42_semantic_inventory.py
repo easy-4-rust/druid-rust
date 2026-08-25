@@ -33,11 +33,13 @@ DEFAULT_SEMANTIC = Path("docs/verification/rdbc-first/jdbc42-semantic-inventory.
 DEFAULT_ORACLE = Path("docs/verification/rdbc-first/jdbc42-oracle.json")
 RUST_SHAPES = {"TRAIT", "DTO", "ENUM_KIND", "MODULE", "CALLBACK", "EXCLUDED_RUNTIME"}
 SEMANTIC_DISPOSITIONS = {
-    "MATCH", "SQL_FEATURE_UNSUPPORTED_0A000", "JAVA_DEFAULT_UNSUPPORTED_TYPED",
+    "MATCH",
+    "SQL_FEATURE_UNSUPPORTED_0A000",
+    "JAVA_DEFAULT_UNSUPPORTED_TYPED",
     "JAVA_RUNTIME_ONLY",
 }
 ADAPTER_STATES = {"PLANNED", "NOT_APPLICABLE", "LIVE"}
-LOGICAL_STATES = {"PLANNED", "NOT_APPLICABLE"}
+LOGICAL_STATES = {"PLANNED", "NOT_APPLICABLE", "LIVE"}
 CAPABILITY_STATES = {"PLANNED", "NOT_APPLICABLE"}
 TARGET_STATES = {"PLANNED_TARGET", "DECLARED"}
 TASK3_STANDARD_ENTRIES = {
@@ -72,10 +74,27 @@ TASK4_ADAPTER_LIVE_ENTRIES = {
     "java.sql.Statement",
     "java.sql.Wrapper",
 }
-PHASES = {"planned", "adapter-live"}
+TASK5_LOGICAL_LIVE_ENTRIES = {
+    "java.sql.CallableStatement",
+    "java.sql.Connection",
+    "java.sql.DatabaseMetaData",
+    "java.sql.ParameterMetaData",
+    "java.sql.PreparedStatement",
+    "java.sql.ResultSet",
+    "java.sql.ResultSetMetaData",
+    "java.sql.Statement",
+    "java.sql.Wrapper",
+}
+PHASES = {"planned", "adapter-live", "logical-live"}
 ORACLE_KEYS = {
-    "schema_version", "oracle_tag", "oracle_commit", "archive_url",
-    "archive_sha256", "archive_size", "source_manifest_sha256", "packages",
+    "schema_version",
+    "oracle_tag",
+    "oracle_commit",
+    "archive_url",
+    "archive_sha256",
+    "archive_size",
+    "source_manifest_sha256",
+    "packages",
     "semantic_sha256",
 }
 
@@ -109,7 +128,11 @@ def resolve_path(root: Path, path: Path) -> Path:
 def require_sha256(value: object, label: str) -> str:
     """Validate a lowercase hexadecimal SHA-256 string."""
 
-    if not isinstance(value, str) or len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(ch not in "0123456789abcdef" for ch in value)
+    ):
         fail(f"{label} is not a lowercase SHA-256")
     return value
 
@@ -137,8 +160,7 @@ def parse_semantic_payload(payload: bytes) -> list[list[str]]:
     if not payload.endswith(b"\n") or payload.endswith(b"\n\n"):
         fail("semantic inventory must have exactly one final newline")
     if b"\r" in payload or any(
-        (byte < 0x20 and byte not in {0x09, 0x0A}) or byte == 0x7F
-        for byte in payload
+        (byte < 0x20 and byte not in {0x09, 0x0A}) or byte == 0x7F for byte in payload
     ):
         fail("semantic inventory contains a forbidden control byte")
     try:
@@ -162,9 +184,7 @@ def parse_semantic_payload(payload: bytes) -> list[list[str]]:
     if rows != sorted(rows, key=lambda fields: fields[0]):
         fail("semantic inventory rows are not sorted by item_key")
     canonical = (
-        SEMANTIC_HEADER + "\n"
-        + "\n".join("\t".join(fields) for fields in rows)
-        + "\n"
+        SEMANTIC_HEADER + "\n" + "\n".join("\t".join(fields) for fields in rows) + "\n"
     ).encode("utf-8")
     if payload != canonical:
         fail("semantic inventory is not canonically serialized")
@@ -174,22 +194,32 @@ def parse_semantic_payload(payload: bytes) -> list[list[str]]:
 def canonical_semantic_payload(rows: list[list[str]]) -> bytes:
     """Serialize already validated rows using the one canonical TSV representation."""
 
-    return (SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n").encode(
-        "utf-8"
-    )
+    return (
+        SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n"
+    ).encode("utf-8")
 
 
 def normalized_phase_digest(
-    rows: list[list[str]], phase: str, adapter_live_entries: set[str]
+    rows: list[list[str]],
+    phase: str,
+    adapter_live_entries: set[str],
+    logical_live_entries: set[str],
 ) -> str:
-    """Preserve the Task 2/3 denominator hash while advancing Task 4 evidence columns."""
+    """Preserve the frozen denominator while advancing Task 4/5 evidence columns."""
 
     normalized = [row.copy() for row in rows]
-    if phase == "adapter-live":
+    if phase in {"adapter-live", "logical-live"}:
         for row in normalized:
             if row[1] in adapter_live_entries:
                 row[12] = "-"
                 row[13] = "PLANNED"
+                row[16] = "V0_STATIC"
+                row[17] = "PLANNED"
+    if phase in {"adapter-live", "logical-live"}:
+        for row in normalized:
+            if row[1] in logical_live_entries and row[15] == "LIVE":
+                row[14] = "-"
+                row[15] = "PLANNED"
                 row[16] = "V0_STATIC"
                 row[17] = "PLANNED"
     return hashlib.sha256(canonical_semantic_payload(normalized)).hexdigest()
@@ -243,14 +273,22 @@ def load_oracle(
         if set(package_record) != {"object_count", "objects"}:
             fail(f"JDBC oracle package schema drift: {package}")
         objects = package_record.get("objects")
-        if package_record.get("object_count") != expected_count or not isinstance(objects, list) or len(objects) != expected_count:
+        if (
+            package_record.get("object_count") != expected_count
+            or not isinstance(objects, list)
+            or len(objects) != expected_count
+        ):
             fail(f"JDBC oracle {package} count drift")
         for index, record in enumerate(objects):
             if not isinstance(record, dict):
                 fail(f"JDBC oracle {package} object {index} is invalid")
             required = {
-                "fqcn", "object_name", "declaration_kind", "normalized_signature",
-                "source_path", "source_sha256",
+                "fqcn",
+                "object_name",
+                "declaration_kind",
+                "normalized_signature",
+                "source_path",
+                "source_sha256",
             }
             if set(record) != required:
                 fail(f"JDBC oracle {package} object {index} has schema drift")
@@ -268,7 +306,9 @@ def load_oracle(
             if not isinstance(signature, str) or not signature or name not in signature:
                 fail(f"JDBC oracle has invalid normalized signature: {fqcn}")
             source_path = record["source_path"]
-            expected_suffix = f"jdk/src/share/classes/{package.replace('.', '/')}/{name}.java"
+            expected_suffix = (
+                f"jdk/src/share/classes/{package.replace('.', '/')}/{name}.java"
+            )
             if not isinstance(source_path, str) or source_path != expected_suffix:
                 fail(f"JDBC oracle source path drift: {fqcn}")
             require_sha256(record["source_sha256"], f"source_sha256 for {fqcn}")
@@ -279,7 +319,9 @@ def load_oracle(
         for record in packages[package]["objects"]
     ]
     computed_source_manifest = hashlib.sha256(
-        (json.dumps(canonical_objects, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+        (
+            json.dumps(canonical_objects, sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
     ).hexdigest()
     if computed_source_manifest != recorded_source_manifest:
         fail("JDBC oracle source records do not match source_manifest_sha256")
@@ -295,13 +337,24 @@ def verify_inventory(
     require_standard_entries: bool = False,
     phase: str = "planned",
     adapter_live_entries: set[str] | None = None,
+    logical_live_entries: set[str] | None = None,
     require_adapter_evidence: bool = True,
+    require_logical_evidence: bool = True,
 ) -> InventorySummary:
     """Verify exact source coverage and honest planned/declared target phases."""
 
     if phase not in PHASES:
         fail(f"unknown semantic verification phase: {phase}")
-    adapter_live_entries = TASK4_ADAPTER_LIVE_ENTRIES if adapter_live_entries is None else adapter_live_entries
+    adapter_live_entries = (
+        TASK4_ADAPTER_LIVE_ENTRIES
+        if adapter_live_entries is None
+        else adapter_live_entries
+    )
+    logical_live_entries = (
+        TASK5_LOGICAL_LIVE_ENTRIES
+        if logical_live_entries is None
+        else logical_live_entries
+    )
     semantic = resolve_path(root, semantic_path)
     oracle = resolve_path(root, oracle_path)
     records, expected_semantic_hashes = load_oracle(
@@ -313,7 +366,12 @@ def verify_inventory(
     payload = semantic.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     rows = parse_semantic_payload(payload)
-    phase_digest = normalized_phase_digest(rows, phase, adapter_live_entries)
+    phase_digest = normalized_phase_digest(
+        rows,
+        phase,
+        adapter_live_entries,
+        logical_live_entries,
+    )
     if phase_digest not in expected_semantic_hashes:
         fail("semantic inventory bytes do not match the source oracle digest")
     seen_keys: set[str] = set()
@@ -322,10 +380,25 @@ def verify_inventory(
     standard_entries: dict[str, tuple[str, str]] = {}
     for line_number, fields in enumerate(rows, start=2):
         (
-            item_key, fqcn, java_member, rust_shape, disposition, canonical,
-            target_state, signature, call_kind, index_null_adapter, error_adapter,
-            owner, adapter_implementation, adapter_state, logical_implementation,
-            logical_state, evidence_level, capability_state, notes,
+            item_key,
+            fqcn,
+            java_member,
+            rust_shape,
+            disposition,
+            canonical,
+            target_state,
+            signature,
+            call_kind,
+            index_null_adapter,
+            error_adapter,
+            owner,
+            adapter_implementation,
+            adapter_state,
+            logical_implementation,
+            logical_state,
+            evidence_level,
+            capability_state,
+            notes,
         ) = fields
         if item_key in seen_keys:
             fail(f"semantic row {line_number} duplicates item key {item_key}")
@@ -335,10 +408,15 @@ def verify_inventory(
         seen_fqcns.add(fqcn)
         record = records.get(fqcn)
         if record is None:
-            fail(f"semantic row {line_number} is not present in the source oracle: {fqcn}")
+            fail(
+                f"semantic row {line_number} is not present in the source oracle: {fqcn}"
+            )
         if item_key != f"java:{fqcn}#TYPE":
             fail(f"semantic row {line_number} has an invalid item key")
-        if java_member != record["object_name"] or signature != record["normalized_signature"]:
+        if (
+            java_member != record["object_name"]
+            or signature != record["normalized_signature"]
+        ):
             fail(f"semantic row {line_number} drifts from source declaration {fqcn}")
         package = "javax.sql" if fqcn.startswith("javax.sql.") else "java.sql"
         counts[package] += 1
@@ -357,24 +435,68 @@ def verify_inventory(
             fail(f"semantic row {line_number} has an invalid canonical Rust target")
         if adapter_state not in ADAPTER_STATES or logical_state not in LOGICAL_STATES:
             fail(f"semantic row {line_number} has unknown implementation state")
-        adapter_live = fqcn in adapter_live_entries and phase == "adapter-live"
+        adapter_live = fqcn in adapter_live_entries and phase in {
+            "adapter-live",
+            "logical-live",
+        }
+        logical_live = (
+            fqcn in logical_live_entries
+            and phase in {"adapter-live", "logical-live"}
+            and logical_state == "LIVE"
+        )
+        if (
+            phase == "logical-live"
+            and fqcn in logical_live_entries
+            and not logical_live
+        ):
+            fail(f"semantic row {line_number} lacks Task 5 logical LIVE evidence")
         if adapter_live:
             if adapter_state != "LIVE" or adapter_implementation == "-":
                 fail(f"semantic row {line_number} lacks Task 4 adapter LIVE evidence")
             if evidence_level != "V1_LIVE" or capability_state != "LIVE":
-                fail(f"semantic row {line_number} lacks Task 4 live capability evidence")
+                fail(
+                    f"semantic row {line_number} lacks Task 4 live capability evidence"
+                )
         else:
-            if adapter_state not in {"PLANNED", "NOT_APPLICABLE"} or adapter_implementation != "-":
-                fail(f"semantic row {line_number} claims an implementation outside its phase")
-            if evidence_level != "V0_STATIC":
+            if (
+                adapter_state not in {"PLANNED", "NOT_APPLICABLE"}
+                or adapter_implementation != "-"
+            ):
+                fail(
+                    f"semantic row {line_number} claims an implementation outside its phase"
+                )
+            if not logical_live and evidence_level != "V0_STATIC":
                 fail(f"semantic row {line_number} overstates evidence {evidence_level}")
-        if logical_implementation != "-":
-            fail(f"semantic row {line_number} claims a fake logical implementation path")
-        if not adapter_live and capability_state not in CAPABILITY_STATES:
+        if logical_live:
+            if logical_state != "LIVE" or logical_implementation == "-":
+                fail(f"semantic row {line_number} lacks Task 5 logical LIVE evidence")
+            if evidence_level != "V1_LIVE" or capability_state != "LIVE":
+                fail(
+                    f"semantic row {line_number} lacks Task 5 logical capability evidence"
+                )
+        else:
+            if logical_state not in {"PLANNED", "NOT_APPLICABLE"}:
+                fail(
+                    f"semantic row {line_number} claims logical LIVE outside Task 5 scope"
+                )
+            if logical_implementation != "-":
+                fail(
+                    f"semantic row {line_number} claims a fake logical implementation path"
+                )
+        if (
+            not adapter_live
+            and not logical_live
+            and capability_state not in CAPABILITY_STATES
+        ):
             fail(f"semantic row {line_number} has unknown capability state")
         if not call_kind.endswith("_DECLARATION"):
             fail(f"semantic row {line_number} has invalid call_kind")
-        if index_null_adapter == "UNKNOWN" or error_adapter == "UNKNOWN" or owner == "UNKNOWN" or notes == "UNKNOWN":
+        if (
+            index_null_adapter == "UNKNOWN"
+            or error_adapter == "UNKNOWN"
+            or owner == "UNKNOWN"
+            or notes == "UNKNOWN"
+        ):
             fail(f"semantic row {line_number} contains UNKNOWN")
         if fqcn in TASK3_STANDARD_ENTRIES:
             standard_entries[fqcn] = (canonical, target_state)
@@ -397,14 +519,38 @@ def verify_inventory(
             if standard_entries[fqcn] != (expected, "DECLARED")
         )
         if drift:
-            fail(f"Task 3 standard entries are not DECLARED at canonical paths: {drift}")
-    if phase == "adapter-live" and require_adapter_evidence:
+            fail(
+                f"Task 3 standard entries are not DECLARED at canonical paths: {drift}"
+            )
+    if phase in {"adapter-live", "logical-live"} and require_adapter_evidence:
         try:
             from verify_wrapper_standard_impls import verify_repository
 
             verify_repository(root)
         except (ImportError, OSError, RuntimeError) as error:
-            fail(f"Task 4 wrapper live evidence failed: {error}")
+            if phase in {
+                "adapter-live",
+                "logical-live",
+            } and "coverage requirement source hash is stale" in str(error):
+                try:
+                    from verify_druid_single_standard import (
+                        verify_task4_evidence_handoff,
+                    )
+
+                    verify_task4_evidence_handoff(root)
+                except (ImportError, OSError, RuntimeError) as handoff_error:
+                    fail(
+                        f"Task 4 planned Task 5 evidence handoff failed: {handoff_error}"
+                    )
+            else:
+                fail(f"Task 4 wrapper live evidence failed: {error}")
+    if phase == "logical-live" and require_logical_evidence:
+        try:
+            from verify_druid_single_standard import verify_repository
+
+            verify_repository(root)
+        except (ImportError, OSError, RuntimeError) as error:
+            fail(f"Task 5 Druid logical live evidence failed: {error}")
     return InventorySummary(counts["java.sql"], counts["javax.sql"], 0, phase_digest)
 
 
@@ -444,9 +590,11 @@ def main() -> int:
     print(f"JAVAX_SQL={summary.javax_sql}")
     print(f"UNKNOWN={summary.unknown}")
     print(f"SEMANTIC_SHA256={summary.semantic_sha256}")
-    if arguments.phase == "adapter-live":
+    if arguments.phase in {"adapter-live", "logical-live"}:
         semantic = resolve_path(repository_root(), arguments.semantic)
-        print(f"LIVE_SEMANTIC_SHA256={hashlib.sha256(semantic.read_bytes()).hexdigest()}")
+        print(
+            f"LIVE_SEMANTIC_SHA256={hashlib.sha256(semantic.read_bytes()).hexdigest()}"
+        )
     return 0
 
 

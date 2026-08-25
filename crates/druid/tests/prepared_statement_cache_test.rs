@@ -5,10 +5,11 @@
 //! - `com.alibaba.druid.bvt.pool.basic.PreparedStatementKeyTest`
 //! - `com.alibaba.druid.bvt.pool.PSCacheTest3`
 
+use druid::core::prepared_statement_key::PreparedStatementKey;
+use druid::core::prepared_statement_method_type::PreparedStatementMethodType;
 use druid::core::{
-    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementKey,
-    PreparedStatementMethodType, PreparedStatementPool, RdbcError, SqlTextPreparedStatement,
-    StatementGeneratedKeys,
+    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementPool, RdbcError,
+    SqlTextPreparedStatement, StatementGeneratedKeys,
 };
 use std::collections::HashSet;
 use std::sync::Arc;
