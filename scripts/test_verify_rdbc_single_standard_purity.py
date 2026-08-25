@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +55,41 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
+
+    def assert_rustc(
+        self,
+        source: str,
+        *,
+        succeeds: bool,
+        diagnostic: str | None = None,
+    ) -> None:
+        """Compile an independent minimal Rust source and assert its exact success class."""
+
+        rustc_root = self.root / "_rustc_fixture"
+        rustc_root.mkdir(exist_ok=True)
+        source_path = rustc_root / "lib.rs"
+        output_path = rustc_root / "libfixture.rlib"
+        source_path.write_text(source, encoding="utf-8")
+        completed = subprocess.run(
+            [
+                "rustc",
+                "--edition=2021",
+                "--crate-type=lib",
+                str(source_path),
+                "-o",
+                str(output_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        stderr = completed.stderr
+        if succeeds:
+            self.assertEqual(completed.returncode, 0, stderr)
+        else:
+            self.assertNotEqual(completed.returncode, 0, "rustc unexpectedly accepted fixture")
+            if diagnostic is not None:
+                self.assertIn(diagnostic, stderr)
 
     def test_accepts_complete_pure_standard_tree(self) -> None:
         """The positive control contains only standard declarations."""
@@ -618,6 +654,23 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         )
         verify_tree(self.root, phase="transitional")
 
+    def test_accepts_nested_local_module_type_namespace(self) -> None:
+        """A nested module remains a type-namespace path root inside its containing block."""
+
+        rust_source = (
+            "pub fn outer() {\n"
+            "    mod local { pub struct External; }\n"
+            "    let _: Option<local::External> = None;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
     def test_rejects_nested_item_binding_after_block_range(self) -> None:
         """A block-local item binding cannot leak into a following function."""
 
@@ -676,6 +729,104 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         )
         verify_tree(self.root, phase="transitional")
 
+    def test_rejects_module_macro_invoked_in_function_with_transitional_body(self) -> None:
+        """A compilable module-defined macro invocation cannot hide a transitional path."""
+
+        rust_source = (
+            "mod resource { pub struct Blob; }\n"
+            "macro_rules! leak {\n"
+            "    () => {{ let _: Option<crate::resource::Blob> = None; }};\n"
+            "}\n"
+            "pub fn run() { leak!(); }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "macro_rules! leak {\n"
+            "    () => {{ let _: Option<crate::resource::Blob> = None; }};\n"
+            "}\n"
+            "pub fn run() { leak!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "leak|macro|allow"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_function_local_macro_invoked_in_nested_block(self) -> None:
+        """Function-local definitions and nested blocks cannot bypass invocation policy."""
+
+        rust_source = (
+            "mod resource { pub struct Blob; }\n"
+            "pub fn run() {\n"
+            "    macro_rules! leak {\n"
+            "        () => {{ let _: Option<crate::resource::Blob> = None; }};\n"
+            "    }\n"
+            "    if true { { leak!(); } }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() {\n"
+            "    macro_rules! leak {\n"
+            "        () => {{ let _: Option<crate::resource::Blob> = None; }};\n"
+            "    }\n"
+            "    if true { { leak!(); } }\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "leak|macro|allow"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_unknown_bare_macro_invocation_in_nested_block(self) -> None:
+        """An unproven bare invocation fails closed at any function/block depth."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn run() { if true { { mystery!(); } } }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "mystery|macro|allow"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_accepts_explicitly_allowlisted_macro_invocations(self) -> None:
+        """Qualified std/core and the reviewed bare format macro remain available."""
+
+        rust_source = (
+            "pub fn allowed() {\n"
+            "    std::assert!(true);\n"
+            "    core::assert!(true);\n"
+            '    let _ = format!("{}", 1);\n'
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_boolean_negation_without_macro_misclassification(self) -> None:
+        """Rust keyword plus unary ! is not a named macro invocation."""
+
+        rust_source = (
+            "pub fn negate(mut value: bool) {\n"
+            "    if !value { value = true; }\n"
+            "    while !value { break; }\n"
+            "    let _ = !value;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
     def test_rejects_actual_external_macro_path(self) -> None:
         """Skipping definitions never permits an actual backend macro invocation."""
 
@@ -686,6 +837,24 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(VerificationError, "sqlx|external|root"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_nested_function_as_type_or_module_namespace(self) -> None:
+        """A value-namespace function binding cannot legalize a multi-segment type path."""
+
+        rust_source = (
+            "pub fn outer() {\n"
+            "    fn sqlx() {}\n"
+            "    let _ = sqlx::External;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=False, diagnostic="E0433")
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            rust_source + "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "sqlx|function|namespace"):
             verify_tree(self.root, phase="transitional")
 
     def test_rejects_lifetime_as_associated_path_root(self) -> None:

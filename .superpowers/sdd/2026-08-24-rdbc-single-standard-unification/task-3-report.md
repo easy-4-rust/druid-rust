@@ -535,3 +535,21 @@ Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均�
   `LIFETIME + ::` rejection；range/capture与actual/unknown macro负向保持。
 - Purity `54/54 + live29`；其余完整recovery gates全PASS，73/55/3559与consumer SHA不变。
 - 状态 `FIX_ROUND_2_IMPLEMENTED_PENDING_REREVIEW`；Task 4继续 blocked。
+
+### Recovery fix round 2 re-review correction / round 3/5
+
+- Reviewer verdict `FIX_REQUIRED`：lifetime addressed；nested/macro partial；`1 load-bearing
+  Important + 1 Minor` open，无新 Critical。
+- Important是fn/block bare macro invocation可编译地展开transitional path；Minor是nested function
+  binding被误当type/module namespace。
+- Round 3基线 `20581e7`，执行显式macro invocation allowlist与LexicalItemScope kind/namespace；
+  Wrapper/Task4/Physical/Cargo/admin不动，Task 4继续 blocked。
+
+### Recovery fix round 3/5 implementation
+
+- Fresh RED `6`：两类可编译macro leak、unknown nested invocation、function namespace误放、local
+  module误杀、keyword-negation false positive。
+- GREEN：definition外`MacroInvocationSite` + finite allowlist；LexicalItemScope kind/value-type-module
+  namespace；non-raw keyword unary-not排除。
+- Purity `61/61 + live29`；完整recovery gates全PASS，73/55/3559与consumer SHA不变。
+- 状态 `FIX_ROUND_3_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续 blocked。

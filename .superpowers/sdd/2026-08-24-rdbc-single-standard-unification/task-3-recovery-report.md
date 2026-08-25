@@ -381,3 +381,88 @@ PURITY_PHASE=transitional
 自审未发现新的 scoped finding。Wrapper production、Task4、Physical、Cargo、admin与verification
 artifacts均无diff；known admin broad failure未跑/未伪报。本轮状态
 `FIX_ROUND_2_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续 blocked。
+
+## 10. Recovery fix round 2 review correction / round 3/5
+
+本段 supersede“自审未发现新finding”。Reviewer对 `20581e7` 仍判 `FIX_REQUIRED`：lifetime
+`ADDRESSED`，nested binding与macro definition `PARTIAL`；`1 load-bearing Important + 1 Minor`
+open，无新 Critical。
+
+- Important：fn/block bare/local macro invocation未受policy裁决，可展开transitional path且真实
+  rustc可编译；必须索引所有definition-range外invocations，除显式allowlist外fail closed。
+- Minor：nested item binding缺少kind/namespace，function name可冒充multi-segment type/module root。
+
+Round 3只修macro invocation policy与namespace Minor；Task 4继续 blocked。
+
+### Fix round 3 strict TDD RED
+
+新增永久 verifier + minimal rustc fixtures，production verifier未改：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 60 tests
+FAILED (failures=4, errors=1)
+```
+
+`55 PASS / 5 RED`：
+
+1. module-defined `leak!()` 在fn内调用、body展开 `crate::resource::Blob`，rustc成功而verifier漏放；
+2. function-local definition + nested-block `leak!()` 同样rustc成功且漏放；
+3. nested block未知bare `mystery!()`漏放；
+4. nested `fn sqlx(){}` 后 `sqlx::External` 被verifier漏放，rustc精确E0433；
+5. nested local `mod local` + `local::External` rustc成功，但verifier误杀 `unknown ... local`。
+
+Complex unused macro definition、qualified std/core与bare format controls、actual external macro、
+module-scope unknown macro、nested shadow/range、lifetime/attribute/include及既有54项均按预期。
+因此RED同时证明load-bearing invocation bypass与namespace Minor，不依赖无效Rust fixture。
+
+首次live GREEN尝试另发现 `if !condition` 被token-only invocation index误判为 `if!`。新增最小
+rustc正向后稳定RED；round 3有效RED总数更新为 `6`。修复必须排除non-raw Rust keyword + unary
+`!`，但不得放松任何普通bare identifier macro。
+
+### Fix round 3 GREEN implementation
+
+1. `MacroInvocationSite`完整索引 `macro_rules` definition ranges外的named invocations，包括
+   module/function/local definition、nested block与recursive token nesting。Finite allowlist只有：
+   bare `format` / `impl_standard_wrapper`、exact `crate::impl_standard_wrapper`、qualified
+   `std/core/alloc` roots；不做local-definition proof或通配，其他 invocation fail closed。
+2. Definition ranges继续从ordinary include/extern/use/path与invocation scan排除；definition外
+   actual external/unknown macros仍拒绝。Non-raw Rust keywords后 unary `!`不生成invocation，避免
+   `if !condition`误判；raw identifier不使用关键字豁免。
+3. `LexicalItemScope`新增 declaration kind与namespace。Nested fn属于value namespace，只能以
+   single-root turbofish形状通过，`fn sqlx`不能授权 `sqlx::External`；struct/trait/type/enum/union
+   属于type namespace，nested mod属于module namespace，均保持合法multi-segment paths。
+
+真实rustc controls证明：两类macro leak本可编译、function namespace误用为E0433、nested local
+module与qualified std/core macros可编译。
+
+Focused GREEN：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 61 tests ... OK
+
+python3 scripts/verify_rdbc_single_standard_purity.py --phase transitional
+STANDARD_FILES=29
+PURITY_PHASE=transitional
+```
+
+### Fix round 3 fresh gates
+
+| Gate | Result |
+| :--- | :--- |
+| Python `py_compile` | PASS |
+| purity self/live | `61/61`；`STANDARD_FILES=29` |
+| druid-rdbc all-target/all-feature | `20/20`，Wrapper `3/3` |
+| JDBC semantic self/live | `13/13`；`52/17/UNKNOWN=0` |
+| Task 2 identity/live | `37/37`；`73/55/3559` |
+| consumer SHA | `b1b420d61a8c5824d45eb3c59feecedb10795db803b4b3d20ece0509a1c72c59` |
+| DruidError / external consumer | `4/4`；`2/2` |
+| workspace all-target/all-feature check | PASS |
+| scoped Clippy `-D warnings` | PASS |
+| rustdoc / doctest | PASS / `1/1` |
+| rustfmt / diff | PASS |
+
+自审未发现新的scoped finding。Wrapper production、Task4、Physical、Cargo、admin与verification
+artifacts无diff；known admin broad failure未跑/未伪报。状态
+`FIX_ROUND_3_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续 blocked。

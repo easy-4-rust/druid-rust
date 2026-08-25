@@ -117,3 +117,35 @@ Task 4继续 blocked。
   single-colon loop label保持。
 - Fresh RED `4`，GREEN purity `54/54 + live29`；完整recovery gates PASS。状态仅为
   `FIX_ROUND_2_IMPLEMENTED_PENDING_REREVIEW`，不预判review verdict。
+
+## Recovery fix round 2 independent re-review（append-only）
+
+Reviewed fix commit: `20581e79063cfb5da0f666b618d41066577945b8`
+
+Verdict remains **FIX_REQUIRED**；无新 Critical。原三个子路径：lifetime root `ADDRESSED`；nested
+item binding `PARTIAL`；macro_rules definition `PARTIAL`。开放为 `1 load-bearing Important + 1
+Minor`。
+
+Important：definition range外的函数/block bare/local macro invocation没有索引。Module scanner跳过
+fn body、ordinary path scan又跳过definition，导致已定义 `leak!()` 可展开
+`crate::resource::Blob` 而 purity ACCEPT；等价最小rustc可编译，属于真实purity绕过。Ruling：purity
+不模拟expansion；所有definition外invocation必须被索引，bare/local macro除显式allowlist外fail
+closed；qualified std/core与本crate批准macro只允许显式名单，不做通配。
+
+Minor：`LexicalItemScope` 未保存declaration kind/namespace，导致 nested `fn sqlx(){}` 后
+`sqlx::External` 被当作可用path root，rustc实际E0433。Function binding只能支持合法
+value/turbofish call，struct/type/module等type namespace保持。
+
+Round 3必须以真实rustc fixtures关闭两项，保留unused macro definition、unknown/external macro、
+nested shadow/range/lifetime controls。Task 4继续 blocked。
+
+### Round 3 implementer response（pending independent re-review）
+
+- `MacroInvocationSite`索引所有definition-range外named invocations；有限allowlist仅包含bare
+  `format/impl_standard_wrapper`、exact `crate::impl_standard_wrapper` 与qualified
+  `std/core/alloc`。其他bare/local/external invocation在任意fn/block深度fail closed。
+- `LexicalItemScope`新增declaration kind与value/type/module namespace；fn只允许single-root
+  turbofish shape，不能支持multi-segment type/module path；nested module/struct/type保持。
+- Rust keyword + unary `!`从invocation index排除，raw identifier不获得豁免。
+- Fresh RED `6`，GREEN purity `61/61 + live29`；完整recovery gates PASS。状态
+  `FIX_ROUND_3_IMPLEMENTED_PENDING_REREVIEW`。

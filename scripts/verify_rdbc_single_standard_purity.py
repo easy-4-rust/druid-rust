@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NoReturn
 
-from verify_rdbc_public_paths import Token, tokenize
+from verify_rdbc_public_paths import RUST_2021_STRICT_RESERVED_KEYWORDS, Token, tokenize
 from verify_wrapper_rdbc_import_boundary import parse_use_tree
 
 
@@ -29,6 +29,9 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "u64", "u128", "usize",
 }
 ALLOWED_CRATE_ITEMS = {"impl_standard_wrapper"}
+ALLOWED_BARE_MACROS = {"format", "impl_standard_wrapper"}
+ALLOWED_QUALIFIED_MACRO_ROOTS = {"alloc", "core", "std"}
+ALLOWED_CRATE_MACROS = {("crate", "impl_standard_wrapper")}
 FORBIDDEN_TRANSITIONAL_PATH_ROOTS = {"compat", "resource", "spi"}
 RUST_PRELUDE_ROOTS = {
     "Box", "Clone", "Copy", "Default", "DoubleEndedIterator", "Drop", "Eq", "Err",
@@ -157,6 +160,8 @@ class LexicalItemScope:
     """One nested function/block item binding and its exact containing block range."""
 
     name: str
+    declaration_kind: str
+    namespace: str
     source: Path
     start: int
     end: int
@@ -165,6 +170,16 @@ class LexicalItemScope:
 @dataclass(frozen=True)
 class GenericBoundSite:
     """One bound root that must resolve under the normal canonical path policy."""
+
+    source: Path
+    token_index: int
+    path: tuple[str, ...]
+    absolute: bool
+
+
+@dataclass(frozen=True)
+class MacroInvocationSite:
+    """One macro invocation outside every macro_rules definition token range."""
 
     source: Path
     token_index: int
@@ -185,6 +200,8 @@ class SourceUnit:
     declaration_scopes: list[DeclarationScope] = field(default_factory=list)
     lexical_item_scopes: list[LexicalItemScope] = field(default_factory=list)
     generic_bound_sites: list[GenericBoundSite] = field(default_factory=list)
+    macro_invocations: list[MacroInvocationSite] = field(default_factory=list)
+    macro_invocations_indexed: bool = False
 
 
 @dataclass(frozen=True)
@@ -277,6 +294,59 @@ def macro_definition_ranges(unit: SourceUnit) -> tuple[tuple[int, int], ...]:
         ranges.append((index, end + 1))
         index = end + 1
     return tuple(ranges)
+
+
+def macro_invocation_sites(unit: SourceUnit) -> tuple[MacroInvocationSite, ...]:
+    """Index every named macro invocation outside complete macro_rules definitions."""
+
+    tokens = unit.tokens
+    excluded = {
+        cursor
+        for start, end in macro_definition_ranges(unit)
+        for cursor in range(start, end)
+    }
+    sites: list[MacroInvocationSite] = []
+    index = 0
+    while index < len(tokens):
+        if index in excluded:
+            index += 1
+            continue
+        start = index
+        absolute = tokens[index].text == "::"
+        cursor = index + int(absolute)
+        if cursor >= len(tokens) or tokens[cursor].kind != "IDENT":
+            index += 1
+            continue
+        path = [canonical_identifier(tokens[cursor])]
+        cursor += 1
+        while (
+            cursor + 1 < len(tokens)
+            and cursor not in excluded
+            and tokens[cursor].text == "::"
+            and tokens[cursor + 1].kind == "IDENT"
+        ):
+            path.append(canonical_identifier(tokens[cursor + 1]))
+            cursor += 2
+        if cursor < len(tokens) and cursor not in excluded and tokens[cursor].text == "!":
+            root_token = tokens[start + int(absolute)]
+            if (
+                len(path) == 1
+                and root_token.text in RUST_2021_STRICT_RESERVED_KEYWORDS
+            ):
+                index = cursor + 1
+                continue
+            sites.append(
+                MacroInvocationSite(
+                    unit.relative,
+                    start,
+                    tuple(path),
+                    absolute,
+                )
+            )
+            index = cursor + 1
+            continue
+        index += 1
+    return tuple(sites)
 
 
 def angle_close(unit: SourceUnit, opening: int, limit: int) -> int:
@@ -607,6 +677,7 @@ class ModuleScopeIndex:
             fail(f"standard scaffold is incomplete or unreachable from lib.rs: {missing}")
         self.canonical_roots = tuple(sorted(root_names))
         self.index_lexical_generic_scopes()
+        self.index_and_verify_macro_invocations()
         self.verify_generic_bound_sites()
         for scope in self.scopes.values():
             if scope.identity and scope.identity[0] in self.canonical_roots:
@@ -871,6 +942,7 @@ class ModuleScopeIndex:
                     "enum",
                     "fn",
                     "impl",
+                    "mod",
                     "struct",
                     "trait",
                     "type",
@@ -933,7 +1005,7 @@ class ModuleScopeIndex:
     def index_lexical_item_scopes(unit: SourceUnit) -> None:
         """Bind nested items throughout their nearest enclosing function/block range."""
 
-        bindable_kinds = {"enum", "fn", "struct", "trait", "type", "union"}
+        bindable_kinds = {"enum", "fn", "mod", "struct", "trait", "type", "union"}
         for declaration in unit.declaration_scopes:
             if (
                 declaration.name is None
@@ -966,6 +1038,14 @@ class ModuleScopeIndex:
             opening, closing = max(blocks, key=lambda pair: pair[0])
             lexical_scope = LexicalItemScope(
                 declaration.name,
+                declaration.declaration_kind,
+                (
+                    "value"
+                    if declaration.declaration_kind == "fn"
+                    else "module"
+                    if declaration.declaration_kind == "mod"
+                    else "type"
+                ),
                 unit.relative,
                 opening + 1,
                 closing,
@@ -995,6 +1075,36 @@ class ModuleScopeIndex:
                     source=site.source,
                     token_index=site.token_index,
                 )
+
+    def index_and_verify_macro_invocations(self) -> None:
+        """Apply the explicit macro allowlist to every canonical invocation site."""
+
+        for unit in self.sources.values():
+            if not any(
+                scope.identity and scope.identity[0] in self.canonical_roots
+                for scope in unit.scopes
+            ):
+                continue
+            self.verify_macro_invocations(unit)
+
+    @staticmethod
+    def verify_macro_invocations(unit: SourceUnit) -> None:
+        """Reject every invocation not proven by the finite canonical macro allowlist."""
+
+        if not unit.macro_invocations_indexed:
+            unit.macro_invocations.extend(macro_invocation_sites(unit))
+            unit.macro_invocations_indexed = True
+        for site in unit.macro_invocations:
+            if len(site.path) == 1 and site.path[0] in ALLOWED_BARE_MACROS:
+                continue
+            if site.path in ALLOWED_CRATE_MACROS:
+                continue
+            if len(site.path) >= 2 and site.path[0] in ALLOWED_QUALIFIED_MACRO_ROOTS:
+                continue
+            fail(
+                f"macro invocation is not in the canonical allowlist in {site.source}: "
+                f"{'::'.join(site.path)}!"
+            )
 
     def lexical_binding_kind(
         self, source: Path | None, token_index: int | None, name: str
@@ -1029,20 +1139,22 @@ class ModuleScopeIndex:
                 return "const"
         return None
 
-    def lexical_item_bound(
+    def lexical_item_binding(
         self, source: Path | None, token_index: int | None, name: str
-    ) -> bool:
-        """Return whether a nested item name is visible in the current block range."""
+    ) -> LexicalItemScope | None:
+        """Return the innermost nested item binding visible at one source token."""
 
         if source is None or token_index is None:
-            return False
+            return None
         unit = self.sources.get(source)
         if unit is None:
-            return False
-        return any(
-            scope.name == name and scope.start <= token_index < scope.end
+            return None
+        candidates = [
+            scope
             for scope in unit.lexical_item_scopes
-        )
+            if scope.name == name and scope.start <= token_index < scope.end
+        ]
+        return min(candidates, key=lambda scope: scope.end - scope.start, default=None)
 
     @staticmethod
     def module_macro_path(
@@ -1187,8 +1299,17 @@ class ModuleScopeIndex:
                 return ResolvedTarget("generic_type", scope.identity if scope else ())
             if lexical_kind == "const":
                 fail(f"const generic cannot be an associated path root in {source}: {first}")
-            if self.lexical_item_bound(source, token_index, first):
-                return ResolvedTarget("lexical_item", scope.identity if scope else ())
+            lexical_item = self.lexical_item_binding(source, token_index, first)
+            if lexical_item is not None:
+                if lexical_item.namespace == "value" and len(path) != 1:
+                    fail(
+                        f"function binding cannot be a type/module namespace in {source}: "
+                        f"{first}"
+                    )
+                return ResolvedTarget(
+                    f"lexical_{lexical_item.namespace}",
+                    scope.identity if scope else (),
+                )
             if scope is None:
                 if canonical:
                     fail(f"unknown path root without reachable module scope: {first}")
@@ -1370,6 +1491,8 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
             crate_name = canonical_identifier(tokens[cursor + 2])
             if crate_name not in ALLOWED_EXTERNAL_IMPORT_ROOTS:
                 fail(f"extern crate is forbidden in {relative}: {crate_name}")
+
+    index.verify_macro_invocations(unit)
 
     covered: set[int] = set(macro_indexes)
     cursor = 0
