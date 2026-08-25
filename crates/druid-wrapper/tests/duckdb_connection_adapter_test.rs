@@ -66,6 +66,59 @@ async fn duckdb_standard_factory_statement_and_prepared_use_native_executor() {
         .await
         .unwrap();
     assert!(rows.next().await.unwrap());
+    assert_eq!(
+        rows.meta_data()
+            .unwrap()
+            .column(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())
+            .unwrap()
+            .label(),
+        "name"
+    );
+}
+
+#[tokio::test]
+async fn duckdb_connection_first_close_rejects_prepared_and_live_metadata() {
+    use druid_rdbc::connection::Connection;
+
+    let factory = DuckDbConnectionFactory::new("duckdb::memory:");
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .unwrap();
+    let mut prepared = connection
+        .prepare_statement(
+            "select ?",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    let mut metadata = connection.database_meta_data().await.unwrap();
+    Connection::close(connection.as_mut()).await.unwrap();
+    assert!(prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::Int(1),
+        })
+        .is_err());
+    assert!(prepared.clear_parameters().is_err());
+    assert!(prepared.execute_prepared_query().await.is_err());
+    assert!(metadata.database_product_name().await.is_err());
+    assert!(matches!(
+        metadata
+            .tables(druid_rdbc::metadata::TablesQuery::default())
+            .await,
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+
+    let mut second = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .unwrap();
+    let mut statement = second
+        .create_statement(druid_rdbc::statement::StatementOptions::default())
+        .await
+        .unwrap();
+    statement.close().await.unwrap();
+    Connection::close(second.as_mut()).await.unwrap();
+    Connection::close(second.as_mut()).await.unwrap();
 }
 
 #[tokio::test]

@@ -306,3 +306,87 @@ All `1 Critical + 4 Important + 1 Minor` review findings have an implementation 
 **ADDRESSED, pending independent re-review**. Task 5 remains blocked. External remote-driver behavior
 is honestly NOT_RUN, SQLx result rows remain eager as the accepted Task 7 boundary, and transitional
 Physical implementations remain only for the planned Task 5/6 migration window.
+
+## 12. Fix round 1 independent-review correction
+
+Independent review of `8252a20..b4b69ea` returned **FIX_REQUIRED**. The prior Section 11 completion
+wording is superseded: C1 and I1 are `PARTIAL`; I2, I3, I4, and M1 are `ADDRESSED`; new Important N1
+is open. C1 still lacks deterministic post-factory HTTP SQL/libSQL/JDBC Agent execution and
+source-bound behavior evidence, and common ResultSet metadata loses family descriptors. I1 still
+allows connection-first Prepared setters and non-SQLx live metadata after owner close. N1 permits a
+fabricated set of 21 CLOSED rows and `--emit-live` drops the honest historical set. Task 5 remains
+blocked until strict RED/GREEN fixes and independent review clear all three load-bearing gaps.
+
+## 13. Fix round 2/5 implementation (base `b4b69ea`)
+
+This append-only section records the current implementation evidence. It does not override the
+review verdict: Task 5 remains blocked until an independent round-2 review returns clear.
+
+### 13.1 Finding disposition and RED/GREEN
+
+| Finding | Fresh RED | Round-2 GREEN |
+| --- | --- | --- |
+| C1 remote owned behavior and verifier binding | HTTP SQL/libSQL/JDBC Agent stopped before connection construction; comment-only behavior evidence was accepted | Each remote family factory now injects only its external transport/runtime boundary. Deterministic fakes enter the production `create_adapter_core`/connector, concrete family adapter, `standard_executor_core`, and common owned Statement/Prepared/ResultSet path. Each executes update, setter, prepared query, `next`, driver label metadata, live database metadata, close, and post-close rejection. Focused remote tests `3/3 PASS`. Verifier resolves one exact enabled test function, strips comments/literals, requires an observable assertion and the complete remote call chain; self-tests `10/10 PASS` reject comment-only, name-only, and empty assertion evidence. |
+| I1 connection-first lifecycle | SQLx/Toasty/RBDC setters returned `Ok` after connection close; DuckDB metadata could not coexist with an already-owned executor | Common and SQLx Prepared mutation/execution now check the shared executor/actor before state changes. All six common-family live metadata objects retain the executor and check it for both standard metadata operations; SQLx metadata checks actor closure. ResultSet/parameter metadata snapshots remain immutable and usable offline. SQLx/Toasty/RBDC/DuckDB focused suites are `6/8/13/11 PASS`; fake remotes cover connection-first, statement-first, double close and live metadata; common executor close-error and deterministic concurrent close/execute tests are `2/2 PASS`. |
+| N1 exact CLOSED history | fabricated replacement rows were accepted and `--emit-live` emitted zero CLOSED rows | The verifier loads `8252a20f...` with offline `git show`, selects the exact 21 Task4 SqlText identities, normalizes only state, and authenticates bytes with SHA-256 `bcc50e12e484a78bff19e578e362f25e4a382259be1ec53aadef53f7f01eca14`. Current CLOSED rows must equal that set field-for-field and remain absent from active source. `--emit-live` merges the pinned history with the active scan. Full denominator self-tests are `41/41 PASS`. |
+
+I2, I3, I4, and M1 remain addressed; their existing behavioral and hash vocabulary gates did not
+regress.
+
+### 13.2 Canonical matrix and metadata envelope
+
+| Family | Deterministic/configured standard evidence | External status |
+| --- | --- | --- |
+| SQLx SQLite | real in-memory actor query/update/placeholder/tables/lifecycle and label snapshot | PASS |
+| Toasty SQLite | real in-memory query/update/lifecycle; explicit owned result descriptor envelope | PASS |
+| RBDC | deterministic driver query/update/labels/lifecycle | PASS; real external DB NOT_RUN |
+| DuckDB native | real in-memory query/update/native labels/lifecycle | PASS |
+| HTTP SQL | deterministic production transport injection through real family core | PASS fake; external service NOT_RUN |
+| libSQL native | deterministic production transport injection through real family core | PASS fake; external service NOT_RUN |
+| JDBC Agent | deterministic production runtime connector through real protocol/family core | PASS fake; external jars/service NOT_RUN |
+
+Common query execution now returns an owned `StandardQueryResult` containing rows plus driver labels,
+which `StandardAdapterResultSet` turns into an immutable `Arc<ResultSetMetaDataSnapshot>`. RBDC,
+DuckDB, HTTP SQL, libSQL, and JDBC Agent preserve concrete labels; Toasty retains a deterministic
+unknown descriptor where its current raw driver response exposes values but no labels.
+
+### 13.3 Inventories and final hashes
+
+```text
+WRAPPER_STANDARD_ADAPTERS_LIVE=31
+WRAPPER_STANDARD_CONSUMERS_CLOSED=21
+FAMILY_COMMON_PREPARED_CHAINS_LIVE=6
+SQLX_OWNED_ACTOR_LIVE=1
+PHYSICAL_ROWS=73
+ADAPTER_ROWS=55
+ACTIVE_SOURCE_ROWS=3536
+CHECKED_ROWS=3557
+CONSUMER_ACTIVE_SOURCE_SHA256=80d529382e7ff4f7846584f14329d7f8ebd6e0b50f662d409518d7cbcfe5442b
+CONSUMER_SOURCE_PROJECTION_SHA256=18bb9682efb4e8521556f13abbc7b1320f2f2bf2d9b9ccb18a0576b3d02d5221
+CONSUMER_LIVE_TSV_SHA256=3a190f9e65c261ce95134c1c7dbcd2558c89a23e3f937df8bfeddc1f60384937
+CLOSED_HISTORY_SHA256=bcc50e12e484a78bff19e578e362f25e4a382259be1ec53aadef53f7f01eca14
+ROUND2_SEMANTIC_IDENTITY_ADDED=0
+ROUND2_SEMANTIC_IDENTITY_REMOVED=0
+```
+
+The source projection and checked TSV hashes remain distinct terms. Active count remains `3536`;
+the checked count is active plus the exact 21-row historical audit set.
+
+### 13.4 Fresh gates and remaining risk
+
+- wrapper verifier self/live: `10/10 PASS`; `31/21/6/1`.
+- denominator self/live: `41/41 PASS`; `73/55/3557`.
+- semantic self/adapter-live: `16/16 PASS`; `52/17/0`; hashes remain `5d99...` / `4588...`.
+- Task3 purity self/transitional: `103/103 PASS`; `STANDARD_FILES=29`.
+- wrapper default and all-feature test matrices: every test binary PASS; all-feature unit tests include
+  all three deterministic remote factory paths.
+- druid-rdbc all-target/all-feature tests `20/20`, doc `1/1`, and Clippy `-D warnings`: PASS.
+- wrapper/workspace all-target/all-feature checks: PASS. Scoped wrapper no-deps Clippy, docs,
+  doctests (`0`), rustfmt, and diff check: PASS.
+- Dependency-aware broad wrapper Clippy is still **not GREEN** only at the two unchanged Druid Task5
+  baseline warnings recorded earlier; no Task5/Druid production file was modified.
+
+All C1/I1/N1 round-1 review gaps now have an implementation disposition of **ADDRESSED, pending
+independent re-review**. Real external HTTP SQL/libSQL/JDBC Agent/RBDC services remain honestly
+NOT_RUN. No Cargo topology, druid-admin, Task5 holder/proxy, Physical deletion, unsafe, or manual
+Send/Sync change was made.

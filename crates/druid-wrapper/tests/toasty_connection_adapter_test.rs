@@ -65,10 +65,69 @@ async fn toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_e
         .unwrap();
     assert!(rows.next().await.unwrap());
     assert_eq!(
+        rows.meta_data()
+            .unwrap()
+            .column(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())
+            .unwrap()
+            .label(),
+        "column_1"
+    );
+    assert_eq!(
         rows.value(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())
             .unwrap(),
         Value::String("toasty-standard".to_owned())
     );
+}
+
+#[tokio::test]
+async fn toasty_connection_first_close_rejects_prepared_and_live_metadata() {
+    use druid_rdbc::connection::Connection;
+
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .unwrap();
+    let mut prepared = connection
+        .prepare_statement(
+            "select ?",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    let mut metadata = connection.database_meta_data().await.unwrap();
+    let parameter_snapshot = prepared.parameter_meta_data().ok();
+    Connection::close(connection.as_mut()).await.unwrap();
+
+    let parameter = druid_rdbc::statement::PreparedParameter {
+        index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+        value: Value::Int(1),
+    };
+    assert!(prepared.set_parameter(parameter).is_err());
+    assert!(prepared.clear_parameters().is_err());
+    assert!(prepared.execute_prepared_query().await.is_err());
+    assert!(metadata.database_product_name().await.is_err());
+    assert!(matches!(
+        metadata
+            .tables(druid_rdbc::metadata::TablesQuery::default())
+            .await,
+        Err(druid_rdbc::error::RdbcError::ConnectionDiscarded)
+    ));
+    if let Some(snapshot) = parameter_snapshot {
+        let _ = snapshot.parameter_count();
+    }
+
+    let mut second = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .unwrap();
+    let mut statement = second
+        .create_statement(druid_rdbc::statement::StatementOptions::default())
+        .await
+        .unwrap();
+    statement.close().await.unwrap();
+    Connection::close(second.as_mut()).await.unwrap();
+    Connection::close(second.as_mut()).await.unwrap();
 }
 
 async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {

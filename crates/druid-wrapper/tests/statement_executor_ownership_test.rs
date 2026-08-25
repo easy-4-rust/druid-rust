@@ -34,6 +34,15 @@ async fn statement_and_result_set_keep_the_sqlx_connection_lease_owned() {
         .execute_query("select name from owned_item where id = 1")
         .await
         .expect("owned result set");
+    assert_eq!(
+        result_set
+            .meta_data()
+            .unwrap()
+            .column(ColumnIndex::new(1).unwrap())
+            .unwrap()
+            .label(),
+        "name"
+    );
     drop(statement);
 
     assert!(result_set.next().await.expect("advance owned result set"));
@@ -200,4 +209,26 @@ async fn sqlx_connection_close_serializes_with_statement_execute_and_releases_in
         .unwrap();
     statement.close().await.unwrap();
     assert!(Connection::close(&mut connection).await.is_ok());
+}
+
+#[tokio::test]
+async fn sqlx_connection_first_close_rejects_prepared_mutation_and_preserves_snapshot() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut prepared =
+        Connection::prepare_statement(&mut connection, "select ?1", StatementOptions::default())
+            .await
+            .unwrap();
+    let snapshot = prepared.parameter_meta_data().unwrap();
+    Connection::close(&mut connection).await.unwrap();
+
+    let parameter = PreparedParameter {
+        index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+        value: Value::Int(7),
+    };
+    assert!(prepared.set_parameter(parameter).is_err());
+    assert!(prepared.clear_parameters().is_err());
+    assert!(prepared.execute_prepared_query().await.is_err());
+    assert_eq!(snapshot.parameter_count(), 1);
 }

@@ -21,6 +21,8 @@ P03_BASE = "d25ef68d9d05c39eb75cb953e46f97ccff6a5908"
 P03_MANIFEST = Path("docs/verification/rdbc-first/rdbc-physical-standardization.tsv")
 DEFAULT_ADAPTERS = Path("docs/verification/rdbc-first/rdbc-adapter-implementations.tsv")
 DEFAULT_CONSUMERS = Path("docs/verification/rdbc-first/rdbc-production-consumers.tsv")
+TASK4_PRE_CUTOVER_COMMIT = "8252a20f882fd3ade9a99d202c0e697a35307e45"
+TASK4_CLOSED_HISTORY_SHA256 = "bcc50e12e484a78bff19e578e362f25e4a382259be1ec53aadef53f7f01eca14"
 PHYSICAL_HEADER = (
     "old_path\tclassification\ttarget_path\tcompatibility\tsource_file\t"
     "normalized_signature\ttarget_task"
@@ -2002,9 +2004,9 @@ def implementation_rows(
                 "Toasty": "toasty_connection_adapter_test::toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_executor",
                 "Rbdc": "rbdc_connection_adapter_test::rbdc_standard_factory_prepared_query_uses_deterministic_driver_core",
                 "DuckDb": "duckdb_connection_adapter_test::duckdb_standard_factory_statement_and_prepared_use_native_executor",
-                "HttpSql": "standard_adapter_not_run_contract_test::http_sql_standard_factory_rejects_unconfigured_insecure_d1_before_network_io",
-                "LibSql": "standard_adapter_not_run_contract_test::libsql_standard_factory_rejects_unconfigured_url_before_remote_execution",
-                "JdbcAgent": "standard_adapter_not_run_contract_test::jdbc_agent_standard_factory_returns_typed_error_when_runtime_is_unconfigured",
+                "HttpSql": "http_sql_connection_factory::http_sql_standard_factory_uses_deterministic_transport_owned_core",
+                "LibSql": "libsql_connection_factory::libsql_standard_factory_uses_deterministic_transport_owned_core",
+                "JdbcAgent": "jdbc_agent_connection_factory::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
                 "DruidRdbcDataSource": "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
                 "DynamicRdbcDataSource": "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
             }
@@ -2031,15 +2033,15 @@ def implementation_rows(
                 ),
                 "HttpSqlPreparedStatement": (
                     "HttpSqlConnectionAdapter::standard_executor_core",
-                    "standard_adapter_not_run_contract_test::http_sql_standard_factory_rejects_unconfigured_insecure_d1_before_network_io",
+                    "http_sql_connection_factory::http_sql_standard_factory_uses_deterministic_transport_owned_core",
                 ),
                 "LibSqlPreparedStatement": (
                     "LibSqlConnectionAdapter::standard_executor_core",
-                    "standard_adapter_not_run_contract_test::libsql_standard_factory_rejects_unconfigured_url_before_remote_execution",
+                    "libsql_connection_factory::libsql_standard_factory_uses_deterministic_transport_owned_core",
                 ),
                 "JdbcAgentPreparedStatement": (
                     "JdbcAgentConnection::standard_executor_core",
-                    "standard_adapter_not_run_contract_test::jdbc_agent_standard_factory_returns_typed_error_when_runtime_is_unconfigured",
+                    "jdbc_agent_connection_factory::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
                 ),
             }
             if implementation_type in prepared_families:
@@ -2421,6 +2423,54 @@ def normalize_consumer_phase(rows: tuple[ConsumerRow, ...]) -> tuple[ConsumerRow
     )
 
 
+def pinned_task4_closed_consumers(root: Path) -> tuple[ConsumerRow, ...]:
+    """Load and authenticate the exact 21 pre-cutover wrapper identities from 8252a20."""
+
+    source = DEFAULT_CONSUMERS.as_posix()
+    result = subprocess.run(
+        ["git", "show", f"{TASK4_PRE_CUTOVER_COMMIT}:{source}"],
+        cwd=root,
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        fail(
+            "cannot load pinned Task 4 consumer history from "
+            f"{TASK4_PRE_CUTOVER_COMMIT}: {detail or 'git show failed'}"
+        )
+    pinned = tuple(
+        sorted(
+            ConsumerRow(
+                row.source_path,
+                row.occurrence_kind,
+                row.symbol,
+                row.old_path,
+                row.target_path,
+                row.target_task,
+                "STANDARD_REFERENCE_CLOSED",
+            )
+            for row in parse_consumer_payload(result.stdout)
+            if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
+            and row.source_path.startswith("crates/druid-wrapper/")
+            and row.old_path
+            in {
+                "druid_rdbc::spi::SqlTextStatement",
+                "druid_rdbc::spi::SqlTextPreparedStatement",
+            }
+        )
+    )
+    if len(pinned) != 21:
+        fail(f"pinned Task 4 consumer history expected 21 rows, found {len(pinned)}")
+    digest = hashlib.sha256(render_consumer_rows(pinned)).hexdigest()
+    if digest != TASK4_CLOSED_HISTORY_SHA256:
+        fail(
+            "pinned Task 4 consumer history hash drift: "
+            f"expected {TASK4_CLOSED_HISTORY_SHA256}, found {digest}"
+        )
+    return pinned
+
+
 def require_task4_adapter_payload(path: Path, live: tuple[AdapterRow, ...]) -> tuple[AdapterRow, ...]:
     """Require exact source impl rows while allowing only Task 4 state advancement."""
 
@@ -2435,6 +2485,7 @@ def require_task4_adapter_payload(path: Path, live: tuple[AdapterRow, ...]) -> t
 
 
 def require_task4_consumer_payload(
+    root: Path,
     path: Path,
     live: tuple[ConsumerRow, ...],
 ) -> tuple[ConsumerRow, ...]:
@@ -2445,8 +2496,9 @@ def require_task4_consumer_payload(
     payload = path.read_bytes()
     checked = tuple(parse_consumer_payload(payload))
     closed = tuple(row for row in checked if row.state == "STANDARD_REFERENCE_CLOSED")
-    if len(closed) != 21:
-        fail(f"Task 4 closed consumer denominator drift: expected 21, found {len(closed)}")
+    pinned_closed = pinned_task4_closed_consumers(root)
+    if closed != pinned_closed:
+        fail("Task 4 historical CLOSED consumers do not match pinned 8252a20 identities")
     active = tuple(row for row in checked if row.state != "STANDARD_REFERENCE_CLOSED")
     normalized_active = normalize_consumer_phase(active)
     if normalized_active != live:
@@ -2484,7 +2536,7 @@ def verify_denominator(
         "physical",
     )
     projected_adapters = require_task4_adapter_payload(adapters, live.adapters)
-    projected_consumers = require_task4_consumer_payload(consumers, live.consumers)
+    projected_consumers = require_task4_consumer_payload(root, consumers, live.consumers)
     return LiveManifests(live.physical, projected_adapters, projected_consumers)
 
 
@@ -2500,7 +2552,12 @@ def emit_live(
     outputs = (
         (physical_path, render_physical_rows(live.physical)),
         (adapter_path, render_adapter_rows(live.adapters)),
-        (consumer_path, render_consumer_rows(live.consumers)),
+        (
+            consumer_path,
+            render_consumer_rows(
+                tuple(sorted((*live.consumers, *pinned_task4_closed_consumers(root))))
+            ),
+        ),
     )
     for destination, payload in outputs:
         resolved = destination if destination.is_absolute() else root / destination

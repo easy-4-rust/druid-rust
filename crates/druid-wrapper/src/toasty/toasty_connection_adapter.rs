@@ -1,9 +1,11 @@
 //! Toasty 物理连接适配器。
 
 use super::ToastyPreparedStatement;
+use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
+use crate::standard_query_result::StandardQueryResult;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
 use druid_rdbc::error::{SqlException, SqlWarning};
@@ -1083,8 +1085,10 @@ impl AdapterExecutionCore for ToastyConnectionAdapter {
         &mut self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, values).await
+    ) -> Result<StandardQueryResult, RdbcError> {
+        self.execute_query_core(sql, values)
+            .await
+            .map(StandardQueryResult::rows_only)
     }
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -1122,10 +1126,19 @@ impl druid_rdbc::connection::Connection for ToastyConnectionAdapter {
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        Ok(Box::new(super::ToastyDatabaseMetaData::owned(
+        let mut snapshot = super::ToastyDatabaseMetaData::owned(
             self.url.clone(),
             self.driver_name.to_owned(),
             self.read_only,
+        );
+        let product_name =
+            druid_rdbc::metadata::DatabaseMetaData::database_product_name(&mut snapshot)
+                .await
+                .ok();
+        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
+            self.standard_executor_core()?,
+            product_name,
+            "toasty_database_metadata_product_name",
         )))
     }
 

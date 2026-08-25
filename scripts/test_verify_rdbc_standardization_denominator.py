@@ -22,6 +22,7 @@ from verify_rdbc_standardization_denominator import (  # noqa: E402
     VerificationError,
     ConsumerRow,
     derive_live_manifests,
+    emit_live,
     render_adapter_rows,
     render_consumer_rows,
     render_physical_rows,
@@ -190,6 +191,31 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             self.mutate_lines(self.consumers, mutation)
             with self.assertRaises(VerificationError):
                 self.verify()
+
+    def test_rejects_fabricated_closed_21_history(self) -> None:
+        """CLOSED rows must equal the exact pinned pre-cutover identities, not merely count 21."""
+
+        fabricated = tuple(
+            replace(
+                row,
+                source_path=f"crates/druid-wrapper/src/fabricated_{index}.rs",
+                symbol=f"fabricated_{index}",
+            )
+            for index, row in enumerate(self.closed_consumers)
+        )
+        self.consumers.write_bytes(
+            render_consumer_rows(tuple(sorted((*self.live.consumers, *fabricated))))
+        )
+        with self.assertRaisesRegex(VerificationError, "historical"):
+            self.verify()
+
+    def test_emit_live_preserves_exact_closed_history(self) -> None:
+        """Refreshing active source rows must retain the immutable Task 4 audit history."""
+
+        emit_live(REPOSITORY_ROOT, self.physical, self.adapters, self.consumers)
+        emitted = parse_consumer_payload(self.consumers.read_bytes())
+        closed = tuple(row for row in emitted if row.state == "STANDARD_REFERENCE_CLOSED")
+        self.assertEqual(self.closed_consumers, closed)
 
     def test_comments_strings_and_raw_strings_do_not_create_occurrences(self) -> None:
         """Rust literals and comments containing old names must not inflate the denominator."""

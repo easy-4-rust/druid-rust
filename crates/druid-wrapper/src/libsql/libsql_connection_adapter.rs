@@ -2,9 +2,11 @@ use super::{
     libsql_prepared_statement::LibSqlStatementExecutionError, LibSqlDatabaseMetaData,
     LibSqlPreparedStatement,
 };
+use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
+use crate::standard_query_result::StandardQueryResult;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlWarning};
 use druid_rdbc::spi::{
@@ -15,18 +17,89 @@ use druid_rdbc::spi::{
 use druid_rdbc::types::{Row, Savepoint, Value};
 use std::sync::Arc;
 
-struct LibSqlResult {
-    rows: Vec<Row>,
-    labels: Vec<String>,
-    rows_affected: u64,
-    last_insert_id: Option<i64>,
+pub(super) struct LibSqlResult {
+    pub(super) rows: Vec<Row>,
+    pub(super) labels: Vec<String>,
+    pub(super) rows_affected: u64,
+    pub(super) last_insert_id: Option<i64>,
+}
+
+#[async_trait::async_trait]
+pub(super) trait LibSqlTransport: Send + Sync {
+    async fn request(&self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, RdbcError>;
+    async fn prepare(&self, sql: &str) -> Result<(), RdbcError>;
+}
+
+struct NativeLibSqlTransport {
+    connection: ::libsql::Connection,
+}
+
+#[async_trait::async_trait]
+impl LibSqlTransport for NativeLibSqlTransport {
+    async fn request(&self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, RdbcError> {
+        let before_changes = self.connection.total_changes();
+        let mut rows = self
+            .connection
+            .query(
+                sql,
+                params
+                    .into_iter()
+                    .map(LibSqlConnectionAdapter::parameter)
+                    .collect::<Vec<_>>(),
+            )
+            .await
+            .map_err(LibSqlConnectionAdapter::driver_error)?;
+        let column_count = usize::try_from(rows.column_count()).unwrap_or_default();
+        let labels = (0..column_count)
+            .map(|index| {
+                rows.column_name(i32::try_from(index).unwrap_or(i32::MAX))
+                    .unwrap_or("")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
+        let mut materialized = Vec::new();
+        loop {
+            let Some(row) = rows
+                .next()
+                .await
+                .map_err(LibSqlConnectionAdapter::driver_error)?
+            else {
+                break;
+            };
+            let values = (0..column_count)
+                .map(|index| {
+                    row.get_value(i32::try_from(index).unwrap_or(i32::MAX))
+                        .map(LibSqlConnectionAdapter::value)
+                        .map_err(LibSqlConnectionAdapter::driver_error)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            materialized.push(Row::new(values));
+        }
+        Ok(LibSqlResult {
+            rows: materialized,
+            labels,
+            rows_affected: self
+                .connection
+                .total_changes()
+                .saturating_sub(before_changes),
+            last_insert_id: Some(self.connection.last_insert_rowid()),
+        })
+    }
+
+    async fn prepare(&self, sql: &str) -> Result<(), RdbcError> {
+        self.connection
+            .prepare(sql)
+            .await
+            .map(|_| ())
+            .map_err(LibSqlConnectionAdapter::driver_error)
+    }
 }
 
 /// 单个 Druid holder 独占的 Turso/libSQL 物理连接。
 ///
 /// 对象直接持有一个 libSQL `Connection`，不创建或持有第三方连接池。
 pub struct LibSqlConnectionAdapter {
-    connection: Option<::libsql::Connection>,
+    transport: Option<Arc<dyn LibSqlTransport>>,
     url: String,
     auto_commit: bool,
     discarded: bool,
@@ -48,7 +121,7 @@ impl LibSqlConnectionAdapter {
             .map_err(Self::driver_error)?;
         let connection = database.connect().map_err(Self::driver_error)?;
         Ok(Self {
-            connection: Some(connection),
+            transport: Some(Arc::new(NativeLibSqlTransport { connection })),
             url: url.to_owned(),
             auto_commit: true,
             discarded: false,
@@ -57,13 +130,27 @@ impl LibSqlConnectionAdapter {
         })
     }
 
+    pub(super) fn from_transport(
+        url: impl Into<String>,
+        transport: Arc<dyn LibSqlTransport>,
+    ) -> Self {
+        Self {
+            transport: Some(transport),
+            url: url.into(),
+            auto_commit: true,
+            discarded: false,
+            savepoint_sequence: 0,
+            standard_executor: None,
+        }
+    }
+
     fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
         if let Some(executor) = &self.standard_executor {
             return Ok(Arc::clone(executor));
         }
-        self.connection()?;
+        self.transport()?;
         let shell = Self {
-            connection: None,
+            transport: None,
             url: self.url.clone(),
             auto_commit: self.auto_commit,
             discarded: self.discarded,
@@ -102,15 +189,15 @@ impl LibSqlConnectionAdapter {
         reason = "uniform async close core across adapter families"
     )]
     async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
-        self.connection.take();
+        self.transport.take();
         Ok(())
     }
 
-    fn connection(&self) -> Result<&::libsql::Connection, RdbcError> {
+    fn transport(&self) -> Result<&Arc<dyn LibSqlTransport>, RdbcError> {
         if self.discarded {
             return Err(RdbcError::ConnectionDiscarded);
         }
-        self.connection
+        self.transport
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)
     }
@@ -169,58 +256,20 @@ impl LibSqlConnectionAdapter {
     }
 
     async fn request(&mut self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, RdbcError> {
-        let connection = self.connection()?.clone();
-        let before_changes = connection.total_changes();
-        let mut rows = match connection
-            .query(
-                sql,
-                params.into_iter().map(Self::parameter).collect::<Vec<_>>(),
-            )
-            .await
-        {
-            Ok(rows) => rows,
-            Err(error) => return Err(self.record_driver_error(error)),
-        };
-        let column_count = usize::try_from(rows.column_count()).unwrap_or_default();
-        let labels = (0..column_count)
-            .map(|index| {
-                rows.column_name(i32::try_from(index).unwrap_or(i32::MAX))
-                    .unwrap_or("")
-                    .to_owned()
-            })
-            .collect::<Vec<_>>();
-        let mut materialized = Vec::new();
-        loop {
-            let row = match rows.next().await {
-                Ok(Some(row)) => row,
-                Ok(None) => break,
-                Err(error) => return Err(self.record_driver_error(error)),
-            };
-            let values = (0..column_count)
-                .map(|index| {
-                    row.get_value(i32::try_from(index).unwrap_or(i32::MAX))
-                        .map(Self::value)
-                        .map_err(Self::driver_error)
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            materialized.push(Row::new(values));
+        let transport = Arc::clone(self.transport()?);
+        match transport.request(sql, params).await {
+            Ok(result) => Ok(result),
+            Err(error) => Err(self.record_driver_error(error)),
         }
-        Ok(LibSqlResult {
-            rows: materialized,
-            labels,
-            rows_affected: connection.total_changes().saturating_sub(before_changes),
-            last_insert_id: Some(connection.last_insert_rowid()),
-        })
     }
 
-    fn record_driver_error(&mut self, error: ::libsql::Error) -> RdbcError {
-        let error = Self::driver_error(error);
+    fn record_driver_error(&mut self, error: RdbcError) -> RdbcError {
         if matches!(&error, RdbcError::SqlException(exception)
             if exception.is_recoverable()
                 || exception.sql_state().is_some_and(|state| state.starts_with("08")))
         {
             self.discarded = true;
-            self.connection.take();
+            self.transport.take();
         }
         error
     }
@@ -245,7 +294,7 @@ impl LibSqlConnectionAdapter {
             Err(LibSqlStatementExecutionError::Driver(error)) => Err(error),
             Err(LibSqlStatementExecutionError::TimedOut) => {
                 self.discarded = true;
-                self.connection.take();
+                self.transport.take();
                 Err(RdbcError::SqlException(Box::new(
                     SqlException::new(
                         0,
@@ -258,7 +307,7 @@ impl LibSqlConnectionAdapter {
             }
             Err(LibSqlStatementExecutionError::Cancelled) => {
                 self.discarded = true;
-                self.connection.take();
+                self.transport.take();
                 Err(RdbcError::SqlException(Box::new(
                     SqlException::new(
                         0,
@@ -334,10 +383,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         &mut self,
         key: &PreparedStatementKey,
     ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        self.connection()?
-            .prepare(key.sql())
-            .await
-            .map_err(Self::driver_error)?;
+        self.transport()?.prepare(key.sql()).await?;
         Ok(Arc::new(LibSqlPreparedStatement::new(key.sql())))
     }
 
@@ -452,7 +498,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         self.close_connection_core().await
     }
     fn is_closed(&self) -> bool {
-        self.connection.is_none()
+        self.transport.is_none()
     }
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
         PhysicalConnectionCapabilities {
@@ -468,7 +514,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         }
     }
     fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        self.connection()?;
+        self.transport()?;
         Ok(Box::new(LibSqlDatabaseMetaData::new(&self.url)))
     }
     fn auto_commit(&self) -> bool {
@@ -485,15 +531,15 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         }
     }
     async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.connection()?;
+        self.transport()?;
         Ok(None)
     }
     async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.connection().map(|_| ())
+        self.transport().map(|_| ())
     }
     fn mark_discarded(&mut self) {
         self.discarded = true;
-        self.connection.take();
+        self.transport.take();
     }
     fn is_discarded(&self) -> bool {
         self.discarded
@@ -520,8 +566,10 @@ impl AdapterExecutionCore for LibSqlConnectionAdapter {
         &mut self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, values).await
+    ) -> Result<StandardQueryResult, RdbcError> {
+        self.request(sql, values)
+            .await
+            .map(|result| StandardQueryResult::with_labels(result.rows, result.labels))
     }
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -559,8 +607,10 @@ impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        Ok(Box::new(super::LibSqlDatabaseMetaData::new(
-            self.url.clone(),
+        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
+            self.standard_executor_core()?,
+            Some("Turso/libSQL".to_owned()),
+            "libsql_database_metadata_product_name",
         )))
     }
 
@@ -573,9 +623,9 @@ impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
-        Ok(self.standard_executor.as_ref().map_or_else(
-            || self.connection.is_none(),
-            |executor| executor.is_closed(),
-        ))
+        Ok(self
+            .standard_executor
+            .as_ref()
+            .map_or_else(|| self.transport.is_none(), |executor| executor.is_closed()))
     }
 }

@@ -32,7 +32,12 @@ impl StandardAdapterPreparedStatement {
     }
 
     fn executor_core(&self) -> Result<&Arc<dyn StandardExecutor>, RdbcError> {
-        self.executor.as_ref().ok_or(RdbcError::ConnectionDiscarded)
+        let executor = self
+            .executor
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        executor.ensure_open()?;
+        Ok(executor)
     }
 
     async fn values_core(&self) -> Result<Vec<druid_rdbc::types::Value>, RdbcError> {
@@ -72,10 +77,10 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
-        let rows = executor
+        let result = executor
             .execute_query(&self.sql, self.values_core().await?)
             .await?;
-        Ok(Box::new(StandardAdapterResultSet::new(rows, executor)))
+        Ok(Box::new(StandardAdapterResultSet::new(result, executor)))
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {

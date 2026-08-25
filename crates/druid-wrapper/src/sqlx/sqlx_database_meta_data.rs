@@ -618,7 +618,8 @@ impl SqlxDatabaseMetaData<'static> {
 
     fn actor_core(&self) -> Result<&Arc<SqlxConnectionActor>, RdbcError> {
         match &self.backend {
-            SqlxDatabaseMetaDataBackend::Owned(actor) => Ok(actor),
+            SqlxDatabaseMetaDataBackend::Owned(actor) if !actor.is_closed() => Ok(actor),
+            SqlxDatabaseMetaDataBackend::Owned(_) => Err(RdbcError::ConnectionDiscarded),
             _ => Err(RdbcError::UnsupportedOperation {
                 operation: "sqlx_standard_metadata_requires_owned_actor",
             }),

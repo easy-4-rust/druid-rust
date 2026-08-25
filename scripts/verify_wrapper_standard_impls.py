@@ -132,6 +132,54 @@ def core_calls(body: str) -> set[str]:
     return set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*_core)\s*\(", body))
 
 
+def extract_behavior_function(source: str, function_name: str) -> str:
+    """Return one executable #[test] function body from comment/literal-free tokens."""
+
+    tokens = code_tokens(source)
+    header = re.compile(
+        rf"\b(?:async\s+)?fn\s+{re.escape(function_name)}\s*\([^{{;]*\)\s*(?:->[^{{]*)?\{{"
+    )
+    matches = list(header.finditer(tokens))
+    if len(matches) != 1:
+        fail(f"adapter behavior evidence must resolve one function: {function_name}")
+    match = matches[0]
+    attribute_prefix = tokens[max(0, match.start() - 120) : match.start()]
+    if "# [ test ]" not in attribute_prefix and "# [ tokio :: test ]" not in attribute_prefix:
+        fail(f"adapter behavior evidence is not an enabled Rust test: {function_name}")
+    depth = 1
+    index = match.end()
+    while index < len(tokens) and depth:
+        depth += tokens[index] == "{"
+        depth -= tokens[index] == "}"
+        index += 1
+    if depth:
+        fail(f"adapter behavior evidence has an unbalanced body: {function_name}")
+    body = tokens[match.end() : index - 1]
+    if not body.strip() or not any(
+        marker in body
+        for marker in ("assert !", "assert_eq !", "assert_ne !", "assert_impl_all !")
+    ):
+        fail(f"adapter behavior evidence has no observable assertion: {function_name}")
+    return body
+
+
+def behavior_evidence_body(root: Path, evidence: str) -> str:
+    """Resolve behavior evidence to one exact integration or source unit-test file."""
+
+    module, separator, function_name = evidence.rpartition("::")
+    if not separator or not module or not function_name:
+        fail(f"adapter behavior evidence is malformed: {evidence}")
+    integration = root / "crates/druid-wrapper/tests" / f"{module}.rs"
+    candidates = [integration] if integration.is_file() else [
+        path
+        for path in (root / "crates/druid-wrapper/src").rglob(f"{module}.rs")
+        if path.is_file()
+    ]
+    if len(candidates) != 1:
+        fail(f"adapter behavior evidence file is not exact: {evidence}")
+    return extract_behavior_function(candidates[0].read_text(encoding="utf-8"), function_name)
+
+
 def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
     """Return whether the canonical Wrapper macro covers this implementation type."""
 
@@ -163,13 +211,26 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
     standard_path = root / row.standard_source_path
     if not standard_path.is_file():
         fail(f"canonical standard source is missing: {row.standard_source_path}")
-    test_name = row.behavior_evidence.split("::", 1)[-1]
-    test_sources = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (root / "crates/druid-wrapper/tests").glob("*.rs")
-    )
-    if test_name not in test_sources:
-        fail(f"adapter behavior evidence is missing: {row.behavior_evidence}")
+    behavior_body = behavior_evidence_body(root, row.behavior_evidence)
+    if concrete_type(row.implementation_type).startswith(("HttpSql", "LibSql", "JdbcAgent")):
+        required_remote_chain = (
+            "ConnectionFactory :: create",
+            "create_statement",
+            "prepare_statement",
+            "set_parameter",
+            "execute_update",
+            "execute_prepared_query",
+            "next",
+            "meta_data",
+            "database_meta_data",
+            "Connection :: close",
+        )
+        missing = [marker for marker in required_remote_chain if marker not in behavior_body]
+        if missing:
+            fail(
+                f"remote adapter behavior evidence lacks factory-to-result chain: "
+                f"{row.behavior_evidence}: {missing}"
+            )
     if row.standard_implementation_type == "StandardAdapterPreparedStatement":
         standard_source = standard_path.read_text(encoding="utf-8")
         required = (

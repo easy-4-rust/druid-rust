@@ -2,9 +2,11 @@ use super::{
     AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions,
     JdbcAgentPreparedStatement,
 };
+use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
+use crate::standard_query_result::StandardQueryResult;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -16,10 +18,68 @@ use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[async_trait::async_trait]
+pub(super) trait JdbcAgentTransport: Send {
+    async fn request(
+        &mut self,
+        operation: &str,
+        payload: JsonValue,
+    ) -> Result<JsonValue, RdbcError>;
+    async fn close(&mut self) -> Result<(), RdbcError>;
+    fn is_unusable(&self) -> bool;
+    fn statement_context(&self) -> Option<(super::AgentRequestHandle, String)>;
+}
+
+#[async_trait::async_trait]
+impl JdbcAgentTransport for JdbcAgentClient {
+    async fn request(
+        &mut self,
+        operation: &str,
+        payload: JsonValue,
+    ) -> Result<JsonValue, RdbcError> {
+        JdbcAgentClient::request(self, operation, payload).await
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        JdbcAgentClient::close(self).await
+    }
+
+    fn is_unusable(&self) -> bool {
+        JdbcAgentClient::is_unusable(self)
+    }
+
+    fn statement_context(&self) -> Option<(super::AgentRequestHandle, String)> {
+        Some(JdbcAgentClient::statement_context(self))
+    }
+}
+
+#[async_trait::async_trait]
+pub(super) trait JdbcAgentConnector: Send + Sync {
+    async fn connect(
+        &self,
+        options: JdbcAgentOptions,
+        payload: JsonValue,
+    ) -> Result<(Box<dyn JdbcAgentTransport>, JsonValue), RdbcError>;
+}
+
+pub(super) struct NativeJdbcAgentConnector;
+
+#[async_trait::async_trait]
+impl JdbcAgentConnector for NativeJdbcAgentConnector {
+    async fn connect(
+        &self,
+        options: JdbcAgentOptions,
+        payload: JsonValue,
+    ) -> Result<(Box<dyn JdbcAgentTransport>, JsonValue), RdbcError> {
+        let (client, session) = JdbcAgentClient::connect(options, payload).await?;
+        Ok((Box::new(client), session))
+    }
+}
+
 /// 由 Druid 独占并通过 JDBC Agent 操作的未池化物理连接。
 #[allow(clippy::struct_excessive_bools)]
 pub struct JdbcAgentConnection {
-    client: Option<JdbcAgentClient>,
+    client: Option<Box<dyn JdbcAgentTransport>>,
     capabilities: PhysicalConnectionCapabilities,
     auto_commit: bool,
     read_only: bool,
@@ -43,15 +103,33 @@ impl JdbcAgentConnection {
         properties: HashMap<String, String>,
         options: JdbcAgentOptions,
     ) -> Result<Self, RdbcError> {
-        let (client, session) = JdbcAgentClient::connect(
+        Self::connect_with_connector(
+            url,
+            validation_query,
+            properties,
             options,
-            json!({
-                "url": url,
-                "properties": properties,
-                "validationQuery": validation_query,
-            }),
+            Arc::new(NativeJdbcAgentConnector),
         )
-        .await?;
+        .await
+    }
+
+    pub(super) async fn connect_with_connector(
+        url: &str,
+        validation_query: Option<&str>,
+        properties: HashMap<String, String>,
+        options: JdbcAgentOptions,
+        connector: Arc<dyn JdbcAgentConnector>,
+    ) -> Result<Self, RdbcError> {
+        let (client, session) = connector
+            .connect(
+                options,
+                json!({
+                    "url": url,
+                    "properties": properties,
+                    "validationQuery": validation_query,
+                }),
+            )
+            .await?;
         let capability = |name: &str| {
             session
                 .pointer(&format!("/capabilities/{name}"))
@@ -125,12 +203,15 @@ impl JdbcAgentConnection {
         })
     }
 
-    fn client_core(&self) -> Result<&JdbcAgentClient, RdbcError> {
-        self.client.as_ref().ok_or(RdbcError::ConnectionDiscarded)
+    fn client_core(&self) -> Result<&dyn JdbcAgentTransport, RdbcError> {
+        self.client.as_deref().ok_or(RdbcError::ConnectionDiscarded)
     }
 
-    fn client_mut_core(&mut self) -> Result<&mut JdbcAgentClient, RdbcError> {
-        self.client.as_mut().ok_or(RdbcError::ConnectionDiscarded)
+    fn client_mut_core(&mut self) -> Result<&mut (dyn JdbcAgentTransport + '_), RdbcError> {
+        match self.client.as_deref_mut() {
+            Some(client) => Ok(client),
+            None => Err(RdbcError::ConnectionDiscarded),
+        }
     }
 
     fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
@@ -234,8 +315,8 @@ impl JdbcAgentConnection {
             || self.discarded
             || self
                 .client
-                .as_ref()
-                .is_none_or(JdbcAgentClient::is_unusable)
+                .as_deref()
+                .is_none_or(JdbcAgentTransport::is_unusable)
         {
             Err(RdbcError::ConnectionDiscarded)
         } else {
@@ -527,7 +608,10 @@ impl PhysicalConnection for JdbcAgentConnection {
             .filter(|statement_id| !statement_id.is_empty())
             .ok_or_else(|| Self::protocol_error("prepare response does not contain statementId"))?
             .to_owned();
-        let (request_handle, session_id) = self.client_core()?.statement_context();
+        let (request_handle, session_id) = self
+            .client_core()?
+            .statement_context()
+            .ok_or_else(|| Self::protocol_error("transport has no physical statement context"))?;
         Ok(Arc::new(JdbcAgentPreparedStatement::new(
             key,
             statement_id,
@@ -776,8 +860,8 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.closed
             || self
                 .client
-                .as_ref()
-                .is_none_or(JdbcAgentClient::is_unusable)
+                .as_deref()
+                .is_none_or(JdbcAgentTransport::is_unusable)
     }
 
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
@@ -862,8 +946,8 @@ impl PhysicalConnection for JdbcAgentConnection {
         self.discarded
             || self
                 .client
-                .as_ref()
-                .is_none_or(JdbcAgentClient::is_unusable)
+                .as_deref()
+                .is_none_or(JdbcAgentTransport::is_unusable)
     }
 
     fn driver_name(&self) -> &str {
@@ -888,8 +972,19 @@ impl AdapterExecutionCore for JdbcAgentConnection {
         &mut self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, values).await
+    ) -> Result<StandardQueryResult, RdbcError> {
+        self.ensure_open()?;
+        let payload = self
+            .client_mut_core()?
+            .request(
+                "execute_query",
+                json!({"sql": sql, "params": Self::parameters(values)?}),
+            )
+            .await?;
+        let labels = Self::column_labels(&payload)?;
+        self.collect_query_payload(payload)
+            .await
+            .map(|rows| StandardQueryResult::with_labels(rows, labels))
     }
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -927,7 +1022,16 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        Ok(Box::new(self.metadata.clone()))
+        let mut snapshot = self.metadata.clone();
+        let product_name =
+            druid_rdbc::metadata::DatabaseMetaData::database_product_name(&mut snapshot)
+                .await
+                .ok();
+        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
+            self.standard_executor_core()?,
+            product_name,
+            "jdbc_agent_database_metadata_product_name_absent",
+        )))
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

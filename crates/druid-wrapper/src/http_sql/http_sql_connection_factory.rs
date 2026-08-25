@@ -1,7 +1,9 @@
+use super::http_sql_connection_adapter::{HttpSqlTransport, ReqwestHttpSqlTransport};
 use super::{HttpSqlConnectionAdapter, HttpSqlProvider};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// 为每个 Druid holder 创建独立 HTTP SQL 逻辑会话的未池化工厂。
 #[derive(Clone)]
@@ -9,6 +11,7 @@ pub struct HttpSqlConnectionFactory {
     provider: HttpSqlProvider,
     endpoint: String,
     properties: HashMap<String, String>,
+    transport: Arc<dyn HttpSqlTransport>,
 }
 
 impl HttpSqlConnectionFactory {
@@ -19,6 +22,7 @@ impl HttpSqlConnectionFactory {
             provider,
             endpoint: endpoint.into(),
             properties: HashMap::new(),
+            transport: Arc::new(ReqwestHttpSqlTransport::new()),
         }
     }
 
@@ -34,10 +38,24 @@ impl HttpSqlConnectionFactory {
             self.provider,
             self.endpoint.clone(),
             self.properties.clone(),
-            reqwest::Client::new(),
+            Arc::clone(&self.transport),
         )?;
         connection.ping().await?;
         Ok(connection)
+    }
+
+    #[cfg(test)]
+    fn with_transport(
+        provider: HttpSqlProvider,
+        endpoint: impl Into<String>,
+        transport: Arc<dyn HttpSqlTransport>,
+    ) -> Self {
+        Self {
+            provider,
+            endpoint: endpoint.into(),
+            properties: HashMap::new(),
+            transport,
+        }
     }
 }
 
@@ -78,5 +96,109 @@ impl druid_rdbc::driver::ConnectionFactory for HttpSqlConnectionFactory {
 
     fn name(&self) -> &str {
         "http-sql"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use druid_rdbc::connection::Connection;
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::statement::{ParameterIndex, PreparedParameter, StatementOptions};
+    use druid_rdbc::types::Value;
+    use serde_json::{json, Value as JsonValue};
+
+    struct DeterministicHttpSqlTransport;
+
+    #[async_trait::async_trait]
+    impl HttpSqlTransport for DeterministicHttpSqlTransport {
+        async fn send(
+            &self,
+            _endpoint: reqwest::Url,
+            _properties: &HashMap<String, String>,
+            body: JsonValue,
+        ) -> Result<(reqwest::StatusCode, JsonValue), String> {
+            let statement = body
+                .as_array()
+                .and_then(|batch| batch.first())
+                .and_then(JsonValue::as_array)
+                .ok_or_else(|| "missing deterministic statement".to_owned())?;
+            let sql = statement
+                .first()
+                .and_then(JsonValue::as_str)
+                .unwrap_or_default();
+            let payload = if sql.starts_with("UPDATE") {
+                json!({"results": [{"rows_affected": 1}]})
+            } else {
+                let value = statement.get(1).cloned().unwrap_or_else(|| json!(1));
+                json!({"results": [{"columns": ["remote_value"], "values": [[value]]}]})
+            };
+            Ok((reqwest::StatusCode::OK, payload))
+        }
+    }
+
+    #[tokio::test]
+    async fn http_sql_standard_factory_uses_deterministic_transport_owned_core() {
+        let factory = HttpSqlConnectionFactory::with_transport(
+            HttpSqlProvider::Rqlite,
+            "https://deterministic.invalid",
+            Arc::new(DeterministicHttpSqlTransport),
+        );
+        let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+            .await
+            .unwrap();
+        let mut statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            statement
+                .execute_update(
+                    "UPDATE remote_item SET value = 1",
+                    druid_rdbc::statement::GeneratedKeys::None,
+                )
+                .await
+                .unwrap(),
+            1
+        );
+        let mut prepared = connection
+            .prepare_statement("SELECT ?", StatementOptions::default())
+            .await
+            .unwrap();
+        prepared
+            .set_parameter(PreparedParameter {
+                index: ParameterIndex::new(1).unwrap(),
+                value: Value::String("http-owned".to_owned()),
+            })
+            .unwrap();
+        let mut rows = prepared.execute_prepared_query().await.unwrap();
+        assert!(rows.next().await.unwrap());
+        assert_eq!(
+            rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+            Value::String("http-owned".to_owned())
+        );
+        let snapshot = rows.meta_data().unwrap();
+        assert_eq!(
+            snapshot
+                .column(ColumnIndex::new(1).unwrap())
+                .unwrap()
+                .label(),
+            "remote_value"
+        );
+        let mut metadata = connection.database_meta_data().await.unwrap();
+        assert_eq!(metadata.database_product_name().await.unwrap(), "rqlite");
+        statement.close().await.unwrap();
+        Connection::close(connection.as_mut()).await.unwrap();
+        assert!(prepared.clear_parameters().is_err());
+        assert!(prepared.execute_prepared_query().await.is_err());
+        assert!(metadata.database_product_name().await.is_err());
+        assert!(matches!(
+            metadata
+                .tables(druid_rdbc::metadata::TablesQuery::default())
+                .await,
+            Err(RdbcError::ConnectionDiscarded)
+        ));
+        Connection::close(connection.as_mut()).await.unwrap();
+        assert_eq!(snapshot.column_count(), 1);
     }
 }

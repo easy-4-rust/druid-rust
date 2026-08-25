@@ -26,7 +26,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         (self.root / self.source_path).parent.mkdir(parents=True)
         tests = self.root / "crates/druid-wrapper/tests"
         tests.mkdir(parents=True)
-        (tests / "demo.rs").write_text("fn runs() {}\n", encoding="utf-8")
+        (tests / "demo.rs").write_text(
+            "#[test]\nfn runs() { assert!(true); }\n", encoding="utf-8"
+        )
         self.row = AdapterRow(
             source_path=self.source_path,
             current_trait="druid_rdbc::spi::PhysicalConnection",
@@ -35,7 +37,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             standard_implementation_type="DemoConnection",
             standard_source_path=self.source_path,
             standard_core_evidence="DemoConnection::run_core",
-            behavior_evidence="demo_test::runs",
+            behavior_evidence="demo::runs",
             state="STANDARD_IMPL_LIVE",
         )
 
@@ -122,6 +124,42 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             (actor.parent / name).write_text(source, encoding="utf-8")
         with self.assertRaises(VerificationError):
             verify_sqlx_ownership(self.root)
+
+    def test_rejects_comment_only_behavior_evidence(self) -> None:
+        """A manifest test name must resolve to executable factory-to-result behavior."""
+
+        self.write_source(
+            "use druid_rdbc::connection::Connection;\n"
+            "impl PhysicalConnection for DemoConnection { fn run(&mut self) { self.run_core(); } }\n"
+            "impl Connection for DemoConnection {\n"
+            " fn create_statement(&mut self) { self.run_core(); }\n"
+            " fn prepare_statement(&mut self) { self.run_core(); }\n"
+            "}\n"
+        )
+        tests = self.root / "crates/druid-wrapper/tests/demo.rs"
+        tests.write_text("// fn runs() {}\n", encoding="utf-8")
+        with self.assertRaisesRegex(VerificationError, "behavior evidence"):
+            verify_adapter_source(self.root, self.row)
+
+    def test_rejects_test_name_only_and_empty_assertion_behavior_evidence(self) -> None:
+        """A named test without executable assertions cannot carry a LIVE adapter row."""
+
+        self.write_source(
+            "use druid_rdbc::connection::Connection;\n"
+            "impl PhysicalConnection for DemoConnection { fn run(&mut self) { self.run_core(); } }\n"
+            "impl Connection for DemoConnection {\n"
+            " fn create_statement(&mut self) { self.run_core(); }\n"
+            " fn prepare_statement(&mut self) { self.run_core(); }\n"
+            "}\n"
+        )
+        tests = self.root / "crates/druid-wrapper/tests/demo.rs"
+        for source in (
+            "const TEST_NAME: &str = \"runs\";\n",
+            "#[test]\nfn runs() {}\n",
+        ):
+            tests.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(VerificationError, "behavior evidence"):
+                verify_adapter_source(self.root, self.row)
 
 
 if __name__ == "__main__":

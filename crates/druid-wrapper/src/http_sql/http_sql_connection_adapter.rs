@@ -2,9 +2,11 @@ use super::{
     http_sql_prepared_statement::HttpSqlStatementExecutionError, HttpSqlDatabaseMetaData,
     HttpSqlPreparedStatement, HttpSqlProvider,
 };
+use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
+use crate::standard_query_result::StandardQueryResult;
 use base64::Engine;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
@@ -14,7 +16,7 @@ use druid_rdbc::spi::{
     StatementExecuteResult, StatementGeneratedKeys,
 };
 use druid_rdbc::types::{Row, Value};
-use reqwest::{RequestBuilder, StatusCode, Url};
+use reqwest::{StatusCode, Url};
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -26,6 +28,52 @@ struct HttpSqlResult {
     last_insert_id: Option<i64>,
 }
 
+#[async_trait::async_trait]
+pub(super) trait HttpSqlTransport: Send + Sync {
+    async fn send(
+        &self,
+        endpoint: Url,
+        properties: &HashMap<String, String>,
+        body: JsonValue,
+    ) -> Result<(StatusCode, JsonValue), String>;
+}
+
+pub(super) struct ReqwestHttpSqlTransport {
+    client: reqwest::Client,
+}
+
+impl ReqwestHttpSqlTransport {
+    pub(super) fn new() -> Self {
+        Self {
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl HttpSqlTransport for ReqwestHttpSqlTransport {
+    async fn send(
+        &self,
+        endpoint: Url,
+        properties: &HashMap<String, String>,
+        body: JsonValue,
+    ) -> Result<(StatusCode, JsonValue), String> {
+        let mut request = self.client.post(endpoint).json(&body);
+        if let Some(token) = properties
+            .get("token")
+            .or_else(|| properties.get("api_token"))
+        {
+            request = request.bearer_auth(token);
+        } else if let Some(user) = properties.get("user") {
+            request = request.basic_auth(user, properties.get("password"));
+        }
+        let response = request.send().await.map_err(|error| error.to_string())?;
+        let status = response.status();
+        let payload = response.json().await.map_err(|error| error.to_string())?;
+        Ok((status, payload))
+    }
+}
+
 /// 单个 Druid holder 独占的 HTTP SQL 逻辑物理连接。
 ///
 /// 该对象只持有独占的 HTTP transport client 和逻辑会话状态，不持有第三方数据库连接池。
@@ -33,7 +81,7 @@ pub struct HttpSqlConnectionAdapter {
     provider: HttpSqlProvider,
     endpoint: Url,
     properties: HashMap<String, String>,
-    client: reqwest::Client,
+    transport: Arc<dyn HttpSqlTransport>,
     closed: bool,
     discarded: bool,
     product_version: Option<String>,
@@ -41,11 +89,11 @@ pub struct HttpSqlConnectionAdapter {
 }
 
 impl HttpSqlConnectionAdapter {
-    pub(crate) fn new(
+    pub(super) fn new(
         provider: HttpSqlProvider,
         endpoint: impl Into<String>,
         properties: HashMap<String, String>,
-        client: reqwest::Client,
+        transport: Arc<dyn HttpSqlTransport>,
     ) -> Result<Self, RdbcError> {
         let endpoint = endpoint.into();
         let endpoint = Url::parse(&endpoint).map_err(|error| {
@@ -65,7 +113,7 @@ impl HttpSqlConnectionAdapter {
             provider,
             endpoint,
             properties,
-            client,
+            transport,
             closed: false,
             discarded: false,
             product_version: None,
@@ -82,7 +130,7 @@ impl HttpSqlConnectionAdapter {
             provider: self.provider,
             endpoint: self.endpoint.clone(),
             properties: self.properties.clone(),
-            client: self.client.clone(),
+            transport: Arc::clone(&self.transport),
             closed: false,
             discarded: self.discarded,
             product_version: self.product_version.clone(),
@@ -149,20 +197,6 @@ impl HttpSqlConnectionAdapter {
         let path = endpoint.path().trim_end_matches('/');
         endpoint.set_path(&format!("{path}/{expected_suffix}"));
         Ok(endpoint)
-    }
-
-    fn authenticated(&self, request: RequestBuilder) -> RequestBuilder {
-        let token = self
-            .properties
-            .get("token")
-            .or_else(|| self.properties.get("api_token"));
-        if let Some(token) = token {
-            return request.bearer_auth(token);
-        }
-        match (self.properties.get("user"), self.properties.get("password")) {
-            (Some(user), password) => request.basic_auth(user, password),
-            _ => request,
-        }
     }
 
     fn encode_parameter(&self, value: Value) -> JsonValue {
@@ -273,16 +307,14 @@ impl HttpSqlConnectionAdapter {
             }
             HttpSqlProvider::CloudflareD1 => json!({"sql": sql, "params": parameters}),
         };
-        let request = self.authenticated(self.client.post(self.request_url()?).json(&body));
-        let response = request.send().await.map_err(|error| {
-            self.discarded = error.is_connect() || error.is_timeout();
-            Self::http_error(StatusCode::SERVICE_UNAVAILABLE, error.to_string())
-        })?;
-        let status = response.status();
-        let payload: JsonValue = response.json().await.map_err(|error| {
-            self.discarded = true;
-            Self::http_error(status, format!("invalid HTTP SQL response: {error}"))
-        })?;
+        let (status, payload) = self
+            .transport
+            .send(self.request_url()?, &self.properties, body)
+            .await
+            .map_err(|error| {
+                self.discarded = true;
+                Self::http_error(StatusCode::SERVICE_UNAVAILABLE, error)
+            })?;
         if !status.is_success() {
             if status.is_server_error()
                 || matches!(
@@ -624,8 +656,10 @@ impl AdapterExecutionCore for HttpSqlConnectionAdapter {
         &mut self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, values).await
+    ) -> Result<StandardQueryResult, RdbcError> {
+        self.request(sql, values)
+            .await
+            .map(|result| StandardQueryResult::with_labels(result.rows, result.column_labels))
     }
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -663,10 +697,14 @@ impl druid_rdbc::connection::Connection for HttpSqlConnectionAdapter {
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        Ok(Box::new(super::HttpSqlDatabaseMetaData::new(
-            self.provider,
-            self.endpoint.to_string(),
-            self.product_version.clone(),
+        let product_name = match self.provider {
+            HttpSqlProvider::Rqlite => "rqlite",
+            HttpSqlProvider::CloudflareD1 => "Cloudflare D1",
+        };
+        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
+            self.standard_executor_core()?,
+            Some(product_name.to_owned()),
+            "http_sql_database_metadata_product_name",
         )))
     }
 

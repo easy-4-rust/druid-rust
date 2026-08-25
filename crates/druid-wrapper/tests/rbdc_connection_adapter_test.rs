@@ -53,6 +53,14 @@ async fn rbdc_standard_factory_prepared_query_uses_deterministic_driver_core() {
     let mut rows = prepared.execute_prepared_query().await.unwrap();
     assert!(rows.next().await.unwrap());
     assert_eq!(
+        rows.meta_data()
+            .unwrap()
+            .column(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())
+            .unwrap()
+            .label(),
+        "column_0"
+    );
+    assert_eq!(
         *observed.lock().unwrap(),
         vec![rbs::Value::String("standard-rbdc".to_owned())]
     );
@@ -559,6 +567,55 @@ fn factory_with_history(
         }),
         "fake://database",
     )
+}
+
+#[tokio::test]
+async fn rbdc_connection_first_close_rejects_prepared_and_live_metadata() {
+    let factory = factory(Arc::new(Mutex::new(Vec::new())));
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .unwrap();
+    let mut prepared = connection
+        .prepare_statement(
+            "SELECT value FROM item WHERE id = ?",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    let mut metadata = connection.database_meta_data().await.unwrap();
+    druid_rdbc::connection::Connection::close(connection.as_mut())
+        .await
+        .unwrap();
+    assert!(prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::Int(1),
+        })
+        .is_err());
+    assert!(prepared.clear_parameters().is_err());
+    assert!(prepared.execute_prepared_query().await.is_err());
+    assert!(metadata.database_product_name().await.is_err());
+    assert!(matches!(
+        metadata
+            .tables(druid_rdbc::metadata::TablesQuery::default())
+            .await,
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+
+    let mut second = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .unwrap();
+    let mut statement = second
+        .create_statement(druid_rdbc::statement::StatementOptions::default())
+        .await
+        .unwrap();
+    statement.close().await.unwrap();
+    druid_rdbc::connection::Connection::close(second.as_mut())
+        .await
+        .unwrap();
+    druid_rdbc::connection::Connection::close(second.as_mut())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

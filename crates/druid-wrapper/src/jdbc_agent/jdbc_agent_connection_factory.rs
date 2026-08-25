@@ -1,7 +1,9 @@
+use super::jdbc_agent_connection::{JdbcAgentConnector, NativeJdbcAgentConnector};
 use super::{JdbcAgentConnection, JdbcAgentOptions};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// 每次创建一个未池化 JDBC Agent 物理连接的 Druid 工厂。
 #[derive(Clone)]
@@ -12,6 +14,7 @@ pub struct JdbcAgentConnectionFactory {
     password: Option<String>,
     properties: HashMap<String, String>,
     options: JdbcAgentOptions,
+    connector: Arc<dyn JdbcAgentConnector>,
 }
 
 impl JdbcAgentConnectionFactory {
@@ -29,6 +32,7 @@ impl JdbcAgentConnectionFactory {
             password: None,
             properties: HashMap::new(),
             options,
+            connector: Arc::new(NativeJdbcAgentConnector),
         }
     }
 
@@ -64,14 +68,32 @@ impl JdbcAgentConnectionFactory {
         &self,
         properties: HashMap<String, String>,
     ) -> Result<JdbcAgentConnection, RdbcError> {
-        let connection = JdbcAgentConnection::connect(
+        let connection = JdbcAgentConnection::connect_with_connector(
             &self.url,
             self.validation_query.as_deref(),
             properties,
             self.options.clone(),
+            Arc::clone(&self.connector),
         )
         .await?;
         Ok(connection)
+    }
+
+    #[cfg(test)]
+    fn with_connector(
+        url: impl Into<String>,
+        options: JdbcAgentOptions,
+        connector: Arc<dyn JdbcAgentConnector>,
+    ) -> Self {
+        Self {
+            url: url.into(),
+            validation_query: None,
+            user_name: None,
+            password: None,
+            properties: HashMap::new(),
+            options,
+            connector,
+        }
     }
 
     fn merged_properties(
@@ -120,7 +142,7 @@ impl std::fmt::Debug for JdbcAgentConnectionFactory {
             .field("has_password", &self.password.is_some())
             .field("property_names", &self.properties.keys())
             .field("options", &self.options)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -157,5 +179,156 @@ impl PhysicalConnectionFactory for JdbcAgentConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::jdbc_agent_connection::JdbcAgentTransport;
+    use super::*;
+    use druid_rdbc::connection::Connection;
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::statement::{ParameterIndex, PreparedParameter, StatementOptions};
+    use druid_rdbc::types::Value;
+    use serde_json::{json, Value as JsonValue};
+
+    struct DeterministicJdbcAgentConnector;
+
+    #[async_trait::async_trait]
+    impl JdbcAgentConnector for DeterministicJdbcAgentConnector {
+        async fn connect(
+            &self,
+            _options: JdbcAgentOptions,
+            _payload: JsonValue,
+        ) -> Result<(Box<dyn JdbcAgentTransport>, JsonValue), RdbcError> {
+            Ok((
+                Box::new(DeterministicJdbcAgentTransport { closed: false }),
+                json!({
+                    "sessionId": "deterministic-session",
+                    "driverName": "deterministic-jdbc",
+                    "databaseProductName": "Deterministic JDBC",
+                    "autoCommit": true,
+                    "capabilities": {}
+                }),
+            ))
+        }
+    }
+
+    struct DeterministicJdbcAgentTransport {
+        closed: bool,
+    }
+
+    #[async_trait::async_trait]
+    impl JdbcAgentTransport for DeterministicJdbcAgentTransport {
+        async fn request(
+            &mut self,
+            operation: &str,
+            payload: JsonValue,
+        ) -> Result<JsonValue, RdbcError> {
+            if self.closed {
+                return Err(RdbcError::ConnectionDiscarded);
+            }
+            match operation {
+                "execute" => Ok(json!({
+                    "kind": "update",
+                    "rowsAffected": 1,
+                    "lastInsertId": 9
+                })),
+                "execute_query" => Ok(json!({
+                    "columns": [{"label": "remote_value"}],
+                    "rows": [[payload
+                        .get("params")
+                        .and_then(JsonValue::as_array)
+                        .and_then(|params| params.first())
+                        .cloned()
+                        .unwrap_or_else(|| json!({"kind": "int", "value": 1}))]],
+                    "hasMore": false
+                })),
+                _ => Err(RdbcError::UnsupportedOperation {
+                    operation: "deterministic_jdbc_agent_operation",
+                }),
+            }
+        }
+
+        async fn close(&mut self) -> Result<(), RdbcError> {
+            self.closed = true;
+            Ok(())
+        }
+
+        fn is_unusable(&self) -> bool {
+            self.closed
+        }
+
+        fn statement_context(&self) -> Option<(super::super::AgentRequestHandle, String)> {
+            None
+        }
+    }
+
+    #[tokio::test]
+    async fn jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core() {
+        let factory = JdbcAgentConnectionFactory::with_connector(
+            "jdbc:deterministic:test",
+            JdbcAgentOptions::new("deterministic-agent"),
+            Arc::new(DeterministicJdbcAgentConnector),
+        );
+        let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+            .await
+            .unwrap();
+        let mut statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            statement
+                .execute_update(
+                    "UPDATE remote_item SET value = 1",
+                    druid_rdbc::statement::GeneratedKeys::None,
+                )
+                .await
+                .unwrap(),
+            1
+        );
+        let mut prepared = connection
+            .prepare_statement("SELECT ?", StatementOptions::default())
+            .await
+            .unwrap();
+        prepared
+            .set_parameter(PreparedParameter {
+                index: ParameterIndex::new(1).unwrap(),
+                value: Value::String("jdbc-owned".to_owned()),
+            })
+            .unwrap();
+        let mut rows = prepared.execute_prepared_query().await.unwrap();
+        assert!(rows.next().await.unwrap());
+        assert_eq!(
+            rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+            Value::String("jdbc-owned".to_owned())
+        );
+        let snapshot = rows.meta_data().unwrap();
+        assert_eq!(
+            snapshot
+                .column(ColumnIndex::new(1).unwrap())
+                .unwrap()
+                .label(),
+            "remote_value"
+        );
+        let mut metadata = connection.database_meta_data().await.unwrap();
+        assert_eq!(
+            metadata.database_product_name().await.unwrap(),
+            "Deterministic JDBC"
+        );
+        statement.close().await.unwrap();
+        Connection::close(connection.as_mut()).await.unwrap();
+        assert!(prepared.clear_parameters().is_err());
+        assert!(prepared.execute_prepared_query().await.is_err());
+        assert!(metadata.database_product_name().await.is_err());
+        assert!(matches!(
+            metadata
+                .tables(druid_rdbc::metadata::TablesQuery::default())
+                .await,
+            Err(RdbcError::ConnectionDiscarded)
+        ));
+        Connection::close(connection.as_mut()).await.unwrap();
+        assert_eq!(snapshot.column_count(), 1);
     }
 }

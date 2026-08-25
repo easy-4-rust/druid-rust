@@ -1,9 +1,11 @@
 //! `DuckDB` 原生物理连接适配器。
 
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
+use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
+use crate::standard_query_result::StandardQueryResult;
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::RdbcError;
@@ -708,8 +710,13 @@ impl AdapterExecutionCore for DuckDbConnectionAdapter {
         &mut self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, values).await
+    ) -> Result<StandardQueryResult, RdbcError> {
+        let sql = sql.to_owned();
+        self.run_blocking(move |connection| {
+            Self::query(connection, &sql, &values)
+                .map(|(rows, labels)| StandardQueryResult::with_labels(rows, labels))
+        })
+        .await
     }
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -761,9 +768,10 @@ impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        Ok(Box::new(super::DuckDbDatabaseMetaData::new(
-            self.connection_ref()?,
-            self.url.clone(),
+        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
+            self.standard_executor_core()?,
+            Some("DuckDB".to_owned()),
+            "duckdb_database_metadata_product_name",
         )))
     }
 

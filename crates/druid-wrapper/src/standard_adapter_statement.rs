@@ -20,7 +20,12 @@ impl StandardAdapterStatement {
     }
 
     fn executor_core(&self) -> Result<&Arc<dyn StandardExecutor>, RdbcError> {
-        self.executor.as_ref().ok_or(RdbcError::ConnectionDiscarded)
+        let executor = self
+            .executor
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        executor.ensure_open()?;
+        Ok(executor)
     }
 
     fn generated_keys_core(generated_keys: &GeneratedKeys) -> Result<(), RdbcError> {
@@ -40,8 +45,8 @@ druid_rdbc::impl_standard_wrapper!(StandardAdapterStatement => Statement);
 impl Statement for StandardAdapterStatement {
     async fn execute_query(&mut self, sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
-        let rows = executor.execute_query(sql, Vec::new()).await?;
-        Ok(Box::new(StandardAdapterResultSet::new(rows, executor)))
+        let result = executor.execute_query(sql, Vec::new()).await?;
+        Ok(Box::new(StandardAdapterResultSet::new(result, executor)))
     }
 
     async fn execute_update(
@@ -68,7 +73,7 @@ impl Statement for StandardAdapterStatement {
         values: Vec<Value>,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
-        let rows = executor.execute_query(sql, values).await?;
-        Ok(Box::new(StandardAdapterResultSet::new(rows, executor)))
+        let result = executor.execute_query(sql, values).await?;
+        Ok(Box::new(StandardAdapterResultSet::new(result, executor)))
     }
 }

@@ -1,10 +1,9 @@
 //! Wrapper-private canonical eager ResultSet for non-SQLx adapter cores.
 
 use crate::standard_adapter_executor::StandardExecutor;
+use crate::standard_query_result::StandardQueryResult;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::metadata::{
-    ColumnDescriptor, ColumnNullability, ResultSetMetaData, ResultSetMetaDataSnapshot,
-};
+use druid_rdbc::metadata::{ResultSetMetaData, ResultSetMetaDataSnapshot};
 use druid_rdbc::result_set::{ColumnIndex, ResultSet};
 use druid_rdbc::types::{Row, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,30 +20,25 @@ pub(crate) struct StandardAdapterResultSet {
 }
 
 impl StandardAdapterResultSet {
-    pub(crate) fn new(rows: Vec<Row>, lease: Arc<dyn StandardExecutor>) -> Self {
-        let width = rows.first().map_or(0, |row| row.values.len());
-        let columns = (1..=width)
-            .map(|index| {
-                ColumnDescriptor::new(
-                    format!("column_{index}"),
-                    "UNKNOWN",
-                    ColumnNullability::Unknown,
-                )
-            })
-            .collect();
+    pub(crate) fn new(result: StandardQueryResult, lease: Arc<dyn StandardExecutor>) -> Self {
         Self {
-            rows,
+            rows: result.rows,
             cursor: 0,
             positioned: false,
             was_null: AtomicBool::new(false),
             closed: false,
             lease: Some(lease),
-            metadata: Arc::new(ResultSetMetaDataSnapshot::new(columns)),
+            metadata: Arc::new(ResultSetMetaDataSnapshot::new(result.columns)),
         }
     }
 
     fn ensure_open_core(&self) -> Result<(), RdbcError> {
-        if self.closed {
+        if self.closed
+            || self
+                .lease
+                .as_ref()
+                .is_some_and(|executor| executor.is_closed())
+        {
             Err(RdbcError::ConnectionDiscarded)
         } else {
             Ok(())

@@ -80,7 +80,10 @@ async fn live_metadata_observes_connection_first_close() {
         .unwrap();
     Connection::close(&mut connection).await.unwrap();
     assert!(metadata.database_product_name().await.is_err());
-    assert!(metadata.tables(TablesQuery::default()).await.is_err());
+    assert!(matches!(
+        metadata.tables(TablesQuery::default()).await,
+        Err(druid_rdbc::error::RdbcError::ConnectionDiscarded)
+    ));
 }
 
 #[tokio::test]

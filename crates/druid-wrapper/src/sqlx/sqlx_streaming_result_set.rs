@@ -695,6 +695,13 @@ impl SqlxStreamingResultSet {
     }
 
     fn next_core(&self) -> Result<bool, RdbcError> {
+        if self
+            .actor_lease
+            .as_ref()
+            .is_some_and(|actor| actor.is_closed())
+        {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
         let mut state = self.state();
         if state.closed {
             return Err(RdbcError::Other("result set is closed".to_string()));
@@ -712,6 +719,13 @@ impl SqlxStreamingResultSet {
     }
 
     fn value_core(&self, column_index: usize) -> Result<Value, RdbcError> {
+        if self
+            .actor_lease
+            .as_ref()
+            .is_some_and(|actor| actor.is_closed())
+        {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
         let zero_index = column_index.checked_sub(1).ok_or_else(|| {
             RdbcError::DriverError(format!(
                 "column_index {column_index} is not a valid 1-based index"

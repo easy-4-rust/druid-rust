@@ -255,15 +255,25 @@ impl SqlxPreparedStatement {
     }
 
     fn actor_core(&self) -> Result<&Arc<SqlxConnectionActor>, RdbcError> {
+        self.ensure_open_core()?;
         match &self.backend {
-            SqlxPreparedStatementBackend::OwnedActor(Some(actor))
-                if !self.closed.load(Ordering::Acquire) =>
-            {
-                Ok(actor)
-            }
+            SqlxPreparedStatementBackend::OwnedActor(Some(actor)) => Ok(actor),
             _ => Err(RdbcError::UnsupportedOperation {
                 operation: "sqlx_standard_statement_requires_owned_actor",
             }),
+        }
+    }
+
+    fn ensure_open_core(&self) -> Result<(), RdbcError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        match &self.backend {
+            SqlxPreparedStatementBackend::OwnedActor(Some(actor)) if actor.is_closed() => {
+                Err(RdbcError::ConnectionDiscarded)
+            }
+            SqlxPreparedStatementBackend::OwnedActor(None) => Err(RdbcError::ConnectionDiscarded),
+            _ => Ok(()),
         }
     }
 
@@ -396,24 +406,29 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
         parameter_index: usize,
         parameter: &PreparedInputParameter,
     ) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
         self.parameter_state.set(parameter_index, parameter)
     }
 
     fn clear_parameters(&self) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
         self.parameter_state.clear_parameters();
         Ok(())
     }
 
     fn add_batch(&self, params: &[Value]) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
         self.parameter_state.add_values(params);
         Ok(())
     }
 
     fn add_parameter_batch(&self, params: &[PreparedInputParameter]) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
         self.parameter_state.add_parameters(params)
     }
 
     fn clear_batch(&self) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
         self.parameter_state.clear_batches();
         Ok(())
     }
@@ -493,13 +508,15 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     async fn execute_prepared_query(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        let actor = Arc::clone(self.actor_core()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
-        self.actor_core()?.execute_query(&self.sql, values).await
+        actor.execute_query(&self.sql, values).await
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
+        let actor = Arc::clone(self.actor_core()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
-        self.actor_core()?.execute_update(&self.sql, values).await
+        actor.execute_update(&self.sql, values).await
     }
 
     fn parameter_meta_data(&self) -> Result<Arc<dyn ParameterMetaData>, RdbcError> {

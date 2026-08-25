@@ -1,7 +1,9 @@
+use super::libsql_connection_adapter::LibSqlTransport;
 use super::LibSqlConnectionAdapter;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Turso/libSQL 原生远程未池化物理连接工厂。
 ///
@@ -11,6 +13,7 @@ use std::collections::HashMap;
 pub struct LibSqlConnectionFactory {
     url: String,
     properties: HashMap<String, String>,
+    transport: Option<Arc<dyn LibSqlTransport>>,
 }
 
 impl std::fmt::Debug for LibSqlConnectionFactory {
@@ -22,7 +25,7 @@ impl std::fmt::Debug for LibSqlConnectionFactory {
                 "property_names",
                 &self.properties.keys().collect::<Vec<_>>(),
             )
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -32,6 +35,7 @@ impl LibSqlConnectionFactory {
         Self {
             url: url.into(),
             properties: HashMap::new(),
+            transport: None,
         }
     }
 
@@ -43,6 +47,12 @@ impl LibSqlConnectionFactory {
     }
 
     async fn create_adapter_core(&self) -> Result<LibSqlConnectionAdapter, RdbcError> {
+        if let Some(transport) = &self.transport {
+            let mut connection =
+                LibSqlConnectionAdapter::from_transport(self.url.clone(), Arc::clone(transport));
+            connection.ping().await?;
+            return Ok(connection);
+        }
         let token = self
             .properties
             .get("token")
@@ -52,6 +62,15 @@ impl LibSqlConnectionFactory {
         let mut connection = LibSqlConnectionAdapter::connect(&self.url, token).await?;
         connection.ping().await?;
         Ok(connection)
+    }
+
+    #[cfg(test)]
+    fn with_transport(url: impl Into<String>, transport: Arc<dyn LibSqlTransport>) -> Self {
+        Self {
+            url: url.into(),
+            properties: HashMap::new(),
+            transport: Some(transport),
+        }
     }
 }
 
@@ -81,5 +100,112 @@ impl druid_rdbc::driver::ConnectionFactory for LibSqlConnectionFactory {
 
     fn name(&self) -> &str {
         "libsql-rs"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::libsql_connection_adapter::LibSqlResult;
+    use super::*;
+    use druid_rdbc::connection::Connection;
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::statement::{ParameterIndex, PreparedParameter, StatementOptions};
+    use druid_rdbc::types::{Row, Value};
+
+    struct DeterministicLibSqlTransport;
+
+    #[async_trait::async_trait]
+    impl LibSqlTransport for DeterministicLibSqlTransport {
+        async fn request(&self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, RdbcError> {
+            if sql.starts_with("UPDATE") {
+                Ok(LibSqlResult {
+                    rows: Vec::new(),
+                    labels: Vec::new(),
+                    rows_affected: 1,
+                    last_insert_id: Some(9),
+                })
+            } else {
+                Ok(LibSqlResult {
+                    rows: vec![Row::new(vec![params
+                        .into_iter()
+                        .next()
+                        .unwrap_or(Value::Int(1))])],
+                    labels: vec!["remote_value".to_owned()],
+                    rows_affected: 0,
+                    last_insert_id: None,
+                })
+            }
+        }
+
+        async fn prepare(&self, _sql: &str) -> Result<(), RdbcError> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn libsql_standard_factory_uses_deterministic_transport_owned_core() {
+        let factory = LibSqlConnectionFactory::with_transport(
+            "libsql://deterministic.invalid",
+            Arc::new(DeterministicLibSqlTransport),
+        );
+        let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+            .await
+            .unwrap();
+        let mut statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(
+            statement
+                .execute_update(
+                    "UPDATE remote_item SET value = 1",
+                    druid_rdbc::statement::GeneratedKeys::None,
+                )
+                .await
+                .unwrap(),
+            1
+        );
+        let mut prepared = connection
+            .prepare_statement("SELECT ?", StatementOptions::default())
+            .await
+            .unwrap();
+        prepared
+            .set_parameter(PreparedParameter {
+                index: ParameterIndex::new(1).unwrap(),
+                value: Value::String("libsql-owned".to_owned()),
+            })
+            .unwrap();
+        let mut rows = prepared.execute_prepared_query().await.unwrap();
+        assert!(rows.next().await.unwrap());
+        assert_eq!(
+            rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+            Value::String("libsql-owned".to_owned())
+        );
+        let snapshot = rows.meta_data().unwrap();
+        assert_eq!(
+            snapshot
+                .column(ColumnIndex::new(1).unwrap())
+                .unwrap()
+                .label(),
+            "remote_value"
+        );
+        let mut metadata = connection.database_meta_data().await.unwrap();
+        assert_eq!(
+            metadata.database_product_name().await.unwrap(),
+            "Turso/libSQL"
+        );
+        statement.close().await.unwrap();
+        Connection::close(connection.as_mut()).await.unwrap();
+        assert!(prepared.clear_parameters().is_err());
+        assert!(prepared.execute_prepared_query().await.is_err());
+        assert!(metadata.database_product_name().await.is_err());
+        assert!(matches!(
+            metadata
+                .tables(druid_rdbc::metadata::TablesQuery::default())
+                .await,
+            Err(RdbcError::ConnectionDiscarded)
+        ));
+        Connection::close(connection.as_mut()).await.unwrap();
+        assert_eq!(snapshot.column_count(), 1);
     }
 }

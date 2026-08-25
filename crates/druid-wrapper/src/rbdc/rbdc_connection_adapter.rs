@@ -1,9 +1,11 @@
 //! RBDC 物理连接适配器。
 
 use super::rbdc_prepared_statement::RbdcPreparedStatement;
+use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
+use crate::standard_query_result::StandardQueryResult;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
@@ -588,10 +590,10 @@ impl AdapterExecutionCore for RbdcConnectionAdapter {
         &mut self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
+    ) -> Result<StandardQueryResult, RdbcError> {
         self.fetch_rows_with_labels(sql, values)
             .await
-            .map(|(rows, _)| rows)
+            .map(|(rows, labels)| StandardQueryResult::with_labels(rows, labels))
     }
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -629,9 +631,17 @@ impl druid_rdbc::connection::Connection for RbdcConnectionAdapter {
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        Ok(Box::new(
-            super::rbdc_database_meta_data::RbdcDatabaseMetaData::owned(self.driver_name.clone()),
-        ))
+        let mut snapshot =
+            super::rbdc_database_meta_data::RbdcDatabaseMetaData::owned(self.driver_name.clone());
+        let product_name =
+            druid_rdbc::metadata::DatabaseMetaData::database_product_name(&mut snapshot)
+                .await
+                .ok();
+        Ok(Box::new(StandardAdapterDatabaseMetaData::new(
+            self.standard_executor_core()?,
+            product_name,
+            "rbdc_database_metadata_product_name",
+        )))
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
