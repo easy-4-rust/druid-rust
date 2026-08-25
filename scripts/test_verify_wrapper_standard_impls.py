@@ -103,21 +103,27 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
 
     @staticmethod
+    def remote_chain_steps() -> tuple[str, ...]:
+        """Return the ordered factory-to-result evidence required for remote families."""
+
+        return (
+            "ConnectionFactory::create();\n",
+            "connection.create_statement();\n",
+            "statement.execute_update();\n",
+            "connection.prepare_statement();\n",
+            "prepared.set_parameter();\n",
+            "prepared.execute_prepared_query();\n",
+            "result.next();\n",
+            "result.meta_data();\n",
+            "connection.database_meta_data();\n",
+            "Connection::close(&mut connection);\n",
+        )
+
+    @staticmethod
     def remote_chain() -> str:
         """Return the literal factory-to-result evidence required for remote families."""
 
-        return (
-            "ConnectionFactory::create();\n"
-            "connection.create_statement();\n"
-            "connection.prepare_statement();\n"
-            "prepared.set_parameter();\n"
-            "statement.execute_update();\n"
-            "prepared.execute_prepared_query();\n"
-            "result.next();\n"
-            "result.meta_data();\n"
-            "connection.database_meta_data();\n"
-            "Connection::close(&mut connection);\n"
-        )
+        return "".join(WrapperStandardVerifierTest.remote_chain_steps())
 
     def test_rejects_adapter_that_only_implements_physical(self) -> None:
         self.write_source("impl PhysicalConnection for DemoConnection {}\n")
@@ -264,7 +270,8 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "#[test]\nfn runs() { if false { execute_update(); } assert!(true); }\n",
             "#[test]\nfn runs() { while false { execute_update(); } assert!(true); }\n",
         ):
-            body = extract_behavior_function(source, "runs")
+            paths = extract_behavior_function(source, "runs")
+            body = "\n".join(" ".join(path.tokens) for path in paths)
             self.assertNotIn("execute_update", body)
 
         for source in (
@@ -285,7 +292,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 "test": True,
             },
         )
-        body = extract_behavior_function(
+        paths = extract_behavior_function(
             "#[cfg(all(feature = \"enabled\", target_os = \"fixture_os\"))]\n"
             "#[cfg_attr(feature = \"enabled\", tokio::test)]\n"
             "async fn runs() {\n"
@@ -295,6 +302,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "runs",
             profile,
         )
+        body = "\n".join(" ".join(path.tokens) for path in paths)
         self.assertIn("execute_update", body)
         self.assertIn("assert !", body)
         self.assertNotIn("disabled_call", body)
@@ -311,91 +319,207 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "cannot prove atom"):
             verify_adapter_source(self.root, self.row)
 
-    def test_full_verifier_rejects_remote_chain_in_nested_if_false(self) -> None:
-        """A live outer branch cannot make an inner static-dead chain count as evidence."""
+    def test_full_verifier_rejects_path_incoherent_branches_and_early_exit(self) -> None:
+        """One candidate path must own the ordered chain and its observable assertion."""
 
-        source = (
-            "#[test]\nfn runs() {\n"
-            " if true {\n"
-            "  if false {\n"
-            f"{self.remote_chain()}"
-            "  }\n"
-            "  assert!(true);\n"
-            " }\n"
-            "}\n"
+        steps = self.remote_chain_steps()
+        fixtures = {
+            "cross-if-else": (
+                "if runtime_condition() {\n"
+                + "".join(steps[:5])
+                + "} else {\n"
+                + "".join(steps[5:])
+                + "}\nassert!(true);\n"
+            ),
+            "nested-runtime": (
+                "if outer_condition() {\n"
+                " if inner_condition() {\n"
+                + "".join(steps[:4])
+                + " } else {\n"
+                + "".join(steps[4:7])
+                + " }\n} else {\n"
+                + "".join(steps[7:])
+                + "}\nassert!(true);\n"
+            ),
+            "early-return": (
+                "".join(steps[:4])
+                + "if runtime_condition() {\n"
+                + "".join(steps[4:6])
+                + " return;\n}\n"
+                + "".join(steps[6:])
+                + "assert!(true);\n"
+            ),
+            "assertion-other-branch": (
+                "if runtime_condition() {\n"
+                + self.remote_chain()
+                + "} else { assert!(true); }\n"
+            ),
+            "split-match-arms": (
+                "match runtime_value() {\n"
+                " Some(_) => {\n"
+                + "".join(steps[:5])
+                + " },\n None => {\n"
+                + "".join(steps[5:])
+                + " assert!(true); },\n}\n"
+            ),
+        }
+        for label, body in fixtures.items():
+            with self.subTest(label=label):
+                source = f"#[test]\nfn runs() {{\n{body}}}\n"
+                with self.assertRaises(VerificationError):
+                    self.verify_remote_behavior(source)
+
+    def test_full_verifier_rejects_loop_only_and_deferred_execution_evidence(self) -> None:
+        """Maybe-zero loops and uncalled deferred bodies cannot impersonate test execution."""
+
+        fixtures = {
+            "nested-if-false": (
+                "if true { if false {\n"
+                + self.remote_chain()
+                + "} assert!(true); }\n"
+            ),
+            "nested-while-false": (
+                "if true { while false {\n"
+                + self.remote_chain()
+                + "} assert!(true); }\n"
+            ),
+            "runtime-while": (
+                "while runtime_condition() {\n"
+                + self.remote_chain()
+                + "assert!(true); }\n"
+            ),
+            "maybe-empty-for": (
+                "for value in maybe_empty() { let _ = value;\n"
+                + self.remote_chain()
+                + "assert!(true); }\n"
+            ),
+            "uncalled-closure": (
+                "let evidence = || {\n"
+                + self.remote_chain()
+                + "assert!(true); };\nlet _ = evidence;\n"
+            ),
+            "unawaited-async-block": (
+                "let evidence = async move {\n"
+                + self.remote_chain()
+                + "assert!(true); };\nlet _ = evidence;\n"
+            ),
+            "uncalled-async-closure": (
+                "let evidence = async || {\n"
+                + self.remote_chain()
+                + "assert!(true); };\nlet _ = evidence;\n"
+            ),
+            "uncalled-helper": (
+                "fn helper() {\n"
+                + self.remote_chain()
+                + "assert!(true); }\nlet _ = helper;\n"
+            ),
+            "cfg-disabled": (
+                "#[cfg(any())] {\n"
+                + self.remote_chain()
+                + "assert!(true); }\n"
+            ),
+            "comment-and-string": (
+                "let text = \"ConnectionFactory::create create_statement execute_update "
+                "prepare_statement set_parameter execute_prepared_query next meta_data "
+                "database_meta_data Connection::close assert!\";\n"
+                "// ConnectionFactory::create(); result.next(); assert!(true);\n"
+                "let _ = text;\n"
+            ),
+        }
+        for label, body in fixtures.items():
+            with self.subTest(label=label):
+                source = f"#[test]\nfn runs() {{\n{body}}}\n"
+                with self.assertRaises(VerificationError):
+                    self.verify_remote_behavior(source)
+
+    def test_full_verifier_rejects_macro_definition_order_and_path_explosion_attacks(self) -> None:
+        """Definitions, marker substrings, wrong order, and unbounded paths fail closed."""
+
+        steps = self.remote_chain_steps()
+        branching = "".join(
+            f"if condition_{index}() {{ branch_{index}(); }}\n" for index in range(7)
         )
-        with self.assertRaisesRegex(VerificationError, "factory-to-result chain"):
-            self.verify_remote_behavior(source)
+        fixtures = {
+            "uninvoked-macro-definition": (
+                "macro_rules! evidence { () => {{\n"
+                + self.remote_chain()
+                + "assert!(true); }}; }\nassert!(true);\n"
+            ),
+            "multi-macro-arms": (
+                "macro_rules! evidence {\n"
+                " () => {{\n"
+                + "".join(steps[:5])
+                + " }};\n ($value:expr) => {{ let _ = $value;\n"
+                + "".join(steps[5:])
+                + "assert!(true); }};\n}\nassert!(true);\n"
+            ),
+            "uninvoked-macro-2-definition": (
+                "macro evidence($value:expr) { let _ = $value;\n"
+                + self.remote_chain()
+                + "assert!(true); }\nassert!(true);\n"
+            ),
+            "invoked-macro-name-only": (
+                "macro_rules! evidence { () => {{\n"
+                + self.remote_chain()
+                + "assert!(true); }}; }\nevidence!();\nassert!(true);\n"
+            ),
+            "wrong-token-order": "".join(reversed(steps)) + "assert!(true);\n",
+            "same-leaf-substring": (
+                "".join(step for step in steps if "result.meta_data" not in step)
+                + "connection.database_meta_data();\nassert!(true);\n"
+            ),
+            "path-explosion": branching + self.remote_chain() + "assert!(true);\n",
+        }
+        for label, body in fixtures.items():
+            with self.subTest(label=label):
+                source = f"#[test]\nfn runs() {{\n{body}}}\n"
+                with self.assertRaises(VerificationError):
+                    self.verify_remote_behavior(source)
 
-    def test_full_verifier_rejects_remote_chain_in_nested_while_false(self) -> None:
-        """A nested static-false loop cannot carry a remote behavior chain."""
+    def test_full_verifier_accepts_only_path_coherent_remote_evidence(self) -> None:
+        """Straight, selected-static, and independently complete runtime paths remain valid."""
 
-        source = (
-            "#[test]\nfn runs() {\n"
-            " if true {\n"
-            "  while false {\n"
-            f"{self.remote_chain()}"
-            "  }\n"
-            "  assert!(true);\n"
-            " }\n"
-            "}\n"
-        )
-        with self.assertRaisesRegex(VerificationError, "factory-to-result chain"):
-            self.verify_remote_behavior(source)
-
-    def test_full_verifier_recurses_through_live_else_if_and_nested_blocks(self) -> None:
-        """Dead-then/live-else nesting must still inspect deeper block and loop bodies."""
-
-        source = (
-            "#[test]\nfn runs() {\n"
-            " if false {\n"
-            "  unreachable_call();\n"
-            " } else if true {\n"
-            "  { loop {\n"
-            "   if false {\n"
-            f"{self.remote_chain()}"
-            "   }\n"
-            "   break;\n"
-            "  } }\n"
-            "  assert!(true);\n"
-            " }\n"
-            "}\n"
-        )
-        with self.assertRaisesRegex(VerificationError, "factory-to-result chain"):
-            self.verify_remote_behavior(source)
-
-    def test_full_verifier_keeps_live_else_and_both_runtime_branches(self) -> None:
-        """Literal-live and unknown-runtime branches remain conservative behavior evidence."""
-
-        live_else = (
-            "#[test]\nfn runs() {\n"
-            " if false { unreachable_call(); } else {\n"
-            f"{self.remote_chain()}"
-            " }\n"
-            " assert!(true);\n"
-            "}\n"
-        )
-        self.verify_remote_behavior(live_else)
-
-        runtime_branches = (
-            "#[test]\nfn runs() {\n"
-            " if runtime_condition() {\n"
-            "  ConnectionFactory::create();\n"
-            "  connection.create_statement();\n"
-            "  connection.prepare_statement();\n"
-            "  prepared.set_parameter();\n"
-            "  statement.execute_update();\n"
-            " } else {\n"
-            "  prepared.execute_prepared_query();\n"
-            "  result.next();\n"
-            "  result.meta_data();\n"
-            "  connection.database_meta_data();\n"
-            "  Connection::close(&mut connection);\n"
-            " }\n"
-            " assert!(true);\n"
-            "}\n"
-        )
-        self.verify_remote_behavior(runtime_branches)
+        fixtures = {
+            "straight-line": self.remote_chain() + "assert!(true);\n",
+            "one-complete-runtime-branch": (
+                "if runtime_condition() {\n"
+                + self.remote_chain()
+                + "assert!(true);\n} else { harmless(); }\n"
+            ),
+            "literal-true": (
+                "if true {\n"
+                + self.remote_chain()
+                + "assert!(true);\n} else { unreachable_call(); }\n"
+            ),
+            "literal-false-live-else": (
+                "if false { unreachable_call(); } else {\n"
+                + self.remote_chain()
+                + "assert!(true);\n}\n"
+            ),
+            "both-runtime-branches-complete": (
+                "if runtime_condition() {\n"
+                + self.remote_chain()
+                + "assert!(true);\n} else {\n"
+                + self.remote_chain()
+                + "assert_eq!(1, 1);\n}\n"
+            ),
+            "one-complete-match-arm": (
+                "match runtime_value() {\n"
+                " Some(_) => {\n"
+                + self.remote_chain()
+                + "assert!(true); },\n None => { harmless(); },\n}\n"
+            ),
+            "compile-backed-direct-macro-arguments": (
+                "macro_rules! execute_direct { ($($body:tt)*) => {{ $($body)* }}; }\n"
+                "execute_direct!(\n"
+                + self.remote_chain()
+                + "assert!(true);\n);\n"
+            ),
+        }
+        for label, body in fixtures.items():
+            with self.subTest(label=label):
+                source = f"#[test]\nfn runs() {{\n{body}}}\n"
+                self.verify_remote_behavior(source)
 
 
 if __name__ == "__main__":

@@ -534,3 +534,84 @@ The checked consumer TSV SHA remains
 semantic TSV bytes are unchanged. Production adapters, Cargo/lock, Druid/admin, Task 5, Physical
 names, unsafe, and manual Send/Sync are unchanged. N2 now has an implementation disposition of
 **ADDRESSED, pending independent re-review**.
+
+## 18. Fix round 5/5 implementation (base `2a4a249`)
+
+This append-only section records the N2 path-coherence implementation. It does not claim review
+clear; Task 5 remains blocked pending the independent final re-review/breaker ruling.
+
+### 18.1 Full-verifier RED -> GREEN
+
+The existing verifier self-test contract remains exactly `18` test methods. Fresh full-verifier
+subcases first produced 16 expected `VerificationError not raised` failures against the round-4
+implementation. They cover:
+
+- mutually exclusive and nested runtime `if/else` branches, early return, match-arm splitting, and
+  a complete chain separated from its assertion;
+- runtime/maybe-empty loops, uncalled closure/helper/async block/async closure, cfg-dead code, and
+  comment/string tokens;
+- uninvoked `macro_rules!`, multiple macro arms, uninvoked macro-2, and a macro invocation whose
+  call-site contains only the macro name;
+- wrong call order, repeated `database_meta_data` attempting to satisfy exact `meta_data`, and a
+  seven-branch path explosion.
+
+Two same-class gaps found during implementation received their own incremental RED -> GREEN cycle:
+macro-2 parameter delimiters were initially excluded without excluding the following expansion
+body, and an uncalled `async ||` closure was initially not recognized as deferred execution. The
+final self-test result is `18/18 PASS`, including all of these permanent subcases and the prior
+nested literal/cfg controls.
+
+### 18.2 Bounded feasible-path model
+
+The verifier now builds ordered `BehaviorPathSummary` alternatives instead of flattening one live
+token union:
+
+- literal `true/false` selects one branch; runtime `if/else` and parsed `match` arms fork; nested
+  controls recurse; `return` terminates only its candidate path; suffix tokens join only
+  fallthrough paths;
+- runtime `while` and `for` bodies cannot supply evidence because zero iterations are feasible;
+  `loop` and `while true` bodies reach a suffix only through a proven `break`; divergent candidates
+  cannot satisfy evidence;
+- candidate summaries are deduplicated and capped at 64; exceeding the cap fails closed;
+- complete `macro_rules!` and macro-2 definition ranges, nested helper function bodies, uncalled
+  closures, and unawaited async blocks contribute no execution tokens;
+- non-assertion function-like macro arguments are considered only after exact Cargo test inventory
+  proves the named test is compiled; expansion bodies are never simulated. Direct call-site
+  arguments remain analyzable, while an invocation name alone supplies no behavior;
+- approved direct assertion macros (`assert*`, `debug_assert*`, `assert_impl_all!`, `matches!`) are
+  recognized by exact invocation tokens, not comments, literals, names, or substrings.
+
+Every remote candidate path is checked independently for exact call tokens in the observed test
+order: factory create -> Statement construction/update -> Prepared construction/setter/query ->
+ResultSet next/metadata -> live DatabaseMetaData -> Connection close. The complete ordered chain
+and an approved assertion must occur on the same feasible path. Exact token matching prevents
+`database_meta_data` from impersonating `meta_data`; the scan cursor prevents reversed order from
+passing.
+
+This is intentionally not a general Rust interpreter. Calls in unknown/maybe-zero loop bodies,
+uncalled or indirectly scheduled closures/futures, helper bodies, and macro expansions are ignored;
+evidence tests that need those abstractions must expose the required chain directly. Only an async
+block followed immediately by `.await` is traversed. These boundaries are fail-closed for Task 4
+evidence.
+
+### 18.3 Real evidence and non-regression
+
+The HTTP SQL, libSQL, and JDBC Agent behavior tests needed no source change. Each compile-backed
+test resolves to exactly one `fallthrough` path with `10/10` ordered chain calls and an observable
+assertion. Fresh gates:
+
+- wrapper verifier self/live: `18/18 PASS`; `31/21/6/1` unchanged;
+- denominator self/live: `41/41 PASS`; `73/55/3557`; projection SHA
+  `18bb9682efb4e8521556f13abbc7b1320f2f2bf2d9b9ccb18a0576b3d02d5221`;
+- semantic self/adapter-live: `16/16 PASS`; `52/17/0`; hashes remain `5d99...` / `4588...`;
+- purity self/transitional: `103/103 PASS + live29`;
+- wrapper default/all-feature complete test matrices, druid-rdbc all-target/all-feature `20/20`,
+  druid-rdbc doc `1/1`, druid-rdbc Clippy, wrapper/workspace all-feature checks, wrapper scoped
+  no-deps Clippy, wrapper docs/doctests, rustfmt, Python byte-compile, and diff check: PASS;
+- dependency-aware wrapper Clippy reproduces only the two unchanged Task 5 baseline warnings at
+  `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`.
+
+Adapter/consumer/semantic TSV SHA-256 values remain respectively `fda28b7e...`, `3a190f9e...`, and
+`45882120...`; their bytes are unchanged. Production adapters, Cargo/lock, Druid/admin, Task 5,
+Physical names, unsafe, and manual Send/Sync are unchanged. N2 has an implementation disposition of
+**ADDRESSED, pending independent final re-review**.
