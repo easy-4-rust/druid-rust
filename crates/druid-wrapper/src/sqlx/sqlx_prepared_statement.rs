@@ -1,8 +1,11 @@
 //! `SQLx` 预编译语句适配器。
 
+use super::sqlx_connection_actor::SqlxConnectionActor;
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
+use crate::prepared_parameter_meta_data_snapshot::PreparedParameterMetaDataSnapshot;
 use crate::prepared_parameter_state::PreparedParameterState;
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::metadata::ParameterMetaData;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
     SqlTextStatement,
@@ -16,7 +19,18 @@ use sqlx::{Column, Statement};
 use std::any::Any;
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tokio::sync::watch;
+
+type StatementState = SqlTextStatement;
+
+fn count_placeholders(sql: &str) -> usize {
+    sql.bytes().filter(|byte| *byte == b'?').count()
+}
+
+fn statement_state_core() -> StatementState {
+    SqlTextStatement::new(PhysicalStatementOptions::default())
+}
 
 /// `SQLx` 语句执行期间由 Druid 控制面产生的中断结果。
 pub(crate) enum SqlxStatementExecutionError {
@@ -30,6 +44,7 @@ enum SqlxPreparedStatementBackend {
     MySql(MySqlStatement<'static>),
     PostgreSql(PgStatement<'static>),
     Sqlite(SqliteStatement<'static>),
+    OwnedActor(Arc<SqlxConnectionActor>),
 }
 
 /// `SQLx` 驱动 prepare 结果。
@@ -40,15 +55,18 @@ pub struct SqlxPreparedStatement {
     sql: String,
     backend: SqlxPreparedStatementBackend,
     closed: AtomicBool,
-    statement: SqlTextStatement,
+    statement: StatementState,
     parameter_state: PreparedParameterState,
+    parameter_count: usize,
     cancel_generation: watch::Sender<u64>,
 }
 
 impl SqlxPreparedStatement {
     pub(crate) fn any(sql: impl Into<String>, statement: AnyStatement<'static>) -> Self {
+        let sql = sql.into();
         Self {
-            sql: sql.into(),
+            parameter_count: count_placeholders(&sql),
+            sql,
             backend: SqlxPreparedStatementBackend::Any(statement),
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
@@ -58,19 +76,23 @@ impl SqlxPreparedStatement {
     }
 
     pub(crate) fn sqlite(sql: impl Into<String>, statement: SqliteStatement<'static>) -> Self {
+        let sql = sql.into();
         Self {
-            sql: sql.into(),
+            parameter_count: count_placeholders(&sql),
+            sql,
             backend: SqlxPreparedStatementBackend::Sqlite(statement),
             closed: AtomicBool::new(false),
-            statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
+            statement: statement_state_core(),
             parameter_state: PreparedParameterState::new(),
             cancel_generation: watch::channel(0).0,
         }
     }
 
     pub(crate) fn mysql(sql: impl Into<String>, statement: MySqlStatement<'static>) -> Self {
+        let sql = sql.into();
         Self {
-            sql: sql.into(),
+            parameter_count: count_placeholders(&sql),
+            sql,
             backend: SqlxPreparedStatementBackend::MySql(statement),
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
@@ -80,11 +102,30 @@ impl SqlxPreparedStatement {
     }
 
     pub(crate) fn postgresql(sql: impl Into<String>, statement: PgStatement<'static>) -> Self {
+        let sql = sql.into();
         Self {
-            sql: sql.into(),
+            parameter_count: count_placeholders(&sql),
+            sql,
             backend: SqlxPreparedStatementBackend::PostgreSql(statement),
             closed: AtomicBool::new(false),
             statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
+            parameter_state: PreparedParameterState::new(),
+            cancel_generation: watch::channel(0).0,
+        }
+    }
+
+    /// 创建持有 canonical SQLx actor 的 owned Statement/PreparedStatement。
+    pub(crate) fn owned_statement(
+        sql: String,
+        actor: Arc<SqlxConnectionActor>,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Self {
+        Self {
+            parameter_count: count_placeholders(&sql),
+            sql,
+            backend: SqlxPreparedStatementBackend::OwnedActor(actor),
+            closed: AtomicBool::new(false),
+            statement: statement_state_core(),
             parameter_state: PreparedParameterState::new(),
             cancel_generation: watch::channel(0).0,
         }
@@ -113,7 +154,8 @@ impl SqlxPreparedStatement {
             SqlxPreparedStatementBackend::Any(statement) => Some(statement),
             SqlxPreparedStatementBackend::MySql(_)
             | SqlxPreparedStatementBackend::PostgreSql(_)
-            | SqlxPreparedStatementBackend::Sqlite(_) => None,
+            | SqlxPreparedStatementBackend::Sqlite(_)
+            | SqlxPreparedStatementBackend::OwnedActor(_) => None,
         }
     }
 
@@ -123,7 +165,8 @@ impl SqlxPreparedStatement {
             SqlxPreparedStatementBackend::MySql(statement) => Some(statement),
             SqlxPreparedStatementBackend::Any(_)
             | SqlxPreparedStatementBackend::PostgreSql(_)
-            | SqlxPreparedStatementBackend::Sqlite(_) => None,
+            | SqlxPreparedStatementBackend::Sqlite(_)
+            | SqlxPreparedStatementBackend::OwnedActor(_) => None,
         }
     }
 
@@ -133,7 +176,8 @@ impl SqlxPreparedStatement {
             SqlxPreparedStatementBackend::PostgreSql(statement) => Some(statement),
             SqlxPreparedStatementBackend::Any(_)
             | SqlxPreparedStatementBackend::MySql(_)
-            | SqlxPreparedStatementBackend::Sqlite(_) => None,
+            | SqlxPreparedStatementBackend::Sqlite(_)
+            | SqlxPreparedStatementBackend::OwnedActor(_) => None,
         }
     }
 
@@ -143,7 +187,8 @@ impl SqlxPreparedStatement {
             SqlxPreparedStatementBackend::Sqlite(statement) => Some(statement),
             SqlxPreparedStatementBackend::Any(_)
             | SqlxPreparedStatementBackend::MySql(_)
-            | SqlxPreparedStatementBackend::PostgreSql(_) => None,
+            | SqlxPreparedStatementBackend::PostgreSql(_)
+            | SqlxPreparedStatementBackend::OwnedActor(_) => None,
         }
     }
 
@@ -153,6 +198,7 @@ impl SqlxPreparedStatement {
             SqlxPreparedStatementBackend::MySql(statement) => !statement.columns().is_empty(),
             SqlxPreparedStatementBackend::PostgreSql(statement) => !statement.columns().is_empty(),
             SqlxPreparedStatementBackend::Sqlite(statement) => !statement.columns().is_empty(),
+            SqlxPreparedStatementBackend::OwnedActor(_) => false,
         }
     }
 
@@ -178,6 +224,7 @@ impl SqlxPreparedStatement {
                 .iter()
                 .map(|column| column.name().to_owned())
                 .collect(),
+            SqlxPreparedStatementBackend::OwnedActor(_) => Vec::new(),
         }
     }
 
@@ -202,6 +249,15 @@ impl SqlxPreparedStatement {
         expected_count: usize,
     ) -> Result<Option<Vec<Vec<Value>>>, RdbcError> {
         self.parameter_state.take_batches(expected_count).await
+    }
+
+    fn actor_core(&self) -> Result<&Arc<SqlxConnectionActor>, RdbcError> {
+        match &self.backend {
+            SqlxPreparedStatementBackend::OwnedActor(actor) => Ok(actor),
+            _ => Err(RdbcError::UnsupportedOperation {
+                operation: "sqlx_standard_statement_requires_owned_actor",
+            }),
+        }
     }
 
     /// 执行一个真实 `SQLx` future，并同时监听 Statement timeout 与显式 cancel。
@@ -363,5 +419,75 @@ impl PhysicalPreparedStatement for SqlxPreparedStatement {
 
     fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(SqlxPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
+    async fn execute_query(
+        &mut self,
+        sql: &str,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.actor_core()?.execute_query(sql, Vec::new()).await
+    }
+
+    async fn execute_update(
+        &mut self,
+        sql: &str,
+        _generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<i64, RdbcError> {
+        self.actor_core()?.execute_update(sql, Vec::new()).await
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        self.closed.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.closed.load(Ordering::Acquire))
+    }
+
+    async fn execute_values(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.actor_core()?.execute_query(sql, values).await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
+    fn set_parameter(
+        &mut self,
+        parameter: druid_rdbc::statement::PreparedParameter,
+    ) -> Result<(), RdbcError> {
+        self.parameter_state.set_standard(parameter)
+    }
+
+    fn clear_parameters(&mut self) -> Result<(), RdbcError> {
+        self.parameter_state.clear_parameters();
+        Ok(())
+    }
+
+    async fn execute_prepared_query(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        let values = self.parameter_state.values(self.parameter_count).await?;
+        self.actor_core()?.execute_query(&self.sql, values).await
+    }
+
+    async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
+        let values = self.parameter_state.values(self.parameter_count).await?;
+        self.actor_core()?.execute_update(&self.sql, values).await
+    }
+
+    fn parameter_meta_data(&self) -> Result<Arc<dyn ParameterMetaData>, RdbcError> {
+        Ok(Arc::new(PreparedParameterMetaDataSnapshot::unknown_inputs(
+            self.parameter_count,
+        )))
     }
 }

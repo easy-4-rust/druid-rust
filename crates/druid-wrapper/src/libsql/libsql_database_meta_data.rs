@@ -10,6 +10,10 @@ impl LibSqlDatabaseMetaData {
     pub(crate) fn new(url: impl Into<String>) -> Self {
         Self { url: url.into() }
     }
+
+    fn database_product_name_core() -> String {
+        "Turso/libSQL".to_owned()
+    }
 }
 
 #[async_trait::async_trait]
@@ -24,7 +28,7 @@ impl PhysicalDatabaseMetaData for LibSqlDatabaseMetaData {
         Ok(false)
     }
     async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
-        Ok(Some("Turso/libSQL".to_owned()))
+        Ok(Some(Self::database_product_name_core()))
     }
     async fn get_driver_name(&mut self) -> Result<Option<String>, RdbcError> {
         Ok(Some("libsql-rs".to_owned()))
@@ -37,5 +41,14 @@ impl PhysicalDatabaseMetaData for LibSqlDatabaseMetaData {
     }
     async fn supports_batch_updates(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(LibSqlDatabaseMetaData => DatabaseMetaData);
+
+#[async_trait::async_trait]
+impl druid_rdbc::metadata::DatabaseMetaData for LibSqlDatabaseMetaData {
+    async fn database_product_name(&mut self) -> Result<String, RdbcError> {
+        Ok(Self::database_product_name_core())
     }
 }

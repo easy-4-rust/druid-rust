@@ -3,6 +3,7 @@
 use crate::prepared_parameter_materializer::PreparedParameterMaterializer;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PreparedInputParameter;
+use druid_rdbc::statement::PreparedParameter;
 use druid_rdbc::types::Value;
 use std::sync::Mutex;
 
@@ -66,6 +67,26 @@ impl PreparedParameterState {
             parameters.resize(parameter_index, None);
         }
         parameters[parameter_index - 1] = Some(stored);
+        Ok(())
+    }
+
+    /// 保存 canonical standard 已经物化的 1-based 参数值。
+    pub(crate) fn set_standard(&self, parameter: PreparedParameter) -> Result<(), RdbcError> {
+        let (parameter_index, value) =
+            PreparedParameterMaterializer::materialize_standard(parameter);
+        if parameter_index == 0 {
+            return Err(RdbcError::InvalidArgument(
+                "parameter index is 1-based".to_owned(),
+            ));
+        }
+        let mut parameters = self
+            .parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if parameters.len() < parameter_index {
+            parameters.resize(parameter_index, None);
+        }
+        parameters[parameter_index - 1] = Some(StoredPreparedParameter::Materialized(value));
         Ok(())
     }
 

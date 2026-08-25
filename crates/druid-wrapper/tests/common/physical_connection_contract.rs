@@ -7,6 +7,18 @@ use druid::core::{
 use std::future::Future;
 use std::sync::Arc;
 
+/// 编译期要求 wrapper adapter 同时暴露 transitional Physical 与 canonical standard。
+#[allow(
+    dead_code,
+    reason = "shared common module is compiled by pool tests that do not own raw adapters"
+)]
+pub fn assert_parallel_standard_contract<C, F>()
+where
+    C: druid_rdbc::spi::PhysicalConnection + druid_rdbc::connection::Connection,
+    F: druid_rdbc::spi::PhysicalConnectionFactory + druid_rdbc::driver::ConnectionFactory,
+{
+}
+
 /// 将真实 SQLx SQLite 数据库错误归类为 fatal，验证租约必须立即 discard。
 #[derive(Debug)]
 struct SqliteDatabaseErrorSorter;

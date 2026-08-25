@@ -276,6 +276,14 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
     }
 }
 
+druid_rdbc::impl_standard_wrapper!(ToastyPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for ToastyPreparedStatement {}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for ToastyPreparedStatement {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

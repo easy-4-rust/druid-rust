@@ -7,7 +7,19 @@ use druid::core::{
     PhysicalConnectionFactory, PreparedStatementKey, PreparedStatementMethodType, RdbcError, Value,
 };
 use std::str::FromStr;
+use wrapper::toasty::ToastyConnectionAdapter;
 use wrapper::toasty::ToastyConnectionFactory;
+
+#[test]
+fn toasty_adapter_exposes_parallel_physical_and_standard_contracts() {
+    fn assert_contract<C, F>()
+    where
+        C: druid_rdbc::spi::PhysicalConnection + druid_rdbc::connection::Connection,
+        F: druid_rdbc::spi::PhysicalConnectionFactory + druid_rdbc::driver::ConnectionFactory,
+    {
+    }
+    assert_contract::<ToastyConnectionAdapter, ToastyConnectionFactory>();
+}
 
 async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")

@@ -12,11 +12,23 @@ use druid::spi::{
     RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, RdbcResourceCapabilities,
     RdbcResourceFactory, RdbcSqlXmlAccess,
 };
+use druid_wrapper::rbdc::RbdcConnectionAdapter;
 use druid_wrapper::rbdc::RbdcConnectionFactory;
 use futures::future::BoxFuture;
 use futures::stream::{self, BoxStream, StreamExt};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
+
+#[test]
+fn rbdc_adapter_exposes_parallel_physical_and_standard_contracts() {
+    fn assert_contract<C, F>()
+    where
+        C: druid_rdbc::spi::PhysicalConnection + druid_rdbc::connection::Connection,
+        F: druid_rdbc::spi::PhysicalConnectionFactory + druid_rdbc::driver::ConnectionFactory,
+    {
+    }
+    assert_contract::<RbdcConnectionAdapter, RbdcConnectionFactory>();
+}
 
 #[derive(Debug)]
 struct FakeMetaData {

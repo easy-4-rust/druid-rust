@@ -3,6 +3,7 @@
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::resource::{RdbcCharacterLength, RdbcStreamLength};
 use druid_rdbc::spi::PreparedInputParameter;
+use druid_rdbc::statement::PreparedParameter;
 use druid_rdbc::types::{RdbcObject, Value};
 
 /// 将标准 RDBC 参数资源转换成扩展驱动可绑定的通用值。
@@ -13,6 +14,11 @@ use druid_rdbc::types::{RdbcObject, Value};
 pub(crate) struct PreparedParameterMaterializer;
 
 impl PreparedParameterMaterializer {
+    /// 将 canonical standard 参数转换成与 Physical setter 共用的 driver `Value`。
+    pub(crate) fn materialize_standard(parameter: PreparedParameter) -> (usize, Value) {
+        (parameter.index.get(), parameter.value)
+    }
+
     fn stream_length(length: RdbcStreamLength) -> Result<Option<usize>, RdbcError> {
         match length {
             RdbcStreamLength::Unspecified => Ok(None),

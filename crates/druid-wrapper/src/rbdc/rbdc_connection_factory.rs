@@ -35,6 +35,15 @@ impl RbdcConnectionFactory {
     pub fn driver_name(&self) -> &str {
         self.driver.name()
     }
+
+    async fn create_adapter_core(&self) -> Result<RbdcConnectionAdapter, RdbcError> {
+        let connection = self.driver.connect(&self.url).await.map_err(|error| {
+            RdbcError::SqlException(Box::new(
+                SqlException::driver(0, error.to_string()).with_class_name("rbdc::Error"),
+            ))
+        })?;
+        Ok(RbdcConnectionAdapter::new(connection, self.driver.name()))
+    }
 }
 
 #[async_trait::async_trait]
@@ -44,15 +53,7 @@ impl PhysicalConnectionFactory for RbdcConnectionFactory {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        let connection = self.driver.connect(&self.url).await.map_err(|error| {
-            RdbcError::SqlException(Box::new(
-                SqlException::driver(0, error.to_string()).with_class_name("rbdc::Error"),
-            ))
-        })?;
-        Ok(Box::new(RbdcConnectionAdapter::new(
-            connection,
-            self.driver.name(),
-        )))
+        Ok(Box::new(self.create_adapter_core().await?))
     }
 
     async fn validate(
@@ -60,5 +61,16 @@ impl PhysicalConnectionFactory for RbdcConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for RbdcConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core().await?))
+    }
+
+    fn name(&self) -> &str {
+        self.driver.name()
     }
 }

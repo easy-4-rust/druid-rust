@@ -80,6 +80,52 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         self.assertGreater(len(self.live.adapters), 0)
         self.assertGreater(len(self.live.consumers), 0)
 
+    def test_accepts_only_task4_wrapper_live_state_projection(self) -> None:
+        """Task 4 may advance its wrapper rows while every source-derived field stays exact."""
+
+        adapters = tuple(
+            replace(row, state="STANDARD_IMPL_LIVE")
+            if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
+            and row.owner == "WRAPPER_ADAPTER"
+            else row
+            for row in self.live.adapters
+        )
+        consumers = tuple(
+            replace(row, state="STANDARD_REFERENCE_LIVE")
+            if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
+            and row.source_path.startswith("crates/druid-wrapper/")
+            else row
+            for row in self.live.consumers
+        )
+        self.adapters.write_bytes(render_adapter_rows(adapters))
+        self.consumers.write_bytes(render_consumer_rows(consumers))
+        self.verify()
+
+    def test_rejects_live_state_on_wrong_target_or_unknown_state(self) -> None:
+        """Task 5 rows and unknown future states cannot impersonate Task 4 LIVE evidence."""
+
+        adapter_lines = self.adapters.read_text(encoding="utf-8").splitlines()
+        wrong_adapter = next(
+            index
+            for index, line in enumerate(adapter_lines[1:], start=1)
+            if "P04_TASK_4_ADAPTER_CUTOVER" not in line
+        )
+        fields = adapter_lines[wrong_adapter].split("\t")
+        fields[-1] = "STANDARD_IMPL_LIVE"
+        adapter_lines[wrong_adapter] = "\t".join(fields)
+        self.adapters.write_text("\n".join(adapter_lines) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(VerificationError, "only valid for Task 4"):
+            self.verify()
+
+        self.adapters.write_bytes(render_adapter_rows(self.live.adapters))
+        consumer_lines = self.consumers.read_text(encoding="utf-8").splitlines()
+        fields = consumer_lines[1].split("\t")
+        fields[-1] = "UNKNOWN_LIVE"
+        consumer_lines[1] = "\t".join(fields)
+        self.consumers.write_text("\n".join(consumer_lines) + "\n", encoding="utf-8")
+        with self.assertRaisesRegex(VerificationError, "unknown state"):
+            self.verify()
+
     def test_rejects_missing_duplicate_extra_and_unknown_physical_rows(self) -> None:
         """No table edit may shrink, duplicate, invent, or declassify the P03/live surface."""
 

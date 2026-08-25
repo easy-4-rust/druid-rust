@@ -5,6 +5,7 @@
 
 mod managed_wrapper_pool;
 mod prepared_parameter_materializer;
+mod prepared_parameter_meta_data_snapshot;
 mod prepared_parameter_state;
 mod proxool_config_key;
 mod wrapper_data_source_factory;

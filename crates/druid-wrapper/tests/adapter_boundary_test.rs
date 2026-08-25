@@ -8,6 +8,7 @@ use druid_rdbc::spi::{
     PhysicalConnection as NewPhysicalConnection,
     PhysicalConnectionFactory as NewPhysicalConnectionFactory,
 };
+use druid_rdbc::{connection::Connection, driver::ConnectionFactory};
 use druid_wrapper::sqlx::bb8::SqlxBb8Pool;
 use druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
@@ -17,6 +18,8 @@ use static_assertions::{assert_impl_all, assert_not_impl_any, assert_type_eq_all
 fn direct_sqlx_types_are_compile_time_direct_connection_and_factory() {
     assert_impl_all!(SqlxConnectionAdapter: OldPhysicalConnection, NewPhysicalConnection);
     assert_impl_all!(SqlxConnectionFactory: OldPhysicalConnectionFactory, NewPhysicalConnectionFactory);
+    assert_impl_all!(SqlxConnectionAdapter: Connection);
+    assert_impl_all!(SqlxConnectionFactory: ConnectionFactory);
 }
 
 #[test]
@@ -97,6 +100,8 @@ fn old_and_new_rdbc_contracts_are_bidirectionally_identical_except_product_error
 fn seven_adapter_families_implement_old_and_new_traits() {
     assert_impl_all!(SqlxConnectionAdapter: OldPhysicalConnection, NewPhysicalConnection);
     assert_impl_all!(SqlxConnectionFactory: OldPhysicalConnectionFactory, NewPhysicalConnectionFactory);
+    assert_impl_all!(SqlxConnectionAdapter: Connection);
+    assert_impl_all!(SqlxConnectionFactory: ConnectionFactory);
     assert_impl_all!(
         druid_wrapper::toasty::ToastyConnectionAdapter:
             OldPhysicalConnection,
@@ -107,6 +112,8 @@ fn seven_adapter_families_implement_old_and_new_traits() {
             OldPhysicalConnectionFactory,
             NewPhysicalConnectionFactory
     );
+    assert_impl_all!(druid_wrapper::toasty::ToastyConnectionAdapter: Connection);
+    assert_impl_all!(druid_wrapper::toasty::ToastyConnectionFactory: ConnectionFactory);
     assert_impl_all!(
         druid_wrapper::rbdc::RbdcConnectionAdapter:
             OldPhysicalConnection,
@@ -117,6 +124,8 @@ fn seven_adapter_families_implement_old_and_new_traits() {
             OldPhysicalConnectionFactory,
             NewPhysicalConnectionFactory
     );
+    assert_impl_all!(druid_wrapper::rbdc::RbdcConnectionAdapter: Connection);
+    assert_impl_all!(druid_wrapper::rbdc::RbdcConnectionFactory: ConnectionFactory);
 
     #[cfg(feature = "jdbc-agent")]
     {
@@ -130,6 +139,8 @@ fn seven_adapter_families_implement_old_and_new_traits() {
                 OldPhysicalConnectionFactory,
                 NewPhysicalConnectionFactory
         );
+        assert_impl_all!(druid_wrapper::jdbc_agent::JdbcAgentConnection: Connection);
+        assert_impl_all!(druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory: ConnectionFactory);
     }
     #[cfg(feature = "libsql-native")]
     {
@@ -143,6 +154,8 @@ fn seven_adapter_families_implement_old_and_new_traits() {
                 OldPhysicalConnectionFactory,
                 NewPhysicalConnectionFactory
         );
+        assert_impl_all!(druid_wrapper::libsql::LibSqlConnectionAdapter: Connection);
+        assert_impl_all!(druid_wrapper::libsql::LibSqlConnectionFactory: ConnectionFactory);
     }
     #[cfg(feature = "http-sql")]
     {
@@ -156,6 +169,8 @@ fn seven_adapter_families_implement_old_and_new_traits() {
                 OldPhysicalConnectionFactory,
                 NewPhysicalConnectionFactory
         );
+        assert_impl_all!(druid_wrapper::http_sql::HttpSqlConnectionAdapter: Connection);
+        assert_impl_all!(druid_wrapper::http_sql::HttpSqlConnectionFactory: ConnectionFactory);
     }
     #[cfg(feature = "duckdb-native")]
     {
@@ -169,5 +184,7 @@ fn seven_adapter_families_implement_old_and_new_traits() {
                 OldPhysicalConnectionFactory,
                 NewPhysicalConnectionFactory
         );
+        assert_impl_all!(druid_wrapper::duckdb::DuckDbConnectionAdapter: Connection);
+        assert_impl_all!(druid_wrapper::duckdb::DuckDbConnectionFactory: ConnectionFactory);
     }
 }

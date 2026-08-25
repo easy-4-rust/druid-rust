@@ -21,6 +21,13 @@ impl HttpSqlDatabaseMetaData {
             product_version,
         }
     }
+
+    fn database_product_name_core(&self) -> String {
+        match self.provider {
+            HttpSqlProvider::Rqlite => "rqlite".to_owned(),
+            HttpSqlProvider::CloudflareD1 => "Cloudflare D1".to_owned(),
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -38,10 +45,7 @@ impl PhysicalDatabaseMetaData for HttpSqlDatabaseMetaData {
     }
 
     async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
-        Ok(Some(match self.provider {
-            HttpSqlProvider::Rqlite => "rqlite".to_owned(),
-            HttpSqlProvider::CloudflareD1 => "Cloudflare D1".to_owned(),
-        }))
+        Ok(Some(self.database_product_name_core()))
     }
 
     async fn get_database_product_version(&mut self) -> Result<Option<String>, RdbcError> {
@@ -62,5 +66,14 @@ impl PhysicalDatabaseMetaData for HttpSqlDatabaseMetaData {
 
     async fn supports_batch_updates(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(HttpSqlDatabaseMetaData => DatabaseMetaData);
+
+#[async_trait::async_trait]
+impl druid_rdbc::metadata::DatabaseMetaData for HttpSqlDatabaseMetaData {
+    async fn database_product_name(&mut self) -> Result<String, RdbcError> {
+        Ok(self.database_product_name_core())
     }
 }

@@ -126,3 +126,11 @@ impl PhysicalPreparedStatement for DuckDbPreparedStatement {
         self.statement.is_closed()
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(DuckDbPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for DuckDbPreparedStatement {}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for DuckDbPreparedStatement {}

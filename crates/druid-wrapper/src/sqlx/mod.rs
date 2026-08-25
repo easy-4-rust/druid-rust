@@ -4,6 +4,7 @@
 pub mod bb8;
 /// SQLx 上的 deadpool 外部池桥接。
 pub mod deadpool;
+pub(crate) mod sqlx_connection_actor;
 pub mod sqlx_connection_adapter;
 pub mod sqlx_connection_factory;
 pub mod sqlx_database_meta_data;

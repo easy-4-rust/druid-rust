@@ -162,6 +162,14 @@ impl PhysicalPreparedStatement for RbdcPreparedStatement {
     }
 }
 
+druid_rdbc::impl_standard_wrapper!(RbdcPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for RbdcPreparedStatement {}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for RbdcPreparedStatement {}
+
 #[cfg(test)]
 mod tests {
     use super::RbdcPreparedStatement;

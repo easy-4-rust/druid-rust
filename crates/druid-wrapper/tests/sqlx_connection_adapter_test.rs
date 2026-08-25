@@ -11,6 +11,14 @@ use druid::pool::DruidPool;
 use druid_wrapper::sqlx::{SqlxConnectionAdapter, SqlxConnectionFactory};
 use std::sync::{Arc, Mutex};
 
+#[test]
+fn sqlx_adapter_exposes_parallel_physical_and_standard_contracts() {
+    common::physical_connection_contract::assert_parallel_standard_contract::<
+        SqlxConnectionAdapter,
+        SqlxConnectionFactory,
+    >();
+}
+
 #[derive(Default)]
 struct SqlxPreparedDescriptorRecorder {
     executions: Mutex<Vec<Vec<PreparedInputParameter>>>,

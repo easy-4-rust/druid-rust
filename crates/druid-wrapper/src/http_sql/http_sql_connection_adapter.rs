@@ -556,3 +556,35 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
         self.provider.as_str()
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(HttpSqlConnectionAdapter => Connection);
+
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for HttpSqlConnectionAdapter {
+    async fn create_statement(
+        &mut self,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        Ok(Box::new(
+            super::HttpSqlPreparedStatement::new(String::new()),
+        ))
+    }
+
+    async fn prepare_statement(
+        &mut self,
+        sql: &str,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        Ok(Box::new(super::HttpSqlPreparedStatement::new(sql)))
+    }
+
+    async fn database_meta_data(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
+        Ok(Box::new(super::HttpSqlDatabaseMetaData::new(
+            self.provider,
+            self.endpoint.to_string(),
+            self.product_version.clone(),
+        )))
+    }
+}

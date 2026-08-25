@@ -27,6 +27,10 @@ impl DuckDbConnectionFactory {
     pub fn url(&self) -> &str {
         &self.url
     }
+
+    async fn create_adapter_core(&self) -> Result<DuckDbConnectionAdapter, RdbcError> {
+        DuckDbConnectionAdapter::connect(&self.url).await
+    }
 }
 
 #[async_trait::async_trait]
@@ -36,7 +40,7 @@ impl PhysicalConnectionFactory for DuckDbConnectionFactory {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(DuckDbConnectionAdapter::connect(&self.url).await?))
+        Ok(Box::new(self.create_adapter_core().await?))
     }
 
     async fn validate(
@@ -44,5 +48,16 @@ impl PhysicalConnectionFactory for DuckDbConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for DuckDbConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core().await?))
+    }
+
+    fn name(&self) -> &str {
+        "duckdb-rs"
     }
 }

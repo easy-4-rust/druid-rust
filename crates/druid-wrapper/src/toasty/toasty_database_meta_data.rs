@@ -2,14 +2,15 @@
 
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::PhysicalDatabaseMetaData;
+use std::borrow::Cow;
 
 /// Toasty driver capability 的数据库元数据视图。
 ///
 /// Toasty 0.9 没有 RDBC 风格的 metadata 对象。本 Adapter 只报告
 /// `Capability`、连接状态和 URL 可以证明的合同；其余方法保持明确 unsupported。
 pub struct ToastyDatabaseMetaData<'connection> {
-    url: &'connection str,
-    driver_name: &'connection str,
+    url: Cow<'connection, str>,
+    driver_name: Cow<'connection, str>,
     read_only: bool,
 }
 
@@ -21,8 +22,8 @@ impl<'connection> ToastyDatabaseMetaData<'connection> {
         read_only: bool,
     ) -> Self {
         Self {
-            url,
-            driver_name,
+            url: Cow::Borrowed(url),
+            driver_name: Cow::Borrowed(driver_name),
             read_only,
         }
     }
@@ -36,7 +37,7 @@ impl<'connection> ToastyDatabaseMetaData<'connection> {
         self.driver_name.eq_ignore_ascii_case("mysql")
     }
 
-    fn product_name(&self) -> Option<&'static str> {
+    fn product_name_core(&self) -> Option<&'static str> {
         if self.is_sqlite() {
             Some("SQLite")
         } else if self.is_mysql() {
@@ -51,10 +52,20 @@ impl<'connection> ToastyDatabaseMetaData<'connection> {
     }
 }
 
+impl ToastyDatabaseMetaData<'static> {
+    pub(crate) fn owned(url: String, driver_name: String, read_only: bool) -> Self {
+        Self {
+            url: Cow::Owned(url),
+            driver_name: Cow::Owned(driver_name),
+            read_only,
+        }
+    }
+}
+
 #[async_trait::async_trait]
 impl PhysicalDatabaseMetaData for ToastyDatabaseMetaData<'_> {
     async fn get_url(&mut self) -> Result<Option<String>, RdbcError> {
-        Ok(Some(self.url.to_owned()))
+        Ok(Some(self.url.as_ref().to_owned()))
     }
 
     async fn get_user_name(&mut self) -> Result<Option<String>, RdbcError> {
@@ -67,16 +78,15 @@ impl PhysicalDatabaseMetaData for ToastyDatabaseMetaData<'_> {
     }
 
     async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
-        self.product_name()
-            .map(str::to_owned)
-            .map(Some)
-            .ok_or(RdbcError::UnsupportedOperation {
+        self.product_name_core().map(str::to_owned).map(Some).ok_or(
+            RdbcError::UnsupportedOperation {
                 operation: "toasty_database_metadata_product_name",
-            })
+            },
+        )
     }
 
     async fn get_driver_name(&mut self) -> Result<Option<String>, RdbcError> {
-        Ok(Some(self.driver_name.to_owned()))
+        Ok(Some(self.driver_name.as_ref().to_owned()))
     }
 
     async fn get_driver_version(&mut self) -> Result<Option<String>, RdbcError> {
@@ -126,5 +136,18 @@ impl PhysicalDatabaseMetaData for ToastyDatabaseMetaData<'_> {
 
     async fn supports_named_parameters(&mut self) -> Result<bool, RdbcError> {
         Ok(false)
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(ToastyDatabaseMetaData<'static> => DatabaseMetaData);
+
+#[async_trait::async_trait]
+impl druid_rdbc::metadata::DatabaseMetaData for ToastyDatabaseMetaData<'static> {
+    async fn database_product_name(&mut self) -> Result<String, RdbcError> {
+        self.product_name_core()
+            .map(str::to_owned)
+            .ok_or(RdbcError::UnsupportedOperation {
+                operation: "toasty_database_metadata_product_name",
+            })
     }
 }

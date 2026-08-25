@@ -1,5 +1,6 @@
 //! `SQLx` 数据库元数据 Adapter。
 
+use super::sqlx_connection_actor::SqlxConnectionActor;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalDatabaseMetaData, PhysicalResultSet, RowSetResultSet};
 use druid_rdbc::types::{Row, Value};
@@ -49,6 +50,8 @@ pub(super) enum SqlxDatabaseMetaDataBackend<'connection> {
     PostgreSql(&'connection mut PgConnection),
     /// 原生 `SQLite`。
     Sqlite(&'connection mut SqliteConnection),
+    /// Canonical live metadata actor；不借用 create-call caller。
+    Owned(Arc<SqlxConnectionActor>),
 }
 
 /// `SQLx` 的物理数据库元数据实现。
@@ -119,6 +122,25 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
                 .is_some_and(|scheme| scheme.eq_ignore_ascii_case("postgresql:"))
     }
 
+    async fn database_product_name_core(&mut self) -> Result<String, RdbcError> {
+        let product = match &self.backend {
+            SqlxDatabaseMetaDataBackend::Sqlite(_) => "SQLite",
+            SqlxDatabaseMetaDataBackend::MySql(_) => "MySQL",
+            SqlxDatabaseMetaDataBackend::PostgreSql(_) => "PostgreSQL",
+            SqlxDatabaseMetaDataBackend::Any(_) if self.is_postgresql() => "PostgreSQL",
+            SqlxDatabaseMetaDataBackend::Any(_) if self.is_mysql() => "MySQL",
+            SqlxDatabaseMetaDataBackend::Owned(actor) => {
+                return actor.database_product_name().await;
+            }
+            SqlxDatabaseMetaDataBackend::Any(_) => {
+                return Err(RdbcError::UnsupportedOperation {
+                    operation: "sqlx_database_metadata_product_name",
+                });
+            }
+        };
+        Ok(product.to_owned())
+    }
+
     async fn product_version(&mut self) -> Result<String, RdbcError> {
         let is_postgresql = self.is_postgresql();
         let is_mysql = self.is_mysql();
@@ -155,6 +177,9 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
             }
             SqlxDatabaseMetaDataBackend::Any(_) => Err(RdbcError::UnsupportedOperation {
                 operation: "sqlx_database_metadata_product_version",
+            }),
+            SqlxDatabaseMetaDataBackend::Owned(_) => Err(RdbcError::UnsupportedOperation {
+                operation: "sqlx_owned_database_metadata_product_version",
             }),
         }
     }
@@ -201,18 +226,20 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
             SqlxDatabaseMetaDataBackend::Sqlite(connection) => Ok(&mut **connection),
             SqlxDatabaseMetaDataBackend::Any(_)
             | SqlxDatabaseMetaDataBackend::MySql(_)
-            | SqlxDatabaseMetaDataBackend::PostgreSql(_) => {
+            | SqlxDatabaseMetaDataBackend::PostgreSql(_)
+            | SqlxDatabaseMetaDataBackend::Owned(_) => {
                 Err(RdbcError::UnsupportedOperation { operation })
             }
         }
     }
 
     fn require_sqlite(&self, operation: &'static str) -> Result<(), RdbcError> {
-        match self.backend {
+        match &self.backend {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => Ok(()),
             SqlxDatabaseMetaDataBackend::Any(_)
             | SqlxDatabaseMetaDataBackend::MySql(_)
-            | SqlxDatabaseMetaDataBackend::PostgreSql(_) => {
+            | SqlxDatabaseMetaDataBackend::PostgreSql(_)
+            | SqlxDatabaseMetaDataBackend::Owned(_) => {
                 Err(RdbcError::UnsupportedOperation { operation })
             }
         }
@@ -577,6 +604,25 @@ impl<'connection> SqlxDatabaseMetaData<'connection> {
             "IS_AUTOINCREMENT",
             "IS_GENERATEDCOLUMN",
         ]
+    }
+}
+
+impl SqlxDatabaseMetaData<'static> {
+    /// 创建拥有 connection actor 的 canonical live metadata object。
+    pub(crate) fn owned(actor: Arc<SqlxConnectionActor>) -> Self {
+        Self {
+            backend: SqlxDatabaseMetaDataBackend::Owned(actor),
+            url: "",
+        }
+    }
+
+    fn actor_core(&self) -> Result<&Arc<SqlxConnectionActor>, RdbcError> {
+        match &self.backend {
+            SqlxDatabaseMetaDataBackend::Owned(actor) => Ok(actor),
+            _ => Err(RdbcError::UnsupportedOperation {
+                operation: "sqlx_standard_metadata_requires_owned_actor",
+            }),
+        }
     }
 }
 
@@ -1104,19 +1150,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     }
 
     async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
-        let product = match &self.backend {
-            SqlxDatabaseMetaDataBackend::Sqlite(_) => "SQLite",
-            SqlxDatabaseMetaDataBackend::MySql(_) => "MySQL",
-            SqlxDatabaseMetaDataBackend::PostgreSql(_) => "PostgreSQL",
-            SqlxDatabaseMetaDataBackend::Any(_) if self.is_postgresql() => "PostgreSQL",
-            SqlxDatabaseMetaDataBackend::Any(_) if self.is_mysql() => "MySQL",
-            SqlxDatabaseMetaDataBackend::Any(_) => {
-                return Err(RdbcError::UnsupportedOperation {
-                    operation: "sqlx_database_metadata_product_name",
-                });
-            }
-        };
-        Ok(Some(product.to_owned()))
+        self.database_product_name_core().await.map(Some)
     }
 
     async fn get_database_product_version(&mut self) -> Result<Option<String>, RdbcError> {
@@ -1220,7 +1254,8 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
             SqlxDatabaseMetaDataBackend::Sqlite(_) => level == 8,
             SqlxDatabaseMetaDataBackend::Any(_)
             | SqlxDatabaseMetaDataBackend::MySql(_)
-            | SqlxDatabaseMetaDataBackend::PostgreSql(_) => level == 2,
+            | SqlxDatabaseMetaDataBackend::PostgreSql(_)
+            | SqlxDatabaseMetaDataBackend::Owned(_) => level == 2,
         })
     }
 
@@ -1236,7 +1271,7 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
     async fn supports_named_parameters(&mut self) -> Result<bool, RdbcError> {
         // SQLite SQL 语法支持 :name/@name/$name；SQLx Any 未提供统一保证。
         Ok(matches!(
-            self.backend,
+            &self.backend,
             SqlxDatabaseMetaDataBackend::Sqlite(_)
         ))
     }
@@ -2068,5 +2103,21 @@ impl PhysicalDatabaseMetaData for SqlxDatabaseMetaData<'_> {
             }
         }
         Ok(Self::result_set(rows, labels))
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(SqlxDatabaseMetaData<'static> => DatabaseMetaData);
+
+#[async_trait::async_trait]
+impl druid_rdbc::metadata::DatabaseMetaData for SqlxDatabaseMetaData<'static> {
+    async fn database_product_name(&mut self) -> Result<String, RdbcError> {
+        self.database_product_name_core().await
+    }
+
+    async fn tables(
+        &mut self,
+        query: druid_rdbc::metadata::TablesQuery,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.actor_core()?.tables(query).await
     }
 }

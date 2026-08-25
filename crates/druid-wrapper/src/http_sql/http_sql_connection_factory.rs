@@ -28,6 +28,17 @@ impl HttpSqlConnectionFactory {
         self.properties.insert(name.into(), value.into());
         self
     }
+
+    async fn create_adapter_core(&self) -> Result<HttpSqlConnectionAdapter, RdbcError> {
+        let mut connection = HttpSqlConnectionAdapter::new(
+            self.provider,
+            self.endpoint.clone(),
+            self.properties.clone(),
+            reqwest::Client::new(),
+        )?;
+        connection.ping().await?;
+        Ok(connection)
+    }
 }
 
 impl std::fmt::Debug for HttpSqlConnectionFactory {
@@ -48,14 +59,7 @@ impl PhysicalConnectionFactory for HttpSqlConnectionFactory {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        let mut connection = HttpSqlConnectionAdapter::new(
-            self.provider,
-            self.endpoint.clone(),
-            self.properties.clone(),
-            reqwest::Client::new(),
-        )?;
-        connection.ping().await?;
-        Ok(Box::new(connection))
+        Ok(Box::new(self.create_adapter_core().await?))
     }
 
     async fn validate(
@@ -63,5 +67,16 @@ impl PhysicalConnectionFactory for HttpSqlConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for HttpSqlConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core().await?))
+    }
+
+    fn name(&self) -> &str {
+        "http-sql"
     }
 }

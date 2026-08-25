@@ -9,10 +9,21 @@ use druid::core::{
     PreparedStatementMethodType, RdbcError, Value,
 };
 use druid_wrapper::driver::{DatabaseConnectionConfig, DruidDriverRegistry};
-use druid_wrapper::duckdb::DuckDbConnectionAdapter;
+use druid_wrapper::duckdb::{DuckDbConnectionAdapter, DuckDbConnectionFactory};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+#[test]
+fn duckdb_adapter_exposes_parallel_physical_and_standard_contracts() {
+    fn assert_contract<C, F>()
+    where
+        C: druid_rdbc::spi::PhysicalConnection + druid_rdbc::connection::Connection,
+        F: druid_rdbc::spi::PhysicalConnectionFactory + druid_rdbc::driver::ConnectionFactory,
+    {
+    }
+    assert_contract::<DuckDbConnectionAdapter, DuckDbConnectionFactory>();
+}
 
 #[tokio::test]
 async fn duckdb_registry_resolves_only_explicit_native_urls() {

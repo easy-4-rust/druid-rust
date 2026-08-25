@@ -25,6 +25,10 @@ impl SqlxConnectionFactory {
     pub fn url(&self) -> &str {
         &self.url
     }
+
+    async fn create_adapter_core(&self) -> Result<SqlxConnectionAdapter, RdbcError> {
+        SqlxConnectionAdapter::connect(&self.url).await
+    }
 }
 
 impl std::fmt::Debug for SqlxConnectionFactory {
@@ -52,7 +56,7 @@ impl PhysicalConnectionFactory for SqlxConnectionFactory {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        let connection = SqlxConnectionAdapter::connect(&self.url).await?;
+        let connection = self.create_adapter_core().await?;
         Ok(Box::new(connection))
     }
 
@@ -61,5 +65,16 @@ impl PhysicalConnectionFactory for SqlxConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for SqlxConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core().await?))
+    }
+
+    fn name(&self) -> &str {
+        "sqlx"
     }
 }

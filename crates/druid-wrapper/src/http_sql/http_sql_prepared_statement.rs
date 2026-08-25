@@ -147,3 +147,11 @@ impl PhysicalPreparedStatement for HttpSqlPreparedStatement {
         self.closed.load(Ordering::Acquire)
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(HttpSqlPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for HttpSqlPreparedStatement {}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for HttpSqlPreparedStatement {}

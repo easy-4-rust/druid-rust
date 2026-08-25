@@ -41,6 +41,18 @@ impl LibSqlConnectionFactory {
         self.properties.insert(name.into(), value.into());
         self
     }
+
+    async fn create_adapter_core(&self) -> Result<LibSqlConnectionAdapter, RdbcError> {
+        let token = self
+            .properties
+            .get("token")
+            .or_else(|| self.properties.get("auth_token"))
+            .cloned()
+            .unwrap_or_default();
+        let mut connection = LibSqlConnectionAdapter::connect(&self.url, token).await?;
+        connection.ping().await?;
+        Ok(connection)
+    }
 }
 
 #[async_trait::async_trait]
@@ -50,15 +62,7 @@ impl PhysicalConnectionFactory for LibSqlConnectionFactory {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        let token = self
-            .properties
-            .get("token")
-            .or_else(|| self.properties.get("auth_token"))
-            .cloned()
-            .unwrap_or_default();
-        let mut connection = LibSqlConnectionAdapter::connect(&self.url, token).await?;
-        connection.ping().await?;
-        Ok(Box::new(connection))
+        Ok(Box::new(self.create_adapter_core().await?))
     }
 
     async fn validate(
@@ -66,5 +70,16 @@ impl PhysicalConnectionFactory for LibSqlConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for LibSqlConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core().await?))
+    }
+
+    fn name(&self) -> &str {
+        "libsql-rs"
     }
 }

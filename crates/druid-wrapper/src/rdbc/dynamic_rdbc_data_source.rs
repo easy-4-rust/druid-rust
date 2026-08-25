@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::any::{Any, TypeId};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -56,6 +56,20 @@ impl DynamicRdbcDataSource {
 impl Wrapper for DynamicRdbcDataSource {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+impl druid_rdbc::wrapper::Wrapper for DynamicRdbcDataSource {
+    fn wrapper_view(&self) -> &dyn druid_rdbc::wrapper::Wrapper {
+        self
+    }
+
+    fn canonical_unwrap(
+        &self,
+        target: TypeId,
+    ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
+        (target == TypeId::of::<dyn druid_rdbc::wrapper::Wrapper>())
+            .then_some(druid_rdbc::wrapper::StandardUnwrapped::Wrapper(self))
     }
 }
 

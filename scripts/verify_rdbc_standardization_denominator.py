@@ -263,7 +263,10 @@ def parse_adapter_payload(payload: bytes) -> list[AdapterRow]:
 
     rows = parse_dataclass_tsv(payload, ADAPTER_HEADER, AdapterRow, "adapter")
     for row in rows:
-        if row.state != "CURRENT_IMPL_TARGET_PLANNED":
+        if row.state == "STANDARD_IMPL_LIVE":
+            if row.target_task != "P04_TASK_4_ADAPTER_CUTOVER" or row.owner != "WRAPPER_ADAPTER":
+                fail("adapter LIVE state is only valid for Task 4 wrapper rows")
+        elif row.state != "CURRENT_IMPL_TARGET_PLANNED":
             fail(f"adapter row has unknown state: {row.state}")
     if payload != render_adapter_rows(tuple(rows)):
         fail("adapter manifest is not canonically serialized")
@@ -277,7 +280,13 @@ def parse_consumer_payload(payload: bytes) -> list[ConsumerRow]:
     for row in rows:
         if row.occurrence_kind not in OCCURRENCE_KINDS:
             fail(f"consumer row has unknown occurrence kind: {row.occurrence_kind}")
-        if row.state != "CURRENT_REFERENCE_TARGET_PLANNED":
+        if row.state == "STANDARD_REFERENCE_LIVE":
+            if (
+                row.target_task != "P04_TASK_4_ADAPTER_CUTOVER"
+                or not row.source_path.startswith("crates/druid-wrapper/")
+            ):
+                fail("consumer LIVE state is only valid for Task 4 wrapper rows")
+        elif row.state != "CURRENT_REFERENCE_TARGET_PLANNED":
             fail(f"consumer row has unknown state: {row.state}")
     if payload != render_consumer_rows(tuple(rows)):
         fail("consumer manifest is not canonically serialized")
@@ -2276,6 +2285,69 @@ def require_checked_payload(
         )
 
 
+def normalize_adapter_phase(rows: tuple[AdapterRow, ...]) -> tuple[AdapterRow, ...]:
+    """Project Task 4 LIVE state back to the frozen Task 2 denominator state."""
+
+    return tuple(
+        AdapterRow(
+            row.source_path,
+            row.current_trait,
+            row.implementation_type,
+            row.owner,
+            row.target_trait,
+            row.target_task,
+            "CURRENT_IMPL_TARGET_PLANNED",
+        )
+        for row in rows
+    )
+
+
+def normalize_consumer_phase(rows: tuple[ConsumerRow, ...]) -> tuple[ConsumerRow, ...]:
+    """Project Task 4 LIVE state back without changing the frozen occurrence coordinates."""
+
+    return tuple(
+        ConsumerRow(
+            row.source_path,
+            row.occurrence_kind,
+            row.symbol,
+            row.old_path,
+            row.target_path,
+            row.target_task,
+            "CURRENT_REFERENCE_TARGET_PLANNED",
+        )
+        for row in rows
+    )
+
+
+def require_task4_adapter_payload(path: Path, live: tuple[AdapterRow, ...]) -> tuple[AdapterRow, ...]:
+    """Require exact source impl rows while allowing only Task 4 state advancement."""
+
+    if not path.is_file():
+        fail(f"adapter manifest not found: {path}")
+    payload = path.read_bytes()
+    checked = tuple(parse_adapter_payload(payload))
+    normalized = normalize_adapter_phase(checked)
+    if normalized != live:
+        fail("adapter manifest rows do not match the live denominator")
+    return normalized
+
+
+def require_task4_consumer_payload(
+    path: Path,
+    live: tuple[ConsumerRow, ...],
+) -> tuple[ConsumerRow, ...]:
+    """Require every Task 2 field, including source coordinates, to match fresh source."""
+
+    if not path.is_file():
+        fail(f"consumer manifest not found: {path}")
+    payload = path.read_bytes()
+    checked = tuple(parse_consumer_payload(payload))
+    normalized = normalize_consumer_phase(checked)
+    if normalized != live:
+        fail("consumer manifest rows do not match the live denominator")
+    return normalized
+
+
 def verify_denominator(
     root: Path,
     physical_path: Path,
@@ -2297,21 +2369,9 @@ def verify_denominator(
         lambda payload: parse_physical_payload(payload, allow_legacy=False),
         "physical",
     )
-    require_checked_payload(
-        adapters,
-        render_adapter_rows(live.adapters),
-        live.adapters,
-        parse_adapter_payload,
-        "adapter",
-    )
-    require_checked_payload(
-        consumers,
-        render_consumer_rows(live.consumers),
-        live.consumers,
-        parse_consumer_payload,
-        "consumer",
-    )
-    return live
+    projected_adapters = require_task4_adapter_payload(adapters, live.adapters)
+    projected_consumers = require_task4_consumer_payload(consumers, live.consumers)
+    return LiveManifests(live.physical, projected_adapters, projected_consumers)
 
 
 def emit_live(

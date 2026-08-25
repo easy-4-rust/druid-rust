@@ -120,6 +120,14 @@ impl JdbcAgentConnection {
         })
     }
 
+    fn standard_statement_core(
+        &self,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "jdbc_agent_standard_create_statement",
+        })
+    }
+
     /// 终止当前隔离 Agent，用于认证其崩溃传播与连接丢弃合同。
     #[doc(hidden)]
     pub async fn diagnostic_crash_agent(&mut self) -> Result<(), RdbcError> {
@@ -778,5 +786,23 @@ impl PhysicalConnection for JdbcAgentConnection {
 
     fn driver_name(&self) -> &str {
         &self.driver_name
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(JdbcAgentConnection => Connection);
+
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for JdbcAgentConnection {
+    async fn create_statement(
+        &mut self,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        self.standard_statement_core()
+    }
+
+    async fn database_meta_data(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
+        Ok(Box::new(self.metadata.clone()))
     }
 }

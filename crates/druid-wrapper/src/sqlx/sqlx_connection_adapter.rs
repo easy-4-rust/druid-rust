@@ -1,5 +1,6 @@
 //! `SQLx` 物理连接适配器。
 
+use super::sqlx_connection_actor::SqlxConnectionActor;
 use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecutionError};
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
 use bigdecimal::{BigDecimal, FromPrimitive};
@@ -21,6 +22,8 @@ use sqlx::{
     Row as SqlxRow, Sqlite, SqliteConnection, Statement, TransactionManager, TypeInfo, ValueRef,
 };
 use std::sync::Arc;
+
+type SqlxExecResult = ExecResult;
 
 fn any_bind_unsupported(value_type: &'static str) -> RdbcError {
     RdbcError::UnsupportedOperation {
@@ -64,6 +67,7 @@ pub struct SqlxConnectionAdapter {
     auto_commit: bool,
     read_only: bool,
     discarded: bool,
+    standard_actor: Option<Arc<SqlxConnectionActor>>,
 }
 
 impl SqlxConnectionAdapter {
@@ -104,7 +108,50 @@ impl SqlxConnectionAdapter {
             auto_commit: true,
             read_only: false,
             discarded: false,
+            standard_actor: None,
         })
+    }
+
+    /// 把当前 raw adapter 转成 canonical owned actor，并在 connection handle 中保留 clone。
+    fn standard_actor_core(&mut self) -> Result<Arc<SqlxConnectionActor>, RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            return Ok(Arc::clone(actor));
+        }
+        if self.connection.is_none() || self.discarded {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let detached = Self {
+            connection: None,
+            url: self.url.clone(),
+            savepoint_sequence: self.savepoint_sequence,
+            auto_commit: self.auto_commit,
+            read_only: self.read_only,
+            discarded: self.discarded,
+            standard_actor: None,
+        };
+        let owned = std::mem::replace(self, detached);
+        let actor = SqlxConnectionActor::new(owned);
+        self.standard_actor = Some(Arc::clone(&actor));
+        Ok(actor)
+    }
+
+    pub(super) fn standard_auto_commit_core(&self) -> bool {
+        self.auto_commit
+    }
+
+    pub(super) fn standard_product_name_core(&self) -> Result<String, RdbcError> {
+        match self.backend_key() {
+            "sqlite" => Ok("SQLite".to_owned()),
+            "mysql" => Ok("MySQL".to_owned()),
+            "postgresql" => Ok("PostgreSQL".to_owned()),
+            _ => Err(RdbcError::UnsupportedOperation {
+                operation: "sqlx_database_metadata_product_name",
+            }),
+        }
+    }
+
+    pub(super) fn standard_close_core(&mut self) {
+        self.connection.take();
     }
 
     fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, RdbcError> {
@@ -647,7 +694,7 @@ impl SqlxConnectionAdapter {
         Ok(Row::new(values))
     }
 
-    async fn fetch_rows_with_labels(
+    pub(super) async fn fetch_rows_with_labels(
         &mut self,
         sql: &str,
         params: Vec<Value>,
@@ -777,11 +824,12 @@ impl SqlxConnectionAdapter {
         }
         Ok(())
     }
-}
 
-#[async_trait::async_trait]
-impl PhysicalConnection for SqlxConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
+    pub(super) async fn execute_update_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<SqlxExecResult, RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
                 let result = Self::bind_any_values(sql, params)?
@@ -831,6 +879,13 @@ impl PhysicalConnection for SqlxConnectionAdapter {
                 })
             }
         }
+    }
+}
+
+#[async_trait::async_trait]
+impl PhysicalConnection for SqlxConnectionAdapter {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<SqlxExecResult, RdbcError> {
+        self.execute_update_core(sql, params).await
     }
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
@@ -1651,6 +1706,79 @@ impl PhysicalConnection for SqlxConnectionAdapter {
             Some(SqlxConnectionBackend::Sqlite(_)) => "SQLite",
             None => "sqlx-closed",
         }
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(SqlxConnectionAdapter => Connection);
+
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
+    async fn create_statement(
+        &mut self,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        let actor = self.standard_actor_core()?;
+        Ok(Box::new(SqlxPreparedStatement::owned_statement(
+            String::new(),
+            actor,
+            options,
+        )))
+    }
+
+    async fn prepare_statement(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        let actor = self.standard_actor_core()?;
+        Ok(Box::new(SqlxPreparedStatement::owned_statement(
+            sql.to_owned(),
+            actor,
+            options,
+        )))
+    }
+
+    async fn database_meta_data(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
+        Ok(Box::new(
+            super::sqlx_database_meta_data::SqlxDatabaseMetaData::owned(
+                self.standard_actor_core()?,
+            ),
+        ))
+    }
+
+    fn auto_commit(&self) -> Result<bool, RdbcError> {
+        Ok(self.standard_actor.as_ref().map_or_else(
+            || self.standard_auto_commit_core(),
+            |actor| actor.auto_commit(),
+        ))
+    }
+
+    fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
+        druid_rdbc::extensions::ConnectionCapabilities {
+            transactions: true,
+            savepoints: true,
+            catalogs: false,
+            schemas: false,
+            callable_statements: false,
+        }
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.close().await
+        } else {
+            self.standard_close_core();
+            Ok(())
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self
+            .standard_actor
+            .as_ref()
+            .map_or_else(|| self.connection.is_none(), |actor| actor.is_closed()))
     }
 }
 

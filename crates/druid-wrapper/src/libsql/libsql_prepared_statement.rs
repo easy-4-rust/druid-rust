@@ -134,3 +134,11 @@ impl PhysicalPreparedStatement for LibSqlPreparedStatement {
         self.closed.load(Ordering::Acquire)
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(LibSqlPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for LibSqlPreparedStatement {}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for LibSqlPreparedStatement {}

@@ -132,3 +132,11 @@ impl PhysicalPreparedStatement for JdbcAgentPreparedStatement {
         Ok(())
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(JdbcAgentPreparedStatement => PreparedStatement);
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::Statement for JdbcAgentPreparedStatement {}
+
+#[async_trait::async_trait]
+impl druid_rdbc::statement::PreparedStatement for JdbcAgentPreparedStatement {}

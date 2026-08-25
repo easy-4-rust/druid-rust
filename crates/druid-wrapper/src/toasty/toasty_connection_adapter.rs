@@ -1014,6 +1014,36 @@ impl PhysicalConnection for ToastyConnectionAdapter {
     }
 }
 
+druid_rdbc::impl_standard_wrapper!(ToastyConnectionAdapter => Connection);
+
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for ToastyConnectionAdapter {
+    async fn create_statement(
+        &mut self,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        Ok(Box::new(super::ToastyPreparedStatement::new(String::new())))
+    }
+
+    async fn prepare_statement(
+        &mut self,
+        sql: &str,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        Ok(Box::new(super::ToastyPreparedStatement::new(sql)))
+    }
+
+    async fn database_meta_data(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
+        Ok(Box::new(super::ToastyDatabaseMetaData::owned(
+            self.url.clone(),
+            self.driver_name.to_owned(),
+            self.read_only,
+        )))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::read_only_session_sql;

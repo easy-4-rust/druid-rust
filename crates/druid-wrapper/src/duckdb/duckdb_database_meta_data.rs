@@ -51,6 +51,10 @@ impl DuckDbDatabaseMetaData {
                 ))
             })
     }
+
+    fn database_product_name_core() -> String {
+        "DuckDB".to_owned()
+    }
 }
 
 #[async_trait::async_trait]
@@ -76,7 +80,7 @@ impl PhysicalDatabaseMetaData for DuckDbDatabaseMetaData {
     }
 
     async fn get_database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
-        Ok(Some("DuckDB".to_string()))
+        Ok(Some(Self::database_product_name_core()))
     }
 
     async fn get_database_product_version(&mut self) -> Result<Option<String>, RdbcError> {
@@ -133,5 +137,14 @@ impl PhysicalDatabaseMetaData for DuckDbDatabaseMetaData {
 
     async fn supports_batch_updates(&mut self) -> Result<bool, RdbcError> {
         Ok(true)
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(DuckDbDatabaseMetaData => DatabaseMetaData);
+
+#[async_trait::async_trait]
+impl druid_rdbc::metadata::DatabaseMetaData for DuckDbDatabaseMetaData {
+    async fn database_product_name(&mut self) -> Result<String, RdbcError> {
+        Ok(Self::database_product_name_core())
     }
 }

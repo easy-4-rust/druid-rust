@@ -1,4 +1,4 @@
-use std::any::Any;
+use std::any::{Any, TypeId};
 
 use async_trait::async_trait;
 use druid::core::DruidPooledConnection;
@@ -72,6 +72,20 @@ impl DruidRdbcDataSource {
 impl Wrapper for DruidRdbcDataSource {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+}
+
+impl druid_rdbc::wrapper::Wrapper for DruidRdbcDataSource {
+    fn wrapper_view(&self) -> &dyn druid_rdbc::wrapper::Wrapper {
+        self
+    }
+
+    fn canonical_unwrap(
+        &self,
+        target: TypeId,
+    ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
+        (target == TypeId::of::<dyn druid_rdbc::wrapper::Wrapper>())
+            .then_some(druid_rdbc::wrapper::StandardUnwrapped::Wrapper(self))
     }
 }
 

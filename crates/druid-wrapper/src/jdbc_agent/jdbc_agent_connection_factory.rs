@@ -57,6 +57,13 @@ impl JdbcAgentConnectionFactory {
         &self,
         properties: HashMap<String, String>,
     ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core(properties).await?))
+    }
+
+    async fn create_adapter_core(
+        &self,
+        properties: HashMap<String, String>,
+    ) -> Result<JdbcAgentConnection, RdbcError> {
         let connection = JdbcAgentConnection::connect(
             &self.url,
             self.validation_query.as_deref(),
@@ -64,7 +71,7 @@ impl JdbcAgentConnectionFactory {
             self.options.clone(),
         )
         .await?;
-        Ok(Box::new(connection))
+        Ok(connection)
     }
 
     fn merged_properties(
@@ -86,6 +93,20 @@ impl JdbcAgentConnectionFactory {
                 .or_insert_with(|| password.clone());
         }
         properties
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for JdbcAgentConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(
+            self.create_adapter_core(self.merged_properties(None))
+                .await?,
+        ))
+    }
+
+    fn name(&self) -> &str {
+        "jdbc-agent"
     }
 }
 

@@ -4,17 +4,23 @@
 //! `Vec<Row>`，但查询侧仍使用 `fetch_all`，因此不是流式游标。真正的流式结果集
 //! 需要先把同步 `PhysicalResultSet::next()` 演进为可等待的 C7 生命周期接口。
 
+use super::sqlx_connection_actor::SqlxConnectionActor;
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::metadata::{
+    ColumnDescriptor, ColumnNullability, ResultSetMetaData as StandardResultSetMetaData,
+    ResultSetMetaDataSnapshot,
+};
+use druid_rdbc::result_set::ColumnIndex;
 use druid_rdbc::spi::{
     PhysicalResultSet, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData,
 };
-use druid_rdbc::types::Value;
+use druid_rdbc::types::{Row, Value};
 use sqlx::mysql::MySqlRow;
 use sqlx::postgres::PgRow;
 use sqlx::sqlite::SqliteRow;
 use sqlx::{any::AnyRow, Column, Row as SqlxRowTrait, TypeInfo, ValueRef};
 use std::fmt;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 struct StreamingState {
@@ -28,6 +34,7 @@ enum StreamingRows {
     MySql(Vec<MySqlRow>),
     PostgreSql(Vec<PgRow>),
     Sqlite(Vec<SqliteRow>),
+    Values(Vec<Row>),
 }
 
 impl fmt::Debug for StreamingRows {
@@ -37,6 +44,7 @@ impl fmt::Debug for StreamingRows {
             StreamingRows::MySql(rows) => ("mysql", rows.len()),
             StreamingRows::PostgreSql(rows) => ("postgresql", rows.len()),
             StreamingRows::Sqlite(rows) => ("sqlite", rows.len()),
+            StreamingRows::Values(rows) => ("values", rows.len()),
         };
         formatter
             .debug_struct("StreamingRows")
@@ -51,6 +59,7 @@ pub struct SqlxStreamingResultSet {
     column_labels: Vec<String>,
     meta_data: ResultSetMetaData,
     state: Mutex<StreamingState>,
+    actor_lease: Option<Arc<SqlxConnectionActor>>,
 }
 
 impl fmt::Debug for SqlxStreamingResultSet {
@@ -59,6 +68,7 @@ impl fmt::Debug for SqlxStreamingResultSet {
             .debug_struct("SqlxStreamingResultSet")
             .field("rows", &self.rows)
             .field("column_labels", &self.column_labels)
+            .field("owns_actor_lease", &self.actor_lease.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -90,6 +100,7 @@ impl SqlxStreamingResultSet {
                 cursor: -1,
                 was_null: false,
             }),
+            actor_lease: None,
         }
     }
 
@@ -108,6 +119,7 @@ impl SqlxStreamingResultSet {
                 cursor: -1,
                 was_null: false,
             }),
+            actor_lease: None,
         }
     }
 
@@ -126,6 +138,7 @@ impl SqlxStreamingResultSet {
                 cursor: -1,
                 was_null: false,
             }),
+            actor_lease: None,
         }
     }
 
@@ -144,7 +157,30 @@ impl SqlxStreamingResultSet {
                 cursor: -1,
                 was_null: false,
             }),
+            actor_lease: None,
         }
+    }
+
+    /// 使用 driver-neutral values 构造 owned eager result set。
+    pub(crate) fn values(rows: Vec<Row>, column_labels: Vec<String>) -> Self {
+        let meta_data = Self::build_meta::<SqliteRow, _>(&[], &column_labels, |_row, _index| None);
+        Self {
+            rows: StreamingRows::Values(rows),
+            column_labels,
+            meta_data,
+            state: Mutex::new(StreamingState {
+                closed: false,
+                cursor: -1,
+                was_null: false,
+            }),
+            actor_lease: None,
+        }
+    }
+
+    /// 让结果集持有执行 query 的 actor/connection lease。
+    pub(crate) fn with_actor_lease(mut self, actor: Arc<SqlxConnectionActor>) -> Self {
+        self.actor_lease = Some(actor);
+        self
     }
 
     fn build_meta<R, F>(rows: &[R], labels: &[String], mut typer: F) -> ResultSetMetaData
@@ -179,6 +215,7 @@ impl SqlxStreamingResultSet {
             StreamingRows::MySql(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
             StreamingRows::PostgreSql(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
             StreamingRows::Sqlite(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
+            StreamingRows::Values(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
         }
     }
 
@@ -188,6 +225,7 @@ impl SqlxStreamingResultSet {
             StreamingRows::MySql(rows) => rows.get(index).map(ValueAt::MySql),
             StreamingRows::PostgreSql(rows) => rows.get(index).map(ValueAt::PostgreSql),
             StreamingRows::Sqlite(rows) => rows.get(index).map(ValueAt::Sqlite),
+            StreamingRows::Values(rows) => rows.get(index).map(ValueAt::Values),
         }
     }
 }
@@ -197,6 +235,7 @@ enum ValueAt<'a> {
     MySql(&'a MySqlRow),
     PostgreSql(&'a PgRow),
     Sqlite(&'a SqliteRow),
+    Values(&'a Row),
 }
 
 impl ValueAt<'_> {
@@ -206,6 +245,7 @@ impl ValueAt<'_> {
             ValueAt::MySql(row) => row.columns().len(),
             ValueAt::PostgreSql(row) => row.columns().len(),
             ValueAt::Sqlite(row) => row.columns().len(),
+            ValueAt::Values(row) => row.values.len(),
         }
     }
 
@@ -215,6 +255,9 @@ impl ValueAt<'_> {
             ValueAt::MySql(row) => decode_mysql_value(row, column_index),
             ValueAt::PostgreSql(row) => decode_postgresql_value(row, column_index),
             ValueAt::Sqlite(row) => decode_sqlite_value(row, column_index),
+            ValueAt::Values(row) => row.values.get(column_index).cloned().ok_or_else(|| {
+                RdbcError::InvalidArgument(format!("column {column_index} is out of range"))
+            }),
         }
     }
 }
@@ -456,25 +499,15 @@ fn sqlx_driver_error(error: sqlx::Error) -> RdbcError {
 
 impl PhysicalResultSet for SqlxStreamingResultSet {
     fn close(&self) -> Result<(), RdbcError> {
-        self.state().closed = true;
-        Ok(())
+        self.close_core()
     }
 
     fn is_closed(&self) -> bool {
-        self.state().closed
+        self.is_closed_core()
     }
 
     fn next(&self) -> Result<bool, RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let next = state.cursor.saturating_add(1);
-        let len = self.len();
-        let present = next < len;
-        state.cursor = if present { next } else { len };
-        state.was_null = false;
-        Ok(present)
+        self.next_core()
     }
 
     fn first(&self) -> Result<bool, RdbcError> {
@@ -593,7 +626,7 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
     }
 
     fn was_null(&self) -> Result<bool, RdbcError> {
-        Ok(self.state().was_null)
+        Ok(self.was_null_core())
     }
 
     fn find_column(&self, column_label: &str) -> Result<usize, RdbcError> {
@@ -607,6 +640,78 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
     }
 
     fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
+        self.value_core(column_index)
+    }
+
+    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
+        Ok(self.meta_data.clone())
+    }
+}
+
+druid_rdbc::impl_standard_wrapper!(SqlxStreamingResultSet => ResultSet);
+
+#[async_trait::async_trait]
+impl druid_rdbc::result_set::ResultSet for SqlxStreamingResultSet {
+    async fn next(&mut self) -> Result<bool, RdbcError> {
+        self.next_core()
+    }
+
+    fn value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
+        self.value_core(column.get())
+    }
+
+    fn meta_data(&self) -> Result<Arc<dyn StandardResultSetMetaData>, RdbcError> {
+        let columns = self
+            .column_labels
+            .iter()
+            .map(|label| ColumnDescriptor::new(label, "UNKNOWN", ColumnNullability::Unknown))
+            .collect();
+        Ok(Arc::new(ResultSetMetaDataSnapshot::new(columns)))
+    }
+
+    fn was_null(&self) -> Result<bool, RdbcError> {
+        Ok(self.was_null_core())
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        self.close_core()?;
+        self.actor_lease.take();
+        Ok(())
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.is_closed_core())
+    }
+}
+
+impl SqlxStreamingResultSet {
+    fn close_core(&self) -> Result<(), RdbcError> {
+        self.state().closed = true;
+        Ok(())
+    }
+
+    fn is_closed_core(&self) -> bool {
+        self.state().closed
+    }
+
+    fn next_core(&self) -> Result<bool, RdbcError> {
+        let mut state = self.state();
+        if state.closed {
+            return Err(RdbcError::Other("result set is closed".to_string()));
+        }
+        let next = state.cursor.saturating_add(1);
+        let len = self.len();
+        let present = next < len;
+        state.cursor = if present { next } else { len };
+        state.was_null = false;
+        Ok(present)
+    }
+
+    fn was_null_core(&self) -> bool {
+        self.state().was_null
+    }
+
+    fn value_core(&self, column_index: usize) -> Result<Value, RdbcError> {
         let zero_index = column_index.checked_sub(1).ok_or_else(|| {
             RdbcError::DriverError(format!(
                 "column_index {column_index} is not a valid 1-based index"
@@ -640,12 +745,6 @@ impl PhysicalResultSet for SqlxStreamingResultSet {
         Ok(value)
     }
 
-    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
-        Ok(self.meta_data.clone())
-    }
-}
-
-impl SqlxStreamingResultSet {
     fn state(&self) -> std::sync::MutexGuard<'_, StreamingState> {
         self.state
             .lock()

@@ -454,3 +454,31 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
         "libsql-rs"
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(LibSqlConnectionAdapter => Connection);
+
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
+    async fn create_statement(
+        &mut self,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
+        Ok(Box::new(super::LibSqlPreparedStatement::new(String::new())))
+    }
+
+    async fn prepare_statement(
+        &mut self,
+        sql: &str,
+        _options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        Ok(Box::new(super::LibSqlPreparedStatement::new(sql)))
+    }
+
+    async fn database_meta_data(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
+        Ok(Box::new(super::LibSqlDatabaseMetaData::new(
+            self.url.clone(),
+        )))
+    }
+}

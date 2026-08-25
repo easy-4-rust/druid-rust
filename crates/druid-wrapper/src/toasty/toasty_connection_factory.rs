@@ -130,6 +130,23 @@ impl ToastyConnectionFactory {
             RdbcError::DriverError(error.to_string())
         }
     }
+
+    async fn create_adapter_core(&self) -> Result<ToastyConnectionAdapter, RdbcError> {
+        let connection = self
+            .driver
+            .connect(&self.connect_context)
+            .await
+            .map_err(|error| Self::driver_error(&error))?;
+        if !connection.is_valid() {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        Ok(ToastyConnectionAdapter::new(
+            connection,
+            Arc::clone(&self.schema),
+            self.driver.capability(),
+            self.url.clone(),
+        ))
+    }
 }
 
 #[async_trait::async_trait]
@@ -139,20 +156,7 @@ impl PhysicalConnectionFactory for ToastyConnectionFactory {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        let connection = self
-            .driver
-            .connect(&self.connect_context)
-            .await
-            .map_err(|error| Self::driver_error(&error))?;
-        if !connection.is_valid() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        Ok(Box::new(ToastyConnectionAdapter::new(
-            connection,
-            Arc::clone(&self.schema),
-            self.driver.capability(),
-            self.url.clone(),
-        )))
+        Ok(Box::new(self.create_adapter_core().await?))
     }
 
     async fn validate(
@@ -160,5 +164,16 @@ impl PhysicalConnectionFactory for ToastyConnectionFactory {
         connection: &mut Box<dyn PhysicalConnection>,
     ) -> Result<(), RdbcError> {
         connection.ping().await
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for ToastyConnectionFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(self.create_adapter_core().await?))
+    }
+
+    fn name(&self) -> &str {
+        self.driver_name
     }
 }

@@ -146,6 +146,14 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         payload["semantic_sha256"] = hashlib.sha256(self.semantic.read_bytes()).hexdigest()
         self.oracle.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
+    def write_rows_preserve_oracle(self, rows: list[list[str]]) -> None:
+        """Write a later-phase fixture while retaining the frozen planned denominator hash."""
+
+        self.semantic.write_text(
+            SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n",
+            encoding="utf-8",
+        )
+
     def assert_rejected(self) -> None:
         """Assert the current fixture fails closed."""
 
@@ -181,6 +189,52 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             expected_source_manifest_sha256=self.source_manifest_sha256,
         )
         self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
+
+    def test_adapter_live_phase_normalizes_to_frozen_denominator(self) -> None:
+        """Task 4 may advance only its adapter evidence columns without rewriting the oracle hash."""
+
+        rows = self.rows()
+        rows[0][12] = "crates/druid-wrapper/src/live.rs::LiveAdapter"
+        rows[0][13] = "LIVE"
+        rows[0][16] = "V1_LIVE"
+        rows[0][17] = "LIVE"
+        self.write_rows_preserve_oracle(rows)
+        summary = verify_inventory(
+            self.root,
+            self.semantic,
+            self.oracle,
+            expected_source_manifest_sha256=self.source_manifest_sha256,
+            phase="adapter-live",
+            adapter_live_entries={"java.sql.Type00"},
+            require_adapter_evidence=False,
+        )
+        self.assertEqual((52, 17, 0), (summary.java_sql, summary.javax_sql, summary.unknown))
+
+    def test_adapter_live_phase_rejects_missing_live_state_or_path(self) -> None:
+        """A Task 4 row cannot be LIVE with a missing path or remain PLANNED."""
+
+        with self.assertRaises(VerificationError):
+            verify_inventory(
+                self.root,
+                self.semantic,
+                self.oracle,
+                expected_source_manifest_sha256=self.source_manifest_sha256,
+                phase="adapter-live",
+                adapter_live_entries={"java.sql.Type00"},
+                require_adapter_evidence=False,
+            )
+
+    def test_rejects_unknown_phase_fail_closed(self) -> None:
+        """No unimplemented future phase may silently reuse planned validation."""
+
+        with self.assertRaisesRegex(VerificationError, "unknown semantic verification phase"):
+            verify_inventory(
+                self.root,
+                self.semantic,
+                self.oracle,
+                expected_source_manifest_sha256=self.source_manifest_sha256,
+                phase="logical-live",
+            )
 
     def test_require_standard_entries_rejects_task2_only_inventory(self) -> None:
         """The Task 3 gate fails while every canonical standard remains only planned."""
