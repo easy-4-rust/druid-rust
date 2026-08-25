@@ -1,6 +1,7 @@
 //! Wrapper-private owned executor shared by canonical adapter handles.
 
 use crate::standard_query_result::StandardQueryResult;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::types::Value;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -45,6 +46,15 @@ pub(crate) trait StandardExecutor: Send + Sync {
     async fn close(&self) -> Result<(), RdbcError>;
     fn is_closed(&self) -> bool;
 
+    fn task4_trace_statement_create(&self);
+    fn task4_trace_statement_update(&self);
+    fn task4_trace_prepared_create(&self);
+    fn task4_trace_parameter_set(&self);
+    fn task4_trace_prepared_query(&self);
+    fn task4_trace_result_next(&self);
+    fn task4_trace_result_set_metadata(&self);
+    fn task4_trace_database_metadata(&self);
+
     fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.is_closed() {
             Err(RdbcError::ConnectionDiscarded)
@@ -57,13 +67,21 @@ pub(crate) trait StandardExecutor: Send + Sync {
 struct OwnedAdapterExecutor<C> {
     connection: Mutex<Option<C>>,
     closed: AtomicBool,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl<C> OwnedAdapterExecutor<C> {
-    fn new(connection: C) -> Self {
+    fn new(connection: C, runtime_trace: Option<RuntimeTraceEmitter>) -> Self {
         Self {
             connection: Mutex::new(Some(connection)),
             closed: AtomicBool::new(false),
+            runtime_trace,
+        }
+    }
+
+    fn trace(&self, observe: impl FnOnce(&RuntimeTraceEmitter)) {
+        if let Some(trace) = &self.runtime_trace {
+            observe(trace);
         }
     }
 }
@@ -106,6 +124,7 @@ where
         };
         connection.standard_close_connection_core().await?;
         guard.take();
+        self.trace(RuntimeTraceEmitter::task4_trace_connection_close);
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
@@ -113,13 +132,48 @@ where
     fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
     }
+
+    fn task4_trace_statement_create(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_statement_create);
+    }
+
+    fn task4_trace_statement_update(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_statement_update);
+    }
+
+    fn task4_trace_prepared_create(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_prepared_create);
+    }
+
+    fn task4_trace_parameter_set(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_parameter_set);
+    }
+
+    fn task4_trace_prepared_query(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_prepared_query);
+    }
+
+    fn task4_trace_result_next(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_result_next);
+    }
+
+    fn task4_trace_result_set_metadata(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_result_set_metadata);
+    }
+
+    fn task4_trace_database_metadata(&self) {
+        self.trace(RuntimeTraceEmitter::task4_trace_database_metadata);
+    }
 }
 
-pub(crate) fn owned_executor<C>(connection: C) -> Arc<dyn StandardExecutor>
+pub(crate) fn owned_executor<C>(
+    connection: C,
+    runtime_trace: Option<RuntimeTraceEmitter>,
+) -> Arc<dyn StandardExecutor>
 where
     C: AdapterExecutionCore,
 {
-    Arc::new(OwnedAdapterExecutor::new(connection))
+    Arc::new(OwnedAdapterExecutor::new(connection, runtime_trace))
 }
 
 #[cfg(test)]
@@ -163,7 +217,7 @@ mod tests {
 
     #[tokio::test]
     async fn close_error_propagates_and_a_retry_reaches_exactly_once_success() {
-        let executor = owned_executor(CloseFailsOnce { closes: 0 });
+        let executor = owned_executor(CloseFailsOnce { closes: 0 }, None);
         assert!(executor.close().await.is_err());
         assert!(!executor.is_closed());
         assert!(executor.close().await.is_ok());
@@ -205,10 +259,13 @@ mod tests {
     async fn close_serializes_with_in_flight_execute_and_closes_all_owned_handles() {
         let started = std::sync::Arc::new(tokio::sync::Notify::new());
         let release = std::sync::Arc::new(tokio::sync::Notify::new());
-        let executor = owned_executor(SerializedCore {
-            started: std::sync::Arc::clone(&started),
-            release: std::sync::Arc::clone(&release),
-        });
+        let executor = owned_executor(
+            SerializedCore {
+                started: std::sync::Arc::clone(&started),
+                release: std::sync::Arc::clone(&release),
+            },
+            None,
+        );
         let execute = {
             let executor = std::sync::Arc::clone(&executor);
             tokio::spawn(async move { executor.execute_update("UPDATE", Vec::new()).await })

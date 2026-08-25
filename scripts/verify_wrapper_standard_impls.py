@@ -1,34 +1,100 @@
 #!/usr/bin/env python3
-"""Verify P04 Task 4 wrapper adapters implement the canonical RDBC standard directly."""
+"""Verify P04 Task 4 wrapper standard identity and typed runtime-trace evidence."""
 
 from __future__ import annotations
 
 import argparse
 import csv
-import functools
+import json
 import re
 import subprocess
-import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
+
 from verify_rdbc_public_paths import tokenize
-from verify_rdbc_standardization_denominator import (
-    cfg_atoms,
-    cfg_profile_excluded_indexes,
-    evaluate_cfg,
-    parse_cfg_expression,
-    parse_cfg_meta,
-    rust_tokens,
-    split_top_level_ranges,
-)
 
 
 DEFAULT_ADAPTERS = Path("docs/verification/rdbc-first/rdbc-adapter-implementations.tsv")
+DEFAULT_RUNTIME_EVIDENCE = Path(
+    "docs/verification/rdbc-first/rdbc-adapter-runtime-traces.tsv"
+)
 DEFAULT_CONSUMERS = Path("docs/verification/rdbc-first/rdbc-production-consumers.tsv")
 TASK = "P04_TASK_4_ADAPTER_CUTOVER"
 LIVE_ADAPTER_STATE = "STANDARD_IMPL_LIVE"
 LIVE_CONSUMER_STATE = "STANDARD_REFERENCE_CLOSED"
+RUNTIME_TRACE_CATEGORY = "RUNTIME_TRACE"
+COMPILE_IDENTITY_CATEGORY = "COMPILE_IDENTITY"
+TRACE_VERSION = "task4-runtime-trace-v1"
+TRACE_MARKER = "DRUID_TASK4_RUNTIME_TRACE"
+RUNTIME_EVIDENCE_HEADER = (
+    "source_path",
+    "target_trait",
+    "behavior_evidence",
+    "cargo_test_target",
+    "cargo_test_id",
+    "behavior_profile",
+    "evidence_category",
+    "trace_family",
+    "trace_version",
+    "trace_evidence_id",
+)
+TRACE_FAMILIES = {
+    "SQLX",
+    "TOASTY",
+    "RBDC",
+    "DUCKDB",
+    "HTTP_SQL",
+    "LIBSQL",
+    "JDBC_AGENT",
+}
+TRACE_STAGES = (
+    "FactoryCreate",
+    "ConnectionCreate",
+    "StatementCreate",
+    "StatementUpdate",
+    "PreparedCreate",
+    "ParameterSet",
+    "PreparedQuery",
+    "ResultNext",
+    "ResultSetMetadata",
+    "DatabaseMetadata",
+    "ConnectionClose",
+)
+TRACE_RECORD_METHODS = {
+    f"task4_trace_{name}"
+    for name in (
+        "factory_create",
+        "connection_create",
+        "statement_create",
+        "statement_update",
+        "prepared_create",
+        "parameter_set",
+        "prepared_query",
+        "result_next",
+        "result_set_metadata",
+        "database_metadata",
+        "connection_close",
+    )
+}
+TRACE_RECORD_ALLOWED_PATHS = {
+    "crates/druid-wrapper/src/standard_adapter_executor.rs",
+    "crates/druid-wrapper/src/standard_adapter_statement.rs",
+    "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+    "crates/druid-wrapper/src/standard_adapter_result_set.rs",
+    "crates/druid-wrapper/src/standard_adapter_database_meta_data.rs",
+    "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
+    "crates/druid-wrapper/src/sqlx/sqlx_connection_factory.rs",
+    "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+    "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+    "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs",
+    "crates/druid-wrapper/src/toasty/toasty_connection_factory.rs",
+    "crates/druid-wrapper/src/rbdc/rbdc_connection_factory.rs",
+    "crates/druid-wrapper/src/duckdb/duckdb_connection_factory.rs",
+    "crates/druid-wrapper/src/http_sql/http_sql_connection_factory.rs",
+    "crates/druid-wrapper/src/libsql/libsql_connection_factory.rs",
+    "crates/druid-wrapper/src/jdbc_agent/jdbc_agent_connection_factory.rs",
+}
 SQL_EXECUTION_MARKERS = (
     "sqlx::query",
     ".fetch_all(",
@@ -37,60 +103,10 @@ SQL_EXECUTION_MARKERS = (
     "RdbcError::DriverError",
     "RdbcError::UnsupportedOperation",
 )
-APPROVED_ASSERTION_MACROS = {
-    "assert",
-    "assert_eq",
-    "assert_ne",
-    "debug_assert",
-    "debug_assert_eq",
-    "debug_assert_ne",
-    "matches",
-}
-STRAIGHT_LINE_FORBIDDEN_KEYWORDS = {
-    "if": "branch `if`",
-    "else": "branch `else`",
-    "match": "branch `match`",
-    "loop": "loop `loop`",
-    "while": "loop `while`",
-    "for": "loop `for`",
-    "return": "early exit `return`",
-    "break": "early exit `break`",
-    "continue": "early exit `continue`",
-    "async": "deferred `async` block or closure",
-    "move": "deferred `move` closure",
-    "type": "local type definition",
-    "struct": "local struct definition",
-    "enum": "local enum definition",
-    "union": "local union definition",
-    "trait": "local trait definition",
-    "impl": "local impl definition",
-    "mod": "local module definition",
-    "macro_rules": "local macro_rules definition",
-    "macro": "local macro definition",
-    "const": "local const item",
-    "static": "local static item",
-    "use": "local use item",
-    "extern": "local extern item",
-    "unsafe": "unsafe block",
-    "try": "try block",
-    "yield": "yield expression",
-}
-REMOTE_BEHAVIOR_CHAIN = (
-    ("ConnectionFactory", "::", "create"),
-    ("create_statement",),
-    ("execute_update",),
-    ("prepare_statement",),
-    ("set_parameter",),
-    ("execute_prepared_query",),
-    ("next",),
-    ("meta_data",),
-    ("database_meta_data",),
-    ("Connection", "::", "close"),
-)
 
 
 class VerificationError(RuntimeError):
-    """Raised when Task 4 evidence is absent, duplicated, or stale."""
+    """Raised when Task 4 evidence is absent, duplicated, forged, or stale."""
 
 
 def fail(message: str) -> NoReturn:
@@ -101,7 +117,7 @@ def fail(message: str) -> NoReturn:
 
 @dataclass(frozen=True)
 class AdapterRow:
-    """One Task 4 production adapter obligation."""
+    """One Task 4 production adapter obligation and its exact evidence binding."""
 
     source_path: Path
     current_trait: str
@@ -112,14 +128,26 @@ class AdapterRow:
     standard_core_evidence: str
     behavior_evidence: str
     state: str
+    behavior_test_target: str = "test:demo"
+    cargo_test_id: str = "runs"
+    behavior_profile: str = "default"
+    evidence_category: str = RUNTIME_TRACE_CATEGORY
+    trace_family: str = "HTTP_SQL"
+    trace_version: str = TRACE_VERSION
+    trace_evidence_id: str = "task4.fixture.runtime-trace-v1"
 
 
-@dataclass(frozen=True)
-class CfgProfile:
-    """One exact wrapper test profile over Cargo features and current rustc target cfg."""
+@dataclass(frozen=True, order=True)
+class EvidenceSpec:
+    """One unique exact Cargo test and its expected trace/identity protocol."""
 
-    name: str
-    assignment: dict[str, bool]
+    test_target: str
+    test_id: str
+    profile: str
+    category: str
+    family: str
+    version: str
+    evidence_id: str
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -128,16 +156,37 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
     raw = path.read_bytes()
     if not raw.endswith(b"\n") or raw.endswith(b"\n\n") or b"\r" in raw:
         fail(f"TSV must have exactly one LF final newline: {path}")
-    text = raw.decode("utf-8")
-    rows = list(csv.DictReader(text.splitlines(), delimiter="\t"))
+    rows = list(csv.DictReader(raw.decode("utf-8").splitlines(), delimiter="\t"))
     if not rows or any(None in row or any(value == "" for value in row.values()) for row in rows):
         fail(f"TSV contains an empty or malformed row: {path}")
     return rows
 
 
-def task_adapter_rows(path: Path) -> list[AdapterRow]:
+def task_adapter_rows(path: Path, evidence_path: Path) -> list[AdapterRow]:
     """Load exactly the production wrapper rows assigned to Task 4."""
 
+    raw_rows = read_tsv(path)
+    evidence_rows = read_tsv(evidence_path)
+    if tuple(evidence_rows[0]) != RUNTIME_EVIDENCE_HEADER:
+        fail("Task 4 runtime evidence TSV header is not exact")
+    evidence_order = [
+        (row["source_path"], row["target_trait"]) for row in evidence_rows
+    ]
+    if evidence_order != sorted(evidence_order):
+        fail("Task 4 runtime evidence TSV is not canonically sorted")
+    evidence_by_key = {
+        (row["source_path"], row["target_trait"]): row for row in evidence_rows
+    }
+    if len(evidence_by_key) != 31 or len(evidence_rows) != 31:
+        fail("Task 4 runtime evidence TSV must contain 31 unique source/target rows")
+    selected = [
+        row
+        for row in raw_rows
+        if row["target_task"] == TASK and row["owner"] == "WRAPPER_ADAPTER"
+    ]
+    selected_keys = {(row["source_path"], row["target_trait"]) for row in selected}
+    if set(evidence_by_key) != selected_keys:
+        fail("Task 4 runtime evidence TSV does not exactly cover adapter rows")
     rows = [
         AdapterRow(
             source_path=Path(row["source_path"]),
@@ -149,12 +198,44 @@ def task_adapter_rows(path: Path) -> list[AdapterRow]:
             standard_core_evidence=row["standard_core_evidence"],
             behavior_evidence=row["behavior_evidence"],
             state=row["state"],
+            behavior_test_target=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "cargo_test_target"
+            ],
+            cargo_test_id=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "cargo_test_id"
+            ],
+            behavior_profile=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "behavior_profile"
+            ],
+            evidence_category=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "evidence_category"
+            ],
+            trace_family=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "trace_family"
+            ],
+            trace_version=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "trace_version"
+            ],
+            trace_evidence_id=evidence_by_key[(row["source_path"], row["target_trait"])][
+                "trace_evidence_id"
+            ],
         )
-        for row in read_tsv(path)
-        if row["target_task"] == TASK and row["owner"] == "WRAPPER_ADAPTER"
+        for row in selected
     ]
     if len(rows) != 31:
         fail(f"Task 4 adapter denominator drift: expected 31 rows, found {len(rows)}")
+    for row, raw_row in zip(rows, selected, strict=True):
+        evidence = evidence_by_key[(raw_row["source_path"], raw_row["target_trait"])]
+        if evidence["behavior_evidence"] != raw_row["behavior_evidence"]:
+            fail(
+                "runtime evidence TSV does not match adapter behavior evidence: "
+                f"{row.source_path}"
+            )
+        if (
+            evidence["cargo_test_id"] != row.behavior_evidence.rsplit("::", 1)[-1]
+            and row.behavior_test_target != "lib"
+        ):
+            fail(f"integration evidence cargo id is not exact: {row.behavior_evidence}")
     return rows
 
 
@@ -179,10 +260,8 @@ def extract_impl_bodies(source: str, trait_name: str, type_name: str) -> list[st
         depth = 1
         index = match.end()
         while index < len(source) and depth:
-            if source[index] == "{":
-                depth += 1
-            elif source[index] == "}":
-                depth -= 1
+            depth += source[index] == "{"
+            depth -= source[index] == "}"
             index += 1
         if depth:
             fail(f"unbalanced impl block for {concrete}: {leaf}")
@@ -202,519 +281,216 @@ def core_calls(body: str) -> set[str]:
     return set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*_core)\s*\(", body))
 
 
-@functools.lru_cache(maxsize=1)
-def rustc_cfg_lines() -> tuple[str, ...]:
-    """Return the current compiler target cfg as canonical atom strings."""
+def validate_runtime_trace_output(
+    output: str,
+    expected_evidence_id: str,
+    expected_family: str,
+    expected_version: str,
+) -> None:
+    """Require exactly one complete, same-family, same-instance typed trace record."""
 
+    prefix = f"{TRACE_MARKER}\t"
+    marker_lines = [line for line in output.splitlines() if line.startswith(prefix)]
+    if output.count(prefix) != 1 or len(marker_lines) != 1:
+        fail(
+            "runtime evidence must contain exactly one library-owned trace record: "
+            f"found {len(marker_lines)} exact lines"
+        )
+    try:
+        payload = json.loads(marker_lines[0][len(prefix) :])
+    except json.JSONDecodeError as error:
+        fail(f"runtime trace JSON is malformed: {error}")
+    required_keys = {"evidence_id", "version", "family", "instance_id", "events"}
+    if not isinstance(payload, dict) or set(payload) != required_keys:
+        fail("runtime trace payload schema is not exact")
+    if payload["evidence_id"] != expected_evidence_id:
+        fail("runtime trace evidence id does not match the TSV binding")
+    if payload["version"] != expected_version or expected_version != TRACE_VERSION:
+        fail("runtime trace protocol version is not the unique Task 4 version")
+    if payload["family"] != expected_family or expected_family not in TRACE_FAMILIES:
+        fail("runtime trace family does not match the TSV binding")
+    instance_id = payload["instance_id"]
+    if isinstance(instance_id, bool) or not isinstance(instance_id, int) or instance_id <= 0:
+        fail("runtime trace instance id must be a positive integer")
+    events = payload["events"]
+    if not isinstance(events, list) or len(events) != len(TRACE_STAGES):
+        fail("runtime trace event denominator is incomplete or duplicated")
+    observed_stages: list[str] = []
+    for event in events:
+        if not isinstance(event, dict) or set(event) != {"family", "instance_id", "stage"}:
+            fail("runtime trace event schema is not exact")
+        if event["family"] != expected_family or event["instance_id"] != instance_id:
+            fail("runtime trace splices different family or connection instances")
+        if not isinstance(event["stage"], str):
+            fail("runtime trace stage is not typed as a string label")
+        observed_stages.append(event["stage"])
+    if tuple(observed_stages) != TRACE_STAGES:
+        fail("runtime trace stages are missing, duplicated, or out of order")
+
+
+def verify_runtime_trace_source_hygiene(path: Path, source: str) -> None:
+    """Reject marker/event/record construction from evidence tests and I/O doubles."""
+
+    forbidden_literals = (
+        TRACE_MARKER,
+        "RuntimeTraceEmitter",
+        "TraceStage",
+        "TraceEvent",
+        "record_stage",
+        *TRACE_STAGES,
+    )
+    found = [literal for literal in forbidden_literals if literal in source]
+    tokens = tuple(token.text for token in tokenize(source))
+    found.extend(method for method in TRACE_RECORD_METHODS if method in tokens)
+    if found:
+        fail(f"runtime evidence source may not forge trace internals: {path}: {sorted(set(found))}")
+
+
+def verify_trace_record_callsites(root: Path) -> None:
+    """Allow typed stage recording only at approved production execution modules."""
+
+    source_root = root / "crates/druid-wrapper/src"
+    for path in source_root.rglob("*.rs"):
+        relative = path.relative_to(root).as_posix()
+        source = path.read_text(encoding="utf-8")
+        tokens = tuple(token.text for token in tokenize(source))
+        calls = {
+            tokens[index + 1]
+            for index in range(len(tokens) - 2)
+            if tokens[index] == "."
+            and tokens[index + 1] in TRACE_RECORD_METHODS
+            and tokens[index + 2] == "("
+        }
+        if calls and relative not in TRACE_RECORD_ALLOWED_PATHS:
+            fail(f"runtime trace record callsite is outside production allowlist: {relative}: {sorted(calls)}")
+        test_region = source.find("#[cfg(test)]")
+        if test_region >= 0:
+            verify_runtime_trace_source_hygiene(Path(relative), source[test_region:])
+    trace_module = source_root / "task4_runtime_trace.rs"
+    for path in source_root.rglob("*.rs"):
+        if path == trace_module:
+            continue
+        if TRACE_MARKER in path.read_text(encoding="utf-8"):
+            fail(f"runtime trace marker serialization escaped its owner module: {path.relative_to(root)}")
+
+
+def evidence_source(root: Path, spec: EvidenceSpec) -> tuple[Path, str]:
+    """Resolve one exact Cargo target/test id to source used for anti-forgery scanning."""
+
+    function_name = spec.test_id.rsplit("::", 1)[-1]
+    if spec.test_target == "lib":
+        candidates = [
+            path
+            for path in (root / "crates/druid-wrapper/src").rglob("*.rs")
+            if re.search(rf"\bfn\s+{re.escape(function_name)}\s*\(", path.read_text(encoding="utf-8"))
+        ]
+        if len(candidates) != 1:
+            fail(f"runtime evidence lib test source is not exact: {spec.test_id}: {candidates}")
+        source = candidates[0].read_text(encoding="utf-8")
+        function_offset = source.find(f"fn {function_name}")
+        test_module_offset = source.rfind("#[cfg(test)]", 0, function_offset)
+        if test_module_offset < 0:
+            fail(f"runtime evidence lib test is not inside cfg(test): {spec.test_id}")
+        return candidates[0], source[test_module_offset:]
+    if not spec.test_target.startswith("test:"):
+        fail(f"runtime evidence has unknown Cargo target: {spec.test_target}")
+    target = spec.test_target.removeprefix("test:")
+    path = root / "crates/druid-wrapper/tests" / f"{target}.rs"
+    if not path.is_file():
+        fail(f"runtime evidence integration target is missing: {target}")
+    source = path.read_text(encoding="utf-8")
+    if len(re.findall(rf"\bfn\s+{re.escape(function_name)}\s*\(", source)) != 1:
+        fail(f"runtime evidence integration test id is not exact: {spec.test_id}")
+    return path, source
+
+
+def cargo_evidence_command(spec: EvidenceSpec) -> list[str]:
+    """Build the one exact Cargo command declared by a TSV evidence row."""
+
+    command = ["cargo", "test", "-p", "druid-wrapper"]
+    if spec.profile == "all-features":
+        command.append("--all-features")
+    elif spec.profile != "default":
+        fail(f"runtime evidence profile is unknown: {spec.profile}")
+    if spec.test_target == "lib":
+        command.append("--lib")
+    elif spec.test_target.startswith("test:"):
+        command.extend(["--test", spec.test_target.removeprefix("test:")])
+    else:
+        fail(f"runtime evidence Cargo target is unknown: {spec.test_target}")
+    command.extend([spec.test_id, "--", "--exact", "--nocapture"])
+    return command
+
+
+def execute_evidence(root: Path, spec: EvidenceSpec) -> None:
+    """Run one exact declared test and validate its runtime-trace or compile-identity outcome."""
+
+    path, source = evidence_source(root, spec)
+    verify_runtime_trace_source_hygiene(path.relative_to(root), source)
     result = subprocess.run(
-        ["rustc", "--print", "cfg"],
+        cargo_evidence_command(spec),
+        cwd=root,
         check=False,
         capture_output=True,
         text=True,
     )
+    output = f"{result.stdout}\n{result.stderr}"
     if result.returncode != 0:
-        fail(f"cannot determine current rustc cfg: {result.stderr.strip()}")
-    return tuple(sorted(line.strip() for line in result.stdout.splitlines() if line.strip()))
+        fail(f"exact Task 4 evidence test failed: {spec.test_id}: {output.strip()}")
+    if not re.search(r"test result: ok\. 1 passed; 0 failed; 0 ignored;", output):
+        fail(f"exact Task 4 evidence test did not complete through libtest: {spec.test_id}")
+    if spec.category == RUNTIME_TRACE_CATEGORY:
+        validate_runtime_trace_output(output, spec.evidence_id, spec.family, spec.version)
+    elif spec.category == COMPILE_IDENTITY_CATEGORY:
+        if TRACE_MARKER in output:
+            fail(f"nonbehavior identity evidence forged runtime behavior: {spec.test_id}")
+    else:
+        fail(f"Task 4 evidence category is unknown: {spec.category}")
 
 
-def expanded_cargo_features(root: Path, all_features: bool) -> tuple[set[str], set[str]]:
-    """Return enabled and declared druid-wrapper feature names for one Cargo profile."""
+def evidence_specs(rows: list[AdapterRow]) -> tuple[EvidenceSpec, ...]:
+    """Validate row bindings and return one deterministic set of exact tests to execute."""
 
-    manifest = root / "crates/druid-wrapper/Cargo.toml"
-    if not manifest.is_file():
-        return set(), set()
-    payload = tomllib.loads(manifest.read_text(encoding="utf-8"))
-    table = payload.get("features", {})
-    if not isinstance(table, dict):
-        fail("druid-wrapper Cargo features table is malformed")
-    declared = {str(name) for name in table if name != "default"}
-    if all_features:
-        return set(declared), declared
-    enabled: set[str] = set()
-    pending = [str(value) for value in table.get("default", [])]
-    while pending:
-        feature = pending.pop()
-        if feature.startswith("dep:") or "/" in feature or feature in enabled:
-            continue
-        if feature not in table:
-            fail(f"default Cargo feature references unknown feature: {feature}")
-        enabled.add(feature)
-        pending.extend(str(value) for value in table.get(feature, []))
-    return enabled, declared
-
-
-@functools.lru_cache(maxsize=8)
-def cfg_profile(root_text: str, profile_name: str) -> CfgProfile:
-    """Build a complete feature/target assignment for default or all-features tests."""
-
-    if profile_name not in {"default", "all-features"}:
-        fail(f"unknown behavior evidence profile: {profile_name}")
-    root = Path(root_text)
-    enabled, declared = expanded_cargo_features(root, profile_name == "all-features")
-    true_atoms = set(rustc_cfg_lines())
-    true_atoms.update(f'feature="{feature}"' for feature in enabled)
-    assignment = {atom: True for atom in true_atoms}
-    for feature in declared:
-        assignment.setdefault(f'feature="{feature}"', False)
-    # Cargo treats an undeclared feature predicate as disabled; target keys are closed below.
-    assignment["test"] = True
-    return CfgProfile(profile_name, assignment)
-
-
-def assignment_for_expressions(
-    expressions: list[tuple[object, ...]],
-    profile: CfgProfile,
-) -> dict[str, bool]:
-    """Complete known feature/target atoms and fail closed for custom cfg names."""
-
-    assignment = dict(profile.assignment)
-    true_atoms = {atom for atom, value in assignment.items() if value}
-    target_keys = {
-        atom.split("=", 1)[0]
-        for atom in rustc_cfg_lines()
-        if "=" in atom
-    }
-    known_flags = {atom for atom in rustc_cfg_lines() if "=" not in atom}
-    for expression in expressions:
-        for atom in cfg_atoms(expression):
-            if atom in assignment:
-                continue
-            key = atom.split("=", 1)[0]
-            if key == "feature":
-                assignment[atom] = False
-            elif key in target_keys:
-                assignment[atom] = atom in true_atoms
-            elif atom in known_flags:
-                assignment[atom] = True
-            elif atom in {"unix", "windows"}:
-                assignment[atom] = atom in true_atoms
-            else:
-                fail(f"cfg profile cannot prove atom: {atom}")
-    return assignment
-
-
-def matching_open_bracket(tokens: list[object], close_index: int) -> int:
-    """Return the matching `[` for one outer attribute closing bracket."""
-
-    depth = 1
-    index = close_index - 1
-    while index >= 0:
-        depth += tokens[index].text == "]"
-        depth -= tokens[index].text == "["
-        if depth == 0:
-            return index
-        index -= 1
-    fail("behavior evidence attribute is unbalanced")
-
-
-def preceding_attribute_ranges(tokens: list[object], fn_index: int) -> list[tuple[int, int]]:
-    """Return the exact consecutive outer attributes attached to one test function."""
-
-    item_start = fn_index
-    while item_start > 0 and tokens[item_start - 1].text in {"async", "const", "unsafe"}:
-        item_start -= 1
-    ranges: list[tuple[int, int]] = []
-    cursor = item_start
-    while cursor > 0 and tokens[cursor - 1].text == "]":
-        opening = matching_open_bracket(tokens, cursor - 1)
-        if opening == 0 or tokens[opening - 1].text != "#":
-            break
-        ranges.append((opening - 1, cursor - 1))
-        cursor = opening - 1
-    ranges.reverse()
-    return ranges
-
-
-def cfg_value(expression: tuple[object, ...], profile: CfgProfile) -> bool:
-    """Evaluate one cfg expression with test=true and a complete current profile."""
-
-    assignment = assignment_for_expressions([expression], profile)
-    value = evaluate_cfg(expression, assignment, test_value=True)
-    if value is None:
-        fail(f"cfg profile cannot prove expression: {expression}")
-    return value
-
-
-def cfg_meta_enables_test(
-    tokens: list[object],
-    start: int,
-    end: int,
-    profile: CfgProfile,
-) -> bool:
-    """Evaluate direct or cfg_attr-provided test attributes under one profile."""
-
-    if start >= end or tokens[start].kind != "IDENT":
-        return False
-    name = tokens[start].text
-    if name == "test" and start + 1 == end:
-        return True
-    if (
-        name == "tokio"
-        and start + 2 < end
-        and tokens[start + 1].text == "::"
-        and tokens[start + 2].text == "test"
-    ):
-        return True
-    if name != "cfg_attr" or start + 1 >= end or tokens[start + 1].text != "(":
-        return False
-    arguments = split_top_level_ranges(tokens, start + 2, end - 1)
-    if len(arguments) < 2:
-        return False
-    condition, _ = parse_cfg_expression(tokens, *arguments[0])
-    if not cfg_value(condition, profile):
-        return False
-    return any(
-        cfg_meta_enables_test(tokens, nested_start, nested_end, profile)
-        for nested_start, nested_end in arguments[1:]
-    )
-
-
-def file_inner_cfg_enabled(tokens: list[object], profile: CfgProfile) -> bool:
-    """Evaluate crate-level `#![cfg]` and nested `#![cfg_attr(..., cfg(...))]`."""
-
-    constraints: list[tuple[object, ...]] = []
-    index = 0
-    while index + 2 < len(tokens):
-        if not (
-            tokens[index].text == "#"
-            and tokens[index + 1].text == "!"
-            and tokens[index + 2].text == "["
-        ):
-            index += 1
-            continue
-        depth = 1
-        bracket_end = index + 3
-        while bracket_end < len(tokens) and depth:
-            depth += tokens[bracket_end].text == "["
-            depth -= tokens[bracket_end].text == "]"
-            bracket_end += 1
-        if depth:
-            fail("behavior evidence inner attribute is unbalanced")
-        constraints.extend(parse_cfg_meta(tokens, index + 3, bracket_end - 1))
-        index = bracket_end
-    if not constraints:
-        return True
-    conjunction: tuple[object, ...] = ("all", tuple(constraints))
-    return cfg_value(conjunction, profile)
-
-
-def all_cfg_expressions(tokens: list[object]) -> list[tuple[object, ...]]:
-    """Collect every outer/inner cfg constraint so the profile assignment is complete."""
-
-    expressions: list[tuple[object, ...]] = []
-    index = 0
-    while index + 1 < len(tokens):
-        if tokens[index].text != "#":
-            index += 1
-            continue
-        inner = index + 2 < len(tokens) and tokens[index + 1].text == "!" and tokens[index + 2].text == "["
-        opening = index + 2 if inner else index + 1
-        if opening >= len(tokens) or tokens[opening].text != "[":
-            index += 1
-            continue
-        depth = 1
-        end = opening + 1
-        while end < len(tokens) and depth:
-            depth += tokens[end].text == "["
-            depth -= tokens[end].text == "]"
-            end += 1
-        if depth:
-            fail("behavior evidence cfg attribute is unbalanced")
-        meta_start = opening + 1
-        expressions.extend(parse_cfg_meta(tokens, meta_start, end - 1))
-        index = end
-    return expressions
-
-
-def straight_line_body_tokens(
-    tokens: list[object],
-    start: int,
-    end: int,
-    excluded: set[int],
-    function_name: str,
-) -> tuple[str, ...]:
-    """Validate and return one direct, sequential fallthrough test body."""
-
-    body_indexes = list(range(start, end))
-    if not body_indexes:
-        fail(f"adapter behavior evidence has an empty body: {function_name}")
-
-    closure_prefixes = {
-        None,
-        "=",
-        "&",
-        "(",
-        "[",
-        "{",
-        ",",
-        ":",
-        ";",
-        ">",
-        "=>",
-        "async",
-        "move",
-        "return",
-    }
-    delimiters = {"(", "[", "{"}
-    for index in body_indexes:
-        text = tokens[index].text
-        if (
-            text == "#"
-            and index + 2 < end
-            and tokens[index + 1].text == "["
-            and tokens[index + 2].text in {"cfg", "cfg_attr"}
-        ):
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"body-level static cfg: {function_name}"
-            )
-
-        forbidden = STRAIGHT_LINE_FORBIDDEN_KEYWORDS.get(text)
-        if forbidden is not None:
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"{forbidden}: {function_name}"
-            )
-        if (
-            text == "fn"
-            and index + 1 < end
-            and tokens[index + 1].kind == "IDENT"
-        ):
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"local helper function definition: {function_name}"
-            )
-        if text == "?":
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"question-mark early return: {function_name}"
-            )
-
-        previous = tokens[index - 1].text if index > start else None
-        following = tokens[index + 1].text if index + 1 < end else None
-        if text in {"&", "|"} and following == text:
-            if text == "|" and previous in closure_prefixes:
-                construct = "closure syntax"
-            else:
-                construct = f"short-circuit operator {text}{text}"
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"{construct}: {function_name}"
-            )
-        if text == "|" and previous in closure_prefixes:
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"closure syntax: {function_name}"
-            )
-
-        if (
-            tokens[index].kind == "IDENT"
-            and index + 2 < end
-            and tokens[index + 1].text == "!"
-            and tokens[index + 2].text in delimiters
-        ):
-            macro_name = text.removeprefix("r#")
-            qualified = index > start and tokens[index - 1].text == "::"
-            if macro_name not in APPROVED_ASSERTION_MACROS or qualified:
-                fail(
-                    "adapter behavior evidence straight-line profile forbids "
-                    f"user or qualified function-like macro {macro_name}!: {function_name}"
-                )
-
-    if any(index in excluded for index in body_indexes):
-        fail(
-            "adapter behavior evidence straight-line profile forbids "
-            f"cfg-disabled body tokens: {function_name}"
+    specs = {
+        EvidenceSpec(
+            row.behavior_test_target,
+            row.cargo_test_id,
+            row.behavior_profile,
+            row.evidence_category,
+            row.trace_family,
+            row.trace_version,
+            row.trace_evidence_id,
         )
-    return tuple(tokens[index].text for index in body_indexes)
-
-
-def body_has_observable_assertion(body_tokens: tuple[str, ...]) -> bool:
-    """Return whether the direct body invokes an approved assertion macro."""
-
-    return any(
-        token.removeprefix("r#") in APPROVED_ASSERTION_MACROS
-        and index + 1 < len(body_tokens)
-        and body_tokens[index + 1] == "!"
-        for index, token in enumerate(body_tokens)
-    )
-
-
-def reject_assertion_macro_shadows(tokens: list[object], function_name: str) -> None:
-    """Reject file-local definitions that impersonate an approved assertion name."""
-
-    for index, token in enumerate(tokens):
-        if token.text.removeprefix("r#") == "macro_use":
-            fail(
-                "adapter behavior evidence assertion macro provenance is "
-                f"ambiguous through macro_use: {function_name}"
-            )
-        candidate: str | None = None
-        if (
-            token.text == "macro_rules"
-            and index + 2 < len(tokens)
-            and tokens[index + 1].text == "!"
-            and tokens[index + 2].kind == "IDENT"
-        ):
-            candidate = tokens[index + 2].text.removeprefix("r#")
-        elif (
-            token.text == "macro"
-            and index + 1 < len(tokens)
-            and tokens[index + 1].kind == "IDENT"
-        ):
-            candidate = tokens[index + 1].text.removeprefix("r#")
-        if candidate in APPROVED_ASSERTION_MACROS:
-            fail(
-                "adapter behavior evidence assertion macro shadow is forbidden: "
-                f"{candidate}!: {function_name}"
-            )
-        if token.text == "use":
-            cursor = index + 1
-            use_tokens: list[str] = []
-            while cursor < len(tokens) and tokens[cursor].text != ";":
-                use_tokens.append(tokens[cursor].text)
-                if (
-                    tokens[cursor].kind == "IDENT"
-                    and tokens[cursor].text.removeprefix("r#")
-                    in APPROVED_ASSERTION_MACROS
-                ):
-                    fail(
-                        "adapter behavior evidence assertion macro shadow import is "
-                        f"forbidden: {tokens[cursor].text}: {function_name}"
-                    )
-                cursor += 1
-            if "*" in use_tokens and use_tokens != ["super", "::", "*"]:
-                fail(
-                    "adapter behavior evidence assertion macro provenance is "
-                    f"ambiguous through glob import: {function_name}"
-                )
-
-
-def ordered_remote_chain_length(body_tokens: tuple[str, ...]) -> int:
-    """Return the ordered exact remote call markers present in the direct body."""
-
-    cursor = 0
-    for marker_index, marker in enumerate(REMOTE_BEHAVIOR_CHAIN):
-        found = False
-        while cursor + len(marker) < len(body_tokens):
-            if body_tokens[cursor : cursor + len(marker)] == marker:
-                call_end = cursor + len(marker)
-                if body_tokens[call_end] == "(":
-                    cursor = call_end + 1
-                    found = True
-                    break
-            cursor += 1
-        if not found:
-            return marker_index
-    return len(REMOTE_BEHAVIOR_CHAIN)
-
-
-def extract_behavior_function(
-    source: str,
-    function_name: str,
-    profile: CfgProfile | None = None,
-) -> tuple[str, ...]:
-    """Return one enabled test body after enforcing the straight-line profile."""
-
-    profile = profile or cfg_profile(str(Path(__file__).resolve().parents[1]), "default")
-    tokens = rust_tokens(source)
-    function_indexes = [
-        index + 1
-        for index, token in enumerate(tokens[:-1])
-        if token.text == "fn" and tokens[index + 1].text == function_name
-    ]
-    if len(function_indexes) != 1:
-        fail(f"adapter behavior evidence must resolve one function: {function_name}")
-    name_index = function_indexes[0]
-    fn_index = name_index - 1
-    attributes = preceding_attribute_ranges(tokens, fn_index)
-    expressions = all_cfg_expressions(tokens)
-    assignment = assignment_for_expressions(expressions, profile)
-    excluded = cfg_profile_excluded_indexes(
-        tokens,
-        assignment,
-        test_value=True,
-    )
-    if not file_inner_cfg_enabled(tokens, profile) or fn_index in excluded:
-        fail(f"adapter behavior evidence is cfg-disabled: {function_name}")
-    if not any(
-        cfg_meta_enables_test(tokens, start + 2, end, profile)
-        for start, end in attributes
-    ):
-        fail(f"adapter behavior evidence is not an enabled Rust test: {function_name}")
-    for start, end in attributes:
-        attribute_tokens = {
-            tokens[index].text.removeprefix("r#")
-            for index in range(start, end + 1)
-            if tokens[index].kind == "IDENT"
-        }
-        disallowed = attribute_tokens.intersection({"ignore", "should_panic"})
-        if disallowed:
-            fail(
-                "adapter behavior evidence straight-line profile forbids "
-                f"test attribute {sorted(disallowed)}: {function_name}"
-            )
-    reject_assertion_macro_shadows(tokens, function_name)
-    opening = name_index + 1
-    while opening < len(tokens) and tokens[opening].text != "{":
-        opening += 1
-    if opening >= len(tokens):
-        fail(f"adapter behavior evidence has no body: {function_name}")
-    depth = 1
-    closing = opening + 1
-    while closing < len(tokens) and depth:
-        depth += tokens[closing].text == "{"
-        depth -= tokens[closing].text == "}"
-        closing += 1
-    if depth:
-        fail(f"adapter behavior evidence has an unbalanced body: {function_name}")
-    body_tokens = straight_line_body_tokens(
-        tokens,
-        opening + 1,
-        closing - 1,
-        excluded,
-        function_name,
-    )
-    if not body_tokens or not body_has_observable_assertion(body_tokens):
-        fail(f"adapter behavior evidence has no observable assertion: {function_name}")
-    return body_tokens
-
-
-def behavior_evidence_body(
-    root: Path,
-    evidence: str,
-    profile: CfgProfile,
-    enabled_tests: tuple[str, ...] | None,
-) -> tuple[str, ...]:
-    """Resolve behavior evidence to one exact integration or source unit-test file."""
-
-    module, separator, function_name = evidence.rpartition("::")
-    if not separator or not module or not function_name:
-        fail(f"adapter behavior evidence is malformed: {evidence}")
-    integration = root / "crates/druid-wrapper/tests" / f"{module}.rs"
-    candidates = [integration] if integration.is_file() else [
-        path
-        for path in (root / "crates/druid-wrapper/src").rglob(f"{module}.rs")
-        if path.is_file()
-    ]
-    if len(candidates) != 1:
-        fail(f"adapter behavior evidence file is not exact: {evidence}")
-    if enabled_tests is not None:
-        matches = [
-            name
-            for name in enabled_tests
-            if name == function_name or name.endswith(f"::{function_name}")
-        ]
-        if len(matches) != 1:
-            fail(
-                f"adapter behavior evidence is not uniquely enabled in {profile.name}: "
-                f"{evidence}: {matches}"
-            )
-    return extract_behavior_function(
-        candidates[0].read_text(encoding="utf-8"),
-        function_name,
-        profile,
-    )
+        for row in rows
+        if row.state == LIVE_ADAPTER_STATE
+    }
+    runtime = [spec for spec in specs if spec.category == RUNTIME_TRACE_CATEGORY]
+    identity = [spec for spec in specs if spec.category == COMPILE_IDENTITY_CATEGORY]
+    if len(runtime) != 7 or {spec.family for spec in runtime} != TRACE_FAMILIES:
+        fail(f"Task 4 must bind exactly seven family runtime traces: {runtime}")
+    if len(identity) != 1:
+        fail(f"Task 4 DataSource Wrapper identity must use one independent exact test: {identity}")
+    if sum(row.evidence_category == COMPILE_IDENTITY_CATEGORY for row in rows) != 2:
+        fail("Task 4 must classify exactly two DataSource rows as nonbehavior identity evidence")
+    for spec in runtime:
+        if spec.version != TRACE_VERSION or spec.family not in TRACE_FAMILIES:
+            fail(f"runtime trace binding is not canonical: {spec}")
+        if spec.evidence_id in {"", "-"}:
+            fail(f"runtime trace evidence id is missing: {spec}")
+    for spec in identity:
+        if (spec.family, spec.version, spec.evidence_id) != ("-", "-", "-"):
+            fail(f"compile identity row must not claim runtime trace fields: {spec}")
+    exact_bindings: dict[tuple[str, str, str], EvidenceSpec] = {}
+    evidence_ids: set[str] = set()
+    for spec in specs:
+        key = (spec.test_target, spec.test_id, spec.profile)
+        previous = exact_bindings.setdefault(key, spec)
+        if previous != spec:
+            fail(f"one exact Cargo test/profile is bound to conflicting evidence: {key}")
+        if spec.category == RUNTIME_TRACE_CATEGORY and spec.evidence_id in evidence_ids:
+            fail(f"runtime trace evidence id is duplicated: {spec.evidence_id}")
+        evidence_ids.add(spec.evidence_id)
+    return tuple(sorted(specs))
 
 
 def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
@@ -728,14 +504,8 @@ def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
     ) is not None
 
 
-def verify_adapter_source(
-    root: Path,
-    row: AdapterRow,
-    *,
-    profile: CfgProfile | None = None,
-    enabled_tests: tuple[str, ...] | None = None,
-) -> None:
-    """Require parallel Physical/standard impls and a single execution core."""
+def verify_adapter_source(root: Path, row: AdapterRow) -> None:
+    """Require parallel Physical/standard impls and a single production execution core."""
 
     path = root / row.source_path
     if not path.is_file():
@@ -745,34 +515,13 @@ def verify_adapter_source(
     current = extract_impl_bodies(source, row.current_trait, row.implementation_type)
     if not current and row.current_trait.rsplit("::", 1)[-1] != "Wrapper":
         fail(f"temporary Physical impl missing: {row.implementation_type} in {row.source_path}")
-
     if row.state != LIVE_ADAPTER_STATE:
         if row.state != "CURRENT_IMPL_TARGET_PLANNED":
             fail(f"adapter inventory row has unknown state: {row.implementation_type}: {row.state}")
         return
-
     standard_path = root / row.standard_source_path
     if not standard_path.is_file():
         fail(f"canonical standard source is missing: {row.standard_source_path}")
-    profile = profile or cfg_profile(str(root), "default")
-    behavior_tokens = behavior_evidence_body(
-        root,
-        row.behavior_evidence,
-        profile,
-        enabled_tests,
-    )
-    if concrete_type(row.implementation_type).startswith(("HttpSql", "LibSql", "JdbcAgent")):
-        chain_length = ordered_remote_chain_length(behavior_tokens)
-        if (
-            not body_has_observable_assertion(behavior_tokens)
-            or chain_length != len(REMOTE_BEHAVIOR_CHAIN)
-        ):
-            missing = [" :: ".join(marker) for marker in REMOTE_BEHAVIOR_CHAIN[chain_length:]]
-            fail(
-                "remote adapter behavior evidence lacks the direct straight-line "
-                "factory-to-result chain plus assertion: "
-                f"{row.behavior_evidence}: {missing}"
-            )
     if row.standard_implementation_type == "StandardAdapterPreparedStatement":
         standard_source = standard_path.read_text(encoding="utf-8")
         required = (
@@ -787,7 +536,11 @@ def verify_adapter_source(
         owner = row.standard_core_evidence.split("::", 1)[0]
         family_sources = list((root / "crates/druid-wrapper/src").rglob("*connection*.rs"))
         owner_source = next(
-            (path.read_text(encoding="utf-8") for path in family_sources if owner in path.read_text(encoding="utf-8")),
+            (
+                candidate.read_text(encoding="utf-8")
+                for candidate in family_sources
+                if owner in candidate.read_text(encoding="utf-8")
+            ),
             None,
         )
         if owner_source is None or any(
@@ -800,7 +553,6 @@ def verify_adapter_source(
         ):
             fail(f"family prepared executor provenance is missing: {row.implementation_type}")
         return
-
     target_leaf = row.target_trait.rsplit("::", 1)[-1]
     standard = extract_impl_bodies(source, row.target_trait, row.implementation_type)
     wrapper_only = target_leaf == "Wrapper" and has_wrapper_macro(
@@ -813,10 +565,7 @@ def verify_adapter_source(
         )
     canonical_path = row.target_trait.replace("druid_rdbc::", "druid_rdbc :: ").replace("::", " :: ")
     canonical_import = row.target_trait.rsplit("::", 1)[0].replace("::", " :: ") + f" :: {target_leaf}"
-    macro_provenance = (
-        "druid_rdbc :: impl_standard_wrapper" in tokens
-        and f"=> {target_leaf}" in tokens
-    )
+    macro_provenance = "druid_rdbc :: impl_standard_wrapper" in tokens and f"=> {target_leaf}" in tokens
     if canonical_path not in tokens and canonical_import not in tokens and not macro_provenance:
         fail(f"standard impl lacks canonical trait provenance: {row.implementation_type}")
     if re.search(rf"\btrait\s+{re.escape(target_leaf)}\b", source):
@@ -832,7 +581,7 @@ def verify_adapter_source(
         delegates = "_core(" in body or "actor" in body.lower()
         if markers and not delegates:
             fail(
-                f"standard impl duplicates SQL/default/error logic instead of delegating one core: "
+                "standard impl duplicates SQL/default/error logic instead of delegating one core: "
                 f"{row.implementation_type}: {markers}"
             )
     current_cores = set().union(*(core_calls(body) for body in current)) if current else set()
@@ -841,6 +590,7 @@ def verify_adapter_source(
         transitive_factory_core = (
             target_leaf == "ConnectionFactory"
             and "create_adapter_core" in source
+            and standard
             and "create_adapter_core" in standard[0]
         )
         if not current_cores.intersection(standard_cores) and not transitive_factory_core:
@@ -876,8 +626,8 @@ def verify_adapter_source(
         fail(f"canonical impl lacks required behavior: {row.implementation_type}: {required_methods}")
     owner, _, methods = row.standard_core_evidence.partition("::")
     production_sources = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in (root / "crates/druid-wrapper/src").rglob("*.rs")
+        candidate.read_text(encoding="utf-8")
+        for candidate in (root / "crates/druid-wrapper/src").rglob("*.rs")
     )
     if owner not in production_sources or any(
         method not in production_sources for method in methods.split("/") if method
@@ -886,27 +636,23 @@ def verify_adapter_source(
 
 
 def verify_consumer_rows(root: Path, path: Path) -> int:
-    """Require every Task 4 wrapper consumer row to record its live transition."""
+    """Require every Task 4 wrapper consumer row to retain its pinned closed transition."""
 
     rows = [
         row
         for row in read_tsv(path)
-        if row["target_task"] == TASK
-        and row["source_path"].startswith("crates/druid-wrapper/")
+        if row["target_task"] == TASK and row["source_path"].startswith("crates/druid-wrapper/")
     ]
     if len(rows) != 21:
         fail(f"Task 4 wrapper consumer denominator drift: expected 21 rows, found {len(rows)}")
     for row in rows:
         if row["state"] != LIVE_CONSUMER_STATE:
-            fail(
-                f"Task 4 wrapper consumer is not LIVE: {row['source_path']}: "
-                f"{row['symbol']}: {row['state']}"
-            )
-        if not (root / row["source_path"]).is_file():
+            fail(f"Task 4 wrapper consumer is not CLOSED: {row['source_path']}: {row['symbol']}")
+        source = root / row["source_path"]
+        if not source.is_file():
             fail(f"Task 4 wrapper consumer source is missing: {row['source_path']}")
-        source_tokens = code_tokens((root / row["source_path"]).read_text(encoding="utf-8"))
         old_leaf = row["old_path"].rsplit("::", 1)[-1]
-        if re.search(rf"\b{re.escape(old_leaf)}\b", source_tokens):
+        if re.search(rf"\b{re.escape(old_leaf)}\b", code_tokens(source.read_text(encoding="utf-8"))):
             fail(f"closed legacy consumer still exists in source: {row['source_path']}: {old_leaf}")
     return len(rows)
 
@@ -914,7 +660,7 @@ def verify_consumer_rows(root: Path, path: Path) -> int:
 def verify_sqlx_ownership(root: Path) -> None:
     """Require owned SQLx Statement/ResultSet/live metadata actor evidence."""
 
-    actor = (root / "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs")
+    actor = root / "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs"
     if not actor.is_file():
         fail("SQLx statement-owned executor is missing")
     actor_source = code_tokens(actor.read_text(encoding="utf-8"))
@@ -928,10 +674,15 @@ def verify_sqlx_ownership(root: Path) -> None:
     missing = [marker for marker in required_actor if marker not in actor_source]
     if missing:
         fail(f"SQLx actor ownership evidence is incomplete: {missing}")
-
-    prepared = code_tokens((root / "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs").read_text(encoding="utf-8"))
-    result_set = code_tokens((root / "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs").read_text(encoding="utf-8"))
-    metadata = code_tokens((root / "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs").read_text(encoding="utf-8"))
+    prepared = code_tokens(
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs").read_text(encoding="utf-8")
+    )
+    result_set = code_tokens(
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs").read_text(encoding="utf-8")
+    )
+    metadata = code_tokens(
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs").read_text(encoding="utf-8")
+    )
     if "Arc < SqlxConnectionActor >" not in prepared:
         fail("SQLx Statement/PreparedStatement does not own its executor actor")
     if "Arc < SqlxConnectionActor >" not in result_set:
@@ -947,64 +698,28 @@ def verify_sqlx_ownership(root: Path) -> None:
         fail("SQLx parameter metadata is not an immutable Arc snapshot")
 
 
-def behavior_profile_name(row: AdapterRow) -> str:
-    """Select the Task 4 matrix profile that actually enables this family evidence."""
-
-    concrete = concrete_type(row.implementation_type)
-    if concrete.startswith(("DuckDb", "HttpSql", "LibSql", "JdbcAgent")):
-        return "all-features"
-    return "default"
-
-
-@functools.lru_cache(maxsize=4)
-def cargo_test_inventory(root_text: str, profile_name: str) -> tuple[str, ...]:
-    """List the exact tests Cargo enables for one Task 4 profile."""
-
-    command = ["cargo", "test", "-p", "druid-wrapper", "--tests"]
-    if profile_name == "all-features":
-        command.append("--all-features")
-    elif profile_name != "default":
-        fail(f"unknown Cargo test inventory profile: {profile_name}")
-    command.extend(["--", "--list"])
-    result = subprocess.run(
-        command,
-        cwd=Path(root_text),
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        fail(f"cannot list {profile_name} Task 4 tests: {detail}")
-    tests = tuple(
-        line[: -len(": test")]
-        for line in result.stdout.splitlines()
-        if line.endswith(": test")
-    )
-    if not tests:
-        fail(f"Cargo listed no tests for Task 4 profile {profile_name}")
-    return tests
-
-
 def verify_repository(
     root: Path,
     adapters_path: Path = DEFAULT_ADAPTERS,
+    runtime_evidence_path: Path = DEFAULT_RUNTIME_EVIDENCE,
     consumers_path: Path = DEFAULT_CONSUMERS,
-) -> tuple[int, int]:
-    """Verify all live Task 4 adapter and ownership obligations."""
+) -> tuple[int, int, int]:
+    """Verify source identity, anti-forgery, and exact runtime evidence for Task 4."""
 
-    adapters = task_adapter_rows(root / adapters_path)
+    adapters = task_adapter_rows(root / adapters_path, root / runtime_evidence_path)
     for row in adapters:
-        profile_name = behavior_profile_name(row)
-        verify_adapter_source(
-            root,
-            row,
-            profile=cfg_profile(str(root), profile_name),
-            enabled_tests=cargo_test_inventory(str(root), profile_name),
-        )
+        verify_adapter_source(root, row)
     consumers = verify_consumer_rows(root, root / consumers_path)
     verify_sqlx_ownership(root)
-    return sum(row.state == LIVE_ADAPTER_STATE for row in adapters), consumers
+    verify_trace_record_callsites(root)
+    specs = evidence_specs(adapters)
+    for spec in specs:
+        execute_evidence(root, spec)
+    return (
+        sum(row.state == LIVE_ADAPTER_STATE for row in adapters),
+        consumers,
+        sum(spec.category == RUNTIME_TRACE_CATEGORY for spec in specs),
+    )
 
 
 def main() -> int:
@@ -1014,7 +729,7 @@ def main() -> int:
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
     arguments = parser.parse_args()
     try:
-        adapter_count, consumer_count = verify_repository(arguments.root.resolve())
+        adapter_count, consumer_count, trace_count = verify_repository(arguments.root.resolve())
     except (OSError, UnicodeError, VerificationError) as error:
         print(f"WRAPPER_STANDARD_IMPLS_FAIL={error}")
         return 1
@@ -1022,6 +737,9 @@ def main() -> int:
     print(f"WRAPPER_STANDARD_CONSUMERS_CLOSED={consumer_count}")
     print("FAMILY_COMMON_PREPARED_CHAINS_LIVE=6")
     print("SQLX_OWNED_ACTOR_LIVE=1")
+    print(f"RUNTIME_TRACE_FAMILIES_LIVE={trace_count}")
+    print(f"RUNTIME_TRACE_PROTOCOL={TRACE_VERSION}")
+    print("NONBEHAVIOR_IDENTITY_ROWS=2")
     return 0
 
 

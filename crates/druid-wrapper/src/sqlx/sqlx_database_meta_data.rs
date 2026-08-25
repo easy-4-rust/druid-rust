@@ -2112,7 +2112,9 @@ druid_rdbc::impl_standard_wrapper!(SqlxDatabaseMetaData<'static> => DatabaseMeta
 #[async_trait::async_trait]
 impl druid_rdbc::metadata::DatabaseMetaData for SqlxDatabaseMetaData<'static> {
     async fn database_product_name(&mut self) -> Result<String, RdbcError> {
-        self.database_product_name_core().await
+        let product_name = self.database_product_name_core().await?;
+        self.actor_core()?.task4_trace_database_metadata();
+        Ok(product_name)
     }
 
     async fn tables(

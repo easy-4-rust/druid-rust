@@ -36,11 +36,14 @@ druid_rdbc::impl_standard_wrapper!(StandardAdapterDatabaseMetaData => DatabaseMe
 impl DatabaseMetaData for StandardAdapterDatabaseMetaData {
     async fn database_product_name(&mut self) -> Result<String, RdbcError> {
         self.ensure_open_core()?;
-        self.product_name
+        let product_name = self
+            .product_name
             .clone()
             .ok_or(RdbcError::UnsupportedOperation {
                 operation: self.absent_operation,
-            })
+            });
+        self.executor.task4_trace_database_metadata();
+        product_name
     }
 
     async fn tables(

@@ -2058,13 +2058,13 @@ def implementation_rows(
         behavior = "-"
         if target_task == "P04_TASK_4_ADAPTER_CUTOVER":
             family_behaviors = {
-                "Sqlx": "statement_executor_ownership_test::statement_and_result_set_keep_the_sqlx_connection_lease_owned",
-                "Toasty": "toasty_connection_adapter_test::toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_executor",
-                "Rbdc": "rbdc_connection_adapter_test::rbdc_standard_factory_prepared_query_uses_deterministic_driver_core",
-                "DuckDb": "duckdb_connection_adapter_test::duckdb_standard_factory_statement_and_prepared_use_native_executor",
-                "HttpSql": "http_sql_connection_factory::http_sql_standard_factory_uses_deterministic_transport_owned_core",
-                "LibSql": "libsql_connection_factory::libsql_standard_factory_uses_deterministic_transport_owned_core",
-                "JdbcAgent": "jdbc_agent_connection_factory::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+                "Sqlx": "statement_executor_ownership_test::sqlx_standard_factory_emits_typed_runtime_trace",
+                "Toasty": "toasty_connection_adapter_test::toasty_standard_factory_emits_typed_runtime_trace",
+                "Rbdc": "rbdc_connection_adapter_test::rbdc_standard_factory_emits_typed_runtime_trace",
+                "DuckDb": "duckdb_connection_adapter_test::duckdb_standard_factory_emits_typed_runtime_trace",
+                "HttpSql": "http_sql::http_sql_connection_factory::tests::http_sql_standard_factory_uses_deterministic_transport_owned_core",
+                "LibSql": "libsql::libsql_connection_factory::tests::libsql_standard_factory_uses_deterministic_transport_owned_core",
+                "JdbcAgent": "jdbc_agent::jdbc_agent_connection_factory::tests::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
                 "DruidRdbcDataSource": "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
                 "DynamicRdbcDataSource": "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
             }
@@ -2079,27 +2079,27 @@ def implementation_rows(
             prepared_families = {
                 "DuckDbPreparedStatement": (
                     "DuckDbConnectionAdapter::standard_executor_core",
-                    "duckdb_connection_adapter_test::duckdb_standard_factory_statement_and_prepared_use_native_executor",
+                    "duckdb_connection_adapter_test::duckdb_standard_factory_emits_typed_runtime_trace",
                 ),
                 "RbdcPreparedStatement": (
                     "RbdcConnectionAdapter::standard_executor_core",
-                    "rbdc_connection_adapter_test::rbdc_standard_factory_prepared_query_uses_deterministic_driver_core",
+                    "rbdc_connection_adapter_test::rbdc_standard_factory_emits_typed_runtime_trace",
                 ),
                 "ToastyPreparedStatement": (
                     "ToastyConnectionAdapter::standard_executor_core",
-                    "toasty_connection_adapter_test::toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_executor",
+                    "toasty_connection_adapter_test::toasty_standard_factory_emits_typed_runtime_trace",
                 ),
                 "HttpSqlPreparedStatement": (
                     "HttpSqlConnectionAdapter::standard_executor_core",
-                    "http_sql_connection_factory::http_sql_standard_factory_uses_deterministic_transport_owned_core",
+                    "http_sql::http_sql_connection_factory::tests::http_sql_standard_factory_uses_deterministic_transport_owned_core",
                 ),
                 "LibSqlPreparedStatement": (
                     "LibSqlConnectionAdapter::standard_executor_core",
-                    "libsql_connection_factory::libsql_standard_factory_uses_deterministic_transport_owned_core",
+                    "libsql::libsql_connection_factory::tests::libsql_standard_factory_uses_deterministic_transport_owned_core",
                 ),
                 "JdbcAgentPreparedStatement": (
                     "JdbcAgentConnection::standard_executor_core",
-                    "jdbc_agent_connection_factory::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
+                    "jdbc_agent::jdbc_agent_connection_factory::tests::jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core",
                 ),
             }
             if implementation_type in prepared_families:
@@ -2108,7 +2108,7 @@ def implementation_rows(
                 standard_core, behavior = prepared_families[implementation_type]
             elif implementation_type == "SqlxPreparedStatement":
                 standard_core = "SqlxConnectionActor::execute_query/execute_update"
-                behavior = "statement_executor_ownership_test::prepared_statement_materializes_standard_parameters_through_the_owned_actor"
+                behavior = "statement_executor_ownership_test::sqlx_standard_factory_emits_typed_runtime_trace"
             elif target_trait.endswith("::ConnectionFactory"):
                 standard_core = f"{implementation_type}::create_adapter_core"
             elif target_trait.endswith("::Connection"):

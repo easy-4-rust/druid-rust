@@ -3,6 +3,7 @@
 use super::sqlx_connection_actor::SqlxConnectionActor;
 use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecutionError};
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::SqlWarning;
@@ -68,6 +69,7 @@ pub struct SqlxConnectionAdapter {
     read_only: bool,
     discarded: bool,
     standard_actor: Option<Arc<SqlxConnectionActor>>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl SqlxConnectionAdapter {
@@ -109,7 +111,16 @@ impl SqlxConnectionAdapter {
             read_only: false,
             discarded: false,
             standard_actor: None,
+            runtime_trace: None,
         })
+    }
+
+    pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
+        self.runtime_trace = Some(runtime_trace);
+    }
+
+    pub(super) fn take_runtime_trace(&mut self) -> Option<RuntimeTraceEmitter> {
+        self.runtime_trace.take()
     }
 
     /// 把当前 raw adapter 转成 canonical owned actor，并在 connection handle 中保留 clone。
@@ -128,6 +139,7 @@ impl SqlxConnectionAdapter {
             read_only: self.read_only,
             discarded: self.discarded,
             standard_actor: None,
+            runtime_trace: None,
         };
         let owned = std::mem::replace(self, detached);
         let actor = SqlxConnectionActor::new(owned);
@@ -1778,7 +1790,7 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
         let actor = self.standard_actor_core()?;
         let parameter_count = actor.parameter_count(sql).await?;
-        Ok(Box::new(SqlxPreparedStatement::owned_statement(
+        Ok(Box::new(SqlxPreparedStatement::owned_prepared_statement(
             sql.to_owned(),
             actor,
             options,

@@ -123,6 +123,21 @@ impl SqlxPreparedStatement {
         _options: druid_rdbc::statement::StatementOptions,
         parameter_count: usize,
     ) -> Self {
+        actor.task4_trace_statement_create();
+        Self::owned_actor(sql, actor, parameter_count)
+    }
+
+    pub(crate) fn owned_prepared_statement(
+        sql: String,
+        actor: Arc<SqlxConnectionActor>,
+        _options: druid_rdbc::statement::StatementOptions,
+        parameter_count: usize,
+    ) -> Self {
+        actor.task4_trace_prepared_create();
+        Self::owned_actor(sql, actor, parameter_count)
+    }
+
+    fn owned_actor(sql: String, actor: Arc<SqlxConnectionActor>, parameter_count: usize) -> Self {
         Self {
             parameter_count,
             sql,
@@ -465,7 +480,10 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
                 operation: "sqlx_standard_generated_keys",
             });
         }
-        self.actor_core()?.execute_update(sql, Vec::new()).await
+        let actor = Arc::clone(self.actor_core()?);
+        let rows_affected = actor.execute_update(sql, Vec::new()).await?;
+        actor.task4_trace_statement_update();
+        Ok(rows_affected)
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
@@ -495,8 +513,10 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
         &mut self,
         parameter: druid_rdbc::statement::PreparedParameter,
     ) -> Result<(), RdbcError> {
-        self.actor_core()?;
-        self.parameter_state.set_standard(parameter)
+        let actor = Arc::clone(self.actor_core()?);
+        self.parameter_state.set_standard(parameter)?;
+        actor.task4_trace_parameter_set();
+        Ok(())
     }
 
     fn clear_parameters(&mut self) -> Result<(), RdbcError> {
@@ -510,7 +530,9 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         let actor = Arc::clone(self.actor_core()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
-        actor.execute_query(&self.sql, values).await
+        let result = actor.execute_query(&self.sql, values).await?;
+        actor.task4_trace_prepared_query();
+        Ok(result)
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {

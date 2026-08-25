@@ -7,6 +7,7 @@ use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, Sta
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use base64::Engine;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
@@ -86,6 +87,7 @@ pub struct HttpSqlConnectionAdapter {
     discarded: bool,
     product_version: Option<String>,
     standard_executor: Option<Arc<dyn StandardExecutor>>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl HttpSqlConnectionAdapter {
@@ -118,7 +120,12 @@ impl HttpSqlConnectionAdapter {
             discarded: false,
             product_version: None,
             standard_executor: None,
+            runtime_trace: None,
         })
+    }
+
+    pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
+        self.runtime_trace = Some(runtime_trace);
     }
 
     fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
@@ -126,6 +133,7 @@ impl HttpSqlConnectionAdapter {
             return Ok(Arc::clone(executor));
         }
         self.ensure_open()?;
+        let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             provider: self.provider,
             endpoint: self.endpoint.clone(),
@@ -135,9 +143,10 @@ impl HttpSqlConnectionAdapter {
             discarded: self.discarded,
             product_version: self.product_version.clone(),
             standard_executor: None,
+            runtime_trace: None,
         };
         let owned = std::mem::replace(self, shell);
-        let executor = owned_executor(owned);
+        let executor = owned_executor(owned, runtime_trace);
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
     }

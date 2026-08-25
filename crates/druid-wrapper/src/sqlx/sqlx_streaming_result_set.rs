@@ -653,7 +653,13 @@ druid_rdbc::impl_standard_wrapper!(SqlxStreamingResultSet => ResultSet);
 #[async_trait::async_trait]
 impl druid_rdbc::result_set::ResultSet for SqlxStreamingResultSet {
     async fn next(&mut self) -> Result<bool, RdbcError> {
-        self.next_core()
+        let present = self.next_core()?;
+        if present {
+            if let Some(actor) = &self.actor_lease {
+                actor.task4_trace_result_next();
+            }
+        }
+        Ok(present)
     }
 
     fn value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
@@ -666,6 +672,9 @@ impl druid_rdbc::result_set::ResultSet for SqlxStreamingResultSet {
             .iter()
             .map(|label| ColumnDescriptor::new(label, "UNKNOWN", ColumnNullability::Unknown))
             .collect();
+        if let Some(actor) = &self.actor_lease {
+            actor.task4_trace_result_set_metadata();
+        }
         Ok(Arc::new(ResultSetMetaDataSnapshot::new(columns)))
     }
 

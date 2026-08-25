@@ -7,6 +7,7 @@ use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, Sta
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{
     ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
@@ -93,6 +94,7 @@ pub struct JdbcAgentConnection {
     metadata: JdbcAgentDatabaseMetaData,
     driver_name: String,
     standard_executor: Option<Arc<dyn StandardExecutor>>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl JdbcAgentConnection {
@@ -200,7 +202,12 @@ impl JdbcAgentConnection {
             metadata,
             driver_name,
             standard_executor: None,
+            runtime_trace: None,
         })
+    }
+
+    pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
+        self.runtime_trace = Some(runtime_trace);
     }
 
     fn client_core(&self) -> Result<&dyn JdbcAgentTransport, RdbcError> {
@@ -219,6 +226,7 @@ impl JdbcAgentConnection {
             return Ok(Arc::clone(executor));
         }
         self.ensure_open()?;
+        let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             client: None,
             capabilities: self.capabilities,
@@ -234,9 +242,10 @@ impl JdbcAgentConnection {
             metadata: self.metadata.clone(),
             driver_name: self.driver_name.clone(),
             standard_executor: None,
+            runtime_trace: None,
         };
         let owned = std::mem::replace(self, shell);
-        let executor = owned_executor(owned);
+        let executor = owned_executor(owned, runtime_trace);
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
     }

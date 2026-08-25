@@ -727,3 +727,133 @@ SEMANTIC_TSV_SHA256=4588212080ef8006cfa9cd6a13427e9867f39bef13b2f985d6350e545352
 N2 and the remaining C1 verifier subcondition have a recovery implementation disposition of
 **ADDRESSED, pending independent breaker re-review**. Task 5 remains blocked until that review returns
 `REVIEW CLEAR`.
+
+## 20. Runtime Trace Recovery implementation（base `876d438`）
+
+This append-only section supersedes Section 19 only for the load-bearing behavior-evidence
+architecture. It does not rewrite the historical straight-line rejection and does not claim review
+clear. Task 5 remains blocked pending a fresh independent runtime-trace re-review.
+
+### 20.1 Fresh RED fixed before implementation
+
+The unchanged `23a770f` straight-line verifier started at `18/18 PASS`, while six permanent recovery
+checks failed for the intended missing contract:
+
+- dropped async Futures、`std::process::exit(0)`、bare `matches!` and an assertion before the chain
+  were all incorrectly accepted as behavior evidence;
+- no typed trace-output validator existed;
+- no source-hygiene gate prevented a fake marker or fake transport from recording stages.
+
+The recovery self-test was then reduced from the obsolete 18-method Rust control-flow interpreter
+suite to a focused 14-method runtime protocol suite. The final result is `14/14 PASS`; the removed
+path/token acceptance is not retained as a second behavior oracle.
+
+### 20.2 Unique typed protocol and opaque API
+
+The only accepted protocol is `task4-runtime-trace-v1`, with this exact 11-stage sequence:
+
+```text
+FactoryCreate -> ConnectionCreate -> StatementCreate -> StatementUpdate -> PreparedCreate ->
+ParameterSet -> PreparedQuery -> ResultNext -> ResultSetMetadata -> DatabaseMetadata ->
+ConnectionClose
+```
+
+- private `FamilyId`、`TraceStage`、`TraceEvent` and `RuntimeTraceEmitter` construct events;
+- every event carries the same family and monotonic connection/executor instance id;
+- the seven factories carry `Option<RuntimeTraceEmitter>` with normal production construction set to
+  `None`（no allocation or event lock on the normal path）；
+- evidence setup returns only opaque `TraceProbe` and `TraceExpectation`; neither exposes a
+  constructor、field、event accessor、family accessor or record API;
+- `verify_and_emit(probe, expectation)` consumes both values and is the only marker serializer；it
+  emits one `DRUID_TASK4_RUNTIME_TRACE` record only after typed sequence validation succeeds;
+- common `OwnedAdapterExecutor` / Statement / PreparedStatement / ResultSet / live DatabaseMetaData
+  record at their real success/attempt execution points；SQLx uses the same typed core through its
+  actor、owned Prepared/ResultSet/live metadata path;
+- common and SQLx close record only after the real close core succeeds and exactly once；the SQLx
+  actor rechecks closed state after acquiring its serialization lock.
+
+External HTTP/libSQL/JDBC and deterministic RBDC doubles still replace only external I/O. They do
+not receive an emitter/probe and contain no marker/stage/record call. Result labels、returned values、
+update counts、live metadata outcome、post-close rejection and immutable snapshot survival remain
+asserted by the Rust evidence tests（including RBDC's truthful typed unsupported product-name
+outcome）。
+
+### 20.3 Exact runtime verifier and manifest
+
+`rdbc-adapter-runtime-traces.tsv` contains exactly 31 source/target rows:
+
+- 29 adapter rows map to seven unique `RUNTIME_TRACE` exact Cargo test/profile/family/version/evidence
+  specs；
+- the two DataSource Wrapper rows map to one independent `COMPILE_IDENTITY` exact test and carry no
+  fake runtime family/version/id.
+
+For every unique spec the verifier runs `cargo test -p druid-wrapper <profile> <target> <test-id>
+-- --exact --nocapture`, requires exit 0 and a completed libtest `1 passed / 0 failed / 0 ignored`
+summary, and then requires exactly one library-owned marker. JSON keys、version、evidence id、family、
+instance and all events are exact. Missing、duplicate、out-of-order、wrong-family、wrong-instance、
+wrong-version、wrong-id、no-marker and duplicate-marker fixtures fail closed. A passing early process
+exit or dropped Future has no marker and therefore fails.
+
+Static analysis now has only two roles：canonical source/core identity and anti-forgery. It rejects
+marker/event/record construction in the exact evidence test or its `cfg(test)` fake transport region,
+allows record callsites only in the reviewed production factory/common/SQLx actor modules, and allows
+marker serialization only in `task4_runtime_trace.rs`. It no longer interprets Rust control flow or
+accepts source tokens as behavior proof.
+
+### 20.4 Seven-family exact evidence and configured status
+
+| Family | Exact profile/target | Fresh runtime result | External status |
+| --- | --- | --- | --- |
+| SQLx SQLite | default integration | real in-memory SQLite trace `1/1 PASS` | configured PASS |
+| Toasty SQLite | default integration | real in-memory SQLite trace `1/1 PASS` | configured PASS |
+| RBDC | default integration | deterministic driver trace `1/1 PASS` | real external DB NOT_RUN |
+| DuckDB | all-features integration | real native memory trace `1/1 PASS` | configured PASS |
+| HTTP SQL | all-features lib unit | production factory + deterministic transport trace `1/1 PASS` | real service NOT_RUN |
+| libSQL | all-features lib unit | production factory + deterministic transport trace `1/1 PASS` | real service NOT_RUN |
+| JDBC Agent | all-features lib unit | production factory + deterministic connector trace `1/1 PASS` | jars/service NOT_RUN |
+
+No external service was upgraded from NOT_RUN. The deterministic production-bound trace is evidence
+for adapter behavior, not evidence that the unavailable external service was contacted.
+
+### 20.5 Fresh gates、denominators and hashes
+
+- wrapper verifier self/live：`14/14 PASS`；`31 / 21 / 6 / 1` plus runtime families `7` and
+  nonbehavior identity rows `2`；
+- denominator self/live：`41/41 PASS`；Physical `73`、adapter `55`、active consumers `3536`、checked
+  consumers `3557`（active + exact pinned CLOSED21）；
+- semantic self/adapter-live：`16/16 PASS`；`52 / 17 / UNKNOWN 0`；hashes remain
+  `5d99b573...cdbd9` / `45882120...bf21`；
+- purity self/transitional：`103/103 PASS + live29`；
+- all seven exact trace tests and the exact DataSource identity test PASS through the live verifier；
+- wrapper default and all-feature complete test matrices：every test binary PASS；
+- wrapper default/all-feature all-target checks、workspace all-target/all-feature check、scoped
+  wrapper no-deps Clippy `-D warnings`、wrapper docs/doctests、Python byte-compile、rustfmt and diff
+  check：PASS；
+- druid-rdbc all-target/all-feature tests `20/20`、doc `1/1` and Clippy `-D warnings`：PASS；
+- dependency-aware wrapper Clippy remains deliberately **not GREEN** only at the same untouched Task
+  5 lines `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`.
+
+Hash vocabulary after the coordinate-bearing source refresh:
+
+```text
+ADAPTER_SOURCE_PROJECTION_SHA256=4090959c7bd6e0858f870b651ea3e36e00a602f91804783430c61baa59c184c8
+ADAPTER_LIVE_TSV_SHA256=350f6b6350f7c75fbf88aa15872f14faaa7cdb9c90faa0c3d5d03ea8442b6410
+RUNTIME_TRACE_TSV_SHA256=a2b5f213c28b2363679d30967014dd6bd6facae8f12850d1e101def522f61f4d
+CONSUMER_ACTIVE_SOURCE_SHA256=fbc3fe58fa5d6a6c4cb317bc4e0d149f16343b44135335bac8fd1f0bc2f67716
+CONSUMER_SOURCE_PROJECTION_SHA256=d6f81a2754bd8010cc4267f5b0cede5fbf94b6b8e0e11debd0a4ebf4a3f2fb58
+CONSUMER_LIVE_TSV_SHA256=241a2d42b74e27ae2b0e41729d3088e94f464bfe7984699073a20f834ce908bc
+SEMANTIC_LIVE_TSV_SHA256=4588212080ef8006cfa9cd6a13427e9867f39bef13b2f985d6350e545352bf21
+```
+
+The consumer identity denominator remains `3536 active + 21 CLOSED`; the TSV byte change is the
+honest token-coordinate movement caused by Task 4 trace fields/calls. No scanner exclusion or virtual
+occurrence was introduced.
+
+### 20.6 Scope and submission state
+
+This recovery changes only Task 4 wrapper factories/adapters/common owned handles/SQLx actor,
+their evidence tests, verifier/self-tests, coordinate-bearing evidence TSVs, and append-only SDD
+artifacts. It does not change Cargo topology/lock、Task 5 Druid holder/proxies、Physical deletion、
+druid-admin、unsafe or manual Send/Sync. C1/N2 have an implementation disposition of **ADDRESSED,
+pending independent runtime-trace re-review**. Task 5 remains blocked until that review returns
+`REVIEW CLEAR`.

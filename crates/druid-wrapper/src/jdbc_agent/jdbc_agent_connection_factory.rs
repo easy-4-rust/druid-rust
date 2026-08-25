@@ -1,5 +1,8 @@
 use super::jdbc_agent_connection::{JdbcAgentConnector, NativeJdbcAgentConnector};
 use super::{JdbcAgentConnection, JdbcAgentOptions};
+use crate::task4_runtime_trace::{
+    jdbc_agent_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
+};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
@@ -15,6 +18,7 @@ pub struct JdbcAgentConnectionFactory {
     properties: HashMap<String, String>,
     options: JdbcAgentOptions,
     connector: Arc<dyn JdbcAgentConnector>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl JdbcAgentConnectionFactory {
@@ -33,6 +37,7 @@ impl JdbcAgentConnectionFactory {
             properties: HashMap::new(),
             options,
             connector: Arc::new(NativeJdbcAgentConnector),
+            runtime_trace: None,
         }
     }
 
@@ -57,6 +62,16 @@ impl JdbcAgentConnectionFactory {
         self
     }
 
+    /// 为唯一 Task 4 evidence test 启用 opaque typed runtime trace。
+    ///
+    /// 返回只读 probe 与不可构造 expectation；两者只能交给 `verify_and_emit` 消费。
+    #[doc(hidden)]
+    pub fn enable_task4_runtime_trace(&mut self) -> (TraceProbe, TraceExpectation) {
+        let (emitter, probe, expectation) = jdbc_agent_trace_session();
+        self.runtime_trace = Some(emitter);
+        (probe, expectation)
+    }
+
     async fn create_with_properties(
         &self,
         properties: HashMap<String, String>,
@@ -68,7 +83,10 @@ impl JdbcAgentConnectionFactory {
         &self,
         properties: HashMap<String, String>,
     ) -> Result<JdbcAgentConnection, RdbcError> {
-        let connection = JdbcAgentConnection::connect_with_connector(
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_factory_create();
+        }
+        let mut connection = JdbcAgentConnection::connect_with_connector(
             &self.url,
             self.validation_query.as_deref(),
             properties,
@@ -76,6 +94,10 @@ impl JdbcAgentConnectionFactory {
             Arc::clone(&self.connector),
         )
         .await?;
+        if let Some(trace) = &self.runtime_trace {
+            connection.install_runtime_trace(trace.clone());
+            trace.task4_trace_connection_create();
+        }
         Ok(connection)
     }
 
@@ -93,6 +115,7 @@ impl JdbcAgentConnectionFactory {
             properties: HashMap::new(),
             options,
             connector,
+            runtime_trace: None,
         }
     }
 
@@ -266,11 +289,12 @@ mod tests {
 
     #[tokio::test]
     async fn jdbc_agent_standard_factory_uses_deterministic_runtime_owned_core() {
-        let factory = JdbcAgentConnectionFactory::with_connector(
+        let mut factory = JdbcAgentConnectionFactory::with_connector(
             "jdbc:deterministic:test",
             JdbcAgentOptions::new("deterministic-agent"),
             Arc::new(DeterministicJdbcAgentConnector),
         );
+        let (trace_probe, trace_expectation) = factory.enable_task4_runtime_trace();
         let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
             .await
             .unwrap();
@@ -330,5 +354,6 @@ mod tests {
         ));
         Connection::close(connection.as_mut()).await.unwrap();
         assert_eq!(snapshot.column_count(), 1);
+        crate::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();
     }
 }

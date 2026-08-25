@@ -60,6 +60,11 @@ impl ResultSet for StandardAdapterResultSet {
         self.positioned = next < self.rows.len();
         self.cursor = next;
         self.was_null.store(false, Ordering::Release);
+        if self.positioned {
+            if let Some(executor) = &self.lease {
+                executor.task4_trace_result_next();
+            }
+        }
         Ok(self.positioned)
     }
 
@@ -85,6 +90,9 @@ impl ResultSet for StandardAdapterResultSet {
 
     fn meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
         self.ensure_open_core()?;
+        if let Some(executor) = &self.lease {
+            executor.task4_trace_result_set_metadata();
+        }
         Ok(self.metadata.clone())
     }
 

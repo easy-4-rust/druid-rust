@@ -6,6 +6,7 @@ use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, Sta
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
@@ -47,6 +48,7 @@ pub struct RbdcConnectionAdapter {
     auto_commit: bool,
     savepoint_sequence: u64,
     standard_executor: Option<Arc<dyn StandardExecutor>>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl RbdcConnectionAdapter {
@@ -62,7 +64,12 @@ impl RbdcConnectionAdapter {
             auto_commit: true,
             savepoint_sequence: 0,
             standard_executor: None,
+            runtime_trace: None,
         }
+    }
+
+    pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
+        self.runtime_trace = Some(runtime_trace);
     }
 
     fn connection_mut(&mut self) -> Result<&mut Box<dyn rbdc::db::Connection>, RdbcError> {
@@ -79,6 +86,7 @@ impl RbdcConnectionAdapter {
             return Ok(Arc::clone(executor));
         }
         self.connection_mut()?;
+        let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             connection: None,
             driver_name: self.driver_name.clone(),
@@ -87,9 +95,10 @@ impl RbdcConnectionAdapter {
             auto_commit: self.auto_commit,
             savepoint_sequence: self.savepoint_sequence,
             standard_executor: None,
+            runtime_trace: None,
         };
         let owned = std::mem::replace(self, shell);
-        let executor = owned_executor(owned);
+        let executor = owned_executor(owned, runtime_trace);
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
     }

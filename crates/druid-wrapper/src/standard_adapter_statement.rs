@@ -14,6 +14,7 @@ pub(crate) struct StandardAdapterStatement {
 
 impl StandardAdapterStatement {
     pub(crate) fn new(executor: Arc<dyn StandardExecutor>) -> Self {
+        executor.task4_trace_statement_create();
         Self {
             executor: Some(executor),
         }
@@ -55,7 +56,10 @@ impl Statement for StandardAdapterStatement {
         generated_keys: GeneratedKeys,
     ) -> Result<i64, RdbcError> {
         Self::generated_keys_core(&generated_keys)?;
-        self.executor_core()?.execute_update(sql, Vec::new()).await
+        let executor = Arc::clone(self.executor_core()?);
+        let rows_affected = executor.execute_update(sql, Vec::new()).await?;
+        executor.task4_trace_statement_update();
+        Ok(rows_affected)
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

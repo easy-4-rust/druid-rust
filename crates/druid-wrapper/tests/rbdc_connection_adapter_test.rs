@@ -31,12 +31,29 @@ fn rbdc_adapter_exposes_parallel_physical_and_standard_contracts() {
 }
 
 #[tokio::test]
-async fn rbdc_standard_factory_prepared_query_uses_deterministic_driver_core() {
+async fn rbdc_standard_factory_emits_typed_runtime_trace() {
+    use druid_rdbc::connection::Connection;
+
     let observed = Arc::new(Mutex::new(Vec::new()));
-    let factory = factory(Arc::clone(&observed));
+    let mut factory = factory(Arc::clone(&observed));
+    let (trace_probe, trace_expectation) = factory.enable_task4_runtime_trace();
     let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
         .await
         .expect("standard RBDC connection");
+    let mut statement = connection
+        .create_statement(druid_rdbc::statement::StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        statement
+            .execute_update(
+                "UPDATE item SET value = 1",
+                druid_rdbc::statement::GeneratedKeys::None,
+            )
+            .await
+            .unwrap(),
+        1
+    );
     let mut prepared = connection
         .prepare_statement(
             "SELECT ?",
@@ -64,6 +81,18 @@ async fn rbdc_standard_factory_prepared_query_uses_deterministic_driver_core() {
         *observed.lock().unwrap(),
         [rbs::Value::String("standard-rbdc".to_owned())]
     );
+    let mut metadata = connection.database_meta_data().await.unwrap();
+    assert!(matches!(
+        metadata.database_product_name().await,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "rbdc_database_metadata_product_name"
+        })
+    ));
+    Connection::close(connection.as_mut()).await.unwrap();
+    assert!(prepared.clear_parameters().is_err());
+    assert!(metadata.database_product_name().await.is_err());
+    Connection::close(connection.as_mut()).await.unwrap();
+    druid_wrapper::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();
 }
 
 #[derive(Debug)]

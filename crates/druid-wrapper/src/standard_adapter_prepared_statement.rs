@@ -23,6 +23,7 @@ impl StandardAdapterPreparedStatement {
         executor: Arc<dyn StandardExecutor>,
         parameter_count: Option<usize>,
     ) -> Self {
+        executor.task4_trace_prepared_create();
         Self {
             sql,
             executor: Some(executor),
@@ -65,8 +66,10 @@ impl Statement for StandardAdapterPreparedStatement {
 #[async_trait::async_trait]
 impl PreparedStatement for StandardAdapterPreparedStatement {
     fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
-        self.executor_core()?;
-        self.parameters.set_standard(parameter)
+        let executor = Arc::clone(self.executor_core()?);
+        self.parameters.set_standard(parameter)?;
+        executor.task4_trace_parameter_set();
+        Ok(())
     }
 
     fn clear_parameters(&mut self) -> Result<(), RdbcError> {
@@ -80,6 +83,7 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
         let result = executor
             .execute_query(&self.sql, self.values_core().await?)
             .await?;
+        executor.task4_trace_prepared_query();
         Ok(Box::new(StandardAdapterResultSet::new(result, executor)))
     }
 

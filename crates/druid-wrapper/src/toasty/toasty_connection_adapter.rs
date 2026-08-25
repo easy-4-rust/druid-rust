@@ -6,6 +6,7 @@ use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, Sta
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
 use druid_rdbc::error::{SqlException, SqlWarning};
@@ -69,6 +70,7 @@ pub struct ToastyConnectionAdapter {
     savepoint_sequence: u64,
     discarded: bool,
     standard_executor: Option<Arc<dyn StandardExecutor>>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl std::fmt::Debug for ToastyConnectionAdapter {
@@ -103,7 +105,12 @@ impl ToastyConnectionAdapter {
             savepoint_sequence: 0,
             discarded: false,
             standard_executor: None,
+            runtime_trace: None,
         }
+    }
+
+    pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
+        self.runtime_trace = Some(runtime_trace);
     }
 
     fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
@@ -111,6 +118,7 @@ impl ToastyConnectionAdapter {
             return Ok(Arc::clone(executor));
         }
         self.connection_mut()?;
+        let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             connection: None,
             schema: Arc::clone(&self.schema),
@@ -122,9 +130,10 @@ impl ToastyConnectionAdapter {
             savepoint_sequence: self.savepoint_sequence,
             discarded: self.discarded,
             standard_executor: None,
+            runtime_trace: None,
         };
         let owned = std::mem::replace(self, shell);
-        let executor = owned_executor(owned);
+        let executor = owned_executor(owned, runtime_trace);
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
     }

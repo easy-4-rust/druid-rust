@@ -1,6 +1,9 @@
 //! `SQLx` 物理连接工厂。
 
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
+use crate::task4_runtime_trace::{
+    sqlx_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
+};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
@@ -11,6 +14,7 @@ use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 #[derive(Clone)]
 pub struct SqlxConnectionFactory {
     url: String,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl SqlxConnectionFactory {
@@ -18,7 +22,10 @@ impl SqlxConnectionFactory {
     ///
     /// 参数 `url` 为 `SQLx` 支持的数据库连接 URL。
     pub fn new(url: impl Into<String>) -> Self {
-        Self { url: url.into() }
+        Self {
+            url: url.into(),
+            runtime_trace: None,
+        }
     }
 
     /// 返回数据库连接 URL。
@@ -26,8 +33,26 @@ impl SqlxConnectionFactory {
         &self.url
     }
 
+    /// 为唯一 Task 4 evidence test 启用 opaque typed runtime trace。
+    ///
+    /// 返回只读 probe 与不可构造 expectation；两者只能交给 `verify_and_emit` 消费。
+    #[doc(hidden)]
+    pub fn enable_task4_runtime_trace(&mut self) -> (TraceProbe, TraceExpectation) {
+        let (emitter, probe, expectation) = sqlx_trace_session();
+        self.runtime_trace = Some(emitter);
+        (probe, expectation)
+    }
+
     async fn create_adapter_core(&self) -> Result<SqlxConnectionAdapter, RdbcError> {
-        SqlxConnectionAdapter::connect(&self.url).await
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_factory_create();
+        }
+        let mut connection = SqlxConnectionAdapter::connect(&self.url).await?;
+        if let Some(trace) = &self.runtime_trace {
+            connection.install_runtime_trace(trace.clone());
+            trace.task4_trace_connection_create();
+        }
+        Ok(connection)
     }
 }
 
@@ -45,7 +70,7 @@ impl std::fmt::Debug for SqlxConnectionFactory {
         formatter
             .debug_struct("SqlxConnectionFactory")
             .field("url", &display_url)
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 

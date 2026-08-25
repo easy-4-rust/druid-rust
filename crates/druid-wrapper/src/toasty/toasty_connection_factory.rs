@@ -1,6 +1,9 @@
 //! Toasty 未池化物理连接工厂。
 
 use super::ToastyConnectionAdapter;
+use crate::task4_runtime_trace::{
+    toasty_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
+};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
@@ -25,6 +28,7 @@ pub struct ToastyConnectionFactory {
     url: String,
     driver_name: &'static str,
     max_connections: Option<usize>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl std::fmt::Debug for ToastyConnectionFactory {
@@ -97,6 +101,7 @@ impl ToastyConnectionFactory {
             url,
             driver_name,
             max_connections,
+            runtime_trace: None,
         })
     }
 
@@ -118,6 +123,16 @@ impl ToastyConnectionFactory {
         self.max_connections
     }
 
+    /// 为唯一 Task 4 evidence test 启用 opaque typed runtime trace。
+    ///
+    /// 返回只读 probe 与不可构造 expectation；两者只能交给 `verify_and_emit` 消费。
+    #[doc(hidden)]
+    pub fn enable_task4_runtime_trace(&mut self) -> (TraceProbe, TraceExpectation) {
+        let (emitter, probe, expectation) = toasty_trace_session();
+        self.runtime_trace = Some(emitter);
+        (probe, expectation)
+    }
+
     fn driver_error(error: &toasty_core::Error) -> RdbcError {
         if error.is_connection_lost() {
             RdbcError::ConnectionDiscarded
@@ -132,6 +147,9 @@ impl ToastyConnectionFactory {
     }
 
     async fn create_adapter_core(&self) -> Result<ToastyConnectionAdapter, RdbcError> {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_factory_create();
+        }
         let connection = self
             .driver
             .connect(&self.connect_context)
@@ -140,12 +158,17 @@ impl ToastyConnectionFactory {
         if !connection.is_valid() {
             return Err(RdbcError::ConnectionDiscarded);
         }
-        Ok(ToastyConnectionAdapter::new(
+        let mut connection = ToastyConnectionAdapter::new(
             connection,
             Arc::clone(&self.schema),
             self.driver.capability(),
             self.url.clone(),
-        ))
+        );
+        if let Some(trace) = &self.runtime_trace {
+            connection.install_runtime_trace(trace.clone());
+            trace.task4_trace_connection_create();
+        }
+        Ok(connection)
     }
 }
 

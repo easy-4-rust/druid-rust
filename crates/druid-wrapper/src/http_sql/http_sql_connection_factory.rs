@@ -1,5 +1,8 @@
 use super::http_sql_connection_adapter::{HttpSqlTransport, ReqwestHttpSqlTransport};
 use super::{HttpSqlConnectionAdapter, HttpSqlProvider};
+use crate::task4_runtime_trace::{
+    http_sql_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
+};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
@@ -12,6 +15,7 @@ pub struct HttpSqlConnectionFactory {
     endpoint: String,
     properties: HashMap<String, String>,
     transport: Arc<dyn HttpSqlTransport>,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl HttpSqlConnectionFactory {
@@ -23,6 +27,7 @@ impl HttpSqlConnectionFactory {
             endpoint: endpoint.into(),
             properties: HashMap::new(),
             transport: Arc::new(ReqwestHttpSqlTransport::new()),
+            runtime_trace: None,
         }
     }
 
@@ -33,7 +38,20 @@ impl HttpSqlConnectionFactory {
         self
     }
 
+    /// 为唯一 Task 4 evidence test 启用 opaque typed runtime trace。
+    ///
+    /// 返回只读 probe 与不可构造 expectation；两者只能交给 `verify_and_emit` 消费。
+    #[doc(hidden)]
+    pub fn enable_task4_runtime_trace(&mut self) -> (TraceProbe, TraceExpectation) {
+        let (emitter, probe, expectation) = http_sql_trace_session();
+        self.runtime_trace = Some(emitter);
+        (probe, expectation)
+    }
+
     async fn create_adapter_core(&self) -> Result<HttpSqlConnectionAdapter, RdbcError> {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_factory_create();
+        }
         let mut connection = HttpSqlConnectionAdapter::new(
             self.provider,
             self.endpoint.clone(),
@@ -41,6 +59,10 @@ impl HttpSqlConnectionFactory {
             Arc::clone(&self.transport),
         )?;
         connection.ping().await?;
+        if let Some(trace) = &self.runtime_trace {
+            connection.install_runtime_trace(trace.clone());
+            trace.task4_trace_connection_create();
+        }
         Ok(connection)
     }
 
@@ -55,6 +77,7 @@ impl HttpSqlConnectionFactory {
             endpoint: endpoint.into(),
             properties: HashMap::new(),
             transport,
+            runtime_trace: None,
         }
     }
 }
@@ -139,11 +162,12 @@ mod tests {
 
     #[tokio::test]
     async fn http_sql_standard_factory_uses_deterministic_transport_owned_core() {
-        let factory = HttpSqlConnectionFactory::with_transport(
+        let mut factory = HttpSqlConnectionFactory::with_transport(
             HttpSqlProvider::Rqlite,
             "https://deterministic.invalid",
             Arc::new(DeterministicHttpSqlTransport),
         );
+        let (trace_probe, trace_expectation) = factory.enable_task4_runtime_trace();
         let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
             .await
             .unwrap();
@@ -200,5 +224,6 @@ mod tests {
         ));
         Connection::close(connection.as_mut()).await.unwrap();
         assert_eq!(snapshot.column_count(), 1);
+        crate::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();
     }
 }

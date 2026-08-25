@@ -2,6 +2,7 @@
 
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
+use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::metadata::TablesQuery;
 use druid_rdbc::result_set::ResultSet;
@@ -18,6 +19,7 @@ pub(crate) struct SqlxConnectionActor {
     connection: Mutex<SqlxConnectionAdapter>,
     closed: AtomicBool,
     auto_commit: AtomicBool,
+    runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
 impl SqlxConnectionActor {
@@ -30,13 +32,63 @@ impl SqlxConnectionActor {
     }
 
     /// 把 active adapter 转换成 shared owned actor。
-    pub(crate) fn new(connection: SqlxConnectionAdapter) -> Arc<Self> {
+    pub(crate) fn new(mut connection: SqlxConnectionAdapter) -> Arc<Self> {
         let auto_commit = connection.standard_auto_commit_core();
+        let runtime_trace = connection.take_runtime_trace();
         Arc::new(Self {
             connection: Mutex::new(connection),
             closed: AtomicBool::new(false),
             auto_commit: AtomicBool::new(auto_commit),
+            runtime_trace,
         })
+    }
+
+    pub(crate) fn task4_trace_statement_create(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_statement_create();
+        }
+    }
+
+    pub(crate) fn task4_trace_statement_update(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_statement_update();
+        }
+    }
+
+    pub(crate) fn task4_trace_prepared_create(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_prepared_create();
+        }
+    }
+
+    pub(crate) fn task4_trace_parameter_set(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_parameter_set();
+        }
+    }
+
+    pub(crate) fn task4_trace_prepared_query(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_prepared_query();
+        }
+    }
+
+    pub(crate) fn task4_trace_result_next(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_result_next();
+        }
+    }
+
+    pub(crate) fn task4_trace_result_set_metadata(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_result_set_metadata();
+        }
+    }
+
+    pub(crate) fn task4_trace_database_metadata(&self) {
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_database_metadata();
+        }
     }
 
     /// 执行 query，并让 returned ResultSet 继续持有同一 actor lease。
@@ -172,7 +224,13 @@ impl SqlxConnectionActor {
             return Ok(());
         }
         let mut connection = self.connection.lock().await;
+        if self.closed.load(Ordering::Acquire) {
+            return Ok(());
+        }
         connection.close_connection_core().await?;
+        if let Some(trace) = &self.runtime_trace {
+            trace.task4_trace_connection_close();
+        }
         self.closed.store(true, Ordering::Release);
         Ok(())
     }
