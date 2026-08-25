@@ -62,6 +62,7 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         *,
         succeeds: bool,
         diagnostic: str | None = None,
+        externs: dict[str, Path] | None = None,
     ) -> None:
         """Compile an independent minimal Rust source and assert its exact success class."""
 
@@ -70,15 +71,18 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         source_path = rustc_root / "lib.rs"
         output_path = rustc_root / "libfixture.rlib"
         source_path.write_text(source, encoding="utf-8")
+        command = [
+            "rustc",
+            "--edition=2021",
+            "--crate-type=lib",
+            str(source_path),
+            "-o",
+            str(output_path),
+        ]
+        for crate_name, crate_path in sorted((externs or {}).items()):
+            command.extend(("--extern", f"{crate_name}={crate_path}"))
         completed = subprocess.run(
-            [
-                "rustc",
-                "--edition=2021",
-                "--crate-type=lib",
-                str(source_path),
-                "-o",
-                str(output_path),
-            ],
+            command,
             check=False,
             capture_output=True,
             text=True,
@@ -123,6 +127,135 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             encoding="utf-8",
         )
         return source
+
+    def install_transitional_type_alias_module(self, exported_name: str = "String") -> str:
+        """Install a private module that re-exports transitional Blob as one path member."""
+
+        source = (
+            "mod evil {\n"
+            f"    pub use crate::resource::Blob as {exported_name};\n"
+            "}\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(
+            lib.read_text(encoding="utf-8") + source,
+            encoding="utf-8",
+        )
+        return source
+
+    def build_test_proc_macro(self) -> Path:
+        """Compile a minimal thiserror-shaped proc-macro oracle with rustc."""
+
+        rustc_root = self.root / "_rustc_fixture"
+        rustc_root.mkdir(exist_ok=True)
+        source_path = rustc_root / "thiserror.rs"
+        library_suffix = {"win32": ".dll", "darwin": ".dylib"}.get(
+            sys.platform,
+            ".so",
+        )
+        output_path = rustc_root / f"libthiserror{library_suffix}"
+        source_path.write_text(
+            "extern crate proc_macro;\n"
+            "use proc_macro::TokenStream;\n"
+            "#[proc_macro_derive(Error, attributes(error))]\n"
+            "pub fn derive_error(_: TokenStream) -> TokenStream { TokenStream::new() }\n"
+            "#[proc_macro_attribute]\n"
+            "pub fn marker(_: TokenStream, item: TokenStream) -> TokenStream { item }\n"
+            "#[proc_macro]\n"
+            "pub fn assert(_: TokenStream) -> TokenStream { \"()\".parse().unwrap() }\n",
+            encoding="utf-8",
+        )
+        completed = subprocess.run(
+            [
+                "rustc",
+                "--edition=2021",
+                "--crate-name=thiserror",
+                "--crate-type=proc-macro",
+                str(source_path),
+                "-o",
+                str(output_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        return output_path
+
+    def install_proc_macro_alias_module(self) -> str:
+        """Install private derive, attribute, and function-like proc-macro re-exports."""
+
+        source = (
+            "mod evil {\n"
+            "    pub use thiserror::{assert, marker, Error as Debug};\n"
+            "}\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(
+            lib.read_text(encoding="utf-8") + source,
+            encoding="utf-8",
+        )
+        return source
+
+    def assert_rejects_ordinary_standard_alias(self, root_name: str) -> None:
+        """Prove one relative standard-looking type root resolves to the local alias first."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "mod connection {\n"
+            f"    use crate::evil as {root_name};\n"
+            f"    pub type Leaked = {root_name}::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            f"use crate::evil as {root_name};\n"
+            f"pub type Leaked = {root_name}::String;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(
+            VerificationError,
+            f"{root_name}|transitional|binding|provenance",
+        ):
+            verify_tree(self.root, phase="transitional")
+
+    def assert_rejects_derive_standard_alias(self, root_name: str) -> None:
+        """Prove a derive root resolves through a local proc-macro re-export first."""
+
+        proc_macro = self.build_test_proc_macro()
+        helper_source = self.install_proc_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            f"    use crate::evil as {root_name};\n"
+            f"    #[derive(::std::fmt::Debug, {root_name}::Debug)]\n"
+            "    #[error(\"x\")]\n"
+            "    pub struct Subject;\n"
+            "}\n"
+        )
+        self.assert_rustc(
+            rust_source,
+            succeeds=True,
+            externs={"thiserror": proc_macro},
+        )
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            f"use crate::evil as {root_name};\n"
+            f"#[derive(::std::fmt::Debug, {root_name}::Debug)]\n"
+            "#[error(\"x\")]\n"
+            "pub struct Subject;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(
+            VerificationError,
+            f"{root_name}|Debug|binding|provenance",
+        ):
+            verify_tree(self.root, phase="transitional")
 
     def test_accepts_complete_pure_standard_tree(self) -> None:
         """The positive control contains only standard declarations."""
@@ -1482,6 +1615,399 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             "    let _character = 'a';\n"
             "    value\n"
             "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_rejects_relative_std_alias_in_ordinary_type_path(self) -> None:
+        """A local std alias cannot hide a transitional type behind std::String."""
+
+        self.assert_rejects_ordinary_standard_alias("std")
+
+    def test_rejects_relative_core_alias_in_ordinary_type_path(self) -> None:
+        """A local core alias cannot hide a transitional type behind core::String."""
+
+        self.assert_rejects_ordinary_standard_alias("core")
+
+    def test_rejects_relative_alloc_alias_in_ordinary_type_path(self) -> None:
+        """A local alloc alias cannot hide a transitional type behind alloc::String."""
+
+        self.assert_rejects_ordinary_standard_alias("alloc")
+
+    def test_rejects_relative_std_alias_in_derive_path(self) -> None:
+        """A relative std::Debug derive resolves the local proc-macro binding first."""
+
+        self.assert_rejects_derive_standard_alias("std")
+
+    def test_rejects_relative_core_alias_in_derive_path(self) -> None:
+        """A relative core::Debug derive resolves the local proc-macro binding first."""
+
+        self.assert_rejects_derive_standard_alias("core")
+
+    def test_rejects_relative_alloc_alias_in_derive_path(self) -> None:
+        """A relative alloc::Debug derive resolves the local proc-macro binding first."""
+
+        self.assert_rejects_derive_standard_alias("alloc")
+
+    def test_rejects_relative_std_alias_in_proc_attribute_path(self) -> None:
+        """A qualified procedural attribute uses the same local-first root resolution."""
+
+        proc_macro = self.build_test_proc_macro()
+        helper_source = self.install_proc_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::evil as std;\n"
+            "    #[std::marker]\n"
+            "    pub struct Subject;\n"
+            "}\n"
+        )
+        self.assert_rustc(
+            rust_source,
+            succeeds=True,
+            externs={"thiserror": proc_macro},
+        )
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as std;\n"
+            "#[std::marker]\n"
+            "pub struct Subject;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|marker|binding|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_relative_std_alias_in_function_like_proc_macro_path(self) -> None:
+        """A qualified function-like macro retains the same local-root provenance policy."""
+
+        proc_macro = self.build_test_proc_macro()
+        helper_source = self.install_proc_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::evil as std;\n"
+            "    pub fn run() { std::assert!(); }\n"
+            "}\n"
+        )
+        self.assert_rustc(
+            rust_source,
+            succeeds=True,
+            externs={"thiserror": proc_macro},
+        )
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as std;\n"
+            "pub fn run() { std::assert!(); }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|assert|binding|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_relative_std_alias_inside_nested_inline_child(self) -> None:
+        """An inline child resolves its own std use before the external prelude."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "mod connection {\n"
+            "    mod child {\n"
+            "        use crate::evil as std;\n"
+            "        pub type Leaked = std::String;\n"
+            "    }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "mod child {\n"
+            "    use crate::evil as std;\n"
+            "    pub type Leaked = std::String;\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_relative_std_alias_inside_external_child(self) -> None:
+        """An external child resolves its own std use before the external prelude."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "mod connection {\n"
+            "    mod child {\n"
+            "        use crate::evil as std;\n"
+            "        pub type Leaked = std::String;\n"
+            "    }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "mod child;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        child = self.root / "connection/contract/child.rs"
+        child.parent.mkdir(parents=True, exist_ok=True)
+        child.write_text(
+            "use crate::evil as std;\n"
+            "pub type Leaked = std::String;\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_block_std_alias_in_ordinary_type_path(self) -> None:
+        """A block use binding shadows std throughout its lexical block."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "pub fn leak() {\n"
+            "    use crate::evil as std;\n"
+            "    let _: std::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn leak() {\n"
+            "    use crate::evil as std;\n"
+            "    let _: std::String;\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|lexical|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_block_std_alias_before_use_declaration(self) -> None:
+        """A block use item binds for the whole block, including preceding expressions."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "pub fn leak() {\n"
+            "    let _: std::String;\n"
+            "    use crate::evil as std;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn leak() {\n"
+            "    let _: std::String;\n"
+            "    use crate::evil as std;\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|lexical|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_accepts_std_after_block_alias_scope_ends(self) -> None:
+        """A block-local std alias does not poison a later external-prelude path."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "pub fn clean() {\n"
+            "    { use crate::evil as std; }\n"
+            "    let _: std::string::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn clean() {\n"
+            "    { use crate::evil as std; }\n"
+            "    let _: std::string::String;\n"
+            "}\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_parent_std_alias_not_inherited_by_inline_child(self) -> None:
+        """An ordinary parent use binding is not in an inline child's name scope."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::evil as std;\n"
+            "    mod child { pub fn run() { std::assert!(true); } }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as std;\n"
+            "mod child { pub fn run() { std::assert!(true); } }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_accepts_parent_std_alias_not_inherited_by_external_child(self) -> None:
+        """An ordinary parent use binding is not in an external child's name scope."""
+
+        helper_source = self.install_private_macro_alias_module()
+        rust_source = (
+            helper_source
+            + "mod connection {\n"
+            "    use crate::evil as std;\n"
+            "    mod child { pub fn run() { std::assert!(true); } }\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as std;\n"
+            "mod child;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        child = self.root / "connection/contract/child.rs"
+        child.parent.mkdir(parents=True, exist_ok=True)
+        child.write_text(
+            "pub fn run() { std::assert!(true); }\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+    def test_rejects_grouped_std_alias_in_ordinary_type_path(self) -> None:
+        """Grouped use syntax cannot bypass local std binding provenance."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "mod connection {\n"
+            "    use crate::{evil as std};\n"
+            "    pub type Leaked = std::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::{evil as std};\n"
+            "pub type Leaked = std::String;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_pub_use_chain_std_alias_in_ordinary_type_path(self) -> None:
+        """A pub-use chain named std retains its local target provenance."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        bridge_source = (
+            "mod bridge { pub(crate) use crate::evil as std; }\n"
+        )
+        lib = self.root / "lib.rs"
+        lib.write_text(
+            lib.read_text(encoding="utf-8") + bridge_source,
+            encoding="utf-8",
+        )
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + bridge_source
+            + "mod connection {\n"
+            "    use crate::bridge::std;\n"
+            "    pub type Leaked = std::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::bridge::std;\n"
+            "pub type Leaked = std::String;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_raw_std_alias_in_ordinary_type_path(self) -> None:
+        """Raw identifier spelling cannot turn a local std alias into the external prelude."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "mod connection {\n"
+            "    use crate::evil as r#std;\n"
+            "    pub type Leaked = r#std::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as r#std;\n"
+            "pub type Leaked = r#std::String;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "std|transitional|binding"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_rejects_extern_crate_alias_named_std(self) -> None:
+        """An extern-crate alias named std cannot impersonate the absolute std provenance."""
+
+        rust_source = (
+            "#![no_std]\n"
+            "extern crate self as std;\n"
+            "pub struct String;\n"
+            "mod connection { pub type Leaked = std::String; }\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        lib = self.root / "lib.rs"
+        lib.write_text(
+            "#![no_std]\n"
+            "extern crate self as std;\n"
+            "pub use resource::Blob as String;\n"
+            + lib.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub type Leaked = std::String;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "extern crate|alias|std|provenance"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_accepts_absolute_std_type_despite_relative_alias(self) -> None:
+        """Leading ::std keeps absolute external provenance despite a relative alias."""
+
+        helper_source = self.install_transitional_type_alias_module()
+        rust_source = (
+            "pub mod resource { pub struct Blob; }\n"
+            + helper_source
+            + "mod connection {\n"
+            "    use crate::evil as std;\n"
+            "    pub type Clean = ::std::string::String;\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "use crate::evil as std;\n"
+            "pub type Clean = ::std::string::String;\n"
             "pub trait Contract: Send {}\n",
             encoding="utf-8",
         )

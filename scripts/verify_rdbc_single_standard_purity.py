@@ -1392,47 +1392,146 @@ class ModuleScopeIndex:
             and definition.end <= child.declared_at_index
         )
 
-    def lexical_use_shadow(
-        self, site: MacroInvocationSite, name: str
+    def lexical_use_binding(
+        self,
+        source: Path | None,
+        token_index: int | None,
+        name: str,
+        *,
+        excluded: LexicalUseBinding | None = None,
     ) -> LexicalUseBinding | None:
-        """Return the innermost active lexical import with the requested name."""
+        """Return the innermost exact-block import with the requested binding name."""
 
-        unit = self.sources.get(site.source)
+        if source is None or token_index is None:
+            return None
+        unit = self.sources.get(source)
         if unit is None:
             return None
         candidates = [
             binding
             for binding in unit.lexical_use_bindings
-            if binding.name == name and binding.start <= site.token_index < binding.end
+            if binding != excluded
+            and binding.name == name
+            and binding.start <= token_index < binding.end
         ]
         return min(candidates, key=lambda binding: binding.end - binding.start, default=None)
 
-    def module_path_shadow(
-        self, site: MacroInvocationSite, name: str
-    ) -> str | None:
-        """Return a module/type/import provenance that shadows one relative path root."""
+    def resolve_lexical_use_binding(
+        self,
+        binding: LexicalUseBinding,
+        *,
+        canonical: bool,
+        resolving: set[tuple[tuple[str, ...], str]],
+        lexical_resolving: set[tuple[Path, int, str]],
+    ) -> ResolvedTarget:
+        """Resolve one exact-block use target without allowing self/cyclic aliases."""
 
-        scope = self.scope_for(site.source, site.token_index)
-        if scope is not None:
-            identity = scope.identity
-            while True:
-                candidate = self.scopes[identity]
-                if name in candidate.bindings:
-                    return f"use binding in {candidate.source}"
-                if name in candidate.children:
-                    return f"module binding in {candidate.source}"
-                item = candidate.local_items.get(name)
-                if item is not None and item.namespace == "type":
-                    return f"type binding in {candidate.source}"
-                if not identity:
-                    break
-                identity = identity[:-1]
-        lexical_use = self.lexical_use_shadow(site, name)
+        key = (binding.source, binding.token_index, binding.name)
+        if key in lexical_resolving:
+            fail(f"cyclic lexical use binding in {binding.source}: {binding.name}")
+        lexical_resolving.add(key)
+        try:
+            return self.resolve_path(
+                self.scope_for(binding.source, binding.token_index),
+                binding.path,
+                absolute=binding.absolute,
+                canonical=canonical,
+                resolving=resolving,
+                lexical_resolving=lexical_resolving,
+                excluded_lexical_use=binding,
+                source=binding.source,
+                token_index=binding.token_index,
+            )
+        finally:
+            lexical_resolving.remove(key)
+
+    def visible_use_binding_target(
+        self,
+        scope: ModuleScope | None,
+        name: str,
+        *,
+        canonical: bool,
+        resolving: set[tuple[tuple[str, ...], str]],
+        lexical_resolving: set[tuple[Path, int, str]],
+        excluded_lexical_use: LexicalUseBinding | None,
+        source: Path | None,
+        token_index: int | None,
+    ) -> ResolvedTarget | None:
+        """Resolve current-block/current-module use binding without ancestor inheritance."""
+
+        lexical_use = self.lexical_use_binding(
+            source,
+            token_index,
+            name,
+            excluded=excluded_lexical_use,
+        )
         if lexical_use is not None:
-            return f"lexical use binding in {lexical_use.source}"
-        lexical_item = self.lexical_item_binding(site.source, site.token_index, name)
-        if lexical_item is not None and lexical_item.namespace in {"module", "type"}:
-            return f"lexical {lexical_item.namespace} binding in {lexical_item.source}"
+            return self.resolve_lexical_use_binding(
+                lexical_use,
+                canonical=canonical,
+                resolving=resolving,
+                lexical_resolving=lexical_resolving,
+            )
+        if (
+            scope is not None
+            and name in scope.bindings
+            and (scope.identity, name) not in resolving
+        ):
+            return self.resolve_binding(
+                scope,
+                name,
+                canonical=canonical,
+                resolving=resolving,
+            )
+        return None
+
+    def resolve_relative_root_binding(
+        self,
+        scope: ModuleScope | None,
+        name: str,
+        *,
+        canonical: bool,
+        resolving: set[tuple[tuple[str, ...], str]],
+        lexical_resolving: set[tuple[Path, int, str]],
+        excluded_lexical_use: LexicalUseBinding | None,
+        source: Path | None,
+        token_index: int | None,
+    ) -> ResolvedTarget | None:
+        """Resolve one non-absolute root locally before any extern/prelude fallback."""
+
+        use_target = self.visible_use_binding_target(
+            scope,
+            name,
+            canonical=canonical,
+            resolving=resolving,
+            lexical_resolving=lexical_resolving,
+            excluded_lexical_use=excluded_lexical_use,
+            source=source,
+            token_index=token_index,
+        )
+        if use_target is not None:
+            return use_target
+        lexical_kind = self.lexical_binding_kind(source, token_index, name)
+        if lexical_kind == "type":
+            return ResolvedTarget("generic_type", scope.identity if scope else ())
+        if lexical_kind == "const":
+            fail(f"const generic cannot be an associated path root in {source}: {name}")
+        lexical_item = self.lexical_item_binding(source, token_index, name)
+        if lexical_item is not None:
+            return ResolvedTarget(
+                f"lexical_{lexical_item.namespace}",
+                scope.identity if scope else (),
+            )
+        if scope is None:
+            return None
+        if name in scope.children or name in scope.local_items:
+            return self.member(
+                scope,
+                name,
+                scope,
+                canonical=canonical,
+                resolving=resolving,
+            )
         return None
 
     def bare_macro_shadow(
@@ -1444,18 +1543,26 @@ class ModuleScopeIndex:
             if definition.name == name and self.macro_definition_active(definition, site):
                 return f"textual macro definition in {definition.source}"
         scope = self.scope_for(site.source, site.token_index)
-        if scope is not None:
-            identity = scope.identity
-            while True:
-                candidate = self.scopes[identity]
-                if name in candidate.bindings:
-                    return f"macro-capable use binding in {candidate.source}"
-                if not identity:
-                    break
-                identity = identity[:-1]
-        lexical_use = self.lexical_use_shadow(site, name)
-        if lexical_use is not None:
-            return f"lexical macro-capable use binding in {lexical_use.source}"
+        try:
+            target = self.visible_use_binding_target(
+                scope,
+                name,
+                canonical=True,
+                resolving=set(),
+                lexical_resolving=set(),
+                excluded_lexical_use=None,
+                source=site.source,
+                token_index=site.token_index,
+            )
+        except VerificationError as error:
+            return f"untrusted use binding ({error})"
+        if target is not None:
+            if (
+                target.kind == "external"
+                and target.external_root in ALLOWED_QUALIFIED_MACRO_ROOTS
+            ):
+                return None
+            return f"non-standard use binding in {site.source}"
         if name in self.exported_macros:
             return f"crate-root exported macro in {self.exported_macros[name].source}"
         return None
@@ -1506,13 +1613,28 @@ class ModuleScopeIndex:
             self.prove_canonical_crate_macro(site, "impl_standard_wrapper")
             return
         if len(site.path) >= 2 and site.path[0] in ALLOWED_QUALIFIED_MACRO_ROOTS:
-            if not site.absolute:
-                shadow = self.module_path_shadow(site, site.path[0])
-                if shadow is not None:
-                    fail(
-                        "qualified standard macro root is shadowed in "
-                        f"{site.source}: {rendered}! ({shadow})"
-                    )
+            try:
+                target = self.resolve_path(
+                    self.scope_for(site.source, site.token_index),
+                    site.path,
+                    absolute=site.absolute,
+                    canonical=True,
+                    source=site.source,
+                    token_index=site.token_index,
+                )
+            except VerificationError as error:
+                fail(
+                    "qualified standard macro root has untrusted binding provenance in "
+                    f"{site.source}: {rendered}! ({error})"
+                )
+            if (
+                target.kind != "external"
+                or target.external_root != site.path[0]
+            ):
+                fail(
+                    "qualified standard macro root does not resolve to external provenance in "
+                    f"{site.source}: {rendered}!"
+                )
             return
         fail(
             f"macro invocation has no canonical binding provenance in {site.source}: "
@@ -1677,14 +1799,17 @@ class ModuleScopeIndex:
         absolute: bool,
         canonical: bool,
         resolving: set[tuple[tuple[str, ...], str]] | None = None,
+        lexical_resolving: set[tuple[Path, int, str]] | None = None,
+        excluded_lexical_use: LexicalUseBinding | None = None,
         source: Path | None = None,
         token_index: int | None = None,
     ) -> ResolvedTarget:
-        """Resolve crate/self/N-super/bare paths uniformly for use and non-use sites."""
+        """Resolve local bindings before extern fallback for every non-absolute path."""
 
         if not path:
             fail("cannot resolve an empty Rust path")
         resolving = resolving if resolving is not None else set()
+        lexical_resolving = lexical_resolving if lexical_resolving is not None else set()
         root_scope = self.scopes[()]
         cursor = 0
         first = path[0]
@@ -1712,37 +1837,42 @@ class ModuleScopeIndex:
             target = ResolvedTarget("module", identity)
         elif first == "Self":
             return ResolvedTarget("item", scope.identity if scope else ())
-        elif first in ALLOWED_EXTERNAL_IMPORT_ROOTS or first in RUST_PRELUDE_ROOTS:
-            return ResolvedTarget("external", external_root=first)
         else:
-            lexical_kind = self.lexical_binding_kind(source, token_index, first)
-            if lexical_kind == "type":
-                return ResolvedTarget("generic_type", scope.identity if scope else ())
-            if lexical_kind == "const":
-                fail(f"const generic cannot be an associated path root in {source}: {first}")
-            lexical_item = self.lexical_item_binding(source, token_index, first)
-            if lexical_item is not None:
-                if lexical_item.namespace == "value" and len(path) != 1:
-                    fail(
-                        f"function binding cannot be a type/module namespace in {source}: "
-                        f"{first}"
-                    )
-                return ResolvedTarget(
-                    f"lexical_{lexical_item.namespace}",
-                    scope.identity if scope else (),
-                )
-            if scope is None:
-                if canonical:
-                    fail(f"unknown path root without reachable module scope: {first}")
-                return ResolvedTarget("external", external_root=first)
             try:
-                target = self.member(
-                    scope, first, scope, canonical=canonical, resolving=resolving
+                target = self.resolve_relative_root_binding(
+                    scope,
+                    first,
+                    canonical=canonical,
+                    resolving=resolving,
+                    lexical_resolving=lexical_resolving,
+                    excluded_lexical_use=excluded_lexical_use,
+                    source=source,
+                    token_index=token_index,
                 )
-            except VerificationError:
+            except VerificationError as error:
                 if canonical:
-                    raise VerificationError(f"unknown path root in {scope.source}: {first}") from None
+                    location = scope.source if scope is not None else source
+                    raise VerificationError(
+                        f"local path root resolution failed in {location}: {first} ({error})"
+                    ) from None
+                target = None
+            if target is None:
+                if first in ALLOWED_EXTERNAL_IMPORT_ROOTS or first in RUST_PRELUDE_ROOTS:
+                    return ResolvedTarget("external", external_root=first)
+                if scope is None:
+                    if canonical:
+                        fail(f"unknown path root without reachable module scope: {first}")
+                    return ResolvedTarget("external", external_root=first)
+                if canonical:
+                    raise VerificationError(
+                        f"unknown path root in {scope.source}: {first}"
+                    ) from None
                 return ResolvedTarget("external", external_root=first)
+            if target.kind == "lexical_value" and len(path) != 1:
+                fail(
+                    f"function binding cannot be a type/module namespace in {source}: "
+                    f"{first}"
+                )
             cursor = 1
 
         requester = scope or root_scope
@@ -1752,13 +1882,18 @@ class ModuleScopeIndex:
             module = self.scopes.get(target.module)
             if module is None:
                 fail(f"resolved module is absent from reachable index: {'::'.join(target.module)}")
-            target = self.member(
-                module,
-                path[cursor],
-                requester,
-                canonical=canonical,
-                resolving=resolving,
-            )
+            try:
+                target = self.member(
+                    module,
+                    path[cursor],
+                    requester,
+                    canonical=canonical,
+                    resolving=resolving,
+                )
+            except VerificationError as error:
+                raise VerificationError(
+                    f"cannot resolve {'::'.join(path)}: {error}"
+                ) from None
             cursor += 1
         self.validate_target(target, path, canonical=canonical)
         return target

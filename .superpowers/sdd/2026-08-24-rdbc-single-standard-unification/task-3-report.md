@@ -568,3 +568,18 @@ Task 4 不得开始，直到用户批准 recovery ruling、两个 Important 均�
   SHA不变；known admin broad failure未跑/未伪报。
 - Scope只有purity verifier/tests与append-only artifacts；状态
   `FIX_ROUND_4_IMPLEMENTED_PENDING_REREVIEW`。Task 4继续blocked。
+
+### Recovery fix round 4 re-review correction / round 5/5 implementation
+
+- Reviewer对`bd62d69`仍判`FIX_REQUIRED`：ordinary/derive relative `std/core/alloc`在local binding前
+  被误判external，且ancestor普通use会误杀child；仍有`1 load-bearing Important + related Minor`。
+- Strict TDD从既有`83/83`扩为`103`项；旧实现fresh RED为`14 failures + 2 errors`，全部攻击/正向
+  均有独立rustc可编译证明。覆盖std/core/alloc ordinary+derive、proc attribute/function macro、
+  inline/external child、block/range、parent不继承、group/pub-use/raw/extern/absolute。
+- GREEN以统一relative-root resolver替代ordinary external fast-path与qualified-macro ancestor shadow
+  heuristic：exact block/current module binding优先，external/prelude回退；textual macro inheritance
+  独立。Purity`103/103 + live29`。
+- 完整semantic/Task2/error/Rust quality gates PASS；`73/55/3559`与consumer SHA保持。Known admin broad
+  failure未跑/未伪报；non-load-bearing compiler-blocked Minors defer。
+- Scope仅两份purity scripts与append-only artifacts；状态
+  `FIX_ROUND_5_IMPLEMENTED_PENDING_REREVIEW`，Task 4继续blocked。

@@ -557,3 +557,87 @@ PURITY_PHASE=transitional
   broad supervisor failure未运行、未伪报GREEN。
 - 状态为`FIX_ROUND_4_IMPLEMENTED_PENDING_REREVIEW`。原reviewer返回`REVIEW CLEAR`前，Task 4继续
   blocked；本实现者不宣称Important已独立关闭。
+
+## 12. Recovery fix round 4 review correction / round 5/5
+
+独立review对`bd62d69`仍判`FIX_REQUIRED`：function-like macro provenance为`PARTIAL`，因为普通
+type/value、derive与procedural attribute path仍在local binding之前把relative `std/core/alloc`
+直接判为external；同一实现还会把parent module普通use错误继承到child。Round 5基线为
+`148648300464d0b2434b7e6684212e7a706119f0`。
+
+### Round 5 strict TDD RED
+
+先只修改永久self-test，未修改production verifier。原`83/83`基线保持；扩展到`103`项后旧实现
+稳定得到：
+
+```text
+Ran 103 tests
+FAILED (failures=14, errors=2)
+```
+
+`16`个fresh RED全部先由`rustc 1.97.1 --edition=2021 --crate-type=lib`证明语义：
+
+1. relative `std/core/alloc` ordinary type alias与derive alias共六个漏放；std procedural attribute
+   再形成一个漏放，既有与新增function-like proc macro control保持拒绝；
+2. nested inline/external child自己的std alias、block alias（含use声明前的block-wide scope）、
+   grouped、pub-use chain与raw alias均被漏放；
+3. parent module普通std use被错误遍历到inline/external child，两个合法`std::assert!`正向被误杀。
+
+Derive/attribute/function-like proc macro使用测试内临时rustc构建的最小thiserror-shaped
+proc-macro oracle；fixture编译失败不计RED。Leading absolute、shadow结束恢复、extern crate alias与
+既有83项在RED基线上均按预期，证明失败来自root provenance次序而非fixture错误。
+
+### Round 5 GREEN：统一 relative-root provenance
+
+1. `resolve_relative_root_binding`成为ordinary、associated/generic、derive/proc attribute和qualified
+   function-like macro共用入口。每个非absolute root按exact lexical block use、当前位置module use、
+   lexical generic/item、当前位置child/item解析，只有不存在真实binding才回退external/prelude。
+2. `resolve_lexical_use_binding`保存block-wide use语义并显式检测self/cyclic aliases；module use在解析
+   自己的target时不会把自身当root。Grouped/pub-use/raw路径继续进入同一binding chain。
+3. 普通module name resolution只检查current module，不遍历ancestor use；parent普通alias因此不进入
+   inline/external child。Textual macro inheritance仍只由`MacroDefinition`的source order、block range
+   与declared-child propagation建模，两套规则不混用。
+4. Qualified `std/core/alloc` macro不再调用独立shadow heuristic，而是调用同一`resolve_path`并要求
+   最终target为同名external root。Bare format仍先处理textual macro scope，再解析当前位置use。
+5. Leading absolute `::std/core/alloc`不读取relative alias；extern crate aliases保持fail closed。
+   `no_std`下不存在std等rustc已拒绝边界未扩张为Rust compiler simulation。
+
+Focused GREEN：
+
+```text
+python3 scripts/test_verify_rdbc_single_standard_purity.py
+Ran 103 tests ... OK
+
+python3 scripts/verify_rdbc_single_standard_purity.py --phase transitional
+STANDARD_FILES=29
+PURITY_PHASE=transitional
+```
+
+### Round 5 fresh gates
+
+| Gate | Result |
+| :--- | :--- |
+| Python `py_compile` | PASS |
+| purity self/live | `103/103`；`STANDARD_FILES=29` |
+| druid-rdbc all-target/all-feature | `20/20`，Wrapper `3/3` |
+| JDBC semantic self/live | `13/13`；`52/17/UNKNOWN=0` |
+| Task 2 identity/live | `37/37`；`73/55/3559` |
+| consumer SHA | `b1b420d61a8c5824d45eb3c59feecedb10795db803b4b3d20ece0509a1c72c59` |
+| DruidError / external consumer | `4/4`；`2/2` |
+| workspace all-target/all-feature check | PASS |
+| scoped Clippy `-D warnings` | PASS |
+| rustdoc / doctest | PASS / `1/1` |
+| rustfmt / diff check | PASS |
+
+### Round 5 self-review / deferred Minor
+
+- Mutation coverage：把external fallback移回local binding之前、恢复ancestor-use遍历、绕开lexical
+  range、让macro重新使用name-only shadow heuristic、忽略group/pub-use/raw，均至少有一个永久fixture
+  失败。实现没有按`std::String`或`std::Debug`字符串特判。
+- `macro` 2.0 declarations、unknown bare proc attributes/derive、`no_std` absent std与nonexistent
+  standard macro在当前rustc上均无可编译绕过，按review ruling作为non-load-bearing Minor defer；未把
+  verifier扩张成完整Rust compiler。
+- Wrapper production、Task4、Physical、Cargo、admin、verification manifests均无diff。Known admin
+  broad supervisor failure未运行、未伪报GREEN。
+- 状态为`FIX_ROUND_5_IMPLEMENTED_PENDING_REREVIEW`。只有原reviewer返回`REVIEW CLEAR`后才可关闭
+  Task 3 recovery；Task 4继续blocked。

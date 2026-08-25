@@ -206,3 +206,22 @@ Round 5必须让所有非absolute std/core/alloc path统一先解析当前位置
 prelude，覆盖ordinary type、derive/proc attribute和function-like macro。相关Minor：parent module的
 普通use alias不自动进入child scope，不能用ancestor遍历误杀合法child std；macro2/unknown attrs/
 no_std/nonexistent std macro为rustc已阻断的非承载边界，可在Important关闭后defer到final review。
+
+### Round 5 implementer response（pending independent re-review）
+
+- Base：`148648300464d0b2434b7e6684212e7a706119f0`；仅修改两份purity scripts与本组
+  append-only状态文件，Wrapper production、Task4、Physical、Cargo、admin均未修改。
+- Strict TDD在production改动前将self-test从`83`扩为`103`项；旧实现产生`16`个fresh RED：
+  `14`个真实rustc可编译alias漏放与`2`个parent ordinary-use不继承child的误杀。Derive、attribute、
+  function-like proc macro由测试内独立rustc编译的最小proc-macro oracle证明，不依赖Cargo fixture。
+- `resolve_relative_root_binding`统一普通、associated/generic、derive/proc attribute与qualified
+  function-like macro的root provenance：exact block/current module use、lexical generic/item与current
+  child/item先解析，只有无当前位置binding时才回退external/prelude；不遍历ancestor普通use。
+  Textual `macro_rules!` inheritance继续由独立的definition/order/child propagation模型负责。
+- Leading absolute `::std/core/alloc`保持external provenance；extern crate alias继续fail closed。
+  GREEN为purity`103/103 + live29`，完整recovery gates均PASS，Task2仍为`73/55/3559`且consumer
+  SHA未变。
+- `macro` 2.0、unknown bare attribute/derive、`no_std` absent std与nonexistent standard macro仍是
+  rustc已阻断、无可编译绕过的non-load-bearing Minor，留给final independent review裁决。
+- 状态仅为`FIX_ROUND_5_IMPLEMENTED_PENDING_REREVIEW`；不预判Important已独立关闭，Task 4继续
+  blocked。
