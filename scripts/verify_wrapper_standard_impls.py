@@ -37,17 +37,43 @@ SQL_EXECUTION_MARKERS = (
     "RdbcError::DriverError",
     "RdbcError::UnsupportedOperation",
 )
-MAX_BEHAVIOR_PATHS = 64
 APPROVED_ASSERTION_MACROS = {
     "assert",
     "assert_eq",
-    "assert_impl_all",
-    "assert_matches",
     "assert_ne",
     "debug_assert",
     "debug_assert_eq",
     "debug_assert_ne",
     "matches",
+}
+STRAIGHT_LINE_FORBIDDEN_KEYWORDS = {
+    "if": "branch `if`",
+    "else": "branch `else`",
+    "match": "branch `match`",
+    "loop": "loop `loop`",
+    "while": "loop `while`",
+    "for": "loop `for`",
+    "return": "early exit `return`",
+    "break": "early exit `break`",
+    "continue": "early exit `continue`",
+    "async": "deferred `async` block or closure",
+    "move": "deferred `move` closure",
+    "type": "local type definition",
+    "struct": "local struct definition",
+    "enum": "local enum definition",
+    "union": "local union definition",
+    "trait": "local trait definition",
+    "impl": "local impl definition",
+    "mod": "local module definition",
+    "macro_rules": "local macro_rules definition",
+    "macro": "local macro definition",
+    "const": "local const item",
+    "static": "local static item",
+    "use": "local use item",
+    "extern": "local extern item",
+    "unsafe": "unsafe block",
+    "try": "try block",
+    "yield": "yield expression",
 }
 REMOTE_BEHAVIOR_CHAIN = (
     ("ConnectionFactory", "::", "create"),
@@ -94,14 +120,6 @@ class CfgProfile:
 
     name: str
     assignment: dict[str, bool]
-
-
-@dataclass(frozen=True)
-class BehaviorPathSummary:
-    """One ordered feasible token path through a behavior-evidence test body."""
-
-    tokens: tuple[str, ...] = ()
-    flow: str = "fallthrough"
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -408,570 +426,180 @@ def all_cfg_expressions(tokens: list[object]) -> list[tuple[object, ...]]:
     return expressions
 
 
-def bounded_behavior_paths(
-    paths: list[BehaviorPathSummary],
-) -> list[BehaviorPathSummary]:
-    """Deduplicate path summaries and reject analysis that exceeds the fixed budget."""
-
-    unique = list(dict.fromkeys(paths))
-    if len(unique) > MAX_BEHAVIOR_PATHS:
-        fail(
-            "behavior evidence path explosion exceeds "
-            f"{MAX_BEHAVIOR_PATHS} candidate paths"
-        )
-    return unique
-
-
-def append_behavior_paths(
-    prefixes: list[BehaviorPathSummary],
-    alternatives: list[BehaviorPathSummary],
-) -> list[BehaviorPathSummary]:
-    """Append alternatives only to prefixes that can still execute the suffix."""
-
-    combined: list[BehaviorPathSummary] = []
-    for prefix in prefixes:
-        if prefix.flow != "fallthrough":
-            combined.append(prefix)
-            continue
-        combined.extend(
-            BehaviorPathSummary(prefix.tokens + alternative.tokens, alternative.flow)
-            for alternative in alternatives
-        )
-    return bounded_behavior_paths(combined)
-
-
-def behavior_path_summaries(
+def straight_line_body_tokens(
     tokens: list[object],
     start: int,
     end: int,
     excluded: set[int],
-    *,
-    compile_backed: bool,
-) -> tuple[BehaviorPathSummary, ...]:
-    """Build bounded ordered paths without interpreting arbitrary Rust expressions."""
+    function_name: str,
+) -> tuple[str, ...]:
+    """Validate and return one direct, sequential fallthrough test body."""
 
-    delimiter_pairs = {"{": "}", "(": ")", "[": "]"}
+    body_indexes = list(range(start, end))
+    if not body_indexes:
+        fail(f"adapter behavior evidence has an empty body: {function_name}")
 
-    def balanced_end(opening: int, limit: int) -> int:
-        """Return the exclusive end of one balanced Rust delimiter group."""
-
-        opener = tokens[opening].text
-        if opener not in delimiter_pairs:
-            fail(f"behavior evidence expected a delimiter at token {opening}")
-        closer = delimiter_pairs[opener]
-        stack = [closer]
-        cursor = opening + 1
-        while cursor < limit and stack:
-            text = tokens[cursor].text
-            if text in delimiter_pairs:
-                stack.append(delimiter_pairs[text])
-            elif text in delimiter_pairs.values():
-                if text != stack[-1]:
-                    fail("behavior evidence contains mismatched delimiters")
-                stack.pop()
-            cursor += 1
-        if stack:
-            fail("behavior evidence contains an unbalanced delimiter group")
-        return cursor
-
-    def control_body_opening(control_index: int, limit: int) -> int:
-        """Find the outer body of an if/loop/match with simple Rust conditions."""
-
-        paren = bracket = 0
-        cursor = control_index + 1
-        while cursor < limit:
-            text = tokens[cursor].text
-            if text == "(":
-                paren += 1
-            elif text == ")":
-                paren -= 1
-            elif text == "[":
-                bracket += 1
-            elif text == "]":
-                bracket -= 1
-            elif text == "{" and paren == bracket == 0:
-                return cursor
-            if paren < 0 or bracket < 0:
-                fail("behavior evidence control expression is unbalanced")
-            cursor += 1
-        fail("behavior evidence control expression has no body")
-
-    def literal_condition(condition_start: int, condition_end: int) -> bool | None:
-        """Recognize only a direct true/false literal, optionally parenthesized."""
-
-        values = [
-            tokens[index].text
-            for index in range(condition_start, condition_end)
-            if index not in excluded
-        ]
-        while len(values) >= 2 and values[0] == "(" and values[-1] == ")":
-            depth = 0
-            encloses_all = True
-            for index, value in enumerate(values):
-                depth += value == "("
-                depth -= value == ")"
-                if depth == 0 and index != len(values) - 1:
-                    encloses_all = False
-                    break
-            if not encloses_all:
-                break
-            values = values[1:-1]
-        if values == ["true"]:
-            return True
-        if values == ["false"]:
-            return False
-        return None
-
-    def append_token_values(
-        paths: list[BehaviorPathSummary],
-        values: tuple[str, ...],
-    ) -> list[BehaviorPathSummary]:
-        """Append ordinary executed tokens while preserving terminated paths."""
-
-        return bounded_behavior_paths(
-            [
-                BehaviorPathSummary(path.tokens + values, path.flow)
-                if path.flow == "fallthrough"
-                else path
-                for path in paths
-            ]
-        )
-
-    def macro_definition_end(index: int, limit: int) -> int | None:
-        """Return the end of a macro_rules/macro-2 definition, never its expansion."""
-
+    closure_prefixes = {
+        None,
+        "=",
+        "&",
+        "(",
+        "[",
+        "{",
+        ",",
+        ":",
+        ";",
+        ">",
+        "=>",
+        "async",
+        "move",
+        "return",
+    }
+    delimiters = {"(", "[", "{"}
+    for index in body_indexes:
         text = tokens[index].text
-        if text == "macro_rules":
-            if index + 2 >= limit or tokens[index + 1].text != "!":
-                fail("behavior evidence macro_rules definition is malformed")
-            cursor = index + 3
-        elif text == "macro":
-            if index + 1 >= limit or tokens[index + 1].kind != "IDENT":
-                return None
-            cursor = index + 2
-        else:
-            return None
-        while cursor < limit and tokens[cursor].text not in delimiter_pairs:
-            cursor += 1
-        if cursor >= limit:
-            fail("behavior evidence macro definition has no body")
-        if text == "macro" and tokens[cursor].text in {"(", "["}:
-            cursor = balanced_end(cursor, limit)
-            while cursor < limit and tokens[cursor].text != "{":
-                cursor += 1
-            if cursor >= limit:
-                fail("behavior evidence macro-2 definition has no expansion body")
-        definition_end = balanced_end(cursor, limit)
-        if definition_end < limit and tokens[definition_end].text == ";":
-            definition_end += 1
-        return definition_end
+        if (
+            text == "#"
+            and index + 2 < end
+            and tokens[index + 1].text == "["
+            and tokens[index + 2].text in {"cfg", "cfg_attr"}
+        ):
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"body-level static cfg: {function_name}"
+            )
 
-    def nested_function_end(index: int, limit: int) -> int | None:
-        """Return the end of one nested named function item, excluding its body."""
+        forbidden = STRAIGHT_LINE_FORBIDDEN_KEYWORDS.get(text)
+        if forbidden is not None:
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"{forbidden}: {function_name}"
+            )
+        if (
+            text == "fn"
+            and index + 1 < end
+            and tokens[index + 1].kind == "IDENT"
+        ):
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"local helper function definition: {function_name}"
+            )
+        if text == "?":
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"question-mark early return: {function_name}"
+            )
+
+        previous = tokens[index - 1].text if index > start else None
+        following = tokens[index + 1].text if index + 1 < end else None
+        if text in {"&", "|"} and following == text:
+            if text == "|" and previous in closure_prefixes:
+                construct = "closure syntax"
+            else:
+                construct = f"short-circuit operator {text}{text}"
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"{construct}: {function_name}"
+            )
+        if text == "|" and previous in closure_prefixes:
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"closure syntax: {function_name}"
+            )
 
         if (
-            tokens[index].text != "fn"
-            or index + 1 >= limit
-            or tokens[index + 1].kind != "IDENT"
+            tokens[index].kind == "IDENT"
+            and index + 2 < end
+            and tokens[index + 1].text == "!"
+            and tokens[index + 2].text in delimiters
         ):
-            return None
-        paren = bracket = 0
-        cursor = index + 2
-        while cursor < limit:
-            text = tokens[cursor].text
-            if text == "(":
-                paren += 1
-            elif text == ")":
-                paren -= 1
-            elif text == "[":
-                bracket += 1
-            elif text == "]":
-                bracket -= 1
-            elif text == "{" and paren == bracket == 0:
-                return balanced_end(cursor, limit)
-            elif text == ";" and paren == bracket == 0:
-                return cursor + 1
-            cursor += 1
-        fail("behavior evidence nested function item has no complete body")
-
-    def previous_live_text(index: int, lower_bound: int) -> str | None:
-        """Return the previous non-cfg-disabled token in the current range."""
-
-        cursor = index - 1
-        while cursor >= lower_bound:
-            if cursor not in excluded:
-                return tokens[cursor].text
-            cursor -= 1
-        return None
-
-    def closure_end(index: int, limit: int, lower_bound: int) -> int | None:
-        """Return an unexpanded closure body's end when `|` starts a closure."""
-
-        if tokens[index].text != "|" or previous_live_text(index, lower_bound) not in {
-            None,
-            "=",
-            "(",
-            ",",
-            ";",
-            "{",
-            ">",
-            "async",
-            "move",
-            "return",
-        }:
-            return None
-        cursor = index + 1
-        paren = bracket = 0
-        while cursor < limit:
-            text = tokens[cursor].text
-            if text == "(" and bracket == 0:
-                paren += 1
-            elif text == ")" and bracket == 0:
-                paren -= 1
-            elif text == "[":
-                bracket += 1
-            elif text == "]":
-                bracket -= 1
-            elif text == "|" and paren == bracket == 0:
-                break
-            cursor += 1
-        if cursor >= limit:
-            fail("behavior evidence closure parameters are unbalanced")
-        body_start = cursor + 1
-        if body_start < limit and tokens[body_start].text == "{":
-            return balanced_end(body_start, limit)
-        paren = bracket = brace = 0
-        cursor = body_start
-        while cursor < limit:
-            text = tokens[cursor].text
-            if text == "(":
-                paren += 1
-            elif text == ")":
-                if paren == 0 and bracket == brace == 0:
-                    return cursor
-                paren -= 1
-            elif text == "[":
-                bracket += 1
-            elif text == "]":
-                bracket -= 1
-            elif text == "{":
-                brace += 1
-            elif text == "}":
-                if brace == 0 and paren == bracket == 0:
-                    return cursor
-                brace -= 1
-            elif text in {",", ";"} and paren == bracket == brace == 0:
-                return cursor
-            cursor += 1
-        return cursor
-
-    def parse_if(index: int, limit: int, loop_depth: int) -> tuple[list[BehaviorPathSummary], int]:
-        """Fork runtime branches and select only a proven literal branch."""
-
-        opening = control_body_opening(index, limit)
-        then_end = balanced_end(opening, limit)
-        then_paths = parse_sequence(opening + 1, then_end - 1, loop_depth)
-        expression_end = then_end
-        else_paths: list[BehaviorPathSummary] = [BehaviorPathSummary()]
-        if then_end < limit and tokens[then_end].text == "else":
-            branch_start = then_end + 1
-            if branch_start >= limit:
-                fail("behavior evidence else branch has no body")
-            if tokens[branch_start].text == "{":
-                expression_end = balanced_end(branch_start, limit)
-                else_paths = parse_sequence(
-                    branch_start + 1,
-                    expression_end - 1,
-                    loop_depth,
+            macro_name = text.removeprefix("r#")
+            qualified = index > start and tokens[index - 1].text == "::"
+            if macro_name not in APPROVED_ASSERTION_MACROS or qualified:
+                fail(
+                    "adapter behavior evidence straight-line profile forbids "
+                    f"user or qualified function-like macro {macro_name}!: {function_name}"
                 )
-            elif tokens[branch_start].text == "if":
-                else_paths, expression_end = parse_if(branch_start, limit, loop_depth)
-            else:
-                fail("behavior evidence else branch is not a block or else-if")
-        literal = literal_condition(index + 1, opening)
-        if literal is True:
-            return then_paths, expression_end
-        if literal is False:
-            return else_paths, expression_end
-        return bounded_behavior_paths(then_paths + else_paths), expression_end
 
-    def parse_match(index: int, limit: int, loop_depth: int) -> tuple[list[BehaviorPathSummary], int]:
-        """Fork match arms without combining mutually exclusive arm bodies."""
-
-        opening = control_body_opening(index, limit)
-        match_end = balanced_end(opening, limit)
-        alternatives: list[BehaviorPathSummary] = []
-        cursor = opening + 1
-        while cursor < match_end - 1:
-            while cursor < match_end - 1 and (
-                cursor in excluded or tokens[cursor].text == ","
-            ):
-                cursor += 1
-            if cursor >= match_end - 1:
-                break
-            paren = bracket = brace = 0
-            arrow = cursor
-            while arrow < match_end - 1:
-                text = tokens[arrow].text
-                if (
-                    text == "="
-                    and arrow + 1 < match_end - 1
-                    and tokens[arrow + 1].text == ">"
-                    and paren == bracket == brace == 0
-                ):
-                    break
-                if text == "(":
-                    paren += 1
-                elif text == ")":
-                    paren -= 1
-                elif text == "[":
-                    bracket += 1
-                elif text == "]":
-                    bracket -= 1
-                elif text == "{":
-                    brace += 1
-                elif text == "}":
-                    brace -= 1
-                arrow += 1
-            if arrow >= match_end - 1:
-                fail("behavior evidence match arm lacks an arrow")
-            expression_start = arrow + 2
-            if expression_start >= match_end - 1:
-                fail("behavior evidence match arm lacks an expression")
-            if tokens[expression_start].text == "{":
-                expression_end = balanced_end(expression_start, match_end)
-                arm_paths = parse_sequence(
-                    expression_start + 1,
-                    expression_end - 1,
-                    loop_depth,
-                )
-                cursor = expression_end
-            else:
-                expression_end = expression_start
-                paren = bracket = brace = 0
-                while expression_end < match_end - 1:
-                    text = tokens[expression_end].text
-                    if text == "," and paren == bracket == brace == 0:
-                        break
-                    if text == "(":
-                        paren += 1
-                    elif text == ")":
-                        paren -= 1
-                    elif text == "[":
-                        bracket += 1
-                    elif text == "]":
-                        bracket -= 1
-                    elif text == "{":
-                        brace += 1
-                    elif text == "}":
-                        brace -= 1
-                    expression_end += 1
-                arm_paths = parse_sequence(
-                    expression_start,
-                    expression_end,
-                    loop_depth,
-                )
-                cursor = expression_end
-            alternatives.extend(arm_paths)
-        if not alternatives:
-            fail("behavior evidence match has no analyzable arm")
-        return bounded_behavior_paths(alternatives), match_end
-
-    def loop_alternatives(
-        body_paths: list[BehaviorPathSummary],
-    ) -> list[BehaviorPathSummary]:
-        """Only an explicit break proves that an unconditional loop reaches its suffix."""
-
-        alternatives: list[BehaviorPathSummary] = []
-        for path in body_paths:
-            if path.flow == "break":
-                alternatives.append(BehaviorPathSummary(path.tokens, "fallthrough"))
-            elif path.flow == "return":
-                alternatives.append(path)
-            else:
-                alternatives.append(BehaviorPathSummary(path.tokens, "diverge"))
-        return bounded_behavior_paths(alternatives)
-
-    def parse_sequence(
-        range_start: int,
-        range_end: int,
-        loop_depth: int,
-    ) -> list[BehaviorPathSummary]:
-        """Summarize one sequential token range and recursively compose its controls."""
-
-        paths = [BehaviorPathSummary()]
-        index = range_start
-        while index < range_end:
-            if index in excluded:
-                index += 1
-                continue
-            text = tokens[index].text
-
-            definition_end = macro_definition_end(index, range_end)
-            if definition_end is not None:
-                index = definition_end
-                continue
-
-            function_end = nested_function_end(index, range_end)
-            if function_end is not None:
-                index = function_end
-                continue
-
-            deferred_closure_end = closure_end(index, range_end, range_start)
-            if deferred_closure_end is not None:
-                index = deferred_closure_end
-                continue
-
-            if text == "async":
-                opening = index + 1
-                if opening < range_end and tokens[opening].text == "move":
-                    opening += 1
-                if opening < range_end and tokens[opening].text == "{":
-                    async_end = balanced_end(opening, range_end)
-                    awaited = (
-                        async_end + 1 < range_end
-                        and tokens[async_end].text == "."
-                        and tokens[async_end + 1].text == "await"
-                    )
-                    if awaited:
-                        paths = append_behavior_paths(
-                            paths,
-                            parse_sequence(opening + 1, async_end - 1, loop_depth),
-                        )
-                        index = async_end + 2
-                    else:
-                        index = async_end
-                    continue
-
-            if text == "if":
-                alternatives, expression_end = parse_if(index, range_end, loop_depth)
-                paths = append_behavior_paths(paths, alternatives)
-                index = expression_end
-                continue
-
-            if text == "match":
-                alternatives, expression_end = parse_match(index, range_end, loop_depth)
-                paths = append_behavior_paths(paths, alternatives)
-                index = expression_end
-                continue
-
-            if text in {"while", "for", "loop"}:
-                opening = control_body_opening(index, range_end)
-                body_end = balanced_end(opening, range_end)
-                if text == "while":
-                    literal = literal_condition(index + 1, opening)
-                    if literal is False:
-                        alternatives = [BehaviorPathSummary()]
-                    elif literal is True:
-                        alternatives = loop_alternatives(
-                            parse_sequence(opening + 1, body_end - 1, loop_depth + 1)
-                        )
-                    else:
-                        # A runtime while can execute zero times; its body is not mandatory evidence.
-                        alternatives = [BehaviorPathSummary()]
-                elif text == "for":
-                    # A for iterator can be empty; do not use its body as execution evidence.
-                    alternatives = [BehaviorPathSummary()]
-                else:
-                    alternatives = loop_alternatives(
-                        parse_sequence(opening + 1, body_end - 1, loop_depth + 1)
-                    )
-                paths = append_behavior_paths(paths, alternatives)
-                index = body_end
-                continue
-
-            if (
-                tokens[index].kind == "IDENT"
-                and index + 2 < range_end
-                and tokens[index + 1].text == "!"
-                and tokens[index + 2].text in delimiter_pairs
-            ):
-                opening = index + 2
-                invocation_end = balanced_end(opening, range_end)
-                macro_name = tokens[index].text.removeprefix("r#")
-                if macro_name in APPROVED_ASSERTION_MACROS or compile_backed:
-                    paths = append_token_values(paths, (macro_name, "!"))
-                    paths = append_behavior_paths(
-                        paths,
-                        parse_sequence(opening + 1, invocation_end - 1, loop_depth),
-                    )
-                index = invocation_end
-                continue
-
-            if text == "{":
-                block_end = balanced_end(index, range_end)
-                paths = append_behavior_paths(
-                    paths,
-                    parse_sequence(index + 1, block_end - 1, loop_depth),
-                )
-                index = block_end
-                continue
-
-            if text == "return":
-                paths = [
-                    BehaviorPathSummary(path.tokens + ("return",), "return")
-                    if path.flow == "fallthrough"
-                    else path
-                    for path in paths
-                ]
-                while index < range_end and tokens[index].text != ";":
-                    index += 1
-                if index < range_end:
-                    index += 1
-                continue
-
-            if text in {"break", "continue"}:
-                if loop_depth == 0:
-                    fail(f"behavior evidence has {text} outside an analyzed loop")
-                paths = [
-                    BehaviorPathSummary(path.tokens + (text,), text)
-                    if path.flow == "fallthrough"
-                    else path
-                    for path in paths
-                ]
-                while index < range_end and tokens[index].text != ";":
-                    index += 1
-                if index < range_end:
-                    index += 1
-                continue
-
-            if text == "else":
-                fail("behavior evidence contains an unsupported standalone else")
-
-            paths = append_token_values(paths, (text,))
-            index += 1
-        return bounded_behavior_paths(paths)
-
-    summaries = parse_sequence(start, end, 0)
-    if any(path.flow in {"break", "continue"} for path in summaries):
-        fail("behavior evidence leaves an unresolved loop control path")
-    feasible = tuple(path for path in summaries if path.flow != "diverge")
-    if not feasible:
-        fail("behavior evidence has no terminating feasible path")
-    return feasible
+    if any(index in excluded for index in body_indexes):
+        fail(
+            "adapter behavior evidence straight-line profile forbids "
+            f"cfg-disabled body tokens: {function_name}"
+        )
+    return tuple(tokens[index].text for index in body_indexes)
 
 
-def path_has_observable_assertion(path: BehaviorPathSummary) -> bool:
-    """Return whether one path invokes an approved assertion macro directly."""
+def body_has_observable_assertion(body_tokens: tuple[str, ...]) -> bool:
+    """Return whether the direct body invokes an approved assertion macro."""
 
     return any(
-        token in APPROVED_ASSERTION_MACROS
-        and index + 1 < len(path.tokens)
-        and path.tokens[index + 1] == "!"
-        for index, token in enumerate(path.tokens)
+        token.removeprefix("r#") in APPROVED_ASSERTION_MACROS
+        and index + 1 < len(body_tokens)
+        and body_tokens[index + 1] == "!"
+        for index, token in enumerate(body_tokens)
     )
 
 
-def ordered_remote_chain_length(path: BehaviorPathSummary) -> int:
-    """Return the number of ordered exact call markers satisfied by one path."""
+def reject_assertion_macro_shadows(tokens: list[object], function_name: str) -> None:
+    """Reject file-local definitions that impersonate an approved assertion name."""
+
+    for index, token in enumerate(tokens):
+        if token.text.removeprefix("r#") == "macro_use":
+            fail(
+                "adapter behavior evidence assertion macro provenance is "
+                f"ambiguous through macro_use: {function_name}"
+            )
+        candidate: str | None = None
+        if (
+            token.text == "macro_rules"
+            and index + 2 < len(tokens)
+            and tokens[index + 1].text == "!"
+            and tokens[index + 2].kind == "IDENT"
+        ):
+            candidate = tokens[index + 2].text.removeprefix("r#")
+        elif (
+            token.text == "macro"
+            and index + 1 < len(tokens)
+            and tokens[index + 1].kind == "IDENT"
+        ):
+            candidate = tokens[index + 1].text.removeprefix("r#")
+        if candidate in APPROVED_ASSERTION_MACROS:
+            fail(
+                "adapter behavior evidence assertion macro shadow is forbidden: "
+                f"{candidate}!: {function_name}"
+            )
+        if token.text == "use":
+            cursor = index + 1
+            use_tokens: list[str] = []
+            while cursor < len(tokens) and tokens[cursor].text != ";":
+                use_tokens.append(tokens[cursor].text)
+                if (
+                    tokens[cursor].kind == "IDENT"
+                    and tokens[cursor].text.removeprefix("r#")
+                    in APPROVED_ASSERTION_MACROS
+                ):
+                    fail(
+                        "adapter behavior evidence assertion macro shadow import is "
+                        f"forbidden: {tokens[cursor].text}: {function_name}"
+                    )
+                cursor += 1
+            if "*" in use_tokens and use_tokens != ["super", "::", "*"]:
+                fail(
+                    "adapter behavior evidence assertion macro provenance is "
+                    f"ambiguous through glob import: {function_name}"
+                )
+
+
+def ordered_remote_chain_length(body_tokens: tuple[str, ...]) -> int:
+    """Return the ordered exact remote call markers present in the direct body."""
 
     cursor = 0
     for marker_index, marker in enumerate(REMOTE_BEHAVIOR_CHAIN):
         found = False
-        while cursor + len(marker) < len(path.tokens):
-            if path.tokens[cursor : cursor + len(marker)] == marker:
+        while cursor + len(marker) < len(body_tokens):
+            if body_tokens[cursor : cursor + len(marker)] == marker:
                 call_end = cursor + len(marker)
-                if path.tokens[call_end] == "(":
+                if body_tokens[call_end] == "(":
                     cursor = call_end + 1
                     found = True
                     break
@@ -985,10 +613,8 @@ def extract_behavior_function(
     source: str,
     function_name: str,
     profile: CfgProfile | None = None,
-    *,
-    compile_backed: bool = False,
-) -> tuple[BehaviorPathSummary, ...]:
-    """Return enabled ordered test-body paths for one exact cfg profile."""
+) -> tuple[str, ...]:
+    """Return one enabled test body after enforcing the straight-line profile."""
 
     profile = profile or cfg_profile(str(Path(__file__).resolve().parents[1]), "default")
     tokens = rust_tokens(source)
@@ -1016,6 +642,19 @@ def extract_behavior_function(
         for start, end in attributes
     ):
         fail(f"adapter behavior evidence is not an enabled Rust test: {function_name}")
+    for start, end in attributes:
+        attribute_tokens = {
+            tokens[index].text.removeprefix("r#")
+            for index in range(start, end + 1)
+            if tokens[index].kind == "IDENT"
+        }
+        disallowed = attribute_tokens.intersection({"ignore", "should_panic"})
+        if disallowed:
+            fail(
+                "adapter behavior evidence straight-line profile forbids "
+                f"test attribute {sorted(disallowed)}: {function_name}"
+            )
+    reject_assertion_macro_shadows(tokens, function_name)
     opening = name_index + 1
     while opening < len(tokens) and tokens[opening].text != "{":
         opening += 1
@@ -1029,18 +668,16 @@ def extract_behavior_function(
         closing += 1
     if depth:
         fail(f"adapter behavior evidence has an unbalanced body: {function_name}")
-    paths = behavior_path_summaries(
+    body_tokens = straight_line_body_tokens(
         tokens,
         opening + 1,
         closing - 1,
         excluded,
-        compile_backed=compile_backed,
+        function_name,
     )
-    if not any(path.tokens for path in paths) or not any(
-        path_has_observable_assertion(path) for path in paths
-    ):
+    if not body_tokens or not body_has_observable_assertion(body_tokens):
         fail(f"adapter behavior evidence has no observable assertion: {function_name}")
-    return paths
+    return body_tokens
 
 
 def behavior_evidence_body(
@@ -1048,7 +685,7 @@ def behavior_evidence_body(
     evidence: str,
     profile: CfgProfile,
     enabled_tests: tuple[str, ...] | None,
-) -> tuple[BehaviorPathSummary, ...]:
+) -> tuple[str, ...]:
     """Resolve behavior evidence to one exact integration or source unit-test file."""
 
     module, separator, function_name = evidence.rpartition("::")
@@ -1077,7 +714,6 @@ def behavior_evidence_body(
         candidates[0].read_text(encoding="utf-8"),
         function_name,
         profile,
-        compile_backed=enabled_tests is not None,
     )
 
 
@@ -1119,27 +755,21 @@ def verify_adapter_source(
     if not standard_path.is_file():
         fail(f"canonical standard source is missing: {row.standard_source_path}")
     profile = profile or cfg_profile(str(root), "default")
-    behavior_paths = behavior_evidence_body(
+    behavior_tokens = behavior_evidence_body(
         root,
         row.behavior_evidence,
         profile,
         enabled_tests,
     )
     if concrete_type(row.implementation_type).startswith(("HttpSql", "LibSql", "JdbcAgent")):
-        complete_paths = [
-            path
-            for path in behavior_paths
-            if path_has_observable_assertion(path)
-            and ordered_remote_chain_length(path) == len(REMOTE_BEHAVIOR_CHAIN)
-        ]
-        if not complete_paths:
-            best_length = max(
-                (ordered_remote_chain_length(path) for path in behavior_paths),
-                default=0,
-            )
-            missing = [" :: ".join(marker) for marker in REMOTE_BEHAVIOR_CHAIN[best_length:]]
+        chain_length = ordered_remote_chain_length(behavior_tokens)
+        if (
+            not body_has_observable_assertion(behavior_tokens)
+            or chain_length != len(REMOTE_BEHAVIOR_CHAIN)
+        ):
+            missing = [" :: ".join(marker) for marker in REMOTE_BEHAVIOR_CHAIN[chain_length:]]
             fail(
-                "remote adapter behavior evidence lacks one ordered path-coherent "
+                "remote adapter behavior evidence lacks the direct straight-line "
                 "factory-to-result chain plus assertion: "
                 f"{row.behavior_evidence}: {missing}"
             )

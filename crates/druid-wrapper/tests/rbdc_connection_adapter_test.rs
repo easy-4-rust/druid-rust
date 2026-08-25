@@ -62,7 +62,7 @@ async fn rbdc_standard_factory_prepared_query_uses_deterministic_driver_core() {
     );
     assert_eq!(
         *observed.lock().unwrap(),
-        vec![rbs::Value::String("standard-rbdc".to_owned())]
+        [rbs::Value::String("standard-rbdc".to_owned())]
     );
 }
 

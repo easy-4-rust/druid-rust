@@ -615,3 +615,115 @@ Adapter/consumer/semantic TSV SHA-256 values remain respectively `fda28b7e...`, 
 `45882120...`; their bytes are unchanged. Production adapters, Cargo/lock, Druid/admin, Task 5,
 Physical names, unsafe, and manual Send/Sync are unchanged. N2 has an implementation disposition of
 **ADDRESSED, pending independent final re-review**.
+
+## 19. Breaker recovery implementation (base `141a203`)
+
+This append-only section records the user-approved straight-line recovery after the round-5 breaker.
+It supersedes Section 18 only for the verifier architecture and current submission state. It does not
+claim review clear; Task 5 remains blocked pending an independent breaker re-review.
+
+### 19.1 Fresh full-verifier RED -> GREEN
+
+On the unchanged `d261174` verifier at recovery base `141a203`, the historical self-test suite was
+`18/18 PASS`, but the three independent breaker fixtures were all accepted:
+
+```text
+runtime-empty-else=ACCEPT
+match-empty-arm=ACCEPT
+runtime-early-pass=ACCEPT
+```
+
+The permanent full-verifier controls first produced the expected
+`VerificationError not raised` failures for those three cases plus complete/empty runtime branches,
+complete branches on both sides, literal/static branches, direct early exits, and short-circuit
+`&&`/`||`. Incremental RED -> GREEN controls also closed `?`, loop/break/continue, closure positions,
+awaited/unawaited async blocks, local helper/type/macro definitions, user/qualified/external
+function-like macros, assertion-macro definition/import/glob shadows, chain/assertion separation,
+`macro_use`, wrong order, marker substrings, ignored/should-panic tests, and the prior cfg/dead-token
+cases.
+
+Fresh recovery results are:
+
+```text
+runtime-empty-else=REJECT: straight-line profile forbids branch `if`
+match-empty-arm=REJECT: straight-line profile forbids branch `match`
+runtime-early-pass=REJECT: straight-line profile forbids branch `if`
+verifier self-test methods=18/18 PASS
+```
+
+The existing 18 test methods remain and their adversarial subcase matrix is expanded. The only
+full-verifier positive fixture is the minimal direct straight-line 10-call chain plus assertion.
+
+### 19.2 One strict evidence policy
+
+The bounded `BehaviorPathSummary` interpreter, path explosion budget, branch/match/loop composition,
+and existential `complete_paths` acceptance are removed. There is no alternative path-acceptance
+policy left in the verifier.
+
+For every LIVE adapter evidence row, the verifier now applies one order:
+
+1. Resolve the exact evidence file/function, evaluate file/enclosing/function cfg under the declared
+   default or all-feature profile, and require one exact occurrence in Cargo's actual `-- --list`
+   inventory.
+2. Reject ignored/should-panic tests and any body-level cfg/static branch, runtime branch/match,
+   loop, short-circuit operator, return/break/continue, `?`, closure/async block, local item/helper,
+   unsafe/try/yield construct, or unapproved function-like macro. Diagnostics name the concrete
+   forbidden construct.
+3. Permit only the finite built-in assertion allowlist at direct invocation sites. Qualified,
+   external, locally defined, explicitly imported, or ambiguous-glob assertion macros fail closed;
+   macro definitions/expansions never supply evidence.
+4. Inspect the one direct fallthrough body token sequence. Remote rows must contain the exact ordered
+   ten-call `ConnectionFactory::create` through `Connection::close` chain and a direct approved
+   assertion in that same body.
+
+This intentionally proves a narrow evidence profile rather than interpreting Rust control flow.
+
+### 19.3 Minimal real evidence-test adaptation
+
+The three load-bearing remote evidence tests already met the strict profile and their source was not
+changed. Fresh all-feature execution is `3/3 PASS` for HTTP SQL, libSQL, and JDBC Agent.
+
+Three other LIVE evidence tests contained non-evidence convenience syntax and were mechanically
+straightened without production changes:
+
+- DuckDB and Toasty replace a two-item `for` setter loop with the same two ordered setter calls;
+- RBDC replaces `vec!` in the expected value with the equivalent one-element array literal;
+- the two DataSource Wrapper rows replace external `assert_impl_all!` use in their evidence function
+  with direct canonical trait-method function-pointer declarations and built-in `assert_ne!` checks.
+
+Focused DuckDB, Toasty, RBDC, and Wrapper identity tests are each `1/1 PASS`. All other LIVE evidence
+functions already satisfy the same profile.
+
+### 19.4 Fresh recovery gates
+
+- wrapper verifier self/live: `18/18 PASS`; `31 LIVE / 21 CLOSED / 6 family chains / 1 SQLx actor`;
+- reviewer breaker probes: all three reject with construct-specific diagnostics;
+- denominator self/live: `41/41 PASS`; `73 / 55 / 3557`, projection SHA
+  `18bb9682efb4e8521556f13abbc7b1320f2f2bf2d9b9ccb18a0576b3d02d5221`;
+- semantic self/adapter-live: `16/16 PASS`; `52 / 17 / 0`, hashes remain
+  `5d99b573...cdbd9` / `45882120...bf21`;
+- Task 3 purity self/transitional: `103/103 PASS + live29`;
+- wrapper default and all-feature complete test matrices PASS; all-feature library remote evidence is
+  `3/3 PASS`;
+- druid-rdbc all-target/all-feature tests, doc test, and Clippy `-D warnings` PASS;
+- wrapper/workspace all-target/all-feature checks, wrapper no-deps Clippy, wrapper docs/doctests,
+  Python byte-compile, rustfmt, and diff checks PASS.
+
+The dependency-aware wrapper Clippy command remains non-GREEN only at the same two untouched Task 5
+baseline lines `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`; it is not
+reported GREEN.
+
+### 19.5 Scope and submission state
+
+Production adapters, verification TSVs, Cargo/lock, Druid/admin, Task 5, Physical names, unsafe, and
+manual Send/Sync are unchanged. Exact checked TSV SHA-256 values remain:
+
+```text
+ADAPTER_TSV_SHA256=fda28b7ea4de21a7611cd353609c792654c7ac3e2ac6ab27ae4ecc19adfa186d
+CONSUMER_TSV_SHA256=3a190f9e65c261ce95134c1c7dbcd2558c89a23e3f937df8bfeddc1f60384937
+SEMANTIC_TSV_SHA256=4588212080ef8006cfa9cd6a13427e9867f39bef13b2f985d6350e545352bf21
+```
+
+N2 and the remaining C1 verifier subcondition have a recovery implementation disposition of
+**ADDRESSED, pending independent breaker re-review**. Task 5 remains blocked until that review returns
+`REVIEW CLEAR`.

@@ -47,17 +47,18 @@ async fn toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_e
         )
         .await
         .expect("owned standard prepared statement");
-    for (index, value) in [Value::Int(1), Value::String("toasty-standard".to_owned())]
-        .into_iter()
-        .enumerate()
-    {
-        prepared
-            .set_parameter(druid_rdbc::statement::PreparedParameter {
-                index: druid_rdbc::statement::ParameterIndex::new(index + 1).unwrap(),
-                value,
-            })
-            .expect("standard setter");
-    }
+    prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::Int(1),
+        })
+        .expect("standard setter");
+    prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(2).unwrap(),
+            value: Value::String("toasty-standard".to_owned()),
+        })
+        .expect("standard setter");
     assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     let mut rows = statement
         .execute_query("select name from standard_item where id = 1")

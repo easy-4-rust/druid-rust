@@ -49,17 +49,18 @@ async fn duckdb_standard_factory_statement_and_prepared_use_native_executor() {
         )
         .await
         .unwrap();
-    for (index, value) in [Value::Int(1), Value::String("duck-standard".to_owned())]
-        .into_iter()
-        .enumerate()
-    {
-        prepared
-            .set_parameter(druid_rdbc::statement::PreparedParameter {
-                index: druid_rdbc::statement::ParameterIndex::new(index + 1).unwrap(),
-                value,
-            })
-            .unwrap();
-    }
+    prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::Int(1),
+        })
+        .unwrap();
+    prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(2).unwrap(),
+            value: Value::String("duck-standard".to_owned()),
+        })
+        .unwrap();
     assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     let mut rows = statement
         .execute_query("select name from standard_duck")

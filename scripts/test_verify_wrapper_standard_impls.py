@@ -255,6 +255,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "#[cfg(any())]\nmod disabled { #[test] fn runs() { assert!(true); } }\n",
             "struct Holder;\n#[cfg(any())]\nimpl Holder {\n"
             " #[test] fn runs() { assert!(true); }\n}\n",
+            "#[ignore]\n#[test]\nfn runs() { assert!(true); }\n",
+            "#[should_panic]\n#[test]\nfn runs() { assert!(true); }\n",
+            "#[cfg_attr(all(), ignore)]\n#[test]\nfn runs() { assert!(true); }\n",
         )
         for source in fixtures:
             tests.write_text(source, encoding="utf-8")
@@ -262,23 +265,17 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 verify_adapter_source(self.root, self.row)
 
     def test_excludes_cfg_disabled_and_statically_dead_behavior_tokens(self) -> None:
-        """Required calls and assertions only count in an enabled reachable function branch."""
+        """Body-level cfg and static control flow are outside the straight-line profile."""
 
         for source in (
             "#[test]\nfn runs() { #[cfg(any())] { execute_update(); } assert!(true); }\n",
             "#[test]\nfn runs() { #[cfg_attr(all(), cfg(any()))] { execute_update(); } assert!(true); }\n",
             "#[test]\nfn runs() { if false { execute_update(); } assert!(true); }\n",
             "#[test]\nfn runs() { while false { execute_update(); } assert!(true); }\n",
+            "#[test]\nfn runs() { #[cfg(all())] execute_update(); assert!(true); }\n",
+            "#[test]\nfn runs() { if true { execute_update(); } assert!(true); }\n",
         ):
-            paths = extract_behavior_function(source, "runs")
-            body = "\n".join(" ".join(path.tokens) for path in paths)
-            self.assertNotIn("execute_update", body)
-
-        for source in (
-            "#[test]\nfn runs() { if false { assert!(true); } }\n",
-            "#[test]\nfn runs() { #[cfg(any())] { assert!(true); } }\n",
-        ):
-            with self.assertRaisesRegex(VerificationError, "observable assertion"):
+            with self.assertRaisesRegex(VerificationError, "straight-line profile forbids"):
                 extract_behavior_function(source, "runs")
 
     def test_accepts_enabled_default_feature_target_tokio_and_live_branch_controls(self) -> None:
@@ -296,16 +293,15 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "#[cfg(all(feature = \"enabled\", target_os = \"fixture_os\"))]\n"
             "#[cfg_attr(feature = \"enabled\", tokio::test)]\n"
             "async fn runs() {\n"
-            "  if true { execute_update(); assert!(true); }\n"
-            "  else { disabled_call(); }\n"
+            "  execute_update().await;\n"
+            "  assert!(true);\n"
             "}\n",
             "runs",
             profile,
         )
-        body = "\n".join(" ".join(path.tokens) for path in paths)
+        body = " ".join(paths)
         self.assertIn("execute_update", body)
         self.assertIn("assert !", body)
-        self.assertNotIn("disabled_call", body)
 
     def test_rejects_unproven_custom_cfg_atom(self) -> None:
         """Unknown build-system cfg names cannot be guessed enabled or disabled."""
@@ -320,7 +316,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             verify_adapter_source(self.root, self.row)
 
     def test_full_verifier_rejects_path_incoherent_branches_and_early_exit(self) -> None:
-        """One candidate path must own the ordered chain and its observable assertion."""
+        """Every branch and early exit is forbidden even when a path is complete."""
 
         steps = self.remote_chain_steps()
         fixtures = {
@@ -362,6 +358,65 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 + "".join(steps[5:])
                 + " assert!(true); },\n}\n"
             ),
+            "runtime-empty-else": (
+                "if runtime_condition() {\n"
+                + self.remote_chain()
+                + "assert!(true);\n} else { harmless(); }\n"
+            ),
+            "runtime-complete-no-else": (
+                "if runtime_condition() {\n"
+                + self.remote_chain()
+                + "assert!(true);\n}\n"
+            ),
+            "both-runtime-branches-complete": (
+                "if runtime_condition() {\n"
+                + self.remote_chain()
+                + "assert!(true);\n} else {\n"
+                + self.remote_chain()
+                + "assert_eq!(1, 1);\n}\n"
+            ),
+            "match-empty-arm": (
+                "match runtime_value() {\n"
+                " Some(_) => {\n"
+                + self.remote_chain()
+                + "assert!(true); },\n None => { harmless(); },\n}\n"
+            ),
+            "both-match-arms-complete": (
+                "match runtime_value() {\n"
+                " Some(_) => {\n"
+                + self.remote_chain()
+                + "assert!(true); },\n None => {\n"
+                + self.remote_chain()
+                + "assert_ne!(1, 2); },\n}\n"
+            ),
+            "runtime-early-pass": (
+                "if runtime_condition() { return; }\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
+            ),
+            "literal-true": (
+                "if true {\n"
+                + self.remote_chain()
+                + "assert!(true);\n}\n"
+            ),
+            "literal-false-live-else": (
+                "if false { harmless(); } else {\n"
+                + self.remote_chain()
+                + "assert!(true);\n}\n"
+            ),
+            "short-circuit-and": (
+                "let _ = runtime_condition() && {\n"
+                + self.remote_chain()
+                + "assert!(true);\ntrue\n};\n"
+            ),
+            "short-circuit-or": (
+                "let _ = runtime_condition() || {\n"
+                + self.remote_chain()
+                + "assert!(true);\nfalse\n};\n"
+            ),
+            "direct-return": "return;\n" + self.remote_chain() + "assert!(true);\n",
+            "direct-break": "break;\n" + self.remote_chain() + "assert!(true);\n",
+            "direct-continue": "continue;\n" + self.remote_chain() + "assert!(true);\n",
         }
         for label, body in fixtures.items():
             with self.subTest(label=label):
@@ -369,8 +424,44 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 with self.assertRaises(VerificationError):
                     self.verify_remote_behavior(source)
 
+        shadowed_assertion = (
+            "macro_rules! assert { ($value:expr) => { let _ = $value; }; }\n"
+            "#[test]\nfn runs() {\n"
+            + self.remote_chain()
+            + "assert!(true);\n}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "assertion macro shadow"):
+            self.verify_remote_behavior(shadowed_assertion)
+
+        imported_assertion = (
+            "use custom_assertions::observe as assert;\n"
+            "#[test]\nfn runs() {\n"
+            + self.remote_chain()
+            + "assert!(true);\n}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "assertion macro shadow"):
+            self.verify_remote_behavior(imported_assertion)
+
+        glob_assertion = (
+            "use custom_assertions::*;\n"
+            "#[test]\nfn runs() {\n"
+            + self.remote_chain()
+            + "assert!(true);\n}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "assertion macro provenance"):
+            self.verify_remote_behavior(glob_assertion)
+
+        macro_use_assertion = (
+            "#[macro_use]\nextern crate custom_assertions;\n"
+            "#[test]\nfn runs() {\n"
+            + self.remote_chain()
+            + "assert!(true);\n}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "assertion macro provenance"):
+            self.verify_remote_behavior(macro_use_assertion)
+
     def test_full_verifier_rejects_loop_only_and_deferred_execution_evidence(self) -> None:
-        """Maybe-zero loops and uncalled deferred bodies cannot impersonate test execution."""
+        """Loops, deferred bodies, local helpers/items, and `?` always fail closed."""
 
         fixtures = {
             "nested-if-false": (
@@ -393,10 +484,23 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 + self.remote_chain()
                 + "assert!(true); }\n"
             ),
+            "unconditional-loop": (
+                "loop { break; }\n" + self.remote_chain() + "assert!(true);\n"
+            ),
             "uncalled-closure": (
                 "let evidence = || {\n"
                 + self.remote_chain()
                 + "assert!(true); };\nlet _ = evidence;\n"
+            ),
+            "closure-in-struct-field": (
+                "let holder = Holder { callback: |value| value };\nlet _ = holder;\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
+            ),
+            "borrowed-closure": (
+                "let callback = &|value| value;\nlet _ = callback;\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
             ),
             "unawaited-async-block": (
                 "let evidence = async move {\n"
@@ -412,6 +516,24 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 "fn helper() {\n"
                 + self.remote_chain()
                 + "assert!(true); }\nlet _ = helper;\n"
+            ),
+            "unrelated-local-helper": (
+                "fn helper() { harmless(); }\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
+            ),
+            "unrelated-local-type": (
+                "type Helper = usize;\nlet _: Helper = 1;\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
+            ),
+            "awaited-async-block": (
+                "async { harmless(); }.await;\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
+            ),
+            "question-mark-early-return": (
+                "fallible_setup()?;\n" + self.remote_chain() + "assert!(true);\n"
             ),
             "cfg-disabled": (
                 "#[cfg(any())] {\n"
@@ -469,6 +591,29 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 + "connection.database_meta_data();\nassert!(true);\n"
             ),
             "path-explosion": branching + self.remote_chain() + "assert!(true);\n",
+            "unrelated-macro-definition": (
+                "macro_rules! helper { () => { harmless() }; }\n"
+                + self.remote_chain()
+                + "assert!(true);\n"
+            ),
+            "user-macro-invocation": (
+                "setup!();\n" + self.remote_chain() + "assert!(true);\n"
+            ),
+            "chain-assertion-separated-by-macro": (
+                self.remote_chain() + "observe!(assert!(true));\n"
+            ),
+            "qualified-user-assertion-macro": (
+                self.remote_chain() + "custom::assert!(true);\n"
+            ),
+            "external-assertion-macro": (
+                self.remote_chain() + "assert_impl_all!(Demo: Send);\n"
+            ),
+            "unapproved-assert-matches-macro": (
+                self.remote_chain() + "assert_matches!(value, Pattern);\n"
+            ),
+            "user-macro-inside-assertion": (
+                self.remote_chain() + "assert!(observe!());\n"
+            ),
         }
         for label, body in fixtures.items():
             with self.subTest(label=label):
@@ -477,49 +622,14 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                     self.verify_remote_behavior(source)
 
     def test_full_verifier_accepts_only_path_coherent_remote_evidence(self) -> None:
-        """Straight, selected-static, and independently complete runtime paths remain valid."""
+        """Only the minimal direct straight-line chain and assertion remain valid."""
 
-        fixtures = {
-            "straight-line": self.remote_chain() + "assert!(true);\n",
-            "one-complete-runtime-branch": (
-                "if runtime_condition() {\n"
-                + self.remote_chain()
-                + "assert!(true);\n} else { harmless(); }\n"
-            ),
-            "literal-true": (
-                "if true {\n"
-                + self.remote_chain()
-                + "assert!(true);\n} else { unreachable_call(); }\n"
-            ),
-            "literal-false-live-else": (
-                "if false { unreachable_call(); } else {\n"
-                + self.remote_chain()
-                + "assert!(true);\n}\n"
-            ),
-            "both-runtime-branches-complete": (
-                "if runtime_condition() {\n"
-                + self.remote_chain()
-                + "assert!(true);\n} else {\n"
-                + self.remote_chain()
-                + "assert_eq!(1, 1);\n}\n"
-            ),
-            "one-complete-match-arm": (
-                "match runtime_value() {\n"
-                " Some(_) => {\n"
-                + self.remote_chain()
-                + "assert!(true); },\n None => { harmless(); },\n}\n"
-            ),
-            "compile-backed-direct-macro-arguments": (
-                "macro_rules! execute_direct { ($($body:tt)*) => {{ $($body)* }}; }\n"
-                "execute_direct!(\n"
-                + self.remote_chain()
-                + "assert!(true);\n);\n"
-            ),
-        }
-        for label, body in fixtures.items():
-            with self.subTest(label=label):
-                source = f"#[test]\nfn runs() {{\n{body}}}\n"
-                self.verify_remote_behavior(source)
+        source = (
+            "#[test]\nfn runs() {\n"
+            + self.remote_chain()
+            + "assert!(true);\n}\n"
+        )
+        self.verify_remote_behavior(source)
 
 
 if __name__ == "__main__":

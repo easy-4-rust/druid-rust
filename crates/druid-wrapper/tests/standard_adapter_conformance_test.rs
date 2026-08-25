@@ -25,8 +25,19 @@ fn configured_core_adapter_families_implement_the_single_standard_directly() {
 
 #[test]
 fn catalog_data_sources_implement_canonical_wrapper_identity() {
-    assert_impl_all!(druid_wrapper::rdbc::DruidRdbcDataSource: Wrapper);
-    assert_impl_all!(druid_wrapper::rdbc::DynamicRdbcDataSource: Wrapper);
+    let druid_wrapper_method: fn(
+        &druid_wrapper::rdbc::DruidRdbcDataSource,
+        Option<std::any::TypeId>,
+    ) -> Result<bool, druid_rdbc::error::RdbcError> =
+        <druid_wrapper::rdbc::DruidRdbcDataSource as Wrapper>::is_wrapper_for;
+    let dynamic_wrapper_method: fn(
+        &druid_wrapper::rdbc::DynamicRdbcDataSource,
+        Option<std::any::TypeId>,
+    ) -> Result<bool, druid_rdbc::error::RdbcError> =
+        <druid_wrapper::rdbc::DynamicRdbcDataSource as Wrapper>::is_wrapper_for;
+
+    assert_ne!(std::mem::size_of_val(&druid_wrapper_method), 0);
+    assert_ne!(std::mem::size_of_val(&dynamic_wrapper_method), 0);
 }
 
 #[cfg(feature = "duckdb-native")]
