@@ -189,3 +189,20 @@ qualified macro必须确认当前位置未被binding/alias shadow，或使用uns
   `13/13 + 52/17/UNKNOWN=0`；Task2 `37/37 + 73/55/3559`与consumer SHA保持；DruidError
   `4/4`、external consumer `2/2`、workspace check、Clippy、rustdoc/doctest、fmt/diff均PASS。
 - 状态仅为`FIX_ROUND_4_IMPLEMENTED_PENDING_REREVIEW`；不预判review verdict，Task 4继续blocked。
+
+## Recovery fix round 4 independent re-review（append-only）
+
+Reviewed fix commit: `bd62d69fd1cdc25498881d9641c5ab656d9a323b`
+
+Verdict remains **FIX_REQUIRED**。Macro provenance Important仍为 `PARTIAL`。Function-like macro
+resolver已关闭上一轮绕过，但ordinary/derive path的 `resolve_path`仍在检查当前位置binding之前把
+relative `std/core/alloc`直接判为external。两个真实可编译路径仍被接受：
+
+1. `use crate::evil as std; pub type Leaked = std::String;`，其中evil re-export transitional Blob。
+2. `use crate::evil as std; #[derive(::std::fmt::Debug, std::Debug)] #[error("x")] struct S;`，
+   其中evil re-export `thiserror::Error as Debug`。
+
+Round 5必须让所有非absolute std/core/alloc path统一先解析当前位置真实binding，再回退external
+prelude，覆盖ordinary type、derive/proc attribute和function-like macro。相关Minor：parent module的
+普通use alias不自动进入child scope，不能用ancestor遍历误杀合法child std；macro2/unknown attrs/
+no_std/nonexistent std macro为rustc已阻断的非承载边界，可在Important关闭后defer到final review。
