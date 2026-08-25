@@ -30,6 +30,34 @@ fn rbdc_adapter_exposes_parallel_physical_and_standard_contracts() {
     assert_contract::<RbdcConnectionAdapter, RbdcConnectionFactory>();
 }
 
+#[tokio::test]
+async fn rbdc_standard_factory_prepared_query_uses_deterministic_driver_core() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let factory = factory(Arc::clone(&observed));
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .expect("standard RBDC connection");
+    let mut prepared = connection
+        .prepare_statement(
+            "SELECT ?",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .expect("owned RBDC prepared statement");
+    prepared
+        .set_parameter(druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::String("standard-rbdc".to_owned()),
+        })
+        .expect("standard RBDC setter");
+    let mut rows = prepared.execute_prepared_query().await.unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(
+        *observed.lock().unwrap(),
+        vec![rbs::Value::String("standard-rbdc".to_owned())]
+    );
+}
+
 #[derive(Debug)]
 struct FakeMetaData {
     column_count: usize,

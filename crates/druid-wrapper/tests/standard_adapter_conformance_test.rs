@@ -16,12 +16,10 @@ fn configured_core_adapter_families_implement_the_single_standard_directly() {
 
     assert_impl_all!(druid_wrapper::rbdc::RbdcConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::rbdc::RbdcConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::rbdc::RbdcPreparedStatement: PreparedStatement);
     assert_impl_all!(druid_wrapper::rbdc::RbdcDatabaseMetaData<'static>: DatabaseMetaData);
 
     assert_impl_all!(druid_wrapper::toasty::ToastyConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::toasty::ToastyConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::toasty::ToastyPreparedStatement: PreparedStatement);
     assert_impl_all!(druid_wrapper::toasty::ToastyDatabaseMetaData<'static>: DatabaseMetaData);
 }
 
@@ -36,7 +34,6 @@ fn catalog_data_sources_implement_canonical_wrapper_identity() {
 fn duckdb_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::duckdb::DuckDbConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::duckdb::DuckDbConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::duckdb::DuckDbPreparedStatement: PreparedStatement);
     assert_impl_all!(druid_wrapper::duckdb::DuckDbDatabaseMetaData: DatabaseMetaData);
 }
 
@@ -45,7 +42,6 @@ fn duckdb_family_implements_the_single_standard_directly() {
 fn http_sql_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::http_sql::HttpSqlConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::http_sql::HttpSqlConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::http_sql::HttpSqlPreparedStatement: PreparedStatement);
     assert_impl_all!(druid_wrapper::http_sql::HttpSqlDatabaseMetaData: DatabaseMetaData);
 }
 
@@ -54,7 +50,6 @@ fn http_sql_family_implements_the_single_standard_directly() {
 fn libsql_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::libsql::LibSqlConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::libsql::LibSqlConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::libsql::LibSqlPreparedStatement: PreparedStatement);
     assert_impl_all!(druid_wrapper::libsql::LibSqlDatabaseMetaData: DatabaseMetaData);
 }
 
@@ -63,6 +58,5 @@ fn libsql_family_implements_the_single_standard_directly() {
 fn jdbc_agent_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::jdbc_agent::JdbcAgentConnection: Connection);
     assert_impl_all!(druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::jdbc_agent::JdbcAgentPreparedStatement: PreparedStatement);
     assert_impl_all!(druid_wrapper::jdbc_agent::JdbcAgentDatabaseMetaData: DatabaseMetaData);
 }

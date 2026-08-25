@@ -1,9 +1,8 @@
 //! `DuckDB` 原生预编译语句句柄。
 
+use crate::prepared_statement_resource_state::PreparedStatementResourceState;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{
-    PhysicalPreparedStatement, PhysicalStatementOptions, SqlTextPreparedStatement,
-};
+use druid_rdbc::spi::{PhysicalPreparedStatement, PhysicalStatementOptions};
 use duckdb::InterruptHandle;
 use std::any::Any;
 use std::sync::Arc;
@@ -15,7 +14,7 @@ use std::sync::Arc;
 /// 与连接身份；每次执行在同一物理连接的 statement cache 中重新取得句柄。
 pub struct DuckDbPreparedStatement {
     connection_id: u64,
-    statement: SqlTextPreparedStatement,
+    statement: PreparedStatementResourceState,
     interrupt_handle: Arc<InterruptHandle>,
 }
 
@@ -28,7 +27,7 @@ impl DuckDbPreparedStatement {
     ) -> Self {
         Self {
             connection_id,
-            statement: SqlTextPreparedStatement::new(sql),
+            statement: PreparedStatementResourceState::new(sql),
             interrupt_handle,
         }
     }
@@ -126,11 +125,3 @@ impl PhysicalPreparedStatement for DuckDbPreparedStatement {
         self.statement.is_closed()
     }
 }
-
-druid_rdbc::impl_standard_wrapper!(DuckDbPreparedStatement => PreparedStatement);
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::Statement for DuckDbPreparedStatement {}
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::PreparedStatement for DuckDbPreparedStatement {}

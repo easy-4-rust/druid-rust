@@ -739,9 +739,7 @@ impl SqlxStreamingResultSet {
             )));
         }
         let value = row.value(zero_index)?;
-        if matches!(value, Value::Null) {
-            self.state().was_null = true;
-        }
+        self.state().was_null = matches!(value, Value::Null);
         Ok(value)
     }
 

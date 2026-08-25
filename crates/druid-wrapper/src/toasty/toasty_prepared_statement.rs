@@ -3,11 +3,11 @@
 //! 对应 Java：`java.sql.PreparedStatement` 的驱动句柄职责。
 
 use super::toasty_connection_adapter::ToastyConnectionAdapter;
+use crate::prepared_statement_resource_state::PreparedStatementResourceState;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
-    SqlTextPreparedStatement,
 };
 use druid_rdbc::types::Value;
 use std::any::Any;
@@ -40,7 +40,7 @@ enum ToastyStoredBatch {
 /// Toasty 的 raw SQL API 没有独立 `PreparedStatement` 参数槽，因此本对象在
 /// `setXxx` 保留本地流和标量的既有时点，仅异步 RDBC 资源在 execute future 中转换。
 pub struct ToastyPreparedStatement {
-    inner: SqlTextPreparedStatement,
+    inner: PreparedStatementResourceState,
     parameters: Mutex<Vec<Option<ToastyStoredParameter>>>,
     batches: Mutex<Vec<ToastyStoredBatch>>,
 }
@@ -49,7 +49,7 @@ impl ToastyPreparedStatement {
     /// 创建 Toasty 物理预编译语句。
     pub fn new(sql: impl Into<String>) -> Self {
         Self {
-            inner: SqlTextPreparedStatement::new(sql),
+            inner: PreparedStatementResourceState::new(sql),
             parameters: Mutex::new(Vec::new()),
             batches: Mutex::new(Vec::new()),
         }
@@ -275,14 +275,6 @@ impl PhysicalPreparedStatement for ToastyPreparedStatement {
         self.inner.is_closed()
     }
 }
-
-druid_rdbc::impl_standard_wrapper!(ToastyPreparedStatement => PreparedStatement);
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::Statement for ToastyPreparedStatement {}
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::PreparedStatement for ToastyPreparedStatement {}
 
 #[cfg(test)]
 mod tests {

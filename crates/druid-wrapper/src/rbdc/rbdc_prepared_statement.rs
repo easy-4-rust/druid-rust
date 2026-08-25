@@ -1,11 +1,11 @@
 //! RBDC 物理预编译语句。
 
 use crate::prepared_parameter_state::PreparedParameterState;
+use crate::prepared_statement_resource_state::PreparedStatementResourceState;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
 use druid_rdbc::spi::{
     PhysicalPreparedStatement, PhysicalStatementOptions, PreparedInputParameter,
-    SqlTextPreparedStatement,
 };
 use druid_rdbc::types::Value;
 use std::any::Any;
@@ -15,7 +15,7 @@ use std::any::Any;
 /// RBDC 公开 SPI 没有独立 prepared handle，因此 SQL token 仍由 connection 执行；
 /// 本对象负责保持 Java setter 时点、参数槽、batch 快照和继承 Statement 状态。
 pub struct RbdcPreparedStatement {
-    inner: SqlTextPreparedStatement,
+    inner: PreparedStatementResourceState,
     parameter_state: PreparedParameterState,
 }
 
@@ -23,7 +23,7 @@ impl RbdcPreparedStatement {
     /// 创建 RBDC Prepared SQL token。
     pub(crate) fn new(sql: impl Into<String>) -> Self {
         Self {
-            inner: SqlTextPreparedStatement::new(sql),
+            inner: PreparedStatementResourceState::new(sql),
             parameter_state: PreparedParameterState::new(),
         }
     }
@@ -161,14 +161,6 @@ impl PhysicalPreparedStatement for RbdcPreparedStatement {
         self.inner.is_closed()
     }
 }
-
-druid_rdbc::impl_standard_wrapper!(RbdcPreparedStatement => PreparedStatement);
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::Statement for RbdcPreparedStatement {}
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::PreparedStatement for RbdcPreparedStatement {}
 
 #[cfg(test)]
 mod tests {

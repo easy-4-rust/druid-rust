@@ -2,6 +2,9 @@ use super::{
     http_sql_prepared_statement::HttpSqlStatementExecutionError, HttpSqlDatabaseMetaData,
     HttpSqlPreparedStatement, HttpSqlProvider,
 };
+use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
+use crate::standard_adapter_statement::StandardAdapterStatement;
 use base64::Engine;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlWarning;
@@ -34,6 +37,7 @@ pub struct HttpSqlConnectionAdapter {
     closed: bool,
     discarded: bool,
     product_version: Option<String>,
+    standard_executor: Option<Arc<dyn StandardExecutor>>,
 }
 
 impl HttpSqlConnectionAdapter {
@@ -65,7 +69,59 @@ impl HttpSqlConnectionAdapter {
             closed: false,
             discarded: false,
             product_version: None,
+            standard_executor: None,
         })
+    }
+
+    fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            return Ok(Arc::clone(executor));
+        }
+        self.ensure_open()?;
+        let shell = Self {
+            provider: self.provider,
+            endpoint: self.endpoint.clone(),
+            properties: self.properties.clone(),
+            client: self.client.clone(),
+            closed: false,
+            discarded: self.discarded,
+            product_version: self.product_version.clone(),
+            standard_executor: None,
+        };
+        let owned = std::mem::replace(self, shell);
+        let executor = owned_executor(owned);
+        self.standard_executor = Some(Arc::clone(&executor));
+        Ok(executor)
+    }
+
+    async fn execute_update_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, RdbcError> {
+        let result = self.request(sql, params).await?;
+        Ok(ExecResult {
+            rows_affected: result.rows_affected,
+            last_insert_id: result.last_insert_id,
+            row_count: Some(u64::try_from(result.rows.len()).unwrap_or(u64::MAX)),
+        })
+    }
+
+    async fn execute_query_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.request(sql, params).await.map(|result| result.rows)
+    }
+
+    #[allow(
+        clippy::unused_async,
+        reason = "uniform async close core across adapter families"
+    )]
+    async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.closed = true;
+        Ok(())
     }
 
     fn ensure_open(&self) -> Result<(), RdbcError> {
@@ -396,12 +452,7 @@ impl HttpSqlConnectionAdapter {
 #[async_trait::async_trait]
 impl PhysicalConnection for HttpSqlConnectionAdapter {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        let result = self.request(sql, params).await?;
-        Ok(ExecResult {
-            rows_affected: result.rows_affected,
-            last_insert_id: result.last_insert_id,
-            row_count: Some(u64::try_from(result.rows.len()).unwrap_or(u64::MAX)),
-        })
+        self.execute_update_core(sql, params).await
     }
 
     async fn execute(
@@ -423,7 +474,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
     }
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.request(sql, params).await.map(|result| result.rows)
+        self.execute_query_core(sql, params).await
     }
 
     async fn fetch_result_set(
@@ -504,8 +555,7 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        self.closed = true;
-        Ok(())
+        self.close_connection_core().await
     }
 
     fn is_closed(&self) -> bool {
@@ -557,6 +607,32 @@ impl PhysicalConnection for HttpSqlConnectionAdapter {
     }
 }
 
+#[async_trait::async_trait]
+impl AdapterExecutionCore for HttpSqlConnectionAdapter {
+    async fn standard_execute_update_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<i64, RdbcError> {
+        let result = self.execute_update_core(sql, values).await?;
+        i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
+        })
+    }
+
+    async fn standard_execute_query_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.execute_query_core(sql, values).await
+    }
+
+    async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.close_connection_core().await
+    }
+}
+
 druid_rdbc::impl_standard_wrapper!(HttpSqlConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
@@ -565,9 +641,9 @@ impl druid_rdbc::connection::Connection for HttpSqlConnectionAdapter {
         &mut self,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        Ok(Box::new(
-            super::HttpSqlPreparedStatement::new(String::new()),
-        ))
+        Ok(Box::new(StandardAdapterStatement::new(
+            self.standard_executor_core()?,
+        )))
     }
 
     async fn prepare_statement(
@@ -575,7 +651,13 @@ impl druid_rdbc::connection::Connection for HttpSqlConnectionAdapter {
         sql: &str,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
-        Ok(Box::new(super::HttpSqlPreparedStatement::new(sql)))
+        let executor = self.standard_executor_core()?;
+        let parameter_count = executor.parameter_count(sql).await?;
+        Ok(Box::new(StandardAdapterPreparedStatement::new(
+            sql.to_owned(),
+            executor,
+            parameter_count,
+        )))
     }
 
     async fn database_meta_data(
@@ -586,5 +668,20 @@ impl druid_rdbc::connection::Connection for HttpSqlConnectionAdapter {
             self.endpoint.to_string(),
             self.product_version.clone(),
         )))
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            executor.close().await
+        } else {
+            self.close_connection_core().await
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self
+            .standard_executor
+            .as_ref()
+            .map_or(self.closed, |executor| executor.is_closed()))
     }
 }

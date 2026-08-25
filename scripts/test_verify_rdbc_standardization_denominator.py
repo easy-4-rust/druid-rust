@@ -25,6 +25,7 @@ from verify_rdbc_standardization_denominator import (  # noqa: E402
     render_adapter_rows,
     render_consumer_rows,
     render_physical_rows,
+    parse_consumer_payload,
     scan_source_text,
     verify_denominator,
 )
@@ -40,6 +41,12 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             REPOSITORY_ROOT,
             REPOSITORY_ROOT / "docs/verification/rdbc-first/rdbc-physical-standardization.tsv",
         )
+        checked = parse_consumer_payload(
+            (REPOSITORY_ROOT / "docs/verification/rdbc-first/rdbc-production-consumers.tsv").read_bytes()
+        )
+        cls.closed_consumers = tuple(
+            row for row in checked if row.state == "STANDARD_REFERENCE_CLOSED"
+        )
 
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -49,7 +56,9 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         self.consumers = self.root / "consumers.tsv"
         self.physical.write_bytes(render_physical_rows(self.live.physical))
         self.adapters.write_bytes(render_adapter_rows(self.live.adapters))
-        self.consumers.write_bytes(render_consumer_rows(self.live.consumers))
+        self.consumers.write_bytes(
+            render_consumer_rows(tuple(sorted((*self.live.consumers, *self.closed_consumers))))
+        )
 
     def tearDown(self) -> None:
         self.temporary_directory.cleanup()
@@ -98,7 +107,9 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             for row in self.live.consumers
         )
         self.adapters.write_bytes(render_adapter_rows(adapters))
-        self.consumers.write_bytes(render_consumer_rows(consumers))
+        self.consumers.write_bytes(
+            render_consumer_rows(tuple(sorted((*consumers, *self.closed_consumers))))
+        )
         self.verify()
 
     def test_rejects_live_state_on_wrong_target_or_unknown_state(self) -> None:
@@ -173,7 +184,9 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             lambda lines: lines + [lines[1]],
             lambda lines: lines + [lines[1].replace("crates/", "crates/fake/", 1)],
         ):
-            self.consumers.write_bytes(render_consumer_rows(self.live.consumers))
+            self.consumers.write_bytes(
+                render_consumer_rows(tuple(sorted((*self.live.consumers, *self.closed_consumers))))
+            )
             self.mutate_lines(self.consumers, mutation)
             with self.assertRaises(VerificationError):
                 self.verify()

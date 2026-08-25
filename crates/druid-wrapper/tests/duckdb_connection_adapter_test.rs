@@ -26,6 +26,49 @@ fn duckdb_adapter_exposes_parallel_physical_and_standard_contracts() {
 }
 
 #[tokio::test]
+async fn duckdb_standard_factory_statement_and_prepared_use_native_executor() {
+    let factory = DuckDbConnectionFactory::new("duckdb::memory:");
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .expect("standard DuckDB connection");
+    let mut statement = connection
+        .create_statement(druid_rdbc::statement::StatementOptions::default())
+        .await
+        .expect("owned DuckDB statement");
+    statement
+        .execute_update(
+            "create table standard_duck(id bigint, name varchar)",
+            druid_rdbc::statement::GeneratedKeys::None,
+        )
+        .await
+        .unwrap();
+    let mut prepared = connection
+        .prepare_statement(
+            "insert into standard_duck values (?, ?)",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    for (index, value) in [Value::Int(1), Value::String("duck-standard".to_owned())]
+        .into_iter()
+        .enumerate()
+    {
+        prepared
+            .set_parameter(druid_rdbc::statement::PreparedParameter {
+                index: druid_rdbc::statement::ParameterIndex::new(index + 1).unwrap(),
+                value,
+            })
+            .unwrap();
+    }
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
+    let mut rows = statement
+        .execute_query("select name from standard_duck")
+        .await
+        .unwrap();
+    assert!(rows.next().await.unwrap());
+}
+
+#[tokio::test]
 async fn duckdb_registry_resolves_only_explicit_native_urls() {
     let registry = DruidDriverRegistry::builtin().expect("内置目录必须可解析");
     let config = DatabaseConnectionConfig::new("duckdb", "duckdb::memory:")

@@ -111,6 +111,16 @@ impl PreparedParameterState {
         Ok(values)
     }
 
+    /// 返回从 1 到当前最高槽位的连续 standard 参数；中间空洞明确失败。
+    pub(crate) async fn values_contiguous(&self) -> Result<Vec<Value>, RdbcError> {
+        let count = self
+            .parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len();
+        self.values(count).await
+    }
+
     /// 清空当前参数槽。
     pub(crate) fn clear_parameters(&self) {
         self.parameters

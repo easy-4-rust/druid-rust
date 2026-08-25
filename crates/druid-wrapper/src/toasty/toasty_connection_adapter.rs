@@ -1,6 +1,9 @@
 //! Toasty 物理连接适配器。
 
 use super::ToastyPreparedStatement;
+use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
+use crate::standard_adapter_statement::StandardAdapterStatement;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
 use druid_rdbc::error::{SqlException, SqlWarning};
@@ -63,6 +66,7 @@ pub struct ToastyConnectionAdapter {
     isolation: Option<IsolationLevel>,
     savepoint_sequence: u64,
     discarded: bool,
+    standard_executor: Option<Arc<dyn StandardExecutor>>,
 }
 
 impl std::fmt::Debug for ToastyConnectionAdapter {
@@ -96,7 +100,83 @@ impl ToastyConnectionAdapter {
             isolation: None,
             savepoint_sequence: 0,
             discarded: false,
+            standard_executor: None,
         }
+    }
+
+    fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            return Ok(Arc::clone(executor));
+        }
+        self.connection_mut()?;
+        let shell = Self {
+            connection: None,
+            schema: Arc::clone(&self.schema),
+            url: self.url.clone(),
+            driver_name: self.driver_name,
+            auto_commit: self.auto_commit,
+            read_only: self.read_only,
+            isolation: self.isolation,
+            savepoint_sequence: self.savepoint_sequence,
+            discarded: self.discarded,
+            standard_executor: None,
+        };
+        let owned = std::mem::replace(self, shell);
+        let executor = owned_executor(owned);
+        self.standard_executor = Some(Arc::clone(&executor));
+        Ok(executor)
+    }
+
+    async fn execute_update_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, RdbcError> {
+        let response = self
+            .execute_operation(Self::raw_sql(sql, params, RawSqlRet::None)?)
+            .await?;
+        let Rows::Count(rows_affected) = response.values else {
+            return Err(RdbcError::DriverError(
+                "Toasty statement returned rows instead of an update count".to_string(),
+            ));
+        };
+        let last_insert_id = self.sqlite_last_insert_id().await?;
+        Ok(ExecResult {
+            rows_affected,
+            last_insert_id,
+            row_count: None,
+        })
+    }
+
+    async fn execute_query_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        let response = self
+            .execute_operation(Self::raw_sql(sql, params, RawSqlRet::Infer)?)
+            .await?;
+        let values = response
+            .values
+            .collect_as_value()
+            .await
+            .map_err(|error| Self::driver_error(&error))?;
+        let ToastyValue::List(rows) = values else {
+            return Err(RdbcError::DriverError(format!(
+                "Toasty query must return a row list, actual={values:?}"
+            )));
+        };
+        rows.into_iter().map(Self::row).collect()
+    }
+
+    #[allow(
+        clippy::unused_async,
+        reason = "uniform async close core across adapter families"
+    )]
+    async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.connection.take();
+        self.auto_commit = true;
+        Ok(())
     }
 
     fn connection_mut(&mut self) -> Result<&mut Box<dyn ToastyConnection>, RdbcError> {
@@ -582,20 +662,7 @@ impl ToastyConnectionAdapter {
 #[async_trait::async_trait]
 impl PhysicalConnection for ToastyConnectionAdapter {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        let response = self
-            .execute_operation(Self::raw_sql(sql, params, RawSqlRet::None)?)
-            .await?;
-        let Rows::Count(rows_affected) = response.values else {
-            return Err(RdbcError::DriverError(
-                "Toasty statement returned rows instead of an update count".to_string(),
-            ));
-        };
-        let last_insert_id = self.sqlite_last_insert_id().await?;
-        Ok(ExecResult {
-            rows_affected,
-            last_insert_id,
-            row_count: None,
-        })
+        self.execute_update_core(sql, params).await
     }
 
     async fn execute(
@@ -764,20 +831,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
     }
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        let response = self
-            .execute_operation(Self::raw_sql(sql, params, RawSqlRet::Infer)?)
-            .await?;
-        let values = response
-            .values
-            .collect_as_value()
-            .await
-            .map_err(|error| Self::driver_error(&error))?;
-        let ToastyValue::List(rows) = values else {
-            return Err(RdbcError::DriverError(format!(
-                "Toasty query must return a row list, actual={values:?}"
-            )));
-        };
-        rows.into_iter().map(Self::row).collect()
+        self.execute_query_core(sql, params).await
     }
 
     async fn prepare_physical_statement(
@@ -876,9 +930,7 @@ impl PhysicalConnection for ToastyConnectionAdapter {
     async fn close(&mut self) -> Result<(), RdbcError> {
         // Toasty Connection SPI 以 Drop 关闭 raw driver connection。
         // SQLite/rusqlite 与网络驱动都会在 drop 时回滚未提交事务。
-        self.connection.take();
-        self.auto_commit = true;
-        Ok(())
+        self.close_connection_core().await
     }
 
     fn is_closed(&self) -> bool {
@@ -1014,6 +1066,32 @@ impl PhysicalConnection for ToastyConnectionAdapter {
     }
 }
 
+#[async_trait::async_trait]
+impl AdapterExecutionCore for ToastyConnectionAdapter {
+    async fn standard_execute_update_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<i64, RdbcError> {
+        let result = self.execute_update_core(sql, values).await?;
+        i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
+        })
+    }
+
+    async fn standard_execute_query_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.execute_query_core(sql, values).await
+    }
+
+    async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.close_connection_core().await
+    }
+}
+
 druid_rdbc::impl_standard_wrapper!(ToastyConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
@@ -1022,7 +1100,9 @@ impl druid_rdbc::connection::Connection for ToastyConnectionAdapter {
         &mut self,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        Ok(Box::new(super::ToastyPreparedStatement::new(String::new())))
+        Ok(Box::new(StandardAdapterStatement::new(
+            self.standard_executor_core()?,
+        )))
     }
 
     async fn prepare_statement(
@@ -1030,7 +1110,13 @@ impl druid_rdbc::connection::Connection for ToastyConnectionAdapter {
         sql: &str,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
-        Ok(Box::new(super::ToastyPreparedStatement::new(sql)))
+        let executor = self.standard_executor_core()?;
+        let parameter_count = executor.parameter_count(sql).await?;
+        Ok(Box::new(StandardAdapterPreparedStatement::new(
+            sql.to_owned(),
+            executor,
+            parameter_count,
+        )))
     }
 
     async fn database_meta_data(
@@ -1041,6 +1127,21 @@ impl druid_rdbc::connection::Connection for ToastyConnectionAdapter {
             self.driver_name.to_owned(),
             self.read_only,
         )))
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            executor.close().await
+        } else {
+            self.close_connection_core().await
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.standard_executor.as_ref().map_or_else(
+            || self.connection.is_none(),
+            |executor| executor.is_closed(),
+        ))
     }
 }
 

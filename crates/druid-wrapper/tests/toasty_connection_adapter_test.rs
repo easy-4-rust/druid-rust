@@ -21,6 +21,56 @@ fn toasty_adapter_exposes_parallel_physical_and_standard_contracts() {
     assert_contract::<ToastyConnectionAdapter, ToastyConnectionFactory>();
 }
 
+#[tokio::test]
+async fn toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_executor() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite factory");
+    let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+        .await
+        .expect("standard connection");
+    let mut statement = connection
+        .create_statement(druid_rdbc::statement::StatementOptions::default())
+        .await
+        .expect("owned standard statement");
+    statement
+        .execute_update(
+            "create table standard_item(id integer primary key, name text)",
+            druid_rdbc::statement::GeneratedKeys::None,
+        )
+        .await
+        .expect("standard DDL");
+    let mut prepared = connection
+        .prepare_statement(
+            "insert into standard_item(id, name) values (?, ?)",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .expect("owned standard prepared statement");
+    for (index, value) in [Value::Int(1), Value::String("toasty-standard".to_owned())]
+        .into_iter()
+        .enumerate()
+    {
+        prepared
+            .set_parameter(druid_rdbc::statement::PreparedParameter {
+                index: druid_rdbc::statement::ParameterIndex::new(index + 1).unwrap(),
+                value,
+            })
+            .expect("standard setter");
+    }
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
+    let mut rows = statement
+        .execute_query("select name from standard_item where id = 1")
+        .await
+        .unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(
+        rows.value(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())
+            .unwrap(),
+        Value::String("toasty-standard".to_owned())
+    );
+}
+
 async fn sqlite_connection() -> Box<dyn druid::core::PhysicalConnection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
         .await

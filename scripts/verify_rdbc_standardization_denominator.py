@@ -31,7 +31,8 @@ LEGACY_PHYSICAL_HEADER = (
 )
 ADAPTER_HEADER = (
     "source_path\tcurrent_trait\timplementation_type\towner\ttarget_trait\t"
-    "target_task\tstate"
+    "target_task\tstandard_implementation_type\tstandard_source_path\t"
+    "standard_core_evidence\tbehavior_evidence\tstate"
 )
 CONSUMER_HEADER = (
     "source_path\toccurrence_kind\tsymbol\told_path\ttarget_path\t"
@@ -73,6 +74,10 @@ class AdapterRow:
     owner: str
     target_trait: str
     target_task: str
+    standard_implementation_type: str
+    standard_source_path: str
+    standard_core_evidence: str
+    behavior_evidence: str
     state: str
 
 
@@ -266,6 +271,16 @@ def parse_adapter_payload(payload: bytes) -> list[AdapterRow]:
         if row.state == "STANDARD_IMPL_LIVE":
             if row.target_task != "P04_TASK_4_ADAPTER_CUTOVER" or row.owner != "WRAPPER_ADAPTER":
                 fail("adapter LIVE state is only valid for Task 4 wrapper rows")
+            if any(
+                value == "-"
+                for value in (
+                    row.standard_implementation_type,
+                    row.standard_source_path,
+                    row.standard_core_evidence,
+                    row.behavior_evidence,
+                )
+            ):
+                fail("adapter LIVE row lacks canonical implementation/core/behavior evidence")
         elif row.state != "CURRENT_IMPL_TARGET_PLANNED":
             fail(f"adapter row has unknown state: {row.state}")
     if payload != render_adapter_rows(tuple(rows)):
@@ -286,6 +301,12 @@ def parse_consumer_payload(payload: bytes) -> list[ConsumerRow]:
                 or not row.source_path.startswith("crates/druid-wrapper/")
             ):
                 fail("consumer LIVE state is only valid for Task 4 wrapper rows")
+        elif row.state == "STANDARD_REFERENCE_CLOSED":
+            if (
+                row.target_task != "P04_TASK_4_ADAPTER_CUTOVER"
+                or not row.source_path.startswith("crates/druid-wrapper/")
+            ):
+                fail("consumer CLOSED state is only valid for Task 4 wrapper rows")
         elif row.state != "CURRENT_REFERENCE_TARGET_PLANNED":
             fail(f"consumer row has unknown state: {row.state}")
     if payload != render_consumer_rows(tuple(rows)):
@@ -1970,14 +1991,91 @@ def implementation_rows(
             else "P04_TASK_5_LOGICAL_CUTOVER" if owner == "DRUID_LOGICAL_OR_PROXY"
             else tasks[trait_path]
         )
+        target_trait = mapping[trait_path]
+        standard_type = implementation_type
+        standard_source = path.as_posix()
+        standard_core = "-"
+        behavior = "-"
+        if target_task == "P04_TASK_4_ADAPTER_CUTOVER":
+            family_behaviors = {
+                "Sqlx": "statement_executor_ownership_test::statement_and_result_set_keep_the_sqlx_connection_lease_owned",
+                "Toasty": "toasty_connection_adapter_test::toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_executor",
+                "Rbdc": "rbdc_connection_adapter_test::rbdc_standard_factory_prepared_query_uses_deterministic_driver_core",
+                "DuckDb": "duckdb_connection_adapter_test::duckdb_standard_factory_statement_and_prepared_use_native_executor",
+                "HttpSql": "standard_adapter_not_run_contract_test::http_sql_standard_factory_rejects_unconfigured_insecure_d1_before_network_io",
+                "LibSql": "standard_adapter_not_run_contract_test::libsql_standard_factory_rejects_unconfigured_url_before_remote_execution",
+                "JdbcAgent": "standard_adapter_not_run_contract_test::jdbc_agent_standard_factory_returns_typed_error_when_runtime_is_unconfigured",
+                "DruidRdbcDataSource": "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
+                "DynamicRdbcDataSource": "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity",
+            }
+            behavior = next(
+                (
+                    evidence
+                    for prefix, evidence in family_behaviors.items()
+                    if implementation_type.startswith(prefix)
+                ),
+                "-",
+            )
+            prepared_families = {
+                "DuckDbPreparedStatement": (
+                    "DuckDbConnectionAdapter::standard_executor_core",
+                    "duckdb_connection_adapter_test::duckdb_standard_factory_statement_and_prepared_use_native_executor",
+                ),
+                "RbdcPreparedStatement": (
+                    "RbdcConnectionAdapter::standard_executor_core",
+                    "rbdc_connection_adapter_test::rbdc_standard_factory_prepared_query_uses_deterministic_driver_core",
+                ),
+                "ToastyPreparedStatement": (
+                    "ToastyConnectionAdapter::standard_executor_core",
+                    "toasty_connection_adapter_test::toasty_standard_factory_prepared_query_and_update_use_the_real_sqlite_executor",
+                ),
+                "HttpSqlPreparedStatement": (
+                    "HttpSqlConnectionAdapter::standard_executor_core",
+                    "standard_adapter_not_run_contract_test::http_sql_standard_factory_rejects_unconfigured_insecure_d1_before_network_io",
+                ),
+                "LibSqlPreparedStatement": (
+                    "LibSqlConnectionAdapter::standard_executor_core",
+                    "standard_adapter_not_run_contract_test::libsql_standard_factory_rejects_unconfigured_url_before_remote_execution",
+                ),
+                "JdbcAgentPreparedStatement": (
+                    "JdbcAgentConnection::standard_executor_core",
+                    "standard_adapter_not_run_contract_test::jdbc_agent_standard_factory_returns_typed_error_when_runtime_is_unconfigured",
+                ),
+            }
+            if implementation_type in prepared_families:
+                standard_type = "StandardAdapterPreparedStatement"
+                standard_source = "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs"
+                standard_core, behavior = prepared_families[implementation_type]
+            elif implementation_type == "SqlxPreparedStatement":
+                standard_core = "SqlxConnectionActor::execute_query/execute_update"
+                behavior = "statement_executor_ownership_test::prepared_statement_materializes_standard_parameters_through_the_owned_actor"
+            elif target_trait.endswith("::ConnectionFactory"):
+                standard_core = f"{implementation_type}::create_adapter_core"
+            elif target_trait.endswith("::Connection"):
+                standard_core = (
+                    "SqlxConnectionAdapter::standard_actor_core"
+                    if implementation_type == "SqlxConnectionAdapter"
+                    else f"{implementation_type}::standard_executor_core"
+                )
+            elif target_trait.endswith("::DatabaseMetaData"):
+                standard_core = f"{implementation_type.split('<', 1)[0]}::database_product_name_core"
+            elif target_trait.endswith("::ResultSet"):
+                standard_core = f"{implementation_type}::next_core/value_core/close_core"
+            elif target_trait.endswith("::Wrapper"):
+                standard_core = f"{implementation_type}::canonical_unwrap"
+                behavior = "standard_adapter_conformance_test::catalog_data_sources_implement_canonical_wrapper_identity"
         rows.append(
             AdapterRow(
                 path.as_posix(),
                 trait_path,
                 implementation_type,
                 owner,
-                mapping[trait_path],
+                target_trait,
                 target_task,
+                standard_type,
+                standard_source,
+                standard_core,
+                behavior,
                 "CURRENT_IMPL_TARGET_PLANNED",
             )
         )
@@ -2296,6 +2394,10 @@ def normalize_adapter_phase(rows: tuple[AdapterRow, ...]) -> tuple[AdapterRow, .
             row.owner,
             row.target_trait,
             row.target_task,
+            row.standard_implementation_type,
+            row.standard_source_path,
+            row.standard_core_evidence,
+            row.behavior_evidence,
             "CURRENT_IMPL_TARGET_PLANNED",
         )
         for row in rows
@@ -2342,10 +2444,22 @@ def require_task4_consumer_payload(
         fail(f"consumer manifest not found: {path}")
     payload = path.read_bytes()
     checked = tuple(parse_consumer_payload(payload))
-    normalized = normalize_consumer_phase(checked)
-    if normalized != live:
-        fail("consumer manifest rows do not match the live denominator")
-    return normalized
+    closed = tuple(row for row in checked if row.state == "STANDARD_REFERENCE_CLOSED")
+    if len(closed) != 21:
+        fail(f"Task 4 closed consumer denominator drift: expected 21, found {len(closed)}")
+    active = tuple(row for row in checked if row.state != "STANDARD_REFERENCE_CLOSED")
+    normalized_active = normalize_consumer_phase(active)
+    if normalized_active != live:
+        fail("active consumer manifest rows do not match the live denominator")
+    live_identities = {
+        (row.source_path, row.occurrence_kind, row.old_path, row.target_path)
+        for row in live
+    }
+    for row in closed:
+        identity = (row.source_path, row.occurrence_kind, row.old_path, row.target_path)
+        if identity in live_identities:
+            fail(f"closed consumer still exists in live source: {identity}")
+    return tuple(sorted((*normalized_active, *normalize_consumer_phase(closed))))
 
 
 def verify_denominator(

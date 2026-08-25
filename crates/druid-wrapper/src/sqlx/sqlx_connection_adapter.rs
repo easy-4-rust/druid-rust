@@ -150,8 +150,31 @@ impl SqlxConnectionAdapter {
         }
     }
 
-    pub(super) fn standard_close_core(&mut self) {
-        self.connection.take();
+    pub(super) async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
+        match self.connection.take() {
+            Some(SqlxConnectionBackend::Any(connection)) => {
+                SqlxConnection::close(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            Some(SqlxConnectionBackend::MySql(connection)) => {
+                SqlxConnection::close(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            Some(SqlxConnectionBackend::PostgreSql(connection)) => {
+                SqlxConnection::close(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            Some(SqlxConnectionBackend::Sqlite(connection)) => {
+                SqlxConnection::close(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            None => {}
+        }
+        Ok(())
     }
 
     fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, RdbcError> {
@@ -163,7 +186,7 @@ impl SqlxConnectionAdapter {
             .ok_or(RdbcError::ConnectionDiscarded)
     }
 
-    fn backend_key(&self) -> &'static str {
+    pub(super) fn backend_key(&self) -> &'static str {
         match self.connection {
             Some(SqlxConnectionBackend::Any(_)) => "any",
             Some(SqlxConnectionBackend::MySql(_)) => "mysql",
@@ -791,6 +814,51 @@ impl SqlxConnectionAdapter {
                     .map(Self::decode_sqlite_row)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok((rows, labels))
+            }
+        }
+    }
+
+    pub(super) async fn standard_parameter_count_core(
+        &mut self,
+        sql: &str,
+    ) -> Result<usize, RdbcError> {
+        fn count<'query, S: Statement<'query>>(statement: &S) -> Result<usize, RdbcError> {
+            match statement.parameters() {
+                Some(sqlx::Either::Left(types)) => Ok(types.len()),
+                Some(sqlx::Either::Right(count)) => Ok(count),
+                None => Err(RdbcError::UnsupportedOperation {
+                    operation: "sqlx_parameter_metadata_unavailable",
+                }),
+            }
+        }
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                count(&statement)
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                count(&statement)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                count(&statement)
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let statement = (&mut *connection)
+                    .prepare(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                count(&statement)
             }
         }
     }
@@ -1559,30 +1627,7 @@ impl PhysicalConnection for SqlxConnectionAdapter {
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        match self.connection.take() {
-            Some(SqlxConnectionBackend::Any(connection)) => {
-                SqlxConnection::close(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            Some(SqlxConnectionBackend::MySql(connection)) => {
-                SqlxConnection::close(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            Some(SqlxConnectionBackend::PostgreSql(connection)) => {
-                SqlxConnection::close(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            Some(SqlxConnectionBackend::Sqlite(connection)) => {
-                SqlxConnection::close(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            None => {}
-        }
-        Ok(())
+        self.close_connection_core().await
     }
 
     fn is_closed(&self) -> bool {
@@ -1722,6 +1767,7 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
             String::new(),
             actor,
             options,
+            0,
         )))
     }
 
@@ -1731,10 +1777,12 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
         let actor = self.standard_actor_core()?;
+        let parameter_count = actor.parameter_count(sql).await?;
         Ok(Box::new(SqlxPreparedStatement::owned_statement(
             sql.to_owned(),
             actor,
             options,
+            parameter_count,
         )))
     }
 
@@ -1757,8 +1805,8 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
         druid_rdbc::extensions::ConnectionCapabilities {
-            transactions: true,
-            savepoints: true,
+            transactions: false,
+            savepoints: false,
             catalogs: false,
             schemas: false,
             callable_statements: false,
@@ -1769,8 +1817,7 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         if let Some(actor) = &self.standard_actor {
             actor.close().await
         } else {
-            self.standard_close_core();
-            Ok(())
+            self.close_connection_core().await
         }
     }
 

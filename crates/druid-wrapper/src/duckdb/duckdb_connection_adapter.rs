@@ -1,6 +1,9 @@
 //! `DuckDB` 原生物理连接适配器。
 
 use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
+use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
+use crate::standard_adapter_statement::StandardAdapterStatement;
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::RdbcError;
@@ -35,6 +38,7 @@ pub struct DuckDbConnectionAdapter {
     url: String,
     auto_commit: bool,
     discarded: bool,
+    standard_executor: Option<Arc<dyn StandardExecutor>>,
 }
 
 impl DuckDbConnectionAdapter {
@@ -58,7 +62,71 @@ impl DuckDbConnectionAdapter {
             url: url.to_owned(),
             auto_commit: true,
             discarded: false,
+            standard_executor: None,
         })
+    }
+
+    fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            return Ok(Arc::clone(executor));
+        }
+        self.connection_ref()?;
+        let shell = Self {
+            connection_id: self.connection_id,
+            connection: None,
+            interrupt_handle: Arc::clone(&self.interrupt_handle),
+            url: self.url.clone(),
+            auto_commit: self.auto_commit,
+            discarded: self.discarded,
+            standard_executor: None,
+        };
+        let owned = std::mem::replace(self, shell);
+        let executor = owned_executor(owned);
+        self.standard_executor = Some(Arc::clone(&executor));
+        Ok(executor)
+    }
+
+    async fn execute_update_core(
+        &self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, RdbcError> {
+        let sql = sql.to_owned();
+        self.run_blocking(move |connection| {
+            let mut statement = connection
+                .prepare_cached(&sql)
+                .map_err(Self::driver_error)?;
+            Self::bind_parameters(&mut statement, &params)?;
+            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
+            Ok(ExecResult {
+                rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
+                last_insert_id: None,
+                row_count: None,
+            })
+        })
+        .await
+    }
+
+    async fn execute_query_core(
+        &self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        let sql = sql.to_owned();
+        self.run_blocking(move |connection| {
+            Self::query(connection, &sql, &params).map(|value| value.0)
+        })
+        .await
+    }
+
+    #[allow(
+        clippy::unused_async,
+        reason = "uniform async close core across adapter families"
+    )]
+    async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.connection.take();
+        self.auto_commit = true;
+        Ok(())
     }
 
     fn parse_target(url: &str) -> Result<Option<PathBuf>, RdbcError> {
@@ -369,20 +437,7 @@ impl DuckDbConnectionAdapter {
 #[async_trait::async_trait]
 impl PhysicalConnection for DuckDbConnectionAdapter {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        let sql = sql.to_owned();
-        self.run_blocking(move |connection| {
-            let mut statement = connection
-                .prepare_cached(&sql)
-                .map_err(Self::driver_error)?;
-            Self::bind_parameters(&mut statement, &params)?;
-            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
-            Ok(ExecResult {
-                rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
-                last_insert_id: None,
-                row_count: None,
-            })
-        })
-        .await
+        self.execute_update_core(sql, params).await
     }
 
     async fn execute(
@@ -418,11 +473,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
     }
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        let sql = sql.to_owned();
-        self.run_blocking(move |connection| {
-            Self::query(connection, &sql, &params).map(|value| value.0)
-        })
-        .await
+        self.execute_query_core(sql, params).await
     }
 
     async fn fetch_result_set(
@@ -573,9 +624,7 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        self.connection.take();
-        self.auto_commit = true;
-        Ok(())
+        self.close_connection_core().await
     }
 
     fn is_closed(&self) -> bool {
@@ -642,6 +691,46 @@ impl PhysicalConnection for DuckDbConnectionAdapter {
     }
 }
 
+#[async_trait::async_trait]
+impl AdapterExecutionCore for DuckDbConnectionAdapter {
+    async fn standard_execute_update_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<i64, RdbcError> {
+        let result = self.execute_update_core(sql, values).await?;
+        i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
+        })
+    }
+
+    async fn standard_execute_query_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.execute_query_core(sql, values).await
+    }
+
+    async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.close_connection_core().await
+    }
+
+    async fn standard_parameter_count_core(
+        &mut self,
+        sql: &str,
+    ) -> Result<Option<usize>, RdbcError> {
+        let sql = sql.to_owned();
+        self.run_blocking(move |connection| {
+            connection
+                .prepare_cached(&sql)
+                .map(|statement| Some(statement.parameter_count()))
+                .map_err(Self::driver_error)
+        })
+        .await
+    }
+}
+
 druid_rdbc::impl_standard_wrapper!(DuckDbConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
@@ -650,10 +739,8 @@ impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
         &mut self,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        Ok(Box::new(super::DuckDbPreparedStatement::new(
-            self.connection_id,
-            String::new(),
-            Arc::clone(&self.interrupt_handle),
+        Ok(Box::new(StandardAdapterStatement::new(
+            self.standard_executor_core()?,
         )))
     }
 
@@ -662,10 +749,12 @@ impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
         sql: &str,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
-        Ok(Box::new(super::DuckDbPreparedStatement::new(
-            self.connection_id,
-            sql,
-            Arc::clone(&self.interrupt_handle),
+        let executor = self.standard_executor_core()?;
+        let parameter_count = executor.parameter_count(sql).await?;
+        Ok(Box::new(StandardAdapterPreparedStatement::new(
+            sql.to_owned(),
+            executor,
+            parameter_count,
         )))
     }
 
@@ -676,5 +765,20 @@ impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
             self.connection_ref()?,
             self.url.clone(),
         )))
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            executor.close().await
+        } else {
+            self.close_connection_core().await
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.standard_executor.as_ref().map_or_else(
+            || self.connection.is_none(),
+            |executor| executor.is_closed(),
+        ))
     }
 }

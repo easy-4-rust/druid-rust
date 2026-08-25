@@ -7,7 +7,12 @@ mod managed_wrapper_pool;
 mod prepared_parameter_materializer;
 mod prepared_parameter_meta_data_snapshot;
 mod prepared_parameter_state;
+mod prepared_statement_resource_state;
 mod proxool_config_key;
+mod standard_adapter_executor;
+mod standard_adapter_prepared_statement;
+mod standard_adapter_result_set;
+mod standard_adapter_statement;
 mod wrapper_data_source_factory;
 mod wrapper_pool_state;
 

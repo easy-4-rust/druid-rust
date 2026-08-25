@@ -76,3 +76,128 @@ async fn prepared_statement_materializes_standard_parameters_through_the_owned_a
         Value::String("owned".to_owned())
     );
 }
+
+#[tokio::test]
+async fn sqlx_standard_close_defaults_and_generated_keys_are_consistent() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let capabilities = Connection::capabilities(&connection);
+    assert!(!capabilities.transactions);
+    assert!(!capabilities.savepoints);
+    assert!(Connection::commit(&mut connection).await.is_err());
+
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    statement.close().await.unwrap();
+    statement.close().await.unwrap();
+    assert!(statement.execute_query("select 1").await.is_err());
+
+    let mut prepared =
+        Connection::prepare_statement(&mut connection, "select ?1", StatementOptions::default())
+            .await
+            .unwrap();
+    prepared.close().await.unwrap();
+    assert!(prepared
+        .set_parameter(PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::Int(1),
+        })
+        .is_err());
+
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    let error = statement
+        .execute_update(
+            "create table generated_key_guard(id integer)",
+            GeneratedKeys::ReturnGeneratedKeys,
+        )
+        .await
+        .expect_err("unsupported generated keys must not be ignored");
+    assert!(matches!(
+        error,
+        druid_rdbc::error::RdbcError::UnsupportedOperation { .. }
+    ));
+}
+
+#[tokio::test]
+async fn sqlx_parameter_metadata_uses_driver_placeholder_description() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut prepared = Connection::prepare_statement(
+        &mut connection,
+        "select '?' as literal, ?1 as bound_value -- ? in comment",
+        StatementOptions::default(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(prepared.parameter_meta_data().unwrap().parameter_count(), 1);
+    prepared
+        .set_parameter(PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).unwrap(),
+            value: Value::String("driver-described".to_owned()),
+        })
+        .unwrap();
+    let mut rows = prepared.execute_prepared_query().await.unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(
+        rows.value(ColumnIndex::new(2).unwrap()).unwrap(),
+        Value::String("driver-described".to_owned())
+    );
+}
+
+#[tokio::test]
+async fn sqlx_connection_close_serializes_with_statement_execute_and_releases_in_both_orders() {
+    use std::sync::Arc;
+    use tokio::sync::{Barrier, Mutex};
+
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    let connection = Arc::new(Mutex::new(connection));
+    let statement = Arc::new(Mutex::new(statement));
+    let barrier = Arc::new(Barrier::new(2));
+    let close_task = {
+        let connection = Arc::clone(&connection);
+        let barrier = Arc::clone(&barrier);
+        tokio::spawn(async move {
+            barrier.wait().await;
+            Connection::close(&mut *connection.lock().await).await
+        })
+    };
+    let execute_task = {
+        let statement = Arc::clone(&statement);
+        let barrier = Arc::clone(&barrier);
+        tokio::spawn(async move {
+            barrier.wait().await;
+            statement
+                .lock()
+                .await
+                .execute_update("create table close_race(id integer)", GeneratedKeys::None)
+                .await
+        })
+    };
+    assert!(close_task.await.unwrap().is_ok());
+    let _ = execute_task.await.unwrap();
+    assert!(statement
+        .lock()
+        .await
+        .execute_query("select 1")
+        .await
+        .is_err());
+
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .unwrap();
+    statement.close().await.unwrap();
+    assert!(Connection::close(&mut connection).await.is_ok());
+}

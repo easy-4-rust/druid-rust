@@ -202,3 +202,107 @@ reported PASS。
 
 Task 4 implementation and verification are complete pending independent review。Task 5 has not
 started。
+
+## 10. Independent review correction
+
+Independent review of `48f6af4..8252a20` returned **FIX_REQUIRED** with
+`1 Critical + 4 Important + 1 Minor` open：
+
+- C1: compile-time direct impl/LIVE claims are not backed by canonical behavior for six non-SQLx
+  families; 21 SqlText consumer rows still reference transitional `druid_rdbc::spi` objects;
+  verifier accepts seven adversarial false positives。
+- I1: SQLx close/open/capability/generated-keys contracts conflict。
+- I2: byte-counting `?` is not driver placeholder metadata。
+- I3: `was_null` does not reset after a successful non-null getter。
+- I4: `TablesQuery` ignores catalog/schema/types and hard-codes SQLite SQL for every backend。
+- M1: source-projection and checked-LIVE TSV hashes were mislabeled。
+
+The previous completion wording is superseded。Task 5 is blocked until all load-bearing findings
+receive strict RED/GREEN fixes and independent re-review returns clear。
+
+## 11. Fix round 1/5 implementation (base `8252a20`)
+
+This section supersedes Sections 5-9 for current counts, hashes, and finding disposition. It does
+not change the independent review verdict: Task 5 remains blocked until this fix commit receives an
+independent clear review.
+
+### 11.1 Strict RED -> GREEN evidence
+
+| Finding | Fresh RED on `8252a20` | Minimal GREEN implementation and permanent evidence |
+| --- | --- | --- |
+| C1 canonical behavior | Toasty standard DDL, RBDC setter, and DuckDB standard DDL returned typed `Unsupported`; seven adversarial verifier fixtures were accepted | Six non-SQLx factories now return wrapper-private owned Statement/Prepared/ResultSet handles bound to a family executor; standard and Physical paths call the same inherent/private execution cores without reverse delegation. Toasty SQLite, DuckDB native, and deterministic RBDC standard factory paths execute real query/update behavior. HTTP SQL, libSQL, and JDBC Agent reach their owned family core and return typed NOT_RUN errors in this unconfigured checkout. Verifier self-tests are `8/8`, including empty, split-core, standard-to-Physical, local-leaf, cfg-disabled, alias, and comment-only rejection. |
+| I1 SQLx lifecycle | capabilities advertised transactions/savepoints while standard commit was unsupported; execute survived statement close; generated-key requests were ignored | transaction/savepoint capabilities are false until implemented; generated keys are typed unsupported. Setter/execute/metadata operations require an open actor; Statement/Prepared/ResultSet close takes its `Option<Arc<_>>` lease. Standard and Physical connection close share `close_connection_core`; close error propagates and can be retried, while successful close is exactly once. Connection-first, statement-first, double-close, and concurrent close/execute tests pass. |
+| I2 placeholders | quoted/comment question marks produced three metadata parameters instead of one | SQLx preparation uses the driver's prepared statement parameter description; no byte-counting or cross-dialect parser remains. Configured SQLite covers quoted/comment `?` and `?1`; other drivers remain typed NOT_RUN unless actually configured. |
+| I3 `wasNull` | NULL then non-NULL remained `true` | every successful getter stores `matches!(value, Value::Null)`; `next` resets, while closed/error paths preserve the last successful state. Permanent sequence/reset/error tests pass. |
+| I4 tables | `table_types=Some([])` still returned a row | the actor routes by backend; unsupported backends fail typed. SQLite distinguishes catalog, schema, pattern, `None`, empty, TABLE, and VIEW filters. Permanent nonmatching and filter tests pass. |
+| M1 hash labels | source projection and checked TSV digests were conflated | three distinct final digests are reported below, with the coordinate-independent semantic identity delta stated honestly. |
+
+### 11.2 Canonical adapter and consumer state
+
+- Canonical adapter rows: `31/31 LIVE` across all seven families. The six legacy concrete
+  Physical Prepared types remain transitional Physical-only; their family rows point to
+  `StandardAdapterPreparedStatement` plus the family-specific factory constructor, executor core,
+  and behavior/NOT_RUN evidence.
+- Shared common provenance chains: `6/6 LIVE`; sharing one concrete standard type does not collapse
+  the per-family executor provenance.
+- Legacy `SqlTextStatement`/`SqlTextPreparedStatement` production references: `21 CLOSED`; the old
+  source references are absent. Their wrapper-private replacement is
+  `PreparedStatementResourceState`, not a canonical facade or alias.
+- Active production consumer rows: `3536`; checked denominator rows: `3557` (`3536` active + `21`
+  historical CLOSED). The Task 2 BASE count `3559` is preserved as historical input, not asserted
+  as the Task 4 active-source count.
+- Coordinate/binding-independent semantic identities versus `8252a20`: `added=10`, `removed=33`
+  (net `-23`). This includes the 21 real legacy-reference removals and the private-core relocation;
+  no virtual occurrence or scanner exclusion was added to manufacture the old count.
+
+Final hash vocabulary and values:
+
+```text
+CONSUMER_ACTIVE_SOURCE_SHA256=c8bba1b39772438d5e94cfdcc03d44169df4c245637de66527885818d4aff183
+CONSUMER_SOURCE_PROJECTION_SHA256=90cacc0be2a227abec57c664419ea3c2b7bb93377c9834ebf77a2b14e3fda41c
+CONSUMER_LIVE_TSV_SHA256=a9651d5310a095db8ff8fdc0c367389ea108397bfea90ff0b7c73923b1a80652
+```
+
+### 11.3 Seven-family behavior matrix
+
+| Family | Canonical standard behavior | Fresh result |
+| --- | --- | --- |
+| SQLx SQLite | owned actor query/update/parameter metadata/tables/lifecycle | configured real in-memory SQLite PASS |
+| Toasty SQLite | factory -> connection -> statement/prepared -> update/query | configured real in-memory SQLite PASS |
+| RBDC | factory -> connection -> prepared setter/query through owned deterministic driver | deterministic fake PASS; external DB NOT_RUN |
+| DuckDB native | factory -> connection -> statement/prepared -> update/query | configured in-memory native PASS |
+| HTTP SQL | factory/connection/owned family executor rejects absent safe remote configuration | typed `InvalidArgument`, NOT_RUN |
+| libSQL native | factory/connection/owned family executor rejects absent valid remote URL/token | typed `InvalidArgument`, NOT_RUN |
+| JDBC Agent | factory/connection/owned family executor reports absent runtime/jars | typed error, NOT_RUN |
+
+No external HTTP/libSQL/JDBC Agent/RBDC service is reported PASS. No Cargo topology, druid-admin,
+Task 5 holder/proxy, or Druid production file was changed.
+
+### 11.4 Fresh final gates
+
+- wrapper verifier self/live: `8/8 PASS`; `31 LIVE`, `21 CLOSED`, `6` common provenance chains,
+  SQLx actor `1`.
+- denominator self/live: `39/39 PASS`; Physical `73`, adapters `55`, checked/projected consumers
+  `3557`.
+- semantic self/adapter-live: `16/16 PASS`; `52/17/0`, normalized and LIVE semantic hashes remain
+  `5d99b573...cdbd9` and `45882120...bf21`.
+- Task 3 purity self/transitional: `103/103 PASS`; `STANDARD_FILES=29`.
+- `cargo test -p druid-wrapper --tests` and
+  `cargo test -p druid-wrapper --all-features --tests`: every test binary PASS, including standard
+  configured/NOT_RUN paths and SQLx ownership/metadata race cases.
+- `cargo test -p druid-rdbc --all-targets --all-features`: `20/20 PASS`;
+  `cargo test -p druid-rdbc --doc`: `1/1 PASS`;
+  druid-rdbc Clippy with `-D warnings`: PASS.
+- `cargo check -p druid-wrapper --all-features --all-targets` and
+  `cargo check --workspace --all-targets --all-features`: PASS.
+- scoped wrapper Clippy `--no-deps -- -D warnings`, wrapper docs, wrapper doctests (`0`), rustfmt,
+  `git diff --check`: PASS.
+- The dependency-aware broad wrapper Clippy command is still **not GREEN** solely because of the two
+  unchanged Druid Task 5 warnings recorded in Section 8; this round did not modify or conceal them.
+
+### 11.5 Round state and risks
+
+All `1 Critical + 4 Important + 1 Minor` review findings have an implementation disposition of
+**ADDRESSED, pending independent re-review**. Task 5 remains blocked. External remote-driver behavior
+is honestly NOT_RUN, SQLx result rows remain eager as the accepted Task 7 boundary, and transitional
+Physical implementations remain only for the planned Task 5/6 migration window.

@@ -2,6 +2,9 @@ use super::{
     libsql_prepared_statement::LibSqlStatementExecutionError, LibSqlDatabaseMetaData,
     LibSqlPreparedStatement,
 };
+use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
+use crate::standard_adapter_statement::StandardAdapterStatement;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::{SqlException, SqlWarning};
 use druid_rdbc::spi::{
@@ -28,6 +31,7 @@ pub struct LibSqlConnectionAdapter {
     auto_commit: bool,
     discarded: bool,
     savepoint_sequence: u64,
+    standard_executor: Option<Arc<dyn StandardExecutor>>,
 }
 
 impl LibSqlConnectionAdapter {
@@ -49,7 +53,57 @@ impl LibSqlConnectionAdapter {
             auto_commit: true,
             discarded: false,
             savepoint_sequence: 0,
+            standard_executor: None,
         })
+    }
+
+    fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            return Ok(Arc::clone(executor));
+        }
+        self.connection()?;
+        let shell = Self {
+            connection: None,
+            url: self.url.clone(),
+            auto_commit: self.auto_commit,
+            discarded: self.discarded,
+            savepoint_sequence: self.savepoint_sequence,
+            standard_executor: None,
+        };
+        let owned = std::mem::replace(self, shell);
+        let executor = owned_executor(owned);
+        self.standard_executor = Some(Arc::clone(&executor));
+        Ok(executor)
+    }
+
+    async fn execute_update_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, RdbcError> {
+        let result = self.request(sql, params).await?;
+        Ok(ExecResult {
+            rows_affected: result.rows_affected,
+            last_insert_id: result.last_insert_id,
+            row_count: None,
+        })
+    }
+
+    async fn execute_query_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.request(sql, params).await.map(|result| result.rows)
+    }
+
+    #[allow(
+        clippy::unused_async,
+        reason = "uniform async close core across adapter families"
+    )]
+    async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.connection.take();
+        Ok(())
     }
 
     fn connection(&self) -> Result<&::libsql::Connection, RdbcError> {
@@ -239,12 +293,7 @@ impl LibSqlConnectionAdapter {
 #[async_trait::async_trait]
 impl PhysicalConnection for LibSqlConnectionAdapter {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        let result = self.request(sql, params).await?;
-        Ok(ExecResult {
-            rows_affected: result.rows_affected,
-            last_insert_id: result.last_insert_id,
-            row_count: None,
-        })
+        self.execute_update_core(sql, params).await
     }
 
     async fn execute(
@@ -266,7 +315,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
     }
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.request(sql, params).await.map(|result| result.rows)
+        self.execute_query_core(sql, params).await
     }
 
     async fn fetch_result_set(
@@ -400,8 +449,7 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        self.connection.take();
-        Ok(())
+        self.close_connection_core().await
     }
     fn is_closed(&self) -> bool {
         self.connection.is_none()
@@ -455,6 +503,32 @@ impl PhysicalConnection for LibSqlConnectionAdapter {
     }
 }
 
+#[async_trait::async_trait]
+impl AdapterExecutionCore for LibSqlConnectionAdapter {
+    async fn standard_execute_update_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<i64, RdbcError> {
+        let result = self.execute_update_core(sql, values).await?;
+        i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
+        })
+    }
+
+    async fn standard_execute_query_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.execute_query_core(sql, values).await
+    }
+
+    async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.close_connection_core().await
+    }
+}
+
 druid_rdbc::impl_standard_wrapper!(LibSqlConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
@@ -463,7 +537,9 @@ impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
         &mut self,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        Ok(Box::new(super::LibSqlPreparedStatement::new(String::new())))
+        Ok(Box::new(StandardAdapterStatement::new(
+            self.standard_executor_core()?,
+        )))
     }
 
     async fn prepare_statement(
@@ -471,7 +547,13 @@ impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
         sql: &str,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
-        Ok(Box::new(super::LibSqlPreparedStatement::new(sql)))
+        let executor = self.standard_executor_core()?;
+        let parameter_count = executor.parameter_count(sql).await?;
+        Ok(Box::new(StandardAdapterPreparedStatement::new(
+            sql.to_owned(),
+            executor,
+            parameter_count,
+        )))
     }
 
     async fn database_meta_data(
@@ -480,5 +562,20 @@ impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
         Ok(Box::new(super::LibSqlDatabaseMetaData::new(
             self.url.clone(),
         )))
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            executor.close().await
+        } else {
+            self.close_connection_core().await
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.standard_executor.as_ref().map_or_else(
+            || self.connection.is_none(),
+            |executor| executor.is_closed(),
+        ))
     }
 }

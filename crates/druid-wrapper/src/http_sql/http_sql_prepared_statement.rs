@@ -1,9 +1,7 @@
 use crate::prepared_parameter_state::PreparedParameterState;
+use crate::prepared_statement_resource_state::PreparedStatementResourceState;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{
-    PhysicalPreparedStatement, PhysicalStatement, PhysicalStatementOptions, PreparedInputParameter,
-    SqlTextStatement,
-};
+use druid_rdbc::spi::{PhysicalPreparedStatement, PreparedInputParameter};
 use druid_rdbc::types::Value;
 use std::any::Any;
 use std::future::Future;
@@ -21,7 +19,7 @@ pub(crate) enum HttpSqlStatementExecutionError {
 pub struct HttpSqlPreparedStatement {
     sql: String,
     closed: AtomicBool,
-    statement: SqlTextStatement,
+    statement: PreparedStatementResourceState,
     parameter_state: PreparedParameterState,
     cancel_generation: watch::Sender<u64>,
 }
@@ -33,7 +31,7 @@ impl HttpSqlPreparedStatement {
         Self {
             sql: sql.into(),
             closed: AtomicBool::new(false),
-            statement: SqlTextStatement::new(PhysicalStatementOptions::default()),
+            statement: PreparedStatementResourceState::new(""),
             parameter_state: PreparedParameterState::new(),
             cancel_generation: watch::channel(0).0,
         }
@@ -147,11 +145,3 @@ impl PhysicalPreparedStatement for HttpSqlPreparedStatement {
         self.closed.load(Ordering::Acquire)
     }
 }
-
-druid_rdbc::impl_standard_wrapper!(HttpSqlPreparedStatement => PreparedStatement);
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::Statement for HttpSqlPreparedStatement {}
-
-#[async_trait::async_trait]
-impl druid_rdbc::statement::PreparedStatement for HttpSqlPreparedStatement {}

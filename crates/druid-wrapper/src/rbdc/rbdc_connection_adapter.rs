@@ -1,6 +1,9 @@
 //! RBDC 物理连接适配器。
 
 use super::rbdc_prepared_statement::RbdcPreparedStatement;
+use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
+use crate::standard_adapter_statement::StandardAdapterStatement;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
@@ -35,12 +38,13 @@ fn parse_rbdc_datetime(value: &str) -> Result<NaiveDateTime, RdbcError> {
 /// 对应 Java 平台依赖: `java.sql.Connection` 的驱动实现。
 /// 本对象包装单个 `rbdc::db::Connection`，不包装 RBDC Pool。
 pub struct RbdcConnectionAdapter {
-    connection: Box<dyn rbdc::db::Connection>,
+    connection: Option<Box<dyn rbdc::db::Connection>>,
     driver_name: String,
     closed: bool,
     discarded: bool,
     auto_commit: bool,
     savepoint_sequence: u64,
+    standard_executor: Option<Arc<dyn StandardExecutor>>,
 }
 
 impl RbdcConnectionAdapter {
@@ -49,13 +53,77 @@ impl RbdcConnectionAdapter {
     /// 参数 `connection` 为 RBDC 连接，`driver_name` 为驱动名称。
     pub fn new(connection: Box<dyn rbdc::db::Connection>, driver_name: impl Into<String>) -> Self {
         Self {
-            connection,
+            connection: Some(connection),
             driver_name: driver_name.into(),
             closed: false,
             discarded: false,
             auto_commit: true,
             savepoint_sequence: 0,
+            standard_executor: None,
         }
+    }
+
+    fn connection_mut(&mut self) -> Result<&mut Box<dyn rbdc::db::Connection>, RdbcError> {
+        if self.closed || self.discarded {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        self.connection
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)
+    }
+
+    fn standard_executor_core(&mut self) -> Result<Arc<dyn StandardExecutor>, RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            return Ok(Arc::clone(executor));
+        }
+        self.connection_mut()?;
+        let shell = Self {
+            connection: None,
+            driver_name: self.driver_name.clone(),
+            closed: false,
+            discarded: self.discarded,
+            auto_commit: self.auto_commit,
+            savepoint_sequence: self.savepoint_sequence,
+            standard_executor: None,
+        };
+        let owned = std::mem::replace(self, shell);
+        let executor = owned_executor(owned);
+        self.standard_executor = Some(Arc::clone(&executor));
+        Ok(executor)
+    }
+
+    async fn execute_update_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<ExecResult, RdbcError> {
+        let result = self
+            .connection_mut()?
+            .exec(sql, Self::params_to_rbdc(params))
+            .await
+            .map_err(Self::driver_error)?;
+        let last_insert_id = match Self::from_rbdc_value(result.last_insert_id)? {
+            Value::Null => None,
+            Value::Int(value) => Some(value),
+            other => {
+                return Err(RdbcError::DriverError(format!(
+                    "RBDC last_insert_id must be an integer or null, got {other}"
+                )));
+            }
+        };
+        Ok(ExecResult {
+            rows_affected: result.rows_affected,
+            last_insert_id,
+            row_count: None,
+        })
+    }
+
+    async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
+        if let Some(mut connection) = self.connection.take() {
+            connection.close().await.map_err(Self::driver_error)?;
+        }
+        self.closed = true;
+        Ok(())
     }
 
     fn driver_error(error: rbdc::Error) -> RdbcError {
@@ -73,7 +141,7 @@ impl RbdcConnectionAdapter {
         params: Vec<Value>,
     ) -> Result<(Vec<Row>, Vec<String>), RdbcError> {
         let mut stream = self
-            .connection
+            .connection_mut()?
             .exec_rows(sql, Self::params_to_rbdc(params))
             .await
             .map_err(Self::driver_error)?;
@@ -199,7 +267,7 @@ impl RbdcConnectionAdapter {
     }
 
     async fn execute_control_statement(&mut self, sql: &str) -> Result<(), RdbcError> {
-        self.connection
+        self.connection_mut()?
             .exec(sql, Vec::new())
             .await
             .map_err(Self::driver_error)?;
@@ -210,25 +278,7 @@ impl RbdcConnectionAdapter {
 #[async_trait::async_trait]
 impl PhysicalConnection for RbdcConnectionAdapter {
     async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        let result = self
-            .connection
-            .exec(sql, Self::params_to_rbdc(params))
-            .await
-            .map_err(Self::driver_error)?;
-        let last_insert_id = match Self::from_rbdc_value(result.last_insert_id)? {
-            Value::Null => None,
-            Value::Int(value) => Some(value),
-            other => {
-                return Err(RdbcError::DriverError(format!(
-                    "RBDC last_insert_id must be an integer or null, got {other}"
-                )));
-            }
-        };
-        Ok(ExecResult {
-            rows_affected: result.rows_affected,
-            last_insert_id,
-            row_count: None,
-        })
+        self.execute_update_core(sql, params).await
     }
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
@@ -367,19 +417,25 @@ impl PhysicalConnection for RbdcConnectionAdapter {
     }
 
     async fn begin(&mut self) -> Result<(), RdbcError> {
-        self.connection.begin().await.map_err(Self::driver_error)?;
+        self.connection_mut()?
+            .begin()
+            .await
+            .map_err(Self::driver_error)?;
         self.auto_commit = false;
         Ok(())
     }
 
     async fn commit(&mut self) -> Result<(), RdbcError> {
-        self.connection.commit().await.map_err(Self::driver_error)?;
+        self.connection_mut()?
+            .commit()
+            .await
+            .map_err(Self::driver_error)?;
         self.auto_commit = true;
         Ok(())
     }
 
     async fn rollback(&mut self) -> Result<(), RdbcError> {
-        self.connection
+        self.connection_mut()?
             .rollback()
             .await
             .map_err(Self::driver_error)?;
@@ -430,19 +486,18 @@ impl PhysicalConnection for RbdcConnectionAdapter {
     }
 
     async fn ping(&mut self) -> Result<(), RdbcError> {
-        self.connection.ping().await.map_err(Self::driver_error)
+        self.connection_mut()?
+            .ping()
+            .await
+            .map_err(Self::driver_error)
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        if !self.closed {
-            self.connection.close().await.map_err(Self::driver_error)?;
-            self.closed = true;
-        }
-        Ok(())
+        self.close_connection_core().await
     }
 
     fn is_closed(&self) -> bool {
-        self.closed
+        self.closed || self.connection.is_none()
     }
 
     fn capabilities(&self) -> PhysicalConnectionCapabilities {
@@ -516,6 +571,34 @@ impl PhysicalConnection for RbdcConnectionAdapter {
     }
 }
 
+#[async_trait::async_trait]
+impl AdapterExecutionCore for RbdcConnectionAdapter {
+    async fn standard_execute_update_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<i64, RdbcError> {
+        let result = self.execute_update_core(sql, values).await?;
+        i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
+        })
+    }
+
+    async fn standard_execute_query_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Vec<Row>, RdbcError> {
+        self.fetch_rows_with_labels(sql, values)
+            .await
+            .map(|(rows, _)| rows)
+    }
+
+    async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError> {
+        self.close_connection_core().await
+    }
+}
+
 druid_rdbc::impl_standard_wrapper!(RbdcConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
@@ -524,9 +607,9 @@ impl druid_rdbc::connection::Connection for RbdcConnectionAdapter {
         &mut self,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        Ok(Box::new(
-            super::rbdc_prepared_statement::RbdcPreparedStatement::new(String::new()),
-        ))
+        Ok(Box::new(StandardAdapterStatement::new(
+            self.standard_executor_core()?,
+        )))
     }
 
     async fn prepare_statement(
@@ -534,9 +617,13 @@ impl druid_rdbc::connection::Connection for RbdcConnectionAdapter {
         sql: &str,
         _options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
-        Ok(Box::new(
-            super::rbdc_prepared_statement::RbdcPreparedStatement::new(sql),
-        ))
+        let executor = self.standard_executor_core()?;
+        let parameter_count = executor.parameter_count(sql).await?;
+        Ok(Box::new(StandardAdapterPreparedStatement::new(
+            sql.to_owned(),
+            executor,
+            parameter_count,
+        )))
     }
 
     async fn database_meta_data(
@@ -544,6 +631,21 @@ impl druid_rdbc::connection::Connection for RbdcConnectionAdapter {
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
         Ok(Box::new(
             super::rbdc_database_meta_data::RbdcDatabaseMetaData::owned(self.driver_name.clone()),
+        ))
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        if let Some(executor) = &self.standard_executor {
+            executor.close().await
+        } else {
+            self.close_connection_core().await
+        }
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.standard_executor.as_ref().map_or_else(
+            || self.closed || self.connection.is_none(),
+            |executor| executor.is_closed(),
         ))
     }
 }
