@@ -59,6 +59,66 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "}\n"
         )
 
+    def verify_remote_behavior(self, behavior_source: str) -> None:
+        """Run the full adapter verifier for one HTTP SQL behavior fixture."""
+
+        self.write_source(
+            "use druid_rdbc::connection::Connection;\n"
+            "struct HttpSqlConnectionAdapter;\n"
+            "trait AdapterExecutionCore {}\n"
+            "impl AdapterExecutionCore for HttpSqlConnectionAdapter {}\n"
+            "impl HttpSqlConnectionAdapter { fn run_core(&mut self) {} }\n"
+            "impl PhysicalConnection for HttpSqlConnectionAdapter {\n"
+            " fn run(&mut self) { self.run_core(); }\n"
+            "}\n"
+            "impl Connection for HttpSqlConnectionAdapter {\n"
+            " fn create_statement(&mut self) {\n"
+            "  self.run_core(); StandardAdapterStatement::new();\n"
+            " }\n"
+            " fn prepare_statement(&mut self) {\n"
+            "  self.run_core(); StandardAdapterPreparedStatement::new();\n"
+            " }\n"
+            "}\n"
+        )
+        (self.root / "crates/druid-wrapper/tests/demo.rs").write_text(
+            behavior_source,
+            encoding="utf-8",
+        )
+        row = AdapterRow(
+            source_path=self.source_path,
+            current_trait="druid_rdbc::spi::PhysicalConnection",
+            implementation_type="HttpSqlConnectionAdapter",
+            target_trait="druid_rdbc::connection::Connection",
+            standard_implementation_type="HttpSqlConnectionAdapter",
+            standard_source_path=self.source_path,
+            standard_core_evidence="HttpSqlConnectionAdapter::run_core",
+            behavior_evidence="demo::runs",
+            state="STANDARD_IMPL_LIVE",
+        )
+        verify_adapter_source(
+            self.root,
+            row,
+            profile=CfgProfile("fixture", {"test": True}),
+            enabled_tests=("runs",),
+        )
+
+    @staticmethod
+    def remote_chain() -> str:
+        """Return the literal factory-to-result evidence required for remote families."""
+
+        return (
+            "ConnectionFactory::create();\n"
+            "connection.create_statement();\n"
+            "connection.prepare_statement();\n"
+            "prepared.set_parameter();\n"
+            "statement.execute_update();\n"
+            "prepared.execute_prepared_query();\n"
+            "result.next();\n"
+            "result.meta_data();\n"
+            "connection.database_meta_data();\n"
+            "Connection::close(&mut connection);\n"
+        )
+
     def test_rejects_adapter_that_only_implements_physical(self) -> None:
         self.write_source("impl PhysicalConnection for DemoConnection {}\n")
         with self.assertRaisesRegex(VerificationError, "implements only Physical"):
@@ -250,6 +310,92 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "cannot prove atom"):
             verify_adapter_source(self.root, self.row)
+
+    def test_full_verifier_rejects_remote_chain_in_nested_if_false(self) -> None:
+        """A live outer branch cannot make an inner static-dead chain count as evidence."""
+
+        source = (
+            "#[test]\nfn runs() {\n"
+            " if true {\n"
+            "  if false {\n"
+            f"{self.remote_chain()}"
+            "  }\n"
+            "  assert!(true);\n"
+            " }\n"
+            "}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "factory-to-result chain"):
+            self.verify_remote_behavior(source)
+
+    def test_full_verifier_rejects_remote_chain_in_nested_while_false(self) -> None:
+        """A nested static-false loop cannot carry a remote behavior chain."""
+
+        source = (
+            "#[test]\nfn runs() {\n"
+            " if true {\n"
+            "  while false {\n"
+            f"{self.remote_chain()}"
+            "  }\n"
+            "  assert!(true);\n"
+            " }\n"
+            "}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "factory-to-result chain"):
+            self.verify_remote_behavior(source)
+
+    def test_full_verifier_recurses_through_live_else_if_and_nested_blocks(self) -> None:
+        """Dead-then/live-else nesting must still inspect deeper block and loop bodies."""
+
+        source = (
+            "#[test]\nfn runs() {\n"
+            " if false {\n"
+            "  unreachable_call();\n"
+            " } else if true {\n"
+            "  { loop {\n"
+            "   if false {\n"
+            f"{self.remote_chain()}"
+            "   }\n"
+            "   break;\n"
+            "  } }\n"
+            "  assert!(true);\n"
+            " }\n"
+            "}\n"
+        )
+        with self.assertRaisesRegex(VerificationError, "factory-to-result chain"):
+            self.verify_remote_behavior(source)
+
+    def test_full_verifier_keeps_live_else_and_both_runtime_branches(self) -> None:
+        """Literal-live and unknown-runtime branches remain conservative behavior evidence."""
+
+        live_else = (
+            "#[test]\nfn runs() {\n"
+            " if false { unreachable_call(); } else {\n"
+            f"{self.remote_chain()}"
+            " }\n"
+            " assert!(true);\n"
+            "}\n"
+        )
+        self.verify_remote_behavior(live_else)
+
+        runtime_branches = (
+            "#[test]\nfn runs() {\n"
+            " if runtime_condition() {\n"
+            "  ConnectionFactory::create();\n"
+            "  connection.create_statement();\n"
+            "  connection.prepare_statement();\n"
+            "  prepared.set_parameter();\n"
+            "  statement.execute_update();\n"
+            " } else {\n"
+            "  prepared.execute_prepared_query();\n"
+            "  result.next();\n"
+            "  result.meta_data();\n"
+            "  connection.database_meta_data();\n"
+            "  Connection::close(&mut connection);\n"
+            " }\n"
+            " assert!(true);\n"
+            "}\n"
+        )
+        self.verify_remote_behavior(runtime_branches)
 
 
 if __name__ == "__main__":

@@ -376,15 +376,22 @@ def all_cfg_expressions(tokens: list[object]) -> list[tuple[object, ...]]:
     return expressions
 
 
-def static_dead_branch_indexes(tokens: list[object]) -> set[int]:
-    """Exclude bodies of obvious `if/while false` and `if true` else branches."""
+def static_live_branch_indexes(
+    tokens: list[object],
+    start: int,
+    end: int,
+    excluded: set[int],
+) -> set[int]:
+    """Return reachable token indexes for literal control flow inside one live range."""
 
-    dead: set[int] = set()
+    live = set(range(start, end)).difference(excluded)
 
-    def block_end(opening: int) -> int:
+    def block_end(opening: int, limit: int) -> int:
+        """Return the exclusive end of one balanced block within the current range."""
+
         depth = 1
         cursor = opening + 1
-        while cursor < len(tokens) and depth:
+        while cursor < limit and depth:
             depth += tokens[cursor].text == "{"
             depth -= tokens[cursor].text == "}"
             cursor += 1
@@ -392,28 +399,91 @@ def static_dead_branch_indexes(tokens: list[object]) -> set[int]:
             fail("behavior evidence contains an unbalanced static branch")
         return cursor
 
-    index = 0
-    while index + 2 < len(tokens):
-        keyword = tokens[index].text
-        literal = tokens[index + 1].text
-        if keyword not in {"if", "while"} or literal not in {"true", "false"}:
+    def control_body_opening(control_index: int, limit: int) -> int:
+        """Find a simple if-expression body while respecting nested delimiters."""
+
+        paren = bracket = 0
+        cursor = control_index + 1
+        while cursor < limit:
+            text = tokens[cursor].text
+            if text == "(":
+                paren += 1
+            elif text == ")":
+                paren = max(0, paren - 1)
+            elif text == "[":
+                bracket += 1
+            elif text == "]":
+                bracket = max(0, bracket - 1)
+            elif text == "{" and paren == bracket == 0:
+                return cursor
+            cursor += 1
+        fail("behavior evidence if/else-if branch has no body")
+
+    def if_expression_end(if_index: int, limit: int) -> int:
+        """Return the exclusive end of an if/else-if/else expression."""
+
+        opening = control_body_opening(if_index, limit)
+        then_end = block_end(opening, limit)
+        if then_end >= limit or tokens[then_end].text != "else":
+            return then_end
+        branch_start = then_end + 1
+        if branch_start >= limit:
+            fail("behavior evidence else branch has no body")
+        if tokens[branch_start].text == "{":
+            return block_end(branch_start, limit)
+        if tokens[branch_start].text == "if":
+            return if_expression_end(branch_start, limit)
+        fail("behavior evidence else branch is not a block or else-if")
+
+    def exclude(branch_start: int, branch_end: int) -> None:
+        live.difference_update(range(branch_start, branch_end))
+
+    def walk(range_start: int, range_end: int) -> None:
+        """Recursively inspect every retained block for literal control flow."""
+
+        index = range_start
+        while index < range_end:
+            if index not in live:
+                index += 1
+                continue
+            keyword = tokens[index].text
+            if (
+                keyword in {"if", "while"}
+                and index + 2 < range_end
+                and tokens[index + 1].text in {"true", "false"}
+                and tokens[index + 2].text == "{"
+            ):
+                literal = tokens[index + 1].text
+                opening = index + 2
+                body_end = block_end(opening, range_end)
+                if keyword == "while":
+                    if literal == "false":
+                        exclude(opening, body_end)
+                    else:
+                        walk(opening + 1, body_end - 1)
+                    index = body_end
+                    continue
+
+                expression_end = if_expression_end(index, range_end)
+                if literal == "false":
+                    exclude(opening, body_end)
+                    if expression_end > body_end:
+                        walk(body_end, expression_end)
+                else:
+                    walk(opening + 1, body_end - 1)
+                    if expression_end > body_end:
+                        exclude(body_end, expression_end)
+                index = expression_end
+                continue
+            if tokens[index].text == "{":
+                nested_end = block_end(index, range_end)
+                walk(index + 1, nested_end - 1)
+                index = nested_end
+                continue
             index += 1
-            continue
-        opening = index + 2
-        if tokens[opening].text != "{":
-            index += 1
-            continue
-        end = block_end(opening)
-        if literal == "false":
-            dead.update(range(opening, end))
-        if keyword == "if" and literal == "true":
-            cursor = end
-            if cursor < len(tokens) and tokens[cursor].text == "else":
-                cursor += 1
-                if cursor < len(tokens) and tokens[cursor].text == "{":
-                    dead.update(range(cursor, block_end(cursor)))
-        index = end
-    return dead
+
+    walk(start, end)
+    return live
 
 
 def extract_behavior_function(
@@ -462,11 +532,16 @@ def extract_behavior_function(
         closing += 1
     if depth:
         fail(f"adapter behavior evidence has an unbalanced body: {function_name}")
-    dead = excluded | static_dead_branch_indexes(tokens)
+    live = static_live_branch_indexes(
+        tokens,
+        opening + 1,
+        closing - 1,
+        excluded,
+    )
     body = " ".join(
         tokens[index].text
         for index in range(opening + 1, closing - 1)
-        if index not in dead
+        if index in live
     )
     if not body.strip() or not any(
         marker in body

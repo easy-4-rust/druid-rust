@@ -465,3 +465,72 @@ behavior function is unique in its actual Cargo profile.
 N2 and the remaining C1 verifier subcondition now have an implementation disposition of
 **ADDRESSED, pending independent re-review**. I1/N1/I2/I3/I4/M1 remain addressed. No production
 adapter, TSV, Cargo, Druid/admin, Task5, Physical deletion, unsafe, or manual Send/Sync file changed.
+
+## 16. Fix round 3 independent-review correction
+
+Independent review of `820438a..b1f8948` returned **FIX_REQUIRED**. The cfg/profile/Cargo inventory
+portion of N2 is addressed, but nested static-dead traversal remains `PARTIAL`: an outer live
+`if true` causes the scanner to skip an inner `if false` or `while false`, so a complete dead remote
+factory-to-result chain can still satisfy LIVE evidence. All other historical findings remain
+addressed. Task 5 remains blocked.
+
+## 17. Fix round 4/5 implementation (base `b1f8948`)
+
+This append-only section records the narrow recursive reachability fix. It does not claim review
+clear; Task 5 remains blocked pending independent round-4 re-review.
+
+### 17.1 Permanent full-verifier RED -> GREEN
+
+Four permanent full-verifier controls were added over an HTTP SQL adapter row, rather than testing
+only the token helper. Against `b1f8948`, three tests failed with the expected
+`VerificationError not raised` result:
+
+- a complete remote chain inside `if true { if false { ... } }`;
+- the same chain inside `if true { while false { ... } }`;
+- dead-then/live-else-if traversal through nested plain blocks and `loop`, ending in another
+  `if false`.
+
+The fourth control was already GREEN and remains so: `if false` retains its live `else`, and an
+unknown runtime condition retains tokens from both branches. The final self-test result is
+`18/18 PASS`.
+
+### 17.2 Recursive live-token reachability
+
+`static_dead_branch_indexes` was replaced by `static_live_branch_indexes`:
+
+- the starting live-token mask is the behavior-function range minus the existing cfg-disabled
+  indexes;
+- every retained balanced `{...}` block is scanned recursively, including ordinary blocks and loop
+  bodies;
+- only an immediately proven literal `if/while true|false` changes reachability;
+- `if false` removes the then block and recursively evaluates a retained else/else-if chain;
+- `if true` recursively evaluates the then block and removes the complete else/else-if range;
+- `while false` removes its body while `while true` recursively scans it;
+- unknown runtime predicates preserve both branches and are only traversed for nested literal
+  controls.
+
+The implementation does not add a general constant evaluator and does not claim `match` or const
+boolean evaluation. Balanced block boundaries and recursive else-if bounds prevent an outer live
+branch from skipping its nested controls. Existing Rust tokenization still removes comment/literal
+contents, and the shared cfg/profile exclusions are unchanged.
+
+### 17.3 Fresh non-regression evidence
+
+- wrapper verifier self/live: `18/18 PASS`; `31/21/6/1` unchanged;
+- denominator self/live: `41/41 PASS`; `73/55/3557`; projection SHA
+  `18bb9682efb4e8521556f13abbc7b1320f2f2bf2d9b9ccb18a0576b3d02d5221`;
+- semantic self/adapter-live: `16/16 PASS`; `52/17/0`; hashes remain `5d99...` / `4588...`;
+- Task 3 purity self/transitional: `103/103 PASS + live29`;
+- wrapper default and all-feature complete test matrices: every binary PASS; all-feature library
+  tests remain `16/16`, including the three deterministic remote chains;
+- druid-rdbc all-target/all-feature `20/20`, doc `1/1`, and Clippy `-D warnings`: PASS;
+- wrapper all-feature/all-target check, workspace all-target/all-feature check, scoped wrapper
+  no-deps Clippy, wrapper docs, doctests (`0`), rustfmt, Python byte-compile, and diff check: PASS;
+- dependency-aware broad wrapper Clippy remains non-GREEN only at the two unchanged Druid Task 5
+  baseline lines `druid_pooled_connection.rs:1479` and `result_set_filter_chain.rs:1309`.
+
+The checked consumer TSV SHA remains
+`3a190f9e65c261ce95134c1c7dbcd2558c89a23e3f937df8bfeddc1f60384937`; adapter, consumer, and
+semantic TSV bytes are unchanged. Production adapters, Cargo/lock, Druid/admin, Task 5, Physical
+names, unsafe, and manual Send/Sync are unchanged. N2 now has an implementation disposition of
+**ADDRESSED, pending independent re-review**.
