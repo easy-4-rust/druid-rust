@@ -409,18 +409,23 @@ def cfg_atoms(expression: CfgExpr) -> set[str]:
 def evaluate_cfg(
     expression: CfgExpr,
     assignment: dict[str, bool],
+    *,
+    test_value: bool = False,
 ) -> bool | None:
-    """Evaluate a cfg AST with ``test=false`` and partial atom assignments."""
+    """Evaluate a cfg AST with an explicit test profile and partial atom assignments."""
 
     kind = expression[0]
     if kind == "test":
-        return False
+        return test_value
     if kind == "atom":
         return assignment.get(str(expression[1]))
     if kind == "not":
-        value = evaluate_cfg(expression[1], assignment)
+        value = evaluate_cfg(expression[1], assignment, test_value=test_value)
         return None if value is None else not value
-    values = [evaluate_cfg(child, assignment) for child in expression[1]]
+    values = [
+        evaluate_cfg(child, assignment, test_value=test_value)
+        for child in expression[1]
+    ]
     if kind == "all":
         if any(value is False for value in values):
             return False
@@ -436,13 +441,66 @@ def cfg_satisfiable_without_test(expression: CfgExpr) -> bool:
     atoms = sorted(cfg_atoms(expression))
 
     def search(assignment: dict[str, bool]) -> bool:
-        value = evaluate_cfg(expression, assignment)
+        value = evaluate_cfg(expression, assignment, test_value=False)
         if value is not None:
             return value
         atom = next(atom for atom in atoms if atom not in assignment)
         return search({**assignment, atom: False}) or search({**assignment, atom: True})
 
     return search({})
+
+
+def cfg_profile_excluded_indexes(
+    tokens: list[object],
+    assignment: dict[str, bool],
+    *,
+    test_value: bool,
+) -> set[int]:
+    """Return cfg-disabled node ranges for one fully proven Cargo/rustc profile."""
+
+    excluded: set[int] = set()
+    index = 0
+    while index + 1 < len(tokens):
+        if tokens[index].text != "#" or tokens[index + 1].text != "[":
+            index += 1
+            continue
+        group_start = index
+        constraints: list[CfgExpr] = []
+        while (
+            index + 1 < len(tokens)
+            and tokens[index].text == "#"
+            and tokens[index + 1].text == "["
+        ):
+            depth = 1
+            bracket_end = index + 2
+            while bracket_end < len(tokens) and depth:
+                depth += tokens[bracket_end].text == "["
+                depth -= tokens[bracket_end].text == "]"
+                bracket_end += 1
+            if depth:
+                fail("outer attribute is not closed")
+            constraints.extend(parse_cfg_attribute(tokens, index, bracket_end - 1))
+            index = bracket_end
+        attributes_end = index
+        node_end = next_rust_node_end(tokens, attributes_end)
+        excluded_node = False
+        if constraints:
+            conjunction: CfgExpr = ("all", tuple(constraints))
+            enabled = evaluate_cfg(
+                conjunction,
+                assignment,
+                test_value=test_value,
+            )
+            if enabled is None:
+                unresolved = sorted(
+                    atom for atom in cfg_atoms(conjunction) if atom not in assignment
+                )
+                fail(f"cfg profile cannot prove atoms: {unresolved}")
+            if not enabled:
+                excluded.update(range(group_start, node_end))
+                excluded_node = True
+        index = node_end if excluded_node else attributes_end
+    return excluded
 
 
 def parse_cfg_attribute(

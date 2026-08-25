@@ -390,3 +390,78 @@ All C1/I1/N1 round-1 review gaps now have an implementation disposition of **ADD
 independent re-review**. Real external HTTP SQL/libSQL/JDBC Agent/RBDC services remain honestly
 NOT_RUN. No Cargo topology, druid-admin, Task5 holder/proxy, Physical deletion, unsafe, or manual
 Send/Sync change was made.
+
+## 14. Fix round 2 independent-review correction
+
+Independent review of `b4b69ea..820438a` returned **FIX_REQUIRED** with one new narrow Important
+finding N2. I1, N1, I2, I3, I4, and M1 are `ADDRESSED`; C1 production behavior is addressed, but its
+fitness-function subcondition remains `PARTIAL`. The current verifier accepts an otherwise valid
+behavior test under `#[cfg(any())]` because it checks nearby test-attribute text without evaluating
+the enclosing cfg/cfg_attr/profile. It can likewise count required tokens in a statically dead branch.
+The prior Section 13 completion wording is superseded. Task 5 remains blocked until N2 receives
+strict RED/GREEN and independent review clear.
+
+## 15. Fix round 3/5 implementation (base `820438a`)
+
+This section records the N2-only implementation and supersedes Section 14 only for current verifier
+status. Task 5 remains blocked pending independent round-3 review.
+
+### 15.1 Fresh RED -> GREEN
+
+Fresh fixtures against `820438a` produced two failing groups: behavior tests under `cfg(any())`, a
+disabled feature/target, nested disabling `cfg_attr`, and disabled enclosing module were accepted;
+required call/assert tokens under `#[cfg(any())]`, `if false`, or `while false` were retained as live
+evidence. The failures were policy failures, not parser errors.
+
+The minimal GREEN reuses the denominator verifier's exact `CfgExpr`, `parse_cfg_meta`,
+`parse_cfg_expression`, atom collection, and evaluator. The shared evaluator now accepts an explicit
+`test_value`; denominator production scans retain `test=false`, while behavior evidence uses
+`test=true`. No second simplified cfg grammar was introduced.
+
+Behavior profiles are explicit:
+
+- default families use the recursively expanded `druid-wrapper` default Cargo feature set;
+- DuckDB, HTTP SQL, libSQL, and JDBC Agent rows use the all-features set;
+- target flags/values come from the current `rustc --print cfg`;
+- undeclared/disabled Cargo features evaluate false, known target alternatives evaluate false, and
+  an unproven custom cfg atom fails closed;
+- actual repository evidence must also occur exactly once in the corresponding
+  `cargo test -p druid-wrapper --tests [--all-features] -- --list` inventory.
+
+The token-range analysis evaluates file inner cfg, function attributes, nested cfg_attr-provided test
+attributes, enclosing modules/impls, and cfg-disabled statements/blocks. It removes obvious static
+dead `if false`, `while false`, and `if true` else bodies before checking assertions and the remote
+factory-to-result call chain. Comments and string contents remain absent through the canonical Rust
+tokenizer.
+
+Permanent verifier controls now cover:
+
+- reject direct `cfg(any())`, disabled feature, disabled target, nested cfg_attr-disabled body/test,
+  disabled enclosing module and impl, and unknown custom cfg;
+- reject required calls/assertions present only in cfg-disabled, `if false`, or `while false` ranges;
+- accept direct default test, enabled all-feature/target predicates, tokio::test via cfg_attr, and
+  required tokens in the live `if true` branch;
+- retain all ten prior adversarial controls.
+
+Final verifier self-tests are `14/14 PASS`; the live gate remains `31/21/6/1` and every checked
+behavior function is unique in its actual Cargo profile.
+
+### 15.2 Non-regression and final gates
+
+- denominator shared cfg model: `41/41 PASS`; live `73/55/3557`, projection SHA
+  `18bb9682efb4e8521556f13abbc7b1320f2f2bf2d9b9ccb18a0576b3d02d5221`.
+- checked consumer TSV SHA remains
+  `3a190f9e65c261ce95134c1c7dbcd2558c89a23e3f937df8bfeddc1f60384937`;
+  adapter/consumer TSV bytes and all production adapter sources are unchanged in this round.
+- semantic self/live: `16/16 PASS`, `52/17/0`, hashes `5d99.../4588...`.
+- Task3 purity: `103/103 PASS + live29`.
+- wrapper default and all-feature complete test matrices: every binary PASS.
+- druid-rdbc all-target/all-feature `20/20`, doc `1/1`, Clippy `-D warnings`: PASS.
+- wrapper and workspace all-target/all-feature checks, scoped wrapper no-deps Clippy, wrapper docs,
+  doctests (`0`), rustfmt, and diff check: PASS.
+- dependency-aware broad Clippy remains non-GREEN only at the two unchanged Druid Task5 baseline
+  lines and is not reported GREEN.
+
+N2 and the remaining C1 verifier subcondition now have an implementation disposition of
+**ADDRESSED, pending independent re-review**. I1/N1/I2/I3/I4/M1 remain addressed. No production
+adapter, TSV, Cargo, Druid/admin, Task5, Physical deletion, unsafe, or manual Send/Sync file changed.

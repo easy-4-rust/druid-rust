@@ -9,7 +9,9 @@ from pathlib import Path
 
 from verify_wrapper_standard_impls import (
     AdapterRow,
+    CfgProfile,
     VerificationError,
+    extract_behavior_function,
     extract_impl_bodies,
     verify_adapter_source,
     verify_sqlx_ownership,
@@ -46,6 +48,16 @@ class WrapperStandardVerifierTest(unittest.TestCase):
 
     def write_source(self, source: str) -> None:
         (self.root / self.source_path).write_text(source, encoding="utf-8")
+
+    def write_valid_adapter_source(self) -> None:
+        self.write_source(
+            "use druid_rdbc::connection::Connection;\n"
+            "impl PhysicalConnection for DemoConnection { fn run(&mut self) { self.run_core(); } }\n"
+            "impl Connection for DemoConnection {\n"
+            " fn create_statement(&mut self) { self.run_core(); }\n"
+            " fn prepare_statement(&mut self) { self.run_core(); }\n"
+            "}\n"
+        )
 
     def test_rejects_adapter_that_only_implements_physical(self) -> None:
         self.write_source("impl PhysicalConnection for DemoConnection {}\n")
@@ -160,6 +172,84 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             tests.write_text(source, encoding="utf-8")
             with self.assertRaisesRegex(VerificationError, "behavior evidence"):
                 verify_adapter_source(self.root, self.row)
+
+    def test_rejects_cfg_feature_target_and_enclosing_disabled_behavior_tests(self) -> None:
+        """A source-named test must be enabled in the declared current profile."""
+
+        self.write_valid_adapter_source()
+        tests = self.root / "crates/druid-wrapper/tests/demo.rs"
+        fixtures = (
+            "#[cfg(any())]\n#[test]\nfn runs() { assert!(true); }\n",
+            "#[cfg(feature = \"disabled\")]\n#[test]\nfn runs() { assert!(true); }\n",
+            "#[cfg(target_os = \"definitely_not_current\")]\n#[test]\nfn runs() { assert!(true); }\n",
+            "#[cfg_attr(all(), cfg_attr(all(), cfg(any())))]\n"
+            "#[test]\nfn runs() { assert!(true); }\n",
+            "#[cfg_attr(all(), cfg_attr(any(), test))]\n"
+            "fn runs() { assert!(true); }\n",
+            "#[cfg(any())]\nmod disabled { #[test] fn runs() { assert!(true); } }\n",
+            "struct Holder;\n#[cfg(any())]\nimpl Holder {\n"
+            " #[test] fn runs() { assert!(true); }\n}\n",
+        )
+        for source in fixtures:
+            tests.write_text(source, encoding="utf-8")
+            with self.assertRaisesRegex(VerificationError, "behavior evidence"):
+                verify_adapter_source(self.root, self.row)
+
+    def test_excludes_cfg_disabled_and_statically_dead_behavior_tokens(self) -> None:
+        """Required calls and assertions only count in an enabled reachable function branch."""
+
+        for source in (
+            "#[test]\nfn runs() { #[cfg(any())] { execute_update(); } assert!(true); }\n",
+            "#[test]\nfn runs() { #[cfg_attr(all(), cfg(any()))] { execute_update(); } assert!(true); }\n",
+            "#[test]\nfn runs() { if false { execute_update(); } assert!(true); }\n",
+            "#[test]\nfn runs() { while false { execute_update(); } assert!(true); }\n",
+        ):
+            body = extract_behavior_function(source, "runs")
+            self.assertNotIn("execute_update", body)
+
+        for source in (
+            "#[test]\nfn runs() { if false { assert!(true); } }\n",
+            "#[test]\nfn runs() { #[cfg(any())] { assert!(true); } }\n",
+        ):
+            with self.assertRaisesRegex(VerificationError, "observable assertion"):
+                extract_behavior_function(source, "runs")
+
+    def test_accepts_enabled_default_feature_target_tokio_and_live_branch_controls(self) -> None:
+        """Legitimate enabled cfg/cfg_attr tests retain their reachable behavior tokens."""
+
+        profile = CfgProfile(
+            "fixture-all-features",
+            {
+                'feature="enabled"': True,
+                'target_os="fixture_os"': True,
+                "test": True,
+            },
+        )
+        body = extract_behavior_function(
+            "#[cfg(all(feature = \"enabled\", target_os = \"fixture_os\"))]\n"
+            "#[cfg_attr(feature = \"enabled\", tokio::test)]\n"
+            "async fn runs() {\n"
+            "  if true { execute_update(); assert!(true); }\n"
+            "  else { disabled_call(); }\n"
+            "}\n",
+            "runs",
+            profile,
+        )
+        self.assertIn("execute_update", body)
+        self.assertIn("assert !", body)
+        self.assertNotIn("disabled_call", body)
+
+    def test_rejects_unproven_custom_cfg_atom(self) -> None:
+        """Unknown build-system cfg names cannot be guessed enabled or disabled."""
+
+        self.write_valid_adapter_source()
+        tests = self.root / "crates/druid-wrapper/tests/demo.rs"
+        tests.write_text(
+            "#[cfg(custom_build_cfg)]\n#[test]\nfn runs() { assert!(true); }\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "cannot prove atom"):
+            verify_adapter_source(self.root, self.row)
 
 
 if __name__ == "__main__":

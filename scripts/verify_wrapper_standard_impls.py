@@ -5,11 +5,23 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import re
+import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import NoReturn
 from verify_rdbc_public_paths import tokenize
+from verify_rdbc_standardization_denominator import (
+    cfg_atoms,
+    cfg_profile_excluded_indexes,
+    evaluate_cfg,
+    parse_cfg_expression,
+    parse_cfg_meta,
+    rust_tokens,
+    split_top_level_ranges,
+)
 
 
 DEFAULT_ADAPTERS = Path("docs/verification/rdbc-first/rdbc-adapter-implementations.tsv")
@@ -50,6 +62,14 @@ class AdapterRow:
     standard_core_evidence: str
     behavior_evidence: str
     state: str
+
+
+@dataclass(frozen=True)
+class CfgProfile:
+    """One exact wrapper test profile over Cargo features and current rustc target cfg."""
+
+    name: str
+    assignment: dict[str, bool]
 
 
 def read_tsv(path: Path) -> list[dict[str, str]]:
@@ -132,29 +152,322 @@ def core_calls(body: str) -> set[str]:
     return set(re.findall(r"\b([A-Za-z_][A-Za-z0-9_]*_core)\s*\(", body))
 
 
-def extract_behavior_function(source: str, function_name: str) -> str:
-    """Return one executable #[test] function body from comment/literal-free tokens."""
+@functools.lru_cache(maxsize=1)
+def rustc_cfg_lines() -> tuple[str, ...]:
+    """Return the current compiler target cfg as canonical atom strings."""
 
-    tokens = code_tokens(source)
-    header = re.compile(
-        rf"\b(?:async\s+)?fn\s+{re.escape(function_name)}\s*\([^{{;]*\)\s*(?:->[^{{]*)?\{{"
+    result = subprocess.run(
+        ["rustc", "--print", "cfg"],
+        check=False,
+        capture_output=True,
+        text=True,
     )
-    matches = list(header.finditer(tokens))
-    if len(matches) != 1:
-        fail(f"adapter behavior evidence must resolve one function: {function_name}")
-    match = matches[0]
-    attribute_prefix = tokens[max(0, match.start() - 120) : match.start()]
-    if "# [ test ]" not in attribute_prefix and "# [ tokio :: test ]" not in attribute_prefix:
-        fail(f"adapter behavior evidence is not an enabled Rust test: {function_name}")
+    if result.returncode != 0:
+        fail(f"cannot determine current rustc cfg: {result.stderr.strip()}")
+    return tuple(sorted(line.strip() for line in result.stdout.splitlines() if line.strip()))
+
+
+def expanded_cargo_features(root: Path, all_features: bool) -> tuple[set[str], set[str]]:
+    """Return enabled and declared druid-wrapper feature names for one Cargo profile."""
+
+    manifest = root / "crates/druid-wrapper/Cargo.toml"
+    if not manifest.is_file():
+        return set(), set()
+    payload = tomllib.loads(manifest.read_text(encoding="utf-8"))
+    table = payload.get("features", {})
+    if not isinstance(table, dict):
+        fail("druid-wrapper Cargo features table is malformed")
+    declared = {str(name) for name in table if name != "default"}
+    if all_features:
+        return set(declared), declared
+    enabled: set[str] = set()
+    pending = [str(value) for value in table.get("default", [])]
+    while pending:
+        feature = pending.pop()
+        if feature.startswith("dep:") or "/" in feature or feature in enabled:
+            continue
+        if feature not in table:
+            fail(f"default Cargo feature references unknown feature: {feature}")
+        enabled.add(feature)
+        pending.extend(str(value) for value in table.get(feature, []))
+    return enabled, declared
+
+
+@functools.lru_cache(maxsize=8)
+def cfg_profile(root_text: str, profile_name: str) -> CfgProfile:
+    """Build a complete feature/target assignment for default or all-features tests."""
+
+    if profile_name not in {"default", "all-features"}:
+        fail(f"unknown behavior evidence profile: {profile_name}")
+    root = Path(root_text)
+    enabled, declared = expanded_cargo_features(root, profile_name == "all-features")
+    true_atoms = set(rustc_cfg_lines())
+    true_atoms.update(f'feature="{feature}"' for feature in enabled)
+    assignment = {atom: True for atom in true_atoms}
+    for feature in declared:
+        assignment.setdefault(f'feature="{feature}"', False)
+    # Cargo treats an undeclared feature predicate as disabled; target keys are closed below.
+    assignment["test"] = True
+    return CfgProfile(profile_name, assignment)
+
+
+def assignment_for_expressions(
+    expressions: list[tuple[object, ...]],
+    profile: CfgProfile,
+) -> dict[str, bool]:
+    """Complete known feature/target atoms and fail closed for custom cfg names."""
+
+    assignment = dict(profile.assignment)
+    true_atoms = {atom for atom, value in assignment.items() if value}
+    target_keys = {
+        atom.split("=", 1)[0]
+        for atom in rustc_cfg_lines()
+        if "=" in atom
+    }
+    known_flags = {atom for atom in rustc_cfg_lines() if "=" not in atom}
+    for expression in expressions:
+        for atom in cfg_atoms(expression):
+            if atom in assignment:
+                continue
+            key = atom.split("=", 1)[0]
+            if key == "feature":
+                assignment[atom] = False
+            elif key in target_keys:
+                assignment[atom] = atom in true_atoms
+            elif atom in known_flags:
+                assignment[atom] = True
+            elif atom in {"unix", "windows"}:
+                assignment[atom] = atom in true_atoms
+            else:
+                fail(f"cfg profile cannot prove atom: {atom}")
+    return assignment
+
+
+def matching_open_bracket(tokens: list[object], close_index: int) -> int:
+    """Return the matching `[` for one outer attribute closing bracket."""
+
     depth = 1
-    index = match.end()
-    while index < len(tokens) and depth:
-        depth += tokens[index] == "{"
-        depth -= tokens[index] == "}"
-        index += 1
+    index = close_index - 1
+    while index >= 0:
+        depth += tokens[index].text == "]"
+        depth -= tokens[index].text == "["
+        if depth == 0:
+            return index
+        index -= 1
+    fail("behavior evidence attribute is unbalanced")
+
+
+def preceding_attribute_ranges(tokens: list[object], fn_index: int) -> list[tuple[int, int]]:
+    """Return the exact consecutive outer attributes attached to one test function."""
+
+    item_start = fn_index
+    while item_start > 0 and tokens[item_start - 1].text in {"async", "const", "unsafe"}:
+        item_start -= 1
+    ranges: list[tuple[int, int]] = []
+    cursor = item_start
+    while cursor > 0 and tokens[cursor - 1].text == "]":
+        opening = matching_open_bracket(tokens, cursor - 1)
+        if opening == 0 or tokens[opening - 1].text != "#":
+            break
+        ranges.append((opening - 1, cursor - 1))
+        cursor = opening - 1
+    ranges.reverse()
+    return ranges
+
+
+def cfg_value(expression: tuple[object, ...], profile: CfgProfile) -> bool:
+    """Evaluate one cfg expression with test=true and a complete current profile."""
+
+    assignment = assignment_for_expressions([expression], profile)
+    value = evaluate_cfg(expression, assignment, test_value=True)
+    if value is None:
+        fail(f"cfg profile cannot prove expression: {expression}")
+    return value
+
+
+def cfg_meta_enables_test(
+    tokens: list[object],
+    start: int,
+    end: int,
+    profile: CfgProfile,
+) -> bool:
+    """Evaluate direct or cfg_attr-provided test attributes under one profile."""
+
+    if start >= end or tokens[start].kind != "IDENT":
+        return False
+    name = tokens[start].text
+    if name == "test" and start + 1 == end:
+        return True
+    if (
+        name == "tokio"
+        and start + 2 < end
+        and tokens[start + 1].text == "::"
+        and tokens[start + 2].text == "test"
+    ):
+        return True
+    if name != "cfg_attr" or start + 1 >= end or tokens[start + 1].text != "(":
+        return False
+    arguments = split_top_level_ranges(tokens, start + 2, end - 1)
+    if len(arguments) < 2:
+        return False
+    condition, _ = parse_cfg_expression(tokens, *arguments[0])
+    if not cfg_value(condition, profile):
+        return False
+    return any(
+        cfg_meta_enables_test(tokens, nested_start, nested_end, profile)
+        for nested_start, nested_end in arguments[1:]
+    )
+
+
+def file_inner_cfg_enabled(tokens: list[object], profile: CfgProfile) -> bool:
+    """Evaluate crate-level `#![cfg]` and nested `#![cfg_attr(..., cfg(...))]`."""
+
+    constraints: list[tuple[object, ...]] = []
+    index = 0
+    while index + 2 < len(tokens):
+        if not (
+            tokens[index].text == "#"
+            and tokens[index + 1].text == "!"
+            and tokens[index + 2].text == "["
+        ):
+            index += 1
+            continue
+        depth = 1
+        bracket_end = index + 3
+        while bracket_end < len(tokens) and depth:
+            depth += tokens[bracket_end].text == "["
+            depth -= tokens[bracket_end].text == "]"
+            bracket_end += 1
+        if depth:
+            fail("behavior evidence inner attribute is unbalanced")
+        constraints.extend(parse_cfg_meta(tokens, index + 3, bracket_end - 1))
+        index = bracket_end
+    if not constraints:
+        return True
+    conjunction: tuple[object, ...] = ("all", tuple(constraints))
+    return cfg_value(conjunction, profile)
+
+
+def all_cfg_expressions(tokens: list[object]) -> list[tuple[object, ...]]:
+    """Collect every outer/inner cfg constraint so the profile assignment is complete."""
+
+    expressions: list[tuple[object, ...]] = []
+    index = 0
+    while index + 1 < len(tokens):
+        if tokens[index].text != "#":
+            index += 1
+            continue
+        inner = index + 2 < len(tokens) and tokens[index + 1].text == "!" and tokens[index + 2].text == "["
+        opening = index + 2 if inner else index + 1
+        if opening >= len(tokens) or tokens[opening].text != "[":
+            index += 1
+            continue
+        depth = 1
+        end = opening + 1
+        while end < len(tokens) and depth:
+            depth += tokens[end].text == "["
+            depth -= tokens[end].text == "]"
+            end += 1
+        if depth:
+            fail("behavior evidence cfg attribute is unbalanced")
+        meta_start = opening + 1
+        expressions.extend(parse_cfg_meta(tokens, meta_start, end - 1))
+        index = end
+    return expressions
+
+
+def static_dead_branch_indexes(tokens: list[object]) -> set[int]:
+    """Exclude bodies of obvious `if/while false` and `if true` else branches."""
+
+    dead: set[int] = set()
+
+    def block_end(opening: int) -> int:
+        depth = 1
+        cursor = opening + 1
+        while cursor < len(tokens) and depth:
+            depth += tokens[cursor].text == "{"
+            depth -= tokens[cursor].text == "}"
+            cursor += 1
+        if depth:
+            fail("behavior evidence contains an unbalanced static branch")
+        return cursor
+
+    index = 0
+    while index + 2 < len(tokens):
+        keyword = tokens[index].text
+        literal = tokens[index + 1].text
+        if keyword not in {"if", "while"} or literal not in {"true", "false"}:
+            index += 1
+            continue
+        opening = index + 2
+        if tokens[opening].text != "{":
+            index += 1
+            continue
+        end = block_end(opening)
+        if literal == "false":
+            dead.update(range(opening, end))
+        if keyword == "if" and literal == "true":
+            cursor = end
+            if cursor < len(tokens) and tokens[cursor].text == "else":
+                cursor += 1
+                if cursor < len(tokens) and tokens[cursor].text == "{":
+                    dead.update(range(cursor, block_end(cursor)))
+        index = end
+    return dead
+
+
+def extract_behavior_function(
+    source: str,
+    function_name: str,
+    profile: CfgProfile | None = None,
+) -> str:
+    """Return enabled reachable test-body tokens for one exact cfg profile."""
+
+    profile = profile or cfg_profile(str(Path(__file__).resolve().parents[1]), "default")
+    tokens = rust_tokens(source)
+    function_indexes = [
+        index + 1
+        for index, token in enumerate(tokens[:-1])
+        if token.text == "fn" and tokens[index + 1].text == function_name
+    ]
+    if len(function_indexes) != 1:
+        fail(f"adapter behavior evidence must resolve one function: {function_name}")
+    name_index = function_indexes[0]
+    fn_index = name_index - 1
+    attributes = preceding_attribute_ranges(tokens, fn_index)
+    expressions = all_cfg_expressions(tokens)
+    assignment = assignment_for_expressions(expressions, profile)
+    excluded = cfg_profile_excluded_indexes(
+        tokens,
+        assignment,
+        test_value=True,
+    )
+    if not file_inner_cfg_enabled(tokens, profile) or fn_index in excluded:
+        fail(f"adapter behavior evidence is cfg-disabled: {function_name}")
+    if not any(
+        cfg_meta_enables_test(tokens, start + 2, end, profile)
+        for start, end in attributes
+    ):
+        fail(f"adapter behavior evidence is not an enabled Rust test: {function_name}")
+    opening = name_index + 1
+    while opening < len(tokens) and tokens[opening].text != "{":
+        opening += 1
+    if opening >= len(tokens):
+        fail(f"adapter behavior evidence has no body: {function_name}")
+    depth = 1
+    closing = opening + 1
+    while closing < len(tokens) and depth:
+        depth += tokens[closing].text == "{"
+        depth -= tokens[closing].text == "}"
+        closing += 1
     if depth:
         fail(f"adapter behavior evidence has an unbalanced body: {function_name}")
-    body = tokens[match.end() : index - 1]
+    dead = excluded | static_dead_branch_indexes(tokens)
+    body = " ".join(
+        tokens[index].text
+        for index in range(opening + 1, closing - 1)
+        if index not in dead
+    )
     if not body.strip() or not any(
         marker in body
         for marker in ("assert !", "assert_eq !", "assert_ne !", "assert_impl_all !")
@@ -163,7 +476,12 @@ def extract_behavior_function(source: str, function_name: str) -> str:
     return body
 
 
-def behavior_evidence_body(root: Path, evidence: str) -> str:
+def behavior_evidence_body(
+    root: Path,
+    evidence: str,
+    profile: CfgProfile,
+    enabled_tests: tuple[str, ...] | None,
+) -> str:
     """Resolve behavior evidence to one exact integration or source unit-test file."""
 
     module, separator, function_name = evidence.rpartition("::")
@@ -177,7 +495,22 @@ def behavior_evidence_body(root: Path, evidence: str) -> str:
     ]
     if len(candidates) != 1:
         fail(f"adapter behavior evidence file is not exact: {evidence}")
-    return extract_behavior_function(candidates[0].read_text(encoding="utf-8"), function_name)
+    if enabled_tests is not None:
+        matches = [
+            name
+            for name in enabled_tests
+            if name == function_name or name.endswith(f"::{function_name}")
+        ]
+        if len(matches) != 1:
+            fail(
+                f"adapter behavior evidence is not uniquely enabled in {profile.name}: "
+                f"{evidence}: {matches}"
+            )
+    return extract_behavior_function(
+        candidates[0].read_text(encoding="utf-8"),
+        function_name,
+        profile,
+    )
 
 
 def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
@@ -191,7 +524,13 @@ def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
     ) is not None
 
 
-def verify_adapter_source(root: Path, row: AdapterRow) -> None:
+def verify_adapter_source(
+    root: Path,
+    row: AdapterRow,
+    *,
+    profile: CfgProfile | None = None,
+    enabled_tests: tuple[str, ...] | None = None,
+) -> None:
     """Require parallel Physical/standard impls and a single execution core."""
 
     path = root / row.source_path
@@ -211,7 +550,13 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
     standard_path = root / row.standard_source_path
     if not standard_path.is_file():
         fail(f"canonical standard source is missing: {row.standard_source_path}")
-    behavior_body = behavior_evidence_body(root, row.behavior_evidence)
+    profile = profile or cfg_profile(str(root), "default")
+    behavior_body = behavior_evidence_body(
+        root,
+        row.behavior_evidence,
+        profile,
+        enabled_tests,
+    )
     if concrete_type(row.implementation_type).startswith(("HttpSql", "LibSql", "JdbcAgent")):
         required_remote_chain = (
             "ConnectionFactory :: create",
@@ -405,6 +750,45 @@ def verify_sqlx_ownership(root: Path) -> None:
         fail("SQLx parameter metadata is not an immutable Arc snapshot")
 
 
+def behavior_profile_name(row: AdapterRow) -> str:
+    """Select the Task 4 matrix profile that actually enables this family evidence."""
+
+    concrete = concrete_type(row.implementation_type)
+    if concrete.startswith(("DuckDb", "HttpSql", "LibSql", "JdbcAgent")):
+        return "all-features"
+    return "default"
+
+
+@functools.lru_cache(maxsize=4)
+def cargo_test_inventory(root_text: str, profile_name: str) -> tuple[str, ...]:
+    """List the exact tests Cargo enables for one Task 4 profile."""
+
+    command = ["cargo", "test", "-p", "druid-wrapper", "--tests"]
+    if profile_name == "all-features":
+        command.append("--all-features")
+    elif profile_name != "default":
+        fail(f"unknown Cargo test inventory profile: {profile_name}")
+    command.extend(["--", "--list"])
+    result = subprocess.run(
+        command,
+        cwd=Path(root_text),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        fail(f"cannot list {profile_name} Task 4 tests: {detail}")
+    tests = tuple(
+        line[: -len(": test")]
+        for line in result.stdout.splitlines()
+        if line.endswith(": test")
+    )
+    if not tests:
+        fail(f"Cargo listed no tests for Task 4 profile {profile_name}")
+    return tests
+
+
 def verify_repository(
     root: Path,
     adapters_path: Path = DEFAULT_ADAPTERS,
@@ -414,7 +798,13 @@ def verify_repository(
 
     adapters = task_adapter_rows(root / adapters_path)
     for row in adapters:
-        verify_adapter_source(root, row)
+        profile_name = behavior_profile_name(row)
+        verify_adapter_source(
+            root,
+            row,
+            profile=cfg_profile(str(root), profile_name),
+            enabled_tests=cargo_test_inventory(str(root), profile_name),
+        )
     consumers = verify_consumer_rows(root, root / consumers_path)
     verify_sqlx_ownership(root)
     return sum(row.state == LIVE_ADAPTER_STATE for row in adapters), consumers
