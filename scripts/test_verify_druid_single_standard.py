@@ -369,20 +369,66 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                 "canonical_prepared_generic_execute_wraps_registered_result_with_typed_params",
                 "canonical_callable_generic_execute_uses_same_typed_policy_and_wraps_result",
                 "canonical_prepared_generic_fatal_error_runs_after_once_and_discards",
+                "canonical_prepared_multi_result_open_failure_closes_every_raw_once",
+                "canonical_multi_result_cleanup_failure_preserves_primary_and_retries",
+                "canonical_callable_multi_result_open_failure_closes_every_raw_once",
+                "canonical_statement_multi_result_open_failure_closes_every_raw_once",
                 "canonical_statement_batch_rewrites_orders_clears_and_filters_once",
                 "canonical_statement_batch_denial_and_partial_fatal_error_are_classified_once",
                 "fatal_standard_create_prepare_call_and_metadata_errors_force_discard",
                 "core::standard_resource_registry::tests::late_registration_after_close_is_rejected_and_closed",
                 "core::standard_resource_registry::tests::explicit_close_unregisters_strong_entries_during_long_lease",
                 "core::standard_resource_registry::tests::concurrent_close_all_waits_for_one_exact_drain",
+                "core::standard_resource_registry::tests::aborted_close_all_caller_does_not_cancel_registry_owned_drain",
+                "core::standard_resource_registry::tests::dropping_registry_cancels_blocked_coordinator_task",
                 "core::standard_resource_registry::tests::pending_admission_cancellation_unblocks_close",
                 "core::standard_resource_registry::tests::multiple_pending_admissions_all_finish_before_close_returns",
                 "core::standard_resource_registry::tests::close_all_waits_for_rejected_late_resource_close_completion",
+                "core::standard_resource_registry::tests::cancelled_rejected_registration_keeps_registry_cleanup_ownership",
                 "core::standard_resource_registry::tests::late_registration_close_failure_stays_old_generation_and_blocks_reopen",
                 "late_metadata_result_registration_is_closed_before_next_lease",
                 "late_result_close_failure_discards_old_generation_without_reopen",
             },
         )
+
+    def test_pending_admission_policy_rejects_permit_moved_after_raw_acquisition(
+        self,
+    ) -> None:
+        root = repository_root()
+        producer_sources = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in (
+                root / "crates/druid/src/core/druid_pooled_connection.rs",
+                root / "crates/druid/src/core/druid_pooled_statement.rs",
+                root / "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+                root / "crates/druid/src/core/druid_pooled_callable_statement.rs",
+                root / "crates/druid/src/core/database_meta_data_proxy_impl.rs",
+                root / "crates/druid/src/core/druid_pooled_result_set.rs",
+            )
+        }
+        source = producer_sources["druid_pooled_connection.rs"]
+        permit = (
+            "        let admission = "
+            "resources.begin_admission(policy.resource_generation())?;\n"
+        )
+        raw = "        let result = self.standard_mut()?.create_statement(options).await;\n"
+        self.assertEqual(source.count(raw), 1)
+        self.assertEqual(source.count(permit + raw), 1)
+        producer_sources["druid_pooled_connection.rs"] = source.replace(
+            permit + raw,
+            raw + permit,
+            1,
+        )
+        with self.assertRaisesRegex(VerificationError, "pre-raw admission"):
+            verifier.require_pending_admission_policy(
+                (
+                    root / "crates/druid/src/core/standard_resource_registry.rs"
+                ).read_text(encoding="utf-8"),
+                (
+                    root / "crates/druid/src/core/standard_resource_admission.rs"
+                ).read_text(encoding="utf-8"),
+                producer_sources,
+            )
 
     def test_residual_method_delegation_rejects_direct_raw_fallback(self) -> None:
         source = """

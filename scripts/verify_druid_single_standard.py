@@ -287,6 +287,26 @@ TASK5_REQUIRED_EXACT_TESTS = (
     ExactCargoTestSpec(
         Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
         "test:standard_filter_stat_semantics_test",
+        "canonical_prepared_multi_result_open_failure_closes_every_raw_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_multi_result_cleanup_failure_preserves_primary_and_retries",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_callable_multi_result_open_failure_closes_every_raw_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_statement_multi_result_open_failure_closes_every_raw_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
         "canonical_statement_batch_rewrites_orders_clears_and_filters_once",
     ),
     ExactCargoTestSpec(
@@ -317,6 +337,16 @@ TASK5_REQUIRED_EXACT_TESTS = (
     ExactCargoTestSpec(
         Path("crates/druid/src/core/standard_resource_registry.rs"),
         "lib",
+        "core::standard_resource_registry::tests::aborted_close_all_caller_does_not_cancel_registry_owned_drain",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::dropping_registry_cancels_blocked_coordinator_task",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
         "core::standard_resource_registry::tests::pending_admission_cancellation_unblocks_close",
     ),
     ExactCargoTestSpec(
@@ -328,6 +358,11 @@ TASK5_REQUIRED_EXACT_TESTS = (
         Path("crates/druid/src/core/standard_resource_registry.rs"),
         "lib",
         "core::standard_resource_registry::tests::close_all_waits_for_rejected_late_resource_close_completion",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::cancelled_rejected_registration_keeps_registry_cleanup_ownership",
     ),
     ExactCargoTestSpec(
         Path("crates/druid/src/core/standard_resource_registry.rs"),
@@ -577,6 +612,14 @@ def require_pending_admission_policy(
         "fnbegin_admission",
         "pending",
         "close_error",
+        "fnregister_batch",
+        "fnclose_registered_after_admission",
+        "fnspawn_coordinator",
+        "fnrun_coordinator",
+        "coordinator_running",
+        "shutting_down",
+        "shutdown.notify_waiters()",
+        "StandardResourceCleanupState::Retry",
         "notified.as_mut().enable()",
         "fnfinish_admission",
     )
@@ -611,8 +654,180 @@ def require_pending_admission_policy(
     result_set = "".join(
         token.text for token in _tokens(producer_sources["druid_pooled_result_set.rs"])
     )
-    if result_set.count(".register(admission,") != 1:
-        fail("Task 5 pending admission ResultSet registration is incomplete")
+    staged_markers = (
+        "fnnew_standard_results",
+        ".register_batch(admission,handles)",
+        ".close_registered_after_admission(&registrations,admission)",
+    )
+    if any(marker not in result_set for marker in staged_markers):
+        fail("Task 5 pending admission staged ResultSet ownership is incomplete")
+
+    ordered_methods = (
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "create_statement",
+            (
+                "begin_admission",
+                "create_statement(options).await",
+                ".register(&admission",
+            ),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "prepare_statement",
+            (
+                "begin_admission",
+                "prepare_statement(&effective_sql,options).await",
+                "DruidPooledPreparedStatement::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_connection.rs",
+            "Connection",
+            "DruidPooledConnection",
+            "prepare_call",
+            (
+                "begin_admission",
+                "prepare_call(&effective_sql,options).await",
+                "DruidPooledCallableStatement::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_statement.rs",
+            "Statement",
+            "DruidPooledStatement",
+            "execute_query",
+            (
+                "begin_standard_admission",
+                "execute_query(&effective_sql).await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_statement.rs",
+            "Statement",
+            "DruidPooledStatement",
+            "execute",
+            (
+                "begin_standard_admission",
+                "execute(&effective_sql,generated_keys).await",
+                "DruidPooledResultSet::new_standard_results",
+            ),
+        ),
+        (
+            "druid_pooled_prepared_statement.rs",
+            "Statement",
+            "DruidPooledPreparedStatement",
+            "execute_query",
+            (
+                "begin_standard_admission",
+                "execute_query(&effective_sql).await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_prepared_statement.rs",
+            "PreparedStatement",
+            "DruidPooledPreparedStatement",
+            "execute_prepared_query",
+            (
+                "begin_standard_admission",
+                "execute_prepared_query().await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_callable_statement.rs",
+            "Statement",
+            "DruidPooledCallableStatement",
+            "execute_query",
+            (
+                "begin_standard_admission",
+                "execute_query(&effective_sql).await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_callable_statement.rs",
+            "PreparedStatement",
+            "DruidPooledCallableStatement",
+            "execute_prepared_query",
+            (
+                "begin_standard_admission",
+                "execute_prepared_query().await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "database_meta_data_proxy_impl.rs",
+            "DatabaseMetaData",
+            "DatabaseMetaDataProxyImpl",
+            "tables",
+            (
+                "begin_admission",
+                ".tables(query).await",
+                "DruidPooledResultSet::new_standard_metadata",
+            ),
+        ),
+    )
+    for label, trait_leaf, type_name, method, markers in ordered_methods:
+        blocks = _impl_blocks(producer_sources[label], trait_leaf, type_name)
+        if len(blocks) != 1:
+            fail(f"Task 5 pre-raw admission impl is missing or ambiguous: {label}")
+        tokens, _, opening, closing = blocks[0]
+        body = _method_bodies(tokens, opening, closing).get(method)
+        if body is None:
+            fail(f"Task 5 pre-raw admission method is missing: {label}:{method}")
+        _require_ordered_markers(body, markers, f"{label}:{type_name}::{method}")
+
+    helper = _named_function_bodies(
+        producer_sources["druid_pooled_prepared_statement.rs"],
+        "execute_standard_prepared_results",
+    )
+    if len(helper) != 1:
+        fail("Task 5 pre-raw admission prepared execute helper is missing or ambiguous")
+    _require_ordered_markers(
+        helper[0],
+        ("begin_standard_admission", "raw()", "new_standard_results"),
+        "druid_pooled_prepared_statement.rs:execute_standard_prepared_results",
+    )
+
+
+def _named_function_bodies(source: str, name: str) -> list[str]:
+    """Return normalized bodies for every real Rust function with an exact name."""
+
+    tokens = _tokens(source)
+    bodies: list[str] = []
+    for index, token in enumerate(tokens):
+        if token.text != "fn" or index + 1 >= len(tokens):
+            continue
+        if tokens[index + 1].text != name:
+            continue
+        body_open = index + 2
+        while body_open < len(tokens) and tokens[body_open].text not in {"{", ";"}:
+            body_open += 1
+        if body_open >= len(tokens) or tokens[body_open].text != "{":
+            continue
+        _, body_close = _balanced_block(tokens, body_open)
+        bodies.append(_normalized(tokens, body_open + 1, body_close))
+    return bodies
+
+
+def _require_ordered_markers(body: str, markers: tuple[str, ...], label: str) -> None:
+    """Require permit, raw acquisition and registry ownership in exact lexical order."""
+
+    cursor = 0
+    for marker in markers:
+        position = body.find(marker, cursor)
+        if position < 0:
+            fail(
+                "Task 5 pre-raw admission ordering is incomplete: " f"{label}:{marker}"
+            )
+        cursor = position + len(marker)
 
 
 def require_concrete_object(source: str, type_name: str, label: str) -> None:

@@ -23,11 +23,14 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, OnceLock, Weak};
+use std::sync::{Arc, Mutex, OnceLock, Weak};
 
 struct StandardResultSetResource {
     result_set: tokio::sync::Mutex<Option<Box<dyn druid_rdbc::result_set::ResultSet>>>,
+    opened: AtomicBool,
+    closing: AtomicBool,
     closed: AtomicBool,
+    close_error: Mutex<Option<RdbcError>>,
     filter_chain: Option<Arc<FilterChain>>,
     filter_context: Arc<ResultSetFilterContext>,
     policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
@@ -43,7 +46,10 @@ impl StandardResultSetResource {
     ) -> Arc<Self> {
         Arc::new(Self {
             result_set: tokio::sync::Mutex::new(Some(result_set)),
+            opened: AtomicBool::new(false),
+            closing: AtomicBool::new(false),
             closed: AtomicBool::new(false),
+            close_error: Mutex::new(None),
             filter_chain,
             filter_context,
             policy,
@@ -72,25 +78,72 @@ impl StandardResultSetResource {
             self.unregister_resource();
             return Ok(());
         }
+        self.closing.store(true, Ordering::Release);
         let mut result_set = self.result_set.lock().await;
         let Some(raw) = result_set.as_mut() else {
             self.closed.store(true, Ordering::Release);
             self.unregister_resource();
             return Ok(());
         };
-        let result = match &self.filter_chain {
-            Some(filter_chain) => filter_chain
+        let opened = self.opened.load(Ordering::Acquire);
+        let result = match (&self.filter_chain, opened) {
+            (Some(filter_chain), true) => filter_chain
                 .standard_result_set_close(raw.as_mut(), &self.filter_context)
                 .await
                 .map_err(RdbcError::from),
-            None => raw.close().await,
+            (Some(_), false) | (None, _) => raw.close().await,
         };
-        self.policy.classify(result, self.filter_context.sql())?;
+        if let Err(error) = self.policy.classify(result, self.filter_context.sql()) {
+            *self
+                .close_error
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(error.clone());
+            return Err(error);
+        }
+        self.close_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
         result_set.take();
         self.closed.store(true, Ordering::Release);
-        self.filter_context.increment_close_count();
+        if opened {
+            self.filter_context.increment_close_count();
+        }
         self.unregister_resource();
         Ok(())
+    }
+
+    fn registry_cleanup_error(&self) -> Option<RdbcError> {
+        if let Some(error) = self
+            .close_error
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+        {
+            return Some(error);
+        }
+        let registered_cleanup = self.registration.get().is_some_and(
+            super::standard_resource_registration::StandardResourceRegistration::cleanup_requested,
+        );
+        (registered_cleanup
+            || self.closing.load(Ordering::Acquire)
+            || self.closed.load(Ordering::Acquire))
+        .then_some(RdbcError::ConnectionDiscarded)
+    }
+
+    fn open_meta_data_core(
+        &self,
+    ) -> Result<Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, RdbcError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let result_set = self
+            .result_set
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_owned()))?;
+        let raw = result_set.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
+        self.policy
+            .classify(raw.meta_data(), self.filter_context.sql())
     }
 
     fn value_core(&self, column: druid_rdbc::result_set::ColumnIndex) -> Result<Value, RdbcError> {
@@ -730,6 +783,119 @@ pub struct DruidPooledResultSet {
     hidden_columns: Option<Vec<i32>>,
 }
 
+struct StagedStandardResultSet {
+    id: u64,
+    statement: DruidPooledStatement,
+    standard: Arc<StandardResultSetResource>,
+    filter_chain: Option<Arc<FilterChain>>,
+    filter_context: Arc<ResultSetFilterContext>,
+}
+
+struct StagedStandardOpenError {
+    error: RdbcError,
+    cleanup_required: bool,
+}
+
+impl StagedStandardOpenError {
+    fn proxy(error: RdbcError) -> Self {
+        Self {
+            error,
+            cleanup_required: true,
+        }
+    }
+
+    fn registry(error: RdbcError) -> Self {
+        Self {
+            error,
+            cleanup_required: false,
+        }
+    }
+}
+
+impl StagedStandardResultSet {
+    fn new(
+        statement: Arc<DruidPooledStatementInner>,
+        standard: Box<dyn druid_rdbc::result_set::ResultSet>,
+        policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+    ) -> Self {
+        let filter_chain = statement.filter_chain.clone();
+        let statement_handle = DruidPooledStatement::from_inner(Arc::clone(&statement));
+        let result_set_id = statement.result_set_id_seed.fetch_add(1, Ordering::AcqRel);
+        let filter_context = Arc::new(
+            ResultSetFilterContext::with_identity_sql_and_execute_elapsed(
+                statement.connection_id,
+                statement.id,
+                result_set_id,
+                statement_handle.last_sql(),
+                statement_handle.last_execute_elapsed(),
+            ),
+        );
+        let standard = StandardResultSetResource::new(
+            standard,
+            filter_chain.clone(),
+            Arc::clone(&filter_context),
+            policy,
+        );
+        Self {
+            id: result_set_id,
+            statement: statement_handle,
+            standard,
+            filter_chain,
+            filter_context,
+        }
+    }
+
+    fn into_opened(self) -> Result<DruidPooledResultSet, StagedStandardOpenError> {
+        if let Some(error) = self.standard.registry_cleanup_error() {
+            return Err(StagedStandardOpenError::registry(error));
+        }
+        let meta_data = self
+            .standard
+            .open_meta_data_core()
+            .map_err(StagedStandardOpenError::proxy)?;
+        let mut open_context =
+            super::StandardResultSetOpenContext::new(&self.filter_context, meta_data);
+        if let Some(filter_chain) = &self.filter_chain {
+            self.standard
+                .policy
+                .classify(
+                    filter_chain
+                        .standard_result_set_open_after_with_proxy(&mut open_context)
+                        .map_err(RdbcError::from),
+                    self.filter_context.sql(),
+                )
+                .map_err(StagedStandardOpenError::proxy)?;
+        }
+        let (logic_column_map, physical_column_map, hidden_columns) =
+            open_context.into_column_mappings();
+        self.standard.opened.store(true, Ordering::Release);
+        if let Some(error) = self.standard.registry_cleanup_error() {
+            return Err(StagedStandardOpenError::registry(error));
+        }
+        Ok(DruidPooledResultSet {
+            id: self.id,
+            attributes: super::ProxyAttributes::default(),
+            statement: self.statement,
+            prepared_statement: None,
+            callable_statement: None,
+            physical: Arc::new(super::RowSetResultSet::new(Vec::new())),
+            standard: Some(self.standard),
+            closed: Arc::new(AtomicBool::new(false)),
+            cursor_index: AtomicI32::new(0),
+            filter_chain: self.filter_chain,
+            filter_context: self.filter_context,
+            logic_column_map,
+            physical_column_map,
+            hidden_columns,
+        })
+    }
+}
+
+enum StagedStandardExecutionResult {
+    ResultSet(StagedStandardResultSet),
+    UpdateCount(i64),
+}
+
 impl DruidPooledResultSet {
     pub const FETCH_FORWARD: i32 = 1000;
     pub const FETCH_REVERSE: i32 = 1001;
@@ -796,72 +962,94 @@ impl DruidPooledResultSet {
         mut standard: Box<dyn druid_rdbc::result_set::ResultSet>,
         admission: &StandardResourceAdmission,
     ) -> Result<Self, RdbcError> {
-        let filter_chain = statement.filter_chain.clone();
+        let Some(policy) = statement.standard_policy.clone() else {
+            let _ = standard.close().await;
+            return Err(RdbcError::ConnectionDiscarded);
+        };
+        let Some(resources) = statement.standard_resources.clone() else {
+            let _ = standard.close().await;
+            return Err(RdbcError::ConnectionDiscarded);
+        };
+        let staged = StagedStandardResultSet::new(statement, standard, policy);
+        let handle: Arc<dyn StandardResourceHandle> = Arc::clone(&staged.standard) as Arc<_>;
+        let registrations = resources.register_batch(admission, vec![handle]).await?;
+        match staged.into_opened() {
+            Ok(result_set) => Ok(result_set),
+            Err(open_error) => {
+                let cleanup_result = resources
+                    .close_registered_after_admission(&registrations, admission)
+                    .await;
+                if open_error.cleanup_required {
+                    Err(open_error.error)
+                } else {
+                    cleanup_result.and(Err(open_error.error))
+                }
+            }
+        }
+    }
+
+    /// 先批量接管 generic execution 中的全部 raw ResultSet，再按原顺序执行 proxy-open。
+    pub(crate) async fn new_standard_results(
+        statement: Arc<DruidPooledStatementInner>,
+        results: Vec<druid_rdbc::statement::ExecutionResult>,
+        admission: &StandardResourceAdmission,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
         let policy = statement
             .standard_policy
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
-        let statement_handle = DruidPooledStatement::from_inner(Arc::clone(&statement));
-        let result_set_id = statement.result_set_id_seed.fetch_add(1, Ordering::AcqRel);
-        let filter_context = Arc::new(
-            ResultSetFilterContext::with_identity_sql_and_execute_elapsed(
-                statement.connection_id,
-                statement.id,
-                result_set_id,
-                statement_handle.last_sql(),
-                statement_handle.last_execute_elapsed(),
-            ),
-        );
         let resources = statement
             .standard_resources
             .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?;
-        let meta_data = match policy.classify(standard.meta_data(), filter_context.sql()) {
-            Ok(meta_data) => meta_data,
-            Err(error) => {
-                let _ = policy.classify(standard.close().await, filter_context.sql());
-                return Err(error);
-            }
-        };
-        let mut open_context = super::StandardResultSetOpenContext::new(&filter_context, meta_data);
-        if let Some(filter_chain) = &filter_chain {
-            let open_result = policy.classify(
-                filter_chain
-                    .standard_result_set_open_after_with_proxy(&mut open_context)
-                    .map_err(RdbcError::from),
-                filter_context.sql(),
-            );
-            if let Err(error) = open_result {
-                let _ = policy.classify(standard.close().await, filter_context.sql());
-                return Err(error);
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        let mut staged_results = Vec::with_capacity(results.len());
+        let mut handles = Vec::new();
+        for result in results {
+            match result {
+                druid_rdbc::statement::ExecutionResult::ResultSet(raw) => {
+                    let staged = StagedStandardResultSet::new(
+                        Arc::clone(&statement),
+                        raw,
+                        Arc::clone(&policy),
+                    );
+                    handles.push(Arc::clone(&staged.standard) as Arc<dyn StandardResourceHandle>);
+                    staged_results.push(StagedStandardExecutionResult::ResultSet(staged));
+                }
+                druid_rdbc::statement::ExecutionResult::UpdateCount(count) => {
+                    staged_results.push(StagedStandardExecutionResult::UpdateCount(count));
+                }
             }
         }
-        let (logic_column_map, physical_column_map, hidden_columns) =
-            open_context.into_column_mappings();
-        let standard = StandardResultSetResource::new(
-            standard,
-            filter_chain.clone(),
-            Arc::clone(&filter_context),
-            policy,
-        );
-        resources.register(admission, Arc::clone(&standard)).await?;
-        Ok(Self {
-            id: result_set_id,
-            attributes: super::ProxyAttributes::default(),
-            statement: statement_handle,
-            prepared_statement: None,
-            callable_statement: None,
-            physical: Arc::new(super::RowSetResultSet::new(Vec::new())),
-            standard: Some(standard),
-            closed: Arc::new(AtomicBool::new(false)),
-            cursor_index: AtomicI32::new(0),
-            filter_chain,
-            filter_context,
-            logic_column_map,
-            physical_column_map,
-            hidden_columns,
-        })
+
+        // 所有 raw cursor 先在一个同步 registry 临界区取得 actor owner；之后才运行可失败的 open hook。
+        let registrations = resources.register_batch(admission, handles).await?;
+        let mut opened = Vec::with_capacity(staged_results.len());
+        for staged in staged_results {
+            match staged {
+                StagedStandardExecutionResult::ResultSet(staged) => match staged.into_opened() {
+                    Ok(result_set) => opened.push(
+                        druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(result_set)),
+                    ),
+                    Err(open_error) => {
+                        // 清理失败由 registry/policy 保留；对调用者保持最初的 proxy-open 分类。
+                        let cleanup_result = resources
+                            .close_registered_after_admission(&registrations, admission)
+                            .await;
+                        return if open_error.cleanup_required {
+                            Err(open_error.error)
+                        } else {
+                            cleanup_result.and(Err(open_error.error))
+                        };
+                    }
+                },
+                StagedStandardExecutionResult::UpdateCount(count) => {
+                    opened.push(druid_rdbc::statement::ExecutionResult::UpdateCount(count));
+                }
+            }
+        }
+        Ok(opened)
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -1458,25 +1458,8 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
                 },
             )
             .await?;
-        let mut wrapped = Vec::with_capacity(results.len());
-        for result in results {
-            wrapped.push(match result {
-                druid_rdbc::statement::ExecutionResult::ResultSet(raw) => {
-                    druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(
-                        DruidPooledResultSet::new_standard(
-                            Arc::clone(&self.inner),
-                            raw,
-                            &admission,
-                        )
-                        .await?,
-                    ))
-                }
-                druid_rdbc::statement::ExecutionResult::UpdateCount(count) => {
-                    druid_rdbc::statement::ExecutionResult::UpdateCount(count)
-                }
-            });
-        }
-        Ok(wrapped)
+        DruidPooledResultSet::new_standard_results(Arc::clone(&self.inner), results, &admission)
+            .await
     }
 
     fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {

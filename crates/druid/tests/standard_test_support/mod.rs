@@ -515,6 +515,23 @@ impl TrackingStatement {
             batch: Vec::new(),
         }
     }
+
+    fn generic_results(
+        &self,
+        value: i64,
+        multi_result: bool,
+    ) -> Vec<druid_rdbc::statement::ExecutionResult> {
+        let count = if multi_result { 3 } else { 1 };
+        (0..count)
+            .map(|offset| {
+                druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(TrackingResultSet::rows(
+                    Arc::clone(&self.state),
+                    vec![vec![Value::Int(value + i64::from(offset))]],
+                ))
+                    as Box<dyn ResultSet>)
+            })
+            .collect()
+    }
 }
 
 druid_rdbc::impl_standard_wrapper!(TrackingStatement => Statement);
@@ -649,12 +666,7 @@ impl Statement for TrackingStatement {
         _generated_keys: GeneratedKeys,
     ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
         self.state.record(format!("statement.execute:{sql}"));
-        Ok(vec![druid_rdbc::statement::ExecutionResult::ResultSet(
-            Box::new(TrackingResultSet::rows(
-                Arc::clone(&self.state),
-                vec![vec![Value::Int(44)]],
-            )),
-        )])
+        Ok(self.generic_results(44, sql.contains("multi_result")))
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
@@ -696,6 +708,23 @@ impl TrackingPreparedStatement {
             closed: false,
             query_timeout: 0,
         }
+    }
+
+    fn generic_results(&self) -> Vec<druid_rdbc::statement::ExecutionResult> {
+        let count = if self.sql.contains("multi_result") {
+            3
+        } else {
+            1
+        };
+        (0..count)
+            .map(|offset| {
+                druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(TrackingResultSet::rows(
+                    Arc::clone(&self.state),
+                    vec![vec![Value::Int(55 + i64::from(offset))]],
+                ))
+                    as Box<dyn ResultSet>)
+            })
+            .collect()
     }
 }
 
@@ -826,12 +855,7 @@ impl PreparedStatement for TrackingPreparedStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(self.parameters.clone());
         self.state.check_sql_failure("prepared_execute_generic")?;
-        Ok(vec![druid_rdbc::statement::ExecutionResult::ResultSet(
-            Box::new(TrackingResultSet::rows(
-                Arc::clone(&self.state),
-                vec![vec![Value::Int(55)]],
-            )),
-        )])
+        Ok(self.generic_results())
     }
 
     fn parameter_meta_data(&self) -> Result<Arc<dyn ParameterMetaData>, RdbcError> {

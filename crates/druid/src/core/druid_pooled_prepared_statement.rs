@@ -913,22 +913,12 @@ impl DruidPooledPreparedStatement {
                 },
             )
             .await?;
-        let statement = self.standard_statement_inner();
-        let mut wrapped = Vec::with_capacity(results.len());
-        for result in results {
-            wrapped.push(match result {
-                druid_rdbc::statement::ExecutionResult::ResultSet(raw) => {
-                    druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(
-                        DruidPooledResultSet::new_standard(Arc::clone(&statement), raw, &admission)
-                            .await?,
-                    ))
-                }
-                druid_rdbc::statement::ExecutionResult::UpdateCount(count) => {
-                    druid_rdbc::statement::ExecutionResult::UpdateCount(count)
-                }
-            });
-        }
-        Ok(wrapped)
+        DruidPooledResultSet::new_standard_results(
+            self.standard_statement_inner(),
+            results,
+            &admission,
+        )
+        .await
     }
 
     pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {

@@ -731,3 +731,85 @@ DRUID_INTERNAL_OBJECTS=13
 真实外部RBDC/HTTP/libSQL/JDBC Agent服务仍为`NOT_RUN`；deterministic local路径与compiler coverage
 不冒充外部部署证据。当前状态是 **FIX_ROUND_3_IMPLEMENTED_PENDING_REVIEW**；只有独立re-review可把
 C3/N1/I6判为ADDRESSED，Task 6继续阻塞。
+
+## 16. Fix round 4/5 implementation report — pending independent re-review
+
+本轮从`d95ef452d496e0e9025c93d67b90c81bae7c101a`开始，只处置Round 3 re-review的两个
+Important finding（multi-result cleanup ownership、registry cleanup cancellation safety）与I6证据缺口。
+C1/C2/I1-I5既有行为保持；没有进入Task 6，没有修改Cargo topology、Task 4 frozen artifacts或
+`druid-admin`，没有worktree/branch/reset/amend/push。
+
+### 16.1 Fresh RED与multi-result staged ownership
+
+- Prepared、Callable和ordinary Statement各自返回三个raw ResultSet，stateful proxy-open Filter拒绝第二个；
+  旧实现三个测试都只在返回错误时观察到`1/3` raw close，证明第一个仍在registry、第二个被直接关闭、
+  第三个以plain `Box<dyn ResultSet>`丢失async-close ownership。
+- 所有raw ResultSet现在先同步转换成`StandardResultSetResource` actor，并在一个registry临界区执行
+  batch registration；只有全部raw取得owner后才按原顺序运行metadata/proxy-open。第二个open失败时，
+  registry queue关闭并unregister整批，Prepared/Callable/Statement均为`3/3` close exactly once；
+  caller仍收到最初的`WallViolation`。
+- staged actor区分`opened`与未open cleanup：只有成功完成open hook的ResultSet计入open/close Filter/Stat；
+  三raw cleanup测试为raw close `3`、Stat open/close `1/1`。cleanup close失败时原proxy错误仍为primary，
+  失败actor保留在旧generation，logical close按既有合同第4次attempt重试后达到`3/3`成功关闭。
+- connection-first metadata barrier继续覆盖stage/open竞态：normal close返回`ConnectionDiscarded`，close failure
+  返回原`Other`并保持旧generation retry；metadata `3/3 PASS`。
+
+### 16.2 Registry-owned coordinator与cancellation safety
+
+- `Open/Closing/Closed`、generation、pending、resource entry、cleanup waiter、retry和first close error仍由同一
+  short critical-section `Mutex`拥有；entry状态为`Open/Queued/Closing/Retry`，没有guard跨`.await`或调用
+  resource/filter callback。
+- `close_all`只原子seal generation、启动/复用一个registry coordinator并等待Notify；resource从未移入
+  caller Future local。abort首个`close_all`时，coordinator在已成功关闭一个resource后继续等待并关闭阻塞
+  resource，第二个caller有界完成，两个raw各一次。
+- Closing/Closed registration先把actor与oneshot waiter转入registry queue，再idempotently finish admission；
+  abort register caller不会丢raw，close coordinator等待pending归零且队列drain完成。先前复用coordinator但
+  enqueue未notify造成的lost wake已由每次ownership transfer后的notify修复。
+- close failure只进入旧generation `Retry`，同一coordinator run不自旋；下一次`close_all`才重新queue，
+  error/discard阻止reopen。multiple callers、permit cancellation、next-lease barrier与128次long-lease
+  unregister的retained count zero均保持。
+- coordinator task只持`Weak<Registry>`；独立atomic+Notify shutdown signal使holder/registry drop能取消
+  正阻塞于driver close的task并释放resource Weak，runtime取消时Drop guard把in-flight恢复为Queued供后续
+  caller接管。registry focused最终`10/10 PASS`。
+
+### 16.3 I6 fail-closed evidence
+
+- pending-admission verifier不再只数token：逐一解析11个producer method/helper body，要求
+  `begin_admission -> raw acquisition -> registry owner`精确词法顺序；把create-statement permit移动到raw
+  acquisition之后的mutation必须以`pre-raw admission`失败，缺少producer仍fail closed。
+- staged ownership要求`new_standard_results`、`register_batch`和admission-aware registry cleanup同时存在；
+  method delegation仍拒绝Prepared/Callable direct raw fallback。
+- Task5 exact runtime从21扩为28：三条multi-result full cleanup、一条cleanup-failure primary/retry、
+  aborted close leader、cancelled rejected registration和registry-drop coordinator shutdown；每条仍要求唯一
+  Rust definition与exact Cargo `1 passed`。verifier self最终`26/26 PASS`，Task5 live PASS并保持：
+
+```text
+TASK5_CONSUMER_ROWS=363
+TASK5_CONSUMER_CLOSED=180
+TASK6_COMPATIBILITY_PENDING=75
+TASK7_RESOURCE_OPERATIONS_PENDING=108
+DRUID_STANDARD_IMPLS=6
+DRUID_INTERNAL_OBJECTS=13
+```
+
+### 16.4 Final inventories and verification
+
+- denominator self/live：`41/41 PASS`，`PHYSICAL=73 / ADAPTER=57 / CONSUMER=3647`，live consumer SHA-256
+  `99225051f9120b6910dec91a9de1cdab2cc59f232db119a268bf3b50bbb52192`；Task5专用emit后的checked
+  `rdbc-production-consumers.tsv` SHA-256为
+  `514dd501caa6ffec8a0cb262d436deca6c029ef4b3e0f9eba0d52b220571074d`。
+- semantic self/logical-live：`18/18 PASS + JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0`；semantic/live hashes
+  保持`5d99b573...cdbd9 / f2e1d929...d9ed84`。Task3 purity为`103/103 PASS + STANDARD_FILES=29`。
+- Task4 frozen coverage/runtime SHA-256保持
+  `f7b3d4b429fe9e5c4bfe954082f0518d8e78635f6f7cc21bde1ffcd40f2307c9` /
+  `106323e17904d377172986ce7464a54de60b4bb575e5f67e333e37f16188a3ec`；Task5 adjusted handoff的
+  RBDC、SQLx default和HTTP_SQL all-features compiler coverage-v2各`15/15 PASS`，没有一般化hash bypass。
+- focused：C3 `21/21`、registry `10/10`、metadata `3/3`，以及既有standard logical、raw owner、
+  recycle、admission、Physical Filter/Stat/ResultSet/Callable回归均在最终三crate全量运行中通过。
+- full：`druid`、`druid-rdbc`、`druid-wrapper` all-target/all-feature tests exit `0`；workspace
+  all-target/all-feature check exit `0`；三crate scoped Clippy `-D warnings`、rustdoc `-D warnings`、
+  doctest `0/1/0`、rustfmt、Black、Python compile与diff-check全部PASS。
+
+真实外部RBDC/HTTP/libSQL/JDBC Agent服务仍为`NOT_RUN`；deterministic local与compiler coverage不冒充
+external deployment evidence。当前状态是 **FIX_ROUND_4_IMPLEMENTED_PENDING_REVIEW**；只有独立re-review
+可把R3-1/R3-2及C3/N1/I6判为ADDRESSED，Task 6继续阻塞。

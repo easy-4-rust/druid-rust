@@ -219,6 +219,23 @@ impl ResultSetFilter for RejectResultSetOpenFilter {
 }
 
 #[derive(Default)]
+struct RejectSecondResultSetOpenFilter {
+    opens: AtomicUsize,
+}
+
+impl ResultSetFilter for RejectSecondResultSetOpenFilter {
+    fn result_set_open_after(&self, _context: &ResultSetFilterContext) -> Result<(), DruidError> {
+        let open = self.opens.fetch_add(1, Ordering::AcqRel) + 1;
+        if open == 2 {
+            return Err(DruidError::WallViolation(
+                "task5 rejected second result-set open".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Default)]
 struct StandardBatchObservationFilter {
     add_inputs: Mutex<Vec<String>>,
     before_statements: Mutex<Vec<Vec<String>>>,
@@ -1349,6 +1366,221 @@ async fn canonical_callable_generic_execute_uses_same_typed_policy_and_wraps_res
         "callable cursor crossed lease"
     );
     assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 1);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_prepared_multi_result_open_failure_closes_every_raw_once() {
+    let state = TrackingState::configured();
+    let reject = Arc::new(RejectSecondResultSetOpenFilter::default());
+    let stat_collector = Arc::new(druid::stats::StatsCollector::new(
+        "task5-prepared-multi-result-cleanup",
+        Duration::from_secs(10),
+    ));
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::new(StatFilter::new(Arc::clone(&stat_collector))));
+    chain.add_result_set(Arc::clone(&reject) as Arc<dyn ResultSetFilter>);
+    let pool = DruidPool::new_standard(
+        "task5-prepared-multi-result-cleanup".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut prepared = Connection::prepare_statement(
+        &mut connection,
+        "SELECT multi_result",
+        StatementOptions::default(),
+    )
+    .await
+    .expect("prepared");
+
+    assert!(matches!(
+        PreparedStatement::execute_prepared(prepared.as_mut()).await,
+        Err(RdbcError::WallViolation(_))
+    ));
+    assert_eq!(reject.opens.load(Ordering::Acquire), 2);
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 3);
+    assert_eq!(stat_collector.result_set_stat().open_count(), 1);
+    assert_eq!(stat_collector.result_set_stat().close_count(), 1);
+
+    connection
+        .close()
+        .await
+        .expect("cleanup leaves no registry entry");
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    let mut replacement = pool.get().await.expect("next lease");
+    replacement.close().await.expect("replacement close");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_multi_result_cleanup_failure_preserves_primary_and_retries() {
+    let state = TrackingState::configured();
+    let reject = Arc::new(RejectSecondResultSetOpenFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_result_set(Arc::clone(&reject) as Arc<dyn ResultSetFilter>);
+    let pool = DruidPool::new_standard(
+        "task5-multi-result-cleanup-retry".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut prepared = Connection::prepare_statement(
+        &mut connection,
+        "SELECT multi_result",
+        StatementOptions::default(),
+    )
+    .await
+    .expect("prepared");
+    state.fail_next("result_set_close");
+
+    assert!(matches!(
+        PreparedStatement::execute_prepared(prepared.as_mut()).await,
+        Err(RdbcError::WallViolation(_))
+    ));
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 2);
+
+    connection
+        .close()
+        .await
+        .expect("logical close retries retained cleanup");
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        4
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 3);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_callable_multi_result_open_failure_closes_every_raw_once() {
+    let state = TrackingState::configured();
+    let reject = Arc::new(RejectSecondResultSetOpenFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_result_set(Arc::clone(&reject) as Arc<dyn ResultSetFilter>);
+    let pool = DruidPool::new_standard(
+        "task5-callable-multi-result-cleanup".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut callable = Connection::prepare_call(
+        &mut connection,
+        "CALL multi_result()",
+        StatementOptions::default(),
+    )
+    .await
+    .expect("callable");
+
+    assert!(matches!(
+        PreparedStatement::execute_prepared(callable.as_mut()).await,
+        Err(RdbcError::WallViolation(_))
+    ));
+    assert_eq!(reject.opens.load(Ordering::Acquire), 2);
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 3);
+
+    connection
+        .close()
+        .await
+        .expect("cleanup leaves no registry entry");
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    let mut replacement = pool.get().await.expect("next lease");
+    replacement.close().await.expect("replacement close");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_statement_multi_result_open_failure_closes_every_raw_once() {
+    let state = TrackingState::configured();
+    let reject = Arc::new(RejectSecondResultSetOpenFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_result_set(Arc::clone(&reject) as Arc<dyn ResultSetFilter>);
+    let pool = DruidPool::new_standard(
+        "task5-statement-multi-result-cleanup".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .expect("statement");
+
+    assert!(matches!(
+        Statement::execute(
+            statement.as_mut(),
+            "SELECT multi_result",
+            GeneratedKeys::None,
+        )
+        .await,
+        Err(RdbcError::WallViolation(_))
+    ));
+    assert_eq!(reject.opens.load(Ordering::Acquire), 2);
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 3);
+
+    connection
+        .close()
+        .await
+        .expect("cleanup leaves no registry entry");
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        3
+    );
+    let mut replacement = pool.get().await.expect("next lease");
+    replacement.close().await.expect("replacement close");
     pool.close().await;
 }
 
