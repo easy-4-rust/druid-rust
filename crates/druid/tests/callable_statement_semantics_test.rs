@@ -8,7 +8,6 @@
 
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid::core::prepared_statement_method_type::PreparedStatementMethodType as DruidPreparedStatementMethodType;
 use druid::core::{
     CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
     CallableParameter, DruidPooledCallableStatement, DruidPooledCallableStatementHandle,
@@ -975,7 +974,6 @@ async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
     let (pool, _, _) = callable_pool().await;
     let mut connection = pool.get().await.unwrap();
     let mut callable = connection.prepare_call("{call query()}").await.unwrap();
-    let expected_key = callable.key().clone();
     let mut result_set = callable
         .fetch_result_set(&mut connection, Vec::new())
         .await
@@ -985,7 +983,6 @@ async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
         .callable_statement()
         .expect("CallableStatement ResultSet 必须保留 callable 动态身份");
     assert!(identity.is_same_statement(&callable));
-    assert_eq!(identity.key(), &expected_key);
     assert!(result_set.prepared_statement().is_some());
     assert!(identity.is_wrapper_for_type::<DruidPooledCallableStatementHandle>());
     assert!(identity
@@ -1013,8 +1010,8 @@ async fn callable_result_set_keeps_the_same_dynamic_statement_identity() {
         statement_object
             .prepared_statement()
             .expect("CallableStatement 必须保留继承的 PreparedStatement 身份")
-            .key(),
-        &expected_key
+            .id(),
+        callable.id()
     );
     assert!(statement_object
         .pooled_statement()
@@ -1097,10 +1094,6 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
     let ascii_stream_long = RdbcInputStream::from_bytes(b"ascii-stream-long".to_vec());
     let binary_stream = RdbcInputStream::from_bytes(vec![0, 1, 2]);
     let binary_stream_long = RdbcInputStream::from_bytes(vec![3, 4, 5]);
-    assert_eq!(
-        callable.key().method_type(),
-        DruidPreparedStatementMethodType::Precall1
-    );
     callable.register_out_parameter(1, 4).unwrap();
     callable.register_out_parameter_with_scale(2, 3, 2).unwrap();
     callable
@@ -1988,26 +1981,12 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         .prepare_call_with_holdability("{call demo()}", 1004, 1007, 2)
         .await
         .unwrap();
-    assert_eq!(
-        held.key().method_type(),
-        DruidPreparedStatementMethodType::Precall2
-    );
-    assert_eq!(held.key().result_set_type(), 1004);
-    assert_eq!(held.key().result_set_concurrency(), 1007);
-    assert_eq!(held.key().result_set_holdability(), 2);
     held.close().unwrap();
 
     let mut result_set = connection
         .prepare_call_with_result_set("{call demo()}", 1003, 1008)
         .await
         .unwrap();
-    assert_eq!(
-        result_set.key().method_type(),
-        DruidPreparedStatementMethodType::Precall3
-    );
-    assert_eq!(result_set.key().result_set_type(), 1003);
-    assert_eq!(result_set.key().result_set_concurrency(), 1008);
-    assert_eq!(result_set.key().result_set_holdability(), 0);
     result_set.close().unwrap();
 
     {
@@ -2018,7 +1997,13 @@ async fn prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
         assert_eq!(keys[0].catalog(), None);
         assert_eq!(keys[0].method_type(), PreparedStatementMethodType::Precall1);
         assert_eq!(keys[1].method_type(), PreparedStatementMethodType::Precall2);
+        assert_eq!(keys[1].result_set_type(), 1004);
+        assert_eq!(keys[1].result_set_concurrency(), 1007);
+        assert_eq!(keys[1].result_set_holdability(), 2);
         assert_eq!(keys[2].method_type(), PreparedStatementMethodType::Precall3);
+        assert_eq!(keys[2].result_set_type(), 1003);
+        assert_eq!(keys[2].result_set_concurrency(), 1008);
+        assert_eq!(keys[2].result_set_holdability(), 0);
     }
 
     let state = pool.state();

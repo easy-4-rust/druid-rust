@@ -6,7 +6,7 @@ use super::{
 use crate::core::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionDatabaseMetaDataFilterChain, DruidError,
     ExecContext, ExecResult, PhysicalDatabaseMetaData, ResultSetFilter, ResultSetFilterChain,
-    ResultSetOpenContext,
+    ResultSetOpenContext, StandardResultSetFilterChain,
 };
 use dashmap::DashMap;
 use std::collections::HashMap;
@@ -451,6 +451,8 @@ impl AfterFilter for WallFilter {
     }
 }
 
+#[allow(private_interfaces)]
+#[async_trait::async_trait]
 impl ResultSetFilter for WallFilter {
     fn result_set_open_after_with_proxy(
         &self,
@@ -461,6 +463,24 @@ impl ResultSetFilter for WallFilter {
 
     fn result_set_next(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<bool, DruidError> {
         let has_next = chain.result_set_next()?;
+        if !has_next {
+            return Ok(false);
+        }
+        let Some(tenant_call_back) = self.provider.config().tenant_call_back() else {
+            return Ok(true);
+        };
+        for column_index in chain.context().tenant_columns() {
+            let value = chain.raw_value(column_index)?;
+            tenant_call_back.filter_resultset_tenant_column(&value);
+        }
+        Ok(true)
+    }
+
+    async fn standard_result_set_next(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<bool, DruidError> {
+        let has_next = chain.result_set_next().await?;
         if !has_next {
             return Ok(false);
         }

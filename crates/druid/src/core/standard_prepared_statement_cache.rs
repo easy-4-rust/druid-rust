@@ -8,6 +8,7 @@ use std::collections::{HashMap, VecDeque};
 pub(crate) struct StandardPreparedStatementCache {
     entries: HashMap<PreparedStatementKey, Box<dyn PreparedStatement>>,
     access_order: VecDeque<PreparedStatementKey>,
+    pending_close: Vec<Box<dyn PreparedStatement>>,
     max_size: usize,
 }
 
@@ -16,8 +17,13 @@ impl StandardPreparedStatementCache {
         Self {
             entries: HashMap::with_capacity(max_size.max(1)),
             access_order: VecDeque::with_capacity(max_size.max(1)),
+            pending_close: Vec::new(),
             max_size,
         }
+    }
+
+    pub(crate) const fn is_enabled(&self) -> bool {
+        self.max_size > 0
     }
 
     pub(crate) fn take(
@@ -53,10 +59,17 @@ impl StandardPreparedStatementCache {
 
     pub(crate) fn clear(&mut self) -> Vec<Box<dyn PreparedStatement>> {
         self.access_order.clear();
-        self.entries
+        let mut statements = self
+            .entries
             .drain()
             .map(|(_, statement)| statement)
-            .collect()
+            .collect::<Vec<_>>();
+        statements.append(&mut self.pending_close);
+        statements
+    }
+
+    pub(crate) fn retain_failed_close(&mut self, mut statements: Vec<Box<dyn PreparedStatement>>) {
+        self.pending_close.append(&mut statements);
     }
 
     fn remove_order(&mut self, key: &PreparedStatementKey) {

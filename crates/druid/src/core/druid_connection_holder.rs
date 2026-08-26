@@ -8,8 +8,8 @@
 use super::druid_pooled_prepared_statement::DruidPooledPreparedStatementShared;
 use super::druid_pooled_statement::{DruidPooledStatement, DruidPooledStatementInner};
 use super::physical_connection_info::PhysicalConnectionInfo;
-use super::prepared_statement_key::PreparedStatementKey;
 use super::standard_prepared_statement_cache::StandardPreparedStatementCache;
+use super::standard_resource_registry::StandardResourceRegistry;
 use super::StandardConnectionCompatibility;
 use super::{
     ConnectionDefaults, ConnectionEventListener, DruidError, PhysicalConnection,
@@ -125,6 +125,7 @@ pub struct DruidConnectionHolder {
     defaults: ConnectionDefaults,
     statement_pool: Option<Arc<Mutex<PreparedStatementPool>>>,
     standard_statement_pool: Arc<tokio::sync::Mutex<StandardPreparedStatementCache>>,
+    standard_resources: Arc<StandardResourceRegistry>,
     pool_prepared_statements: bool,
     max_pool_prepared_statements_per_connection: usize,
     share_prepared_statements: bool,
@@ -277,7 +278,7 @@ impl DruidConnectionHolder {
     /// `DruidConnectionHolder(DruidAbstractDataSource, PhysicalConnectionInfo)`。
     /// connect 阶段耗时、会话变量和全局变量随物理连接一起移动，避免拆成
     /// 与连接生命周期不同步的旁路状态。
-    pub(crate) fn with_connection_info(
+    pub(crate) async fn with_connection_info(
         mut connection_info: PhysicalConnectionInfo,
         id: u64,
         user_password_version: u64,
@@ -285,8 +286,8 @@ impl DruidConnectionHolder {
         let create_duration = connection_info.connect_span();
         let variables = connection_info.take_variables();
         let global_variables = connection_info.take_global_variables();
-        if let Some(connection) = connection_info.take_connection() {
-            let defaults = ConnectionDefaults::capture_standard(connection.as_ref())?;
+        if let Some(mut connection) = connection_info.take_connection() {
+            let defaults = ConnectionDefaults::capture_standard(connection.as_mut()).await?;
             return Ok(Self::new_internal(
                 Some(connection),
                 ConnectionOwnerPolicy::NativePool,
@@ -309,8 +310,8 @@ impl DruidConnectionHolder {
             let compatibility = physical_any
                 .downcast::<StandardConnectionCompatibility>()
                 .map_err(|_| DruidError::ConnectionDiscarded)?;
-            let connection = compatibility.into_standard()?;
-            let defaults = ConnectionDefaults::capture_standard(connection.as_ref())?;
+            let mut connection = compatibility.into_standard()?;
+            let defaults = ConnectionDefaults::capture_standard(connection.as_mut()).await?;
             return Ok(Self::new_internal(
                 Some(connection),
                 ConnectionOwnerPolicy::NativePool,
@@ -349,11 +350,8 @@ impl DruidConnectionHolder {
         defaults: ConnectionDefaults,
     ) -> Self {
         let now = Instant::now();
-        let standard_cache_size = match owner {
-            ConnectionOwnerPolicy::NativePool => 10,
-            // 外部租约归还时只移交 raw connection；旧 statement 不能跨租约缓存。
-            ConnectionOwnerPolicy::ExternalLease => 0,
-        };
+        // cache 必须由显式 pool_prepared_statements 配置开启；external lease 永不缓存。
+        let standard_cache_size = 0;
         Self {
             connection,
             owner,
@@ -381,6 +379,7 @@ impl DruidConnectionHolder {
             standard_statement_pool: Arc::new(tokio::sync::Mutex::new(
                 StandardPreparedStatementCache::new(standard_cache_size),
             )),
+            standard_resources: Arc::new(StandardResourceRegistry::default()),
             pool_prepared_statements: false,
             max_pool_prepared_statements_per_connection: 10,
             share_prepared_statements: false,
@@ -394,7 +393,7 @@ impl DruidConnectionHolder {
     }
 
     /// 从 canonical standard raw connection 创建 native-pool holder。
-    pub fn with_standard_connection(
+    pub async fn with_standard_connection(
         connection: Box<dyn druid_rdbc::connection::Connection>,
         id: u64,
         create_duration: Duration,
@@ -407,10 +406,11 @@ impl DruidConnectionHolder {
             user_password_version,
             ConnectionOwnerPolicy::NativePool,
         )
+        .await
     }
 
     /// 从 canonical standard raw connection 创建 external-lease holder。
-    pub(crate) fn with_external_standard_connection(
+    pub(crate) async fn with_external_standard_connection(
         connection: Box<dyn druid_rdbc::connection::Connection>,
         id: u64,
         create_duration: Duration,
@@ -423,16 +423,17 @@ impl DruidConnectionHolder {
             user_password_version,
             ConnectionOwnerPolicy::ExternalLease,
         )
+        .await
     }
 
-    fn with_standard_connection_owner(
-        connection: Box<dyn druid_rdbc::connection::Connection>,
+    async fn with_standard_connection_owner(
+        mut connection: Box<dyn druid_rdbc::connection::Connection>,
         id: u64,
         create_duration: Duration,
         user_password_version: u64,
         owner: ConnectionOwnerPolicy,
     ) -> Result<Self, DruidError> {
-        let defaults = ConnectionDefaults::capture_standard(connection.as_ref())?;
+        let defaults = ConnectionDefaults::capture_standard(connection.as_mut()).await?;
         Ok(Self::new_internal(
             Some(connection),
             owner,
@@ -487,13 +488,32 @@ impl DruidConnectionHolder {
         self.owner == ConnectionOwnerPolicy::ExternalLease
     }
 
+    /// 返回两个互斥 raw slot 中的实际连接是否不可复用。
+    pub(crate) fn raw_connection_is_unusable(&self) -> bool {
+        match (&self.connection, &self.physical_connection) {
+            (Some(connection), None) => connection.is_closed().unwrap_or(true),
+            (None, Some(connection)) => connection.is_closed() || connection.is_discarded(),
+            // 两槽同时为空或同时存在都违反 holder 单一 owner 不变量。
+            (None, None) | (Some(_), Some(_)) => true,
+        }
+    }
+
+    pub(crate) fn standard_resource_registry(&self) -> Arc<StandardResourceRegistry> {
+        Arc::clone(&self.standard_resources)
+    }
+
+    pub(crate) fn has_open_standard_resources(&self) -> bool {
+        self.standard_resources.has_open_resources()
+    }
+
     /// eviction/shutdown 唯一拥有的 canonical raw close。
     pub async fn close_standard_connection(&mut self) -> Result<(), DruidError> {
+        let resources = Arc::clone(&self.standard_resources);
+        let mut first_error = resources.close_all().await.map_err(DruidError::from).err();
         let cached = {
             let mut cache = self.standard_statement_pool.lock().await;
             cache.clear()
         };
-        let mut first_error = None;
         for mut statement in cached {
             if let Err(error) = statement.close().await {
                 first_error.get_or_insert_with(|| DruidError::from(error));
@@ -689,7 +709,11 @@ impl DruidConnectionHolder {
         self.clear_statement_cache();
         self.statement_pool = None;
         self.standard_statement_pool = Arc::new(tokio::sync::Mutex::new(
-            StandardPreparedStatementCache::new(max_pool_prepared_statements_per_connection),
+            StandardPreparedStatementCache::new(if pool_prepared_statements {
+                max_pool_prepared_statements_per_connection
+            } else {
+                0
+            }),
         ));
         self.pool_prepared_statements = pool_prepared_statements;
         self.max_pool_prepared_statements_per_connection =
@@ -758,17 +782,6 @@ impl DruidConnectionHolder {
         })
     }
 
-    /// 从缓存取得 `PreparedStatement` holder。
-    pub fn get_cached_prepared_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Option<Arc<PreparedStatementHolder>> {
-        self.statement_pool()
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(key)
-    }
-
     /// 将 `PreparedStatement` holder 放回缓存。
     pub fn cache_prepared_statement(&mut self, holder: Arc<PreparedStatementHolder>) {
         self.statement_pool()
@@ -812,10 +825,12 @@ impl DruidConnectionHolder {
             self.clear_connection_event_listeners();
             self.clear_statement_event_listeners();
             self.close_statement_trace();
-            self.standard_connection_mut()
-                .ok_or(DruidError::ConnectionDiscarded)?
-                .clear_warnings()
-                .await?;
+            if defaults.standard_warnings_supported() {
+                self.standard_connection_mut()
+                    .ok_or(DruidError::ConnectionDiscarded)?
+                    .clear_warnings()
+                    .await?;
+            }
             return Ok(());
         }
         {
@@ -992,14 +1007,11 @@ impl DruidConnectionHolder {
     /// 返回 holder 或物理 Adapter 是否已经标记丢弃。
     pub fn is_discard(&self) -> bool {
         self.discard.load(Ordering::Acquire)
-            || self
-                .connection
-                .as_ref()
-                .is_some_and(|connection| connection.is_closed().unwrap_or(true))
-            || self
-                .physical_connection
-                .as_ref()
-                .is_none_or(|connection| connection.is_discarded())
+            || match (&self.connection, &self.physical_connection) {
+                (Some(connection), None) => connection.is_closed().unwrap_or(true),
+                (None, Some(connection)) => connection.is_discarded(),
+                (None, None) | (Some(_), Some(_)) => true,
+            }
     }
 
     /// 保存首次修改 schema 前的原始值。

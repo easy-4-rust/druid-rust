@@ -1,13 +1,13 @@
-//! Java PreparedStatementKey/Holder/Pool 等价契约。
+//! Java PreparedStatementKey/Holder/Pool crate-private 等价契约。
 //!
 //! Java oracle：
 //! - `com.alibaba.druid.bvt.pool.PreparedStatementKeyTest`
 //! - `com.alibaba.druid.bvt.pool.basic.PreparedStatementKeyTest`
 //! - `com.alibaba.druid.bvt.pool.PSCacheTest3`
 
-use druid::core::prepared_statement_key::PreparedStatementKey;
-use druid::core::prepared_statement_method_type::PreparedStatementMethodType;
-use druid::core::{
+use super::prepared_statement_key::PreparedStatementKey;
+use super::prepared_statement_method_type::PreparedStatementMethodType;
+use super::{
     PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementPool, RdbcError,
     SqlTextPreparedStatement, StatementGeneratedKeys,
 };

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use druid_rdbc::connection::Connection;
-use druid_rdbc::error::{RdbcError, SqlWarning};
+use druid_rdbc::error::{RdbcError, SqlException, SqlWarning};
 use druid_rdbc::extensions::ConnectionCapabilities;
 use druid_rdbc::metadata::{
     ColumnDescriptor, ColumnNullability, DatabaseMetaData, ParameterDescriptor, ParameterMetaData,
@@ -23,10 +23,16 @@ pub struct TrackingState {
     pub raw_close_count: AtomicUsize,
     pub raw_close_attempt_count: AtomicUsize,
     pub statement_close_count: AtomicUsize,
+    pub statement_close_attempt_count: AtomicUsize,
     pub prepared_close_count: AtomicUsize,
+    pub prepared_close_attempt_count: AtomicUsize,
+    pub prepared_clear_attempt_count: AtomicUsize,
+    pub prepared_is_closed_attempt_count: AtomicUsize,
     pub result_set_close_count: AtomicUsize,
+    pub result_set_next_count: AtomicUsize,
     pub metadata_query_count: AtomicUsize,
     pub factory_create_count: AtomicUsize,
+    pub is_valid_attempt_count: AtomicUsize,
     pub auto_commit: AtomicBool,
     pub read_only: AtomicBool,
     pub catalog: Mutex<Option<String>>,
@@ -89,6 +95,118 @@ impl TrackingState {
 
 pub struct TrackingFactory {
     state: Arc<TrackingState>,
+}
+
+pub struct UnsupportedStateFactory {
+    state: Arc<TrackingState>,
+    setter_attempts: Arc<AtomicUsize>,
+}
+
+impl UnsupportedStateFactory {
+    pub fn new(state: Arc<TrackingState>, setter_attempts: Arc<AtomicUsize>) -> Self {
+        Self {
+            state,
+            setter_attempts,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for UnsupportedStateFactory {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
+        Ok(Box::new(UnsupportedStateConnection {
+            inner: TrackingConnection::new(Arc::clone(&self.state)),
+            setter_attempts: Arc::clone(&self.setter_attempts),
+        }))
+    }
+
+    fn name(&self) -> &str {
+        "task5-unsupported-state"
+    }
+}
+
+struct UnsupportedStateConnection {
+    inner: TrackingConnection,
+    setter_attempts: Arc<AtomicUsize>,
+}
+
+druid_rdbc::impl_standard_wrapper!(UnsupportedStateConnection => Connection);
+
+#[async_trait::async_trait]
+impl Connection for UnsupportedStateConnection {
+    async fn create_statement(
+        &mut self,
+        options: StatementOptions,
+    ) -> Result<Box<dyn Statement>, RdbcError> {
+        Connection::create_statement(&mut self.inner, options).await
+    }
+
+    async fn set_auto_commit(&mut self, _enabled: bool) -> Result<(), RdbcError> {
+        self.setter_attempts.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn auto_commit(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_auto_commit",
+        })
+    }
+
+    fn read_only(&self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_read_only",
+        })
+    }
+
+    async fn set_read_only(&mut self, _read_only: bool) -> Result<(), RdbcError> {
+        self.setter_attempts.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn catalog(&self) -> Result<Option<String>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_catalog",
+        })
+    }
+
+    async fn set_catalog(&mut self, _catalog: Option<&str>) -> Result<(), RdbcError> {
+        self.setter_attempts.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn schema(&self) -> Result<Option<String>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_schema",
+        })
+    }
+
+    async fn set_schema(&mut self, _schema: Option<&str>) -> Result<(), RdbcError> {
+        self.setter_attempts.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_warnings",
+        })
+    }
+
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.setter_attempts.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    async fn is_valid(&mut self, _timeout_seconds: u32) -> Result<bool, RdbcError> {
+        Ok(true)
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        Connection::close(&mut self.inner).await
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Connection::is_closed(&self.inner)
+    }
 }
 
 impl TrackingFactory {
@@ -205,11 +323,13 @@ impl Connection for TrackingConnection {
 
     fn auto_commit(&self) -> Result<bool, RdbcError> {
         self.ensure_open()?;
+        self.state.check_failure("auto_commit_getter")?;
         Ok(self.state.auto_commit.load(Ordering::Acquire))
     }
 
     fn read_only(&self) -> Result<bool, RdbcError> {
         self.ensure_open()?;
+        self.state.check_failure("read_only_getter")?;
         Ok(self.state.read_only.load(Ordering::Acquire))
     }
 
@@ -224,6 +344,7 @@ impl Connection for TrackingConnection {
 
     fn catalog(&self) -> Result<Option<String>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_failure("catalog_getter")?;
         Ok(self
             .state
             .catalog
@@ -249,6 +370,7 @@ impl Connection for TrackingConnection {
 
     fn schema(&self) -> Result<Option<String>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_failure("schema_getter")?;
         Ok(self
             .state
             .schema
@@ -274,6 +396,7 @@ impl Connection for TrackingConnection {
 
     async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_failure("warnings_getter")?;
         Ok(self
             .state
             .warnings
@@ -305,6 +428,11 @@ impl Connection for TrackingConnection {
     }
 
     async fn is_valid(&mut self, _timeout_seconds: u32) -> Result<bool, RdbcError> {
+        self.state
+            .is_valid_attempt_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_failure("is_valid")?;
+        self.state.record("connection.is_valid");
         Ok(!self.closed)
     }
 
@@ -358,10 +486,42 @@ impl Statement for TrackingStatement {
         _generated_keys: GeneratedKeys,
     ) -> Result<i64, RdbcError> {
         self.state.record(format!("statement.update:{sql}"));
+        if self
+            .state
+            .check_failure("statement_execute_update")
+            .is_err()
+        {
+            return Err(RdbcError::SqlException(Box::new(
+                SqlException::new(
+                    9001,
+                    Some("08006".to_owned()),
+                    Some("forced standard statement failure".to_owned()),
+                )
+                .with_class_name("task5.FatalConnectionException"),
+            )));
+        }
         Ok(1)
     }
 
+    async fn execute(
+        &mut self,
+        sql: &str,
+        _generated_keys: GeneratedKeys,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
+        self.state.record(format!("statement.execute:{sql}"));
+        Ok(vec![druid_rdbc::statement::ExecutionResult::ResultSet(
+            Box::new(TrackingResultSet::rows(
+                Arc::clone(&self.state),
+                vec![vec![Value::Int(44)]],
+            )),
+        )])
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
+        self.state
+            .statement_close_attempt_count
+            .fetch_add(1, Ordering::AcqRel);
+        tokio::task::yield_now().await;
         if !self.closed {
             self.closed = true;
             self.state
@@ -401,6 +561,10 @@ druid_rdbc::impl_standard_wrapper!(TrackingPreparedStatement => PreparedStatemen
 impl Statement for TrackingPreparedStatement {
     async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
+            self.state
+                .prepared_close_attempt_count
+                .fetch_add(1, Ordering::AcqRel);
+            self.state.check_failure("prepared_close")?;
             self.closed = true;
             self.state
                 .prepared_close_count
@@ -411,6 +575,10 @@ impl Statement for TrackingPreparedStatement {
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
+        self.state
+            .prepared_is_closed_attempt_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_failure("prepared_is_closed")?;
         Ok(self.closed)
     }
 }
@@ -425,6 +593,10 @@ impl PreparedStatement for TrackingPreparedStatement {
     }
 
     fn clear_parameters(&mut self) -> Result<(), RdbcError> {
+        self.state
+            .prepared_clear_attempt_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_failure("prepared_clear_parameters")?;
         self.parameters.clear();
         Ok(())
     }
@@ -536,6 +708,10 @@ druid_rdbc::impl_standard_wrapper!(TrackingResultSet => ResultSet);
 #[async_trait::async_trait]
 impl ResultSet for TrackingResultSet {
     async fn next(&mut self) -> Result<bool, RdbcError> {
+        self.state
+            .result_set_next_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.record("result_set.next");
         self.current = self.rows.pop_front();
         self.was_null = false;
         Ok(self.current.is_some())

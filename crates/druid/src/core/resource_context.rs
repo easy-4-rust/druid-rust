@@ -19,6 +19,8 @@ pub(crate) struct ResourceContext {
     owner: Option<Arc<dyn ResourceOwner>>,
     state: AtomicU8,
     state_changed: Notify,
+    #[cfg(test)]
+    releasing_wait_hook: std::sync::Mutex<Option<(Arc<Notify>, Arc<Notify>)>>,
 }
 
 #[allow(dead_code)]
@@ -36,6 +38,8 @@ impl ResourceContext {
             owner: Some(owner),
             state: AtomicU8::new(ResourceState::Open as u8),
             state_changed: Notify::new(),
+            #[cfg(test)]
+            releasing_wait_hook: std::sync::Mutex::new(None),
         }
     }
 
@@ -47,6 +51,8 @@ impl ResourceContext {
             owner: None,
             state: AtomicU8::new(ResourceState::Open as u8),
             state_changed: Notify::new(),
+            #[cfg(test)]
+            releasing_wait_hook: std::sync::Mutex::new(None),
         }
     }
 
@@ -87,12 +93,17 @@ impl ResourceContext {
     {
         loop {
             let changed = self.state_changed.notified();
-            match self.state() {
+            tokio::pin!(changed);
+            changed.as_mut().enable();
+            let state = self.state();
+            #[cfg(test)]
+            self.pause_after_releasing_observation(state).await;
+            match state {
                 ResourceState::Freed => return Ok(()),
                 ResourceState::Invalid => {
                     return Err(RdbcError::rdbc_resource_closed(self.kind.standard_name()));
                 }
-                ResourceState::Releasing => changed.await,
+                ResourceState::Releasing => changed.as_mut().await,
                 ResourceState::Open => {
                     if self
                         .state
@@ -132,6 +143,30 @@ impl ResourceContext {
         self.state
             .store(ResourceState::Invalid as u8, Ordering::Release);
         self.state_changed.notify_waiters();
+    }
+
+    #[cfg(test)]
+    fn install_releasing_wait_hook(&self, observed: Arc<Notify>, resume: Arc<Notify>) {
+        *self
+            .releasing_wait_hook
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((observed, resume));
+    }
+
+    #[cfg(test)]
+    async fn pause_after_releasing_observation(&self, state: ResourceState) {
+        if state != ResourceState::Releasing {
+            return;
+        }
+        let hook = self
+            .releasing_wait_hook
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some((observed, resume)) = hook {
+            observed.notify_one();
+            resume.notified().await;
+        }
     }
 }
 
@@ -210,6 +245,53 @@ mod tests {
         assert_eq!(releases.load(Ordering::SeqCst), 1);
         assert_eq!(owner.released.load(Ordering::SeqCst), 1);
         assert_eq!(context.state(), ResourceState::Freed);
+    }
+
+    #[tokio::test]
+    async fn release_waiter_cannot_miss_winner_notification() {
+        let context = Arc::new(ResourceContext::detached(
+            ResourceKind::Blob,
+            ResourceRuntimeCapabilities::FREE,
+        ));
+        let winner_started = Arc::new(Notify::new());
+        let winner_resume = Arc::new(Notify::new());
+        let winner_context = Arc::clone(&context);
+        let winner_started_signal = Arc::clone(&winner_started);
+        let winner_resume_wait = Arc::clone(&winner_resume);
+        let winner = tokio::spawn(async move {
+            winner_context
+                .release_with(move || async move {
+                    winner_started_signal.notify_one();
+                    winner_resume_wait.notified().await;
+                    Ok(())
+                })
+                .await
+        });
+        winner_started.notified().await;
+
+        let loser_observed = Arc::new(Notify::new());
+        let loser_resume = Arc::new(Notify::new());
+        context.install_releasing_wait_hook(Arc::clone(&loser_observed), Arc::clone(&loser_resume));
+        let loser_context = Arc::clone(&context);
+        let loser = tokio::spawn(async move {
+            loser_context
+                .release_with(|| async {
+                    panic!("loser must not release the resource");
+                    #[allow(unreachable_code)]
+                    Ok(())
+                })
+                .await
+        });
+        loser_observed.notified().await;
+        winner_resume.notify_one();
+        assert!(winner.await.expect("winner join").is_ok());
+        loser_resume.notify_one();
+
+        let loser_result = tokio::time::timeout(std::time::Duration::from_millis(100), loser)
+            .await
+            .expect("enabled waiter must observe completed release")
+            .expect("loser join");
+        assert!(loser_result.is_ok());
     }
 
     #[test]

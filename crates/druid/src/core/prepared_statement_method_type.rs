@@ -5,7 +5,7 @@
 /// Druid cache 需要区分的 prepareStatement/prepareCall 重载。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[allow(dead_code)] // All Java overload identities must exist before their call paths cut over.
-pub enum PreparedStatementMethodType {
+pub(crate) enum PreparedStatementMethodType {
     /// `prepareStatement(String)`。
     M1,
     /// `prepareStatement(String, int, int)`。

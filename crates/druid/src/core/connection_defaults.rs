@@ -7,6 +7,7 @@
 
 use super::{DruidError, PhysicalConnection};
 use druid_rdbc::connection::Connection as StandardConnection;
+use druid_rdbc::error::{RdbcError, RdbcErrorKind};
 
 /// 物理连接进入连接池时的默认状态。
 ///
@@ -21,6 +22,11 @@ pub struct ConnectionDefaults {
     transaction_isolation: u8,
     catalog: Option<String>,
     schema: Option<String>,
+    standard_auto_commit_supported: bool,
+    standard_read_only_supported: bool,
+    standard_catalog_supported: bool,
+    standard_schema_supported: bool,
+    standard_warnings_supported: bool,
 }
 
 impl Default for ConnectionDefaults {
@@ -32,6 +38,11 @@ impl Default for ConnectionDefaults {
             transaction_isolation: 2,
             catalog: None,
             schema: None,
+            standard_auto_commit_supported: false,
+            standard_read_only_supported: false,
+            standard_catalog_supported: false,
+            standard_schema_supported: false,
+            standard_warnings_supported: false,
         }
     }
 }
@@ -51,21 +62,52 @@ impl ConnectionDefaults {
             transaction_isolation: connection.transaction_isolation(),
             catalog: connection.catalog().map(ToOwned::to_owned),
             schema: connection.schema().map(ToOwned::to_owned),
+            standard_auto_commit_supported: false,
+            standard_read_only_supported: false,
+            standard_catalog_supported: false,
+            standard_schema_supported: false,
+            standard_warnings_supported: false,
         }
     }
 
     /// 从 canonical standard connection 捕获 Druid 回收所需默认状态。
-    pub(crate) fn capture_standard(
-        connection: &dyn StandardConnection,
+    pub(crate) async fn capture_standard(
+        connection: &mut dyn StandardConnection,
     ) -> Result<Self, DruidError> {
+        let auto_commit = optional_standard_state(connection.auto_commit())?;
+        let read_only = optional_standard_state(connection.read_only())?;
+        let catalog = optional_standard_state(connection.catalog())?;
+        let schema = optional_standard_state(connection.schema())?;
+        let warnings_supported = optional_standard_state(connection.warnings().await)?.is_some();
         Ok(Self {
-            auto_commit: connection.auto_commit()?,
-            read_only: connection.read_only()?,
+            auto_commit: auto_commit.unwrap_or(true),
+            read_only: read_only.unwrap_or(false),
             holdability: 0,
             transaction_isolation: 2,
-            catalog: connection.catalog()?,
-            schema: connection.schema()?,
+            catalog: catalog.clone().flatten(),
+            schema: schema.clone().flatten(),
+            standard_auto_commit_supported: auto_commit.is_some(),
+            standard_read_only_supported: read_only.is_some(),
+            standard_catalog_supported: catalog.is_some(),
+            standard_schema_supported: schema.is_some(),
+            standard_warnings_supported: warnings_supported,
         })
+    }
+
+    /// 返回 standard auto-commit 是否可观察及其首次值。
+    pub(crate) fn standard_auto_commit(&self) -> Option<bool> {
+        self.standard_auto_commit_supported
+            .then_some(self.auto_commit)
+    }
+
+    /// 返回 standard read-only 是否可观察及其首次值。
+    pub(crate) fn standard_read_only(&self) -> Option<bool> {
+        self.standard_read_only_supported.then_some(self.read_only)
+    }
+
+    /// 返回 standard warning chain 是否可观察/清理。
+    pub(crate) fn standard_warnings_supported(&self) -> bool {
+        self.standard_warnings_supported
     }
 
     /// 返回默认自动提交状态。
@@ -103,11 +145,15 @@ impl ConnectionDefaults {
         &self,
         connection: &dyn StandardConnection,
     ) -> Result<bool, DruidError> {
-        let capabilities = connection.capabilities();
-        Ok(connection.read_only()? != self.read_only
-            || connection.auto_commit()? != self.auto_commit
-            || (capabilities.catalogs && connection.catalog()?.as_deref() != self.catalog())
-            || (capabilities.schemas && connection.schema()?.as_deref() != self.schema()))
+        Ok(
+            (self.standard_read_only_supported && connection.read_only()? != self.read_only)
+                || (self.standard_auto_commit_supported
+                    && connection.auto_commit()? != self.auto_commit)
+                || (self.standard_catalog_supported
+                    && connection.catalog()?.as_deref() != self.catalog())
+                || (self.standard_schema_supported
+                    && connection.schema()?.as_deref() != self.schema()),
+        )
     }
 
     /// 按 Druid holder 顺序恢复 canonical standard connection 状态。
@@ -115,17 +161,16 @@ impl ConnectionDefaults {
         &self,
         connection: &mut dyn StandardConnection,
     ) -> Result<(), DruidError> {
-        let capabilities = connection.capabilities();
-        if connection.read_only()? != self.read_only {
+        if self.standard_read_only_supported && connection.read_only()? != self.read_only {
             connection.set_read_only(self.read_only).await?;
         }
-        if capabilities.catalogs && connection.catalog()?.as_deref() != self.catalog() {
+        if self.standard_catalog_supported && connection.catalog()?.as_deref() != self.catalog() {
             connection.set_catalog(self.catalog()).await?;
         }
-        if capabilities.schemas && connection.schema()?.as_deref() != self.schema() {
+        if self.standard_schema_supported && connection.schema()?.as_deref() != self.schema() {
             connection.set_schema(self.schema()).await?;
         }
-        if connection.auto_commit()? != self.auto_commit {
+        if self.standard_auto_commit_supported && connection.auto_commit()? != self.auto_commit {
             connection.set_auto_commit(self.auto_commit).await?;
         }
         Ok(())
@@ -207,5 +252,20 @@ impl ConnectionDefaults {
         }
 
         Ok(())
+    }
+}
+
+fn optional_standard_state<T>(result: Result<T, RdbcError>) -> Result<Option<T>, DruidError> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error)
+            if matches!(
+                error.kind(),
+                RdbcErrorKind::UnsupportedOperation | RdbcErrorKind::SqlFeatureNotSupported
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error.into()),
     }
 }

@@ -6,6 +6,7 @@ use super::connection_event_listener::ConnectionEventListener;
 use super::connection_recycle_disposition::ConnectionRecycleDisposition;
 use super::database_meta_data_proxy_impl::DatabaseMetaDataProxyImpl;
 use super::druid_connection_holder::{DruidConnectionHolder, StatementTrace};
+use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
 use super::druid_pooled_callable_statement::DruidPooledCallableStatement;
 use super::druid_pooled_prepared_statement::DruidPooledPreparedStatement;
 use super::druid_pooled_statement::DruidPooledStatement;
@@ -32,6 +33,7 @@ use super::rdbc_result_set::PhysicalResultSet;
 use super::row::Row;
 use super::savepoint::Savepoint;
 use super::sql_warning::SqlWarning;
+use super::standard_logical_policy::StandardLogicalPolicy;
 use super::statement_event_listener::StatementEventListener;
 use super::transaction_info::TransactionInfo;
 use super::value::Value;
@@ -113,6 +115,7 @@ pub struct DruidPooledConnection {
     return_connection: Option<DruidConnectionReturnCallback>,
     lease_active: Arc<AtomicBool>,
     execution_running: Arc<AtomicBool>,
+    standard_policy: Option<Arc<StandardLogicalPolicy>>,
     borrowed_at: Instant,
     recycled: bool,
     connection_closed_notified: bool,
@@ -370,6 +373,19 @@ impl DruidPooledConnection {
         return_connection: DruidConnectionReturnCallback,
     ) -> Self {
         let id = holder.connection_id();
+        let standard = holder.has_standard_connection();
+        let lease_active = Arc::new(AtomicBool::new(true));
+        let execution_running = Arc::new(AtomicBool::new(false));
+        let standard_policy = standard.then(|| {
+            StandardLogicalPolicy::new(
+                id,
+                data_source.clone(),
+                Arc::clone(&lease_active),
+                Arc::clone(&execution_running),
+                filter_chain.clone(),
+                holder.defaults().standard_auto_commit(),
+            )
+        });
         let connected_time_millis = now_millis().saturating_sub(
             holder
                 .created_at
@@ -389,8 +405,9 @@ impl DruidPooledConnection {
             exception_sorter: None,
             fatal_error_handler: None,
             return_connection: Some(return_connection),
-            lease_active: Arc::new(AtomicBool::new(true)),
-            execution_running: Arc::new(AtomicBool::new(false)),
+            lease_active,
+            execution_running,
+            standard_policy,
             borrowed_at: Instant::now(),
             recycled: false,
             connection_closed_notified: false,
@@ -438,7 +455,7 @@ impl DruidPooledConnection {
     ///
     /// external owner 的 holder 永远不会进入 native pool callback。
     #[allow(clippy::too_many_arguments)]
-    pub fn with_external_standard_connection(
+    pub async fn with_external_standard_connection(
         connection: Box<dyn druid_rdbc::connection::Connection>,
         id: u64,
         data_source: String,
@@ -451,7 +468,8 @@ impl DruidPooledConnection {
             id,
             Duration::ZERO,
             0,
-        )?;
+        )
+        .await?;
         Ok(Self::with_standard_holder(
             holder,
             data_source,
@@ -653,6 +671,9 @@ impl DruidPooledConnection {
     /// 分类器命中 fatal SQL 异常时，当前 holder 与物理 Adapter 会立即标记为
     /// discard，之后的 close/Drop 只能进入销毁分支。
     pub fn set_exception_sorter(&mut self, exception_sorter: Arc<dyn ExceptionSorter>) {
+        if let Some(policy) = &self.standard_policy {
+            policy.set_exception_sorter(Arc::clone(&exception_sorter));
+        }
         self.exception_sorter = Some(exception_sorter);
     }
 
@@ -668,11 +689,17 @@ impl DruidPooledConnection {
         &mut self,
         fatal_error_handler: Arc<dyn FatalErrorHandler>,
     ) {
+        if let Some(policy) = &self.standard_policy {
+            policy.set_fatal_error_handler(Arc::clone(&fatal_error_handler));
+        }
         self.fatal_error_handler = Some(fatal_error_handler);
     }
 
     /// 装配数据源级运行统计；native pool 对外连接必须共享同一实例。
     pub(crate) fn set_stats_collector(&mut self, stats_collector: Arc<StatsCollector>) {
+        if let Some(policy) = &self.standard_policy {
+            policy.set_stats_collector(Arc::clone(&stats_collector));
+        }
         self.stats_collector = Some(stats_collector);
     }
 
@@ -1062,6 +1089,8 @@ impl DruidPooledConnection {
             self.lease_active.clone(),
             self.filter_chain.clone(),
             self.stats_collector.clone(),
+            None,
+            None,
         );
         let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         holder.add_statement_trace(StatementTrace::Statement(statement.statement_trace_inner()));
@@ -1438,6 +1467,8 @@ impl DruidPooledConnection {
             self.lease_active.clone(),
             self.filter_chain.clone(),
             self.stats_collector.clone(),
+            None,
+            None,
         );
         let holder = self.holder.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
         holder.add_statement_trace(StatementTrace::Prepared(statement.statement_trace_shared()));
@@ -1517,6 +1548,18 @@ impl DruidPooledConnection {
         };
         let defaults = holder.defaults().clone();
         if holder.has_standard_connection() {
+            if self
+                .standard_policy
+                .as_ref()
+                .is_some_and(|policy| policy.is_discarded())
+            {
+                holder.mark_discarded();
+                return ConnectionRecycleDisposition::discard();
+            }
+            if holder.has_open_standard_resources() {
+                holder.mark_discarded();
+                return ConnectionRecycleDisposition::discard();
+            }
             let unusable_or_dirty = holder.standard_connection().is_none_or(|connection| {
                 connection.is_closed().unwrap_or(true)
                     || defaults.standard_needs_reset(connection).unwrap_or(true)
@@ -1646,15 +1689,47 @@ impl DruidPooledConnection {
 
     async fn prepare_standard_for_recycle(&mut self) -> ConnectionRecycleDisposition {
         let reset_result = async {
+            let resources = self
+                .holder
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .standard_resource_registry();
+            resources.close_all().await?;
+            if self
+                .standard_policy
+                .as_ref()
+                .is_some_and(|policy| policy.is_discarded())
+            {
+                return Err(RdbcError::ConnectionDiscarded);
+            }
+            let defaults = self
+                .holder
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .defaults()
+                .clone();
             let (supports_transactions, auto_commit, read_only) = {
                 let connection = self.standard_ref()?;
                 (
                     connection.capabilities().transactions,
-                    connection.auto_commit()?,
-                    connection.read_only()?,
+                    if defaults.standard_auto_commit().is_some() {
+                        Some(connection.auto_commit()?)
+                    } else {
+                        None
+                    },
+                    if defaults.standard_read_only().is_some() {
+                        Some(connection.read_only()?)
+                    } else {
+                        None
+                    },
                 )
             };
-            if supports_transactions && !auto_commit && !read_only {
+            if supports_transactions && auto_commit.is_none() {
+                return Err(RdbcError::UnsupportedOperation {
+                    operation: "connection_auto_commit",
+                });
+            }
+            if supports_transactions && auto_commit == Some(false) && read_only != Some(true) {
                 self.before_connection_event(&ConnectionEvent::Rollback)
                     .await?;
                 self.standard_mut()?.rollback().await?;
@@ -1739,6 +1814,21 @@ impl DruidPooledConnection {
         }
     }
 
+    async fn after_connection_event(
+        &mut self,
+        event: &ConnectionEvent,
+        started_at: Instant,
+    ) -> Result<(), RdbcError> {
+        let Some(filter_chain) = self.filter_chain.clone() else {
+            return Ok(());
+        };
+        let result = filter_chain
+            .after_connection_event_with_identity(self.id, event, started_at.elapsed())
+            .await
+            .map_err(RdbcError::from);
+        self.classify_result(result)
+    }
+
     async fn close_logical_once(&mut self) -> Result<(), RdbcError> {
         if self.recycled {
             return Ok(());
@@ -1814,6 +1904,7 @@ impl DruidPooledConnection {
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
+        let driver_params = params.clone();
         let mut context = ExecContext {
             connection_id: self.id,
             statement_id,
@@ -1827,28 +1918,31 @@ impl DruidPooledConnection {
             operation: super::ExecOperation::Update,
         };
 
-        if let Some(filter_chain) = &filter_chain {
-            let result = filter_chain.before_execute(&mut context).await;
-            self.classify_result_with_sql(result, Some(&context.sql))?;
-        }
-
-        // 过滤器需要在 after 阶段观察同一组参数，因此只克隆驱动调用所需所有权。
-        let result = self
-            .physical_mut()?
-            .exec(&context.sql, params.clone())
-            .await;
-        let result = self.classify_result_with_sql(result, Some(&context.sql));
-        self.record_execution(&context.sql, &result);
+        let physical_owner = &mut *self;
+        let around = DruidExecutionFilterPolicy::execute(
+            filter_chain.as_deref(),
+            &mut context,
+            move |effective_sql| async move {
+                physical_owner
+                    .physical_mut()?
+                    .exec(&effective_sql, driver_params)
+                    .await
+            },
+            Clone::clone,
+        )
+        .await;
+        let (effective_sql, raw_result, after_result) = match around {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                return self.classify_result_with_sql(Err(error), Some(&context.sql));
+            }
+        };
+        let result = self.classify_result_with_sql(raw_result, Some(&effective_sql));
+        self.record_execution(&effective_sql, &result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
-        if let Some(filter_chain) = &filter_chain {
-            let filter_result = result.clone().map_err(DruidError::from);
-            let after_result = filter_chain
-                .after_execute(&context, &filter_result, start.elapsed())
-                .await;
-            self.classify_result_with_sql(after_result, Some(&context.sql))?;
-        }
+        self.classify_result_with_sql(after_result, Some(&effective_sql))?;
         result
     }
 
@@ -1868,6 +1962,7 @@ impl DruidPooledConnection {
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
+        let driver_params = params.clone();
         let mut context = ExecContext {
             connection_id: self.id,
             statement_id,
@@ -1881,38 +1976,39 @@ impl DruidPooledConnection {
             operation: super::ExecOperation::Execute,
         };
 
-        if let Some(filter_chain) = &filter_chain {
-            let before_result = filter_chain.before_execute(&mut context).await;
-            self.classify_result_with_sql(before_result, Some(&context.sql))?;
-        }
-
-        let result = self
-            .physical_mut()?
-            .execute(&context.sql, params.clone(), generated_keys)
-            .await;
-        let result = self.classify_result_with_sql(result, Some(&context.sql));
-        self.record_execution(&context.sql, &result);
+        let physical_owner = &mut *self;
+        let around = DruidExecutionFilterPolicy::execute(
+            filter_chain.as_deref(),
+            &mut context,
+            move |effective_sql| async move {
+                physical_owner
+                    .physical_mut()?
+                    .execute(&effective_sql, driver_params, generated_keys)
+                    .await
+            },
+            |results| match results.first() {
+                Some(StatementExecuteResult::ResultSet(rows)) => ExecResult {
+                    rows_affected: 0,
+                    last_insert_id: None,
+                    row_count: Some(rows.len() as u64),
+                },
+                Some(StatementExecuteResult::Update(execution)) => execution.clone(),
+                None => ExecResult::default(),
+            },
+        )
+        .await;
+        let (effective_sql, raw_result, after_result) = match around {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                return self.classify_result_with_sql(Err(error), Some(&context.sql));
+            }
+        };
+        let result = self.classify_result_with_sql(raw_result, Some(&effective_sql));
+        self.record_execution(&effective_sql, &result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
-        if let Some(filter_chain) = &filter_chain {
-            let filter_result = match &result {
-                Ok(results) => match results.first() {
-                    Some(StatementExecuteResult::ResultSet(rows)) => Ok(ExecResult {
-                        rows_affected: 0,
-                        last_insert_id: None,
-                        row_count: Some(rows.len() as u64),
-                    }),
-                    Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
-                    None => Ok(ExecResult::default()),
-                },
-                Err(error) => Err(DruidError::from(error.clone())),
-            };
-            let after_result = filter_chain
-                .after_execute(&context, &filter_result, start.elapsed())
-                .await;
-            self.classify_result_with_sql(after_result, Some(&context.sql))?;
-        }
+        self.classify_result_with_sql(after_result, Some(&effective_sql))?;
         result
     }
 
@@ -1937,6 +2033,7 @@ impl DruidPooledConnection {
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
+        let driver_params = params.clone();
         let mut context = ExecContext {
             connection_id: self.id,
             statement_id,
@@ -1950,38 +2047,39 @@ impl DruidPooledConnection {
             operation: super::ExecOperation::Execute,
         };
 
-        if let Some(filter_chain) = &filter_chain {
-            let before_result = filter_chain.before_execute(&mut context).await;
-            self.classify_result_with_sql(before_result, Some(&sql))?;
-        }
-
-        let result = self
-            .physical_mut()?
-            .execute_prepared(statement, params.clone(), generated_keys)
-            .await;
-        let result = self.classify_result_with_sql(result, Some(&sql));
-        self.record_execution(&sql, &result);
+        let physical_owner = &mut *self;
+        let around = DruidExecutionFilterPolicy::execute(
+            filter_chain.as_deref(),
+            &mut context,
+            move |_effective_sql| async move {
+                physical_owner
+                    .physical_mut()?
+                    .execute_prepared(statement, driver_params, generated_keys)
+                    .await
+            },
+            |results| match results.first() {
+                Some(StatementExecuteResult::ResultSet(rows)) => ExecResult {
+                    rows_affected: 0,
+                    last_insert_id: None,
+                    row_count: Some(rows.len() as u64),
+                },
+                Some(StatementExecuteResult::Update(execution)) => execution.clone(),
+                None => ExecResult::default(),
+            },
+        )
+        .await;
+        let (effective_sql, raw_result, after_result) = match around {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                return self.classify_result_with_sql(Err(error), Some(&context.sql));
+            }
+        };
+        let result = self.classify_result_with_sql(raw_result, Some(&effective_sql));
+        self.record_execution(&effective_sql, &result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
-        if let Some(filter_chain) = &filter_chain {
-            let filter_result = match &result {
-                Ok(results) => match results.first() {
-                    Some(StatementExecuteResult::ResultSet(rows)) => Ok(ExecResult {
-                        rows_affected: 0,
-                        last_insert_id: None,
-                        row_count: Some(rows.len() as u64),
-                    }),
-                    Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
-                    None => Ok(ExecResult::default()),
-                },
-                Err(error) => Err(DruidError::from(error.clone())),
-            };
-            let after_result = filter_chain
-                .after_execute(&context, &filter_result, start.elapsed())
-                .await;
-            self.classify_result_with_sql(after_result, Some(&sql))?;
-        }
+        self.classify_result_with_sql(after_result, Some(&effective_sql))?;
         result
     }
 
@@ -2003,6 +2101,7 @@ impl DruidPooledConnection {
         let start = Instant::now();
         let filter_chain = self.filter_chain.clone();
         let data_source = self.data_source.clone();
+        let driver_parameters = parameters.clone();
         let mut context = ExecContext {
             connection_id: self.id,
             statement_id,
@@ -2016,38 +2115,39 @@ impl DruidPooledConnection {
             operation: super::ExecOperation::Execute,
         };
 
-        if let Some(filter_chain) = &filter_chain {
-            let before_result = filter_chain.before_execute(&mut context).await;
-            self.classify_result_with_sql(before_result, Some(&sql))?;
-        }
-
-        let result = self
-            .physical_mut()?
-            .execute_prepared_parameters(statement, parameters.clone(), generated_keys)
-            .await;
-        let result = self.classify_result_with_sql(result, Some(&sql));
-        self.record_execution(&sql, &result);
+        let physical_owner = &mut *self;
+        let around = DruidExecutionFilterPolicy::execute(
+            filter_chain.as_deref(),
+            &mut context,
+            move |_effective_sql| async move {
+                physical_owner
+                    .physical_mut()?
+                    .execute_prepared_parameters(statement, driver_parameters, generated_keys)
+                    .await
+            },
+            |results| match results.first() {
+                Some(StatementExecuteResult::ResultSet(rows)) => ExecResult {
+                    rows_affected: 0,
+                    last_insert_id: None,
+                    row_count: Some(rows.len() as u64),
+                },
+                Some(StatementExecuteResult::Update(execution)) => execution.clone(),
+                None => ExecResult::default(),
+            },
+        )
+        .await;
+        let (effective_sql, raw_result, after_result) = match around {
+            Ok(outcome) => outcome,
+            Err(error) => {
+                return self.classify_result_with_sql(Err(error), Some(&context.sql));
+            }
+        };
+        let result = self.classify_result_with_sql(raw_result, Some(&effective_sql));
+        self.record_execution(&effective_sql, &result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
-        if let Some(filter_chain) = &filter_chain {
-            let filter_result = match &result {
-                Ok(results) => match results.first() {
-                    Some(StatementExecuteResult::ResultSet(rows)) => Ok(ExecResult {
-                        rows_affected: 0,
-                        last_insert_id: None,
-                        row_count: Some(rows.len() as u64),
-                    }),
-                    Some(StatementExecuteResult::Update(execution)) => Ok(execution.clone()),
-                    None => Ok(ExecResult::default()),
-                },
-                Err(error) => Err(DruidError::from(error.clone())),
-            };
-            let after_result = filter_chain
-                .after_execute(&context, &filter_result, start.elapsed())
-                .await;
-            self.classify_result_with_sql(after_result, Some(&sql))?;
-        }
+        self.classify_result_with_sql(after_result, Some(&effective_sql))?;
         result
     }
 
@@ -2629,8 +2729,20 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
         let statement = self.standard_mut()?.create_statement(options).await?;
-        Ok(Box::new(DruidPooledStatement::new_standard(
+        let resources = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        let statement = DruidPooledStatement::new_standard(
             statement,
+            Arc::clone(&resources),
+            policy,
             self.id,
             self.next_statement_id(),
             Arc::clone(&self.result_set_id_seed),
@@ -2638,7 +2750,9 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             Arc::clone(&self.lease_active),
             self.filter_chain.clone(),
             self.stats_collector.clone(),
-        )))
+        );
+        resources.register(Arc::clone(&statement.inner));
+        Ok(Box::new(statement))
     }
 
     async fn prepare_statement(
@@ -2658,6 +2772,16 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .standard_statement_pool();
+        let resources = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
         let cached = cache.lock().await.take(&key);
         let statement = match cached {
             Some(statement) => statement,
@@ -2668,6 +2792,8 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             sql,
             key,
             cache,
+            resources,
+            policy,
             self.id,
             self.next_statement_id(),
             Arc::clone(&self.result_set_id_seed),
@@ -2684,9 +2810,21 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::CallableStatement>, RdbcError> {
         let statement = self.standard_mut()?.prepare_call(sql, options).await?;
+        let resources = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
         Ok(Box::new(DruidPooledCallableStatement::new_standard(
             statement,
             sql,
+            resources,
+            policy,
             self.id,
             self.next_statement_id(),
             Arc::clone(&self.result_set_id_seed),
@@ -2701,32 +2839,62 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
         let raw = self.standard_mut()?.database_meta_data().await?;
+        let resources = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
         Ok(Box::new(DatabaseMetaDataProxyImpl::new_standard(
             raw,
             self.id,
             Arc::clone(&self.lease_active),
+            Arc::clone(&self.result_set_id_seed),
+            resources,
+            policy,
+            self.filter_chain.clone(),
+            self.stats_collector.clone(),
         )))
     }
 
     async fn commit(&mut self) -> Result<(), RdbcError> {
-        self.before_connection_event(&ConnectionEvent::Commit)
-            .await?;
+        let event = ConnectionEvent::Commit;
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
+        if let Some(policy) = &self.standard_policy {
+            policy.record_transaction_boundary(true);
+        }
         let result = self.standard_mut()?.commit().await;
-        self.classify_result(result)
+        self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await
     }
 
     async fn rollback(&mut self) -> Result<(), RdbcError> {
-        self.before_connection_event(&ConnectionEvent::Rollback)
-            .await?;
+        let event = ConnectionEvent::Rollback;
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
+        if let Some(policy) = &self.standard_policy {
+            policy.record_transaction_boundary(false);
+        }
         let result = self.standard_mut()?.rollback().await;
-        self.classify_result(result)
+        self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await
     }
 
     async fn set_auto_commit(&mut self, enabled: bool) -> Result<(), RdbcError> {
-        self.before_connection_event(&ConnectionEvent::SetAutoCommit(enabled))
-            .await?;
+        let event = ConnectionEvent::SetAutoCommit(enabled);
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
         let result = self.standard_mut()?.set_auto_commit(enabled).await;
-        self.classify_result(result)
+        self.classify_result(result)?;
+        if let Some(policy) = &self.standard_policy {
+            policy.set_auto_commit_state(enabled);
+        }
+        self.after_connection_event(&event, started_at).await
     }
 
     fn auto_commit(&self) -> Result<bool, RdbcError> {
@@ -2738,10 +2906,12 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
-        self.before_connection_event(&ConnectionEvent::SetReadOnly(read_only))
-            .await?;
+        let event = ConnectionEvent::SetReadOnly(read_only);
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
         let result = self.standard_mut()?.set_read_only(read_only).await;
-        self.classify_result(result)
+        self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await
     }
 
     fn catalog(&self) -> Result<Option<String>, RdbcError> {
@@ -2749,12 +2919,12 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn set_catalog(&mut self, catalog: Option<&str>) -> Result<(), RdbcError> {
-        self.before_connection_event(&ConnectionEvent::SetCatalog(
-            catalog.unwrap_or_default().to_string(),
-        ))
-        .await?;
+        let event = ConnectionEvent::SetCatalog(catalog.unwrap_or_default().to_string());
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
         let result = self.standard_mut()?.set_catalog(catalog).await;
-        self.classify_result(result)
+        self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await
     }
 
     fn schema(&self) -> Result<Option<String>, RdbcError> {
@@ -2762,16 +2932,16 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn set_schema(&mut self, schema: Option<&str>) -> Result<(), RdbcError> {
-        self.before_connection_event(&ConnectionEvent::SetSchema(
-            schema.unwrap_or_default().to_string(),
-        ))
-        .await?;
+        let event = ConnectionEvent::SetSchema(schema.unwrap_or_default().to_string());
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
         let initial_schema = self.standard_ref()?.schema()?;
         if let Some(holder) = self.holder.as_ref() {
             holder.remember_initial_schema(initial_schema);
         }
         let result = self.standard_mut()?.set_schema(schema).await;
-        self.classify_result(result)
+        self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await
     }
 
     async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
@@ -2779,7 +2949,12 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.standard_mut()?.clear_warnings().await
+        let event = ConnectionEvent::ClearWarnings;
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
+        let result = self.standard_mut()?.clear_warnings().await;
+        self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await
     }
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
@@ -2789,7 +2964,13 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     }
 
     async fn is_valid(&mut self, timeout_seconds: u32) -> Result<bool, RdbcError> {
-        self.standard_mut()?.is_valid(timeout_seconds).await
+        let event = ConnectionEvent::IsValid;
+        let started_at = Instant::now();
+        self.before_connection_event(&event).await?;
+        let result = self.standard_mut()?.is_valid(timeout_seconds).await;
+        let valid = self.classify_result(result)?;
+        self.after_connection_event(&event, started_at).await?;
+        Ok(valid)
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
@@ -2824,6 +3005,22 @@ impl PhysicalConnection for DruidPooledConnection {
 
     async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
         self.fetch_with_filters(sql, params, None).await
+    }
+
+    async fn prepare_physical_statement(
+        &mut self,
+        key: &super::compat::physical_prepared_statement_key_type!(),
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        let result = self.physical_mut()?.prepare_physical_statement(key).await;
+        self.classify_result(result)
+    }
+
+    async fn prepare_physical_call(
+        &mut self,
+        key: &super::compat::physical_prepared_statement_key_type!(),
+    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
+        let result = self.physical_mut()?.prepare_physical_call(key).await;
+        self.classify_result(result)
     }
 
     async fn exec_prepared(

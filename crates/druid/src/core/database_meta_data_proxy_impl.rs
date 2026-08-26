@@ -2,7 +2,9 @@
 //! 来源文件：
 //! `core/src/main/java/com/alibaba/druid/proxy/rdbc/DatabaseMetaDataProxyImpl.java`。
 
-use super::{PhysicalDatabaseMetaData, RdbcError};
+use super::standard_resource_registry::StandardResourceRegistry;
+use super::{DruidPooledResultSet, FilterChain, PhysicalDatabaseMetaData, RdbcError};
+use crate::stats::StatsCollector;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -18,6 +20,11 @@ pub struct DatabaseMetaDataProxyImpl<'connection> {
     standard: Option<Box<dyn druid_rdbc::metadata::DatabaseMetaData>>,
     lease_active: Arc<AtomicBool>,
     connection_id: u64,
+    result_set_id_seed: Option<Arc<std::sync::atomic::AtomicU64>>,
+    standard_resources: Option<Arc<StandardResourceRegistry>>,
+    standard_policy: Option<Arc<super::standard_logical_policy::StandardLogicalPolicy>>,
+    filter_chain: Option<Arc<FilterChain>>,
+    stats_collector: Option<Arc<StatsCollector>>,
 }
 
 impl<'connection> DatabaseMetaDataProxyImpl<'connection> {
@@ -32,6 +39,11 @@ impl<'connection> DatabaseMetaDataProxyImpl<'connection> {
             standard: None,
             lease_active: Arc::new(AtomicBool::new(true)),
             connection_id,
+            result_set_id_seed: None,
+            standard_resources: None,
+            standard_policy: None,
+            filter_chain: None,
+            stats_collector: None,
         }
     }
 
@@ -40,12 +52,22 @@ impl<'connection> DatabaseMetaDataProxyImpl<'connection> {
         standard: Box<dyn druid_rdbc::metadata::DatabaseMetaData>,
         connection_id: u64,
         lease_active: Arc<AtomicBool>,
+        result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        standard_resources: Arc<StandardResourceRegistry>,
+        standard_policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+        filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Option<Arc<StatsCollector>>,
     ) -> DatabaseMetaDataProxyImpl<'static> {
         DatabaseMetaDataProxyImpl {
             raw: None,
             standard: Some(standard),
             lease_active,
             connection_id,
+            result_set_id_seed: Some(result_set_id_seed),
+            standard_resources: Some(standard_resources),
+            standard_policy: Some(standard_policy),
+            filter_chain,
+            stats_collector,
         }
     }
 
@@ -154,10 +176,30 @@ impl druid_rdbc::metadata::DatabaseMetaData for DatabaseMetaDataProxyImpl<'stati
         if !self.lease_active.load(Ordering::Acquire) {
             return Err(RdbcError::ConnectionDiscarded);
         }
-        self.standard
+        let raw = self
+            .standard
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .tables(query)
-            .await
+            .await?;
+        Ok(Box::new(DruidPooledResultSet::new_standard_metadata(
+            self.connection_id,
+            self.result_set_id_seed
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .clone(),
+            Arc::clone(&self.lease_active),
+            self.filter_chain.clone(),
+            self.stats_collector.clone(),
+            self.standard_resources
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .clone(),
+            self.standard_policy
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .clone(),
+            raw,
+        )?))
     }
 }

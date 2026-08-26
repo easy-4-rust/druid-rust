@@ -304,3 +304,191 @@ fail-closed路径；上述附加 RED 均已关闭。没有发现未处置的 Tas
 
 本报告与 production/tests/verifiers/manifests将作为一个独立 Task 5 commit 精确暂存；不 push。
 commit SHA 在提交完成后的 handoff 中报告，避免通过 amend 或第二个仅写 SHA 的提交改写历史。
+
+## 10. Independent review correction — FIX_REQUIRED（append-only）
+
+独立 spec + code review 针对 `d1ccc8e..cf15451` 给出 **FIX_REQUIRED：3 Critical、
+6 Important、0 Minor**。本节覆盖此前第 8 节“没有 Task 5 blocker”以及 ledger 中
+“implementation complete”的结论；这些旧文字保留为历史记录，不再代表当前状态。
+
+开放 finding：
+
+1. C1：`DruidPool::new_standard` admission 无条件读取扩展 state getter，七个真实 Task 4
+   adapter 均会在入池前失败；需要显式 managed/unsupported state capture 与真实 adapter matrix。
+2. C2：borrow/return/discard/validation/wrap 仍硬编码 Physical slot，standard holder 无法进入
+   第二次 native checkout，也没有使用实际 `test_on_return`。
+3. C3：canonical Connection/Statement/Prepared/Callable/ResultSet 绕过现有 Filter/Wall/Stat/
+   ExceptionSorter/after-event core。
+4. I1：live metadata `tables()` 返回 raw ResultSet，cursor 没有继承同一 logical lease generation。
+5. I2：standard Prepared cache 忽略 `pool_prepared_statements=false/zero`。
+6. I3：standard handles 未加入 logical close cascade，且 Prepared fallible close 在 cleanup 前
+   `take()` raw handle，失败会丢失 terminal ownership。
+7. I4：Druid `ResourceContext::release_with` 未在观察 `Releasing` 前 pin + enable Notify waiter，
+   存在 lost wakeup。
+8. I5：新 Druid key/method-type modules/types/methods仍从外部可达，形成第二棵 public tree。
+9. I6：`verify_task4_evidence_handoff` 仅定义未调用，Task 5 live gate没有执行 frozen handoff。
+
+当前 Task 5 状态改为 **FIX_ROUND_1_IN_PROGRESS**；Task 6 明确阻塞。修复范围仅限上述九项，
+必须逐 finding 留下真实 RED→最小 GREEN，并保持 frozen classifier `180/75/108`、logical LIVE
+9 行和 semantic `52/17/0`。完成实现与全门禁后仍需新的独立 review 才能解除 Task 6 阻塞。
+
+## 11. Fix round 1/5 implementation — pending independent review
+
+本轮从 `cf15451a17dd24729b099fd3ad4caf29e81fb43f` 开始，只处理独立 review 的
+3 Critical + 6 Important。当前状态为 **FIX_ROUND_1_IMPLEMENTED_PENDING_REVIEW**；这不是
+REVIEW CLEAR，Task 6 继续阻塞。
+
+### 11.1 C1 — truthful standard admission/reset
+
+- `StandardConnectionCompatibility` 与 `ConnectionDefaults` 将 auto-commit、read-only、catalog、
+  schema、warnings 分别保存为“可观察值”或 typed Unsupported；不再把未观察状态伪造成
+  `true/false/None` capability。
+- 只有 `UnsupportedOperation` / `SQLFeatureNotSupported` 被视为 unmanaged；其他 getter 错误原样
+  终止 admission。reset 只读取/设置首次确认为 supported 的字段。
+- rollback 只在 transactions capability 为真且 auto-commit 被真实观察为 `false` 时执行。
+- legacy Physical 初始化顺序保持不变；capability skip 仅作用于私有
+  `StandardConnectionCompatibility`，避免把 Task 6 过渡 SPI 的旧 setter 行为误删。
+
+RED/GREEN：
+
+- 真实 SQLx factory 经 `DruidPool::new_standard` 最初以
+  `UnsupportedOperation(connection_read_only)` 获取超时；GREEN 后 SQLx/Toasty/RBDC default
+  admission `3/3 PASS`，all-features 加 DuckDB 为 `4/4 PASS`。
+- 全 Unsupported fixture 最初以 `connection_auto_commit` 获取超时；GREEN 后 borrow/return 成功且
+  五类 setter/clear-warning attempt 总数为 0。
+- 注入 `auto_commit_getter` 的非 Unsupported driver error 现在确定性终止 holder admission。
+- HTTP SQL、libSQL、JDBC Agent 没有新增 public fake seam；由未改的 Task 4 deterministic
+  factory/runtime/coverage evidence 与本轮 Druid admission contract 组合证明。真实外部服务仍
+  `NOT_RUN`。
+
+### 11.2 C2 — standard holder native lifecycle
+
+- idle borrow、return、destroy、wrap、test-on-return、keep-alive 都按 holder 实际
+  `standard_connection | physical_connection` slot 分支。
+- standard native return 使用 standard recycle constructor 与真实 `test_on_return`；ExternalLease
+  只执行 external callback，永不进入 native idle queue。
+- second checkout、validation discard、idle expiry、shutdown、Java-compatible maxIdle 都以 raw
+  create/close/validate 精确计数验证。
+
+Fresh RED：borrow-close-borrow 的 factory create count 为 `2` 而非 `1`。GREEN 后同一 holder
+复用，create count `1`；invalid/expired/shutdown holder 只销毁一次。
+
+### 11.3 C3 — one Filter/Stat/error policy
+
+- 新私有一对象文件 `druid_execution_filter_policy.rs` 提供唯一
+  `before -> effective SQL -> raw -> after` core。canonical standard policy 与 transitional
+  Physical update/generic execute/prepared typed-parameter families都适配该 core，不互相委托。
+- canonical Statement/Prepared/Callable query/update/execute 使用同一 policy；generic execute
+  中的 ResultSet 也包装为 `DruidPooledResultSet`，进入同一 registry/lease。
+- ExceptionSorter 对 typed SQL error 执行 fatal classification，并把 logical disposition 标记为
+  discard；after-error 仍恰好执行一次。
+- standard commit/rollback/setters/validation/clear-warnings补齐 connection before/after event；
+  logical policy跟踪可观察 auto-commit与 transaction start/commit/rollback stats。
+- async ResultSet chain保持 crate-private；现有 public `ResultSetFilter` 只新增 primitive
+  before/after observation hooks，不暴露第二棵 proxy 类型树。Stat/Wall/Log 与自定义 recording
+  filter 的 open/next/close 均走一次；Log 的 Physical/standard 分支共享同一 logging core。
+- transitional `prepare_physical_statement/prepare_physical_call` 补回 sorter delegation，修复 full
+  regression发现的结构化 SQL error bypass。
+
+Fresh RED：generic execute raw ResultSet 的 Stat `open_count` 为 `0`（期望 `1`），且能跨 lease；
+GREEN 后 C3 suite `5/5 PASS`，证明 SQL rewrite、before/after、Wall raw-call rejection、三种 statement
+family、open/next/close/fetch stats、fatal discard、commit/rollback stats 与 result hooks精确一次。
+
+### 11.4 I1–I3 — metadata/cache/resource ownership
+
+- I1：`DatabaseMetaData::tables` 返回同 lease/generation 的 `DruidPooledResultSet`。第一 lease
+  close 并 reborrow holder 后，旧 metadata cursor 的 next/value/meta_data 全部拒绝；先前取得的
+  ResultSetMetaData/ParameterMetaData snapshots 继续可用。
+- I2：standard cache capacity 由 `pool_prepared_statements && capacity > 0` 决定；disabled、zero、
+  enabled、external matrix均验证 prepare/raw-close次数。
+- I3：holder-owned `StandardResourceRegistry` 对 Statement/Prepared/Callable/ResultSet 逆序异步
+  cascade。Prepared 在 clear/is_closed/raw close 成功前不 `take` handle；失败保留并可重试。
+  eviction close失败的 raw handle保存在 cache pending-close owner中，shutdown确定性重试。
+
+Fresh RED 包括：disabled cache prepare count `1`（期望 `2`）；connection-first cascade raw close
+计数均为 0；Prepared cleanup failure后第二次 close 返回 discarded；并发 connection/statement
+close raw attempts `2`（期望 `1`）；eviction failure shutdown attempts `2`（期望 `3`）。上述均 GREEN，
+并增加 drop-without-close、double/concurrent close 与 stale close 不跨 lease cache 的证明。
+
+### 11.5 I4 — Notify race ruling
+
+生产代码已镜像 detached lifecycle 的模式：先创建 `notified()`，`pin!` 并 `enable()`，再观察
+`Releasing`。确定性 barrier/timeout测试 PASS。
+
+必须诚实记录：review描述的旧代码 lost-wakeup 在当前 Tokio 1.53 `notify_waiters` generation
+语义下未能复现；测试在生产修复前也是 PASS。因此本项不是伪造 RED，而是防御性对齐与永久回归
+门禁。若独立 reviewer要求证明不同 Tokio/`notify_one` 语义，需另行 ruling，不能在报告中冒充。
+
+### 11.6 I5 — private Druid types
+
+- 新 key/method/resource/owner/policy/registry/async-chain modules与类型均为 `mod` + `pub(crate)` 或更严；
+  删除 public `key()` 暴露。只保留 Task 6 frozen compatibility facade。
+- 原外部 cache/key 测试迁入 crate-private unit suite（`6/6 PASS`）；wrapper/callable测试改用公开对象
+  identity、captured compatibility key 与 cache count，不再穿透私有对象。
+- external consumer compile-fail最初意外编译成功；GREEN 后 private module paths均拒绝，公开
+  `druid::sql::*` contract仍编译通过。
+
+### 11.7 I6 — live handoff and runtime composition
+
+- `verify_repository` 现在必调 `verify_task4_evidence_handoff` 并传播失败。
+- handoff严格检查两个 frozen artifact hashes、全 requirement source hashes、唯一 RBDC stale tuple、
+  exact resource rename，再运行 Unsupported admission、all-feature adapter admission 与当前 RBDC
+  exact trace。
+- Task5 live还运行 pool/cache/cleanup、Filter/Stat/error、metadata cross-lease 与 raw/logical owner
+  suites；shared execution core与四个 admission identity有静态 + runtime双重证明。
+- verifier self-tests从 `13/13` 增至 `19/19`，新增 coverage hash、runtime hash、stale tuple、exact
+  RBDC command failure、admission omission、shared-core omission与runtime failure propagation反例。
+
+Fresh RED：monkeypatch `verify_task4_evidence_handoff` 为 sentinel error时，旧
+`verify_repository` 没有抛错；GREEN 后 sentinel与所有新增 mutation均 fail closed。
+
+### 11.8 Final inventory and frozen handoff
+
+Task5 classifier保持：
+
+```text
+TASK5_CONSUMER_ROWS=363
+DRUID_INTERNAL_REFERENCE_CLOSED=180
+TASK6_COMPATIBILITY_PENDING=75
+TASK7_RESOURCE_OPERATIONS_PENDING=108
+DRUID_STANDARD_IMPLS=6
+DRUID_INTERNAL_OBJECTS=13
+```
+
+logical-live保持精确 9 行与 `JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0`；semantic/live hash分别为
+`5d99b573...cdbd9` / `f2e1d929...d9ed84`。
+
+Fresh denominator为 `PHYSICAL=73 / ADAPTER=57 / CONSUMER=3629`，consumer hash
+`3857923c2a618abea89c4bc07d7a0ffc477dfe97d51a4b66bb822b3d3f79b84e`。变化来自本轮真实
+runtime tests/hooks与 shared-core source identities；self-test `41/41 PASS`，Task5 frozen
+180/75/108 identity hash未改变。最终 checked `rdbc-production-consumers.tsv` SHA-256 为
+`3def7e2e8348db2e39f7dde270645530b591518e01d562ed5d8c99d613c0bf0d`。
+
+Task 4 frozen artifacts字节未改：coverage
+`f7b3d4b...07c9`，runtime `106323e...a3ec`。旧 Task4 self/live继续诚实为 `35/38` / exit 1，
+且只因 RBDC evidence source从 frozen `f5e8df...b1e` 变为批准的 current `b3fc87...f96c`。
+Task5 exact handoff PASS；当前 SQLx default与HTTP SQL all-features隔离 compiler coverage代表样本
+均 PASS，每族 15 个 exact compiler functions。
+
+### 11.9 Verification summary
+
+- focused：raw/logical `5/5`、privacy external `3/3`、standard logical `18/18`、C3 `5/5`、
+  metadata `1/1`、Druid lib `52/52`；all-feature admission `4/4`。
+- full：Druid、druid-wrapper、druid-rdbc 的 all-target/all-feature test全部 PASS。
+- workspace `cargo check --workspace --all-targets --all-features` PASS。
+- scoped Clippy：Druid、wrapper、RDBC all-target/all-feature `-D warnings` PASS；两处原 Task5 warning
+  与本轮新增 lint均清零。
+- 三 crate rustdoc `-D warnings` PASS；doctest `0 / 0 / 1 PASS`。
+- Task3 purity `103/103` + transitional `STANDARD_FILES=29` PASS。
+- Task5 verifier `19/19` self + live PASS；semantic `18/18` + logical-live PASS；denominator
+  `41/41` + live PASS。
+- fmt、Black 24.10、Python compile、diff/stage检查在最终提交前再次执行。
+
+外部真实 RBDC/HTTP/libSQL/JDBC Agent服务仍为 `NOT_RUN`。本轮没有安装工具、修改 Cargo topology、
+切分支、创建 worktree、amend 或 push。
+
+### 11.10 Remaining risk and status
+
+没有已知未处置的 round1 production correctness finding，但只有独立 re-review可以确认
+3C+6I为 ADDRESSED。I4 的旧行为不可复现结论需要 reviewer接受；Task4旧 verifier stale仍按计划由
+Task5 exact handoff承接。Task 6在新的独立 REVIEW CLEAR 前继续阻塞。

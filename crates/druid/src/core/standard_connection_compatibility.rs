@@ -8,27 +8,30 @@ use super::{
 /// 仅在旧 physical-connect Filter 链进入 standard holder 前存在的私有适配器。
 pub(crate) struct StandardConnectionCompatibility {
     connection: Option<Box<dyn druid_rdbc::connection::Connection>>,
-    auto_commit: bool,
-    read_only: bool,
-    catalog: Option<String>,
-    schema: Option<String>,
+    auto_commit: Option<bool>,
+    read_only: Option<bool>,
+    catalog: Option<Option<String>>,
+    schema: Option<Option<String>>,
+    warnings_supported: bool,
     discarded: bool,
 }
 
 impl StandardConnectionCompatibility {
-    pub(crate) fn new(
-        connection: Box<dyn druid_rdbc::connection::Connection>,
+    pub(crate) async fn new(
+        mut connection: Box<dyn druid_rdbc::connection::Connection>,
     ) -> Result<Self, RdbcError> {
-        let auto_commit = connection.auto_commit()?;
-        let read_only = connection.read_only()?;
-        let catalog = connection.catalog()?;
-        let schema = connection.schema()?;
+        let auto_commit = optional_standard_state(connection.auto_commit())?;
+        let read_only = optional_standard_state(connection.read_only())?;
+        let catalog = optional_standard_state(connection.catalog())?;
+        let schema = optional_standard_state(connection.schema())?;
+        let warnings_supported = optional_standard_state(connection.warnings().await)?.is_some();
         Ok(Self {
             connection: Some(connection),
             auto_commit,
             read_only,
             catalog,
             schema,
+            warnings_supported,
             discarded: false,
         })
     }
@@ -186,41 +189,61 @@ impl PhysicalConnection for StandardConnectionCompatibility {
         PhysicalConnectionCapabilities {
             transactions: capabilities.transactions,
             savepoints: capabilities.savepoints,
-            auto_commit: true,
-            read_only: true,
+            auto_commit: self.auto_commit.is_some(),
+            read_only: self.read_only.is_some(),
             transaction_isolation: false,
             holdability: false,
-            clear_warnings: true,
-            catalog: capabilities.catalogs,
-            schema: capabilities.schemas,
+            clear_warnings: self.warnings_supported,
+            catalog: self.catalog.is_some(),
+            schema: self.schema.is_some(),
         }
     }
 
     fn auto_commit(&self) -> bool {
-        self.auto_commit
+        self.auto_commit.unwrap_or(false)
     }
 
     async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
+        if self.auto_commit.is_none() {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "connection_set_auto_commit",
+            });
+        }
         self.connection_mut()?.set_auto_commit(auto_commit).await?;
-        self.auto_commit = auto_commit;
+        self.auto_commit = Some(auto_commit);
         Ok(())
     }
 
     fn read_only(&self) -> bool {
-        self.read_only
+        self.read_only.unwrap_or(false)
     }
 
     async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
+        if self.read_only.is_none() {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "connection_set_read_only",
+            });
+        }
         self.connection_mut()?.set_read_only(read_only).await?;
-        self.read_only = read_only;
+        self.read_only = Some(read_only);
         Ok(())
     }
 
     async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
+        if !self.warnings_supported {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "connection_warnings",
+            });
+        }
         self.connection_mut()?.warnings().await
     }
 
     async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        if !self.warnings_supported {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "connection_clear_warnings",
+            });
+        }
         self.connection_mut()?.clear_warnings().await
     }
 
@@ -233,26 +256,52 @@ impl PhysicalConnection for StandardConnectionCompatibility {
     }
 
     fn catalog(&self) -> Option<&str> {
-        self.catalog.as_deref()
+        self.catalog.as_ref().and_then(|catalog| catalog.as_deref())
     }
 
     async fn set_catalog(&mut self, catalog: &str) -> Result<(), RdbcError> {
+        if self.catalog.is_none() {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "connection_set_catalog",
+            });
+        }
         self.connection_mut()?.set_catalog(Some(catalog)).await?;
-        self.catalog = Some(catalog.to_string());
+        self.catalog = Some(Some(catalog.to_string()));
         Ok(())
     }
 
     fn schema(&self) -> Option<&str> {
-        self.schema.as_deref()
+        self.schema.as_ref().and_then(|schema| schema.as_deref())
     }
 
     async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
+        if self.schema.is_none() {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "connection_set_schema",
+            });
+        }
         self.connection_mut()?.set_schema(Some(schema)).await?;
-        self.schema = Some(schema.to_string());
+        self.schema = Some(Some(schema.to_string()));
         Ok(())
     }
 
     fn driver_name(&self) -> &str {
         "druid-standard"
+    }
+}
+
+fn optional_standard_state<T>(result: Result<T, RdbcError>) -> Result<Option<T>, RdbcError> {
+    match result {
+        Ok(value) => Ok(Some(value)),
+        Err(error)
+            if matches!(
+                error.kind(),
+                druid_rdbc::error::RdbcErrorKind::UnsupportedOperation
+                    | druid_rdbc::error::RdbcErrorKind::SqlFeatureNotSupported
+            ) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error),
     }
 }

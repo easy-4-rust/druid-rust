@@ -620,20 +620,14 @@ impl DruidPool {
                 if lifetime_expired || idle_expired {
                     continue;
                 }
-                let physically_unusable = holder
-                    .physical_connection()
-                    .is_none_or(|connection| connection.is_closed() || connection.is_discarded());
-                if physically_unusable {
+                if holder.raw_connection_is_unusable() {
                     continue;
                 }
                 let validate_on_borrow = self.inner.config.test_on_borrow
                     || (self.inner.config.test_while_idle
                         && holder.idle_duration() >= self.inner.config.time_between_eviction_runs);
                 if validate_on_borrow {
-                    let validation_failed = match holder.physical_connection_box_mut() {
-                        Some(connection) => !self.inner.test_connection_internal(connection).await,
-                        None => true,
-                    };
+                    let validation_failed = !self.inner.test_holder_internal(holder).await;
                     if validation_failed {
                         continue;
                     }
@@ -1386,25 +1380,40 @@ impl DruidPool {
     fn wrap_connection(&self, holder: DruidConnectionHolder) -> DruidPooledConnection {
         let connection_id = holder.connection_id();
         let connection_properties = holder.connection_properties();
+        let standard = holder.has_standard_connection();
         let pool = self.inner.clone();
         let active_leases = Arc::clone(&self.active_leases);
-        let recycle_validator = self.inner.config.test_on_return.then(|| {
-            Arc::new(PoolValidationFactory::new(self.inner.clone()))
-                as Arc<dyn PhysicalConnectionFactory>
+        let return_connection = Box::new(move |holder, disposition| {
+            active_leases.remove(&connection_id);
+            pool.return_connection(holder, disposition)
         });
-        let mut connection = DruidPooledConnection::with_holder(
-            holder,
-            self.name.clone(),
-            self.filter_chain.clone(),
-            self.inner
-                .config
-                .keep_connection_underlying_transaction_isolation,
-            recycle_validator,
-            Box::new(move |holder, disposition| {
-                active_leases.remove(&connection_id);
-                pool.return_connection(holder, disposition)
-            }),
-        );
+        let mut connection = if standard {
+            DruidPooledConnection::with_standard_holder(
+                holder,
+                self.name.clone(),
+                self.filter_chain.clone(),
+                self.inner
+                    .config
+                    .keep_connection_underlying_transaction_isolation,
+                self.inner.config.test_on_return,
+                return_connection,
+            )
+        } else {
+            let recycle_validator = self.inner.config.test_on_return.then(|| {
+                Arc::new(PoolValidationFactory::new(self.inner.clone()))
+                    as Arc<dyn PhysicalConnectionFactory>
+            });
+            DruidPooledConnection::with_holder(
+                holder,
+                self.name.clone(),
+                self.filter_chain.clone(),
+                self.inner
+                    .config
+                    .keep_connection_underlying_transaction_isolation,
+                recycle_validator,
+                return_connection,
+            )
+        };
         if let Some(exception_sorter) = self.exception_sorter.clone() {
             connection.set_exception_sorter(exception_sorter);
         }

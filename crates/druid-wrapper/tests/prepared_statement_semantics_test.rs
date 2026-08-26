@@ -1647,21 +1647,8 @@ async fn concurrent_logical_statements_preserve_java_in_use_and_lru_semantics() 
     );
     drop(active);
 
-    let statement_pool = connection
-        .connection_holder()
-        .unwrap()
-        .statement_pool_direct()
-        .unwrap();
-    assert_eq!(
-        statement_pool
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .keys_in_lru_order()
-            .iter()
-            .map(druid::core::prepared_statement_key::PreparedStatementKey::sql)
-            .collect::<Vec<_>>(),
-        vec!["select 3", "select 4", "select 0"]
-    );
+    // Exact private-key access order is covered by the crate-private cache unit suite.
+    assert_eq!(pool.state().cached_prepared_statement_count, 3);
 
     connection.close().await.unwrap();
     pool.close().await;
@@ -1940,7 +1927,6 @@ async fn prepared_generic_execute_matches_real_sqlite_result_and_generated_key_s
         .prepared_statement()
         .expect("PreparedStatement ResultSet 必须恢复具体 statement 身份");
     assert!(prepared_identity.is_same_statement(&query));
-    assert_eq!(prepared_identity.key(), query.key());
     assert!(std::ptr::eq(
         prepared_identity.pooled_statement().statement(),
         query.pooled_statement().statement()
@@ -2089,7 +2075,6 @@ async fn prepared_result_set_keeps_the_same_statement_alive_and_can_close_it() {
         .prepare_statement("SELECT ?1 AS value")
         .await
         .unwrap();
-    let expected_key = statement.key().clone();
     let mut result_set = statement
         .fetch_result_set(&mut connection, vec![Value::Int(11)])
         .await
@@ -2103,7 +2088,6 @@ async fn prepared_result_set_keeps_the_same_statement_alive_and_can_close_it() {
         "普通 PreparedStatement 结果集不能伪装成 CallableStatement"
     );
     assert!(identity.is_same_statement(&statement));
-    assert_eq!(identity.key(), &expected_key);
     assert!(!identity.is_closed());
     assert!(!identity.is_wrapper_for(None));
     assert!(identity.unwrap(None).is_none());

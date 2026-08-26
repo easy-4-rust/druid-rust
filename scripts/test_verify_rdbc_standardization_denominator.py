@@ -315,7 +315,7 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
         self.assertIn("TRAIT_OBJECT", {row.occurrence_kind for row in qualified})
 
     def test_live_scan_includes_proven_physical_mut_receiver_calls(self) -> None:
-        """The typed physical_mut accessor accounts for all 33 post-Task5 physical calls."""
+        """The typed accessor accounts for 31 calls after shared policy and prepare delegation."""
 
         source_path = "crates/druid/src/core/druid_pooled_connection.rs"
         receiver_calls = [
@@ -331,7 +331,7 @@ fn accepts(connection: Box<dyn PC>, statement: &PS) {
             )
             in row.symbol
         ]
-        self.assertEqual(33, len(receiver_calls))
+        self.assertEqual(31, len(receiver_calls))
         names = [row.symbol.split("@", 1)[0] for row in receiver_calls]
         self.assertEqual(1, names.count("commit"))
         self.assertEqual(2, names.count("rollback"))

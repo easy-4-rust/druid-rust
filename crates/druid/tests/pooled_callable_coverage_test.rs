@@ -55,8 +55,6 @@ async fn cs_prepare_call_basic() {
         assert!(cs.id() > 0);
         // is_closed
         assert!(!cs.is_closed());
-        // key
-        let _ = cs.key();
         // close
         cs.close_with_connection(&mut conn).unwrap();
         assert!(cs.is_closed());
@@ -309,7 +307,6 @@ async fn cs_handle_properties() {
         // The handle is created internally when wrapping result sets.
         // We can test the handle through the result set's statement() method.
         // For now, test that the callable statement itself has the expected API.
-        let _ = cs.key();
         let _ = cs.id();
     }
 }

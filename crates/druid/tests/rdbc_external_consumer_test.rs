@@ -644,3 +644,39 @@ fn error_identity() {
         Some("second warning")
     );
 }
+
+/// 新 Druid cache 对象只能是 crate-private；外部仅保留 Task 6 旧 facade。
+#[test]
+fn external_consumer_cannot_name_druid_private_cache_types() -> Result<(), Box<dyn Error>> {
+    let package = TemporaryPackage::create()?;
+    let druid_path = Path::new(env!("CARGO_MANIFEST_DIR")).canonicalize()?;
+    let manifest = format!(
+        "[package]\nname = \"druid-private-cache-probe\"\nversion = \"0.0.0\"\nedition = \"2021\"\npublish = false\n\n[workspace]\n\n[dependencies]\ndruid = {{ path = \"{}\" }}\n",
+        toml_path(&druid_path)?,
+    );
+    let source = r"use druid::core::prepared_statement_key::PreparedStatementKey;
+use druid::core::prepared_statement_method_type::PreparedStatementMethodType;
+
+fn main() {
+    let _ = std::any::TypeId::of::<PreparedStatementKey>();
+    let _ = std::any::TypeId::of::<PreparedStatementMethodType>();
+}
+";
+    fs::create_dir(package.path.join("src"))?;
+    fs::write(package.path.join("Cargo.toml"), manifest)?;
+    fs::write(package.path.join("src/main.rs"), source)?;
+    let output = Command::new(env!("CARGO"))
+        .arg("check")
+        .arg("--quiet")
+        .current_dir(&package.path)
+        .env("CARGO_TARGET_DIR", package.path.join("target"))
+        .output()?;
+    assert!(
+        !output.status.success(),
+        "private cache type probe unexpectedly compiled"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("module `prepared_statement_key` is private"));
+    assert!(stderr.contains("module `prepared_statement_method_type` is private"));
+    Ok(())
+}

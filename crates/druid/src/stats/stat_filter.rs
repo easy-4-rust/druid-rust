@@ -10,7 +10,8 @@ use crate::core::{
     DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
     PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
     PhysicalConnectionConnectResult, PreparedInputParameter, RdbcObject, ResultSetFilter,
-    ResultSetFilterChain, ResultSetFilterContext, StatementEventContext, Value,
+    ResultSetFilterChain, ResultSetFilterContext, StandardResultSetFilterChain,
+    StatementEventContext, Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -228,6 +229,40 @@ impl StatFilter {
                     context.file().map(str::to_owned),
                 )
             })
+    }
+
+    fn record_result_set_close(&self, context: &ResultSetFilterContext) -> Result<i64, DruidError> {
+        let elapsed = context.elapsed().unwrap_or_default();
+        let fetch_row_count = context.fetch_row_count();
+        let stat_elapsed_nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
+        let listener_elapsed_nanos = i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX);
+        let stat = self.collector.result_set_stat();
+        stat.after_close(stat_elapsed_nanos);
+        stat.add_fetch_row_count(u64::try_from(fetch_row_count).unwrap_or_default());
+        stat.increment_close_counter();
+        StatFilterContext::global().add_fetch_row_count(fetch_row_count)?;
+        if context.close_count() == 0 {
+            if let Some(sql) = context.sql() {
+                let key = if self.is_merge_sql() {
+                    super::parameterize(sql).fingerprint
+                } else {
+                    super::fingerprint(sql)
+                };
+                if let Some(sql_stat) = self.collector.sql_merger.get_stat(key) {
+                    sql_stat
+                        .add_fetch_row_count(u64::try_from(fetch_row_count).unwrap_or_default());
+                    sql_stat.add_result_set_hold_time(
+                        context.statement_execute_elapsed().unwrap_or_default(),
+                        elapsed,
+                    );
+                    sql_stat.add_read_string_length(context.read_string_length());
+                    sql_stat.add_read_bytes_length(context.read_bytes_length());
+                    sql_stat.add_input_stream_open_count(context.open_input_stream_count());
+                    sql_stat.add_reader_open_count(context.open_reader_count());
+                }
+            }
+        }
+        Ok(listener_elapsed_nanos)
     }
 }
 
@@ -567,6 +602,8 @@ impl AfterFilter for StatFilter {
     }
 }
 
+#[allow(private_interfaces)]
+#[async_trait::async_trait]
 impl ResultSetFilter for StatFilter {
     fn result_set_open_after(&self, context: &ResultSetFilterContext) -> Result<(), DruidError> {
         self.collector.result_set_stat().before_open();
@@ -575,40 +612,17 @@ impl ResultSetFilter for StatFilter {
     }
 
     fn result_set_close(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<(), DruidError> {
-        let elapsed = chain.context().elapsed().unwrap_or_default();
-        let fetch_row_count = chain.context().fetch_row_count();
-        let stat_elapsed_nanos = u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX);
-        let listener_elapsed_nanos = i64::try_from(elapsed.as_nanos()).unwrap_or(i64::MAX);
-        let stat = self.collector.result_set_stat();
-        stat.after_close(stat_elapsed_nanos);
-        stat.add_fetch_row_count(u64::try_from(fetch_row_count).unwrap_or_default());
-        stat.increment_close_counter();
-        StatFilterContext::global().add_fetch_row_count(fetch_row_count)?;
-        if chain.context().close_count() == 0 {
-            if let Some(sql) = chain.context().sql() {
-                let key = if self.is_merge_sql() {
-                    super::parameterize(sql).fingerprint
-                } else {
-                    super::fingerprint(sql)
-                };
-                if let Some(sql_stat) = self.collector.sql_merger.get_stat(key) {
-                    sql_stat
-                        .add_fetch_row_count(u64::try_from(fetch_row_count).unwrap_or_default());
-                    sql_stat.add_result_set_hold_time(
-                        chain
-                            .context()
-                            .statement_execute_elapsed()
-                            .unwrap_or_default(),
-                        elapsed,
-                    );
-                    sql_stat.add_read_string_length(chain.context().read_string_length());
-                    sql_stat.add_read_bytes_length(chain.context().read_bytes_length());
-                    sql_stat.add_input_stream_open_count(chain.context().open_input_stream_count());
-                    sql_stat.add_reader_open_count(chain.context().open_reader_count());
-                }
-            }
-        }
+        let listener_elapsed_nanos = self.record_result_set_close(chain.context())?;
         chain.result_set_close()?;
+        StatFilterContext::global().result_set_close(listener_elapsed_nanos)
+    }
+
+    async fn standard_result_set_close(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        let listener_elapsed_nanos = self.record_result_set_close(chain.context())?;
+        chain.result_set_close().await?;
         StatFilterContext::global().result_set_close(listener_elapsed_nanos)
     }
 }

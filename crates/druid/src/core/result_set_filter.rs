@@ -2,6 +2,7 @@
 //!
 //! 对应 Java：`com.alibaba.druid.filter.Filter` 的 `resultSet_*` 方法族。
 
+use super::standard_result_set_filter_chain::StandardResultSetFilterChain;
 use super::{
     DruidError, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcClob, RdbcInputStream, RdbcNClob,
     RdbcObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcTargetType, RdbcTypeMap, RdbcUrl,
@@ -344,6 +345,10 @@ macro_rules! long_stream_update_filter_methods {
 ///
 /// Java RDBC `ResultSet` 操作是同步调用，`Filter` 可以在委托前后执行逻辑，也可以
 /// 短路或改写返回值。因此该协议保留 around-chain，而不是退化为只读事件通知。
+// async standard hooks deliberately use a crate-private chain: external filters retain
+// source-compatible pass-through defaults without exposing a second public proxy hierarchy.
+#[allow(private_interfaces)]
+#[async_trait::async_trait]
 pub trait ResultSetFilter: Send + Sync {
     /// 查询成功并创建 `ResultSet` 代理后执行。
     ///
@@ -375,6 +380,62 @@ pub trait ResultSetFilter: Send + Sync {
     /// 默认实现继续调用链。委托前产生的副作用即使下游关闭失败也不会回滚。
     fn result_set_close(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<(), DruidError> {
         chain.result_set_close()
+    }
+
+    /// canonical async `ResultSet#next()` 调用下游前的公开观察 hook。
+    fn standard_result_set_next_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical async `ResultSet#next()` 调用下游后的公开观察 hook。
+    fn standard_result_set_next_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &Result<bool, DruidError>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical async `ResultSet#close()` 调用下游前的公开观察 hook。
+    fn standard_result_set_close_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical async `ResultSet#close()` 调用下游后的公开观察 hook。
+    fn standard_result_set_close_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// 包围 canonical async `ResultSet#next()`，顺序与 Physical 链一致。
+    async fn standard_result_set_next(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<bool, DruidError> {
+        self.standard_result_set_next_before(chain.context())?;
+        let result = chain.result_set_next().await;
+        self.standard_result_set_next_after(chain.context(), &result)?;
+        result
+    }
+
+    /// 包围 canonical async `ResultSet#close()`，顺序与 Physical 链一致。
+    async fn standard_result_set_close(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        self.standard_result_set_close_before(chain.context())?;
+        let result = chain.result_set_close().await;
+        self.standard_result_set_close_after(chain.context(), &result)?;
+        result
     }
 
     /// 包围 `ResultSet#getWarnings()`。

@@ -7,7 +7,7 @@ use druid_rdbc::result_set::ColumnIndex;
 use druid_rdbc::statement::{GeneratedKeys, ParameterIndex, Statement, StatementOptions};
 use druid_rdbc::types::Value;
 use standard_test_support::{TrackingConnection, TrackingState};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 #[tokio::test]
@@ -19,14 +19,22 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
         Duration::ZERO,
         0,
     )
+    .await
     .expect("standard holder");
+    let returned = Arc::new(Mutex::new(None));
+    let returned_holder = Arc::clone(&returned);
     let mut connection = DruidPooledConnection::with_standard_holder(
         holder,
         "task5-metadata".to_string(),
         None,
         false,
         false,
-        Box::new(|_holder, _disposition| false),
+        Box::new(move |holder, _disposition| {
+            *returned_holder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(holder);
+            false
+        }),
     );
 
     let mut metadata = Connection::database_meta_data(&mut connection)
@@ -50,6 +58,7 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
             .expect("table name"),
         Value::String("task5_table".to_string())
     );
+    let tables_snapshot = tables.meta_data().expect("metadata table snapshot");
 
     let mut prepared =
         Connection::prepare_statement(&mut connection, "SELECT ?", StatementOptions::default())
@@ -70,11 +79,32 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
             .expect("owned statement actor");
 
     prepared.close().await.expect("prepared close");
-    tables.close().await.expect("tables close");
     Connection::close(&mut connection)
         .await
         .expect("logical connection close");
+    let holder = returned
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+        .expect("first metadata lease returned holder");
+    let mut second = DruidPooledConnection::with_standard_holder(
+        holder,
+        "task5-metadata-second".to_owned(),
+        None,
+        false,
+        false,
+        Box::new(|_holder, _disposition| false),
+    );
+    let mut second_statement =
+        Connection::create_statement(&mut second, StatementOptions::default())
+            .await
+            .expect("second lease proves holder reborrow");
     assert!(metadata.database_product_name().await.is_err());
+    assert!(tables.next().await.is_err());
+    assert!(tables
+        .value(ColumnIndex::new(1).expect("1-based column"))
+        .is_err());
+    assert!(tables.meta_data().is_err());
     assert!(Statement::is_closed(stale_statement.as_ref()).expect("logical close state"));
     assert!(stale_statement
         .execute_update("UPDATE stale", GeneratedKeys::None)
@@ -91,10 +121,19 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
     assert!(result.next().await.is_err());
     result.close().await.expect("stale result cleanup");
     drop(metadata);
+    second_statement
+        .close()
+        .await
+        .expect("second statement close");
+    Connection::close(&mut second)
+        .await
+        .expect("second lease close");
 
     fn assert_snapshot<T: Send + Sync + 'static + ?Sized>(_snapshot: Arc<T>) {}
     assert_snapshot(result_snapshot.clone());
     assert_snapshot(parameter_snapshot.clone());
+    assert_snapshot(tables_snapshot.clone());
+    assert_eq!(tables_snapshot.column_count(), 1);
     assert_eq!(result_snapshot.column_count(), 1);
     assert_eq!(parameter_snapshot.parameter_count(), 1);
     assert_eq!(

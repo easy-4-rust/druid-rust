@@ -40,7 +40,10 @@ impl PreparedStatementHolder {
     /// 创建语句持有者。
     ///
     /// 对应 Java：`PreparedStatementHolder(PreparedStatementKey, PreparedStatement)`。
-    pub fn new(key: PreparedStatementKey, statement: Arc<dyn PhysicalPreparedStatement>) -> Self {
+    pub(crate) fn new(
+        key: PreparedStatementKey,
+        statement: Arc<dyn PhysicalPreparedStatement>,
+    ) -> Self {
         Self {
             key,
             statement,
@@ -55,7 +58,7 @@ impl PreparedStatementHolder {
     }
 
     /// 返回缓存键。
-    pub fn key(&self) -> &PreparedStatementKey {
+    pub(crate) fn key(&self) -> &PreparedStatementKey {
         &self.key
     }
 

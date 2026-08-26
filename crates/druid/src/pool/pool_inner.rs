@@ -8,11 +8,13 @@ use crate::core::Value as RdbcValue;
 use crate::core::{
     ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, FilterChain,
     PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
-    PreparedStatementCacheStats, RdbcString, StatementGeneratedKeys, ValidConnectionCheckerAdapter,
+    PreparedStatementCacheStats, RdbcString, StandardConnectionCompatibility,
+    StatementGeneratedKeys, ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, RdbcUtils};
 use crate::stats::StatsCollector;
 use serde_json::{Number as JsonNumber, Value as JsonValue};
+use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -622,6 +624,19 @@ impl PoolInner {
         self.validate_connection(connection).await.is_ok()
     }
 
+    /// 对 holder 的实际 raw slot 执行同一 borrow/return/keep-alive 校验。
+    pub(crate) async fn test_holder_internal(&self, holder: &mut DruidConnectionHolder) -> bool {
+        if let Some(connection) = holder.standard_connection_mut() {
+            let timeout_seconds =
+                u32::try_from(self.config.validation_query_timeout.as_secs()).unwrap_or(u32::MAX);
+            return matches!(connection.is_valid(timeout_seconds).await, Ok(true));
+        }
+        match holder.physical_connection_box_mut() {
+            Some(connection) => self.test_connection_internal(connection).await,
+            None => false,
+        }
+    }
+
     /// 按 Java `initialSize` 预建空闲物理连接。
     pub(crate) async fn fill_initial(&self) -> Result<(), DruidError> {
         if self.config.async_init {
@@ -861,7 +876,8 @@ impl PoolInner {
                     connection_info,
                     connection_id,
                     user_password_version,
-                )?;
+                )
+                .await?;
                 holder.set_connection_properties(Arc::new(connection_properties));
                 holder.configure_statement_pool(
                     self.config.pool_prepared_statements,
@@ -945,20 +961,34 @@ impl PoolInner {
         connection: &mut dyn PhysicalConnection,
     ) -> Result<(), DruidError> {
         let skip_auto_commit = self.config.db_type_name.as_deref() == Some("odps");
+        let capabilities = connection.capabilities();
+        let standard_compatibility =
+            connection.type_id() == TypeId::of::<StandardConnectionCompatibility>();
 
-        if !skip_auto_commit && connection.auto_commit() != self.config.default_auto_commit {
+        if !skip_auto_commit
+            && (!standard_compatibility || capabilities.auto_commit)
+            && connection.auto_commit() != self.config.default_auto_commit
+        {
             connection
                 .set_auto_commit(self.config.default_auto_commit)
                 .await?;
         }
 
-        if let Some(default_read_only) = self.config.default_read_only {
+        if let Some(default_read_only) = self
+            .config
+            .default_read_only
+            .filter(|_| !standard_compatibility || capabilities.read_only)
+        {
             if connection.read_only() != default_read_only {
                 connection.set_read_only(default_read_only).await?;
             }
         }
 
-        if let Some(default_transaction_isolation) = self.config.default_transaction_isolation {
+        if let Some(default_transaction_isolation) = self
+            .config
+            .default_transaction_isolation
+            .filter(|_| !standard_compatibility || capabilities.transaction_isolation)
+        {
             if connection.transaction_isolation() != default_transaction_isolation {
                 connection
                     .set_transaction_isolation(default_transaction_isolation)
@@ -966,7 +996,12 @@ impl PoolInner {
             }
         }
 
-        if let Some(default_catalog) = self.config.default_catalog.as_deref() {
+        if let Some(default_catalog) = self
+            .config
+            .default_catalog
+            .as_deref()
+            .filter(|_| !standard_compatibility || capabilities.catalog)
+        {
             if !default_catalog.is_empty() {
                 connection.set_catalog(default_catalog).await?;
             }
@@ -1101,9 +1136,7 @@ impl PoolInner {
             return self.discard_recycled_holder(holder);
         }
 
-        let unusable = holder
-            .physical_connection()
-            .is_none_or(|connection| connection.is_closed() || connection.is_discarded());
+        let unusable = holder.raw_connection_is_unusable();
         if self.closed.load(Ordering::Acquire)
             || !self.enabled.load(Ordering::Acquire)
             || unusable
@@ -1438,10 +1471,7 @@ impl PoolInner {
             let entered_validation =
                 holder.try_transition(ConnectionState::Idle, ConnectionState::Validating);
             let valid = if entered_validation {
-                match holder.physical_connection_box_mut() {
-                    Some(connection) => self.test_connection_internal(connection).await,
-                    None => false,
-                }
+                self.test_holder_internal(holder).await
             } else {
                 false
             };

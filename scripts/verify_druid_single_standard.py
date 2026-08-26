@@ -73,6 +73,7 @@ DRUID_TASK6_COMPAT_PATHS = {
 
 FIXED_FILES = (
     "crates/druid/src/core/druid_connection_holder.rs",
+    "crates/druid/src/core/druid_execution_filter_policy.rs",
     "crates/druid/src/core/druid_pooled_connection.rs",
     "crates/druid/src/core/druid_pooled_statement.rs",
     "crates/druid/src/core/druid_pooled_prepared_statement.rs",
@@ -95,6 +96,8 @@ FIXED_FILES = (
     "crates/druid/tests/single_standard_logical_contract_test.rs",
     "crates/druid/tests/raw_logical_ownership_test.rs",
     "crates/druid/tests/standard_metadata_ownership_test.rs",
+    "crates/druid/tests/standard_filter_stat_semantics_test.rs",
+    "crates/druid-wrapper/tests/druid_standard_pool_admission_test.rs",
     "docs/verification/rdbc-first/jdbc42-semantic-inventory.tsv",
     "docs/verification/rdbc-first/rdbc-production-consumers.tsv",
 )
@@ -173,6 +176,61 @@ class VerificationSummary:
 
 def fail(message: str) -> NoReturn:
     raise VerificationError(message)
+
+
+def require_admission_composition_source(source: str) -> None:
+    """Require every local Task5 admission identity without exposing remote test seams."""
+
+    required = {
+        "sqlx_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+        "toasty_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+        "rbdc_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+        "duckdb_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+        "DruidPool::new_standard",
+    }
+    missing = sorted(token for token in required if token not in source)
+    if missing:
+        fail(f"Task 5 standard admission composition is incomplete: {missing}")
+
+
+def require_shared_execution_policy(
+    policy_source: str, standard_source: str, physical_source: str
+) -> None:
+    """Require one named Filter policy used by both canonical and transitional paths."""
+
+    policy_tokens = (
+        "struct DruidExecutionFilterPolicy",
+        "before_execute(context)",
+        "raw(effective_sql.clone()).await",
+        "after_execute(context",
+    )
+    if any(token not in policy_source for token in policy_tokens):
+        fail("Task 5 shared Filter execution policy is incomplete")
+    call = "DruidExecutionFilterPolicy::execute"
+    if call not in standard_source or physical_source.count(call) < 4:
+        fail(
+            "standard and Physical execution paths do not share Druid execution policy"
+        )
+
+
+def run_cargo_gate(root: Path, label: str, command: list[str]) -> None:
+    """Run one exact offline Cargo evidence gate and preserve actionable failure output."""
+
+    try:
+        result = subprocess.run(
+            command,
+            cwd=root,
+            check=False,
+            capture_output=True,
+            timeout=600,
+        )
+    except subprocess.TimeoutExpired as error:
+        fail(f"{label} timed out: {error}")
+    if result.returncode != 0:
+        detail = (result.stdout + result.stderr).decode("utf-8", errors="replace")[
+            -4000:
+        ]
+        fail(f"{label} failed: {detail}")
 
 
 def repository_root() -> Path:
@@ -583,33 +641,84 @@ def verify_task4_evidence_handoff(root: Path) -> None:
         fail(
             "Task 4 RBDC evidence source drift is not the approved Task 5 resource rename"
         )
-    try:
-        result = subprocess.run(
+    admission_source = (
+        root / "crates/druid-wrapper/tests/druid_standard_pool_admission_test.rs"
+    ).read_text(encoding="utf-8")
+    require_admission_composition_source(admission_source)
+    run_cargo_gate(
+        root,
+        "Task 5 unsupported-state admission",
+        [
+            "cargo",
+            "test",
+            "--offline",
+            "--locked",
+            "-p",
+            "druid",
+            "--test",
+            "single_standard_logical_contract_test",
+            "unsupported_standard_state_is_unmanaged_without_calling_its_setters",
+            "--",
+            "--exact",
+        ],
+    )
+    run_cargo_gate(
+        root,
+        "Task 5 real standard-adapter admission",
+        [
+            "cargo",
+            "test",
+            "--offline",
+            "--locked",
+            "-p",
+            "druid-wrapper",
+            "--all-features",
+            "--test",
+            "druid_standard_pool_admission_test",
+        ],
+    )
+    run_cargo_gate(
+        root,
+        "Task 4 RBDC exact runtime handoff",
+        [
+            "cargo",
+            "test",
+            "--offline",
+            "--locked",
+            "-p",
+            "druid-wrapper",
+            "--test",
+            "rbdc_connection_adapter_test",
+            "rbdc_standard_factory_emits_typed_runtime_trace",
+            "--",
+            "--exact",
+        ],
+    )
+
+
+def verify_task5_runtime_contracts(root: Path) -> None:
+    """Bind LIVE claims to the review's focused production behavior suites."""
+
+    for label, test_name in (
+        ("Task 5 pool/cache/cleanup runtime", "single_standard_logical_contract_test"),
+        ("Task 5 Filter/Stat/error runtime", "standard_filter_stat_semantics_test"),
+        ("Task 5 metadata cross-lease runtime", "standard_metadata_ownership_test"),
+        ("Task 5 raw/logical owner runtime", "raw_logical_ownership_test"),
+    ):
+        run_cargo_gate(
+            root,
+            label,
             [
                 "cargo",
                 "test",
                 "--offline",
                 "--locked",
                 "-p",
-                "druid-wrapper",
+                "druid",
                 "--test",
-                "rbdc_connection_adapter_test",
-                "rbdc_standard_factory_emits_typed_runtime_trace",
-                "--",
-                "--exact",
+                test_name,
             ],
-            cwd=root,
-            check=False,
-            capture_output=True,
-            timeout=600,
         )
-    except subprocess.TimeoutExpired as error:
-        fail(f"Task 4 RBDC exact runtime handoff timed out: {error}")
-    if result.returncode != 0:
-        detail = (result.stdout + result.stderr).decode("utf-8", errors="replace")[
-            -4000:
-        ]
-        fail(f"Task 4 RBDC exact runtime handoff failed: {detail}")
 
 
 def _symbol_identity(symbol: str) -> str:
@@ -737,6 +846,13 @@ def verify_repository(root: Path) -> VerificationSummary:
         )
     owner_path = "crates/druid/src/core/druid_pooled_connection.rs"
     require_owner_close_contract((root / owner_path).read_text(), owner_path)
+    require_shared_execution_policy(
+        (root / "crates/druid/src/core/druid_execution_filter_policy.rs").read_text(),
+        (root / "crates/druid/src/core/standard_logical_policy.rs").read_text(),
+        (root / owner_path).read_text(),
+    )
+    verify_task4_evidence_handoff(root)
+    verify_task5_runtime_contracts(root)
 
     baseline_payload = _git_show(root, TASK5_BASE, DEFAULT_CONSUMERS)
     if hashlib.sha256(baseline_payload).hexdigest() != TASK5_BASE_CONSUMER_SHA256:

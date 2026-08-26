@@ -17,6 +17,7 @@ async fn logical_close_recycles_once_while_native_eviction_closes_raw_once() {
         Duration::ZERO,
         0,
     )
+    .await
     .expect("native holder");
     let recycle_count = Arc::new(AtomicUsize::new(0));
     let returned = Arc::new(Mutex::new(None));
@@ -84,6 +85,7 @@ async fn external_lease_never_enters_the_native_return_path() {
             false
         }),
     )
+    .await
     .expect("external logical connection");
 
     let mut prepared = Connection::prepare_statement(
@@ -121,6 +123,7 @@ async fn reset_failure_discards_and_raw_close_remains_exactly_once() {
         Duration::ZERO,
         0,
     )
+    .await
     .expect("holder captures initial state");
     state.read_only.store(true, Ordering::Release);
 
@@ -171,6 +174,7 @@ async fn failed_raw_close_is_not_retried_by_the_owner() {
         Duration::ZERO,
         0,
     )
+    .await
     .expect("native holder");
 
     assert!(holder.close_standard_connection().await.is_err());
@@ -191,6 +195,7 @@ async fn standard_recycle_rolls_back_and_restores_the_complete_state() {
         Duration::ZERO,
         0,
     )
+    .await
     .expect("native holder captures standard defaults");
     state.auto_commit.store(false, Ordering::Release);
     *state

@@ -7,6 +7,9 @@ import tempfile
 import unittest
 from collections import Counter
 from pathlib import Path
+from unittest import mock
+
+import verify_druid_single_standard as verifier
 
 from verify_druid_single_standard import (
     VerificationError,
@@ -15,11 +18,17 @@ from verify_druid_single_standard import (
     TASK7_PENDING,
     classify_frozen_task5_row,
     require_concrete_object,
+    require_admission_composition_source,
     require_direct_standard_impl,
     require_fixed_files,
     require_holder_contract,
     require_identity_counter_hash,
     require_owner_close_contract,
+    require_shared_execution_policy,
+    repository_root,
+    verify_repository,
+    verify_task4_evidence_handoff,
+    verify_task5_runtime_contracts,
     verify_task5_consumer_states,
 )
 
@@ -248,6 +257,91 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                 "0" * 64,
                 "Task 6 compatibility additions",
             )
+
+    def test_live_repository_verification_executes_task4_handoff(self) -> None:
+        """A mutated Task 4 handoff must fail the live Task 5 verifier."""
+
+        with mock.patch.object(
+            verifier,
+            "verify_task4_evidence_handoff",
+            side_effect=VerificationError("mutated Task 4 handoff reached"),
+        ):
+            with self.assertRaisesRegex(
+                VerificationError, "mutated Task 4 handoff reached"
+            ):
+                verify_repository(repository_root())
+
+    def test_admission_composition_requires_all_local_factory_identities(self) -> None:
+        source = " ".join(
+            [
+                "DruidPool::new_standard",
+                "sqlx_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+                "toasty_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+                "rbdc_standard_factory_is_admitted_borrowed_and_executed_by_druid_pool",
+            ]
+        )
+        with self.assertRaisesRegex(VerificationError, "admission composition"):
+            require_admission_composition_source(source)
+
+    def test_shared_execution_policy_requires_both_entrypoint_families(self) -> None:
+        policy = " ".join(
+            [
+                "struct DruidExecutionFilterPolicy",
+                "before_execute(context)",
+                "raw(effective_sql.clone()).await",
+                "after_execute(context",
+            ]
+        )
+        with self.assertRaisesRegex(VerificationError, "do not share"):
+            require_shared_execution_policy(
+                policy,
+                "DruidExecutionFilterPolicy::execute",
+                "DruidExecutionFilterPolicy::execute",
+            )
+
+    def test_task4_handoff_rejects_each_frozen_hash_and_stale_tuple(self) -> None:
+        root = repository_root()
+        for constant in (
+            "TASK4_COVERAGE_MANIFEST_SHA256",
+            "TASK4_RUNTIME_MANIFEST_SHA256",
+            "TASK5_RBDC_EVIDENCE_SOURCE_SHA256",
+        ):
+            with self.subTest(constant=constant), mock.patch.object(
+                verifier, constant, "0" * 64
+            ):
+                with self.assertRaises(VerificationError):
+                    verify_task4_evidence_handoff(root)
+
+    def test_task4_exact_rbdc_command_failure_is_not_bypassed(self) -> None:
+        success = verifier.subprocess.CompletedProcess([], 0, b"", b"")
+        failure = verifier.subprocess.CompletedProcess(
+            [], 1, b"", b"forced exact RBDC failure"
+        )
+        with mock.patch.object(
+            verifier.subprocess,
+            "run",
+            side_effect=[success, success, failure],
+        ) as run:
+            with self.assertRaisesRegex(
+                VerificationError, "exact runtime handoff failed"
+            ):
+                verify_task4_evidence_handoff(repository_root())
+        self.assertEqual(run.call_count, 3)
+        self.assertIn(
+            "rbdc_standard_factory_emits_typed_runtime_trace",
+            run.call_args_list[-1].args[0],
+        )
+
+    def test_live_runtime_contract_failure_is_propagated(self) -> None:
+        with mock.patch.object(
+            verifier,
+            "run_cargo_gate",
+            side_effect=VerificationError("mutated Task 5 runtime reached"),
+        ):
+            with self.assertRaisesRegex(
+                VerificationError, "mutated Task 5 runtime reached"
+            ):
+                verify_task5_runtime_contracts(repository_root())
 
 
 if __name__ == "__main__":

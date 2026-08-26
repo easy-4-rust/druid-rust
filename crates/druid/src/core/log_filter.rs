@@ -7,7 +7,7 @@ use super::{
     DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
     PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
     PhysicalConnectionConnectResult, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
-    StatementEvent, StatementEventContext,
+    StandardResultSetFilterChain, StatementEvent, StatementEventContext,
 };
 use crate::sql::SqlFormatOption;
 use parking_lot::RwLock;
@@ -863,6 +863,74 @@ impl AfterFilter for LogFilter {
     }
 }
 
+impl LogFilter {
+    fn log_result_set_next_result(
+        &self,
+        context: &ResultSetFilterContext,
+        result: &Result<bool, DruidError>,
+    ) {
+        match result {
+            Ok(true) if self.is_result_set_next_after_log_enabled() => {
+                let category = self.result_set_category();
+                tracing::debug!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    fetch_row_count = context.fetch_row_count(),
+                    "result set next"
+                );
+            }
+            Err(error) if self.is_result_set_log_error_enabled() => {
+                let category = self.result_set_category();
+                tracing::error!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    %error,
+                    "result set next error"
+                );
+            }
+            _ => {}
+        }
+    }
+
+    fn log_result_set_close_result(
+        &self,
+        context: &ResultSetFilterContext,
+        result: &Result<(), DruidError>,
+    ) {
+        match result {
+            Ok(()) if self.is_result_set_close_after_log_enabled() => {
+                let category = self.result_set_category();
+                tracing::debug!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    fetch_row_count = context.fetch_row_count(),
+                    "result set closed"
+                );
+            }
+            Err(error) if self.is_result_set_log_error_enabled() => {
+                let category = self.result_set_category();
+                tracing::error!(
+                    category,
+                    connection_id = context.connection_id(),
+                    statement_id = context.statement_id(),
+                    result_set_id = context.result_set_id(),
+                    %error,
+                    "result set close error"
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+#[allow(private_interfaces)]
+#[async_trait::async_trait]
 impl ResultSetFilter for LogFilter {
     fn result_set_open_after(&self, context: &ResultSetFilterContext) -> Result<(), DruidError> {
         if self.is_result_set_open_after_log_enabled() {
@@ -881,65 +949,31 @@ impl ResultSetFilter for LogFilter {
 
     fn result_set_next(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<bool, DruidError> {
         let more_rows = chain.result_set_next();
-        match more_rows {
-            Ok(true) if self.is_result_set_next_after_log_enabled() => {
-                let category = self.result_set_category();
-                let context = chain.context();
-                tracing::debug!(
-                    category,
-                    connection_id = context.connection_id(),
-                    statement_id = context.statement_id(),
-                    result_set_id = context.result_set_id(),
-                    fetch_row_count = context.fetch_row_count(),
-                    "result set next"
-                );
-            }
-            Err(ref error) if self.is_result_set_log_error_enabled() => {
-                let category = self.result_set_category();
-                let context = chain.context();
-                tracing::error!(
-                    category,
-                    connection_id = context.connection_id(),
-                    statement_id = context.statement_id(),
-                    result_set_id = context.result_set_id(),
-                    %error,
-                    "result set next error"
-                );
-            }
-            _ => {}
-        }
+        self.log_result_set_next_result(chain.context(), &more_rows);
         more_rows
     }
 
     fn result_set_close(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<(), DruidError> {
         let result = chain.result_set_close();
-        match result {
-            Ok(()) if self.is_result_set_close_after_log_enabled() => {
-                let category = self.result_set_category();
-                let context = chain.context();
-                tracing::debug!(
-                    category,
-                    connection_id = context.connection_id(),
-                    statement_id = context.statement_id(),
-                    result_set_id = context.result_set_id(),
-                    fetch_row_count = context.fetch_row_count(),
-                    "result set closed"
-                );
-            }
-            Err(ref error) if self.is_result_set_log_error_enabled() => {
-                let category = self.result_set_category();
-                let context = chain.context();
-                tracing::error!(
-                    category,
-                    connection_id = context.connection_id(),
-                    statement_id = context.statement_id(),
-                    result_set_id = context.result_set_id(),
-                    %error,
-                    "result set close error"
-                );
-            }
-            _ => {}
-        }
+        self.log_result_set_close_result(chain.context(), &result);
+        result
+    }
+
+    async fn standard_result_set_next(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<bool, DruidError> {
+        let result = chain.result_set_next().await;
+        self.log_result_set_next_result(chain.context(), &result);
+        result
+    }
+
+    async fn standard_result_set_close(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        let result = chain.result_set_close().await;
+        self.log_result_set_close_result(chain.context(), &result);
         result
     }
 }

@@ -6,6 +6,7 @@ use super::filter::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionEventContext,
     ExecContext, StatementEvent, StatementEventContext,
 };
+use super::standard_result_set_filter_chain::StandardResultSetFilterChain;
 use super::{
     ClobProxy, DruidPooledConnection, PhysicalConnection, PhysicalConnectionFactory,
     PhysicalDatabaseMetaData, PhysicalPreparedStatement, PhysicalResultSet, PhysicalStatement,
@@ -1500,6 +1501,26 @@ impl FilterChainImpl {
         context: &ResultSetFilterContext,
     ) -> Result<(), DruidError> {
         ResultSetFilterChain::new(&self.result_set, physical, context).result_set_close()
+    }
+
+    pub(crate) async fn standard_result_set_next(
+        &self,
+        standard: &mut dyn druid_rdbc::result_set::ResultSet,
+        context: &ResultSetFilterContext,
+    ) -> Result<bool, DruidError> {
+        StandardResultSetFilterChain::new(&self.result_set, standard, context)
+            .result_set_next()
+            .await
+    }
+
+    pub(crate) async fn standard_result_set_close(
+        &self,
+        standard: &mut dyn druid_rdbc::result_set::ResultSet,
+        context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        StandardResultSetFilterChain::new(&self.result_set, standard, context)
+            .result_set_close()
+            .await
     }
 
     /// 从位置 0 执行一次 `ResultSet#getWarnings()` around-chain。

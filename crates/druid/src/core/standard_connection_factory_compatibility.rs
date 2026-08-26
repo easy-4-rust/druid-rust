@@ -23,9 +23,9 @@ impl PhysicalConnectionFactory for StandardConnectionFactoryCompatibility {
     }
 
     async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(StandardConnectionCompatibility::new(
-            self.factory.create().await?,
-        )?))
+        Ok(Box::new(
+            StandardConnectionCompatibility::new(self.factory.create().await?).await?,
+        ))
     }
 
     async fn validate(

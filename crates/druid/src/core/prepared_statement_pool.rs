@@ -58,7 +58,10 @@ impl PreparedStatementPool {
     /// 命中会更新 access-order；非共享模式下语句正在使用时返回 `None`，但与
     /// Java 一致不增加 miss。真正命中时增加 holder hit 和数据源 hit；不存在
     /// 时增加 miss。
-    pub fn get(&mut self, key: &PreparedStatementKey) -> Option<Arc<PreparedStatementHolder>> {
+    pub(crate) fn get(
+        &mut self,
+        key: &PreparedStatementKey,
+    ) -> Option<Arc<PreparedStatementHolder>> {
         let holder = self.map.get(key).cloned();
         if let Some(holder) = holder {
             self.touch(key);
@@ -160,7 +163,8 @@ impl PreparedStatementPool {
     }
 
     /// 返回从最旧到最新的 access-order key，用于差分测试和管理面快照。
-    pub fn keys_in_lru_order(&self) -> Vec<PreparedStatementKey> {
+    #[cfg(test)]
+    pub(crate) fn keys_in_lru_order(&self) -> Vec<PreparedStatementKey> {
         self.access_order.iter().cloned().collect()
     }
 

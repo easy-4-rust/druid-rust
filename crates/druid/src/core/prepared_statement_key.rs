@@ -8,7 +8,7 @@ use druid_rdbc::statement::{GeneratedKeys, StatementOptions};
 
 /// 完整区分 SQL、catalog、重载与结果集选项的 Druid 私有缓存键。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct PreparedStatementKey {
+pub(crate) struct PreparedStatementKey {
     sql: String,
     catalog: Option<String>,
     method_type: PreparedStatementMethodType,
@@ -23,7 +23,7 @@ pub struct PreparedStatementKey {
 #[allow(dead_code)] // Task 5 freezes the full Java overload key; later overloads consume accessors.
 impl PreparedStatementKey {
     /// 创建 canonical standard PreparedStatement 缓存键。
-    pub fn standard(
+    pub(crate) fn standard(
         sql: &str,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -87,7 +87,7 @@ impl PreparedStatementKey {
         })
     }
 
-    pub fn new(
+    pub(crate) fn new(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -95,7 +95,7 @@ impl PreparedStatementKey {
         Self::full(sql, catalog, method_type, 0, 0, 0, 0, None, None)
     }
 
-    pub fn with_result_set(
+    pub(crate) fn with_result_set(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -115,7 +115,7 @@ impl PreparedStatementKey {
         )
     }
 
-    pub fn with_result_set_holdability(
+    pub(crate) fn with_result_set_holdability(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -136,7 +136,7 @@ impl PreparedStatementKey {
         )
     }
 
-    pub fn with_auto_generated_keys(
+    pub(crate) fn with_auto_generated_keys(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -155,7 +155,7 @@ impl PreparedStatementKey {
         )
     }
 
-    pub fn with_column_indexes(
+    pub(crate) fn with_column_indexes(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -164,7 +164,7 @@ impl PreparedStatementKey {
         Self::full(sql, catalog, method_type, 0, 0, 0, 0, column_indexes, None)
     }
 
-    pub fn with_column_names(
+    pub(crate) fn with_column_names(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -174,7 +174,7 @@ impl PreparedStatementKey {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn full(
+    pub(crate) fn full(
         sql: Option<String>,
         catalog: Option<String>,
         method_type: PreparedStatementMethodType,
@@ -200,50 +200,50 @@ impl PreparedStatementKey {
     }
 
     /// 返回 SQL 文本。
-    pub fn sql(&self) -> &str {
+    pub(crate) fn sql(&self) -> &str {
         &self.sql
     }
 
-    pub fn with_sql(mut self, sql: impl Into<String>) -> Self {
+    pub(crate) fn with_sql(mut self, sql: impl Into<String>) -> Self {
         self.sql = sql.into();
         self
     }
 
     /// 返回 catalog。
-    pub fn catalog(&self) -> Option<&str> {
+    pub(crate) fn catalog(&self) -> Option<&str> {
         self.catalog.as_deref()
     }
 
     /// 返回 prepare 重载种类。
-    pub const fn method_type(&self) -> PreparedStatementMethodType {
+    pub(crate) const fn method_type(&self) -> PreparedStatementMethodType {
         self.method_type
     }
 
-    pub const fn result_set_type(&self) -> i32 {
+    pub(crate) const fn result_set_type(&self) -> i32 {
         self.result_set_type
     }
 
-    pub const fn result_set_concurrency(&self) -> i32 {
+    pub(crate) const fn result_set_concurrency(&self) -> i32 {
         self.result_set_concurrency
     }
 
-    pub const fn result_set_holdability(&self) -> i32 {
+    pub(crate) const fn result_set_holdability(&self) -> i32 {
         self.result_set_holdability
     }
 
-    pub const fn auto_generated_keys(&self) -> i32 {
+    pub(crate) const fn auto_generated_keys(&self) -> i32 {
         self.auto_generated_keys
     }
 
-    pub fn column_indexes(&self) -> Option<&[i32]> {
+    pub(crate) fn column_indexes(&self) -> Option<&[i32]> {
         self.column_indexes.as_deref()
     }
 
-    pub fn column_names(&self) -> Option<&[String]> {
+    pub(crate) fn column_names(&self) -> Option<&[String]> {
         self.column_names.as_deref()
     }
 
-    pub fn statement_generated_keys(&self) -> druid_rdbc::spi::StatementGeneratedKeys {
+    pub(crate) fn statement_generated_keys(&self) -> druid_rdbc::spi::StatementGeneratedKeys {
         if let Some(indexes) = &self.column_indexes {
             druid_rdbc::spi::StatementGeneratedKeys::ColumnIndexes(indexes.clone())
         } else if let Some(names) = &self.column_names {
