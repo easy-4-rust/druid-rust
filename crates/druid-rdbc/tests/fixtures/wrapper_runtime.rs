@@ -9,9 +9,7 @@ use druid_rdbc::driver::{ConnectionFactory, ConnectionProperties, Driver};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::metadata::{DatabaseMetaData, ParameterMetaData, ResultSetMetaData};
 use druid_rdbc::result_set::ResultSet;
-use druid_rdbc::statement::{
-    CallableStatement, PreparedStatement, Statement, StatementOptions,
-};
+use druid_rdbc::statement::{CallableStatement, PreparedStatement, Statement, StatementOptions};
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper, WrapperExt};
 use std::any::TypeId;
 use std::marker::PhantomData;
@@ -163,6 +161,10 @@ impl XaDataSource for XaDataSourceObject {
 
 #[async_trait::async_trait]
 impl Driver for DriverObject {
+    fn name(&self) -> &str {
+        "external-driver"
+    }
+
     fn accepts_url(&self, _url: &str) -> bool {
         false
     }
@@ -189,7 +191,10 @@ macro_rules! assert_exact_identity {
         let expected: &$trait_object = &value;
         match value.unwrap(Some(TypeId::of::<$trait_object>()))? {
             StandardUnwrapped::$variant(actual) => {
-                assert_eq!(actual as *const _ as *const (), expected as *const _ as *const ());
+                assert_eq!(
+                    actual as *const _ as *const (),
+                    expected as *const _ as *const ()
+                );
             }
             other => panic!("unexpected canonical variant: {other:?}"),
         }
@@ -214,7 +219,10 @@ macro_rules! assert_inherited_identity {
         assert!(value.is_wrapper_for(Some(target))?);
         match value.unwrap(Some(target))? {
             StandardUnwrapped::$variant(actual) => {
-                assert_eq!(actual as *const _ as *const (), expected as *const _ as *const ());
+                assert_eq!(
+                    actual as *const _ as *const (),
+                    expected as *const _ as *const ()
+                );
             }
             other => panic!("unexpected inherited variant: {other:?}"),
         }
@@ -225,19 +233,47 @@ macro_rules! assert_inherited_identity {
 async fn main() -> Result<(), RdbcError> {
     assert_exact_identity!(ConnectionObject, dyn Connection, Connection);
     assert_exact_identity!(StatementObject, dyn Statement, Statement);
-    assert_exact_identity!(PreparedStatementObject, dyn PreparedStatement, PreparedStatement);
-    assert_exact_identity!(CallableStatementObject, dyn CallableStatement, CallableStatement);
+    assert_exact_identity!(
+        PreparedStatementObject,
+        dyn PreparedStatement,
+        PreparedStatement
+    );
+    assert_exact_identity!(
+        CallableStatementObject,
+        dyn CallableStatement,
+        CallableStatement
+    );
     assert_exact_identity!(
         GenericResultSet::<u8, String, 4>(PhantomData),
         dyn ResultSet,
         ResultSet
     );
-    assert_exact_identity!(DatabaseMetaDataObject, dyn DatabaseMetaData, DatabaseMetaData);
-    assert_exact_identity!(ResultSetMetaDataObject, dyn ResultSetMetaData, ResultSetMetaData);
-    assert_exact_identity!(ParameterMetaDataObject, dyn ParameterMetaData, ParameterMetaData);
-    assert_exact_identity!(CommonDataSourceObject, dyn CommonDataSource, CommonDataSource);
+    assert_exact_identity!(
+        DatabaseMetaDataObject,
+        dyn DatabaseMetaData,
+        DatabaseMetaData
+    );
+    assert_exact_identity!(
+        ResultSetMetaDataObject,
+        dyn ResultSetMetaData,
+        ResultSetMetaData
+    );
+    assert_exact_identity!(
+        ParameterMetaDataObject,
+        dyn ParameterMetaData,
+        ParameterMetaData
+    );
+    assert_exact_identity!(
+        CommonDataSourceObject,
+        dyn CommonDataSource,
+        CommonDataSource
+    );
     assert_exact_identity!(DataSourceObject, dyn DataSource, DataSource);
-    assert_exact_identity!(PooledConnectionObject, dyn PooledConnection, PooledConnection);
+    assert_exact_identity!(
+        PooledConnectionObject,
+        dyn PooledConnection,
+        PooledConnection
+    );
     assert_exact_identity!(
         ConnectionPoolDataSourceObject,
         dyn ConnectionPoolDataSource,
@@ -246,7 +282,11 @@ async fn main() -> Result<(), RdbcError> {
     assert_exact_identity!(XaConnectionObject, dyn XaConnection, XaConnection);
     assert_exact_identity!(XaDataSourceObject, dyn XaDataSource, XaDataSource);
     assert_exact_identity!(DriverObject, dyn Driver, Driver);
-    assert_exact_identity!(ConnectionFactoryObject, dyn ConnectionFactory, ConnectionFactory);
+    assert_exact_identity!(
+        ConnectionFactoryObject,
+        dyn ConnectionFactory,
+        ConnectionFactory
+    );
     assert_exact_identity!(WrapperObject, dyn Wrapper, Wrapper);
 
     let callable = CallableStatementObject;
@@ -260,11 +300,7 @@ async fn main() -> Result<(), RdbcError> {
     assert_inherited_identity!(data_source, dyn CommonDataSource, CommonDataSource);
 
     let pooled_data_source = ConnectionPoolDataSourceObject;
-    assert_inherited_identity!(
-        pooled_data_source,
-        dyn CommonDataSource,
-        CommonDataSource
-    );
+    assert_inherited_identity!(pooled_data_source, dyn CommonDataSource, CommonDataSource);
 
     let xa_data_source = XaDataSourceObject;
     assert_inherited_identity!(xa_data_source, dyn CommonDataSource, CommonDataSource);

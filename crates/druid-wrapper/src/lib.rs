@@ -14,6 +14,7 @@ mod standard_adapter_prepared_statement;
 mod standard_adapter_result_set;
 mod standard_adapter_statement;
 mod standard_query_result;
+mod standard_statement_state;
 /// P04 Task 4 的 opaque runtime-trace evidence API；仅用于仓库内适配器验收。
 #[doc(hidden)]
 pub mod task4_runtime_trace;

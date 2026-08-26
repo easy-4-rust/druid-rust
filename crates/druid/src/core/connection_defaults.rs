@@ -122,6 +122,7 @@ impl ConnectionDefaults {
     pub(crate) async fn reset_standard_state(
         &self,
         connection: &mut dyn Connection,
+        reset_schema: bool,
     ) -> Result<(), DruidError> {
         if self.read_only_supported && connection.read_only()? != self.read_only {
             connection.set_read_only(self.read_only).await?;
@@ -129,7 +130,8 @@ impl ConnectionDefaults {
         if self.catalog_supported && connection.catalog()?.as_deref() != self.catalog() {
             connection.set_catalog(self.catalog()).await?;
         }
-        if self.schema_supported && connection.schema()?.as_deref() != self.schema() {
+        if reset_schema && self.schema_supported && connection.schema()?.as_deref() != self.schema()
+        {
             connection.set_schema(self.schema()).await?;
         }
         if self.auto_commit_supported && connection.auto_commit()? != self.auto_commit {

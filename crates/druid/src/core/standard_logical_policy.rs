@@ -4,6 +4,7 @@ use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
 use super::exception_sorter::ExceptionSorter;
 use super::fatal_error_handler::FatalErrorHandler;
 use super::filter::{ExecContext, ExecOperation};
+use super::owner_disposition_control::OwnerDispositionControl;
 use super::{
     BatchExecContext, BatchExecKind, DruidError, ExecResult, FilterChain, PreparedInputParameter,
     RdbcError, Value,
@@ -29,6 +30,7 @@ pub(crate) struct StandardLogicalPolicy {
     transaction_started_at: Mutex<Option<Instant>>,
     resource_generation: u64,
     discarded: AtomicBool,
+    owner_disposition: Arc<OwnerDispositionControl>,
 }
 
 impl StandardLogicalPolicy {
@@ -40,6 +42,7 @@ impl StandardLogicalPolicy {
         filter_chain: Option<Arc<FilterChain>>,
         auto_commit: Option<bool>,
         resource_generation: u64,
+        owner_disposition: Arc<OwnerDispositionControl>,
     ) -> Arc<Self> {
         Arc::new(Self {
             connection_id,
@@ -54,6 +57,7 @@ impl StandardLogicalPolicy {
             transaction_started_at: Mutex::new(None),
             resource_generation,
             discarded: AtomicBool::new(false),
+            owner_disposition,
         })
     }
 
@@ -151,8 +155,8 @@ impl StandardLogicalPolicy {
     {
         let params = prepared_parameters
             .iter()
-            .map(|parameter| parameter.value.clone())
-            .collect();
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, RdbcError>>()?;
         self.execute_with_parameter_context(
             sql,
             params,
@@ -212,7 +216,9 @@ impl StandardLogicalPolicy {
         let (effective_sql, result, after) = match around {
             Ok(outcome) => outcome,
             Err(error) => {
-                return self.classify(Err(RdbcError::from(error)), Some(&context.sql));
+                let result = self.classify(Err(RdbcError::from(error)), Some(&context.sql));
+                self.record_execution(&context.sql, &result);
+                return result;
             }
         };
         let result = self.classify(result, Some(&effective_sql));
@@ -261,10 +267,10 @@ impl StandardLogicalPolicy {
             .map(|parameters| {
                 parameters
                     .iter()
-                    .map(|parameter| parameter.value.clone())
-                    .collect::<Vec<_>>()
+                    .map(PreparedInputParameter::scalar_value)
+                    .collect::<Result<Vec<_>, RdbcError>>()
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, RdbcError>>()?;
         self.execute_batch_counts(
             sql,
             &[],
@@ -349,6 +355,9 @@ impl StandardLogicalPolicy {
                 .is_some_and(|(sorter, exception)| sorter.is_exception_fatal(exception));
             if fatal {
                 self.discarded.store(true, Ordering::Release);
+                self.lease_active.store(false, Ordering::Release);
+                self.owner_disposition
+                    .signal_discard(super::ConnectionRecycleDisposition::discard());
                 if let Some(handler) = self.fatal_error_handler.read().as_ref() {
                     let product_error = DruidError::from(error.clone());
                     if handler.handle_fatal_error(&product_error, sql) {
@@ -358,6 +367,20 @@ impl StandardLogicalPolicy {
             }
         }
         result
+    }
+
+    /// 记录一次 canonical ResultSet 访问错误，不伪增 SQL executeCount。
+    pub(crate) fn record_result_set_error(&self, error: &RdbcError) {
+        let Some(stats) = self.stats_collector.read().clone() else {
+            return;
+        };
+        stats.record_error();
+        stats
+            .result_set_stat()
+            .error(DruidError::from(error.clone()));
+        if let Some(entry) = stats.connection_stat().entry(self.connection_id) {
+            entry.error(error);
+        }
     }
 
     fn record_execution<T>(&self, sql: &str, result: &Result<T, RdbcError>) {

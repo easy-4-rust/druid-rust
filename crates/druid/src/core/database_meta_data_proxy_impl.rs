@@ -3,7 +3,7 @@
 use super::standard_resource_registry::StandardResourceRegistry;
 use super::{DruidPooledResultSet, FilterChain, RdbcError};
 use crate::stats::StatsCollector;
-use druid_rdbc::metadata::{DatabaseMetaData, TablesQuery};
+use druid_rdbc::metadata::{DatabaseMetaData, DatabaseMetaDataRequest, RowIdLifetime, TablesQuery};
 use druid_rdbc::result_set::ResultSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -74,6 +74,78 @@ druid_rdbc::impl_standard_wrapper!(DatabaseMetaDataProxyImpl => DatabaseMetaData
 
 #[async_trait::async_trait]
 impl DatabaseMetaData for DatabaseMetaDataProxyImpl {
+    async fn metadata_boolean(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.policy.classify(
+            self.raw.metadata_boolean(request).await,
+            Some("DatabaseMetaData.boolean"),
+        )
+    }
+
+    async fn metadata_string(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<Option<String>, RdbcError> {
+        self.ensure_open()?;
+        self.policy.classify(
+            self.raw.metadata_string(request).await,
+            Some("DatabaseMetaData.string"),
+        )
+    }
+
+    async fn metadata_integer(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<i32, RdbcError> {
+        self.ensure_open()?;
+        self.policy.classify(
+            self.raw.metadata_integer(request).await,
+            Some("DatabaseMetaData.integer"),
+        )
+    }
+
+    async fn metadata_result_set(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.ensure_open()?;
+        let operation = request.operation().as_str();
+        let admission = self
+            .resources
+            .begin_admission(self.policy.resource_generation())?;
+        let raw = self
+            .policy
+            .classify(self.raw.metadata_result_set(request).await, Some(operation))?;
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard_metadata(
+                self.connection_id,
+                Arc::clone(&self.result_set_id_seed),
+                Arc::clone(&self.lease_active),
+                self.filter_chain.clone(),
+                self.stats_collector.clone(),
+                Arc::clone(&self.resources),
+                Arc::clone(&self.policy),
+                &admission,
+                raw,
+            )
+            .await?,
+        ))
+    }
+
+    async fn metadata_row_id_lifetime(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<RowIdLifetime, RdbcError> {
+        self.ensure_open()?;
+        self.policy.classify(
+            self.raw.metadata_row_id_lifetime(request).await,
+            Some("DatabaseMetaData.row_id_lifetime"),
+        )
+    }
+
     async fn database_product_name(&mut self) -> Result<String, RdbcError> {
         self.ensure_open()?;
         self.policy

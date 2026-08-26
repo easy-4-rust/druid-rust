@@ -1846,11 +1846,21 @@ async fn fatal_standard_create_prepare_call_and_metadata_errors_force_discard() 
             _ => unreachable!("fixed operation list"),
         };
         assert!(matches!(result, Err(RdbcError::SqlException(_))));
+        assert!(
+            returned
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_none(),
+            "fatal notification must not transfer the holder before close"
+        );
+        assert!(connection.is_closed().expect("fatal lease is closed"));
+        assert!(!connection.is_recycled());
+        connection.close().await.expect("fatal logical close");
         let (mut holder, disposition) = returned
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
-            .expect("fatal classifier returns holder immediately");
+            .expect("fatal close transfers the holder exactly once");
         assert!(matches!(
             disposition,
             ConnectionRecycleDisposition::Discard { .. }

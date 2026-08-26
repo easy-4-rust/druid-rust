@@ -70,6 +70,12 @@ pub struct PoolInnerConfig {
     pub max_evictable_idle_time: Duration,
     /// Java `phyTimeoutMillis`；`None` 对应默认值 `-1`。
     pub driver_connection_timeout: Option<Duration>,
+    /// `driver_connection_timeout` 的 Task 6 兼容字段。
+    #[deprecated(
+        since = "0.0.0-design",
+        note = "use driver_connection_timeout; this alias is removed in the next breaking release"
+    )]
+    pub physical_connection_timeout: Option<Duration>,
     pub test_on_borrow: bool,
     pub test_on_return: bool,
     pub test_while_idle: bool,
@@ -110,6 +116,16 @@ pub struct PoolInnerConfig {
     pub use_oracle_implicit_cache: bool,
 }
 
+impl PoolInnerConfig {
+    /// Resolves the canonical timeout, accepting a directly populated compatibility field.
+    #[allow(deprecated)]
+    pub(crate) fn effective_driver_connection_timeout(&self) -> Option<Duration> {
+        self.driver_connection_timeout
+            .or(self.physical_connection_timeout)
+    }
+}
+
+#[allow(deprecated)]
 impl Default for PoolInnerConfig {
     fn default() -> Self {
         Self {
@@ -135,6 +151,7 @@ impl Default for PoolInnerConfig {
             idle_timeout: Duration::from_secs(1800),
             max_evictable_idle_time: Duration::from_secs(7 * 60 * 60),
             driver_connection_timeout: None,
+            physical_connection_timeout: None,
             test_on_borrow: false,
             test_on_return: false,
             test_while_idle: false,
@@ -556,6 +573,24 @@ impl DruidPoolBuilder {
         self
     }
 
+    /// Task 6 兼容入口；新代码应使用 [`Self::driver_connection_timeout`]。
+    #[deprecated(
+        since = "0.0.0-design",
+        note = "use driver_connection_timeout; this alias is removed in the next breaking release"
+    )]
+    pub fn physical_connection_timeout(self, physical_connection_timeout: Duration) -> Self {
+        self.driver_connection_timeout(physical_connection_timeout)
+    }
+
+    /// Java `phyTimeoutMillis` 的 Task 6 兼容入口。
+    #[deprecated(
+        since = "0.0.0-design",
+        note = "use driver_connection_timeout; this alias is removed in the next breaking release"
+    )]
+    pub fn phy_timeout(self, phy_timeout: Duration) -> Self {
+        self.driver_connection_timeout(phy_timeout)
+    }
+
     pub fn test_on_borrow(mut self, v: bool) -> Self {
         self.test_on_borrow = v;
         self
@@ -954,6 +989,7 @@ impl DruidPoolBuilder {
         Ok(())
     }
 
+    #[allow(deprecated)]
     pub async fn build(mut self) -> Result<super::DruidPool, crate::core::DruidError> {
         if self.max_open == 0 {
             return Err(crate::core::DruidError::InvalidArgument(
@@ -1011,6 +1047,7 @@ impl DruidPoolBuilder {
             idle_timeout: self.idle_timeout,
             max_evictable_idle_time: self.max_evictable_idle_time,
             driver_connection_timeout: self.driver_connection_timeout,
+            physical_connection_timeout: self.driver_connection_timeout,
             test_on_borrow: self.test_on_borrow,
             test_on_return: self.test_on_return,
             test_while_idle: self.test_while_idle,

@@ -1,6 +1,7 @@
 //! JDBC-like 语句标准与类型化描述符。
 
 mod callable_statement;
+mod prepared_input_parameter;
 mod prepared_statement;
 #[expect(
     clippy::module_inception,
@@ -11,11 +12,10 @@ mod statement;
 pub use callable_statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
 };
-pub use prepared_statement::{
-    ParameterIndex, PreparedInputParameter, PreparedParameter, PreparedStatement,
-    PreparedTypeNameArgument,
-};
+pub use prepared_input_parameter::{PreparedInputParameter, PreparedTypeNameArgument};
+pub use prepared_statement::{ParameterIndex, PreparedParameter, PreparedStatement};
 pub use statement::{
-    ExecResult, ExecutionResult, GeneratedKeys, ResultSetConcurrency, ResultSetHoldability,
-    ResultSetType, Statement, StatementExecuteResult, StatementOptions,
+    CurrentResultDisposition, ExecResult, ExecutionResult, FetchDirection, GeneratedKeys,
+    ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement, StatementExecuteResult,
+    StatementOptions,
 };

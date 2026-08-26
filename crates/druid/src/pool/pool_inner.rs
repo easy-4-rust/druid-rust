@@ -611,12 +611,10 @@ impl PoolInner {
 
     /// 对 holder 的实际 raw slot 执行同一 borrow/return/keep-alive 校验。
     pub(crate) async fn test_holder_internal(&self, holder: &mut DruidConnectionHolder) -> bool {
-        let Some(connection) = holder.standard_connection_mut() else {
+        let Some(connection) = holder.standard_connection_box_mut() else {
             return false;
         };
-        let timeout_seconds =
-            u32::try_from(self.config.validation_query_timeout.as_secs()).unwrap_or(u32::MAX);
-        matches!(connection.is_valid(timeout_seconds).await, Ok(true))
+        self.validate_connection(connection).await.is_ok()
     }
 
     /// 按 Java `initialSize` 预建空闲物理连接。
@@ -1147,7 +1145,7 @@ impl PoolInner {
         let lifetime_expired = connection_age >= self.config.max_lifetime;
         let driver_timeout_expired = self
             .config
-            .driver_connection_timeout
+            .effective_driver_connection_timeout()
             .is_some_and(|timeout| !timeout.is_zero() && connection_age > timeout);
         let max_use_count_reached =
             self.config.max_use_count > 0 && holder.use_count() >= self.config.max_use_count as u64;
@@ -1180,6 +1178,45 @@ impl PoolInner {
                 false
             }
         }
+    }
+
+    /// Records one fatal discard before the holder can be transferred by its logical owner.
+    pub(crate) fn signal_owner_discard(&self, disposition: &ConnectionRecycleDisposition) {
+        let was_active = self
+            .active_count
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (current > 0).then_some(current - 1)
+            })
+            .is_ok();
+        if !was_active {
+            return;
+        }
+        self.close_count.fetch_add(1, Ordering::Relaxed);
+        self.discard_count.fetch_add(1, Ordering::Relaxed);
+        if disposition.has_recycle_error() {
+            self.recycle_error_count.fetch_add(1, Ordering::Relaxed);
+        }
+        self.record_destroy();
+        self.request_refill(self.config.min_idle);
+    }
+
+    /// Transfers and closes a holder whose pool accounting was completed by `signal_owner_discard`.
+    pub(crate) fn finish_signaled_discard(&self, mut holder: DruidConnectionHolder) -> bool {
+        let _termination = CloseWorkerTerminationGuard { inner: self };
+        let connection_id = holder.connection_id();
+        let connection_age = holder.connection_age();
+        holder.mark_discarded();
+        if let Some(sender) = self.close_sender.read().clone() {
+            let command = ConnectionCloseCommand {
+                connection_id,
+                connection_age,
+                holder: Box::new(holder),
+            };
+            if let Err(error) = sender.send(Some(command)) {
+                drop(error.0);
+            }
+        }
+        false
     }
 
     fn discard_recycled_holder(&self, holder: DruidConnectionHolder) -> bool {
@@ -1313,7 +1350,7 @@ impl PoolInner {
 
                 let driver_timeout_expired = self
                     .config
-                    .driver_connection_timeout
+                    .effective_driver_connection_timeout()
                     .is_some_and(|timeout| !timeout.is_zero() && holder.connection_age() > timeout);
                 if driver_timeout_expired {
                     evicted.push(holder);

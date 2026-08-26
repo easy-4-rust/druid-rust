@@ -1,6 +1,7 @@
 //! deadpool 外部连接池桥接。
 
 use super::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager;
+use crate::sqlx::external_pool_connection_control::ExternalPoolLeaseControl;
 use deadpool::managed::{Pool as DeadpoolPool, PoolError, Timeouts};
 use druid::core::{
     ConnectionRecycleDisposition, DruidConnectionHolder, DruidPooledConnection,
@@ -30,6 +31,7 @@ pub struct SqlxDeadpoolPool {
     recycle_count: Arc<AtomicU64>,
     recycle_error_count: Arc<AtomicU64>,
     discard_count: Arc<AtomicU64>,
+    manager_rejection_count: Arc<AtomicU64>,
 }
 
 impl SqlxDeadpoolPool {
@@ -92,6 +94,7 @@ impl SqlxDeadpoolPool {
             recycle_count: Arc::new(AtomicU64::new(0)),
             recycle_error_count: Arc::new(AtomicU64::new(0)),
             discard_count: Arc::new(AtomicU64::new(0)),
+            manager_rejection_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -130,12 +133,32 @@ impl SqlxDeadpoolPool {
                 return Err(Self::map_pool_error(error));
             }
         };
+        let external_control = Arc::new(ExternalPoolLeaseControl::register(
+            lease.as_ref().as_ref(),
+            Arc::clone(&self.manager_rejection_count),
+        ));
 
         let id = self.connection_sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let close_count = self.close_count.clone();
         let recycle_count = self.recycle_count.clone();
         let recycle_error_count = self.recycle_error_count.clone();
         let discard_count = self.discard_count.clone();
+        let disposition_signaled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let signaled_for_observer = Arc::clone(&disposition_signaled);
+        let control_for_observer = Arc::clone(&external_control);
+        let close_for_observer = Arc::clone(&close_count);
+        let discard_for_observer = Arc::clone(&discard_count);
+        let recycle_error_for_observer = Arc::clone(&recycle_error_count);
+        let disposition_observer = Box::new(move |disposition: ConnectionRecycleDisposition| {
+            signaled_for_observer.store(true, Ordering::Release);
+            control_for_observer.poison();
+            close_for_observer.fetch_add(1, Ordering::Relaxed);
+            discard_for_observer.fetch_add(1, Ordering::Relaxed);
+            if disposition.has_recycle_error() {
+                recycle_error_for_observer.fetch_add(1, Ordering::Relaxed);
+            }
+        });
+        let signaled_for_return = Arc::clone(&disposition_signaled);
         let holder = DruidConnectionHolder::with_external_connection(
             Box::new(ExternalConnectionLease::new(lease)),
             id,
@@ -144,31 +167,40 @@ impl SqlxDeadpoolPool {
         )
         .await
         .map_err(RdbcError::from)?;
-        Ok(DruidPooledConnection::with_standard_holder(
-            holder,
-            self.name.clone(),
-            self.filter_chain.clone(),
-            false,
-            false,
-            Box::new(move |mut holder, disposition| {
-                close_count.fetch_add(1, Ordering::Relaxed);
-                match disposition {
-                    ConnectionRecycleDisposition::Reusable => {
-                        recycle_count.fetch_add(1, Ordering::Relaxed);
-                    }
-                    ConnectionRecycleDisposition::Discard { recycle_error } => {
+        Ok(
+            DruidPooledConnection::with_standard_holder_and_disposition_observer(
+                holder,
+                self.name.clone(),
+                self.filter_chain.clone(),
+                false,
+                false,
+                disposition_observer,
+                Box::new(move |mut holder, disposition| {
+                    if signaled_for_return.load(Ordering::Acquire) {
                         holder.mark_discarded();
-                        discard_count.fetch_add(1, Ordering::Relaxed);
-                        if recycle_error.is_some() {
-                            recycle_error_count.fetch_add(1, Ordering::Relaxed);
+                        drop(holder);
+                        return false;
+                    }
+                    close_count.fetch_add(1, Ordering::Relaxed);
+                    match disposition {
+                        ConnectionRecycleDisposition::Reusable => {
+                            recycle_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                        ConnectionRecycleDisposition::Discard { recycle_error } => {
+                            external_control.poison();
+                            holder.mark_discarded();
+                            discard_count.fetch_add(1, Ordering::Relaxed);
+                            if recycle_error.is_some() {
+                                recycle_error_count.fetch_add(1, Ordering::Relaxed);
+                            }
                         }
                     }
-                }
-                // 丢弃透明租约桥接会触发 deadpool 自身唯一的归还路径。
-                drop(holder);
-                false
-            }),
-        ))
+                    // 丢弃透明租约桥接会触发 deadpool 自身唯一的归还路径。
+                    drop(holder);
+                    false
+                }),
+            ),
+        )
     }
 }
 
@@ -197,6 +229,7 @@ impl DruidPool for SqlxDeadpoolPool {
             wait_count: state.waiting,
             create_count: self.pool.manager().create_count(),
             close_count: self.close_count.load(Ordering::Relaxed),
+            destroy_count: self.manager_rejection_count.load(Ordering::Relaxed),
             connect_count: self.connect_count.load(Ordering::Relaxed),
             connect_error_count: self.connect_error_count.load(Ordering::Relaxed),
             recycle_count: self.recycle_count.load(Ordering::Relaxed),

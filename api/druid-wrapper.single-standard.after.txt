@@ -1,0 +1,1107 @@
+pub mod druid_wrapper
+pub mod druid_wrapper::c3p0
+pub trait druid_wrapper::c3p0::PooledDataSource: druid::core::pool::Pool
+impl<T> druid_wrapper::c3p0::PooledDataSource for T where T: druid::core::pool::Pool + ?core::marker::Sized
+pub type druid_wrapper::c3p0::ComboPooledDataSource = druid::pool::druid_data_source::DruidDataSource
+pub mod druid_wrapper::dbcp
+pub struct druid_wrapper::dbcp::BasicDataSourceFactory
+impl druid_wrapper::dbcp::BasicDataSourceFactory
+pub async fn druid_wrapper::dbcp::BasicDataSourceFactory::create_data_source(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_rdbc::error::rdbc_error::RdbcError>
+pub async fn druid_wrapper::dbcp::BasicDataSourceFactory::create_data_source_with_factory(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_rdbc::error::rdbc_error::RdbcError>
+pub struct druid_wrapper::dbcp::ManagedBasicDataSourceFactory
+impl druid_wrapper::dbcp::ManagedBasicDataSourceFactory
+pub async fn druid_wrapper::dbcp::ManagedBasicDataSourceFactory::create_data_source(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_rdbc::error::rdbc_error::RdbcError>
+pub async fn druid_wrapper::dbcp::ManagedBasicDataSourceFactory::create_data_source_with_factory(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_rdbc::error::rdbc_error::RdbcError>
+pub trait druid_wrapper::dbcp::BasicDataSourceMBean: druid::pool::managed_data_source::ManagedDataSource
+impl<T> druid_wrapper::dbcp::BasicDataSourceMBean for T where T: druid::pool::managed_data_source::ManagedDataSource + ?core::marker::Sized
+pub trait druid_wrapper::dbcp::ManagedBasicDataSourceMBean: druid_wrapper::dbcp::BasicDataSourceMBean
+impl<T> druid_wrapper::dbcp::ManagedBasicDataSourceMBean for T where T: druid_wrapper::dbcp::BasicDataSourceMBean + ?core::marker::Sized
+pub type druid_wrapper::dbcp::BasicDataSource = druid::pool::druid_data_source::DruidDataSource
+pub type druid_wrapper::dbcp::ManagedBasicDataSource = druid::pool::druid_data_source::DruidDataSource
+pub mod druid_wrapper::dbcp2
+pub struct druid_wrapper::dbcp2::BasicDataSourceFactory
+impl druid_wrapper::dbcp2::BasicDataSourceFactory
+pub async fn druid_wrapper::dbcp2::BasicDataSourceFactory::create_data_source(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_rdbc::error::rdbc_error::RdbcError>
+pub async fn druid_wrapper::dbcp2::BasicDataSourceFactory::create_data_source_with_factory(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_rdbc::error::rdbc_error::RdbcError>
+pub trait druid_wrapper::dbcp2::BasicDataSourceMBean: druid::pool::managed_data_source::ManagedDataSource
+impl<T> druid_wrapper::dbcp2::BasicDataSourceMBean for T where T: druid::pool::managed_data_source::ManagedDataSource + ?core::marker::Sized
+pub type druid_wrapper::dbcp2::BasicDataSource = druid::pool::druid_data_source::DruidDataSource
+pub mod druid_wrapper::driver
+pub enum druid_wrapper::driver::DriverRegistryError
+pub druid_wrapper::driver::DriverRegistryError::InvalidManifest(alloc::string::String)
+pub druid_wrapper::driver::DriverRegistryError::InvalidProfileId(druid_wrapper::driver::DatabaseProfileIdError)
+pub druid_wrapper::driver::DriverRegistryError::InvalidUrl
+pub druid_wrapper::driver::DriverRegistryError::InvalidUrl::profile: alloc::string::String
+pub druid_wrapper::driver::DriverRegistryError::InvalidUrl::url: alloc::string::String
+pub druid_wrapper::driver::DriverRegistryError::Pool(druid_rdbc::error::rdbc_error::RdbcError)
+pub druid_wrapper::driver::DriverRegistryError::UnknownProfile(alloc::string::String)
+pub druid_wrapper::driver::DriverRegistryError::UnsupportedRuntime
+pub druid_wrapper::driver::DriverRegistryError::UnsupportedRuntime::profile: alloc::string::String
+pub druid_wrapper::driver::DriverRegistryError::UnsupportedRuntime::runtime: alloc::string::String
+pub enum druid_wrapper::driver::DriverRuntimeMode
+pub druid_wrapper::driver::DriverRuntimeMode::HttpSql
+pub druid_wrapper::driver::DriverRuntimeMode::JdbcAgent
+pub druid_wrapper::driver::DriverRuntimeMode::Native
+pub druid_wrapper::driver::DriverRuntimeMode::Sqlx
+pub enum druid_wrapper::driver::DriverSupportStatus
+pub druid_wrapper::driver::DriverSupportStatus::Certified
+pub druid_wrapper::driver::DriverSupportStatus::Declared
+pub druid_wrapper::driver::DriverSupportStatus::Experimental
+pub druid_wrapper::driver::DriverSupportStatus::Verified
+impl druid_wrapper::driver::DriverSupportStatus
+pub const fn druid_wrapper::driver::DriverSupportStatus::counts_as_supported(self) -> bool
+pub enum druid_wrapper::driver::ProtocolFamily
+pub druid_wrapper::driver::ProtocolFamily::Embedded
+pub druid_wrapper::driver::ProtocolFamily::HttpSql
+pub druid_wrapper::driver::ProtocolFamily::Jdbc
+pub druid_wrapper::driver::ProtocolFamily::MySql
+pub druid_wrapper::driver::ProtocolFamily::Oracle
+pub druid_wrapper::driver::ProtocolFamily::PostgreSql
+pub druid_wrapper::driver::ProtocolFamily::SQLite
+pub druid_wrapper::driver::ProtocolFamily::SqlServer
+impl druid_wrapper::driver::ProtocolFamily
+pub const fn druid_wrapper::driver::ProtocolFamily::as_str(self) -> &'static str
+pub enum druid_wrapper::driver::WallMode
+pub druid_wrapper::driver::WallMode::Dedicated
+pub druid_wrapper::driver::WallMode::Disabled
+pub druid_wrapper::driver::WallMode::FamilyCompatible
+pub druid_wrapper::driver::WallMode::Generic
+pub struct druid_wrapper::driver::DatabaseConnectionConfig
+impl druid_wrapper::driver::DatabaseConnectionConfig
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_wrapper::driver::DatabaseProfileIdError>
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::password(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::profile_id(&self) -> &druid_wrapper::driver::DatabaseProfileId
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::properties(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::property(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::url(&self) -> &str
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::user_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::fmt::Debug for druid_wrapper::driver::DatabaseConnectionConfig
+pub fn druid_wrapper::driver::DatabaseConnectionConfig::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_wrapper::driver::DatabaseProfile
+impl druid_wrapper::driver::DatabaseProfile
+pub fn druid_wrapper::driver::DatabaseProfile::artifact_id(&self) -> &str
+pub fn druid_wrapper::driver::DatabaseProfile::artifact_version(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::driver::DatabaseProfile::capabilities(&self) -> druid_wrapper::driver::DriverCapabilities
+pub const fn druid_wrapper::driver::DatabaseProfile::db_type(&self) -> druid::sql::db_type::DbType
+pub const fn druid_wrapper::driver::DatabaseProfile::default_port(&self) -> core::option::Option<u16>
+pub const fn druid_wrapper::driver::DatabaseProfile::delivery_phase(&self) -> u8
+pub fn druid_wrapper::driver::DatabaseProfile::display_name(&self) -> &str
+pub fn druid_wrapper::driver::DatabaseProfile::driver_class(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::driver::DatabaseProfile::evidence(&self) -> core::option::Option<&druid_wrapper::driver::DriverVerificationEvidence>
+pub fn druid_wrapper::driver::DatabaseProfile::exception_sorter(&self) -> &str
+pub fn druid_wrapper::driver::DatabaseProfile::id(&self) -> &druid_wrapper::driver::DatabaseProfileId
+pub const fn druid_wrapper::driver::DatabaseProfile::protocol_family(&self) -> druid_wrapper::driver::ProtocolFamily
+pub fn druid_wrapper::driver::DatabaseProfile::provider_id(&self) -> &str
+pub fn druid_wrapper::driver::DatabaseProfile::reset_sql(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::driver::DatabaseProfile::runtime_mode(&self) -> druid_wrapper::driver::DriverRuntimeMode
+pub const fn druid_wrapper::driver::DatabaseProfile::support_status(&self) -> druid_wrapper::driver::DriverSupportStatus
+pub fn druid_wrapper::driver::DatabaseProfile::validation_query(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::driver::DatabaseProfile::wall_mode(&self) -> druid_wrapper::driver::WallMode
+pub struct druid_wrapper::driver::DatabaseProfileId(_)
+impl druid_wrapper::driver::DatabaseProfileId
+pub fn druid_wrapper::driver::DatabaseProfileId::as_str(&self) -> &str
+pub fn druid_wrapper::driver::DatabaseProfileId::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_wrapper::driver::DatabaseProfileIdError>
+impl core::convert::AsRef<str> for druid_wrapper::driver::DatabaseProfileId
+pub fn druid_wrapper::driver::DatabaseProfileId::as_ref(&self) -> &str
+impl core::fmt::Display for druid_wrapper::driver::DatabaseProfileId
+pub fn druid_wrapper::driver::DatabaseProfileId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_wrapper::driver::DatabaseProfileIdError
+impl druid_wrapper::driver::DatabaseProfileIdError
+pub fn druid_wrapper::driver::DatabaseProfileIdError::value(&self) -> &str
+impl core::error::Error for druid_wrapper::driver::DatabaseProfileIdError
+impl core::fmt::Display for druid_wrapper::driver::DatabaseProfileIdError
+pub fn druid_wrapper::driver::DatabaseProfileIdError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_wrapper::driver::DriverCapabilities
+pub druid_wrapper::driver::DriverCapabilities::array: bool
+pub druid_wrapper::driver::DriverCapabilities::auto_commit: bool
+pub druid_wrapper::driver::DriverCapabilities::batch: bool
+pub druid_wrapper::driver::DriverCapabilities::blob: bool
+pub druid_wrapper::driver::DriverCapabilities::cancellation: bool
+pub druid_wrapper::driver::DriverCapabilities::catalog: bool
+pub druid_wrapper::driver::DriverCapabilities::clob: bool
+pub druid_wrapper::driver::DriverCapabilities::generated_keys: bool
+pub druid_wrapper::driver::DriverCapabilities::lob: bool
+pub druid_wrapper::driver::DriverCapabilities::metadata: bool
+pub druid_wrapper::driver::DriverCapabilities::multiple_results: bool
+pub druid_wrapper::driver::DriverCapabilities::n_clob: bool
+pub druid_wrapper::driver::DriverCapabilities::paged_results: bool
+pub druid_wrapper::driver::DriverCapabilities::prepared_statements: bool
+pub druid_wrapper::driver::DriverCapabilities::query: bool
+pub druid_wrapper::driver::DriverCapabilities::read_only: bool
+pub druid_wrapper::driver::DriverCapabilities::savepoints: bool
+pub druid_wrapper::driver::DriverCapabilities::schema: bool
+pub druid_wrapper::driver::DriverCapabilities::sql_xml: bool
+pub druid_wrapper::driver::DriverCapabilities::transaction_isolation: bool
+pub druid_wrapper::driver::DriverCapabilities::transactions: bool
+pub druid_wrapper::driver::DriverCapabilities::update: bool
+impl druid_wrapper::driver::DriverCapabilities
+pub const fn druid_wrapper::driver::DriverCapabilities::is_empty(self) -> bool
+pub struct druid_wrapper::driver::DriverManifest
+impl druid_wrapper::driver::DriverManifest
+pub fn druid_wrapper::driver::DriverManifest::builtin() -> core::result::Result<Self, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DriverManifest::catalog_version(&self) -> &str
+pub fn druid_wrapper::driver::DriverManifest::from_json(&str) -> core::result::Result<Self, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DriverManifest::profiles(&self) -> &[druid_wrapper::driver::DatabaseProfile]
+pub const fn druid_wrapper::driver::DriverManifest::schema_version(&self) -> u32
+pub struct druid_wrapper::driver::DriverVerificationEvidence
+impl druid_wrapper::driver::DriverVerificationEvidence
+pub fn druid_wrapper::driver::DriverVerificationEvidence::artifact_sha256(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::driver::DriverVerificationEvidence::contract_version(&self) -> &str
+pub fn druid_wrapper::driver::DriverVerificationEvidence::is_valid_for(&self, druid_wrapper::driver::DriverRuntimeMode) -> bool
+pub fn druid_wrapper::driver::DriverVerificationEvidence::java_versions(&self) -> &[u16]
+pub fn druid_wrapper::driver::DriverVerificationEvidence::platforms(&self) -> &[alloc::string::String]
+pub fn druid_wrapper::driver::DriverVerificationEvidence::runs(&self) -> &[druid_wrapper::driver::DriverVerificationRun]
+pub fn druid_wrapper::driver::DriverVerificationEvidence::tested_at(&self) -> &str
+pub struct druid_wrapper::driver::DriverVerificationRun
+impl druid_wrapper::driver::DriverVerificationRun
+pub fn druid_wrapper::driver::DriverVerificationRun::artifact_sha256(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::driver::DriverVerificationRun::contract_checks(&self) -> &[alloc::string::String]
+pub fn druid_wrapper::driver::DriverVerificationRun::database_version(&self) -> &str
+pub fn druid_wrapper::driver::DriverVerificationRun::evidence_ref(&self) -> &str
+pub fn druid_wrapper::driver::DriverVerificationRun::installation_paths(&self) -> &[alloc::string::String]
+pub fn druid_wrapper::driver::DriverVerificationRun::java_versions(&self) -> &[u16]
+pub fn druid_wrapper::driver::DriverVerificationRun::passed_at(&self) -> &str
+pub const fn druid_wrapper::driver::DriverVerificationRun::runtime_mode(&self) -> druid_wrapper::driver::DriverRuntimeMode
+pub fn druid_wrapper::driver::DriverVerificationRun::rust_version(&self) -> &str
+pub fn druid_wrapper::driver::DriverVerificationRun::source_revision(&self) -> &str
+pub fn druid_wrapper::driver::DriverVerificationRun::target(&self) -> &str
+pub struct druid_wrapper::driver::DruidDatabasePoolBuilder
+impl druid_wrapper::driver::DruidDatabasePoolBuilder
+pub async fn druid_wrapper::driver::DruidDatabasePoolBuilder::build(self) -> core::result::Result<druid::pool::druid_pool::DruidPool, druid_wrapper::driver::DriverRegistryError>
+pub async fn druid_wrapper::driver::DruidDatabasePoolBuilder::build_data_source(self) -> core::result::Result<druid::pool::druid_data_source::DruidDataSource, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::from_rdbc_url(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::jdbc_agent(self, druid_wrapper::jdbc_agent::JdbcAgentOptions) -> Self
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::password(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::pool(self, impl core::ops::function::FnOnce(druid::pool::config::DruidPoolBuilder) -> druid::pool::config::DruidPoolBuilder + core::marker::Send + 'static) -> Self
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::property(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver::DruidDatabasePoolBuilder::user_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub struct druid_wrapper::driver::DruidDriverRegistry
+impl druid_wrapper::driver::DruidDriverRegistry
+pub fn druid_wrapper::driver::DruidDriverRegistry::builtin() -> core::result::Result<Self, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDriverRegistry::catalog_size(&self) -> usize
+pub fn druid_wrapper::driver::DruidDriverRegistry::catalog_version(&self) -> &str
+pub fn druid_wrapper::driver::DruidDriverRegistry::from_manifest(druid_wrapper::driver::DriverManifest) -> core::result::Result<Self, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDriverRegistry::profile(&self, &druid_wrapper::driver::DatabaseProfileId) -> core::result::Result<&druid_wrapper::driver::DatabaseProfile, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDriverRegistry::profiles(&self) -> impl core::iter::traits::exact_size::ExactSizeIterator<Item = &druid_wrapper::driver::DatabaseProfile>
+pub fn druid_wrapper::driver::DruidDriverRegistry::resolve(&self, &druid_wrapper::driver::DatabaseConnectionConfig) -> core::result::Result<druid_wrapper::driver::ResolvedDatabaseDriver, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::driver::DruidDriverRegistry::supported_count(&self) -> usize
+pub fn druid_wrapper::driver::DruidDriverRegistry::with_jdbc_agent(self, druid_wrapper::jdbc_agent::JdbcAgentOptions) -> Self
+pub struct druid_wrapper::driver::ResolvedDatabaseDriver
+impl druid_wrapper::driver::ResolvedDatabaseDriver
+pub fn druid_wrapper::driver::ResolvedDatabaseDriver::factory(&self) -> alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>
+pub fn druid_wrapper::driver::ResolvedDatabaseDriver::profile(&self) -> &druid_wrapper::driver::DatabaseProfile
+pub fn druid_wrapper::driver::ResolvedDatabaseDriver::url(&self) -> &str
+impl core::fmt::Debug for druid_wrapper::driver::ResolvedDatabaseDriver
+pub fn druid_wrapper::driver::ResolvedDatabaseDriver::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod druid_wrapper::driver_admin
+pub enum druid_wrapper::driver_admin::DriverEvidenceError
+pub druid_wrapper::driver_admin::DriverEvidenceError::Incomplete(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverEvidenceError::Io(core::io::error::Error)
+pub druid_wrapper::driver_admin::DriverEvidenceError::Json(serde_json::error::Error)
+pub enum druid_wrapper::driver_admin::DriverInstallerError
+pub druid_wrapper::driver_admin::DriverInstallerError::ActiveArtifact
+pub druid_wrapper::driver_admin::DriverInstallerError::ActiveArtifact::profile_id: alloc::string::String
+pub druid_wrapper::driver_admin::DriverInstallerError::ActiveArtifact::sha256: alloc::string::String
+pub druid_wrapper::driver_admin::DriverInstallerError::ArtifactTooLarge(u64)
+pub druid_wrapper::driver_admin::DriverInstallerError::ArtifactVersionNotFound
+pub druid_wrapper::driver_admin::DriverInstallerError::ArtifactVersionNotFound::profile_id: alloc::string::String
+pub druid_wrapper::driver_admin::DriverInstallerError::ArtifactVersionNotFound::sha256: alloc::string::String
+pub druid_wrapper::driver_admin::DriverInstallerError::ChecksumMismatch
+pub druid_wrapper::driver_admin::DriverInstallerError::ChecksumMismatch::actual: alloc::string::String
+pub druid_wrapper::driver_admin::DriverInstallerError::ChecksumMismatch::expected: alloc::string::String
+pub druid_wrapper::driver_admin::DriverInstallerError::ClassPath(std::env::JoinPathsError)
+pub druid_wrapper::driver_admin::DriverInstallerError::Download(reqwest::error::Error)
+pub druid_wrapper::driver_admin::DriverInstallerError::DownloadTimeout(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::InvalidArtifact(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::InvalidChecksum(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::InvalidUrl(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::Io(core::io::error::Error)
+pub druid_wrapper::driver_admin::DriverInstallerError::JavaRuntimeNotInstalled
+pub druid_wrapper::driver_admin::DriverInstallerError::LockTimeout(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::Metadata(serde_json::error::Error)
+pub druid_wrapper::driver_admin::DriverInstallerError::NotInstalled(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::NotJdbcProfile(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::OfflineMode(alloc::string::String)
+pub druid_wrapper::driver_admin::DriverInstallerError::ProfileId(druid_wrapper::driver::DatabaseProfileIdError)
+pub druid_wrapper::driver_admin::DriverInstallerError::Registry(druid_wrapper::driver::DriverRegistryError)
+pub druid_wrapper::driver_admin::DriverInstallerError::UnsupportedJavaVersion(u16)
+pub struct druid_wrapper::driver_admin::DriverBundleFile
+impl druid_wrapper::driver_admin::DriverBundleFile
+pub fn druid_wrapper::driver_admin::DriverBundleFile::checksum(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::driver_admin::DriverBundleFile::expected_sha256(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver_admin::DriverBundleFile::new(impl core::convert::Into<std::path::PathBuf>) -> Self
+pub fn druid_wrapper::driver_admin::DriverBundleFile::path(&self) -> &std::path::Path
+pub struct druid_wrapper::driver_admin::DriverBundleInstallRequest
+impl druid_wrapper::driver_admin::DriverBundleInstallRequest
+pub fn druid_wrapper::driver_admin::DriverBundleInstallRequest::files(&self) -> &[druid_wrapper::driver_admin::DriverBundleFile]
+pub fn druid_wrapper::driver_admin::DriverBundleInstallRequest::new(impl core::convert::Into<alloc::string::String>, alloc::vec::Vec<druid_wrapper::driver_admin::DriverBundleFile>) -> Self
+pub fn druid_wrapper::driver_admin::DriverBundleInstallRequest::profile_id(&self) -> &str
+pub struct druid_wrapper::driver_admin::DriverEvidenceAggregator
+impl druid_wrapper::driver_admin::DriverEvidenceAggregator
+pub fn druid_wrapper::driver_admin::DriverEvidenceAggregator::aggregate(impl core::convert::AsRef<std::path::Path>, &str, druid_wrapper::driver::DriverRuntimeMode) -> core::result::Result<serde_json::value::Value, druid_wrapper::driver_admin::DriverEvidenceError>
+pub struct druid_wrapper::driver_admin::DriverInstallRequest
+impl druid_wrapper::driver_admin::DriverInstallRequest
+pub fn druid_wrapper::driver_admin::DriverInstallRequest::expected_sha256(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::driver_admin::DriverInstallRequest::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<std::path::PathBuf>) -> Self
+pub struct druid_wrapper::driver_admin::DriverInstaller
+impl druid_wrapper::driver_admin::DriverInstaller
+pub const druid_wrapper::driver_admin::DriverInstaller::DOWNLOAD_TIMEOUT: core::time::Duration
+pub const druid_wrapper::driver_admin::DriverInstaller::LOCK_TIMEOUT: core::time::Duration
+pub const druid_wrapper::driver_admin::DriverInstaller::MAX_ARTIFACT_BYTES: u64
+pub async fn druid_wrapper::driver_admin::DriverInstaller::activate_version(&self, &str, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::active_installation(&self, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::active_java_runtime(&self) -> core::result::Result<druid_wrapper::driver_admin::JavaRuntimeInstallation, druid_wrapper::driver_admin::DriverInstallerError>
+pub fn druid_wrapper::driver_admin::DriverInstaller::default_root() -> core::result::Result<std::path::PathBuf, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::install_agent_file(&self, impl core::convert::AsRef<std::path::Path>, core::option::Option<&str>) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::install_bundle_files(&self, &druid_wrapper::driver_admin::DriverBundleInstallRequest) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::install_file(&self, &druid_wrapper::driver_admin::DriverInstallRequest) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::install_url(&self, &str, &str, &str, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::installations(&self, &str) -> core::result::Result<alloc::vec::Vec<druid_wrapper::driver_admin::InstalledDriver>, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::jdbc_agent_options(&self, &str, impl core::convert::Into<std::ffi::os_str::OsString>) -> core::result::Result<druid_wrapper::jdbc_agent::JdbcAgentOptions, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::jdbc_agent_options_with_managed_java(&self, &str) -> core::result::Result<druid_wrapper::jdbc_agent::JdbcAgentOptions, druid_wrapper::driver_admin::DriverInstallerError>
+pub fn druid_wrapper::driver_admin::DriverInstaller::new(impl core::convert::Into<std::path::PathBuf>) -> Self
+pub const fn druid_wrapper::driver_admin::DriverInstaller::offline(self, bool) -> Self
+pub async fn druid_wrapper::driver_admin::DriverInstaller::register_java_runtime(&self, impl core::convert::AsRef<std::path::Path>, &str) -> core::result::Result<druid_wrapper::driver_admin::JavaRuntimeInstallation, druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::remove_version(&self, &str, &str) -> core::result::Result<(), druid_wrapper::driver_admin::DriverInstallerError>
+pub async fn druid_wrapper::driver_admin::DriverInstaller::verify_installation(&self, &str, &str) -> core::result::Result<druid_wrapper::driver_admin::InstalledDriver, druid_wrapper::driver_admin::DriverInstallerError>
+pub fn druid_wrapper::driver_admin::DriverInstaller::with_http_client(impl core::convert::Into<std::path::PathBuf>, reqwest::async_impl::client::Client) -> Self
+pub struct druid_wrapper::driver_admin::DriverRuntimeDiagnostics
+impl druid_wrapper::driver_admin::DriverRuntimeDiagnostics
+pub async fn druid_wrapper::driver_admin::DriverRuntimeDiagnostics::check(&self, &str) -> core::result::Result<druid_wrapper::driver_admin::DriverRuntimeReport, druid_wrapper::driver_admin::DriverInstallerError>
+pub fn druid_wrapper::driver_admin::DriverRuntimeDiagnostics::java_program(self, impl core::convert::Into<std::ffi::os_str::OsString>) -> Self
+pub fn druid_wrapper::driver_admin::DriverRuntimeDiagnostics::new(druid_wrapper::driver_admin::DriverInstaller) -> Self
+pub struct druid_wrapper::driver_admin::DriverRuntimeReport
+impl druid_wrapper::driver_admin::DriverRuntimeReport
+pub const fn druid_wrapper::driver_admin::DriverRuntimeReport::java_version(&self) -> core::option::Option<u16>
+pub const fn druid_wrapper::driver_admin::DriverRuntimeReport::ready(&self) -> bool
+pub struct druid_wrapper::driver_admin::InstalledDriver
+impl druid_wrapper::driver_admin::InstalledDriver
+pub fn druid_wrapper::driver_admin::InstalledDriver::artifact_version(&self) -> &str
+pub fn druid_wrapper::driver_admin::InstalledDriver::class_path(&self) -> alloc::vec::Vec<std::path::PathBuf>
+pub fn druid_wrapper::driver_admin::InstalledDriver::driver_class(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::driver_admin::InstalledDriver::installed_at_epoch_millis(&self) -> i64
+pub const fn druid_wrapper::driver_admin::InstalledDriver::is_bundle(&self) -> bool
+pub fn druid_wrapper::driver_admin::InstalledDriver::jar_files(&self) -> &[alloc::string::String]
+pub fn druid_wrapper::driver_admin::InstalledDriver::jar_sha256(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub fn druid_wrapper::driver_admin::InstalledDriver::license(&self) -> &str
+pub const fn druid_wrapper::driver_admin::InstalledDriver::minimum_java_version(&self) -> u16
+pub fn druid_wrapper::driver_admin::InstalledDriver::path(&self) -> &std::path::Path
+pub fn druid_wrapper::driver_admin::InstalledDriver::profile_id(&self) -> &str
+pub fn druid_wrapper::driver_admin::InstalledDriver::sha256(&self) -> &str
+pub struct druid_wrapper::driver_admin::JavaRuntimeInstallation
+impl druid_wrapper::driver_admin::JavaRuntimeInstallation
+pub fn druid_wrapper::driver_admin::JavaRuntimeInstallation::java_home(&self) -> &std::path::Path
+pub fn druid_wrapper::driver_admin::JavaRuntimeInstallation::java_program(&self) -> &std::path::Path
+pub const fn druid_wrapper::driver_admin::JavaRuntimeInstallation::major_version(&self) -> u16
+pub fn druid_wrapper::driver_admin::JavaRuntimeInstallation::sha256(&self) -> &str
+pub mod druid_wrapper::duckdb
+pub struct druid_wrapper::duckdb::DuckDbConnectionAdapter
+impl druid_wrapper::duckdb::DuckDbConnectionAdapter
+pub async fn druid_wrapper::duckdb::DuckDbConnectionAdapter::connect(&str) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::duckdb::DuckDbConnectionAdapter
+pub fn druid_wrapper::duckdb::DuckDbConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::duckdb::DuckDbConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::duckdb::DuckDbConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::duckdb::DuckDbConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::duckdb::DuckDbConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::duckdb::DuckDbConnectionAdapter
+pub struct druid_wrapper::duckdb::DuckDbConnectionFactory
+impl druid_wrapper::duckdb::DuckDbConnectionFactory
+pub fn druid_wrapper::duckdb::DuckDbConnectionFactory::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::duckdb::DuckDbConnectionFactory::url(&self) -> &str
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::duckdb::DuckDbConnectionFactory
+pub fn druid_wrapper::duckdb::DuckDbConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::duckdb::DuckDbConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::duckdb::DuckDbConnectionFactory::name(&self) -> &str
+pub mod druid_wrapper::http_sql
+pub enum druid_wrapper::http_sql::HttpSqlProvider
+pub druid_wrapper::http_sql::HttpSqlProvider::CloudflareD1
+pub druid_wrapper::http_sql::HttpSqlProvider::Rqlite
+impl druid_wrapper::http_sql::HttpSqlProvider
+pub const fn druid_wrapper::http_sql::HttpSqlProvider::as_str(self) -> &'static str
+pub fn druid_wrapper::http_sql::HttpSqlProvider::from_provider_id(&str) -> core::option::Option<Self>
+pub struct druid_wrapper::http_sql::HttpSqlConnectionAdapter
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::http_sql::HttpSqlConnectionAdapter
+pub fn druid_wrapper::http_sql::HttpSqlConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::http_sql::HttpSqlConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::http_sql::HttpSqlConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::http_sql::HttpSqlConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::http_sql::HttpSqlConnectionAdapter::is_valid<'life0, 'async_trait>(&'life0 mut self, u32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::http_sql::HttpSqlConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::http_sql::HttpSqlConnectionAdapter
+pub struct druid_wrapper::http_sql::HttpSqlConnectionFactory
+impl druid_wrapper::http_sql::HttpSqlConnectionFactory
+pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::new(druid_wrapper::http_sql::HttpSqlProvider, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::property(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::fmt::Debug for druid_wrapper::http_sql::HttpSqlConnectionFactory
+pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::http_sql::HttpSqlConnectionFactory
+pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::http_sql::HttpSqlConnectionFactory::name(&self) -> &str
+pub mod druid_wrapper::jdbc_agent
+pub enum druid_wrapper::jdbc_agent::AgentValue
+pub druid_wrapper::jdbc_agent::AgentValue::Bool(bool)
+pub druid_wrapper::jdbc_agent::AgentValue::Bytes(alloc::string::String)
+pub druid_wrapper::jdbc_agent::AgentValue::Date(alloc::string::String)
+pub druid_wrapper::jdbc_agent::AgentValue::Decimal(alloc::string::String)
+pub druid_wrapper::jdbc_agent::AgentValue::Float(f64)
+pub druid_wrapper::jdbc_agent::AgentValue::Int(i64)
+pub druid_wrapper::jdbc_agent::AgentValue::Null
+pub druid_wrapper::jdbc_agent::AgentValue::String(alloc::string::String)
+pub druid_wrapper::jdbc_agent::AgentValue::Time(alloc::string::String)
+pub druid_wrapper::jdbc_agent::AgentValue::Timestamp(alloc::string::String)
+impl druid_wrapper::jdbc_agent::AgentValue
+pub fn druid_wrapper::jdbc_agent::AgentValue::from_druid(druid_rdbc::types::value::Value) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::jdbc_agent::AgentValue::into_druid(self) -> core::result::Result<druid_rdbc::types::value::Value, druid_rdbc::error::rdbc_error::RdbcError>
+pub enum druid_wrapper::jdbc_agent::JdbcAgentOptionsError
+pub druid_wrapper::jdbc_agent::JdbcAgentOptionsError::ClassPath(std::env::JoinPathsError)
+pub druid_wrapper::jdbc_agent::JdbcAgentOptionsError::UnsafeJvmOption(alloc::string::String)
+pub struct druid_wrapper::jdbc_agent::AgentError
+impl druid_wrapper::jdbc_agent::AgentError
+pub fn druid_wrapper::jdbc_agent::AgentError::into_druid_error(self) -> druid_rdbc::error::rdbc_error::RdbcError
+pub struct druid_wrapper::jdbc_agent::AgentRequest<'a>
+impl<'a> druid_wrapper::jdbc_agent::AgentRequest<'a>
+pub const fn druid_wrapper::jdbc_agent::AgentRequest<'a>::new(u64, &'a str, serde_json::value::Value) -> Self
+pub struct druid_wrapper::jdbc_agent::AgentResponse
+pub struct druid_wrapper::jdbc_agent::AgentRpcError
+impl druid_wrapper::jdbc_agent::AgentRpcError
+pub fn druid_wrapper::jdbc_agent::AgentRpcError::into_druid_error(self) -> druid_rdbc::error::rdbc_error::RdbcError
+pub struct druid_wrapper::jdbc_agent::JdbcAgentConnection
+impl druid_wrapper::jdbc_agent::JdbcAgentConnection
+pub async fn druid_wrapper::jdbc_agent::JdbcAgentConnection::connect(&str, core::option::Option<&str>, std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, druid_wrapper::jdbc_agent::JdbcAgentOptions) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+impl core::fmt::Debug for druid_wrapper::jdbc_agent::JdbcAgentConnection
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::jdbc_agent::JdbcAgentConnection
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::capabilities(&self) -> druid_rdbc::extensions::connection_capabilities::ConnectionCapabilities
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnection::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::jdbc_agent::JdbcAgentConnection
+pub struct druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory
+impl druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::new(impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>, druid_wrapper::jdbc_agent::JdbcAgentOptions) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::password(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::property(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::user_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::fmt::Debug for druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::create_with_properties<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::name(&self) -> &str
+pub fn druid_wrapper::jdbc_agent::JdbcAgentConnectionFactory::user_name(&self) -> core::option::Option<&str>
+pub struct druid_wrapper::jdbc_agent::JdbcAgentDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::jdbc_agent::JdbcAgentDatabaseMetaData
+pub fn druid_wrapper::jdbc_agent::JdbcAgentDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::jdbc_agent::JdbcAgentDatabaseMetaData
+pub struct druid_wrapper::jdbc_agent::JdbcAgentOptions
+impl druid_wrapper::jdbc_agent::JdbcAgentOptions
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::agent_key(&self) -> &str
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::argument(self, impl core::convert::Into<std::ffi::os_str::OsString>) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::artifact_version(&self) -> &str
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::bundled_agent_jar(impl core::convert::AsRef<std::path::Path>) -> std::path::PathBuf
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentOptions::idle_timeout(self, core::time::Duration) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::java(impl core::convert::Into<std::ffi::os_str::OsString>, impl core::iter::traits::collect::IntoIterator<Item = std::path::PathBuf>) -> core::result::Result<Self, std::env::JoinPathsError>
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::java_with_jvm_options(impl core::convert::Into<std::ffi::os_str::OsString>, impl core::iter::traits::collect::IntoIterator<Item = std::path::PathBuf>, impl core::iter::traits::collect::IntoIterator<Item = std::ffi::os_str::OsString>) -> core::result::Result<Self, druid_wrapper::jdbc_agent::JdbcAgentOptionsError>
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::jvm_options_hash(&self) -> &str
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentOptions::max_frame_bytes(self, usize) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::new(impl core::convert::Into<std::ffi::os_str::OsString>) -> Self
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentOptions::request_timeout(self, core::time::Duration) -> Self
+pub fn druid_wrapper::jdbc_agent::JdbcAgentOptions::runtime_identity(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub struct druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics
+impl druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics
+pub fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetrics::snapshot() -> druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot
+pub struct druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot
+impl druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::active_sessions(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::cancellation_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::crash_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::process_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::protocol_error_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::rpc_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::rpc_error_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::rpc_latency_micros_max(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::rpc_latency_micros_total(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::start_count(&self) -> u64
+pub const fn druid_wrapper::jdbc_agent::JdbcAgentRuntimeMetricsSnapshot::timeout_count(&self) -> u64
+pub mod druid_wrapper::libsql
+pub struct druid_wrapper::libsql::LibSqlConnectionAdapter
+impl druid_wrapper::libsql::LibSqlConnectionAdapter
+pub async fn druid_wrapper::libsql::LibSqlConnectionAdapter::connect(&str, alloc::string::String) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::libsql::LibSqlConnectionAdapter
+pub fn druid_wrapper::libsql::LibSqlConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::libsql::LibSqlConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::libsql::LibSqlConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::libsql::LibSqlConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::libsql::LibSqlConnectionAdapter::is_valid<'life0, 'async_trait>(&'life0 mut self, u32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::libsql::LibSqlConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::libsql::LibSqlConnectionAdapter
+pub struct druid_wrapper::libsql::LibSqlConnectionFactory
+impl druid_wrapper::libsql::LibSqlConnectionFactory
+pub fn druid_wrapper::libsql::LibSqlConnectionFactory::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::libsql::LibSqlConnectionFactory::property(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::fmt::Debug for druid_wrapper::libsql::LibSqlConnectionFactory
+pub fn druid_wrapper::libsql::LibSqlConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::libsql::LibSqlConnectionFactory
+pub fn druid_wrapper::libsql::LibSqlConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::libsql::LibSqlConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::libsql::LibSqlConnectionFactory::name(&self) -> &str
+pub mod druid_wrapper::proxool
+pub struct druid_wrapper::proxool::ProxoolConstants
+impl druid_wrapper::proxool::ProxoolConstants
+pub const druid_wrapper::proxool::ProxoolConstants::ALIAS: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::ALIAS_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::DRIVER_CLASS: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::DRIVER_CLASS_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::DRIVER_URL: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::DRIVER_URL_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::HOUSE_KEEPING_SLEEP_TIME: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::HOUSE_KEEPING_SLEEP_TIME_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::HOUSE_KEEPING_TEST_SQL: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::HOUSE_KEEPING_TEST_SQL_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MAXIMUM_ACTIVE_TIME: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MAXIMUM_ACTIVE_TIME_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MAXIMUM_CONNECTION_COUNT: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MAXIMUM_CONNECTION_COUNT_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MAXIMUM_CONNECTION_LIFETIME: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MAXIMUM_CONNECTION_LIFETIME_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MINIMUM_CONNECTION_COUNT: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::MINIMUM_CONNECTION_COUNT_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::PASSWORD_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::PROPERTY_PREFIX: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::PROTOTYPE_COUNT: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::PROTOTYPE_COUNT_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::PROXOOL: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::SIMULTANEOUS_BUILD_THROTTLE: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::SIMULTANEOUS_BUILD_THROTTLE_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::TEST_AFTER_USE: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::TEST_AFTER_USE_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::TEST_BEFORE_USE: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::TEST_BEFORE_USE_PROPERTY: &'static str
+pub const druid_wrapper::proxool::ProxoolConstants::USER_PROPERTY: &'static str
+pub struct druid_wrapper::proxool::ProxoolDataSource
+impl druid_wrapper::proxool::ProxoolDataSource
+pub fn druid_wrapper::proxool::ProxoolDataSource::alias(&self) -> core::option::Option<&str>
+pub async fn druid_wrapper::proxool::ProxoolDataSource::build(&self) -> core::result::Result<druid_wrapper::ManagedWrapperPool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::proxool::ProxoolDataSource::driver(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::proxool::ProxoolDataSource::driver_url(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::proxool::ProxoolDataSource::fatal_sql_exception_wrapper_class(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::proxool::ProxoolDataSource::fatal_sql_exceptions_as_string(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::proxool::ProxoolDataSource::house_keeping_sleep_time(&self) -> u64
+pub fn druid_wrapper::proxool::ProxoolDataSource::house_keeping_test_sql(&self) -> core::option::Option<&str>
+pub const fn druid_wrapper::proxool::ProxoolDataSource::is_jmx(&self) -> bool
+pub fn druid_wrapper::proxool::ProxoolDataSource::is_test_after_use(&self) -> bool
+pub fn druid_wrapper::proxool::ProxoolDataSource::is_test_before_use(&self) -> bool
+pub const fn druid_wrapper::proxool::ProxoolDataSource::is_trace(&self) -> bool
+pub const fn druid_wrapper::proxool::ProxoolDataSource::is_verbose(&self) -> bool
+pub const fn druid_wrapper::proxool::ProxoolDataSource::jmx_agent_id(&self) -> &'static str
+pub fn druid_wrapper::proxool::ProxoolDataSource::maximum_active_time(&self) -> u64
+pub fn druid_wrapper::proxool::ProxoolDataSource::maximum_connection_count(&self) -> usize
+pub const fn druid_wrapper::proxool::ProxoolDataSource::maximum_connection_lifetime(&self) -> i64
+pub fn druid_wrapper::proxool::ProxoolDataSource::minimum_connection_count(&self) -> usize
+pub fn druid_wrapper::proxool::ProxoolDataSource::new() -> Self
+pub const fn druid_wrapper::proxool::ProxoolDataSource::overload_without_refusal_lifetime(&self) -> i64
+pub fn druid_wrapper::proxool::ProxoolDataSource::password(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::proxool::ProxoolDataSource::properties(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub const fn druid_wrapper::proxool::ProxoolDataSource::prototype_count(&self) -> i32
+pub const fn druid_wrapper::proxool::ProxoolDataSource::recently_started_threshold(&self) -> i64
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_alias(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_delegate_properties(&mut self, &str) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_driver(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_driver_url(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_fatal_sql_exception_wrapper_class(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_fatal_sql_exceptions_as_string(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_house_keeping_sleep_time(&mut self, u64)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_house_keeping_test_sql(&mut self, impl core::convert::Into<alloc::string::String>)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_jmx(&mut self, bool)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_jmx_agent_id(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_maximum_active_time(&mut self, u64)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_maximum_connection_count(&mut self, usize)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_maximum_connection_lifetime(&mut self, i32)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_minimum_connection_count(&mut self, usize)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_overload_without_refusal_lifetime(&mut self, i32)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_password(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_property(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_prototype_count(&mut self, i32)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_recently_started_threshold(&mut self, i32)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_simultaneous_build_throttle(&mut self, i32)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_statistics(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_statistics_log_level(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_test_after_use(&mut self, bool)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_test_before_use(&mut self, bool)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_trace(&mut self, bool)
+pub fn druid_wrapper::proxool::ProxoolDataSource::set_user(&mut self, impl core::convert::Into<alloc::string::String>)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::set_verbose(&mut self, bool)
+pub const fn druid_wrapper::proxool::ProxoolDataSource::simultaneous_build_throttle(&self) -> i32
+pub const fn druid_wrapper::proxool::ProxoolDataSource::statistics(&self) -> &'static str
+pub const fn druid_wrapper::proxool::ProxoolDataSource::statistics_log_level(&self) -> &'static str
+pub fn druid_wrapper::proxool::ProxoolDataSource::user(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::proxool::ProxoolDataSource::with_alias(impl core::convert::Into<alloc::string::String>) -> Self
+pub mod druid_wrapper::rbdc
+pub mod druid_wrapper::rbdc::rbdc_connection_adapter
+pub struct druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+impl druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::new(alloc::boxed::Box<dyn rbdc::db::Connection>, impl core::convert::Into<alloc::string::String>) -> Self
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+pub mod druid_wrapper::rbdc::rbdc_connection_factory
+pub struct druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory
+impl druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::driver_name(&self) -> &str
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::new(alloc::sync::Arc<dyn rbdc::db::Driver>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::url(&self) -> &str
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::name(&self) -> &str
+pub mod druid_wrapper::rbdc::rbdc_database_meta_data
+pub struct druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData
+pub fn druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData
+pub struct druid_wrapper::rbdc::RbdcConnectionAdapter
+impl druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::new(alloc::boxed::Box<dyn rbdc::db::Connection>, impl core::convert::Into<alloc::string::String>) -> Self
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rbdc::rbdc_connection_adapter::RbdcConnectionAdapter
+pub struct druid_wrapper::rbdc::RbdcConnectionFactory
+impl druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::driver_name(&self) -> &str
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::new(alloc::sync::Arc<dyn rbdc::db::Driver>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::url(&self) -> &str
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rbdc::rbdc_connection_factory::RbdcConnectionFactory::name(&self) -> &str
+pub struct druid_wrapper::rbdc::RbdcDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData
+pub fn druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rbdc::rbdc_database_meta_data::RbdcDatabaseMetaData
+pub mod druid_wrapper::rdbc
+pub struct druid_wrapper::rdbc::DruidRdbcDataSource
+impl druid_wrapper::rdbc::DruidRdbcDataSource
+pub async fn druid_wrapper::rdbc::DruidRdbcDataSource::connect(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_wrapper::driver::DriverRegistryError>
+pub fn druid_wrapper::rdbc::DruidRdbcDataSource::inner(&self) -> &druid::pool::druid_data_source::DruidDataSource
+pub fn druid_wrapper::rdbc::DruidRdbcDataSource::new(druid::pool::druid_data_source::DruidDataSource) -> Self
+pub fn druid_wrapper::rdbc::DruidRdbcDataSource::with_credentials(druid::pool::druid_data_source::DruidDataSource, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+impl druid::sql::common_data_source::CommonDataSource for druid_wrapper::rdbc::DruidRdbcDataSource
+pub fn druid_wrapper::rdbc::DruidRdbcDataSource::login_timeout(&self) -> u64
+impl druid::sql::data_source::DataSource for druid_wrapper::rdbc::DruidRdbcDataSource
+pub fn druid_wrapper::rdbc::DruidRdbcDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::rdbc::DruidRdbcDataSource::get_connection_with_credentials<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 str, &'life2 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rdbc::DruidRdbcDataSource
+pub struct druid_wrapper::rdbc::DynamicRdbcDataSource
+impl druid_wrapper::rdbc::DynamicRdbcDataSource
+pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::current_name(&self) -> alloc::string::String
+pub async fn druid_wrapper::rdbc::DynamicRdbcDataSource::get_connection_for(&self, druid::dynamic::sql_hint::SqlHint) -> core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::new(druid::dynamic::datasource_group::DataSourceGroup) -> Self
+pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::route(&self, druid::dynamic::sql_hint::SqlHint) -> alloc::sync::Arc<dyn druid::core::pool::Pool>
+pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::switch(&self, druid::dynamic::datasource_group::DataSourceGroup)
+impl druid::sql::common_data_source::CommonDataSource for druid_wrapper::rdbc::DynamicRdbcDataSource
+impl druid::sql::data_source::DataSource for druid_wrapper::rdbc::DynamicRdbcDataSource
+pub fn druid_wrapper::rdbc::DynamicRdbcDataSource::get_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::rdbc::DynamicRdbcDataSource
+pub mod druid_wrapper::sqlx
+pub mod druid_wrapper::sqlx::bb8
+pub mod druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager
+pub struct druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager
+impl druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::url(&self) -> &str
+impl bb8::api::ManageConnection for druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager
+pub type druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::Connection = alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>
+pub type druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::Error = druid_rdbc::error::rdbc_error::RdbcError
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::connect<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<Self::Connection, Self::Error>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::has_broken(&self, &mut Self::Connection) -> bool
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::is_valid<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut Self::Connection) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), Self::Error>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub mod druid_wrapper::sqlx::bb8::sqlx_bb8_pool
+pub struct druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+impl druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+pub async fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::connect(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::from_pool(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, bb8::api::Pool<druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager>, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> Self
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::inner(&self) -> &bb8::api::Pool<druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager>
+impl druid::core::pool::Pool for druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::driver_name(&self) -> &'static str
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::name(&self) -> &str
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::state(&self) -> druid::core::pool_state::PoolState
+pub struct druid_wrapper::sqlx::bb8::SqlxBb8Adapter
+impl druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+pub async fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::connect(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::from_pool(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, bb8::api::Pool<druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager>, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> Self
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::inner(&self) -> &bb8::api::Pool<druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager>
+impl druid::core::pool::Pool for druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::driver_name(&self) -> &'static str
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::name(&self) -> &str
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::state(&self) -> druid::core::pool_state::PoolState
+pub struct druid_wrapper::sqlx::bb8::SqlxBb8ConnectionManager
+impl druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::url(&self) -> &str
+impl bb8::api::ManageConnection for druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager
+pub type druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::Connection = alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>
+pub type druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::Error = druid_rdbc::error::rdbc_error::RdbcError
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::connect<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<Self::Connection, Self::Error>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::has_broken(&self, &mut Self::Connection) -> bool
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager::is_valid<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut Self::Connection) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), Self::Error>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub struct druid_wrapper::sqlx::bb8::SqlxBb8Pool
+impl druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+pub async fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::connect(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::from_pool(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, bb8::api::Pool<druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager>, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> Self
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::inner(&self) -> &bb8::api::Pool<druid_wrapper::sqlx::bb8::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager>
+impl druid::core::pool::Pool for druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::driver_name(&self) -> &'static str
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::name(&self) -> &str
+pub fn druid_wrapper::sqlx::bb8::sqlx_bb8_pool::SqlxBb8Pool::state(&self) -> druid::core::pool_state::PoolState
+pub mod druid_wrapper::sqlx::deadpool
+pub mod druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager
+pub struct druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager
+impl druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::create_count(&self) -> u64
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::url(&self) -> &str
+impl deadpool::managed::manager::Manager for druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager
+pub type druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::Error = druid_rdbc::error::rdbc_error::RdbcError
+pub type druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::Type = alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>
+pub async fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::create(&self) -> core::result::Result<Self::Type, Self::Error>
+pub async fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::recycle(&self, &mut Self::Type, &deadpool::managed::metrics::Metrics) -> deadpool::managed::manager::RecycleResult<Self::Error>
+pub mod druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool
+pub struct druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+impl druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::close(&self)
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::connect(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::from_pool(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::time::Duration, deadpool::managed::pool::Pool<druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager>, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> Self
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::inner(&self) -> &deadpool::managed::pool::Pool<druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager>
+impl druid::core::pool::Pool for druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::driver_name(&self) -> &'static str
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::name(&self) -> &str
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::state(&self) -> druid::core::pool_state::PoolState
+pub struct druid_wrapper::sqlx::deadpool::SqlxDeadpoolAdapter
+impl druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::close(&self)
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::connect(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::from_pool(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::time::Duration, deadpool::managed::pool::Pool<druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager>, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> Self
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::inner(&self) -> &deadpool::managed::pool::Pool<druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager>
+impl druid::core::pool::Pool for druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::driver_name(&self) -> &'static str
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::name(&self) -> &str
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::state(&self) -> druid::core::pool_state::PoolState
+pub struct druid_wrapper::sqlx::deadpool::SqlxDeadpoolConnectionManager
+impl druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::create_count(&self) -> u64
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::url(&self) -> &str
+impl deadpool::managed::manager::Manager for druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager
+pub type druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::Error = druid_rdbc::error::rdbc_error::RdbcError
+pub type druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::Type = alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>
+pub async fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::create(&self) -> core::result::Result<Self::Type, Self::Error>
+pub async fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager::recycle(&self, &mut Self::Type, &deadpool::managed::metrics::Metrics) -> deadpool::managed::manager::RecycleResult<Self::Error>
+pub struct druid_wrapper::sqlx::deadpool::SqlxDeadpoolPool
+impl druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::close(&self)
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::connect(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, usize, core::time::Duration, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::from_pool(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::time::Duration, deadpool::managed::pool::Pool<druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager>, core::option::Option<alloc::sync::Arc<druid::core::filter_chain::FilterChain>>) -> Self
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::inner(&self) -> &deadpool::managed::pool::Pool<druid_wrapper::sqlx::deadpool::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager>
+impl druid::core::pool::Pool for druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::driver_name(&self) -> &'static str
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::name(&self) -> &str
+pub fn druid_wrapper::sqlx::deadpool::sqlx_deadpool_pool::SqlxDeadpoolPool::state(&self) -> druid::core::pool_state::PoolState
+pub mod druid_wrapper::sqlx::sqlx_connection_adapter
+pub struct druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+impl druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+pub async fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::connect(&str) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::auto_commit(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::capabilities(&self) -> druid_rdbc::extensions::connection_capabilities::ConnectionCapabilities
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::clear_warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::driver_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::exec<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::statement::statement::ExecResult, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::fetch<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::row::Row>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::is_valid<'life0, 'async_trait>(&'life0 mut self, u32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::ping<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::read_only(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::release_savepoint<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::rollback<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::rollback_to<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_auto_commit<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_read_only<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_savepoint<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_savepoint_named<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+pub mod druid_wrapper::sqlx::sqlx_connection_factory
+pub struct druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+impl druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::url(&self) -> &str
+impl core::fmt::Debug for druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::name(&self) -> &str
+pub mod druid_wrapper::sqlx::sqlx_database_meta_data
+pub struct druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_boolean<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_integer<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_result_set<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_row_id_lifetime<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::metadata::result_set_meta_data::RowIdLifetime, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_string<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::tables<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data::TablesQuery) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData
+pub mod druid_wrapper::sqlx::sqlx_prepared_statement
+pub struct druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+impl druid_rdbc::statement::prepared_statement::PreparedStatement for druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::add_parameter_batch(&mut self, alloc::vec::Vec<druid_rdbc::statement::prepared_statement::PreparedParameter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::add_prepared_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_parameters(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_prepared_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::statement::ExecutionResult>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared_batch<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared_query<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared_update<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::parameter_meta_data(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::metadata::parameter_meta_data::ParameterMetaData>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::result_set_meta_data(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::metadata::result_set_meta_data::ResultSetMetaData>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_parameter(&mut self, druid_rdbc::statement::prepared_statement::PreparedParameter) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::sql(&self) -> core::result::Result<&str, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::statement::statement::Statement for druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::batch(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::close_on_completion(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::statement::ExecutionResult>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_batch<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_query<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_update<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_values<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::fetch_direction(&self) -> core::result::Result<druid_rdbc::statement::statement::FetchDirection, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::fetch_size(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::generated_keys<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::get_update_count(&self) -> core::result::Result<core::option::Option<i64>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::is_close_on_completion(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::is_poolable(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::max_field_size(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_max_field_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_max_rows(&mut self, i64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_poolable(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_query_timeout(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::warnings(&self) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+pub struct druid_wrapper::sqlx::SqlxConnectionAdapter
+impl druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+pub async fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::connect(&str) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::auto_commit(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::capabilities(&self) -> druid_rdbc::extensions::connection_capabilities::ConnectionCapabilities
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::clear_warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::driver_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::exec<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::statement::statement::ExecResult, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::fetch<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::row::Row>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::is_valid<'life0, 'async_trait>(&'life0 mut self, u32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::ping<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::read_only(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::release_savepoint<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::rollback<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::rollback_to<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_auto_commit<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_read_only<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_savepoint<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::set_savepoint_named<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::sqlx::sqlx_connection_adapter::SqlxConnectionAdapter
+pub struct druid_wrapper::sqlx::SqlxConnectionFactory
+impl druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::url(&self) -> &str
+impl core::fmt::Debug for druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_connection_factory::SqlxConnectionFactory::name(&self) -> &str
+pub struct druid_wrapper::sqlx::SqlxDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_boolean<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_integer<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_result_set<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_row_id_lifetime<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::metadata::result_set_meta_data::RowIdLifetime, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::metadata_string<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData::tables<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data::TablesQuery) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::sqlx::sqlx_database_meta_data::SqlxDatabaseMetaData
+pub struct druid_wrapper::sqlx::SqlxPreparedStatement
+impl druid_rdbc::statement::prepared_statement::PreparedStatement for druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::add_parameter_batch(&mut self, alloc::vec::Vec<druid_rdbc::statement::prepared_statement::PreparedParameter>) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::add_prepared_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_parameters(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_prepared_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::statement::ExecutionResult>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared_batch<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared_query<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_prepared_update<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::parameter_meta_data(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::metadata::parameter_meta_data::ParameterMetaData>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::result_set_meta_data(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::metadata::result_set_meta_data::ResultSetMetaData>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_parameter(&mut self, druid_rdbc::statement::prepared_statement::PreparedParameter) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::sql(&self) -> core::result::Result<&str, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::statement::statement::Statement for druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::batch(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::close_on_completion(&mut self) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::statement::ExecutionResult>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_batch<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_query<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_update<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::execute_values<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::fetch_direction(&self) -> core::result::Result<druid_rdbc::statement::statement::FetchDirection, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::fetch_size(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::generated_keys<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::result_set::ResultSet>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::get_update_count(&self) -> core::result::Result<core::option::Option<i64>, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::is_close_on_completion(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::is_poolable(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::max_field_size(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::max_rows(&self) -> core::result::Result<i64, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::options(&self) -> core::result::Result<druid_rdbc::statement::statement::StatementOptions, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_escape_processing(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_fetch_direction(&mut self, druid_rdbc::statement::statement::FetchDirection) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_fetch_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_max_field_size(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_max_rows(&mut self, i64) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_poolable(&mut self, bool) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::set_query_timeout(&mut self, i32) -> core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement::warnings(&self) -> core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::sqlx::sqlx_prepared_statement::SqlxPreparedStatement
+pub mod druid_wrapper::toasty
+pub mod druid_wrapper::toasty::toasty_connection_adapter
+pub struct druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+impl core::fmt::Debug for druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::auto_commit(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::begin<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::capabilities(&self) -> druid_rdbc::extensions::connection_capabilities::ConnectionCapabilities
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::clear_warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::driver_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::exec<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::statement::statement::ExecResult, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::fetch<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::row::Row>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::ping<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::read_only(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::release_savepoint<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::rollback<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::rollback_to<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_auto_commit<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_read_only<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_savepoint<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_savepoint_named<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_transaction_isolation<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::connection::connection::TransactionIsolation) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::transaction_isolation(&self) -> core::result::Result<druid_rdbc::connection::connection::TransactionIsolation, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+pub mod druid_wrapper::toasty::toasty_connection_factory
+pub struct druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+impl druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::driver_name(&self) -> &str
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::from_driver(impl toasty_core::driver::Driver) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::max_connections(&self) -> core::option::Option<usize>
+pub async fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::url(&self) -> &str
+impl core::fmt::Debug for druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::name(&self) -> &str
+pub mod druid_wrapper::toasty::toasty_database_meta_data
+pub struct druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::metadata_boolean<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::metadata_integer<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::metadata_string<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData
+pub struct druid_wrapper::toasty::ToastyConnectionAdapter
+impl core::fmt::Debug for druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::connection::connection::Connection for druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::auto_commit(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::begin<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::capabilities(&self) -> druid_rdbc::extensions::connection_capabilities::ConnectionCapabilities
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::clear_warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::statement::Statement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::database_meta_data::DatabaseMetaData>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::driver_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::exec<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::statement::statement::ExecResult, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::fetch<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::value::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::row::Row>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::is_closed(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::ping<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::prepared_statement::PreparedStatement>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::read_only(&self) -> core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::release_savepoint<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::rollback<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::rollback_to<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::types::savepoint::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_auto_commit<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_read_only<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_savepoint<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_savepoint_named<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::savepoint::Savepoint, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::set_transaction_isolation<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::connection::connection::TransactionIsolation) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::transaction_isolation(&self) -> core::result::Result<druid_rdbc::connection::connection::TransactionIsolation, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::sql_warning::SqlWarning>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::toasty::toasty_connection_adapter::ToastyConnectionAdapter
+pub struct druid_wrapper::toasty::ToastyConnectionFactory
+impl druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::driver_name(&self) -> &str
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::from_driver(impl toasty_core::driver::Driver) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::max_connections(&self) -> core::option::Option<usize>
+pub async fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_rdbc::error::rdbc_error::RdbcError>
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::url(&self) -> &str
+impl core::fmt::Debug for druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl druid_rdbc::driver::connection_factory::ConnectionFactory for druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::connection::Connection>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_connection_factory::ToastyConnectionFactory::name(&self) -> &str
+pub struct druid_wrapper::toasty::ToastyDatabaseMetaData
+impl druid_rdbc::metadata::database_meta_data::DatabaseMetaData for druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::metadata_boolean<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::metadata_integer<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData::metadata_string<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::database_meta_data_request::DatabaseMetaDataRequest) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+impl druid_rdbc::wrapper::wrapper::Wrapper for druid_wrapper::toasty::toasty_database_meta_data::ToastyDatabaseMetaData
+pub struct druid_wrapper::ManagedWrapperPool
+impl druid_wrapper::ManagedWrapperPool
+pub async fn druid_wrapper::ManagedWrapperPool::close(&self)
+pub fn druid_wrapper::ManagedWrapperPool::is_enabled(&self) -> bool
+pub fn druid_wrapper::ManagedWrapperPool::new(impl core::convert::Into<alloc::string::String>, alloc::sync::Arc<dyn druid::core::pool::Pool>) -> Self
+pub fn druid_wrapper::ManagedWrapperPool::object_name(&self) -> core::option::Option<alloc::string::String>
+pub fn druid_wrapper::ManagedWrapperPool::provider(&self) -> &str
+pub fn druid_wrapper::ManagedWrapperPool::set_enabled(&self, bool)
+pub fn druid_wrapper::ManagedWrapperPool::set_object_name(&self, core::option::Option<alloc::string::String>)
+pub fn druid_wrapper::ManagedWrapperPool::wrapper_state(&self) -> druid_wrapper::WrapperPoolState
+impl druid::core::pool::Pool for druid_wrapper::ManagedWrapperPool
+pub fn druid_wrapper::ManagedWrapperPool::driver_name(&self) -> &str
+pub fn druid_wrapper::ManagedWrapperPool::get<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::ManagedWrapperPool::get_timeout<'life0, 'async_trait>(&'life0 self, core::time::Duration) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid::core::druid_pooled_connection::DruidPooledConnection, druid_rdbc::error::rdbc_error::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_wrapper::ManagedWrapperPool::name(&self) -> &str
+pub fn druid_wrapper::ManagedWrapperPool::state(&self) -> druid::core::pool_state::PoolState
+pub struct druid_wrapper::ProxoolConfigKey
+impl druid_wrapper::ProxoolConfigKey
+pub const druid_wrapper::ProxoolConfigKey::ALIAS: &'static str
+pub const druid_wrapper::ProxoolConfigKey::DRIVER_CLASS: &'static str
+pub const druid_wrapper::ProxoolConfigKey::DRIVER_URL: &'static str
+pub const druid_wrapper::ProxoolConfigKey::HOUSE_KEEPING_SLEEP_TIME: &'static str
+pub const druid_wrapper::ProxoolConfigKey::HOUSE_KEEPING_TEST_SQL: &'static str
+pub const druid_wrapper::ProxoolConfigKey::INITIAL_SIZE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MAXIMUM_ACTIVE_TIME: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MAXIMUM_CONNECTION_COUNT: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MAX_ACTIVE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MAX_TOTAL: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MAX_WAIT: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MAX_WAIT_MILLIS: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MINIMUM_CONNECTION_COUNT: &'static str
+pub const druid_wrapper::ProxoolConfigKey::MIN_IDLE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::NAME: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PASSWORD: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROVIDER: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_ALIAS: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_DRIVER_CLASS: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_DRIVER_URL: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_HOUSE_KEEPING_SLEEP_TIME: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_HOUSE_KEEPING_TEST_SQL: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_MAXIMUM_ACTIVE_TIME: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_MAXIMUM_CONNECTION_COUNT: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_MINIMUM_CONNECTION_COUNT: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_TEST_AFTER_USE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::PROXOOL_TEST_BEFORE_USE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::TEST_AFTER_USE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::TEST_BEFORE_USE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::TEST_ON_BORROW: &'static str
+pub const druid_wrapper::ProxoolConfigKey::TEST_ON_RETURN: &'static str
+pub const druid_wrapper::ProxoolConfigKey::TEST_WHILE_IDLE: &'static str
+pub const druid_wrapper::ProxoolConfigKey::URL: &'static str
+pub const druid_wrapper::ProxoolConfigKey::USER: &'static str
+pub const druid_wrapper::ProxoolConfigKey::USERNAME: &'static str
+pub const druid_wrapper::ProxoolConfigKey::VALIDATION_QUERY: &'static str
+pub struct druid_wrapper::WrapperDataSourceFactory
+impl druid_wrapper::WrapperDataSourceFactory
+pub async fn druid_wrapper::WrapperDataSourceFactory::create(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::result::Result<druid_wrapper::ManagedWrapperPool, druid_rdbc::error::rdbc_error::RdbcError>
+pub async fn druid_wrapper::WrapperDataSourceFactory::create_with_factory(&std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::connection_factory::ConnectionFactory>, impl core::convert::Into<alloc::string::String>) -> core::result::Result<druid_wrapper::ManagedWrapperPool, druid_rdbc::error::rdbc_error::RdbcError>
+pub struct druid_wrapper::WrapperPoolState
+pub druid_wrapper::WrapperPoolState::active_count: usize
+pub druid_wrapper::WrapperPoolState::close_count: u64
+pub druid_wrapper::WrapperPoolState::closed: bool
+pub druid_wrapper::WrapperPoolState::connect_count: u64
+pub druid_wrapper::WrapperPoolState::connect_error_count: u64
+pub druid_wrapper::WrapperPoolState::discard_count: u64
+pub druid_wrapper::WrapperPoolState::driver_name: alloc::string::String
+pub druid_wrapper::WrapperPoolState::idle_count: usize
+pub druid_wrapper::WrapperPoolState::max_open: usize
+pub druid_wrapper::WrapperPoolState::name: alloc::string::String
+pub druid_wrapper::WrapperPoolState::provider: alloc::string::String
+pub druid_wrapper::WrapperPoolState::recycle_count: u64
+pub druid_wrapper::WrapperPoolState::url: alloc::string::String
+pub druid_wrapper::WrapperPoolState::wait_count: usize
+impl druid_wrapper::WrapperPoolState
+pub fn druid_wrapper::WrapperPoolState::from_pool_state(impl core::convert::Into<alloc::string::String>, druid::core::pool_state::PoolState) -> Self
+pub fn druid_wrapper::init_driver_extensions()

@@ -1,4 +1,7 @@
 use crate::error::RdbcError;
+use crate::metadata::{
+    DatabaseMetaDataArgument, DatabaseMetaDataOperation, DatabaseMetaDataRequest, RowIdLifetime,
+};
 use crate::result_set::ResultSet;
 use crate::wrapper::Wrapper;
 
@@ -23,17 +26,77 @@ pub struct TablesQuery {
 /// 不借用创建它的 [`crate::connection::Connection`]。
 #[async_trait::async_trait]
 pub trait DatabaseMetaData: Wrapper + Send + 'static {
+    /// 执行 boolean-valued metadata request。
+    async fn metadata_boolean(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: request.operation().as_str(),
+        })
+    }
+
+    /// 执行 nullable-string metadata request。
+    async fn metadata_string(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<Option<String>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: request.operation().as_str(),
+        })
+    }
+
+    /// 执行 integer-valued metadata request。
+    async fn metadata_integer(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: request.operation().as_str(),
+        })
+    }
+
+    /// 执行 ResultSet-valued metadata request。
+    async fn metadata_result_set(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: request.operation().as_str(),
+        })
+    }
+
+    /// 执行 RowId lifetime request。
+    async fn metadata_row_id_lifetime(
+        &mut self,
+        request: DatabaseMetaDataRequest,
+    ) -> Result<RowIdLifetime, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: request.operation().as_str(),
+        })
+    }
+
     /// 返回数据库产品名。
     async fn database_product_name(&mut self) -> Result<String, RdbcError> {
-        Err(RdbcError::UnsupportedOperation {
-            operation: "database_meta_data_product_name",
-        })
+        self.metadata_string(DatabaseMetaDataRequest::new(
+            DatabaseMetaDataOperation::GetDatabaseProductName,
+            Vec::new(),
+        ))
+        .await?
+        .ok_or_else(|| RdbcError::DriverError("database product name is SQL NULL".to_owned()))
     }
 
     /// 查询 tables 并返回 owned live result set。
     async fn tables(&mut self, _query: TablesQuery) -> Result<Box<dyn ResultSet>, RdbcError> {
-        Err(RdbcError::UnsupportedOperation {
-            operation: "database_meta_data_tables",
-        })
+        self.metadata_result_set(DatabaseMetaDataRequest::new(
+            DatabaseMetaDataOperation::GetTables,
+            std::vec![
+                DatabaseMetaDataArgument::OptionalString(_query.catalog),
+                DatabaseMetaDataArgument::OptionalString(_query.schema_pattern),
+                DatabaseMetaDataArgument::OptionalString(_query.table_name_pattern),
+                DatabaseMetaDataArgument::Strings(_query.table_types),
+            ],
+        ))
+        .await
     }
 }

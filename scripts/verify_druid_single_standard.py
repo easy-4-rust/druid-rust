@@ -61,7 +61,7 @@ TASK6_ADDITION_NORMALIZED_SHA256 = (
     "773722c3231615e5227eea118f046b47c0fa73f7dddfd9cc1486a4edfb2f64c7"
 )
 TASK4_COVERAGE_MANIFEST_SHA256 = (
-    "a2b06227c716c068d577582995bb6627756b8a5aef7c59f7b2d517278b13d7fe"
+    "e83862418e32b4834acdbbda14c6060a29be010ffc971553c83f01e1748c6d77"
 )
 TASK4_RUNTIME_MANIFEST_SHA256 = (
     "bb63308865daf2e1d528e8e415e9438545919bf4752e300710c219a978bf344a"
@@ -634,10 +634,10 @@ def require_pending_admission_policy(
 
     expected = {
         "druid_pooled_connection.rs": ("begin_admission", 3),
-        "druid_pooled_statement.rs": ("begin_standard_admission", 3),
+        "druid_pooled_statement.rs": ("begin_standard_admission", 5),
         "druid_pooled_prepared_statement.rs": ("begin_standard_admission", 3),
         "druid_pooled_callable_statement.rs": ("begin_standard_admission", 3),
-        "database_meta_data_proxy_impl.rs": ("begin_admission", 1),
+        "database_meta_data_proxy_impl.rs": ("begin_admission", 2),
     }
     if set(producer_sources) != set(expected) | {"druid_pooled_result_set.rs"}:
         fail("Task 5 pending admission producer denominator is incomplete")
@@ -718,6 +718,28 @@ def require_pending_admission_policy(
             ),
         ),
         (
+            "druid_pooled_statement.rs",
+            "Statement",
+            "DruidPooledStatement",
+            "generated_keys",
+            (
+                "begin_standard_admission",
+                ".generated_keys().await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_statement.rs",
+            "Statement",
+            "DruidPooledStatement",
+            "get_result_set",
+            (
+                "begin_standard_admission",
+                ".get_result_set().await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
             "druid_pooled_prepared_statement.rs",
             "PreparedStatement",
             "DruidPooledPreparedStatement",
@@ -759,6 +781,17 @@ def require_pending_admission_policy(
                 "begin_standard_admission",
                 ".generated_keys().await",
                 "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "database_meta_data_proxy_impl.rs",
+            "DatabaseMetaData",
+            "DatabaseMetaDataProxyImpl",
+            "metadata_result_set",
+            (
+                "begin_admission",
+                ".metadata_result_set(request).await",
+                "DruidPooledResultSet::new_standard_metadata",
             ),
         ),
         (

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import tempfile
 import unittest
 from collections import Counter
@@ -457,6 +458,49 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                     "druid_pooled_result_set.rs": "register(admission)",
                 },
             )
+
+    def test_pooled_statement_admission_helper_and_four_pre_raw_producers_are_exact(self) -> None:
+        """Helper + query/execute/keys/current-result occurrences are all load-bearing。"""
+
+        repository = Path(__file__).resolve().parents[1]
+        core = repository / "crates/druid/src/core"
+        producer_names = (
+            "druid_pooled_connection.rs",
+            "druid_pooled_statement.rs",
+            "druid_pooled_prepared_statement.rs",
+            "druid_pooled_callable_statement.rs",
+            "database_meta_data_proxy_impl.rs",
+            "druid_pooled_result_set.rs",
+        )
+        registry = (core / "standard_resource_registry.rs").read_text(encoding="utf-8")
+        admission = (core / "standard_resource_admission.rs").read_text(encoding="utf-8")
+        producers = {
+            name: (core / name).read_text(encoding="utf-8") for name in producer_names
+        }
+        statement = producers["druid_pooled_statement.rs"]
+        self.assertEqual(statement.count("begin_standard_admission"), 5)
+        verifier.require_pending_admission_policy(registry, admission, producers)
+
+        offsets = [
+            match.start()
+            for match in re.finditer("begin_standard_admission", statement)
+        ]
+        self.assertEqual(len(offsets), 5)
+        for index, offset in enumerate(offsets):
+            with self.subTest(occurrence=index):
+                mutated = (
+                    statement[:offset]
+                    + "retired_standard_admission"
+                    + statement[offset + len("begin_standard_admission") :]
+                )
+                candidate = dict(producers)
+                candidate["druid_pooled_statement.rs"] = mutated
+                with self.assertRaisesRegex(
+                    VerificationError, "producer drift|pre-raw admission"
+                ):
+                    verifier.require_pending_admission_policy(
+                        registry, admission, candidate
+                    )
 
     def test_exact_runtime_source_rejects_name_in_comment_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

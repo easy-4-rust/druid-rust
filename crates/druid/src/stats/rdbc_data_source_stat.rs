@@ -215,6 +215,13 @@ impl RdbcDataSourceStat {
         }
     }
 
+    /// 记录一次非执行阶段的数据库对象访问错误。
+    ///
+    /// ResultSet getter/update 失败属于数据源 errorCount，但不能伪增 executeCount。
+    pub(crate) fn record_error(&self) {
+        self.error_count.fetch_add(1, Ordering::Relaxed);
+    }
+
     /// 记录事务开始。
     pub fn record_start_transaction(&self) {
         self.start_transaction_count.fetch_add(1, Ordering::Relaxed);

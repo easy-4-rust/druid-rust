@@ -7,4 +7,4 @@
 mod connection;
 
 pub use crate::types::Savepoint;
-pub use connection::Connection;
+pub use connection::{Connection, TransactionIsolation};

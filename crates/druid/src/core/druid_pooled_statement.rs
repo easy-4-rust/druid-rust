@@ -1,17 +1,21 @@
 //! Canonical pooled Statement proxy.
 
 use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
+use super::druid_pooled_result_set::StandardResultSetResource;
 use super::filter::ExecOperation;
 use super::standard_logical_policy::StandardLogicalPolicy;
 use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
+use super::statement_state_delegates::delegate_statement_state_methods;
 use super::{
     DruidPooledResultSet, FilterChain, ProxyAttributeValue, ProxyAttributes, RdbcError,
     StatementExecuteType,
 };
 use crate::stats::StatsCollector;
-use druid_rdbc::statement::{ExecResult, ExecutionResult, GeneratedKeys, Statement};
+use druid_rdbc::statement::{
+    CurrentResultDisposition, ExecResult, ExecutionResult, GeneratedKeys, Statement,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -31,6 +35,8 @@ pub(crate) struct DruidPooledStatementInner {
     pub(crate) filter_chain: Option<Arc<FilterChain>>,
     pub(crate) stats_collector: Option<Arc<StatsCollector>>,
     state: Mutex<DruidPooledStatementState>,
+    result_sets: Mutex<Vec<std::sync::Weak<StandardResultSetResource>>>,
+    result_sequence: Mutex<Option<StatementResultSequence>>,
 }
 
 struct DruidPooledStatementState {
@@ -44,6 +50,16 @@ struct DruidPooledStatementState {
     exception_count: u64,
     update_count: i64,
     batch: Vec<String>,
+}
+
+pub(crate) enum TrackedStatementResult {
+    ResultSet(std::sync::Weak<StandardResultSetResource>),
+    UpdateCount(i64),
+}
+
+struct StatementResultSequence {
+    results: Vec<TrackedStatementResult>,
+    current: usize,
 }
 
 /// Logical Statement that owns one canonical driver statement.
@@ -93,6 +109,8 @@ impl DruidPooledStatement {
                     update_count: -1,
                     batch: Vec::new(),
                 }),
+                result_sets: Mutex::new(Vec::new()),
+                result_sequence: Mutex::new(None),
             }),
         }
     }
@@ -241,6 +259,79 @@ impl DruidPooledStatement {
 }
 
 impl DruidPooledStatementInner {
+    pub(crate) fn track_result_set(&self, result_set: &Arc<StandardResultSetResource>) {
+        let mut result_sets = self
+            .result_sets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        result_sets.retain(|candidate| candidate.strong_count() > 0);
+        result_sets.push(Arc::downgrade(result_set));
+    }
+
+    pub(crate) fn set_execution_results(&self, results: Vec<TrackedStatementResult>) {
+        let (first_result_set, update_count) = match results.first() {
+            Some(TrackedStatementResult::ResultSet(_)) => (true, -1),
+            Some(TrackedStatementResult::UpdateCount(count)) => (false, *count),
+            None => (false, -1),
+        };
+        *self
+            .result_sequence
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) =
+            (!results.is_empty()).then_some(StatementResultSequence {
+                results,
+                current: 0,
+            });
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        state.first_result_set = first_result_set;
+        state.update_count = update_count;
+    }
+
+    async fn dispose_result_sets(
+        &self,
+        disposition: CurrentResultDisposition,
+        current: Option<std::sync::Weak<StandardResultSetResource>>,
+    ) -> Result<(), RdbcError> {
+        let targets = {
+            let mut result_sets = self
+                .result_sets
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            result_sets.retain(|candidate| candidate.strong_count() > 0);
+            // Future non-exhaustive dispositions retain results by default, matching KeepCurrent.
+            #[allow(clippy::match_same_arms)]
+            match disposition {
+                CurrentResultDisposition::KeepCurrent => Vec::new(),
+                CurrentResultDisposition::CloseAll => result_sets
+                    .iter()
+                    .filter_map(std::sync::Weak::upgrade)
+                    .collect(),
+                CurrentResultDisposition::Default | CurrentResultDisposition::CloseCurrent => {
+                    current
+                        .and_then(|result_set| result_set.upgrade())
+                        .into_iter()
+                        .collect()
+                }
+                _ => Vec::new(),
+            }
+        };
+        let mut first_error = None;
+        for result_set in targets {
+            if let Err(error) = result_set.close_core().await {
+                first_error.get_or_insert(error);
+            }
+        }
+        let mut result_sets = self
+            .result_sets
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        result_sets.retain(|candidate| candidate.strong_count() > 0);
+        first_error.map_or(Ok(()), Err)
+    }
+
     pub(crate) fn begin_standard_admission(&self) -> Result<StandardResourceAdmission, RdbcError> {
         self.resources
             .begin_admission(self.policy.resource_generation())
@@ -331,6 +422,8 @@ druid_rdbc::impl_standard_wrapper!(DruidPooledStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for DruidPooledStatement {
+    delegate_statement_state_methods!(inner.statement, "statement is busy");
+
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.ensure_open()?;
         self.inner
@@ -461,7 +554,11 @@ impl Statement for DruidPooledStatement {
                         rows_affected: u64::try_from(*count).unwrap_or_default(),
                         ..ExecResult::default()
                     },
-                    Some(ExecutionResult::ResultSet(_)) | None => ExecResult::default(),
+                    Some(ExecutionResult::ResultSet(_)) => ExecResult {
+                        row_count: Some(0),
+                        ..ExecResult::default()
+                    },
+                    None => ExecResult::default(),
                 },
             )
             .await;
@@ -510,6 +607,11 @@ impl Statement for DruidPooledStatement {
         Ok(())
     }
 
+    fn batch(&self) -> Result<Vec<String>, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().batch.clone())
+    }
+
     async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
         self.ensure_open()?;
         self.begin_batch_execution();
@@ -537,6 +639,99 @@ impl Statement for DruidPooledStatement {
         }
     }
 
+    async fn generated_keys(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.ensure_open()?;
+        let admission = self.inner.begin_standard_admission()?;
+        let raw = self.inner.statement.lock().await.generated_keys().await?;
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw, &admission).await?,
+        ))
+    }
+
+    async fn get_result_set(
+        &mut self,
+    ) -> Result<Option<Box<dyn druid_rdbc::result_set::ResultSet>>, RdbcError> {
+        self.ensure_open()?;
+        let admission = self.inner.begin_standard_admission()?;
+        let raw = self.inner.statement.lock().await.get_result_set().await?;
+        match raw {
+            Some(raw) => Ok(Some(Box::new(
+                DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw, &admission)
+                    .await?,
+            ))),
+            None => Ok(None),
+        }
+    }
+
+    fn get_update_count(&self) -> Result<Option<i64>, RdbcError> {
+        self.ensure_open()?;
+        let count = self.state().update_count;
+        Ok((count >= 0).then_some(count))
+    }
+
+    async fn get_more_results(
+        &mut self,
+        disposition: CurrentResultDisposition,
+    ) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        let (has_sequence, current) = {
+            let sequence = self
+                .inner
+                .result_sequence
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let current = sequence.as_ref().and_then(|sequence| {
+                match sequence.results.get(sequence.current) {
+                    Some(TrackedStatementResult::ResultSet(result_set)) => Some(result_set.clone()),
+                    Some(TrackedStatementResult::UpdateCount(_)) | None => None,
+                }
+            });
+            (sequence.is_some(), current)
+        };
+        self.inner.dispose_result_sets(disposition, current).await?;
+        if has_sequence {
+            let (has_more, update_count) = {
+                let mut sequence_guard = self
+                    .inner
+                    .result_sequence
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let Some(sequence) = sequence_guard.as_mut() else {
+                    return Ok(false);
+                };
+                sequence.current = sequence.current.saturating_add(1);
+                let next = match sequence.results.get(sequence.current) {
+                    Some(TrackedStatementResult::ResultSet(_)) => Some((true, -1)),
+                    Some(TrackedStatementResult::UpdateCount(count)) => Some((false, *count)),
+                    None => None,
+                };
+                if let Some(next) = next {
+                    next
+                } else {
+                    *sequence_guard = None;
+                    (false, -1)
+                }
+            };
+            let mut state = self.state_mut();
+            state.first_result_set = has_more;
+            state.update_count = update_count;
+            return Ok(has_more);
+        }
+        let has_more = self
+            .inner
+            .statement
+            .lock()
+            .await
+            .get_more_results(disposition)
+            .await?;
+        let mut state = self.state_mut();
+        state.first_result_set = has_more;
+        state.update_count = -1;
+        Ok(has_more)
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         self.inner.close_standard_core().await
     }
@@ -552,20 +747,39 @@ impl Statement for DruidPooledStatement {
             .is_closed()
     }
 
-    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
-        self.inner
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
+        self.ensure_open()?;
+        let result = self
+            .inner
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .warning_messages()
+            .warnings();
+        self.inner
+            .policy
+            .classify(result, self.last_sql().as_deref())
+    }
+
+    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
+        let mut messages = Vec::new();
+        let mut warning = self.warnings()?;
+        while let Some(current) = warning {
+            messages.push(current.message().to_owned());
+            warning = current.next_warning().cloned();
+        }
+        Ok(messages)
     }
 
     fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.inner
+        let result = self
+            .inner
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .clear_warnings()
+            .clear_warnings();
+        self.inner
+            .policy
+            .classify(result, self.last_sql().as_deref())
     }
 }
 

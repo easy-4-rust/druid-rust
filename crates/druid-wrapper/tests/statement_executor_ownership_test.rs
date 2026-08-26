@@ -148,11 +148,20 @@ async fn sqlx_standard_close_defaults_and_generated_keys_are_consistent() {
         .unwrap();
     let capabilities = Connection::capabilities(&connection);
     assert!(capabilities.transactions);
-    assert!(!capabilities.savepoints);
+    assert!(capabilities.savepoints);
+    assert!(!capabilities.catalogs);
+    assert!(!capabilities.schemas);
+    assert!(!capabilities.callable_statements);
     Connection::set_auto_commit(&mut connection, false)
         .await
         .unwrap();
     assert!(!Connection::auto_commit(&connection).unwrap());
+    let savepoint = connection
+        .set_savepoint_named("ownership_contract")
+        .await
+        .unwrap();
+    connection.rollback_to(&savepoint).await.unwrap();
+    connection.release_savepoint(&savepoint).await.unwrap();
     Connection::commit(&mut connection).await.unwrap();
     assert!(Connection::auto_commit(&connection).unwrap());
 
@@ -178,17 +187,29 @@ async fn sqlx_standard_close_defaults_and_generated_keys_are_consistent() {
     let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
         .await
         .unwrap();
-    let error = statement
+    statement
         .execute_update(
             "create table generated_key_guard(id integer)",
-            GeneratedKeys::ReturnGeneratedKeys,
+            GeneratedKeys::None,
         )
         .await
-        .expect_err("unsupported generated keys must not be ignored");
-    assert!(matches!(
-        error,
-        druid_rdbc::error::RdbcError::UnsupportedOperation { .. }
-    ));
+        .unwrap();
+    assert_eq!(
+        statement
+            .execute_update(
+                "insert into generated_key_guard(id) values (1)",
+                GeneratedKeys::ReturnGeneratedKeys,
+            )
+            .await
+            .unwrap(),
+        1
+    );
+    let mut generated_keys = statement.generated_keys().await.unwrap();
+    assert!(generated_keys.next().await.unwrap());
+    assert_eq!(
+        generated_keys.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(1)
+    );
 }
 
 #[tokio::test]

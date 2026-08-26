@@ -1,5 +1,6 @@
 //! `SQLx` canonical 连接的 deadpool 管理器。
 
+use crate::sqlx::external_pool_connection_control::take_poisoned;
 use crate::sqlx::SqlxConnectionFactory;
 use deadpool::managed::{Manager, Metrics, RecycleResult};
 use druid_rdbc::connection::Connection;
@@ -52,7 +53,7 @@ impl Manager for SqlxDeadpoolConnectionManager {
         connection: &mut Self::Type,
         _metrics: &Metrics,
     ) -> RecycleResult<Self::Error> {
-        if connection.is_closed().unwrap_or(true) {
+        if take_poisoned(connection.as_ref()) || connection.is_closed().unwrap_or(true) {
             return Err(deadpool::managed::RecycleError::Backend(
                 RdbcError::ConnectionDiscarded,
             ));

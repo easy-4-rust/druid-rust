@@ -31,13 +31,34 @@ pub(crate) trait AdapterExecutionCore: Send + 'static {
         values: Vec<Value>,
     ) -> Result<StandardQueryResult, RdbcError>;
 
+    async fn standard_statement_returns_rows_core(&mut self, sql: &str) -> Result<bool, RdbcError> {
+        Ok(statement_returns_rows(sql))
+    }
+
+    async fn standard_execute_update_result_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<AdapterUpdateResult, RdbcError> {
+        let rows_affected = self.standard_execute_update_core(sql, values).await?;
+        Ok(AdapterUpdateResult {
+            rows_affected: u64::try_from(rows_affected).map_err(|_| {
+                RdbcError::InvalidArgument(
+                    "negative update count cannot be represented by AdapterUpdateResult".to_owned(),
+                )
+            })?,
+            last_insert_id: None,
+            row_count: None,
+        })
+    }
+
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError>;
 
     async fn standard_parameter_count_core(
         &mut self,
-        _sql: &str,
+        sql: &str,
     ) -> Result<Option<usize>, RdbcError> {
-        Ok(None)
+        Ok(Some(parameter_count(sql)))
     }
 }
 
@@ -45,11 +66,17 @@ pub(crate) trait AdapterExecutionCore: Send + 'static {
 #[async_trait::async_trait]
 pub(crate) trait StandardExecutor: Send + Sync {
     async fn execute_update(&self, sql: &str, values: Vec<Value>) -> Result<i64, RdbcError>;
+    async fn execute_update_result(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<AdapterUpdateResult, RdbcError>;
     async fn execute_query(
         &self,
         sql: &str,
         values: Vec<Value>,
     ) -> Result<StandardQueryResult, RdbcError>;
+    async fn statement_returns_rows(&self, sql: &str) -> Result<bool, RdbcError>;
     async fn parameter_count(&self, sql: &str) -> Result<Option<usize>, RdbcError>;
     async fn close(&self) -> Result<(), RdbcError>;
     fn is_closed(&self) -> bool;
@@ -102,9 +129,22 @@ where
     C: AdapterExecutionCore,
 {
     async fn execute_update(&self, sql: &str, values: Vec<Value>) -> Result<i64, RdbcError> {
+        let result = self.execute_update_result(sql, values).await?;
+        i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
+        })
+    }
+
+    async fn execute_update_result(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         let mut guard = self.connection.lock().await;
         let connection = guard.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
-        connection.standard_execute_update_core(sql, values).await
+        connection
+            .standard_execute_update_result_core(sql, values)
+            .await
     }
 
     async fn execute_query(
@@ -115,6 +155,12 @@ where
         let mut guard = self.connection.lock().await;
         let connection = guard.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
         connection.standard_execute_query_core(sql, values).await
+    }
+
+    async fn statement_returns_rows(&self, sql: &str) -> Result<bool, RdbcError> {
+        let mut guard = self.connection.lock().await;
+        let connection = guard.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
+        connection.standard_statement_returns_rows_core(sql).await
     }
 
     async fn parameter_count(&self, sql: &str) -> Result<Option<usize>, RdbcError> {
@@ -200,6 +246,60 @@ where
             trace.task4_trace_database_metadata();
         }
     }
+}
+
+fn statement_returns_rows(sql: &str) -> bool {
+    let sql = sql.trim_start();
+    let keyword_end = sql
+        .find(|character: char| !character.is_ascii_alphabetic())
+        .unwrap_or(sql.len());
+    matches!(
+        sql[..keyword_end].to_ascii_uppercase().as_str(),
+        "SELECT" | "WITH" | "VALUES" | "PRAGMA" | "SHOW" | "DESCRIBE" | "DESC" | "EXPLAIN"
+    )
+}
+
+fn parameter_count(sql: &str) -> usize {
+    let bytes = sql.as_bytes();
+    let mut index = 0;
+    let mut anonymous = 0_usize;
+    let mut numbered = 0_usize;
+    let mut single_quoted = false;
+    let mut double_quoted = false;
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\'' if !double_quoted => {
+                if single_quoted && bytes.get(index + 1) == Some(&b'\'') {
+                    index += 2;
+                    continue;
+                }
+                single_quoted = !single_quoted;
+            }
+            b'"' if !single_quoted => {
+                if double_quoted && bytes.get(index + 1) == Some(&b'"') {
+                    index += 2;
+                    continue;
+                }
+                double_quoted = !double_quoted;
+            }
+            b'?' if !single_quoted && !double_quoted => {
+                let mut cursor = index + 1;
+                while bytes.get(cursor).is_some_and(u8::is_ascii_digit) {
+                    cursor += 1;
+                }
+                if cursor == index + 1 {
+                    anonymous = anonymous.saturating_add(1);
+                } else if let Ok(value) = sql[index + 1..cursor].parse::<usize>() {
+                    numbered = numbered.max(value);
+                }
+                index = cursor;
+                continue;
+            }
+            _ => {}
+        }
+        index += 1;
+    }
+    anonymous.max(numbered)
 }
 
 pub(crate) fn owned_executor<C>(

@@ -1,5 +1,6 @@
+use super::prepared_input_parameter::PreparedInputParameter;
 use crate::error::RdbcError;
-use crate::metadata::ParameterMetaData;
+use crate::metadata::{ParameterMetaData, ResultSetMetaData};
 use crate::result_set::ResultSet;
 use crate::statement::{ExecutionResult, Statement};
 use crate::types::Value;
@@ -59,22 +60,16 @@ pub struct PreparedParameter {
     pub value: Value,
 }
 
-/// Canonical name for a prepared input parameter snapshot。
-pub type PreparedInputParameter = PreparedParameter;
-
-/// Optional SQL type-name argument preserved from JDBC setter overloads。
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum PreparedTypeNameArgument {
-    /// Setter overload omitted the type name。
-    Omitted,
-    /// Setter supplied an explicit type name。
-    Named(String),
-}
-
 /// JDBC `PreparedStatement` 标准。
 #[async_trait::async_trait]
 pub trait PreparedStatement: Statement {
+    /// 返回 prepared SQL text。
+    fn sql(&self) -> Result<&str, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "prepared_statement_sql",
+        })
+    }
+
     /// 设置一个 typed parameter snapshot。
     fn set_parameter(&mut self, _parameter: PreparedParameter) -> Result<(), RdbcError> {
         Err(RdbcError::UnsupportedOperation {
@@ -82,8 +77,59 @@ pub trait PreparedStatement: Statement {
         })
     }
 
+    /// 按 1-based index 绑定 rich JDBC setter descriptor。
+    fn set_input_parameter(
+        &mut self,
+        index: ParameterIndex,
+        parameter: PreparedInputParameter,
+    ) -> Result<(), RdbcError> {
+        self.set_parameter(PreparedParameter {
+            index,
+            value: parameter.scalar_value()?,
+        })
+    }
+
     /// 清空当前 parameter snapshots。
     fn clear_parameters(&mut self) -> Result<(), RdbcError> {
+        Ok(())
+    }
+
+    /// 把当前 parameter snapshot 加入 prepared batch。
+    fn add_prepared_batch(&mut self) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "prepared_statement_add_batch",
+        })
+    }
+
+    /// 直接加入一组 typed parameter snapshots。
+    fn add_parameter_batch(
+        &mut self,
+        _parameters: Vec<PreparedParameter>,
+    ) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "prepared_statement_add_parameter_batch",
+        })
+    }
+
+    /// 直接加入一组 1-based rich setter descriptors。
+    fn add_input_parameter_batch(
+        &mut self,
+        parameters: Vec<(ParameterIndex, PreparedInputParameter)>,
+    ) -> Result<(), RdbcError> {
+        let parameters = parameters
+            .into_iter()
+            .map(|(index, parameter)| {
+                Ok(PreparedParameter {
+                    index,
+                    value: parameter.scalar_value()?,
+                })
+            })
+            .collect::<Result<Vec<_>, RdbcError>>()?;
+        self.add_parameter_batch(parameters)
+    }
+
+    /// 清空 prepared batch，不改变当前 parameter snapshot。
+    fn clear_prepared_batch(&mut self) -> Result<(), RdbcError> {
         Ok(())
     }
 
@@ -105,6 +151,20 @@ pub trait PreparedStatement: Statement {
     async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
         Err(RdbcError::UnsupportedOperation {
             operation: "prepared_statement_execute",
+        })
+    }
+
+    /// 执行 prepared parameter batch，并返回无损 64-bit counts。
+    async fn execute_prepared_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "prepared_statement_execute_batch",
+        })
+    }
+
+    /// 返回 prepared query 的 immutable ResultSet metadata snapshot。
+    fn result_set_meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "prepared_statement_result_set_meta_data",
         })
     }
 

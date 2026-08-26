@@ -1,0 +1,25 @@
+id	category	owner	error_codes	contract	status
+T01	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0195;E0277	Add canonical impl_standard_wrapper leaf to migrated external test doubles and retain async_trait on impls	ADDRESSED_EXECUTED_1283_GREEN
+T02	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0053;E0308;E0600	Adapt Connection driver_name and is_closed assertions/impls to Result-typed canonical returns	ADDRESSED_EXECUTED_1283_GREEN
+T03	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0046;E0050	Adapt Driver doubles to accepts_url plus property-aware Option-returning connect	ADDRESSED_EXECUTED_1283_GREEN
+T04	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0599	Replace DruidPooledConnection new/with_context and holder with_connection with public standard pool/holder construction	ADDRESSED_EXECUTED_1283_GREEN
+T05	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0061;E0599	Adapt no-arg Druid statement/prepared calls to typed StatementOptions and owned Box trait handles	ADDRESSED_EXECUTED_1283_GREEN
+T06	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0053;E0061;E0195	Adapt ResultSet test doubles and callers to async navigation plus ColumnIndex/ResultSetExt	ADDRESSED_EXECUTED_1283_GREEN
+T07	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0599;E0624	Replace private holder standard_connection/take/cache inspection with public logical lifecycle and pool statistics	ADDRESSED_EXECUTED_1283_GREEN
+T08	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0599;E0624	Replace private Druid result-set driver-column inspection with WallFilter-produced logical getter outcomes	ADDRESSED_EXECUTED_1283_GREEN
+T09	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0599;E0600;E0782	Adapt legacy Option/Any Wrapper tests to Result plus StandardUnwrapped variants and WrapperExt concrete-self behavior	ADDRESSED_EXECUTED_1283_GREEN
+T10	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0432;E0782	Replace removed ResultSetMetaDataProxyImpl identity with canonical ResultSetMetaData snapshot/trait behavior	ADDRESSED_EXECUTED_1283_GREEN
+T11	C1_METHOD_GAP	C1_METHOD_PARITY	E0405;E0433	Merge retired ConnectionExt native_sql/client_info/network_timeout/type_map/valid/holdability/warnings and statement defaults into canonical Connection or record approved typed targets	ADDRESSED_EXECUTED_1283_GREEN
+T12	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0432;E0599	Replace removed ResultSetFilterChain direct identity with canonical standard ResultSet filter/stat public path	ADDRESSED_EXECUTED_1283_GREEN
+T13	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0061;E0599	Move connection-owned prepared execution tests to owned PreparedStatement set/add/execute APIs	ADDRESSED_EXECUTED_1283_GREEN
+T14	TEST_TYPED_MIGRATION	C2_TEST_PARITY	E0308;E0609	Replace removed operation-presence capability fields with actual canonical operation results plus transactions/savepoints/catalog/schema/callable descriptor fields	ADDRESSED_EXECUTED_1283_GREEN
+C01	C1_METHOD_GAP	C1_METHOD_PARITY	E0223;E0599	Restore canonical rich prepared input descriptors for null/type/scale/calendar/LOB/stream/ref/array/url/rowid/sqlxml behavior	ADDRESSED_72_OF_72_GREEN
+C02	C1_METHOD_GAP	C1_METHOD_PARITY	E0599	Canonical Connection exec_prepared_batch convenience was added after first RED and awaits C2 rerun	ADDRESSED_EXECUTED_1283_GREEN
+C03	C1_BEHAVIOR_GAP	C1_METHOD_PARITY	RUNTIME_UNSUPPORTED	Toasty canonical DatabaseMetaData must preserve 16 BASE supported info/capability values instead of UnsupportedOperation	ADDRESSED_67_OF_67_GREEN
+C04	C1_BEHAVIOR_GAP	INTEGRATION_OWNER	RUNTIME_ASSERTION	FilterChain before_batch must invoke BeforeFilter and block DROP; after_batch must invoke AfterFilter once	ADDRESSED_1_OF_1_GREEN
+C05	C1_METHOD_GAP	INTEGRATION_OWNER	E0599	Restore JDBC Driver rdbc_compliant and parent_logger/get_parent_logger behavior	ADDRESSED_DRIVER_CONTRACT_3_OF_3_GREEN
+C06	C1_BEHAVIOR_GAP	INTEGRATION_OWNER	RUNTIME_ASSERTION	Restore keepAlive shrink idle eviction/refill and fatal-error forced validation of pre-fatal idle connections	ADDRESSED_14_OF_14_GREEN
+C07	C1_BEHAVIOR_GAP	INTEGRATION_OWNER	RUNTIME_ASSERTION	Count canonical ResultSet update errors in public pool/data-source statistics while preserving typed SQLFeatureNotSupported	ADDRESSED_FILTER_ADAPTER_2_OF_2_GREEN
+C08	C1_BEHAVIOR_GAP	INTEGRATION_OWNER	RUNTIME_ASSERTION	Route canonical Druid pooled Connection exec through registered BeforeFilter and preserve WallViolation	ADDRESSED_BLOCKING_FILTER_1_OF_1_GREEN
+C09	C1_BEHAVIOR_GAP	INTEGRATION_OWNER	RUNTIME_UNSUPPORTED	Canonical Toasty/pooled ResultSet resource getter must preserve BASE real SQLite binary/character stream behavior	ADDRESSED_MATRIX_1_OF_1_GREEN
+C10	C1_BEHAVIOR_GAP	C1_METHOD_PARITY	RUNTIME_UNSUPPORTED	Toasty canonical Connection must preserve BASE direct exec/fetch/batch extension behavior	ADDRESSED_TOASTY_MATRIX_69_OF_69_GREEN

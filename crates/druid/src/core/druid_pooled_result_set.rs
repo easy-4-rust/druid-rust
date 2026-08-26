@@ -1,6 +1,11 @@
 //! Canonical pooled ResultSet proxy.
 
-use super::druid_pooled_statement::{DruidPooledStatement, DruidPooledStatementInner};
+mod access;
+
+use super::druid_pooled_statement::{
+    DruidPooledStatement, DruidPooledStatementInner, TrackedStatementResult,
+};
+use super::result_set_meta_data_proxy::ResultSetMetaDataProxy;
 use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
@@ -12,7 +17,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-struct StandardResultSetResource {
+pub(crate) struct StandardResultSetResource {
     result_set: tokio::sync::Mutex<Option<Box<dyn ResultSet>>>,
     opened: AtomicBool,
     closing: AtomicBool,
@@ -21,6 +26,7 @@ struct StandardResultSetResource {
     filter_chain: Option<Arc<FilterChain>>,
     filter_context: Arc<ResultSetFilterContext>,
     policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+    meta_data_attributes: Arc<ProxyAttributes>,
     registration: OnceLock<super::standard_resource_registration::StandardResourceRegistration>,
 }
 
@@ -40,6 +46,7 @@ impl StandardResultSetResource {
             filter_chain,
             filter_context,
             policy,
+            meta_data_attributes: Arc::new(ProxyAttributes::default()),
             registration: OnceLock::new(),
         })
     }
@@ -60,7 +67,7 @@ impl StandardResultSetResource {
         self.policy.classify(result, self.filter_context.sql())
     }
 
-    async fn close_core(&self) -> Result<(), RdbcError> {
+    pub(crate) async fn close_core(&self) -> Result<(), RdbcError> {
         if self.closed.load(Ordering::Acquire) {
             self.unregister_resource();
             return Ok(());
@@ -126,8 +133,13 @@ impl StandardResultSetResource {
             .try_lock()
             .map_err(|_| RdbcError::Other("result set is busy".to_owned()))?;
         let raw = result_set.as_ref().ok_or(RdbcError::ConnectionDiscarded)?;
-        self.policy
-            .classify(raw.meta_data(), self.filter_context.sql())
+        let meta_data = self
+            .policy
+            .classify(raw.meta_data(), self.filter_context.sql())?;
+        Ok(Arc::new(ResultSetMetaDataProxy::new(
+            meta_data,
+            Arc::clone(&self.meta_data_attributes),
+        )))
     }
 
     fn value_core(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
@@ -159,7 +171,11 @@ impl StandardResultSetResource {
                 .map_err(RdbcError::from),
             None => raw.meta_data(),
         };
-        self.policy.classify(result, self.filter_context.sql())
+        let meta_data = self.policy.classify(result, self.filter_context.sql())?;
+        Ok(Arc::new(ResultSetMetaDataProxy::new(
+            meta_data,
+            Arc::clone(&self.meta_data_attributes),
+        )))
     }
 
     fn was_null_core(&self) -> Result<bool, RdbcError> {
@@ -242,6 +258,7 @@ impl StagedResultSet {
             Arc::clone(&filter_context),
             Arc::clone(&statement.policy),
         );
+        statement.track_result_set(&resource);
         Self {
             id,
             statement: statement_handle,
@@ -315,11 +332,17 @@ impl DruidPooledResultSet {
         admission: &StandardResourceAdmission,
     ) -> Result<Self, RdbcError> {
         let resources = Arc::clone(&statement.resources);
+        let statement_identity = Arc::clone(&statement);
         let staged = StagedResultSet::new(statement, raw);
         let handle = Arc::clone(&staged.resource) as Arc<dyn StandardResourceHandle>;
         let registrations = resources.register_batch(admission, vec![handle]).await?;
         match staged.into_opened() {
-            Ok(result_set) => Ok(result_set),
+            Ok(result_set) => {
+                statement_identity.set_execution_results(vec![TrackedStatementResult::ResultSet(
+                    Arc::downgrade(&result_set.resource),
+                )]);
+                Ok(result_set)
+            }
             Err(open_error) => {
                 let cleanup = resources
                     .close_registered_after_admission(&registrations, admission)
@@ -355,10 +378,16 @@ impl DruidPooledResultSet {
         }
         let registrations = resources.register_batch(admission, handles).await?;
         let mut opened = Vec::with_capacity(staged_results.len());
+        let mut tracked = Vec::with_capacity(staged_results.len());
         for staged in staged_results {
             match staged {
                 StagedExecutionResult::ResultSet(staged) => match staged.into_opened() {
-                    Ok(result_set) => opened.push(ExecutionResult::ResultSet(Box::new(result_set))),
+                    Ok(result_set) => {
+                        tracked.push(TrackedStatementResult::ResultSet(Arc::downgrade(
+                            &result_set.resource,
+                        )));
+                        opened.push(ExecutionResult::ResultSet(Box::new(result_set)));
+                    }
                     Err(open_error) => {
                         let cleanup = resources
                             .close_registered_after_admission(&registrations, admission)
@@ -371,10 +400,12 @@ impl DruidPooledResultSet {
                     }
                 },
                 StagedExecutionResult::UpdateCount(count) => {
+                    tracked.push(TrackedStatementResult::UpdateCount(count));
                     opened.push(ExecutionResult::UpdateCount(count));
                 }
             }
         }
+        statement.set_execution_results(tracked);
         Ok(opened)
     }
 
@@ -463,6 +494,39 @@ impl DruidPooledResultSet {
         }
         Some(driver)
     }
+
+    fn driver_column_index(&self, column: ColumnIndex) -> Result<ColumnIndex, RdbcError> {
+        let logical = i32::try_from(column.get())
+            .map_err(|_| RdbcError::InvalidArgument("column index exceeds i32".to_owned()))?;
+        let driver = self
+            .driver_column(logical)
+            .ok_or_else(|| RdbcError::InvalidArgument("column is hidden".to_owned()))?;
+        usize::try_from(driver)
+            .ok()
+            .and_then(|index| ColumnIndex::new(index).ok())
+            .ok_or_else(|| RdbcError::InvalidArgument("invalid driver column".to_owned()))
+    }
+
+    fn logical_column_index(&self, driver: ColumnIndex) -> Result<ColumnIndex, RdbcError> {
+        let driver = i32::try_from(driver.get())
+            .map_err(|_| RdbcError::InvalidArgument("column index exceeds i32".to_owned()))?;
+        if self
+            .hidden_columns
+            .as_ref()
+            .is_some_and(|columns| columns.contains(&driver))
+        {
+            return Err(RdbcError::InvalidArgument("column is hidden".to_owned()));
+        }
+        let logical = self
+            .logic_column_map
+            .as_ref()
+            .and_then(|mapping| mapping.get(&driver).copied())
+            .unwrap_or(driver);
+        usize::try_from(logical)
+            .ok()
+            .and_then(|index| ColumnIndex::new(index).ok())
+            .ok_or_else(|| RdbcError::InvalidArgument("invalid logical column".to_owned()))
+    }
 }
 
 #[derive(Debug)]
@@ -495,18 +559,104 @@ impl ResultSet for DruidPooledResultSet {
         Ok(more)
     }
 
+    async fn navigate(
+        &mut self,
+        navigation: druid_rdbc::result_set::ResultSetNavigation,
+    ) -> Result<bool, RdbcError> {
+        if std::matches!(
+            navigation,
+            druid_rdbc::result_set::ResultSetNavigation::Next
+        ) {
+            return self.next().await;
+        }
+        self.ensure_open()?;
+        let present = self.resource.navigate_core(navigation).await?;
+        let row = self.resource.access_core(|raw| raw.row())?;
+        self.cursor_index.store(row, Ordering::Release);
+        if present {
+            self.filter_context.record_fetch_row_count(row);
+        }
+        Ok(present)
+    }
+
+    fn row(&self) -> Result<i32, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.row())
+    }
+
     fn value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
         self.ensure_open()?;
-        let logical = i32::try_from(column.get())
-            .map_err(|_| RdbcError::InvalidArgument("column index exceeds i32".to_owned()))?;
+        self.resource.value_core(self.driver_column_index(column)?)
+    }
+
+    fn find_column(&self, column_label: &str) -> Result<ColumnIndex, RdbcError> {
+        self.ensure_open()?;
         let driver = self
-            .driver_column(logical)
-            .ok_or_else(|| RdbcError::InvalidArgument("column is hidden".to_owned()))?;
-        let driver = usize::try_from(driver)
-            .ok()
-            .and_then(|index| ColumnIndex::new(index).ok())
-            .ok_or_else(|| RdbcError::InvalidArgument("invalid driver column".to_owned()))?;
-        self.resource.value_core(driver)
+            .resource
+            .access_core(|raw| raw.find_column(column_label))?;
+        self.logical_column_index(driver)
+    }
+
+    fn object(&self, column: ColumnIndex) -> Result<druid_rdbc::types::RdbcObject, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .access_core(|raw| raw.object(self.driver_column_index(column)?))
+    }
+
+    fn object_with_type_map(
+        &self,
+        column: ColumnIndex,
+        type_map: Option<&druid_rdbc::types::RdbcTypeMap>,
+    ) -> Result<druid_rdbc::types::RdbcObject, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| {
+            raw.object_with_type_map(self.driver_column_index(column)?, type_map)
+        })
+    }
+
+    fn object_as(
+        &self,
+        column: ColumnIndex,
+        target_type: &druid_rdbc::types::RdbcTargetType,
+    ) -> Result<druid_rdbc::types::RdbcObject, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .access_core(|raw| raw.object_as(self.driver_column_index(column)?, target_type))
+    }
+
+    fn input_stream(
+        &self,
+        column: ColumnIndex,
+        kind: druid_rdbc::result_set::ResultSetStreamKind,
+    ) -> Result<Option<druid_rdbc::resource::RdbcInputStream>, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .access_core(|raw| raw.input_stream(self.driver_column_index(column)?, kind))
+    }
+
+    fn reader(
+        &self,
+        column: ColumnIndex,
+        national: bool,
+    ) -> Result<Option<druid_rdbc::resource::RdbcReader>, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .access_core(|raw| raw.reader(self.driver_column_index(column)?, national))
+    }
+
+    fn update_value(
+        &mut self,
+        column: ColumnIndex,
+        update: druid_rdbc::result_set::ResultSetUpdate,
+    ) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        let result = self
+            .resource
+            .access_core(|raw| raw.update_value(self.driver_column_index(column)?, update));
+        if let Err(error) = &result {
+            self.resource.policy.record_result_set_error(error);
+        }
+        result
     }
 
     fn meta_data(&self) -> Result<Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, RdbcError> {
@@ -517,6 +667,130 @@ impl ResultSet for DruidPooledResultSet {
     fn was_null(&self) -> Result<bool, RdbcError> {
         self.ensure_open()?;
         self.resource.was_null_core()
+    }
+
+    fn is_before_first(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.is_before_first())
+    }
+
+    fn is_after_last(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.is_after_last())
+    }
+
+    fn is_first(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.is_first())
+    }
+
+    fn is_last(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.is_last())
+    }
+
+    fn set_fetch_direction(
+        &mut self,
+        direction: druid_rdbc::statement::FetchDirection,
+    ) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .access_core(|raw| raw.set_fetch_direction(direction))
+    }
+
+    fn fetch_direction(&self) -> Result<druid_rdbc::statement::FetchDirection, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.fetch_direction())
+    }
+
+    fn set_fetch_size(&mut self, rows: i32) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.set_fetch_size(rows))
+    }
+
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.fetch_size())
+    }
+
+    fn result_set_type(&self) -> Result<druid_rdbc::statement::ResultSetType, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.result_set_type())
+    }
+
+    fn concurrency(&self) -> Result<druid_rdbc::statement::ResultSetConcurrency, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.concurrency())
+    }
+
+    fn holdability(&self) -> Result<druid_rdbc::statement::ResultSetHoldability, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.holdability())
+    }
+
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.warnings())
+    }
+
+    fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::clear_warnings)
+    }
+
+    fn cursor_name(&self) -> Result<Option<String>, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.cursor_name())
+    }
+
+    fn row_updated(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.row_updated())
+    }
+
+    fn row_inserted(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.row_inserted())
+    }
+
+    fn row_deleted(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(|raw| raw.row_deleted())
+    }
+
+    fn insert_row(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::insert_row)
+    }
+
+    fn update_row(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::update_row)
+    }
+
+    fn delete_row(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::delete_row)
+    }
+
+    fn refresh_row(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::refresh_row)
+    }
+
+    fn cancel_row_updates(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::cancel_row_updates)
+    }
+
+    fn move_to_insert_row(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::move_to_insert_row)
+    }
+
+    fn move_to_current_row(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource.access_core(ResultSet::move_to_current_row)
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

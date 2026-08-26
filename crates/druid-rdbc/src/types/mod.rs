@@ -20,8 +20,10 @@ mod rdbc_target_type;
 mod rdbc_type;
 mod rdbc_type_map;
 mod rdbc_url;
+mod resource_handle;
 mod row;
 mod savepoint;
+mod sql_scalar;
 mod time;
 mod timestamp;
 mod types;
@@ -56,8 +58,13 @@ pub use rdbc_target_type::RdbcTargetType;
 pub use rdbc_type::RdbcType;
 pub use rdbc_type_map::RdbcTypeMap;
 pub use rdbc_url::RdbcUrl;
+pub use resource_handle::{
+    RdbcArray, RdbcBlob, RdbcCharacterLength, RdbcClob, RdbcInputStream, RdbcNClob, RdbcReader,
+    RdbcRef, RdbcSqlXml, RdbcStreamLength,
+};
 pub use row::Row;
 pub use savepoint::Savepoint;
+pub use sql_scalar::{RdbcBigDecimal, RdbcNaiveDate, RdbcNaiveDateTime, RdbcNaiveTime};
 pub use time::Time;
 pub use timestamp::Timestamp;
 pub use types::Types;

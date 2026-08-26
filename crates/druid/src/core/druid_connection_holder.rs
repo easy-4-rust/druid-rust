@@ -250,6 +250,10 @@ impl DruidConnectionHolder {
         self.connection.as_deref_mut()
     }
 
+    pub(crate) fn standard_connection_box_mut(&mut self) -> Option<&mut Box<dyn Connection>> {
+        self.connection.as_mut()
+    }
+
     pub(crate) fn take_standard_connection(&mut self) -> Option<Box<dyn Connection>> {
         self.connection.take()
     }
@@ -354,10 +358,12 @@ impl DruidConnectionHolder {
     /// Restores the captured connection state and listener scopes.
     pub async fn reset(&mut self, _keep_transaction_isolation: bool) -> Result<(), DruidError> {
         let defaults = self.defaults.clone();
+        let reset_schema = !self.should_restore_schema_on_recycle();
         defaults
             .reset_standard_state(
                 self.standard_connection_mut()
                     .ok_or(DruidError::ConnectionDiscarded)?,
+                reset_schema,
             )
             .await?;
         self.clear_connection_event_listeners();

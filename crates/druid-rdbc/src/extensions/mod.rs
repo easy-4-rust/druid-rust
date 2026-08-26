@@ -1,5 +1,6 @@
 //! Rust 专用的 standard extensions。
 
+mod buffered_row_set;
 mod character_reader;
 mod character_writer;
 mod connection_capabilities;
@@ -7,6 +8,7 @@ mod xml_result;
 mod xml_source;
 
 pub use crate::statement::ExecResult;
+pub use buffered_row_set::BufferedRowSet;
 pub use character_reader::CharacterReader;
 pub use character_writer::CharacterWriter;
 pub use connection_capabilities::ConnectionCapabilities;

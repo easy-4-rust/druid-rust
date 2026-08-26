@@ -2,11 +2,13 @@
 
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
 use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
+use crate::standard_adapter_executor::AdapterUpdateResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::metadata::TablesQuery;
+use druid_rdbc::metadata::{ColumnDescriptor, ColumnNullability, TablesQuery};
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::types::Value;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -19,6 +21,10 @@ pub(crate) struct SqlxConnectionActor {
     connection: Mutex<SqlxConnectionAdapter>,
     closed: AtomicBool,
     auto_commit: AtomicBool,
+    read_only: AtomicBool,
+    savepoint_sequence: AtomicU64,
+    backend_key: &'static str,
+    url: String,
     runtime_trace: Option<RuntimeTraceEmitter>,
 }
 
@@ -34,11 +40,19 @@ impl SqlxConnectionActor {
     /// 把 active adapter 转换成 shared owned actor。
     pub(crate) fn new(mut connection: SqlxConnectionAdapter) -> Arc<Self> {
         let auto_commit = connection.standard_auto_commit_core();
+        let read_only = connection.standard_read_only_core();
+        let savepoint_sequence = connection.standard_savepoint_sequence_core();
+        let backend_key = connection.backend_key();
+        let url = connection.standard_url_core().to_owned();
         let runtime_trace = connection.take_runtime_trace();
         Arc::new(Self {
             connection: Mutex::new(connection),
             closed: AtomicBool::new(false),
             auto_commit: AtomicBool::new(auto_commit),
+            read_only: AtomicBool::new(read_only),
+            savepoint_sequence: AtomicU64::new(savepoint_sequence),
+            backend_key,
+            url,
             runtime_trace,
         })
     }
@@ -107,36 +121,77 @@ impl SqlxConnectionActor {
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open_core()?;
         let mut connection = self.connection.lock().await;
-        let (rows, labels) = connection.fetch_rows_with_labels(sql, values).await?;
-        Ok(self.result_set_core(rows, labels))
+        let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
+        Ok(self.result_set_core(rows, columns))
     }
 
-    fn result_set_core(
+    pub(crate) fn result_set_core(
         self: &Arc<SqlxConnectionActor>,
         rows: Vec<druid_rdbc::types::Row>,
-        labels: Vec<String>,
+        columns: Vec<ColumnDescriptor>,
     ) -> Box<dyn ResultSet> {
-        Box::new(SqlxStreamingResultSet::values(rows, labels).with_actor_lease(Arc::clone(self)))
+        Box::new(SqlxStreamingResultSet::values(rows, columns).with_actor_lease(Arc::clone(self)))
     }
 
-    /// 执行 update，复用 adapter 的唯一 driver-neutral SQL core。
-    pub(crate) async fn execute_update(
+    /// 执行 update，并保留 generated-key/row-count driver outcome。
+    pub(crate) async fn execute_update_result(
         &self,
         sql: &str,
         values: Vec<Value>,
-    ) -> Result<i64, RdbcError> {
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         self.ensure_open_core()?;
-        let mut connection = self.connection.lock().await;
-        let result = connection.execute_update_core(sql, values).await?;
-        i64::try_from(result.rows_affected).map_err(|_| {
-            RdbcError::InvalidArgument("rows affected exceeds canonical i64 count".to_owned())
-        })
+        self.connection
+            .lock()
+            .await
+            .execute_update_core(sql, values)
+            .await
+    }
+
+    /// 执行 eager query，仅返回 canonical rows。
+    pub(crate) async fn fetch_rows(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<Vec<druid_rdbc::types::Row>, RdbcError> {
+        self.ensure_open_core()?;
+        self.connection
+            .lock()
+            .await
+            .fetch_rows_with_labels(sql, values)
+            .await
+            .map(|(rows, _)| rows)
     }
 
     /// 返回 live database product identity。
     pub(crate) async fn database_product_name(&self) -> Result<String, RdbcError> {
         self.ensure_open_core()?;
         self.connection.lock().await.standard_product_name_core()
+    }
+
+    /// 返回 live database version。
+    pub(crate) async fn database_product_version(&self) -> Result<String, RdbcError> {
+        self.ensure_open_core()?;
+        self.connection
+            .lock()
+            .await
+            .standard_product_version_core()
+            .await
+    }
+
+    /// 返回 authenticated database user；driver 不暴露时保持 None/unsupported。
+    pub(crate) async fn database_user_name(&self) -> Result<Option<String>, RdbcError> {
+        self.ensure_open_core()?;
+        self.connection.lock().await.standard_user_name_core().await
+    }
+
+    /// 返回 driver-backed read-only metadata state。
+    pub(crate) async fn database_read_only(&self) -> Result<bool, RdbcError> {
+        self.ensure_open_core()?;
+        self.connection
+            .lock()
+            .await
+            .standard_read_only_metadata_core()
+            .await
     }
 
     pub(crate) async fn parameter_count(&self, sql: &str) -> Result<usize, RdbcError> {
@@ -146,6 +201,26 @@ impl SqlxConnectionActor {
             .await
             .standard_parameter_count_core(sql)
             .await
+    }
+
+    /// 返回 driver describe 生成的 immutable result metadata columns。
+    pub(crate) async fn describe_columns(
+        &self,
+        sql: &str,
+    ) -> Result<Vec<ColumnDescriptor>, RdbcError> {
+        self.ensure_open_core()?;
+        self.connection
+            .lock()
+            .await
+            .describe_columns_core(sql)
+            .await
+    }
+
+    /// 返回 SQLx describe 是否报告 result columns；不检查 SQL 文本前缀。
+    pub(crate) async fn statement_returns_rows(&self, sql: &str) -> Result<bool, RdbcError> {
+        self.describe_columns(sql)
+            .await
+            .map(|columns| !columns.is_empty())
     }
 
     /// 执行 SQLite live tables query，并返回继续持有 actor lease 的 ResultSet。
@@ -166,22 +241,25 @@ impl SqlxConnectionActor {
             "SELF_REFERENCING_COL_NAME",
             "REF_GENERATION",
         ];
-        let labels = LABELS.iter().map(|label| (*label).to_owned()).collect();
+        let columns = LABELS
+            .iter()
+            .map(|label| ColumnDescriptor::new(*label, "VARCHAR", ColumnNullability::Unknown))
+            .collect::<Vec<_>>();
         if query
             .catalog
             .as_deref()
-            .is_some_and(|catalog| !matches!(catalog, "" | "main"))
+            .is_some_and(|catalog| !std::matches!(catalog, "" | "main"))
             || query
                 .schema_pattern
                 .as_deref()
-                .is_some_and(|schema| !matches!(schema, "" | "main"))
+                .is_some_and(|schema| !std::matches!(schema, "" | "main"))
         {
-            return Ok(self.result_set_core(Vec::new(), labels));
+            return Ok(self.result_set_core(Vec::new(), columns));
         }
         let allowed_types = match query.table_types {
             None => None,
             Some(types) if types.is_empty() => {
-                return Ok(self.result_set_core(Vec::new(), labels));
+                return Ok(self.result_set_core(Vec::new(), columns));
             }
             Some(types) => Some(
                 types
@@ -218,7 +296,7 @@ impl SqlxConnectionActor {
             });
         }
         drop(connection);
-        Ok(self.result_set_core(rows, labels))
+        Ok(self.result_set_core(rows, columns))
     }
 
     /// 返回 actor 维护的 auto-commit snapshot。
@@ -266,6 +344,59 @@ impl SqlxConnectionActor {
         connection.rollback_raw_core().await?;
         self.auto_commit.store(true, Ordering::Release);
         Ok(())
+    }
+
+    /// 执行 savepoint/control SQL。
+    pub(crate) async fn execute_control_statement(&self, sql: &str) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        self.connection
+            .lock()
+            .await
+            .execute_control_statement(sql)
+            .await
+    }
+
+    /// 分配下一个 connection-local savepoint ID。
+    pub(crate) fn next_savepoint_id(&self) -> u64 {
+        self.savepoint_sequence.fetch_add(1, Ordering::AcqRel) + 1
+    }
+
+    /// 返回 read-only snapshot。
+    pub(crate) fn read_only(&self) -> bool {
+        self.read_only.load(Ordering::Acquire)
+    }
+
+    /// 设置 raw SQLx session 的 read-only 状态。
+    pub(crate) async fn set_read_only(&self, read_only: bool) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        self.connection
+            .lock()
+            .await
+            .set_read_only_raw_core(read_only)
+            .await?;
+        self.read_only.store(read_only, Ordering::Release);
+        Ok(())
+    }
+
+    /// 返回 backend identity。
+    pub(crate) const fn backend_key(&self) -> &'static str {
+        self.backend_key
+    }
+
+    /// 返回配置 URL；metadata 层负责避免把它写入日志。
+    pub(crate) fn database_url(&self) -> &str {
+        &self.url
+    }
+
+    /// SQLx 不暴露 JDBC warning chain；存活 actor 返回空链。
+    pub(crate) fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
+        self.ensure_open_core()?;
+        Ok(None)
+    }
+
+    /// SQLx 不保存可清理的 warning state；存活 actor no-op 成功。
+    pub(crate) fn clear_warnings(&self) -> Result<(), RdbcError> {
+        self.ensure_open_core()
     }
 
     /// Exactly-once 关闭 raw connection；其他 handles 仍可观察 closed state。

@@ -1378,11 +1378,25 @@ impl DruidPool {
         let connection_properties = holder.connection_properties();
         let pool = self.inner.clone();
         let active_leases = Arc::clone(&self.active_leases);
+        let disposition_signaled = Arc::new(AtomicBool::new(false));
+        let signaled_for_observer = Arc::clone(&disposition_signaled);
+        let active_for_observer = Arc::clone(&active_leases);
+        let pool_for_observer = Arc::clone(&pool);
+        let disposition_observer = Box::new(move |disposition| {
+            signaled_for_observer.store(true, Ordering::Release);
+            active_for_observer.remove(&connection_id);
+            pool_for_observer.signal_owner_discard(&disposition);
+        });
+        let signaled_for_return = Arc::clone(&disposition_signaled);
         let return_connection = Box::new(move |holder, disposition| {
             active_leases.remove(&connection_id);
-            pool.return_connection(holder, disposition)
+            if signaled_for_return.load(Ordering::Acquire) {
+                pool.finish_signaled_discard(holder)
+            } else {
+                pool.return_connection(holder, disposition)
+            }
         });
-        let mut connection = DruidPooledConnection::with_standard_holder(
+        let mut connection = DruidPooledConnection::with_standard_holder_and_disposition_observer(
             holder,
             self.name.clone(),
             self.filter_chain.clone(),
@@ -1390,6 +1404,7 @@ impl DruidPool {
                 .config
                 .keep_connection_underlying_transaction_isolation,
             self.inner.config.test_on_return,
+            disposition_observer,
             return_connection,
         );
         if let Some(exception_sorter) = self.exception_sorter.clone() {

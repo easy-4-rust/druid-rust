@@ -108,6 +108,108 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "statement-owned executor"):
             verify_sqlx_ownership(self.root)
 
+    def test_sqlx_coverage_binding_and_call_chain_reject_retired_update_aliases(self) -> None:
+        """Task 6 coverage binds the live update-result actor, never the retired alias。"""
+
+        repository = Path(__file__).resolve().parents[1]
+        sqlx_root = self.root / "crates/druid-wrapper/src/sqlx"
+        sqlx_root.mkdir(parents=True)
+        names = (
+            "sqlx_connection_actor.rs",
+            "sqlx_prepared_statement.rs",
+            "sqlx_streaming_result_set.rs",
+            "sqlx_database_meta_data.rs",
+        )
+        for name in names:
+            (sqlx_root / name).write_bytes(
+                (repository / "crates/druid-wrapper/src/sqlx" / name).read_bytes()
+            )
+        verify_sqlx_ownership(self.root)
+
+        kind, path, function, anchor = verifier.canonical_coverage_requirement(
+            "SQLX", "FAMILY_EXECUTOR_FUNCTION"
+        )
+        requirement = verifier.CoverageRequirement(
+            requirement_id="FAMILY_EXECUTOR_FUNCTION",
+            requirement_kind=kind,
+            source_path=path,
+            source_sha256="0" * 64,
+            source_function=function,
+            compiler_function_name="_Rcanonical_sqlx_update_result",
+            anchor_id=anchor,
+            minimum_count=1,
+        )
+        verifier.validate_coverage_requirement_binding("SQLX", requirement)
+        for retired in (
+            replace(requirement, source_function="execute_update"),
+            replace(
+                requirement,
+                source_path=Path(
+                    "crates/druid-wrapper/src/sqlx/sqlx_connection_adapter.rs"
+                ),
+                source_function="execute_update_core",
+            ),
+        ):
+            with self.assertRaisesRegex(VerificationError, "not canonical"):
+                verifier.validate_coverage_requirement_binding("SQLX", retired)
+
+        actor = sqlx_root / "sqlx_connection_actor.rs"
+        actor_source = actor.read_text(encoding="utf-8")
+        actor.write_text(
+            actor_source.replace("execute_update_result", "execute_update", 1),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "update actor/core"):
+            verify_sqlx_ownership(self.root)
+
+    def test_toasty_coverage_binding_and_call_chain_reject_retired_update_core(self) -> None:
+        """Generated-key preserving result core is the only Toasty executor obligation。"""
+
+        repository = Path(__file__).resolve().parents[1]
+        paths = (
+            "crates/druid-wrapper/src/standard_adapter_statement.rs",
+            "crates/druid-wrapper/src/standard_adapter_executor.rs",
+            "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+        )
+        for relative in paths:
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((repository / relative).read_bytes())
+        verifier.verify_family_executor_call_chains(self.root)
+
+        kind, path, function, anchor = verifier.canonical_coverage_requirement(
+            "TOASTY", "FAMILY_EXECUTOR_FUNCTION"
+        )
+        requirement = verifier.CoverageRequirement(
+            requirement_id="FAMILY_EXECUTOR_FUNCTION",
+            requirement_kind=kind,
+            source_path=path,
+            source_sha256="0" * 64,
+            source_function=function,
+            compiler_function_name="_Rcanonical_toasty_update_result",
+            anchor_id=anchor,
+            minimum_count=1,
+        )
+        verifier.validate_coverage_requirement_binding("TOASTY", requirement)
+        with self.assertRaisesRegex(VerificationError, "not canonical"):
+            verifier.validate_coverage_requirement_binding(
+                "TOASTY",
+                replace(requirement, source_function="standard_execute_update_core"),
+            )
+
+        toasty = self.root / paths[-1]
+        source = toasty.read_text(encoding="utf-8")
+        toasty.write_text(
+            source.replace(
+                "async fn standard_execute_update_result_core",
+                "async fn retired_standard_execute_update_result_core",
+                1,
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "Toasty canonical"):
+            verifier.verify_family_executor_call_chains(self.root)
+
     def test_rejects_empty_default_and_split_core_standard_impls(self) -> None:
         for source in (
             "impl PhysicalConnection for DemoConnection {}\nimpl Connection for DemoConnection {}\n",
@@ -827,6 +929,53 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "callsite multiset drift"):
             verify_trace_record_callsites(self.root)
+
+    def test_duplicate_trace_calls_are_pinned_to_exact_mutually_exclusive_branches(self) -> None:
+        """2/2/2 callsites cannot move, duplicate, disappear, or both execute。"""
+
+        repository = Path(__file__).resolve().parents[1]
+        paths = (
+            "crates/druid-wrapper/src/standard_adapter_statement.rs",
+            "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+            "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+        )
+
+        def seed() -> None:
+            for relative in paths:
+                target = self.root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes((repository / relative).read_bytes())
+
+        seed()
+        verifier.verify_trace_branch_callsites(self.root)
+        mutations = (
+            (
+                paths[0],
+                "executor.task4_trace_statement_update();",
+                "",
+            ),
+            (
+                paths[1],
+                "executor.task4_trace_prepared_query();",
+                "",
+            ),
+            (
+                paths[2],
+                "} else if let Some(trace) = &self.runtime_trace {",
+                "} if let Some(trace) = &self.runtime_trace {",
+            ),
+        )
+        for relative, old, new in mutations:
+            with self.subTest(relative=relative, mutation=old):
+                seed()
+                target = self.root / relative
+                source = target.read_text(encoding="utf-8")
+                self.assertIn(old, source)
+                target.write_text(source.replace(old, new, 1), encoding="utf-8")
+                with self.assertRaisesRegex(
+                    VerificationError, "multiplicity|mutually exclusive"
+                ):
+                    verifier.verify_trace_branch_callsites(self.root)
 
     def test_cargo_command_binds_exact_target_test_and_profile(self) -> None:
         spec = EvidenceSpec(

@@ -1,13 +1,18 @@
 //! Canonical connection ownership wrapper for one external-pool lease.
 
-use druid_rdbc::connection::Connection;
+use druid_rdbc::connection::{Connection, TransactionIsolation};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::extensions::ConnectionCapabilities;
 use druid_rdbc::metadata::DatabaseMetaData;
-use druid_rdbc::statement::{CallableStatement, PreparedStatement, Statement, StatementOptions};
+use druid_rdbc::statement::{
+    CallableStatement, ExecResult, PreparedInputParameter, PreparedStatement, ResultSetHoldability,
+    Statement, StatementOptions,
+};
+use druid_rdbc::types::{RdbcBlob, RdbcClob, RdbcNClob, RdbcTypeMap, Row, Savepoint, Value};
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
 use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
+use std::time::Duration;
 
 /// Owns one bb8/deadpool lease and delegates the canonical connection contract.
 pub struct ExternalConnectionLease<L>
@@ -59,6 +64,41 @@ where
         + Send
         + 'static,
 {
+    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
+        self.connection_mut().exec(sql, params).await
+    }
+
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
+        self.connection_mut().fetch(sql, params).await
+    }
+
+    async fn exec_batch(
+        &mut self,
+        batch: Vec<(String, Vec<Value>)>,
+    ) -> Result<Vec<i64>, RdbcError> {
+        self.connection_mut().exec_batch(batch).await
+    }
+
+    async fn exec_prepared_batch(
+        &mut self,
+        statement: &mut dyn PreparedStatement,
+        parameter_sets: Vec<Vec<Value>>,
+    ) -> Result<Vec<i64>, RdbcError> {
+        self.connection_mut()
+            .exec_prepared_batch(statement, parameter_sets)
+            .await
+    }
+
+    async fn exec_prepared_parameter_batch(
+        &mut self,
+        statement: &mut dyn PreparedStatement,
+        parameter_sets: Vec<Vec<PreparedInputParameter>>,
+    ) -> Result<Vec<i64>, RdbcError> {
+        self.connection_mut()
+            .exec_prepared_parameter_batch(statement, parameter_sets)
+            .await
+    }
+
     async fn create_statement(
         &mut self,
         options: StatementOptions,
@@ -86,12 +126,48 @@ where
         self.connection_mut().database_meta_data().await
     }
 
+    async fn database_product_name(&mut self) -> Result<Option<String>, RdbcError> {
+        self.connection_mut().database_product_name().await
+    }
+
+    async fn database_product_version(&mut self) -> Result<Option<String>, RdbcError> {
+        self.connection_mut().database_product_version().await
+    }
+
+    fn driver_major_version(&self) -> Result<i32, RdbcError> {
+        self.connection().driver_major_version()
+    }
+
+    fn driver_minor_version(&self) -> Result<i32, RdbcError> {
+        self.connection().driver_minor_version()
+    }
+
     async fn commit(&mut self) -> Result<(), RdbcError> {
         self.connection_mut().commit().await
     }
 
     async fn rollback(&mut self) -> Result<(), RdbcError> {
         self.connection_mut().rollback().await
+    }
+
+    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
+        self.connection_mut().rollback_to(savepoint).await
+    }
+
+    async fn begin(&mut self) -> Result<(), RdbcError> {
+        self.connection_mut().begin().await
+    }
+
+    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
+        self.connection_mut().set_savepoint().await
+    }
+
+    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
+        self.connection_mut().set_savepoint_named(name).await
+    }
+
+    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
+        self.connection_mut().release_savepoint(savepoint).await
     }
 
     fn auto_commit(&self) -> Result<bool, RdbcError> {
@@ -108,6 +184,56 @@ where
 
     async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
         self.connection_mut().set_read_only(read_only).await
+    }
+
+    async fn set_client_info(&mut self, name: &str, value: Option<&str>) -> Result<(), RdbcError> {
+        self.connection_mut().set_client_info(name, value).await
+    }
+
+    fn client_info(&self, name: &str) -> Result<Option<String>, RdbcError> {
+        self.connection().client_info(name)
+    }
+
+    async fn native_sql(&mut self, sql: &str) -> Result<String, RdbcError> {
+        self.connection_mut().native_sql(sql).await
+    }
+
+    async fn set_network_timeout(&mut self, timeout: Duration) -> Result<(), RdbcError> {
+        self.connection_mut().set_network_timeout(timeout).await
+    }
+
+    fn network_timeout(&self) -> Result<Duration, RdbcError> {
+        self.connection().network_timeout()
+    }
+
+    fn type_map(&self) -> Result<Option<RdbcTypeMap>, RdbcError> {
+        self.connection().type_map()
+    }
+
+    async fn set_type_map(&mut self, type_map: RdbcTypeMap) -> Result<(), RdbcError> {
+        self.connection_mut().set_type_map(type_map).await
+    }
+
+    fn transaction_isolation(&self) -> Result<TransactionIsolation, RdbcError> {
+        self.connection().transaction_isolation()
+    }
+
+    async fn set_transaction_isolation(
+        &mut self,
+        level: TransactionIsolation,
+    ) -> Result<(), RdbcError> {
+        self.connection_mut().set_transaction_isolation(level).await
+    }
+
+    fn holdability(&self) -> Result<ResultSetHoldability, RdbcError> {
+        self.connection().holdability()
+    }
+
+    async fn set_holdability(
+        &mut self,
+        holdability: ResultSetHoldability,
+    ) -> Result<(), RdbcError> {
+        self.connection_mut().set_holdability(holdability).await
     }
 
     fn catalog(&self) -> Result<Option<String>, RdbcError> {
@@ -134,6 +260,18 @@ where
         self.connection_mut().clear_warnings().await
     }
 
+    async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
+        self.connection_mut().create_blob().await
+    }
+
+    async fn create_clob(&mut self) -> Result<RdbcClob, RdbcError> {
+        self.connection_mut().create_clob().await
+    }
+
+    async fn create_n_clob(&mut self) -> Result<RdbcNClob, RdbcError> {
+        self.connection_mut().create_n_clob().await
+    }
+
     fn capabilities(&self) -> ConnectionCapabilities {
         self.connection().capabilities()
     }
@@ -142,11 +280,23 @@ where
         self.connection_mut().is_valid(timeout_seconds).await
     }
 
+    async fn ping(&mut self) -> Result<(), RdbcError> {
+        self.connection_mut().ping().await
+    }
+
+    async fn abort(&mut self) -> Result<(), RdbcError> {
+        self.connection_mut().abort().await
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         self.connection_mut().close().await
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
         self.connection().is_closed()
+    }
+
+    fn driver_name(&self) -> Result<String, RdbcError> {
+        self.connection().driver_name()
     }
 }

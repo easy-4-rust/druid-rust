@@ -184,16 +184,56 @@ pub trait BeforeFilter: Send + Sync {
         Ok(())
     }
 
-    async fn before_batch(&self, _context: &mut BatchExecContext<'_>) -> Result<(), DruidError> {
-        Ok(())
+    async fn before_batch(&self, context: &mut BatchExecContext<'_>) -> Result<(), DruidError> {
+        let params = context
+            .parameter_sets
+            .last()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let mut execute_context = ExecContext {
+            connection_id: context.connection_id,
+            statement_id: context.statement_id,
+            sql: context.sql.to_owned(),
+            params,
+            prepared_parameters: context
+                .prepared_parameter_sets
+                .and_then(|sets| sets.last())
+                .map(Vec::as_slice),
+            data_source: context.data_source,
+            start: context.start,
+            fingerprint: context.fingerprint,
+            in_transaction: context.in_transaction,
+            operation: ExecOperation::Batch,
+        };
+        self.before(&mut execute_context).await
     }
 
     async fn before_batch_error(
         &self,
-        _context: &BatchExecContext<'_>,
-        _error: &DruidError,
+        context: &BatchExecContext<'_>,
+        error: &DruidError,
     ) -> Result<(), DruidError> {
-        Ok(())
+        let params = context
+            .parameter_sets
+            .last()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let execute_context = ExecContext {
+            connection_id: context.connection_id,
+            statement_id: context.statement_id,
+            sql: context.sql.to_owned(),
+            params,
+            prepared_parameters: context
+                .prepared_parameter_sets
+                .and_then(|sets| sets.last())
+                .map(Vec::as_slice),
+            data_source: context.data_source,
+            start: context.start,
+            fingerprint: context.fingerprint,
+            in_transaction: context.in_transaction,
+            operation: ExecOperation::Batch,
+        };
+        self.before_execute_error(&execute_context, error).await
     }
 
     async fn on_connection_event(&self, _event: &ConnectionEvent) -> Result<(), DruidError> {
@@ -372,11 +412,42 @@ pub trait AfterFilter: Send + Sync {
 
     async fn after_batch(
         &self,
-        _context: &BatchExecContext<'_>,
-        _result: &Result<Vec<i32>, DruidError>,
-        _elapsed: Duration,
+        context: &BatchExecContext<'_>,
+        result: &Result<Vec<i32>, DruidError>,
+        elapsed: Duration,
     ) -> Result<(), DruidError> {
-        Ok(())
+        let execute_result = match result {
+            Ok(update_counts) => Ok(ExecResult {
+                rows_affected: update_counts
+                    .iter()
+                    .filter_map(|count| u64::try_from(*count).ok())
+                    .sum(),
+                last_insert_id: None,
+                row_count: None,
+            }),
+            Err(error) => Err(error.clone()),
+        };
+        let params = context
+            .parameter_sets
+            .last()
+            .map(Vec::as_slice)
+            .unwrap_or_default();
+        let execute_context = ExecContext {
+            connection_id: context.connection_id,
+            statement_id: context.statement_id,
+            sql: context.sql.to_owned(),
+            params,
+            prepared_parameters: context
+                .prepared_parameter_sets
+                .and_then(|sets| sets.last())
+                .map(Vec::as_slice),
+            data_source: context.data_source,
+            start: context.start,
+            fingerprint: None,
+            in_transaction: context.in_transaction,
+            operation: ExecOperation::Batch,
+        };
+        self.after(&execute_context, &execute_result, elapsed).await
     }
 
     async fn after_connection_event(

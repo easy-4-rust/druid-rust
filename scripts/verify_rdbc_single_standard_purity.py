@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import NoReturn
@@ -109,28 +110,32 @@ def fail(message: str) -> NoReturn:
 def forbidden_identity(identifier: str) -> bool:
     """Return whether one Rust identifier belongs to transitional/product runtime."""
 
-    normalized = identifier.removeprefix("r#").replace("_", "").lower()
-    if any(
-        fragment in normalized
-        for fragment in (
-            "physical",
-            "druid",
-            "holder",
-            "lease",
-            "cache",
-            "filter",
-            "resourceowner",
+    spelling = identifier.removeprefix("r#")
+    normalized = spelling.replace("_", "").lower()
+    components = tuple(
+        component.lower()
+        for word in spelling.split("_")
+        for component in re.findall(
+            r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|[A-Z]+|\d+",
+            word,
         )
-    ):
+    )
+    if any(
+        component in {"physical", "druid", "holder", "lease", "cache", "filter"}
+        for component in components
+    ) or "resourceowner" in {
+        normalized,
+        "".join(components),
+    }:
         return True
     if (
         normalized.startswith("pooledconnection")
         or normalized == "connectionpooldatasource"
     ):
         return False
-    if identifier in {"spi", "compat"}:
+    if spelling in {"spi", "compat"}:
         return True
-    return "pool" in normalized
+    return "pool" in components
 
 
 def verify_module_root(path: Path, token_texts: list[str]) -> None:

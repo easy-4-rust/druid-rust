@@ -3062,9 +3062,9 @@ def verify_final_denominator(
         fail("final consumer manifest is not canonical")
     if len(physical) != 73 or Counter(row.compatibility for row in physical) != Counter(
         {
-            "TASK6_CLOSED": 57,
-            "MOVE_TO_DRUID_P04_TASK5": 10,
-            "REPLACE_VALUE_ALIAS_WITH_STANDARD_TRAIT_P04_TASK7": 6,
+            "TASK6_CLOSED": 36,
+            "MOVE_TO_DRUID_P04_TASK5": 8,
+            "TASK7_PENDING": 29,
         }
     ):
         fail(

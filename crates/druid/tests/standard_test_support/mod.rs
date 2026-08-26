@@ -9,8 +9,8 @@ use druid_rdbc::metadata::{
 };
 use druid_rdbc::result_set::{ColumnIndex, ResultSet};
 use druid_rdbc::statement::{
-    CallableOutParameter, CallableStatement, GeneratedKeys, ParameterIndex, PreparedParameter,
-    PreparedStatement, Statement, StatementOptions,
+    CallableOutParameter, CallableParameter, CallableStatement, GeneratedKeys, ParameterIndex,
+    PreparedParameter, PreparedStatement, Statement, StatementOptions,
 };
 use druid_rdbc::types::Value;
 use std::collections::VecDeque;
@@ -937,11 +937,15 @@ impl PreparedStatement for TrackingCallableStatement {
 
 #[async_trait::async_trait]
 impl CallableStatement for TrackingCallableStatement {
-    fn register_out_parameter(&mut self, parameter: CallableOutParameter) -> Result<(), RdbcError> {
+    fn register_out_parameter(
+        &mut self,
+        parameter: CallableParameter,
+        out_parameter: CallableOutParameter,
+    ) -> Result<(), RdbcError> {
         self.prepared.state.record(format!(
-            "callable.out:{}:{}",
-            parameter.index.get(),
-            parameter.type_name
+            "callable.out:{parameter:?}:{}:{}",
+            out_parameter.sql_type(),
+            out_parameter.type_name().unwrap_or_default()
         ));
         Ok(())
     }

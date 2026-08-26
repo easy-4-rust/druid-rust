@@ -491,6 +491,15 @@ impl HighAvailableDataSource {
         self.inner.config.write().driver_timeout = value;
     }
 
+    /// Task 6 compatibility alias for [`Self::set_driver_timeout`].
+    #[deprecated(
+        since = "0.0.0-design",
+        note = "use set_driver_timeout; this alias is removed in the next breaking release"
+    )]
+    pub fn set_physical_timeout(&self, value: Option<Duration>) {
+        self.set_driver_timeout(value);
+    }
+
     /// 设置连续建连错误重试间隔。
     pub fn set_time_between_connect_error(&self, value: Duration) {
         self.inner.config.write().time_between_connect_error = value;

@@ -281,6 +281,23 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             with self.subTest(source=source), self.assertRaises(VerificationError):
                 verify_tree(self.root, phase="transitional")
 
+    def test_release_savepoint_is_not_a_lease_runtime_identity(self) -> None:
+        """Identifier components distinguish JDBC release from a Druid lease helper."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub trait Contract: Send { fn release_savepoint(&mut self); }\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+        source.write_text(
+            "pub trait Contract: Send { fn lease_handle(&mut self); }\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "lease_handle|runtime"):
+            verify_tree(self.root, phase="transitional")
+
     def test_allows_exact_javax_sql_pool_names_only(self) -> None:
         """JDBC PooledConnection names survive while generic pool policy does not."""
 

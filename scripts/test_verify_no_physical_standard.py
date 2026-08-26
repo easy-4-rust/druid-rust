@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import json
+import inspect
 import tempfile
 import unittest
 from pathlib import Path
 
+import verify_no_physical_standard as verifier
 from verify_no_physical_standard import (
     VerificationError,
     discover_production_files,
@@ -254,6 +256,13 @@ class NoPhysicalVerifierTest(unittest.TestCase):
                 {"crates/druid/tests/old_close_test.rs"},
             ),
         )
+
+    def test_live_gate_requires_exact_method_test_and_public_contract_execution(self) -> None:
+        source = inspect.getsource(verifier.verify_repository)
+        self.assertIn("verify_task6_method_parity.py", source)
+        self.assertIn("verify_handoff_ledgers", source)
+        self.assertIn("deleted_test_parity.execute_targets", source)
+        self.assertIn("public_contract.verify_repository", source)
 
 
 if __name__ == "__main__":

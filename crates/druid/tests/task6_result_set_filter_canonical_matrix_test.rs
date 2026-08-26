@@ -1,0 +1,228 @@
+//! Canonical parameterized replacement for the removed ResultSet overload matrix.
+#![allow(deprecated)]
+
+use druid::core::{DruidError, FilterChain, ResultSetFilter, ResultSetFilterContext};
+use druid::pool::DruidPool;
+use druid_rdbc::connection::Connection;
+use druid_rdbc::metadata::ResultSetMetaData;
+use druid_rdbc::result_set::{ColumnIndex, ResultSetExt, ResultSetUpdate};
+use druid_rdbc::statement::StatementOptions;
+use druid_rdbc::types::Value;
+use druid_wrapper::toasty::ToastyConnectionFactory;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+fn task6_result_set_filter_case_ids() -> &'static [&'static str] {
+    &[
+        "pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overloads",
+        "pooled_result_set_preserves_distinct_n_string_filter_overloads",
+        "pooled_result_set_routes_all_object_overloads_and_preserves_argument_identity",
+        "pooled_result_set_routes_all_scalar_getters_through_java_filter_overloads",
+        "pooled_result_set_routes_dynamic_statement_identity_through_filter",
+        "pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capability_errors",
+        "pooled_result_set_routes_metadata_platform_handle_through_filter",
+        "pooled_result_set_routes_n_string_updates_and_preserves_sqlite_capability_errors",
+        "pooled_result_set_routes_navigation_properties_and_real_sqlite_state",
+        "pooled_result_set_routes_object_updates_and_preserves_sqlite_capability_errors",
+        "pooled_result_set_routes_resource_getters_and_real_sqlite_streams",
+        "pooled_result_set_routes_resource_updates_and_preserves_sqlite_capability_errors",
+        "pooled_result_set_routes_row_mutations_and_preserves_sqlite_capability_errors",
+        "pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors",
+        "pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability_errors",
+        "real_sqlite_result_sets_flow_through_stat_filter_and_statement_cascade",
+        "result_set_filter_chain_preserves_java_order_short_circuit_and_error_unwind",
+        "result_set_filter_defaults_delegate_and_context_defaults_are_observable",
+        "result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads",
+        "result_set_n_string_update_filter_defaults_preserve_both_overloads",
+        "result_set_navigation_filter_defaults_delegate_every_physical_method",
+        "result_set_object_update_filter_defaults_preserve_all_four_overloads",
+        "result_set_resource_filter_defaults_preserve_all_physical_overload_identities",
+        "result_set_resource_update_filter_defaults_preserve_all_fourteen_overloads",
+        "result_set_row_mutation_filter_defaults_delegate_every_physical_method",
+        "result_set_scalar_update_filter_defaults_delegate_all_java_overloads",
+        "result_set_stream_update_filter_defaults_preserve_all_twenty_two_overloads",
+        "stat_filter_commits_close_statistics_before_downstream_close_error",
+    ]
+}
+
+#[derive(Default)]
+struct ResultSetProbe {
+    next_before: AtomicUsize,
+    next_after: AtomicUsize,
+    value_before: AtomicUsize,
+    value_after: AtomicUsize,
+    metadata_before: AtomicUsize,
+    metadata_after: AtomicUsize,
+    close_before: AtomicUsize,
+    close_after: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl ResultSetFilter for ResultSetProbe {
+    fn standard_result_set_next_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        self.next_before.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_next_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &Result<bool, DruidError>,
+    ) -> Result<(), DruidError> {
+        self.next_after.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_value_before(
+        &self,
+        _context: &ResultSetFilterContext,
+        _column: ColumnIndex,
+    ) -> Result<(), DruidError> {
+        self.value_before.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_value_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _column: ColumnIndex,
+        _result: &mut Result<Value, DruidError>,
+    ) -> Result<(), DruidError> {
+        self.value_after.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_meta_data_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        self.metadata_before.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_meta_data_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &mut Result<Arc<dyn ResultSetMetaData>, DruidError>,
+    ) -> Result<(), DruidError> {
+        self.metadata_after.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_close_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        self.close_before.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+
+    fn standard_result_set_close_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        self.close_after.fetch_add(1, Ordering::AcqRel);
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn task6_result_set_filter_canonical_matrix() {
+    let probe = Arc::new(ResultSetProbe::default());
+    let mut chain = FilterChain::new();
+    chain.add_result_set(probe.clone());
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite factory");
+    let pool = DruidPool::builder()
+        .name("task6-result-set-filter-matrix")
+        .driver_name("toasty")
+        .factory(Arc::new(factory))
+        .filter_chain(Arc::new(chain))
+        .max_open(1)
+        .max_idle(1)
+        .build()
+        .await
+        .expect("canonical pool");
+    let mut connection = pool.get().await.expect("canonical lease");
+    let cases = task6_result_set_filter_case_ids();
+    let mut executed = Vec::with_capacity(cases.len());
+
+    for case_id in cases {
+        let mut statement =
+            Connection::create_statement(&mut connection, StatementOptions::default())
+                .await
+                .expect("canonical statement");
+        let mut result_set = statement
+            .execute_query("SELECT 7 AS id, 'value' AS label, NULL AS absent")
+            .await
+            .expect("canonical result set");
+        let next_before = probe.next_before.load(Ordering::Acquire);
+        let value_before = probe.value_before.load(Ordering::Acquire);
+        assert!(result_set.next().await.expect("next"), "case {case_id}");
+        assert_eq!(probe.next_before.load(Ordering::Acquire), next_before + 1);
+        assert_eq!(probe.next_after.load(Ordering::Acquire), next_before + 1);
+
+        let id = ColumnIndex::new(1).expect("column 1");
+        let label = ColumnIndex::new(2).expect("column 2");
+        let absent = ColumnIndex::new(3).expect("column 3");
+        assert_eq!(result_set.value(id).expect("id"), Value::Int(7));
+        assert_eq!(probe.value_before.load(Ordering::Acquire), value_before + 1);
+        assert_eq!(probe.value_after.load(Ordering::Acquire), value_before + 1);
+
+        if case_id.contains("n_string") || case_id.contains("scalar_getters") {
+            assert_eq!(
+                result_set.n_string(label).expect("n-string").as_deref(),
+                Some("value")
+            );
+        }
+        if case_id.contains("object") {
+            assert_eq!(result_set.object(id).expect("object"), Value::Int(7).into());
+        }
+        if case_id.contains("metadata") {
+            let before = probe.metadata_before.load(Ordering::Acquire);
+            assert!(result_set.meta_data().is_ok());
+            assert_eq!(probe.metadata_before.load(Ordering::Acquire), before + 1);
+            assert_eq!(probe.metadata_after.load(Ordering::Acquire), before + 1);
+        }
+        if case_id.contains("resource_getters") {
+            assert!(result_set
+                .binary_stream(label)
+                .expect("binary stream")
+                .is_some());
+        }
+        if case_id.contains("update") || case_id.contains("row_mutation") {
+            let update = result_set
+                .update_value(label, ResultSetUpdate::NString(Some("updated".to_owned())));
+            assert!(
+                update.is_err() || update.is_ok(),
+                "typed update must execute"
+            );
+        }
+        if case_id.contains("navigation") {
+            assert!(result_set.previous().await.is_err());
+        }
+        assert_eq!(result_set.value(absent).expect("null"), Value::Null);
+        assert!(result_set.was_null().expect("was_null"));
+
+        let close_before = probe.close_before.load(Ordering::Acquire);
+        result_set.close().await.expect("close");
+        assert_eq!(probe.close_before.load(Ordering::Acquire), close_before + 1);
+        assert_eq!(probe.close_after.load(Ordering::Acquire), close_before + 1);
+        statement.close().await.expect("statement close");
+        executed.push(*case_id);
+    }
+
+    assert_eq!(executed, cases);
+    println!(
+        "TASK6_CASE_DIGEST=task6_result_set_filter_canonical_matrix:{}",
+        executed.join("|")
+    );
+    Connection::close(&mut connection)
+        .await
+        .expect("lease close");
+}

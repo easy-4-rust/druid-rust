@@ -7,7 +7,8 @@ use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::types::{Row, Value};
+use druid_rdbc::metadata::{ColumnDescriptor, ColumnNullability, ResultSetColumnType};
+use druid_rdbc::types::{Row, Types, Value};
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
 use sqlx::mysql::{MySqlArguments, MySqlConnection, MySqlRow, MySqlTransactionManager};
 use sqlx::postgres::{PgArguments, PgConnection, PgRow, PgTransactionManager};
@@ -32,7 +33,6 @@ fn any_bind_unsupported(value_type: &'static str) -> RdbcError {
     }
 }
 
-#[cfg(test)]
 fn read_only_session_sql(backend: &str, read_only: bool) -> Option<&'static str> {
     match (backend, read_only) {
         ("postgresql", true) => Some("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"),
@@ -118,6 +118,20 @@ impl SqlxConnectionAdapter {
         self.runtime_trace.take()
     }
 
+    fn validate_savepoint_name(name: &str) -> Result<(), RdbcError> {
+        let valid = !name.is_empty()
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
+        if valid {
+            Ok(())
+        } else {
+            Err(RdbcError::InvalidArgument(
+                "savepoint name must contain only ASCII letters, digits, or '_'".to_owned(),
+            ))
+        }
+    }
+
     /// 把当前 raw adapter 转成 canonical owned actor，并在 connection handle 中保留 clone。
     fn standard_actor_core(&mut self) -> Result<Arc<SqlxConnectionActor>, RdbcError> {
         if let Some(actor) = &self.standard_actor {
@@ -146,6 +160,18 @@ impl SqlxConnectionAdapter {
         self.auto_commit
     }
 
+    pub(super) fn standard_read_only_core(&self) -> bool {
+        self.read_only
+    }
+
+    pub(super) const fn standard_savepoint_sequence_core(&self) -> u64 {
+        self.savepoint_sequence
+    }
+
+    pub(super) fn standard_url_core(&self) -> &str {
+        &self.url
+    }
+
     pub(super) fn standard_product_name_core(&self) -> Result<String, RdbcError> {
         match self.backend_key() {
             "sqlite" => Ok("SQLite".to_owned()),
@@ -155,6 +181,71 @@ impl SqlxConnectionAdapter {
                 operation: "sqlx_database_metadata_product_name",
             }),
         }
+    }
+
+    pub(super) async fn standard_product_version_core(&mut self) -> Result<String, RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Sqlite(connection) => {
+                sqlx::query_scalar::<Sqlite, String>("select sqlite_version()")
+                    .fetch_one(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                sqlx::query_scalar::<MySql, String>("select version()")
+                    .fetch_one(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                sqlx::query_scalar::<Postgres, String>("show server_version")
+                    .fetch_one(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::Any(connection) => {
+                sqlx::query_scalar::<Any, String>("select version()")
+                    .fetch_one(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+        }
+    }
+
+    pub(super) async fn standard_user_name_core(&mut self) -> Result<Option<String>, RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Sqlite(_) => Ok(None),
+            SqlxConnectionBackend::MySql(connection) => {
+                sqlx::query_scalar::<MySql, String>("select current_user()")
+                    .fetch_one(connection)
+                    .await
+                    .map(Some)
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                sqlx::query_scalar::<Postgres, String>("select current_user")
+                    .fetch_one(connection)
+                    .await
+                    .map(Some)
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::Any(_) => Err(RdbcError::UnsupportedOperation {
+                operation: "sqlx_database_metadata_user_name",
+            }),
+        }
+    }
+
+    pub(super) async fn standard_read_only_metadata_core(&mut self) -> Result<bool, RdbcError> {
+        if self.backend_key() == "sqlite" {
+            if let SqlxConnectionBackend::Sqlite(connection) = self.connection_mut()? {
+                return sqlx::query_scalar::<Sqlite, i64>("PRAGMA query_only")
+                    .fetch_one(connection)
+                    .await
+                    .map(|value| value != 0)
+                    .map_err(Self::driver_error);
+            }
+        }
+        Ok(self.read_only)
     }
 
     pub(super) async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -313,6 +404,88 @@ impl SqlxConnectionAdapter {
         } else {
             self.rollback_raw_core().await
         }
+    }
+
+    pub(super) async fn execute_control_statement(&mut self, sql: &str) -> Result<(), RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                sqlx::query(sql)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                sqlx::query(sql)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                sqlx::query(sql)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                sqlx::query(sql)
+                    .execute(connection)
+                    .await
+                    .map_err(Self::driver_error)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) async fn set_read_only_raw_core(
+        &mut self,
+        read_only: bool,
+    ) -> Result<(), RdbcError> {
+        if !self.auto_commit {
+            return Err(RdbcError::InvalidArgument(
+                "read_only cannot change while a transaction is active".to_owned(),
+            ));
+        }
+        self.connection_mut()?;
+        let backend = self.backend_key();
+        let Some(sql) = read_only_session_sql(backend, read_only) else {
+            if read_only {
+                return Err(RdbcError::UnsupportedOperation {
+                    operation: if backend == "sqlite" {
+                        "sqlx_sqlite_read_only_transaction"
+                    } else {
+                        "sqlx_driver_read_only_transaction"
+                    },
+                });
+            }
+            self.read_only = false;
+            return Ok(());
+        };
+        self.execute_control_statement(sql).await?;
+        self.read_only = read_only;
+        Ok(())
+    }
+
+    async fn standard_control_core(&mut self, sql: &str) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.execute_control_statement(sql).await
+        } else {
+            self.execute_control_statement(sql).await
+        }
+    }
+
+    fn next_savepoint_id_core(&mut self) -> u64 {
+        if let Some(actor) = &self.standard_actor {
+            actor.next_savepoint_id()
+        } else {
+            self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
+            self.savepoint_sequence
+        }
+    }
+
+    fn standard_backend_key_core(&self) -> &'static str {
+        self.standard_actor
+            .as_ref()
+            .map_or_else(|| self.backend_key(), |actor| actor.backend_key())
     }
 
     fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, RdbcError> {
@@ -654,7 +827,7 @@ impl SqlxConnectionAdapter {
                 }
                 name if name.contains("CHAR")
                     || name.contains("TEXT")
-                    || matches!(name, "ENUM" | "SET" | "JSON") =>
+                    || std::matches!(name, "ENUM" | "SET" | "JSON") =>
                 {
                     Value::String(row.try_get(index).map_err(Self::driver_error)?)
                 }
@@ -785,13 +958,141 @@ impl SqlxConnectionAdapter {
         Ok(Row::new(values))
     }
 
+    fn column_descriptor(name: &str, type_name: &str, nullable: Option<bool>) -> ColumnDescriptor {
+        let uppercase = type_name.to_ascii_uppercase();
+        let (column_type, signed, case_sensitive) = match uppercase.as_str() {
+            "BOOL" | "BOOLEAN" => (ResultSetColumnType::Jdbc(Types::BOOLEAN), false, false),
+            "TINYINT" => (ResultSetColumnType::Jdbc(Types::TINYINT), true, false),
+            "SMALLINT" | "INT2" => (ResultSetColumnType::Jdbc(Types::SMALLINT), true, false),
+            "INTEGER" | "INT" | "INT4" | "MEDIUMINT" => {
+                (ResultSetColumnType::Jdbc(Types::INTEGER), true, false)
+            }
+            "BIGINT" | "INT8" => (ResultSetColumnType::Jdbc(Types::BIGINT), true, false),
+            "REAL" | "FLOAT4" => (ResultSetColumnType::Jdbc(Types::REAL), true, false),
+            "FLOAT" => (ResultSetColumnType::Jdbc(Types::FLOAT), true, false),
+            "DOUBLE" | "FLOAT8" | "DOUBLE PRECISION" => {
+                (ResultSetColumnType::Jdbc(Types::DOUBLE), true, false)
+            }
+            "NUMERIC" | "DECIMAL" | "NEWDECIMAL" => {
+                (ResultSetColumnType::Jdbc(Types::DECIMAL), true, false)
+            }
+            "DATE" => (ResultSetColumnType::Jdbc(Types::DATE), false, false),
+            "TIME" => (ResultSetColumnType::Jdbc(Types::TIME), false, false),
+            "DATETIME" | "TIMESTAMP" => (ResultSetColumnType::Jdbc(Types::TIMESTAMP), false, false),
+            value if value.contains("BLOB") || value.contains("BINARY") || value == "BYTEA" => {
+                (ResultSetColumnType::Jdbc(Types::VARBINARY), false, false)
+            }
+            value
+                if value.contains("CHAR")
+                    || value.contains("TEXT")
+                    || std::matches!(value, "NAME" | "ENUM" | "SET" | "JSON") =>
+            {
+                (ResultSetColumnType::Jdbc(Types::VARCHAR), false, true)
+            }
+            "NULL" => (ResultSetColumnType::Jdbc(Types::NULL), false, false),
+            other => (ResultSetColumnType::Named(other.to_owned()), false, true),
+        };
+        let nullability = match nullable {
+            Some(true) => ColumnNullability::Nullable,
+            Some(false) => ColumnNullability::NoNulls,
+            None => ColumnNullability::Unknown,
+        };
+        ColumnDescriptor::new(name, type_name, nullability)
+            .with_driver_type(name, column_type)
+            .with_flags(false, case_sensitive, true, false, signed)
+    }
+
+    pub(super) async fn describe_columns_core(
+        &mut self,
+        sql: &str,
+    ) -> Result<Vec<ColumnDescriptor>, RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect())
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect())
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect())
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                Ok(describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect())
+            }
+        }
+    }
+
     pub(super) async fn fetch_rows_with_labels(
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<(Vec<Row>, Vec<String>), RdbcError> {
+    ) -> Result<(Vec<Row>, Vec<ColumnDescriptor>), RdbcError> {
         match self.connection_mut()? {
             SqlxConnectionBackend::Any(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
                 let statement = {
                     let statement = (&mut *connection)
                         .prepare(sql)
@@ -799,10 +1100,17 @@ impl SqlxConnectionAdapter {
                         .map_err(Self::driver_error)?;
                     Statement::to_owned(&statement)
                 };
-                let labels = statement
+                let columns = describe
                     .columns()
                     .iter()
-                    .map(|column| column.name().to_string())
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
                     .collect();
                 let rows = Self::bind_any_prepared_values(&statement, params)?
                     .fetch_all(connection)
@@ -812,9 +1120,13 @@ impl SqlxConnectionAdapter {
                     .into_iter()
                     .map(Self::decode_any_row)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok((rows, labels))
+                Ok((rows, columns))
             }
             SqlxConnectionBackend::MySql(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
                 let statement = {
                     let statement = (&mut *connection)
                         .prepare(sql)
@@ -822,10 +1134,17 @@ impl SqlxConnectionAdapter {
                         .map_err(Self::driver_error)?;
                     Statement::to_owned(&statement)
                 };
-                let labels = statement
+                let columns = describe
                     .columns()
                     .iter()
-                    .map(|column| column.name().to_owned())
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
                     .collect();
                 let rows = Self::bind_mysql_prepared_values(&statement, params)
                     .fetch_all(connection)
@@ -835,9 +1154,13 @@ impl SqlxConnectionAdapter {
                     .into_iter()
                     .map(Self::decode_mysql_row)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok((rows, labels))
+                Ok((rows, columns))
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
                 let statement = {
                     let statement = (&mut *connection)
                         .prepare(sql)
@@ -845,10 +1168,17 @@ impl SqlxConnectionAdapter {
                         .map_err(Self::driver_error)?;
                     Statement::to_owned(&statement)
                 };
-                let labels = statement
+                let columns = describe
                     .columns()
                     .iter()
-                    .map(|column| column.name().to_owned())
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
                     .collect();
                 let rows = Self::bind_postgresql_prepared_values(&statement, params)
                     .fetch_all(connection)
@@ -858,9 +1188,13 @@ impl SqlxConnectionAdapter {
                     .into_iter()
                     .map(Self::decode_postgresql_row)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok((rows, labels))
+                Ok((rows, columns))
             }
             SqlxConnectionBackend::Sqlite(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
                 let statement = {
                     let statement = (&mut *connection)
                         .prepare(sql)
@@ -868,10 +1202,17 @@ impl SqlxConnectionAdapter {
                         .map_err(Self::driver_error)?;
                     Statement::to_owned(&statement)
                 };
-                let labels = statement
+                let columns = describe
                     .columns()
                     .iter()
-                    .map(|column| column.name().to_string())
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
                     .collect();
                 let rows = Self::bind_sqlite_prepared_values(&statement, params)
                     .fetch_all(connection)
@@ -881,7 +1222,7 @@ impl SqlxConnectionAdapter {
                     .into_iter()
                     .map(Self::decode_sqlite_row)
                     .collect::<Result<Vec<_>, _>>()?;
-                Ok((rows, labels))
+                Ok((rows, columns))
             }
         }
     }
@@ -992,6 +1333,33 @@ druid_rdbc::impl_standard_wrapper!(SqlxConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
+    async fn exec(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<druid_rdbc::statement::ExecResult, RdbcError> {
+        let result = if let Some(actor) = &self.standard_actor {
+            actor.execute_update_result(sql, params).await?
+        } else {
+            self.execute_update_core(sql, params).await?
+        };
+        Ok(druid_rdbc::statement::ExecResult {
+            rows_affected: result.rows_affected,
+            last_insert_id: result.last_insert_id,
+            row_count: result.row_count,
+        })
+    }
+
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.fetch_rows(sql, params).await
+        } else {
+            self.fetch_rows_with_labels(sql, params)
+                .await
+                .map(|(rows, _)| rows)
+        }
+    }
+
     async fn create_statement(
         &mut self,
         options: druid_rdbc::statement::StatementOptions,
@@ -1012,11 +1380,15 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
         let actor = self.standard_actor_core()?;
         let parameter_count = actor.parameter_count(sql).await?;
+        let result_set_meta_data = druid_rdbc::metadata::ResultSetMetaDataSnapshot::new(
+            actor.describe_columns(sql).await?,
+        );
         Ok(Box::new(SqlxPreparedStatement::owned_prepared_statement(
             sql.to_owned(),
             actor,
             options,
             parameter_count,
+            result_set_meta_data,
         )))
     }
 
@@ -1038,6 +1410,53 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         self.rollback_core().await
     }
 
+    async fn rollback_to(
+        &mut self,
+        savepoint: &druid_rdbc::types::Savepoint,
+    ) -> Result<(), RdbcError> {
+        let name = savepoint
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
+        Self::validate_savepoint_name(&name)?;
+        self.standard_control_core(&format!("ROLLBACK TO SAVEPOINT {name}"))
+            .await
+    }
+
+    async fn set_savepoint(&mut self) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        let id = self.next_savepoint_id_core();
+        self.standard_control_core(&format!("SAVEPOINT druid_sp_{id}"))
+            .await?;
+        Ok(druid_rdbc::types::Savepoint { id, name: None })
+    }
+
+    async fn set_savepoint_named(
+        &mut self,
+        name: &str,
+    ) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        Self::validate_savepoint_name(name)?;
+        let id = self.next_savepoint_id_core();
+        self.standard_control_core(&format!("SAVEPOINT {name}"))
+            .await?;
+        Ok(druid_rdbc::types::Savepoint {
+            id,
+            name: Some(name.to_owned()),
+        })
+    }
+
+    async fn release_savepoint(
+        &mut self,
+        savepoint: &druid_rdbc::types::Savepoint,
+    ) -> Result<(), RdbcError> {
+        let name = savepoint
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
+        Self::validate_savepoint_name(&name)?;
+        self.standard_control_core(&format!("RELEASE SAVEPOINT {name}"))
+            .await
+    }
+
     async fn set_auto_commit(&mut self, enabled: bool) -> Result<(), RdbcError> {
         self.set_auto_commit_core(enabled).await
     }
@@ -1049,10 +1468,25 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         ))
     }
 
+    fn read_only(&self) -> Result<bool, RdbcError> {
+        Ok(self
+            .standard_actor
+            .as_ref()
+            .map_or_else(|| self.standard_read_only_core(), |actor| actor.read_only()))
+    }
+
+    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.set_read_only(read_only).await
+        } else {
+            self.set_read_only_raw_core(read_only).await
+        }
+    }
+
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
         druid_rdbc::extensions::ConnectionCapabilities {
             transactions: true,
-            savepoints: false,
+            savepoints: true,
             catalogs: false,
             schemas: false,
             callable_statements: false,
@@ -1064,6 +1498,28 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
             Ok(()) => Ok(true),
             Err(RdbcError::ConnectionDiscarded) => Ok(false),
             Err(error) => Err(error),
+        }
+    }
+
+    async fn ping(&mut self) -> Result<(), RdbcError> {
+        self.ping_connection_core().await
+    }
+
+    async fn warnings(&mut self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.warnings()
+        } else {
+            self.connection_mut()?;
+            Ok(None)
+        }
+    }
+
+    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.clear_warnings()
+        } else {
+            self.connection_mut()?;
+            Ok(())
         }
     }
 
@@ -1080,6 +1536,17 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
             .standard_actor
             .as_ref()
             .map_or_else(|| self.connection.is_none(), |actor| actor.is_closed()))
+    }
+
+    fn driver_name(&self) -> Result<String, RdbcError> {
+        Ok(match self.standard_backend_key_core() {
+            "mysql" => "MySQL",
+            "postgresql" => "PostgreSQL",
+            "sqlite" => "SQLite",
+            "any" => "SQLx Any",
+            _ => "sqlx-closed",
+        }
+        .to_owned())
     }
 }
 

@@ -16,7 +16,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, NoReturn
 
+import verify_task6_deleted_test_parity as deleted_test_parity
+import verify_task6_public_contract as public_contract
 from verify_rdbc_public_paths import Token, tokenize
+from verify_task6_migration_authority import (
+    load_rows as load_migration_authority,
+    module_declares_exact_target,
+    verify_authority_schema,
+    verify_closed_targets,
+    verify_derived_document,
+    verify_handoff_ledgers,
+    verify_standardization,
+)
 
 
 TASK6_BASE = "5afe8609b177544ff7d18461aa84f69efe8ee90e"
@@ -44,6 +55,9 @@ PHYSICAL_MANIFEST = Path(
 )
 CONSUMER_MANIFEST = Path("docs/verification/rdbc-first/rdbc-production-consumers.tsv")
 MIGRATION_DOCUMENT = Path("docs/rdbc/physical-to-standard-migration.md")
+MIGRATION_AUTHORITY = Path(
+    "docs/verification/rdbc-first/task6-migration-authority.tsv"
+)
 API_SNAPSHOT = Path("api/druid-rdbc.single-standard.after.txt")
 PUBLIC_API_TOOLCHAIN = "nightly-2026-08-07-aarch64-apple-darwin"
 TASK6_PENDING = "TASK6_COMPATIBILITY_PENDING"
@@ -67,6 +81,8 @@ class MigrationRow:
     old_path: str
     disposition: str
     target_path: str
+    target_task: str
+    state: str
     evidence: str
 
 
@@ -359,18 +375,34 @@ def read_tsv(path: Path) -> list[dict[str, str]]:
 
 
 def parse_migration_table(path: Path) -> tuple[MigrationRow, ...]:
-    """Parse the exact four-column Markdown table from the Task 6 migration document."""
+    """Parse the six-column derived table, retaining four-column self-test compatibility."""
 
     rows: list[MigrationRow] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if not line.startswith("|"):
             continue
         cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
-        if cells == ["old_path", "disposition", "target_path", "evidence"]:
+        if cells in (
+            ["old_path", "disposition", "target_path", "evidence"],
+            [
+                "old_path",
+                "disposition",
+                "target_path",
+                "target_task",
+                "state",
+                "evidence",
+            ],
+        ):
             continue
         if cells and all(set(cell) <= {"-", ":"} for cell in cells):
             continue
         if len(cells) == 4 and cells[1] in ALLOWED_DISPOSITIONS:
+            rows.append(
+                MigrationRow(
+                    cells[0], cells[1], cells[2], "-", "TASK6_CLOSED", cells[3]
+                )
+            )
+        elif len(cells) == 6 and cells[1] in ALLOWED_DISPOSITIONS:
             rows.append(MigrationRow(*cells))
     if not rows:
         fail(f"migration table contains no disposition rows: {path}")
@@ -486,12 +518,18 @@ def verify_test_disposition_table(
 def task6_manifest_paths(physical: Path, consumers: Path) -> set[str]:
     """Derive old public/consumer paths that cross the atomic Task 6 boundary."""
 
+    task7_aliases = {
+        "druid_rdbc::resource::Array",
+        "druid_rdbc::resource::Blob",
+        "druid_rdbc::resource::Clob",
+        "druid_rdbc::resource::NClob",
+        "druid_rdbc::resource::Ref",
+        "druid_rdbc::resource::SqlXml",
+    }
     required = {
         row["old_path"]
         for row in read_tsv(physical)
-        if "TASK6" in row["compatibility"]
-        or "::spi::" in row["old_path"]
-        or FORBIDDEN_PHYSICAL.search(row["old_path"])
+        if row["old_path"] not in task7_aliases
     }
     required.update(
         row["old_path"]
@@ -527,23 +565,9 @@ def baseline_extra_identities(root: Path, covered: Iterable[str]) -> set[str]:
 
 
 def source_declares_target(root: Path, target: str) -> bool:
-    """Prove a private Druid/wrapper target with a real declaration or module file."""
+    """Prove a private Druid/wrapper target at its exact declared module path."""
 
-    crate, separator, remainder = target.partition("::")
-    if not separator or crate not in {"druid", "druid_wrapper"}:
-        return False
-    crate_directory = "druid-wrapper" if crate == "druid_wrapper" else crate
-    source_root = root / "crates" / crate_directory / "src"
-    parts = remainder.split("::")
-    module_file = source_root.joinpath(*parts).with_suffix(".rs")
-    if module_file.is_file() or source_root.joinpath(*parts, "mod.rs").is_file():
-        return True
-    leaf = parts[-1]
-    declaration = re.compile(rf"\b(?:struct|enum|trait|type|fn)\s+{re.escape(leaf)}\b")
-    return any(
-        declaration.search(path.read_text(encoding="utf-8"))
-        for path in source_root.rglob("*.rs")
-    )
+    return module_declares_exact_target(root, target)
 
 
 def target_exists(root: Path, target: str, public_api_items: set[str]) -> bool:
@@ -585,8 +609,9 @@ def verify_migration_table(
         if row.disposition == "DELETED":
             if row.target_path != "-":
                 fail(f"deleted migration row must use '-' target: {row.old_path}")
-        elif row.target_path == "-" or not target_exists(
-            root, row.target_path, public_api_items
+        elif row.target_path == "-" or (
+            row.state != "TASK7_PENDING"
+            and not target_exists(root, row.target_path, public_api_items)
         ):
             fail(
                 f"migration target does not exist: {row.old_path} -> {row.target_path}"
@@ -702,7 +727,7 @@ def verify_final_consumer_history(root: Path, current: Path) -> int:
     return len(closed)
 
 
-def verify_repository(root: Path) -> tuple[int, int, int, int, int]:
+def verify_repository(root: Path) -> tuple[int, int, int, int, int, int]:
     """Run the complete source, API, rustdoc, migration, and history gate."""
 
     metadata = load_cargo_metadata(root)
@@ -722,6 +747,27 @@ def verify_repository(root: Path) -> tuple[int, int, int, int, int]:
         )
     rustdoc = generate_rustdoc_text(root)
     verify_text_artifact("rustdoc", rustdoc)
+    run_checked(
+        ["python3", "scripts/verify_task6_method_parity.py"],
+        cwd=root,
+        label="Task 6 exact method parity",
+    )
+    try:
+        public_contract_rows, _, _ = public_contract.verify_repository(root)
+    except (
+        OSError,
+        subprocess.TimeoutExpired,
+        public_contract.VerificationError,
+    ) as error:
+        fail(f"Druid/wrapper/admin public contract failed: {error}")
+    authority_rows = load_migration_authority(root / MIGRATION_AUTHORITY)
+    verify_authority_schema(authority_rows)
+    verify_standardization(
+        authority_rows, tuple(read_tsv(root / PHYSICAL_MANIFEST))
+    )
+    verify_closed_targets(root, authority_rows, public_api_items(api))
+    verify_handoff_ledgers(root, authority_rows)
+    verify_derived_document(root, authority_rows)
     manifest_paths = task6_manifest_paths(
         root / PHYSICAL_MANIFEST, root / CONSUMER_MANIFEST
     )
@@ -734,13 +780,50 @@ def verify_repository(root: Path) -> tuple[int, int, int, int, int]:
         public_api_items=public_api_items(api),
         required_extra=extras,
     )
+    authority_identity = {
+        (
+            row["old_path"],
+            row["disposition"],
+            row["target_path"],
+            row["target_task"],
+            row["state"],
+            row["evidence"],
+        )
+        for row in authority_rows
+    }
+    document_identity = {
+        (
+            row.old_path,
+            row.disposition,
+            row.target_path,
+            row.target_task,
+            row.state,
+            row.evidence,
+        )
+        for row in migration_rows
+    }
+    if document_identity != authority_identity:
+        fail("derived migration document does not match the authoritative TSV")
     closed = verify_final_consumer_history(root, CONSUMER_MANIFEST)
-    test_rows = verify_test_disposition_table(
-        root,
-        root / MIGRATION_DOCUMENT,
-        baseline_deleted_tests(root),
+    try:
+        base_tests = deleted_test_parity.derive_base_tests(root)
+        test_rows = deleted_test_parity.verify_ledger(
+            base_tests,
+            deleted_test_parity.parse_ledger(root / deleted_test_parity.DEFAULT_LEDGER),
+            root,
+        )
+        support_targets = deleted_test_parity.verify_zero_test_support(root)
+        deleted_test_parity.execute_targets(root, test_rows, support_targets)
+    except deleted_test_parity.VerificationError as error:
+        fail(f"exact deleted-test parity failed: {error}")
+    return (
+        len(files),
+        len(migration_rows),
+        len(extras),
+        closed,
+        len(test_rows),
+        public_contract_rows,
     )
-    return len(files), len(migration_rows), len(extras), closed, len(test_rows)
 
 
 def main() -> int:
@@ -752,8 +835,8 @@ def main() -> int:
     )
     arguments = parser.parse_args()
     try:
-        files, migration_rows, extras, closed, test_rows = verify_repository(
-            arguments.root.resolve()
+        files, migration_rows, extras, closed, test_rows, public_contract_rows = (
+            verify_repository(arguments.root.resolve())
         )
     except (OSError, UnicodeError, VerificationError) as error:
         print(f"NO_PHYSICAL_STANDARD_FAIL={error}")
@@ -766,7 +849,8 @@ def main() -> int:
     print(f"MIGRATION_IDENTITIES_CLOSED={migration_rows}")
     print(f"NEWLY_DISCOVERED_IDENTITIES_CLOSED={extras}")
     print(f"TRANSITIONAL_CONSUMER_IDENTITIES_CLOSED={closed}")
-    print(f"DELETED_TEST_DISPOSITIONS={test_rows}")
+    print(f"DELETED_TEST_FUNCTION_MIGRATIONS={test_rows}")
+    print(f"PUBLIC_CONFIG_WIRE_BREAKS_DISPOSITIONED={public_contract_rows}")
     print("ACTIVE_TRANSITIONAL_CONSUMERS=0")
     return 0
 

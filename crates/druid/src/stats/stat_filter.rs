@@ -636,7 +636,10 @@ fn build_slow_parameters(
 }
 
 fn slow_prepared_parameter(parameter: &PreparedInputParameter) -> serde_json::Value {
-    slow_value(&parameter.value)
+    parameter.scalar_value().map_or_else(
+        |_| json_marker("<native-parameter>"),
+        |value| slow_value(&value),
+    )
 }
 
 fn slow_value(value: &Value) -> serde_json::Value {

@@ -13,6 +13,7 @@ use super::exception_sorter::ExceptionSorter;
 use super::fatal_error_handler::FatalErrorHandler;
 use super::filter::ConnectionEvent;
 use super::filter_chain::FilterChain;
+use super::owner_disposition_control::OwnerDispositionControl;
 use super::prepared_statement_key::PreparedStatementKey;
 use super::prepared_statement_method_type::PreparedStatementMethodType;
 use super::proxy_attributes::{ProxyAttributeValue, ProxyAttributes};
@@ -31,6 +32,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// Native pool 回收完整 holder 的一次性回调。
 pub type DruidConnectionReturnCallback =
     Box<dyn FnOnce(DruidConnectionHolder, ConnectionRecycleDisposition) -> bool + Send>;
+
+/// Synchronous one-shot discard notification, separate from the later holder return.
+pub type DruidConnectionDispositionObserver =
+    Box<dyn FnOnce(ConnectionRecycleDisposition) + Send + 'static>;
 
 /// 外部连接池 canonical standard lease 的一次性归还回调。
 pub type StandardConnectionReturnCallback = Box<
@@ -55,6 +60,7 @@ pub struct DruidPooledConnection {
     exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     fatal_error_handler: Option<Arc<dyn FatalErrorHandler>>,
     return_connection: Option<DruidConnectionReturnCallback>,
+    owner_disposition: Arc<OwnerDispositionControl>,
     lease_active: Arc<AtomicBool>,
     execution_running: Arc<AtomicBool>,
     standard_policy: Option<Arc<StandardLogicalPolicy>>,
@@ -104,6 +110,10 @@ impl std::fmt::Debug for DruidPooledConnection {
             .field("exception_sorter", &self.exception_sorter.is_some())
             .field("fatal_error_handler", &self.fatal_error_handler.is_some())
             .field("return_connection", &self.return_connection.is_some())
+            .field(
+                "owner_disposition_signaled",
+                &self.owner_disposition.is_signaled(),
+            )
             .field("lease_active", &self.lease_active.load(Ordering::Acquire))
             .field(
                 "execution_running",
@@ -133,10 +143,28 @@ impl DruidPooledConnection {
 
     /// Creates a logical connection from one canonical holder.
     pub fn with_holder(
+        holder: DruidConnectionHolder,
+        data_source: String,
+        filter_chain: Option<Arc<FilterChain>>,
+        keep_underlying_transaction_isolation: bool,
+        return_connection: DruidConnectionReturnCallback,
+    ) -> Self {
+        Self::with_holder_and_observer(
+            holder,
+            data_source,
+            filter_chain,
+            keep_underlying_transaction_isolation,
+            Box::new(|_| {}),
+            return_connection,
+        )
+    }
+
+    fn with_holder_and_observer(
         mut holder: DruidConnectionHolder,
         data_source: String,
         filter_chain: Option<Arc<FilterChain>>,
         keep_underlying_transaction_isolation: bool,
+        disposition_observer: DruidConnectionDispositionObserver,
         return_connection: DruidConnectionReturnCallback,
     ) -> Self {
         let id = holder.connection_id();
@@ -148,6 +176,7 @@ impl DruidPooledConnection {
             holder.mark_discarded();
             holder.standard_resource_registry().current_generation()
         };
+        let owner_disposition = Arc::new(OwnerDispositionControl::new(disposition_observer));
         let standard_policy = Some(StandardLogicalPolicy::new(
             id,
             data_source.clone(),
@@ -156,6 +185,7 @@ impl DruidPooledConnection {
             filter_chain.clone(),
             holder.defaults().standard_auto_commit(),
             resource_generation,
+            Arc::clone(&owner_disposition),
         ));
         let connected_time_millis = now_millis().saturating_sub(
             holder
@@ -175,6 +205,7 @@ impl DruidPooledConnection {
             exception_sorter: None,
             fatal_error_handler: None,
             return_connection: Some(return_connection),
+            owner_disposition,
             lease_active,
             execution_running,
             standard_policy,
@@ -211,6 +242,32 @@ impl DruidPooledConnection {
             data_source,
             filter_chain,
             keep_underlying_transaction_isolation,
+            return_connection,
+        );
+        connection.standard_test_on_return = test_on_return;
+        connection
+    }
+
+    /// Creates a logical connection with an immediate one-shot discard observer.
+    ///
+    /// The observer updates pool accounting or external-pool poison synchronously; the real holder
+    /// remains owned by this connection and is transferred exactly once during close or Drop.
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_standard_holder_and_disposition_observer(
+        holder: DruidConnectionHolder,
+        data_source: String,
+        filter_chain: Option<Arc<FilterChain>>,
+        keep_underlying_transaction_isolation: bool,
+        test_on_return: bool,
+        disposition_observer: DruidConnectionDispositionObserver,
+        return_connection: DruidConnectionReturnCallback,
+    ) -> Self {
+        let mut connection = Self::with_holder_and_observer(
+            holder,
+            data_source,
+            filter_chain,
+            keep_underlying_transaction_isolation,
+            disposition_observer,
             return_connection,
         );
         connection.standard_test_on_return = test_on_return;
@@ -476,18 +533,17 @@ impl DruidPooledConnection {
                 exception_sorter.is_exception_fatal(exception)
             });
         if fatal {
-            if let Some(holder) = self.holder.as_mut() {
-                holder.mark_discarded();
-            }
             let fatal_error_handler = self.fatal_error_handler.clone();
             let on_fatal_error = fatal_error_handler.as_ref().is_some_and(|handler| {
                 let product_error = DruidError::from(error.clone());
                 handler.handle_fatal_error(&product_error, sql)
             });
-            // Java `handleFatalError` 当场执行 discardConnection，而不是等用户
-            // 随后 close；这样 activeCount 会在错误返回前释放。
-            let refill_requested = self.discard_connection();
-            if on_fatal_error && !refill_requested {
+            // Pool accounting/poison is synchronous, but ownership of the real
+            // holder stays with this logical connection until close/Drop. The
+            // later transfer observes the one-shot signal and cannot account a
+            // second discard.
+            self.signal_owner_discard(&ConnectionRecycleDisposition::discard());
+            if on_fatal_error {
                 if let Some(handler) = fatal_error_handler {
                     handler.request_fatal_error_refill();
                 }
@@ -523,6 +579,28 @@ impl DruidPooledConnection {
                 self.notify_connection_error(error);
             }
             self.handle_exception_with_sql(error, sql);
+        }
+        result
+    }
+
+    /// Completes a result already classified by [`StandardLogicalPolicy`].
+    ///
+    /// The shared policy owns sorter/filter/stat classification for direct canonical execution.
+    /// When it marks the lease fatal, this owner records the shared disposition while retaining
+    /// the real holder until close/Drop; re-running the sorter here would duplicate fatal-handler
+    /// notifications.
+    fn finish_standard_policy_result<T>(
+        &mut self,
+        policy: &StandardLogicalPolicy,
+        result: Result<T, RdbcError>,
+    ) -> Result<T, RdbcError> {
+        if let Err(error) = &result {
+            if error.sql_exception().is_some() {
+                self.notify_connection_error(error);
+            }
+        }
+        if policy.is_discarded() {
+            self.signal_owner_discard(&ConnectionRecycleDisposition::discard());
         }
         result
     }
@@ -656,6 +734,12 @@ impl DruidPooledConnection {
     fn standard_ref(
         &self,
     ) -> Result<&(dyn druid_rdbc::connection::Connection + 'static), RdbcError> {
+        if !self.lease_active.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionLeaked {
+                id: self.id,
+                held_for: self.borrowed_at.elapsed(),
+            });
+        }
         self.holder
             .as_ref()
             .and_then(DruidConnectionHolder::standard_connection)
@@ -674,6 +758,12 @@ impl DruidPooledConnection {
             return false;
         }
 
+        // A non-reusable lease must notify its owner before the real holder is
+        // transferred. Direct connection methods reach this finalizer without
+        // traversing `StandardLogicalPolicy`; policy-owned statement/result-set
+        // failures may have signalled already, and the control is deliberately
+        // one-shot so pool accounting and external poison remain exact.
+        self.signal_owner_discard(&disposition);
         self.lease_active.store(false, Ordering::Release);
         self.recycled = true;
         if let (Some(holder), Some(return_connection)) =
@@ -684,6 +774,22 @@ impl DruidPooledConnection {
             return return_connection(holder, disposition);
         }
         false
+    }
+
+    /// Signals a non-reusable owner disposition without transferring the holder.
+    ///
+    /// Fatal operation paths call this before returning their error; close/Drop
+    /// later call `recycle_once`, where the same one-shot control prevents pool
+    /// accounting and external poison from being emitted twice.
+    fn signal_owner_discard(&mut self, disposition: &ConnectionRecycleDisposition) -> bool {
+        if disposition.is_reusable() {
+            return false;
+        }
+        if let Some(holder) = self.holder.as_mut() {
+            holder.mark_discarded();
+        }
+        self.lease_active.store(false, Ordering::Release);
+        self.owner_disposition.signal_discard(disposition.clone())
     }
 
     fn notify_connection_closed(&mut self) {
@@ -927,6 +1033,72 @@ druid_rdbc::impl_standard_wrapper!(DruidPooledConnection => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for DruidPooledConnection {
+    async fn exec(
+        &mut self,
+        sql: &str,
+        params: Vec<druid_rdbc::types::Value>,
+    ) -> Result<druid_rdbc::statement::ExecResult, RdbcError> {
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        let driver_params = params.clone();
+        let connection = self.standard_mut()?;
+        let result =
+            policy
+                .execute(
+                    sql,
+                    params,
+                    0,
+                    super::ExecOperation::Update,
+                    move |effective_sql| async move {
+                        connection.exec(&effective_sql, driver_params).await
+                    },
+                    |result| *result,
+                )
+                .await;
+        self.finish_standard_policy_result(policy.as_ref(), result)
+    }
+
+    async fn fetch(
+        &mut self,
+        sql: &str,
+        params: Vec<druid_rdbc::types::Value>,
+    ) -> Result<Vec<druid_rdbc::types::Row>, RdbcError> {
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        let driver_params = params.clone();
+        let connection = self.standard_mut()?;
+        let result = policy
+            .execute(
+                sql,
+                params,
+                0,
+                super::ExecOperation::Query,
+                move |effective_sql| async move {
+                    connection.fetch(&effective_sql, driver_params).await
+                },
+                |rows| druid_rdbc::statement::ExecResult {
+                    row_count: Some(u64::try_from(rows.len()).unwrap_or(u64::MAX)),
+                    ..druid_rdbc::statement::ExecResult::default()
+                },
+            )
+            .await;
+        self.finish_standard_policy_result(policy.as_ref(), result)
+    }
+
+    async fn exec_batch(
+        &mut self,
+        batch: Vec<(String, Vec<druid_rdbc::types::Value>)>,
+    ) -> Result<Vec<i64>, RdbcError> {
+        let result = self.standard_mut()?.exec_batch(batch).await;
+        self.classify_result(result)
+    }
+
     async fn create_statement(
         &mut self,
         options: druid_rdbc::statement::StatementOptions,
@@ -996,6 +1168,12 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .standard_statement_pool();
+        let cache_stats = Arc::clone(
+            self.holder
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .prepared_statement_stats(),
+        );
         let resources = self
             .holder
             .as_ref()
@@ -1007,15 +1185,26 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         let admission = resources.begin_admission(policy.resource_generation())?;
-        let cached = cache.lock().await.take(&key);
+        let (cached, cache_enabled) = {
+            let mut cache = cache.lock().await;
+            let enabled = cache.is_enabled();
+            (cache.take(&key), enabled)
+        };
+        let cache_hit = cached.is_some();
         let statement = if let Some(statement) = cached {
+            cache_stats.record_hit();
             statement
         } else {
             let result = self
                 .standard_mut()?
                 .prepare_statement(&effective_sql, options)
                 .await;
-            self.classify_result_with_sql(result, Some(&effective_sql))?
+            let statement = self.classify_result_with_sql(result, Some(&effective_sql))?;
+            cache_stats.record_prepare();
+            if cache_enabled {
+                cache_stats.record_miss();
+            }
+            statement
         };
         let statement_id = self.next_statement_id();
         let statement = DruidPooledPreparedStatement::new_standard(
@@ -1023,6 +1212,8 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             &effective_sql,
             key,
             cache,
+            cache_stats,
+            cache_hit,
             resources,
             &admission,
             policy,
@@ -1177,6 +1368,35 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         self.after_connection_event(&event, started_at).await
     }
 
+    async fn rollback_to(
+        &mut self,
+        savepoint: &druid_rdbc::types::Savepoint,
+    ) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.rollback_to(savepoint).await;
+        self.classify_result(result)
+    }
+
+    async fn set_savepoint(&mut self) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        let result = self.standard_mut()?.set_savepoint().await;
+        self.classify_result(result)
+    }
+
+    async fn set_savepoint_named(
+        &mut self,
+        name: &str,
+    ) -> Result<druid_rdbc::types::Savepoint, RdbcError> {
+        let result = self.standard_mut()?.set_savepoint_named(name).await;
+        self.classify_result(result)
+    }
+
+    async fn release_savepoint(
+        &mut self,
+        savepoint: &druid_rdbc::types::Savepoint,
+    ) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.release_savepoint(savepoint).await;
+        self.classify_result(result)
+    }
+
     async fn set_auto_commit(&mut self, enabled: bool) -> Result<(), RdbcError> {
         let event = ConnectionEvent::SetAutoCommit(enabled);
         let started_at = Instant::now();
@@ -1204,6 +1424,66 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         let result = self.standard_mut()?.set_read_only(read_only).await;
         self.classify_result(result)?;
         self.after_connection_event(&event, started_at).await
+    }
+
+    fn transaction_isolation(
+        &self,
+    ) -> Result<druid_rdbc::connection::TransactionIsolation, RdbcError> {
+        self.standard_ref()?.transaction_isolation()
+    }
+
+    async fn set_transaction_isolation(
+        &mut self,
+        level: druid_rdbc::connection::TransactionIsolation,
+    ) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.set_transaction_isolation(level).await;
+        self.classify_result(result)
+    }
+
+    fn holdability(&self) -> Result<druid_rdbc::statement::ResultSetHoldability, RdbcError> {
+        self.standard_ref()?.holdability()
+    }
+
+    async fn set_holdability(
+        &mut self,
+        holdability: druid_rdbc::statement::ResultSetHoldability,
+    ) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.set_holdability(holdability).await;
+        self.classify_result(result)
+    }
+
+    async fn set_client_info(&mut self, name: &str, value: Option<&str>) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.set_client_info(name, value).await;
+        self.classify_result(result)
+    }
+
+    fn client_info(&self, name: &str) -> Result<Option<String>, RdbcError> {
+        self.standard_ref()?.client_info(name)
+    }
+
+    async fn native_sql(&mut self, sql: &str) -> Result<String, RdbcError> {
+        self.standard_mut()?.native_sql(sql).await
+    }
+
+    async fn set_network_timeout(&mut self, timeout: std::time::Duration) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.set_network_timeout(timeout).await;
+        self.classify_result(result)
+    }
+
+    fn network_timeout(&self) -> Result<std::time::Duration, RdbcError> {
+        self.standard_ref()?.network_timeout()
+    }
+
+    fn type_map(&self) -> Result<Option<druid_rdbc::types::RdbcTypeMap>, RdbcError> {
+        self.standard_ref()?.type_map()
+    }
+
+    async fn set_type_map(
+        &mut self,
+        type_map: druid_rdbc::types::RdbcTypeMap,
+    ) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.set_type_map(type_map).await;
+        self.classify_result(result)
     }
 
     fn catalog(&self) -> Result<Option<String>, RdbcError> {
@@ -1265,12 +1545,26 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         Ok(valid)
     }
 
+    async fn ping(&mut self) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.ping().await;
+        self.classify_result(result)
+    }
+
+    async fn abort(&mut self) -> Result<(), RdbcError> {
+        let result = self.standard_mut()?.abort().await;
+        self.classify_result(result)
+    }
+
+    fn driver_name(&self) -> Result<String, RdbcError> {
+        self.standard_ref()?.driver_name()
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         self.close_logical_once().await
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
-        Ok(self.recycled)
+        Ok(self.recycled || !self.lease_active.load(Ordering::Acquire))
     }
 }
 

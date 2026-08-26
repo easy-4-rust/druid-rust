@@ -1,17 +1,23 @@
 //! Canonical pooled CallableStatement proxy.
 
+mod identity;
+mod prepared_batch;
+
 use super::filter::ExecOperation;
+use super::optional_statement_state_delegates::delegate_optional_statement_state_methods;
 use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_registry::StandardResourceRegistry;
+use super::statement_state_delegates::delegate_statement_state_methods;
 use super::{DruidPooledResultSet, DruidPooledStatement, ExecResult, FilterChain, RdbcError};
 use crate::stats::StatsCollector;
-use druid_rdbc::metadata::ParameterMetaData;
+use druid_rdbc::metadata::{ParameterMetaData, ResultSetMetaData};
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{
-    CallableOutParameter, CallableStatement, ExecutionResult, GeneratedKeys, ParameterIndex,
-    PreparedParameter, PreparedStatement, Statement,
+    CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
+    ExecutionResult, GeneratedKeys, ParameterIndex, PreparedInputParameter, PreparedParameter,
+    PreparedStatement, Statement,
 };
-use druid_rdbc::types::Value;
+use druid_rdbc::types::{RdbcObject, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -56,10 +62,18 @@ struct CallableStatementView {
     resource: Arc<CallableStatementResource>,
 }
 
+impl CallableStatementView {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
+        self.resource.ensure_open()
+    }
+}
+
 druid_rdbc::impl_standard_wrapper!(CallableStatementView => Statement);
 
 #[async_trait::async_trait]
 impl Statement for CallableStatementView {
+    delegate_optional_statement_state_methods!(resource.statement, "callable statement is busy");
+
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.resource.ensure_open()?;
         self.resource
@@ -204,8 +218,8 @@ impl Statement for CallableStatementView {
 }
 
 struct CallableStatementState {
-    parameters: Vec<Option<PreparedParameter>>,
-    batch_parameter_sets: Vec<Vec<PreparedParameter>>,
+    parameters: Vec<Option<PreparedInputParameter>>,
+    batch_parameter_sets: Vec<Vec<PreparedInputParameter>>,
 }
 
 /// Druid logical proxy over one canonical driver CallableStatement.
@@ -215,8 +229,6 @@ pub struct DruidPooledCallableStatement {
     sql: String,
     state: Mutex<CallableStatementState>,
 }
-
-druid_rdbc::impl_standard_wrapper!(DruidPooledCallableStatement => CallableStatement);
 
 impl DruidPooledCallableStatement {
     /// Wraps one owned canonical CallableStatement.
@@ -307,7 +319,7 @@ impl DruidPooledCallableStatement {
         }
     }
 
-    fn parameter_snapshot(&self) -> Result<Vec<PreparedParameter>, RdbcError> {
+    fn parameter_snapshot(&self) -> Result<Vec<PreparedInputParameter>, RdbcError> {
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -369,6 +381,8 @@ impl DruidPooledCallableStatement {
 
 #[async_trait::async_trait]
 impl Statement for DruidPooledCallableStatement {
+    delegate_statement_state_methods!(statement_base.inner.statement, "callable statement is busy");
+
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.ensure_open()?;
         Statement::query_timeout(&self.statement_base)
@@ -513,31 +527,56 @@ impl Statement for DruidPooledCallableStatement {
             .is_closed()
     }
 
-    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
+    fn warnings(&self) -> Result<Option<druid_rdbc::error::SqlWarning>, RdbcError> {
         self.ensure_open()?;
-        self.resource
+        let result = self
+            .resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .warning_messages()
+            .warnings();
+        self.statement_base
+            .inner
+            .policy
+            .classify(result, Some(&self.sql))
+    }
+
+    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
+        let mut messages = Vec::new();
+        let mut warning = self.warnings()?;
+        while let Some(current) = warning {
+            messages.push(current.message().to_owned());
+            warning = current.next_warning().cloned();
+        }
+        Ok(messages)
     }
 
     fn clear_warnings(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        self.resource
+        let result = self
+            .resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .clear_warnings()
+            .clear_warnings();
+        self.statement_base
+            .inner
+            .policy
+            .classify(result, Some(&self.sql))
     }
 }
 
 #[async_trait::async_trait]
 impl PreparedStatement for DruidPooledCallableStatement {
+    fn sql(&self) -> Result<&str, RdbcError> {
+        self.ensure_open()?;
+        Ok(&self.sql)
+    }
+
     fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let index = parameter.index.get() - 1;
@@ -555,7 +594,32 @@ impl PreparedStatement for DruidPooledCallableStatement {
         if state.parameters.len() <= index {
             state.parameters.resize_with(index + 1, || None);
         }
-        state.parameters[index] = Some(parameter);
+        state.parameters[index] = Some(PreparedInputParameter::RustValue(parameter.value));
+        Ok(())
+    }
+
+    fn set_input_parameter(
+        &mut self,
+        index: ParameterIndex,
+        parameter: PreparedInputParameter,
+    ) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .set_input_parameter(index, parameter.clone())?;
+        let offset = index.get() - 1;
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.parameters.len() <= offset {
+            state.parameters.resize_with(offset + 1, || None);
+        }
+        state.parameters[offset] = Some(parameter);
         Ok(())
     }
 
@@ -574,6 +638,25 @@ impl PreparedStatement for DruidPooledCallableStatement {
             .parameters
             .clear();
         Ok(())
+    }
+
+    fn add_prepared_batch(&mut self) -> Result<(), RdbcError> {
+        self.add_prepared_batch_core()
+    }
+
+    fn add_parameter_batch(&mut self, parameters: Vec<PreparedParameter>) -> Result<(), RdbcError> {
+        self.add_parameter_batch_core(parameters)
+    }
+
+    fn add_input_parameter_batch(
+        &mut self,
+        parameters: Vec<(ParameterIndex, PreparedInputParameter)>,
+    ) -> Result<(), RdbcError> {
+        self.add_input_parameter_batch_core(parameters)
+    }
+
+    fn clear_prepared_batch(&mut self) -> Result<(), RdbcError> {
+        self.clear_prepared_batch_core()
     }
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
@@ -647,6 +730,14 @@ impl PreparedStatement for DruidPooledCallableStatement {
         self.execute_prepared_results().await
     }
 
+    async fn execute_prepared_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.execute_prepared_batch_core().await
+    }
+
+    fn result_set_meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
+        self.result_set_meta_data_core()
+    }
+
     fn parameter_meta_data(&self) -> Result<Arc<dyn ParameterMetaData>, RdbcError> {
         self.ensure_open()?;
         self.resource
@@ -660,7 +751,11 @@ impl PreparedStatement for DruidPooledCallableStatement {
 }
 
 impl CallableStatement for DruidPooledCallableStatement {
-    fn register_out_parameter(&mut self, parameter: CallableOutParameter) -> Result<(), RdbcError> {
+    fn register_out_parameter(
+        &mut self,
+        parameter: CallableParameter,
+        out_parameter: CallableOutParameter,
+    ) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.resource
             .statement
@@ -668,7 +763,33 @@ impl CallableStatement for DruidPooledCallableStatement {
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .register_out_parameter(parameter)
+            .register_out_parameter(parameter, out_parameter)
+    }
+
+    fn set_named_parameter(
+        &mut self,
+        parameter_name: &str,
+        parameter: CallableInputParameter,
+    ) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .set_named_parameter(parameter_name, parameter)
+    }
+
+    fn out_parameter(&self, parameter: &CallableParameter) -> Result<RdbcObject, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .out_parameter(parameter)
     }
 
     fn out_value(&self, index: ParameterIndex) -> Result<Value, RdbcError> {
@@ -681,15 +802,15 @@ impl CallableStatement for DruidPooledCallableStatement {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .out_value(index)
     }
-}
 
-impl std::fmt::Debug for DruidPooledCallableStatement {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("DruidPooledCallableStatement")
-            .field("sql", &self.sql)
-            .field("statement_base", &self.statement_base)
-            .field("closed", &self.is_closed())
-            .finish_non_exhaustive()
+    fn was_null(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .was_null()
     }
 }

@@ -2,6 +2,8 @@
 
 extern crate druid_wrapper as wrapper;
 
+use druid_rdbc::error::RdbcError;
+use druid_rdbc::metadata::{DatabaseMetaDataInfoExt, DatabaseMetaDataLimitsExt};
 use druid_rdbc::types::Value;
 use wrapper::toasty::ToastyConnectionFactory;
 
@@ -59,7 +61,17 @@ async fn toasty_standard_factory_emits_typed_runtime_trace() {
     assert_eq!(metadata.database_product_name().await.unwrap(), "SQLite");
     Connection::close(connection.as_mut()).await.unwrap();
     assert!(prepared.clear_parameters().is_err());
-    assert!(metadata.database_product_name().await.is_err());
+    assert_eq!(
+        metadata.get_database_product_name().await.unwrap(),
+        Some("SQLite".to_owned())
+    );
+    assert!(matches!(
+        metadata.get_database_product_version().await,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "get_database_product_version"
+        })
+    ));
+    assert!(metadata.supports_transactions().await.unwrap());
     Connection::close(connection.as_mut()).await.unwrap();
     assert_eq!(snapshot.column_count(), 1);
     wrapper::task4_runtime_trace::verify_and_emit(trace_probe, trace_expectation).unwrap();

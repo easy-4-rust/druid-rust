@@ -3,6 +3,7 @@
 use crate::standard_adapter_executor::StandardExecutor;
 use crate::standard_query_result::StandardQueryResult;
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::SqlWarning;
 use druid_rdbc::metadata::{ResultSetMetaData, ResultSetMetaDataSnapshot};
 use druid_rdbc::result_set::{ColumnIndex, ResultSet};
 use druid_rdbc::types::{Row, Value};
@@ -17,6 +18,7 @@ pub(crate) struct StandardAdapterResultSet {
     closed: bool,
     lease: Option<Arc<dyn StandardExecutor>>,
     metadata: Arc<ResultSetMetaDataSnapshot>,
+    warnings: Option<SqlWarning>,
 }
 
 impl StandardAdapterResultSet {
@@ -29,6 +31,7 @@ impl StandardAdapterResultSet {
             closed: false,
             lease: Some(lease),
             metadata: Arc::new(ResultSetMetaDataSnapshot::new(result.columns)),
+            warnings: None,
         }
     }
 
@@ -99,6 +102,17 @@ impl ResultSet for StandardAdapterResultSet {
     fn was_null(&self) -> Result<bool, RdbcError> {
         self.ensure_open_core()?;
         Ok(self.was_null.load(Ordering::Acquire))
+    }
+
+    fn warnings(&self) -> Result<Option<SqlWarning>, RdbcError> {
+        self.ensure_open_core()?;
+        Ok(self.warnings.clone())
+    }
+
+    fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        self.warnings = None;
+        Ok(())
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

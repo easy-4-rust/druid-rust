@@ -416,17 +416,18 @@ druid_rdbc::impl_standard_wrapper!(DuckDbConnectionAdapter => Connection);
 impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
     async fn create_statement(
         &mut self,
-        _options: druid_rdbc::statement::StatementOptions,
+        options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
         Ok(Box::new(StandardAdapterStatement::new(
             self.standard_executor_core()?,
+            options,
         )))
     }
 
     async fn prepare_statement(
         &mut self,
         sql: &str,
-        _options: druid_rdbc::statement::StatementOptions,
+        options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
         let executor = self.standard_executor_core()?;
         let parameter_count = executor.parameter_count(sql).await?;
@@ -434,6 +435,7 @@ impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
             sql.to_owned(),
             executor,
             parameter_count,
+            options,
         )))
     }
 

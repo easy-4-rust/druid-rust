@@ -1,6 +1,7 @@
 //! bb8 外部连接池桥接。
 
 use super::sqlx_bb8_connection_manager::SqlxBb8ConnectionManager;
+use crate::sqlx::external_pool_connection_control::ExternalPoolLeaseControl;
 use druid::core::{
     ConnectionRecycleDisposition, DruidConnectionHolder, DruidPooledConnection,
     ExternalConnectionLease, FilterChain, Pool, PoolState,
@@ -30,6 +31,7 @@ pub struct SqlxBb8Pool {
     recycle_count: Arc<AtomicU64>,
     recycle_error_count: Arc<AtomicU64>,
     discard_count: Arc<AtomicU64>,
+    manager_rejection_count: Arc<AtomicU64>,
 }
 
 impl SqlxBb8Pool {
@@ -91,6 +93,7 @@ impl SqlxBb8Pool {
             recycle_count: Arc::new(AtomicU64::new(0)),
             recycle_error_count: Arc::new(AtomicU64::new(0)),
             discard_count: Arc::new(AtomicU64::new(0)),
+            manager_rejection_count: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -112,12 +115,32 @@ impl SqlxBb8Pool {
                 return Err(error);
             }
         };
+        let external_control = Arc::new(ExternalPoolLeaseControl::register(
+            lease.as_ref(),
+            Arc::clone(&self.manager_rejection_count),
+        ));
 
         let id = self.connection_sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let close_count = self.close_count.clone();
         let recycle_count = self.recycle_count.clone();
         let recycle_error_count = self.recycle_error_count.clone();
         let discard_count = self.discard_count.clone();
+        let disposition_signaled = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let signaled_for_observer = Arc::clone(&disposition_signaled);
+        let control_for_observer = Arc::clone(&external_control);
+        let close_for_observer = Arc::clone(&close_count);
+        let discard_for_observer = Arc::clone(&discard_count);
+        let recycle_error_for_observer = Arc::clone(&recycle_error_count);
+        let disposition_observer = Box::new(move |disposition: ConnectionRecycleDisposition| {
+            signaled_for_observer.store(true, Ordering::Release);
+            control_for_observer.poison();
+            close_for_observer.fetch_add(1, Ordering::Relaxed);
+            discard_for_observer.fetch_add(1, Ordering::Relaxed);
+            if disposition.has_recycle_error() {
+                recycle_error_for_observer.fetch_add(1, Ordering::Relaxed);
+            }
+        });
+        let signaled_for_return = Arc::clone(&disposition_signaled);
         let holder = DruidConnectionHolder::with_external_connection(
             Box::new(ExternalConnectionLease::new(lease)),
             id,
@@ -126,31 +149,40 @@ impl SqlxBb8Pool {
         )
         .await
         .map_err(RdbcError::from)?;
-        Ok(DruidPooledConnection::with_standard_holder(
-            holder,
-            self.name.clone(),
-            self.filter_chain.clone(),
-            false,
-            false,
-            Box::new(move |mut holder, disposition| {
-                close_count.fetch_add(1, Ordering::Relaxed);
-                match disposition {
-                    ConnectionRecycleDisposition::Reusable => {
-                        recycle_count.fetch_add(1, Ordering::Relaxed);
-                    }
-                    ConnectionRecycleDisposition::Discard { recycle_error } => {
+        Ok(
+            DruidPooledConnection::with_standard_holder_and_disposition_observer(
+                holder,
+                self.name.clone(),
+                self.filter_chain.clone(),
+                false,
+                false,
+                disposition_observer,
+                Box::new(move |mut holder, disposition| {
+                    if signaled_for_return.load(Ordering::Acquire) {
                         holder.mark_discarded();
-                        discard_count.fetch_add(1, Ordering::Relaxed);
-                        if recycle_error.is_some() {
-                            recycle_error_count.fetch_add(1, Ordering::Relaxed);
+                        drop(holder);
+                        return false;
+                    }
+                    close_count.fetch_add(1, Ordering::Relaxed);
+                    match disposition {
+                        ConnectionRecycleDisposition::Reusable => {
+                            recycle_count.fetch_add(1, Ordering::Relaxed);
+                        }
+                        ConnectionRecycleDisposition::Discard { recycle_error } => {
+                            external_control.poison();
+                            holder.mark_discarded();
+                            discard_count.fetch_add(1, Ordering::Relaxed);
+                            if recycle_error.is_some() {
+                                recycle_error_count.fetch_add(1, Ordering::Relaxed);
+                            }
                         }
                     }
-                }
-                // 丢弃透明租约桥接会触发 bb8 自身唯一的归还路径。
-                drop(holder);
-                false
-            }),
-        ))
+                    // 丢弃透明租约桥接会触发 bb8 自身唯一的归还路径。
+                    drop(holder);
+                    false
+                }),
+            ),
+        )
     }
 }
 

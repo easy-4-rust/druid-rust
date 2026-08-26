@@ -151,7 +151,7 @@ TRACE_RECORD_CALLSITE_COUNTS = {
     (
         "crates/druid-wrapper/src/standard_adapter_statement.rs",
         "task4_trace_statement_update",
-    ): 1,
+    ): 2,
     (
         "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
         "task4_trace_prepared_create",
@@ -163,7 +163,7 @@ TRACE_RECORD_CALLSITE_COUNTS = {
     (
         "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
         "task4_trace_prepared_query",
-    ): 1,
+    ): 2,
     (
         "crates/druid-wrapper/src/standard_adapter_result_set.rs",
         "task4_trace_result_next",
@@ -226,6 +226,10 @@ TRACE_RECORD_CALLSITE_COUNTS = {
         "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
         "task4_trace_connection_close",
     ): 1,
+    (
+        "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+        "task4_trace_database_metadata",
+    ): 2,
     **{
         ("crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs", method): 1
         for method in TRACE_RECORD_METHODS
@@ -246,6 +250,33 @@ TRACE_RECORD_CALLSITE_COUNTS = {
         )
         for family, factory_file in FAMILY_FACTORY_FILES.items()
     },
+}
+TRACE_BRANCH_CALLSITE_COUNTS = {
+    (
+        "crates/druid-wrapper/src/standard_adapter_statement.rs",
+        "execute_update",
+        "task4_trace_statement_update",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_statement.rs",
+        "execute",
+        "task4_trace_statement_update",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+        "execute_prepared_query",
+        "task4_trace_prepared_query",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+        "execute_prepared",
+        "task4_trace_prepared_query",
+    ): 1,
+    (
+        "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+        "database_meta_data",
+        "task4_trace_database_metadata",
+    ): 2,
 }
 COMMON_STAGE_FILES = {
     "StatementCreate": "crates/druid-wrapper/src/standard_adapter_statement.rs",
@@ -323,11 +354,11 @@ COVERAGE_STAGE_REQUIREMENTS = {
 FAMILY_EXECUTOR_RULES = {
     "SQLX": (
         "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
-        "execute_update",
+        "execute_update_result",
     ),
     "TOASTY": (
         "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
-        "standard_execute_update_core",
+        "standard_execute_update_result_core",
     ),
     "RBDC": (
         "crates/druid-wrapper/src/rbdc/rbdc_connection_adapter.rs",
@@ -849,6 +880,29 @@ def canonical_coverage_requirement(
     )
 
 
+def validate_coverage_requirement_binding(
+    family: str, requirement: CoverageRequirement
+) -> None:
+    """Reject any source/function alias for one canonical coverage obligation."""
+
+    expected_kind, expected_path, expected_function, expected_anchor = (
+        canonical_coverage_requirement(family, requirement.requirement_id)
+    )
+    if (
+        requirement.requirement_kind != expected_kind
+        or requirement.source_path != expected_path
+        or requirement.source_function != expected_function
+        or requirement.anchor_id != expected_anchor
+    ):
+        fail(
+            "coverage requirement kind/source/function/anchor is not canonical: "
+            f"{family}:{requirement.requirement_id}:"
+            f"{requirement.requirement_kind}:{requirement.source_path}:"
+            f"{requirement.source_function}:{requirement.anchor_id} != "
+            f"{expected_kind}:{expected_path}:{expected_function}:{expected_anchor}"
+        )
+
+
 def validate_coverage_manifest(
     root: Path, family_specs: tuple[CoverageFamilySpec, ...]
 ) -> None:
@@ -907,22 +961,7 @@ def validate_coverage_manifest(
                     f"{family}:{requirement.requirement_id}:"
                     f"{requirement.requirement_kind}"
                 )
-            expected_kind, expected_path, expected_function, expected_anchor = (
-                canonical_coverage_requirement(family, requirement.requirement_id)
-            )
-            if (
-                requirement.requirement_kind != expected_kind
-                or requirement.source_path != expected_path
-                or requirement.source_function != expected_function
-                or requirement.anchor_id != expected_anchor
-            ):
-                fail(
-                    "coverage requirement kind/source/function/anchor is not canonical: "
-                    f"{family}:{requirement.requirement_id}:"
-                    f"{requirement.requirement_kind}:{requirement.source_path}:"
-                    f"{requirement.source_function}:{requirement.anchor_id} != "
-                    f"{expected_kind}:{expected_path}:{expected_function}:{expected_anchor}"
-                )
+            validate_coverage_requirement_binding(family, requirement)
             if not requirement.compiler_function_name or any(
                 character.isspace() for character in requirement.compiler_function_name
             ):
@@ -1463,6 +1502,7 @@ def verify_trace_record_callsites(root: Path) -> None:
         fail(
             f"runtime trace record callsite multiset drift: missing={missing}, extra={extra}"
         )
+    verify_trace_branch_callsites(root)
 
     track_caller_sources = (
         source_root / "task4_runtime_trace.rs",
@@ -1524,6 +1564,46 @@ def verify_trace_record_callsites(root: Path) -> None:
             "typed validation-success coverage anchor is missing, duplicated, or bypassable: "
             f"definitions={success_definitions}:occurrences={success_occurrences}"
         )
+
+
+def verify_trace_branch_callsites(root: Path) -> None:
+    """Pin duplicate trace calls to exact mutually exclusive production branches."""
+
+    for (relative, function, method), expected in TRACE_BRANCH_CALLSITE_COUNTS.items():
+        path = root / relative
+        if not path.is_file():
+            fail(f"runtime trace branch source is missing: {relative}")
+        source = path.read_text(encoding="utf-8")
+        ranges = function_line_ranges(source, function)
+        if len(ranges) != 1:
+            fail(
+                "runtime trace branch function is missing/ambiguous: "
+                f"{relative}:{function}:{ranges}"
+            )
+        start, end = ranges[0]
+        body = "\n".join(source.splitlines()[start - 1 : end])
+        observed = len(re.findall(rf"(?:\.|::)\s*{re.escape(method)}\s*\(", body))
+        if observed != expected:
+            fail(
+                "runtime trace branch callsite multiplicity drift: "
+                f"{relative}:{function}:{method}:{observed} != {expected}"
+            )
+    toasty_path = (
+        root
+        / "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs"
+    )
+    toasty_source = toasty_path.read_text(encoding="utf-8")
+    start, end = function_line_ranges(toasty_source, "database_meta_data")[0]
+    toasty_body = code_tokens("\n".join(toasty_source.splitlines()[start - 1 : end]))
+    mutually_exclusive = (
+        "if let Some ( executor ) = & self . standard_executor",
+        "else if let Some ( trace ) = & self . runtime_trace",
+        "executor . task4_trace_database_metadata ( )",
+        "trace . task4_trace_database_metadata ( )",
+    )
+    missing = [marker for marker in mutually_exclusive if marker not in toasty_body]
+    if missing:
+        fail(f"Toasty metadata trace branches are not mutually exclusive: {missing}")
 
 
 def evidence_source(root: Path, spec: EvidenceSpec) -> tuple[Path, str]:
@@ -2396,6 +2476,18 @@ def verify_sqlx_ownership(root: Path) -> None:
     missing = [marker for marker in required_actor if marker not in actor_source]
     if missing:
         fail(f"SQLx actor ownership evidence is incomplete: {missing}")
+    required_update_actor = (
+        "async fn execute_update_result",
+        ". execute_update_core ( sql , values )",
+    )
+    missing_update_actor = [
+        marker for marker in required_update_actor if marker not in actor_source
+    ]
+    if missing_update_actor:
+        fail(
+            "SQLx canonical update actor/core call chain is incomplete: "
+            f"{missing_update_actor}"
+        )
     prepared = code_tokens(
         (root / "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs").read_text(
             encoding="utf-8"
@@ -2413,6 +2505,8 @@ def verify_sqlx_ownership(root: Path) -> None:
     )
     if "Arc < SqlxConnectionActor >" not in prepared:
         fail("SQLx Statement/PreparedStatement does not own its executor actor")
+    if "actor . execute_update_result" not in prepared:
+        fail("SQLx Statement bypasses the canonical update-result actor entry")
     if "Arc < SqlxConnectionActor >" not in result_set:
         fail("SQLx ResultSet does not retain its query actor/lease")
     if "Arc < SqlxConnectionActor >" not in metadata:
@@ -2429,6 +2523,41 @@ def verify_sqlx_ownership(root: Path) -> None:
         fail("SQLx parameter metadata is not an immutable Arc snapshot")
 
 
+def verify_family_executor_call_chains(root: Path) -> None:
+    """Bind coverage executors to the canonical update path used by evidence tests."""
+
+    statement = code_tokens(
+        (root / "crates/druid-wrapper/src/standard_adapter_statement.rs").read_text(
+            encoding="utf-8"
+        )
+    )
+    executor = code_tokens(
+        (root / "crates/druid-wrapper/src/standard_adapter_executor.rs").read_text(
+            encoding="utf-8"
+        )
+    )
+    toasty = code_tokens(
+        (
+            root
+            / "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs"
+        ).read_text(encoding="utf-8")
+    )
+    if "executor . execute_update_result" not in statement:
+        fail("canonical Statement bypasses the shared update-result executor")
+    if ". standard_execute_update_result_core ( sql , values )" not in executor:
+        fail("shared executor bypasses the adapter update-result core")
+    required_toasty = (
+        "async fn standard_execute_update_result_core",
+        "self . execute_update_core ( sql , values )",
+    )
+    missing_toasty = [marker for marker in required_toasty if marker not in toasty]
+    if missing_toasty:
+        fail(
+            "Toasty canonical update-result executor/core call chain is incomplete: "
+            f"{missing_toasty}"
+        )
+
+
 def verify_repository(
     root: Path,
     adapters_path: Path = DEFAULT_ADAPTERS,
@@ -2443,6 +2572,7 @@ def verify_repository(
         verify_adapter_source(root, row)
     consumers = verify_consumer_rows(root, root / consumers_path)
     verify_sqlx_ownership(root)
+    verify_family_executor_call_chains(root)
     verify_trace_record_callsites(root)
     specs = evidence_specs(adapters)
     coverage_family_specs = load_coverage_manifest(root, coverage_manifest_path)

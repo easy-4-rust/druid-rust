@@ -1,5 +1,6 @@
 //! `SQLx` canonical 连接的 bb8 管理器。
 
+use crate::sqlx::external_pool_connection_control::take_poisoned;
 use crate::sqlx::SqlxConnectionFactory;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::driver::ConnectionFactory;
@@ -42,6 +43,6 @@ impl bb8::ManageConnection for SqlxBb8ConnectionManager {
     }
 
     fn has_broken(&self, connection: &mut Self::Connection) -> bool {
-        connection.is_closed().unwrap_or(true)
+        take_poisoned(connection.as_ref()) || connection.is_closed().unwrap_or(true)
     }
 }
