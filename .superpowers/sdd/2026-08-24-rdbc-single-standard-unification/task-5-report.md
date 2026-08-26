@@ -813,3 +813,21 @@ DRUID_INTERNAL_OBJECTS=13
 真实外部RBDC/HTTP/libSQL/JDBC Agent服务仍为`NOT_RUN`；deterministic local与compiler coverage不冒充
 external deployment evidence。当前状态是 **FIX_ROUND_4_IMPLEMENTED_PENDING_REVIEW**；只有独立re-review
 可把R3-1/R3-2及C3/N1/I6判为ADDRESSED，Task 6继续阻塞。
+
+## 17. Independent Round 4 re-review — REVIEW CLEAR
+
+Independent scoped re-review of `d95ef45..b115287` returned **REVIEW CLEAR**：
+
+- multi-result cleanup `ADDRESSED`：Statement/Prepared/Callable reject-second probes全部raw `3/3`
+  exactly-once close，primary proxy error保持，cleanup failure留在旧generation retry ownership；
+- cancellation safety `ADDRESSED`：aborted `close_all`、rejected registration与successor close不能丢失
+  registry ownership或留下leaderless `Closing`；Weak coordinator + shutdown signal在holder drop后不保留
+  task/resource；无mutex跨await/callback；
+- I6 `ADDRESSED`：28 exact runtime identities、permit-before-raw mutation和staged-ownership checks均有效；
+- C1/C2/I1-I5无回归；新finding为`0 Critical / 0 Important / 0 Minor`。
+
+Fresh independent gates：verifier `26/26`、C3 `21/21`、registry `10/10`、metadata `3/3`，三crate
+all-target/all-feature、workspace check、Clippy/docs/fmt/diff，classifier `180/75/108`、semantic
+`52/17/0`、denominator `73/57/3647`及RBDC/SQLx/HTTP coverage `15/15`均PASS。
+
+Final status：**TASK5_COMPLETE_REVIEW_CLEAR**。Task 6可以开始。
