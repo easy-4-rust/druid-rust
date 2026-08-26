@@ -2175,29 +2175,28 @@ impl DruidPooledConnection {
             in_transaction: !self.auto_commit(),
         };
 
-        if let Some(filter_chain) = &filter_chain {
-            let before_result = filter_chain.before_batch(&mut context).await;
-            self.classify_result_with_sql(before_result, Some(sql))?;
-        }
-
         let batch = statements
             .iter()
             .cloned()
             .map(|statement| (statement, Vec::<Value>::new()))
             .collect();
-        let result = self.physical_mut()?.exec_batch(batch).await;
+        let around = DruidExecutionFilterPolicy::execute_batch(
+            filter_chain.as_deref(),
+            &mut context,
+            || async { self.physical_mut()?.exec_batch(batch).await },
+            Clone::clone,
+        )
+        .await;
+        let (result, after_result) = match around {
+            Ok(outcome) => outcome,
+            Err(error) => return self.classify_result_with_sql(Err(error), Some(sql)),
+        };
         let result = self.classify_result_with_sql(result, Some(sql));
         self.record_execution(sql, &result);
         if let Some(holder) = self.holder.as_ref() {
             holder.record_execute();
         }
-        if let Some(filter_chain) = &filter_chain {
-            let filter_result = result.clone().map_err(DruidError::from);
-            let after_result = filter_chain
-                .after_batch(&context, &filter_result, start.elapsed())
-                .await;
-            self.classify_result_with_sql(after_result, Some(sql))?;
-        }
+        self.classify_result_with_sql(after_result, Some(sql))?;
         result
     }
 
@@ -2724,8 +2723,6 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        let result = self.standard_mut()?.create_statement(options).await;
-        let statement = self.classify_result(result)?;
         let resources = self
             .holder
             .as_ref()
@@ -2736,7 +2733,9 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
-        let resource_generation = policy.resource_generation();
+        let admission = resources.begin_admission(policy.resource_generation())?;
+        let result = self.standard_mut()?.create_statement(options).await;
+        let statement = self.classify_result(result)?;
         let statement_id = self.next_statement_id();
         let statement = DruidPooledStatement::new_standard(
             statement,
@@ -2751,7 +2750,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             self.stats_collector.clone(),
         );
         resources
-            .register(resource_generation, Arc::clone(&statement.inner))
+            .register(&admission, Arc::clone(&statement.inner))
             .await?;
         let query_timeout = self.effective_query_timeout();
         if query_timeout > 0 {
@@ -2799,6 +2798,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
+        let admission = resources.begin_admission(policy.resource_generation())?;
         let cached = cache.lock().await.take(&key);
         let statement = if let Some(statement) = cached {
             statement
@@ -2816,6 +2816,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             key,
             cache,
             resources,
+            &admission,
             policy,
             self.id,
             statement_id,
@@ -2850,11 +2851,6 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
     ) -> Result<Box<dyn druid_rdbc::statement::CallableStatement>, RdbcError> {
         let effective_sql =
             DruidExecutionFilterPolicy::prepare_statement_sql(self.filter_chain.as_deref(), sql)?;
-        let result = self
-            .standard_mut()?
-            .prepare_call(&effective_sql, options)
-            .await;
-        let statement = self.classify_result_with_sql(result, Some(&effective_sql))?;
         let resources = self
             .holder
             .as_ref()
@@ -2865,11 +2861,18 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
+        let admission = resources.begin_admission(policy.resource_generation())?;
+        let result = self
+            .standard_mut()?
+            .prepare_call(&effective_sql, options)
+            .await;
+        let statement = self.classify_result_with_sql(result, Some(&effective_sql))?;
         let statement_id = self.next_statement_id();
         let statement = DruidPooledCallableStatement::new_standard(
             statement,
             &effective_sql,
             resources,
+            &admission,
             policy,
             self.id,
             statement_id,

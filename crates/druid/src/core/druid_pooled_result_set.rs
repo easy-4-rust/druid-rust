@@ -6,6 +6,7 @@
 //! `core/src/main/java/com/alibaba/druid/pool/DruidPooledResultSet.java`。
 
 use super::druid_pooled_statement::DruidPooledStatementInner;
+use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
 use super::{
@@ -793,6 +794,7 @@ impl DruidPooledResultSet {
     pub(crate) async fn new_standard(
         statement: Arc<DruidPooledStatementInner>,
         mut standard: Box<dyn druid_rdbc::result_set::ResultSet>,
+        admission: &StandardResourceAdmission,
     ) -> Result<Self, RdbcError> {
         let filter_chain = statement.filter_chain.clone();
         let policy = statement
@@ -837,16 +839,13 @@ impl DruidPooledResultSet {
         }
         let (logic_column_map, physical_column_map, hidden_columns) =
             open_context.into_column_mappings();
-        let resource_generation = policy.resource_generation();
         let standard = StandardResultSetResource::new(
             standard,
             filter_chain.clone(),
             Arc::clone(&filter_context),
             policy,
         );
-        resources
-            .register(resource_generation, Arc::clone(&standard))
-            .await?;
+        resources.register(admission, Arc::clone(&standard)).await?;
         Ok(Self {
             id: result_set_id,
             attributes: super::ProxyAttributes::default(),
@@ -874,6 +873,7 @@ impl DruidPooledResultSet {
         stats_collector: Option<Arc<crate::stats::StatsCollector>>,
         standard_resources: Arc<StandardResourceRegistry>,
         standard_policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+        admission: &StandardResourceAdmission,
         standard: Box<dyn druid_rdbc::result_set::ResultSet>,
     ) -> Result<Self, RdbcError> {
         let statement = DruidPooledStatement::new(
@@ -890,7 +890,7 @@ impl DruidPooledResultSet {
             Some(standard_resources),
             Some(standard_policy),
         );
-        Self::new_standard(statement.inner, standard).await
+        Self::new_standard(statement.inner, standard, admission).await
     }
 
     pub(crate) fn with_prepared_statement(

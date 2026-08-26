@@ -22,6 +22,16 @@ impl DruidExecutionFilterPolicy {
         )
     }
 
+    pub(crate) fn statement_add_batch_sql(
+        filter_chain: Option<&FilterChain>,
+        sql: &str,
+    ) -> Result<String, DruidError> {
+        filter_chain.map_or_else(
+            || Ok(sql.to_owned()),
+            |filter_chain| filter_chain.statement_add_batch_sql(sql),
+        )
+    }
+
     pub(crate) async fn complete_statement_creation(
         filter_chain: Option<&FilterChain>,
         stats_collector: Option<&Arc<StatsCollector>>,

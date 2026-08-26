@@ -5,9 +5,11 @@
 //! 来源文件：
 //! `core/src/main/java/com/alibaba/druid/pool/DruidPooledStatement.java`。
 
+use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
 use super::druid_pooled_result_set::DruidPooledResultSetTrace;
 use super::filter::ExecOperation;
 use super::standard_logical_policy::StandardLogicalPolicy;
+use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
 use super::{
@@ -56,6 +58,7 @@ struct DruidPooledStatementState {
     current_result_index: usize,
     generated_keys: Vec<Row>,
     result_set_trace: Vec<DruidPooledResultSetTrace>,
+    standard_batch: Vec<String>,
 }
 
 /// 借用池化连接执行动态 SQL 的普通语句。
@@ -127,6 +130,7 @@ impl DruidPooledStatement {
                     current_result_index: 0,
                     generated_keys: Vec::new(),
                     result_set_trace: Vec::new(),
+                    standard_batch: Vec::new(),
                 }),
             }),
         }
@@ -503,9 +507,9 @@ impl DruidPooledStatement {
         sql: &str,
     ) -> Result<(), RdbcError> {
         self.ensure_open_for(connection)?;
-        let rewritten_sql = self.inner.filter_chain.as_ref().map_or_else(
-            || Ok(sql.to_owned()),
-            |filter_chain| filter_chain.statement_add_batch_sql(sql),
+        let rewritten_sql = DruidExecutionFilterPolicy::statement_add_batch_sql(
+            self.inner.filter_chain.as_deref(),
+            sql,
         )?;
         let result = self.inner.statement.add_batch(&rewritten_sql);
         self.classify(connection, result)
@@ -1198,6 +1202,19 @@ impl DruidPooledStatement {
 }
 
 impl DruidPooledStatementInner {
+    pub(crate) fn begin_standard_admission(&self) -> Result<StandardResourceAdmission, RdbcError> {
+        let resources = self
+            .standard_resources
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        let generation = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .resource_generation();
+        resources.begin_admission(generation)
+    }
+
     async fn close_standard_core(&self) -> Result<(), RdbcError> {
         {
             if self
@@ -1310,6 +1327,7 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
         sql: &str,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         self.ensure_standard_open()?;
+        let admission = self.inner.begin_standard_admission()?;
         self.begin_single_execution(sql, StatementExecuteType::ExecuteQuery);
         let started = Instant::now();
         let policy = self
@@ -1344,7 +1362,7 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
             .await?;
         self.state_mut().last_execute_elapsed = Some(started.elapsed());
         Ok(Box::new(
-            DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw).await?,
+            DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw, &admission).await?,
         ))
     }
 
@@ -1398,6 +1416,7 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
         generated_keys: druid_rdbc::statement::GeneratedKeys,
     ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
         self.ensure_standard_open()?;
+        let admission = self.inner.begin_standard_admission()?;
         self.begin_single_execution(sql, StatementExecuteType::Execute);
         let policy = self
             .inner
@@ -1444,7 +1463,12 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
             wrapped.push(match result {
                 druid_rdbc::statement::ExecutionResult::ResultSet(raw) => {
                     druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(
-                        DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw).await?,
+                        DruidPooledResultSet::new_standard(
+                            Arc::clone(&self.inner),
+                            raw,
+                            &admission,
+                        )
+                        .await?,
                     ))
                 }
                 druid_rdbc::statement::ExecutionResult::UpdateCount(count) => {
@@ -1457,36 +1481,87 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
 
     fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
         self.ensure_standard_open()?;
-        self.inner
+        let policy = self
+            .inner
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        let effective_sql = policy.classify(
+            DruidExecutionFilterPolicy::statement_add_batch_sql(
+                self.inner.filter_chain.as_deref(),
+                &sql,
+            )
+            .map_err(RdbcError::from),
+            Some(&sql),
+        )?;
+        let result = self
+            .inner
             .standard_statement
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .try_lock()
             .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
-            .add_batch(sql)
+            .add_batch(effective_sql.clone());
+        policy.classify(result, Some(&effective_sql))?;
+        self.state_mut().standard_batch.push(effective_sql);
+        Ok(())
     }
 
     fn clear_batch(&mut self) -> Result<(), RdbcError> {
         self.ensure_standard_open()?;
-        self.inner
+        let policy = self
+            .inner
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?;
+        let result = self
+            .inner
             .standard_statement
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .try_lock()
             .map_err(|_| RdbcError::Other("statement is busy".to_string()))?
-            .clear_batch()
+            .clear_batch();
+        policy.classify(result, None)?;
+        self.state_mut().standard_batch.clear();
+        Ok(())
     }
 
     async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
         self.ensure_standard_open()?;
-        self.inner
-            .standard_statement
+        self.begin_batch_execution();
+        let policy = self
+            .inner
+            .standard_policy
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .lock()
+            .clone();
+        let statements = self.state().standard_batch.clone();
+        let sql = statements.join("\n;\n");
+        let inner = Arc::clone(&self.inner);
+        let result = policy
+            .execute_statement_batch(&sql, &statements, self.id(), move || async move {
+                inner
+                    .standard_statement
+                    .as_ref()
+                    .ok_or(RdbcError::ConnectionDiscarded)?
+                    .lock()
+                    .await
+                    .execute_batch()
+                    .await
+            })
             .await
-            .execute_batch()
-            .await
+            .map(|counts| {
+                let mut state = self.state_mut();
+                state.standard_batch.clear();
+                state.first_result_set = false;
+                state.update_count = if counts.len() == 1 { counts[0] } else { -1 };
+                counts
+            });
+        if result.is_err() {
+            self.record_exception();
+        }
+        result
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

@@ -6,6 +6,7 @@
 //! `core/src/main/java/com/alibaba/druid/pool/DruidPooledCallableStatement.java`。
 
 use super::filter::ExecOperation;
+use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
 use super::{
@@ -229,6 +230,10 @@ impl druid_rdbc::statement::Statement for DruidPooledCallableStatement {
         sql: &str,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         self.ensure_standard_callable()?;
+        let admission = self
+            .prepared_statement
+            .standard_statement_inner()
+            .begin_standard_admission()?;
         let resource = Arc::clone(
             self.standard_callable
                 .as_ref()
@@ -262,6 +267,7 @@ impl druid_rdbc::statement::Statement for DruidPooledCallableStatement {
             DruidPooledResultSet::new_standard(
                 self.prepared_statement.standard_statement_inner(),
                 raw,
+                &admission,
             )
             .await?,
         ))
@@ -435,6 +441,10 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         self.ensure_standard_callable()?;
+        let admission = self
+            .prepared_statement
+            .standard_statement_inner()
+            .begin_standard_admission()?;
         let resource = Arc::clone(
             self.standard_callable
                 .as_ref()
@@ -470,6 +480,7 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
             DruidPooledResultSet::new_standard(
                 self.prepared_statement.standard_statement_inner(),
                 raw,
+                &admission,
             )
             .await?,
         ))
@@ -514,15 +525,22 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
         &mut self,
     ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
         self.ensure_standard_callable()?;
-        let resource = self
-            .standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?;
-        let mut statement = resource.statement.lock().await;
-        statement
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .execute_prepared()
+        let resource = Arc::clone(
+            self.standard_callable
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?,
+        );
+        self.prepared_statement
+            .execute_standard_prepared_results(move || async move {
+                resource
+                    .statement
+                    .lock()
+                    .await
+                    .as_mut()
+                    .ok_or(RdbcError::ConnectionDiscarded)?
+                    .execute_prepared()
+                    .await
+            })
             .await
     }
 
@@ -603,6 +621,7 @@ impl DruidPooledCallableStatement {
         callable: Box<dyn druid_rdbc::statement::CallableStatement>,
         sql: &str,
         standard_resources: Arc<StandardResourceRegistry>,
+        admission: &StandardResourceAdmission,
         standard_policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
         connection_id: u64,
         statement_id: u64,
@@ -612,10 +631,9 @@ impl DruidPooledCallableStatement {
         filter_chain: Option<std::sync::Arc<super::FilterChain>>,
         stats_collector: Option<std::sync::Arc<crate::stats::StatsCollector>>,
     ) -> Result<Self, RdbcError> {
-        let resource_generation = standard_policy.resource_generation();
         let callable = StandardCallableStatementResource::new(callable);
         standard_resources
-            .register(resource_generation, Arc::clone(&callable))
+            .register(admission, Arc::clone(&callable))
             .await?;
         Ok(Self {
             prepared_statement: DruidPooledPreparedStatement::new_standard_shell(

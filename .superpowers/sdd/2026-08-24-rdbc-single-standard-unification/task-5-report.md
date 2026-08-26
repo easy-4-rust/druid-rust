@@ -617,3 +617,117 @@ logical-live继续精确9行：`JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0`；semant
 真实外部RBDC/HTTP/libSQL/JDBC Agent服务仍为`NOT_RUN`；deterministic local生产路径与compiler
 coverage不冒充外部部署证据。当前状态是 **FIX_ROUND_2_IMPLEMENTED_PENDING_REVIEW**；只有独立
 re-review可将C3/N1/I6判为ADDRESSED，Task 6继续阻塞。
+
+## 14. Fix round 2 independent re-review correction — FIX_REQUIRED
+
+独立re-review针对`314115b..b1dd9a7`仍给出 **FIX_REQUIRED**。本节覆盖第13节的
+`FIX_ROUND_2_IMPLEMENTED_PENDING_REVIEW`完成倾向；历史文字保留为当轮证据，但不代表当前状态。
+
+- C3：`PARTIAL`。canonical Prepared/Callable generic `execute_prepared`仍直接调用raw，绕过typed
+  parameter Filter/Stat/sorter并泄漏raw ResultSet；ordinary canonical Statement batch仍绕过add边界
+  rewrite/deny及shared batch around policy。
+- N1：`PARTIAL`。registry仅在register时封闭；raw acquisition到register之间没有pending permit，
+  holder可先回池/reopen，late close failure还可能进入新generation。
+- I6：`PARTIAL`。exact runner本身fail-closed，但method obligations与exact test list未覆盖上述C3/N1
+  residual，删除相关policy仍不会使live verifier失败。
+- C1/C2/I1-I5：re-review未发现回归，继续`ADDRESSED`。
+
+当前状态改为 **FIX_ROUND_3_IN_PROGRESS**。本轮仅拥有C3 residual、N1 pre-raw pending admission与
+I6 evidence扩展；frozen `180/75/108`、6 additions、logical 9、semantic `52/17/0`、Task4 frozen
+artifacts以及已处置行为必须保持。Task 6继续阻塞。
+
+## 15. Fix round 3/5 implementation report — pending independent re-review
+
+本轮从`b1dd9a7`开始，只处置Round 2 re-review留下的C3 generic execute/ordinary batch、N1
+pre-raw pending admission和I6 evidence缺口。C1/C2/I1-I5既有行为保持；没有创建worktree或分支，
+没有reset/amend/push，没有修改Cargo topology、Task 4 frozen artifacts或`druid-admin`。
+
+### 15.1 Fresh RED
+
+- C3 focused初始为`12 PASS / 4 FAIL`：Prepared generic execute、Callable generic execute的Filter
+  计数均为`0`而不是`1`；ordinary Statement batch没有before/after事件；Wall拒绝的batch entry仍到达raw。
+- N1把pre-raw permit契约写入producer/registry测试后出现`8 x E0599`，所有失败均是生产registry尚无
+  `begin_admission`，证明旧实现只在raw acquisition之后register时才seal。
+- I6 mutation/self-test初始出现`1 failure + 2 errors`：generic execute/batch method obligation、pending
+  producer覆盖和新race测试未被live verifier绑定。
+
+这些RED均在production修改之前取得；最终GREEN没有通过删除、ignore、cfg-disable或放宽断言获得。
+
+### 15.2 C3 generic execute与ordinary batch shared policy GREEN
+
+- `DruidPooledPreparedStatement::execute_prepared`与Callable继承实现都进入唯一的
+  `execute_standard_prepared_results`。该core使用prepare边界的effective SQL、当前有序typed parameter
+  snapshot和同一个before/raw/sorter/after/stat policy；不会在execute边界再次做tenant rewrite。
+- generic `ExecutionResult::ResultSet`逐个包装、注册为同lease/generation的
+  `DruidPooledResultSet`；UpdateCount保持原值和顺序。fatal raw error只分类一次、after-error只触发一次并
+  将logical disposition标记为discard。
+- ordinary canonical Statement的`add_batch`先经共享`statement_add_batch_sql`做Wall rewrite/deny；仅raw
+  add成功后才保存effective SQL。`clear_batch`同步清理raw与logical顺序状态，`execute_batch`与transitional
+  Physical共同使用`execute_batch` around core，保留partial counts、Stat与ExceptionSorter语义。
+- 新增5个精确行为测试覆盖Prepared/Callable generic ResultSet、typed params、fatal error以及ordinary batch
+  rewrite/deny/order/clear/partial fatal；C3 focused最终`17/17 PASS`。transitional Physical
+  `pooled_statement_semantics 7/7`、filter adapter `2/2`、stat context `4/4`、ResultSet filter `28/28`、
+  Callable `4/4`继续PASS，未形成standard↔Physical delegation或第二份policy body。
+
+### 15.3 N1 generation-scoped pending admission GREEN
+
+- 新私有一对象文件`standard_resource_admission.rs`保存`Weak<StandardResourceRegistry>`与generation；
+  `begin_admission`在registry同一把Mutex下只允许`Open/current`并递增pending，RAII Drop递减并notify。
+- `close_all`原子`Open→Closing`后先逆序drain已注册资源，再以`pin + enable`的Notify等待pending归零；
+  在此之前不能进入Closed、不能reopen，也不能让holder回native idle queue。
+- `register(&permit, resource)`只接受同registry、同Open generation的permit。Closing/Closed/wrong-generation
+  会在锁外关闭新raw handle并返回typed error；关闭失败的handle与error保留在旧generation，下一generation
+  不可打开，后续`close_all`确定性重试。successful explicit close仍按generation/id unregister，避免长lease
+  强引用累积。
+- permit在任何可能产生live resource的raw操作之前取得：Connection create/prepare/call；root Statement
+  query/generic execute；Prepared query/prepared query/generic execute；Callable query/prepared query/generic
+  execute；metadata tables。ResultSet/Prepared/Callable constructors要求传入permit，调用者不能漏传。
+- registry最终`7/7 PASS`：cancellation、multiple pending、late close completion、late close failure/retry、
+  long-loop unregister和concurrent close_all。metadata cross-lease `3/3 PASS`：connection close在late raw I/O/
+  reject-close完成前保持阻塞；close failure使holder discard，shutdown第二次恰好重试；下一lease不接收旧cursor。
+  standard logical lifecycle继续`18/18 PASS`。
+
+### 15.4 I6 fail-closed evidence GREEN
+
+- `FIXED_FILES`加入permit文件；canonical method obligation现在要求root Statement batch、Prepared generic
+  execute及Callable继承方法，并解析无注释方法体，拒绝direct raw fallback。
+- pending policy检查registry state/RAII markers以及每个producer source的精确`begin_admission`/
+  `register(admission)`数量；删掉任何一个入口、只留comment或改成0-test都会失败。
+- Task5 exact runtime从11扩至21：C3新增5个、registry pending新增4个、metadata late-close-failure新增1个；
+  verifier验证真实Rust函数唯一身份、Cargo target和非零executed test count。
+- verifier self-test最终`25/25 PASS`；Task5 live执行21个exact tests与当前RBDC coverage-v2的15个exact
+  compiler functions，并保持：
+
+```text
+TASK5_CONSUMER_ROWS=363
+TASK5_CONSUMER_CLOSED=180
+TASK6_COMPATIBILITY_PENDING=75
+TASK7_RESOURCE_OPERATIONS_PENDING=108
+DRUID_STANDARD_IMPLS=6
+DRUID_INTERNAL_OBJECTS=13
+```
+
+### 15.5 Inventory、Task 4 handoff与完整门禁
+
+- denominator self/live：`41/41 PASS`，`PHYSICAL=73 / ADAPTER=57 / CONSUMER=3647`，consumer hash
+  `2cc780035bd025ba47490a4e56ed8ecceac0fa01215d1af0030a7c0bcf4bbec5`；重新emit后的checked
+  `rdbc-production-consumers.tsv` SHA-256为
+  `24c02233b102d447d51e62a04d6b596079d6d9303d180efbf62908412e3195a6`。
+- Task3 purity `103/103 PASS + STANDARD_FILES=29`。semantic `18/18 PASS`；logical-live仍为
+  `JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0`，semantic/live hashes保持
+  `5d99b573...cdbd9 / f2e1d929...d9ed84`。
+- Task4 frozen coverage/runtime bytes未改，SHA-256保持
+  `f7b3d4b...07c9 / 106323e...a3ec`。旧Task4 self/live仍诚实为`35/38`与exit `1`，三个self error及
+  live error全部且仅是批准的RBDC source hash
+  `f5e8df...b1e → b3fc87...f96c`；Task5 handoff运行current RBDC coverage-v2并PASS。SQLx default与
+  HTTP_SQL all-features代表覆盖也各自`15/15 PASS`，没有一般化stale bypass或frozen artifact重写。
+- focused：C3 `17/17`、registry `7/7`、metadata `3/3`、standard logical `18/18`、raw owner
+  `5/5`、recycle `12/12`、external/privacy `3/3`以及既有Physical Filter/Stat/ResultSet/Callable
+  回归全部PASS。
+- full：`druid`、`druid-wrapper`、`druid-rdbc` all-target/all-feature tests全部PASS；workspace
+  all-target/all-feature check PASS；三crate scoped Clippy all-target/all-feature `-D warnings`、rustdoc、
+  doctest `0/0/1`、rustfmt、Black、Python compile与diff-check全部PASS。
+
+真实外部RBDC/HTTP/libSQL/JDBC Agent服务仍为`NOT_RUN`；deterministic local路径与compiler coverage
+不冒充外部部署证据。当前状态是 **FIX_ROUND_3_IMPLEMENTED_PENDING_REVIEW**；只有独立re-review可把
+C3/N1/I6判为ADDRESSED，Task 6继续阻塞。

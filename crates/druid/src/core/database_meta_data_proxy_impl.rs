@@ -176,6 +176,17 @@ impl druid_rdbc::metadata::DatabaseMetaData for DatabaseMetaDataProxyImpl<'stati
         if !self.lease_active.load(Ordering::Acquire) {
             return Err(RdbcError::ConnectionDiscarded);
         }
+        let resources = self
+            .standard_resources
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        let admission = resources.begin_admission(policy.resource_generation())?;
         let raw = self
             .standard
             .as_mut()
@@ -192,14 +203,9 @@ impl druid_rdbc::metadata::DatabaseMetaData for DatabaseMetaDataProxyImpl<'stati
                 Arc::clone(&self.lease_active),
                 self.filter_chain.clone(),
                 self.stats_collector.clone(),
-                self.standard_resources
-                    .as_ref()
-                    .ok_or(RdbcError::ConnectionDiscarded)?
-                    .clone(),
-                self.standard_policy
-                    .as_ref()
-                    .ok_or(RdbcError::ConnectionDiscarded)?
-                    .clone(),
+                resources,
+                policy,
+                &admission,
                 raw,
             )
             .await?,

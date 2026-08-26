@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use druid_rdbc::connection::Connection;
-use druid_rdbc::error::{RdbcError, SqlException, SqlWarning};
+use druid_rdbc::error::{BatchUpdateCounts, RdbcError, SqlException, SqlWarning};
 use druid_rdbc::extensions::ConnectionCapabilities;
 use druid_rdbc::metadata::{
     ColumnDescriptor, ColumnNullability, DatabaseMetaData, ParameterDescriptor, ParameterMetaData,
@@ -24,6 +24,10 @@ pub struct TrackingState {
     pub raw_close_attempt_count: AtomicUsize,
     pub statement_close_count: AtomicUsize,
     pub statement_close_attempt_count: AtomicUsize,
+    pub statement_batch_add_attempt_count: AtomicUsize,
+    pub statement_batch_clear_count: AtomicUsize,
+    pub statement_batch_execute_count: AtomicUsize,
+    pub statement_batch_executions: Mutex<Vec<Vec<String>>>,
     pub prepared_close_count: AtomicUsize,
     pub prepared_close_attempt_count: AtomicUsize,
     pub prepared_clear_attempt_count: AtomicUsize,
@@ -31,6 +35,7 @@ pub struct TrackingState {
     pub prepared_execution_parameters: Mutex<Vec<Vec<PreparedParameter>>>,
     pub statement_query_timeouts: Mutex<Vec<i32>>,
     pub result_set_close_count: AtomicUsize,
+    pub result_set_close_attempt_count: AtomicUsize,
     pub result_set_next_count: AtomicUsize,
     pub result_set_value_count: AtomicUsize,
     pub result_set_meta_data_count: AtomicUsize,
@@ -498,6 +503,7 @@ pub struct TrackingStatement {
     state: Arc<TrackingState>,
     closed: bool,
     query_timeout: i32,
+    batch: Vec<String>,
 }
 
 impl TrackingStatement {
@@ -506,6 +512,7 @@ impl TrackingStatement {
             state,
             closed: false,
             query_timeout: 0,
+            batch: Vec::new(),
         }
     }
 }
@@ -526,6 +533,58 @@ impl Statement for TrackingStatement {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(seconds);
         Ok(())
+    }
+
+    fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
+        self.state
+            .statement_batch_add_attempt_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_sql_failure("statement_add_batch")?;
+        self.state.record(format!("statement.batch.add:{sql}"));
+        self.batch.push(sql);
+        Ok(())
+    }
+
+    fn clear_batch(&mut self) -> Result<(), RdbcError> {
+        self.state
+            .statement_batch_clear_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_sql_failure("statement_clear_batch")?;
+        self.state.record("statement.batch.clear");
+        self.batch.clear();
+        Ok(())
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.state
+            .statement_batch_execute_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.record("statement.batch.execute");
+        self.state
+            .statement_batch_executions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(self.batch.clone());
+        if self
+            .state
+            .check_failure("statement_execute_batch_partial")
+            .is_err()
+        {
+            return Err(RdbcError::BatchUpdateException {
+                update_counts: BatchUpdateCounts::from_large(vec![1]),
+                cause: Box::new(RdbcError::SqlException(Box::new(
+                    SqlException::new(
+                        9010,
+                        Some("08006".to_owned()),
+                        Some("forced partial standard batch failure".to_owned()),
+                    )
+                    .with_class_name("task5.FatalBatchException"),
+                ))),
+            });
+        }
+        let counts = vec![1; self.batch.len()];
+        self.batch.clear();
+        Ok(counts)
     }
 
     async fn execute_query(&mut self, sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {
@@ -756,6 +815,25 @@ impl PreparedStatement for TrackingPreparedStatement {
         Ok(1)
     }
 
+    async fn execute_prepared(
+        &mut self,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
+        self.state
+            .record(format!("prepared.execute:generic: {}", self.sql));
+        self.state
+            .prepared_execution_parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(self.parameters.clone());
+        self.state.check_sql_failure("prepared_execute_generic")?;
+        Ok(vec![druid_rdbc::statement::ExecutionResult::ResultSet(
+            Box::new(TrackingResultSet::rows(
+                Arc::clone(&self.state),
+                vec![vec![Value::Int(55)]],
+            )),
+        )])
+    }
+
     fn parameter_meta_data(&self) -> Result<Arc<dyn ParameterMetaData>, RdbcError> {
         Ok(Arc::new(TrackingParameterMetaData))
     }
@@ -824,6 +902,12 @@ impl PreparedStatement for TrackingCallableStatement {
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
         PreparedStatement::execute_prepared_update(&mut self.prepared).await
+    }
+
+    async fn execute_prepared(
+        &mut self,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
+        PreparedStatement::execute_prepared(&mut self.prepared).await
     }
 }
 
@@ -928,6 +1012,10 @@ impl ResultSet for TrackingResultSet {
 
     async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
+            self.state
+                .result_set_close_attempt_count
+                .fetch_add(1, Ordering::AcqRel);
+            self.state.check_failure("result_set_close")?;
             self.closed = true;
             self.state
                 .result_set_close_count

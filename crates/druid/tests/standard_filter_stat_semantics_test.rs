@@ -3,7 +3,7 @@
 mod standard_test_support;
 
 use druid::core::{
-    AfterFilter, BeforeFilter, ConnectionEvent, ConnectionRecycleDisposition,
+    AfterFilter, BatchExecKind, BeforeFilter, ConnectionEvent, ConnectionRecycleDisposition,
     DruidConnectionHolder, DruidError, DruidPooledConnection, ExceptionSorter,
     ExceptionSorterProperties, ExecContext, ExecResult, FilterChain, ResultSetFilter,
     ResultSetFilterContext, StatementEvent,
@@ -217,6 +217,82 @@ impl ResultSetFilter for RejectResultSetOpenFilter {
         ))
     }
 }
+
+#[derive(Default)]
+struct StandardBatchObservationFilter {
+    add_inputs: Mutex<Vec<String>>,
+    before_statements: Mutex<Vec<Vec<String>>>,
+    before_kinds: Mutex<Vec<BatchExecKind>>,
+    before_count: AtomicUsize,
+    after_count: AtomicUsize,
+    after_error_count: AtomicUsize,
+}
+
+#[async_trait::async_trait]
+impl BeforeFilter for StandardBatchObservationFilter {
+    fn name(&self) -> &str {
+        "task5-standard-batch-observation"
+    }
+
+    async fn before(&self, _context: &mut ExecContext<'_>) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    fn statement_add_batch_sql(&self, sql: &str) -> Result<String, DruidError> {
+        self.add_inputs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(sql.to_owned());
+        Ok(sql.replace("logical", "batch_rewritten"))
+    }
+
+    async fn before_batch(
+        &self,
+        context: &mut druid::core::BatchExecContext<'_>,
+    ) -> Result<(), DruidError> {
+        self.before_count.fetch_add(1, Ordering::AcqRel);
+        self.before_statements
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(context.statements.to_vec());
+        self.before_kinds
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(context.kind);
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl AfterFilter for StandardBatchObservationFilter {
+    fn name(&self) -> &str {
+        "task5-standard-batch-observation"
+    }
+
+    async fn after(
+        &self,
+        _context: &ExecContext<'_>,
+        _result: &Result<ExecResult, DruidError>,
+        _elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    async fn after_batch(
+        &self,
+        _context: &druid::core::BatchExecContext<'_>,
+        result: &Result<Vec<i32>, DruidError>,
+        _elapsed: Duration,
+    ) -> Result<(), DruidError> {
+        self.after_count.fetch_add(1, Ordering::AcqRel);
+        if result.is_err() {
+            self.after_error_count.fetch_add(1, Ordering::AcqRel);
+        }
+        Ok(())
+    }
+}
+
+impl ResultSetFilter for StandardBatchObservationFilter {}
 
 impl TenantCallBack for RecordingTenantCallBack {
     fn tenant_value(
@@ -1149,6 +1225,331 @@ async fn canonical_result_set_value_metadata_was_null_filters_modify_and_reject_
         .await
         .expect("statement close");
     connection.close().await.expect("logical close");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_prepared_generic_execute_wraps_registered_result_with_typed_params() {
+    let state = TrackingState::configured();
+    let prepared_filter = Arc::new(PreparedCreationFilter::default());
+    let recording = Arc::new(RecordingFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::clone(&prepared_filter));
+    chain.add_filter(Arc::clone(&recording));
+    let pool = DruidPool::new_standard(
+        "task5-prepared-generic".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig::default(),
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut prepared = Connection::prepare_statement(
+        &mut connection,
+        "SELECT logical ?",
+        StatementOptions::default(),
+    )
+    .await
+    .expect("prepared");
+    PreparedStatement::set_parameter(
+        prepared.as_mut(),
+        druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).expect("index"),
+            value: druid_rdbc::types::Value::Int(71),
+        },
+    )
+    .expect("parameter");
+    let mut results = PreparedStatement::execute_prepared(prepared.as_mut())
+        .await
+        .expect("generic execute");
+    let mut result = match results.remove(0) {
+        ExecutionResult::ResultSet(result) => result,
+        ExecutionResult::UpdateCount(count) => panic!("expected ResultSet, got {count}"),
+    };
+    let observations = prepared_filter
+        .executions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].sql, "SELECT prepared_rewritten ?");
+    assert_eq!(
+        observations[0].params,
+        vec![druid_rdbc::types::Value::Int(71)]
+    );
+    assert_eq!(recording.before.load(Ordering::Acquire), 1);
+    assert_eq!(recording.after.load(Ordering::Acquire), 1);
+    assert_eq!(recording.result_open.load(Ordering::Acquire), 1);
+    assert_eq!(pool.stats_collector().statement_stat().execute_count(), 1);
+    assert!(result.next().await.expect("first row"));
+    connection.close().await.expect("logical close");
+    assert!(result.next().await.is_err(), "generic cursor crossed lease");
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 1);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_callable_generic_execute_uses_same_typed_policy_and_wraps_result() {
+    let state = TrackingState::configured();
+    let prepared_filter = Arc::new(PreparedCreationFilter::default());
+    let recording = Arc::new(RecordingFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::clone(&prepared_filter));
+    chain.add_filter(Arc::clone(&recording));
+    let pool = DruidPool::new_standard(
+        "task5-callable-generic".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig::default(),
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut callable = Connection::prepare_call(
+        &mut connection,
+        "CALL logical_proc(?)",
+        StatementOptions::default(),
+    )
+    .await
+    .expect("callable");
+    PreparedStatement::set_parameter(
+        callable.as_mut(),
+        druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).expect("index"),
+            value: druid_rdbc::types::Value::Int(81),
+        },
+    )
+    .expect("parameter");
+    let mut results = PreparedStatement::execute_prepared(callable.as_mut())
+        .await
+        .expect("generic callable execute");
+    let mut result = match results.remove(0) {
+        ExecutionResult::ResultSet(result) => result,
+        ExecutionResult::UpdateCount(count) => panic!("expected ResultSet, got {count}"),
+    };
+    let observations = prepared_filter
+        .executions
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    assert_eq!(observations.len(), 1);
+    assert_eq!(observations[0].sql, "CALL prepared_rewritten_proc(?)");
+    assert_eq!(
+        observations[0].params,
+        vec![druid_rdbc::types::Value::Int(81)]
+    );
+    assert_eq!(recording.before.load(Ordering::Acquire), 1);
+    assert_eq!(recording.after.load(Ordering::Acquire), 1);
+    assert_eq!(recording.result_open.load(Ordering::Acquire), 1);
+    assert!(result.next().await.expect("first row"));
+    connection.close().await.expect("logical close");
+    assert!(
+        result.next().await.is_err(),
+        "callable cursor crossed lease"
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 1);
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_prepared_generic_fatal_error_runs_after_once_and_discards() {
+    let state = TrackingState::configured();
+    let recording = Arc::new(RecordingFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::clone(&recording));
+    let pool = DruidPool::new_standard(
+        "task5-prepared-generic-fatal".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    connection.set_exception_sorter(Arc::new(AllFatalSorter));
+    let mut prepared = Connection::prepare_statement(
+        &mut connection,
+        "SELECT fatal_generic ?",
+        StatementOptions::default(),
+    )
+    .await
+    .expect("prepared");
+    PreparedStatement::set_parameter(
+        prepared.as_mut(),
+        druid_rdbc::statement::PreparedParameter {
+            index: druid_rdbc::statement::ParameterIndex::new(1).expect("index"),
+            value: druid_rdbc::types::Value::Int(91),
+        },
+    )
+    .expect("parameter");
+    state.fail_next("prepared_execute_generic");
+    assert!(matches!(
+        PreparedStatement::execute_prepared(prepared.as_mut()).await,
+        Err(RdbcError::SqlException(_))
+    ));
+    assert_eq!(recording.before.load(Ordering::Acquire), 1);
+    assert_eq!(recording.after.load(Ordering::Acquire), 1);
+    assert_eq!(recording.after_error.load(Ordering::Acquire), 1);
+    assert_eq!(pool.stats_collector().statement_stat().execute_count(), 1);
+    connection.close().await.expect("fatal close");
+    let mut replacement = pool.get().await.expect("replacement");
+    assert_eq!(state.factory_create_count.load(Ordering::Acquire), 2);
+    replacement.close().await.expect("replacement close");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_statement_batch_rewrites_orders_clears_and_filters_once() {
+    let state = TrackingState::configured();
+    let batch_filter = Arc::new(StandardBatchObservationFilter::default());
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::clone(&batch_filter));
+    let pool = DruidPool::new_standard(
+        "task5-statement-batch".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig::default(),
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .expect("statement");
+    Statement::add_batch(statement.as_mut(), "UPDATE logical_one SET v=1".to_owned())
+        .expect("first add");
+    Statement::add_batch(statement.as_mut(), "UPDATE logical_two SET v=2".to_owned())
+        .expect("second add");
+    assert_eq!(
+        Statement::execute_batch(statement.as_mut())
+            .await
+            .expect("execute batch"),
+        vec![1, 1]
+    );
+    assert_eq!(batch_filter.before_count.load(Ordering::Acquire), 1);
+    assert_eq!(batch_filter.after_count.load(Ordering::Acquire), 1);
+    assert_eq!(
+        batch_filter
+            .before_statements
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)[0],
+        vec![
+            "UPDATE batch_rewritten_one SET v=1".to_owned(),
+            "UPDATE batch_rewritten_two SET v=2".to_owned(),
+        ]
+    );
+    assert_eq!(
+        batch_filter
+            .before_kinds
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)[0],
+        BatchExecKind::Statement
+    );
+    assert_eq!(
+        state
+            .statement_batch_executions
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)[0],
+        vec![
+            "UPDATE batch_rewritten_one SET v=1".to_owned(),
+            "UPDATE batch_rewritten_two SET v=2".to_owned(),
+        ]
+    );
+
+    Statement::add_batch(
+        statement.as_mut(),
+        "UPDATE logical_three SET v=3".to_owned(),
+    )
+    .expect("third add");
+    Statement::clear_batch(statement.as_mut()).expect("clear batch");
+    assert!(Statement::execute_batch(statement.as_mut())
+        .await
+        .expect("empty batch")
+        .is_empty());
+    assert_eq!(state.statement_batch_clear_count.load(Ordering::Acquire), 1);
+    assert_eq!(batch_filter.before_count.load(Ordering::Acquire), 2);
+    assert_eq!(batch_filter.after_count.load(Ordering::Acquire), 2);
+    assert_eq!(pool.stats_collector().statement_stat().execute_count(), 2);
+    Statement::close(statement.as_mut())
+        .await
+        .expect("statement close");
+    connection.close().await.expect("connection close");
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn canonical_statement_batch_denial_and_partial_fatal_error_are_classified_once() {
+    let state = TrackingState::configured();
+    let batch_filter = Arc::new(StandardBatchObservationFilter::default());
+    let mut wall_config = WallConfig::default();
+    wall_config.deny_tables.push("blocked".to_owned());
+    let mut chain = FilterChain::new();
+    chain.add_filter(Arc::clone(&batch_filter));
+    chain.add_filter(Arc::new(WallFilter::with_config(wall_config)));
+    let pool = DruidPool::new_standard(
+        "task5-statement-batch-error".to_owned(),
+        "tracking".to_owned(),
+        Arc::new(TrackingFactory::new(Arc::clone(&state))),
+        PoolInnerConfig {
+            max_open: 1,
+            max_idle: 1,
+            acquire_timeout: Duration::from_secs(2),
+            ..PoolInnerConfig::default()
+        },
+        Some(Arc::new(chain)),
+    );
+    pool.init().await.expect("pool init");
+    let mut connection = pool.get().await.expect("connection");
+    connection.set_exception_sorter(Arc::new(AllFatalSorter));
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .expect("statement");
+    Statement::add_batch(statement.as_mut(), "UPDATE logical_ok SET v=1".to_owned())
+        .expect("allowed add");
+    assert!(matches!(
+        Statement::add_batch(
+            statement.as_mut(),
+            "DELETE FROM blocked WHERE id=1".to_owned()
+        ),
+        Err(RdbcError::WallViolation(_))
+    ));
+    assert_eq!(
+        state
+            .statement_batch_add_attempt_count
+            .load(Ordering::Acquire),
+        1,
+        "Wall denial must precede raw add"
+    );
+    Statement::add_batch(
+        statement.as_mut(),
+        "UPDATE logical_after SET v=2".to_owned(),
+    )
+    .expect("second allowed add");
+    state.fail_next("statement_execute_batch_partial");
+    let error = Statement::execute_batch(statement.as_mut())
+        .await
+        .expect_err("partial fatal batch");
+    assert_eq!(
+        error.batch_update_counts().expect("partial counts").large(),
+        &[1]
+    );
+    assert_eq!(batch_filter.before_count.load(Ordering::Acquire), 1);
+    assert_eq!(batch_filter.after_count.load(Ordering::Acquire), 1);
+    assert_eq!(batch_filter.after_error_count.load(Ordering::Acquire), 1);
+    assert_eq!(
+        state.statement_batch_execute_count.load(Ordering::Acquire),
+        1
+    );
+    connection.close().await.expect("fatal close");
+    let mut replacement = pool.get().await.expect("replacement connection");
+    assert_eq!(state.factory_create_count.load(Ordering::Acquire), 2);
+    replacement.close().await.expect("replacement close");
     pool.close().await;
 }
 

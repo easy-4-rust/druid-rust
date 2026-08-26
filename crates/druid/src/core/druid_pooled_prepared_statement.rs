@@ -10,6 +10,7 @@ use super::filter::ExecOperation;
 use super::prepared_statement_key::PreparedStatementKey;
 use super::prepared_statement_physical_statement::PreparedStatementPhysicalStatement;
 use super::standard_prepared_statement_cache::StandardPreparedStatementCache;
+use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
 use super::{
@@ -25,6 +26,7 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
+use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -429,6 +431,7 @@ impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
         sql: &str,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         self.ensure_standard_open()?;
+        let admission = self.statement_base.inner.begin_standard_admission()?;
         let resource = Arc::clone(
             self.standard_statement
                 .as_ref()
@@ -466,7 +469,12 @@ impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
             )
             .await?;
         Ok(Box::new(
-            DruidPooledResultSet::new_standard(Arc::clone(&self.statement_base.inner), raw).await?,
+            DruidPooledResultSet::new_standard(
+                Arc::clone(&self.statement_base.inner),
+                raw,
+                &admission,
+            )
+            .await?,
         ))
     }
 
@@ -723,6 +731,7 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         self.ensure_standard_open()?;
+        let admission = self.statement_base.inner.begin_standard_admission()?;
         let resource = Arc::clone(
             self.standard_statement
                 .as_ref()
@@ -761,7 +770,12 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
             )
             .await?;
         Ok(Box::new(
-            DruidPooledResultSet::new_standard(Arc::clone(&self.statement_base.inner), raw).await?,
+            DruidPooledResultSet::new_standard(
+                Arc::clone(&self.statement_base.inner),
+                raw,
+                &admission,
+            )
+            .await?,
         ))
     }
 
@@ -809,17 +823,22 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
     async fn execute_prepared(
         &mut self,
     ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
-        self.ensure_standard_open()?;
-        let resource = self
-            .standard_statement
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?;
-        let mut statement = resource.statement.lock().await;
-        statement
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .execute_prepared()
-            .await
+        let resource = Arc::clone(
+            self.standard_statement
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?,
+        );
+        self.execute_standard_prepared_results(move || async move {
+            resource
+                .statement
+                .lock()
+                .await
+                .as_mut()
+                .ok_or(RdbcError::ConnectionDiscarded)?
+                .execute_prepared()
+                .await
+        })
+        .await
     }
 
     fn parameter_meta_data(
@@ -857,6 +876,59 @@ impl DruidPooledPreparedStatement {
         &self,
     ) -> Arc<super::druid_pooled_statement::DruidPooledStatementInner> {
         Arc::clone(&self.statement_base.inner)
+    }
+
+    pub(crate) async fn execute_standard_prepared_results<F, Fut>(
+        &mut self,
+        raw: F,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError>>,
+    {
+        self.ensure_open()?;
+        let admission = self.statement_base.inner.begin_standard_admission()?;
+        let policy = self.standard_policy()?;
+        let sql = self.standard_sql();
+        let parameters = self.standard_parameter_snapshot()?;
+        let results = policy
+            .execute_prepared(
+                &sql,
+                parameters,
+                self.id(),
+                ExecOperation::Execute,
+                move |_effective_sql| raw(),
+                |results| match results.first() {
+                    Some(druid_rdbc::statement::ExecutionResult::UpdateCount(count)) => {
+                        ExecResult {
+                            rows_affected: u64::try_from(*count).unwrap_or_default(),
+                            last_insert_id: None,
+                            row_count: None,
+                        }
+                    }
+                    Some(druid_rdbc::statement::ExecutionResult::ResultSet(_)) => {
+                        ExecResult::default()
+                    }
+                    None => ExecResult::default(),
+                },
+            )
+            .await?;
+        let statement = self.standard_statement_inner();
+        let mut wrapped = Vec::with_capacity(results.len());
+        for result in results {
+            wrapped.push(match result {
+                druid_rdbc::statement::ExecutionResult::ResultSet(raw) => {
+                    druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(
+                        DruidPooledResultSet::new_standard(Arc::clone(&statement), raw, &admission)
+                            .await?,
+                    ))
+                }
+                druid_rdbc::statement::ExecutionResult::UpdateCount(count) => {
+                    druid_rdbc::statement::ExecutionResult::UpdateCount(count)
+                }
+            });
+        }
+        Ok(wrapped)
     }
 
     pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
@@ -1050,6 +1122,7 @@ impl DruidPooledPreparedStatement {
         key: PreparedStatementKey,
         cache: Arc<tokio::sync::Mutex<StandardPreparedStatementCache>>,
         standard_resources: Arc<StandardResourceRegistry>,
+        admission: &StandardResourceAdmission,
         standard_policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
         connection_id: u64,
         statement_id: u64,
@@ -1059,7 +1132,6 @@ impl DruidPooledPreparedStatement {
         filter_chain: Option<Arc<FilterChain>>,
         stats_collector: Option<Arc<StatsCollector>>,
     ) -> Result<Self, RdbcError> {
-        let resource_generation = standard_policy.resource_generation();
         let mut result = Self::new_standard_shell(
             sql,
             connection_id,
@@ -1074,7 +1146,7 @@ impl DruidPooledPreparedStatement {
         );
         let statement = StandardPreparedStatementResource::new(statement);
         standard_resources
-            .register(resource_generation, Arc::clone(&statement))
+            .register(admission, Arc::clone(&statement))
             .await?;
         result.standard_statement = Some(statement);
         result.standard_key = Some(key);

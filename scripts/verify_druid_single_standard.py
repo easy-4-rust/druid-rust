@@ -106,6 +106,7 @@ FIXED_FILES = (
     "crates/druid/src/core/wrapper_proxy_hooks.rs",
     "crates/druid/src/core/mysql_metadata_compatibility.rs",
     "crates/druid/src/core/standard_prepared_statement_cache.rs",
+    "crates/druid/src/core/standard_resource_admission.rs",
     "crates/druid/tests/single_standard_logical_contract_test.rs",
     "crates/druid/tests/raw_logical_ownership_test.rs",
     "crates/druid/tests/standard_metadata_ownership_test.rs",
@@ -146,12 +147,26 @@ STANDARD_IMPLS = {
     "crates/druid/src/core/druid_pooled_statement.rs": (
         "druid_rdbc::statement::Statement",
         "DruidPooledStatement",
-        {"execute_query", "execute_update", "close", "is_closed"},
+        {
+            "execute_query",
+            "execute_update",
+            "execute",
+            "add_batch",
+            "clear_batch",
+            "execute_batch",
+            "close",
+            "is_closed",
+        },
     ),
     "crates/druid/src/core/druid_pooled_prepared_statement.rs": (
         "druid_rdbc::statement::PreparedStatement",
         "DruidPooledPreparedStatement",
-        {"set_parameter", "execute_prepared_query", "execute_prepared_update"},
+        {
+            "set_parameter",
+            "execute_prepared_query",
+            "execute_prepared_update",
+            "execute_prepared",
+        },
     ),
     "crates/druid/src/core/druid_pooled_callable_statement.rs": (
         "druid_rdbc::statement::CallableStatement",
@@ -169,6 +184,33 @@ STANDARD_IMPLS = {
         {"database_product_name", "tables"},
     ),
 }
+
+STANDARD_INHERITED_IMPLS = (
+    (
+        "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+        "druid_rdbc::statement::Statement",
+        "DruidPooledPreparedStatement",
+        {"add_batch", "clear_batch", "execute_batch"},
+    ),
+    (
+        "crates/druid/src/core/druid_pooled_callable_statement.rs",
+        "druid_rdbc::statement::Statement",
+        "DruidPooledCallableStatement",
+        {"add_batch", "clear_batch", "execute_batch"},
+    ),
+    (
+        "crates/druid/src/core/druid_pooled_callable_statement.rs",
+        "druid_rdbc::statement::PreparedStatement",
+        "DruidPooledCallableStatement",
+        {
+            "set_parameter",
+            "clear_parameters",
+            "execute_prepared_query",
+            "execute_prepared_update",
+            "execute_prepared",
+        },
+    ),
+)
 
 
 class VerificationError(RuntimeError):
@@ -230,6 +272,31 @@ TASK5_REQUIRED_EXACT_TESTS = (
     ExactCargoTestSpec(
         Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
         "test:standard_filter_stat_semantics_test",
+        "canonical_prepared_generic_execute_wraps_registered_result_with_typed_params",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_callable_generic_execute_uses_same_typed_policy_and_wraps_result",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_prepared_generic_fatal_error_runs_after_once_and_discards",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_statement_batch_rewrites_orders_clears_and_filters_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_statement_batch_denial_and_partial_fatal_error_are_classified_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
         "fatal_standard_create_prepare_call_and_metadata_errors_force_discard",
     ),
     ExactCargoTestSpec(
@@ -248,9 +315,34 @@ TASK5_REQUIRED_EXACT_TESTS = (
         "core::standard_resource_registry::tests::concurrent_close_all_waits_for_one_exact_drain",
     ),
     ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::pending_admission_cancellation_unblocks_close",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::multiple_pending_admissions_all_finish_before_close_returns",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::close_all_waits_for_rejected_late_resource_close_completion",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::late_registration_close_failure_stays_old_generation_and_blocks_reopen",
+    ),
+    ExactCargoTestSpec(
         Path("crates/druid/tests/standard_metadata_ownership_test.rs"),
         "test:standard_metadata_ownership_test",
         "late_metadata_result_registration_is_closed_before_next_lease",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_metadata_ownership_test.rs"),
+        "test:standard_metadata_ownership_test",
+        "late_result_close_failure_discards_old_generation_without_reopen",
     ),
 )
 
@@ -447,6 +539,80 @@ def _method_bodies(tokens: list[object], opening: int, closing: int) -> dict[str
         methods[name] = _normalized(tokens, body_open + 1, body_close)
         cursor = body_close + 1
     return methods
+
+
+def require_method_delegation(
+    source: str,
+    trait_path: str,
+    type_name: str,
+    required_markers: dict[str, str],
+    label: str,
+) -> None:
+    """Bind load-bearing canonical methods to named shared-policy cores."""
+
+    blocks = _impl_blocks(source, trait_path.rsplit("::", 1)[-1], type_name)
+    if len(blocks) != 1:
+        fail(f"{label} shared policy delegation impl is missing or ambiguous")
+    tokens, _, opening, closing = blocks[0]
+    methods = _method_bodies(tokens, opening, closing)
+    for method, marker in required_markers.items():
+        body = methods.get(method)
+        if body is None or marker not in body:
+            fail(
+                f"{label} shared policy delegation is missing: "
+                f"{type_name}::{method}->{marker}"
+            )
+
+
+def require_pending_admission_policy(
+    registry_source: str,
+    admission_source: str,
+    producer_sources: dict[str, str],
+) -> None:
+    """Require pre-raw permits at every standard live-resource producer."""
+
+    registry = "".join(token.text for token in _tokens(registry_source))
+    admission = "".join(token.text for token in _tokens(admission_source))
+    registry_markers = (
+        "fnbegin_admission",
+        "pending",
+        "close_error",
+        "notified.as_mut().enable()",
+        "fnfinish_admission",
+    )
+    admission_markers = (
+        "structStandardResourceAdmission",
+        "implDropforStandardResourceAdmission",
+        "finish_admission",
+    )
+    if any(marker not in registry for marker in registry_markers) or any(
+        marker not in admission for marker in admission_markers
+    ):
+        fail("Task 5 pending admission registry/RAII policy is incomplete")
+
+    expected = {
+        "druid_pooled_connection.rs": ("begin_admission", 3),
+        "druid_pooled_statement.rs": ("begin_standard_admission", 3),
+        "druid_pooled_prepared_statement.rs": ("begin_standard_admission", 3),
+        "druid_pooled_callable_statement.rs": ("begin_standard_admission", 2),
+        "database_meta_data_proxy_impl.rs": ("begin_admission", 1),
+    }
+    if set(producer_sources) != set(expected) | {"druid_pooled_result_set.rs"}:
+        fail("Task 5 pending admission producer denominator is incomplete")
+    for label, (symbol, count) in expected.items():
+        observed = sum(
+            token.text == symbol for token in _tokens(producer_sources[label])
+        )
+        if observed != count:
+            fail(
+                f"Task 5 pending admission producer drift: "
+                f"{label}:{symbol}:{observed}!={count}"
+            )
+    result_set = "".join(
+        token.text for token in _tokens(producer_sources["druid_pooled_result_set.rs"])
+    )
+    if result_set.count(".register(admission,") != 1:
+        fail("Task 5 pending admission ResultSet registration is incomplete")
 
 
 def require_concrete_object(source: str, type_name: str, label: str) -> None:
@@ -1052,6 +1218,52 @@ def verify_repository(root: Path) -> VerificationSummary:
         require_direct_standard_impl(
             (root / relative).read_text(), trait_path, type_name, methods, relative
         )
+    for relative, trait_path, type_name, methods in STANDARD_INHERITED_IMPLS:
+        require_direct_standard_impl(
+            (root / relative).read_text(), trait_path, type_name, methods, relative
+        )
+    require_method_delegation(
+        (root / "crates/druid/src/core/druid_pooled_statement.rs").read_text(),
+        "druid_rdbc::statement::Statement",
+        "DruidPooledStatement",
+        {
+            "add_batch": "statement_add_batch_sql",
+            "execute_batch": "execute_statement_batch",
+        },
+        "crates/druid/src/core/druid_pooled_statement.rs",
+    )
+    for relative, type_name in (
+        (
+            "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+            "DruidPooledPreparedStatement",
+        ),
+        (
+            "crates/druid/src/core/druid_pooled_callable_statement.rs",
+            "DruidPooledCallableStatement",
+        ),
+    ):
+        require_method_delegation(
+            (root / relative).read_text(),
+            "druid_rdbc::statement::PreparedStatement",
+            type_name,
+            {"execute_prepared": "execute_standard_prepared_results"},
+            relative,
+        )
+    require_pending_admission_policy(
+        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(),
+        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(),
+        {
+            path.name: path.read_text()
+            for path in (
+                root / "crates/druid/src/core/druid_pooled_connection.rs",
+                root / "crates/druid/src/core/druid_pooled_statement.rs",
+                root / "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+                root / "crates/druid/src/core/druid_pooled_callable_statement.rs",
+                root / "crates/druid/src/core/database_meta_data_proxy_impl.rs",
+                root / "crates/druid/src/core/druid_pooled_result_set.rs",
+            )
+        },
+    )
     owner_path = "crates/druid/src/core/druid_pooled_connection.rs"
     require_owner_close_contract((root / owner_path).read_text(), owner_path)
     require_shared_execution_policy(

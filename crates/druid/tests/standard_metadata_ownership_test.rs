@@ -203,8 +203,33 @@ async fn late_metadata_result_registration_is_closed_before_next_lease() {
     // 之前阻塞，精确覆盖 snapshot-gap 竞态。
     entered.wait();
 
-    Connection::close(&mut first)
+    let (close_started, close_started_rx) = tokio::sync::oneshot::channel();
+    let mut close = tokio::spawn(async move {
+        let _ = close_started.send(());
+        Connection::close(&mut first).await
+    });
+    close_started_rx.await.expect("close task started");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut close)
+            .await
+            .is_err(),
+        "logical close returned while raw admission was pending"
+    );
+    assert!(
+        returned
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_none(),
+        "holder reopened before late raw cleanup"
+    );
+    release.wait();
+    assert!(matches!(
+        query.await.expect("metadata query task"),
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+    close
         .await
+        .expect("close task")
         .expect("first lease seals registry");
     let holder = returned
         .lock()
@@ -219,11 +244,6 @@ async fn late_metadata_result_registration_is_closed_before_next_lease() {
         false,
         Box::new(|_holder, _disposition| false),
     );
-    release.wait();
-    assert!(matches!(
-        query.await.expect("metadata query task"),
-        Err(RdbcError::ConnectionDiscarded)
-    ));
     assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 1);
 
     let mut second_statement =
@@ -239,4 +259,86 @@ async fn late_metadata_result_registration_is_closed_before_next_lease() {
     );
     second_statement.close().await.expect("statement close");
     Connection::close(&mut second).await.expect("second close");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn late_result_close_failure_discards_old_generation_without_reopen() {
+    let state = TrackingState::configured();
+    let holder = DruidConnectionHolder::with_standard_connection(
+        Box::new(TrackingConnection::new(Arc::clone(&state))),
+        63,
+        Duration::ZERO,
+        0,
+    )
+    .await
+    .expect("standard holder");
+    let returned = Arc::new(Mutex::new(None));
+    let returned_holder = Arc::clone(&returned);
+    let entered = Arc::new(Barrier::new(2));
+    let release = Arc::new(Barrier::new(2));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(LateRegistrationBarrier {
+        entered: Arc::clone(&entered),
+        release: Arc::clone(&release),
+    }));
+    let mut first = DruidPooledConnection::with_standard_holder(
+        holder,
+        "task5-late-close-failure".to_owned(),
+        Some(Arc::new(filter_chain)),
+        false,
+        false,
+        Box::new(move |holder, disposition| {
+            *returned_holder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some((holder, disposition));
+            false
+        }),
+    );
+    let mut metadata = Connection::database_meta_data(&mut first)
+        .await
+        .expect("metadata proxy");
+    let query = tokio::spawn(async move { metadata.tables(TablesQuery::default()).await });
+    entered.wait();
+    let (close_started, close_started_rx) = tokio::sync::oneshot::channel();
+    let mut close = tokio::spawn(async move {
+        let _ = close_started.send(());
+        Connection::close(&mut first).await
+    });
+    close_started_rx.await.expect("close task started");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), &mut close)
+            .await
+            .is_err(),
+        "logical close returned before late close failure resolved"
+    );
+    state.fail_next("result_set_close");
+    release.wait();
+    assert!(matches!(
+        query.await.expect("metadata query task"),
+        Err(RdbcError::Other(_))
+    ));
+    close
+        .await
+        .expect("close task")
+        .expect("logical close reports disposition through callback");
+    let (mut holder, disposition) = returned
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+        .expect("discarded holder returned to owner");
+    assert!(disposition.has_recycle_error());
+    assert!(holder.is_discard());
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        1
+    );
+    holder
+        .close_standard_connection()
+        .await
+        .expect("old generation retry and raw shutdown");
+    assert_eq!(
+        state.result_set_close_attempt_count.load(Ordering::Acquire),
+        2
+    );
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 1);
 }

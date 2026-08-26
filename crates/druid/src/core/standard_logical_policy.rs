@@ -221,6 +221,29 @@ impl StandardLogicalPolicy {
         result
     }
 
+    pub(crate) async fn execute_statement_batch<F, Fut>(
+        &self,
+        sql: &str,
+        statements: &[String],
+        statement_id: u64,
+        raw: F,
+    ) -> Result<Vec<i64>, RdbcError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<Vec<i64>, RdbcError>>,
+    {
+        self.execute_batch_counts(
+            sql,
+            statements,
+            &[],
+            None,
+            BatchExecKind::Statement,
+            statement_id,
+            raw,
+        )
+        .await
+    }
+
     pub(crate) async fn execute_prepared_batch<F, Fut>(
         &self,
         sql: &str,
@@ -242,6 +265,34 @@ impl StandardLogicalPolicy {
                     .collect::<Result<Vec<_>, _>>()
             })
             .collect::<Result<Vec<_>, _>>()?;
+        self.execute_batch_counts(
+            sql,
+            &[],
+            &parameter_sets,
+            Some(prepared_parameter_sets),
+            BatchExecKind::PreparedStatement,
+            statement_id,
+            raw,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_batch_counts<F, Fut>(
+        &self,
+        sql: &str,
+        statements: &[String],
+        parameter_sets: &[Vec<Value>],
+        prepared_parameter_sets: Option<&[Vec<PreparedInputParameter>]>,
+        kind: BatchExecKind,
+        statement_id: u64,
+        raw: F,
+    ) -> Result<Vec<i64>, RdbcError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<Vec<i64>, RdbcError>>,
+    {
+        self.ensure_open()?;
         let _execution = StandardExecutionGuard::new(
             Arc::clone(&self.execution_running),
             self.stats_collector
@@ -253,10 +304,10 @@ impl StandardLogicalPolicy {
             connection_id: self.connection_id,
             statement_id: Some(statement_id),
             sql,
-            statements: &[],
-            parameter_sets: &parameter_sets,
-            prepared_parameter_sets: Some(prepared_parameter_sets),
-            kind: BatchExecKind::PreparedStatement,
+            statements,
+            parameter_sets,
+            prepared_parameter_sets,
+            kind,
             data_source: &self.data_source,
             start: Instant::now(),
             fingerprint: None,

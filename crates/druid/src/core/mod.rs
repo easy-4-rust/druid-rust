@@ -139,6 +139,7 @@ mod standard_connection_compatibility;
 mod standard_connection_factory_compatibility;
 mod standard_logical_policy;
 mod standard_prepared_statement_cache;
+mod standard_resource_admission;
 mod standard_resource_handle;
 mod standard_resource_registration;
 mod standard_resource_registry;

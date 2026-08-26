@@ -366,13 +366,55 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                 "canonical_result_set_open_initializes_wall_tenant_hidden_mapping",
                 "canonical_result_set_open_rejection_closes_unregistered_raw_once",
                 "canonical_result_set_value_metadata_was_null_filters_modify_and_reject_once",
+                "canonical_prepared_generic_execute_wraps_registered_result_with_typed_params",
+                "canonical_callable_generic_execute_uses_same_typed_policy_and_wraps_result",
+                "canonical_prepared_generic_fatal_error_runs_after_once_and_discards",
+                "canonical_statement_batch_rewrites_orders_clears_and_filters_once",
+                "canonical_statement_batch_denial_and_partial_fatal_error_are_classified_once",
                 "fatal_standard_create_prepare_call_and_metadata_errors_force_discard",
                 "core::standard_resource_registry::tests::late_registration_after_close_is_rejected_and_closed",
                 "core::standard_resource_registry::tests::explicit_close_unregisters_strong_entries_during_long_lease",
                 "core::standard_resource_registry::tests::concurrent_close_all_waits_for_one_exact_drain",
+                "core::standard_resource_registry::tests::pending_admission_cancellation_unblocks_close",
+                "core::standard_resource_registry::tests::multiple_pending_admissions_all_finish_before_close_returns",
+                "core::standard_resource_registry::tests::close_all_waits_for_rejected_late_resource_close_completion",
+                "core::standard_resource_registry::tests::late_registration_close_failure_stays_old_generation_and_blocks_reopen",
                 "late_metadata_result_registration_is_closed_before_next_lease",
+                "late_result_close_failure_discards_old_generation_without_reopen",
             },
         )
+
+    def test_residual_method_delegation_rejects_direct_raw_fallback(self) -> None:
+        source = """
+            impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
+                async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
+                    self.raw.execute_prepared().await
+                }
+            }
+        """
+        with self.assertRaisesRegex(VerificationError, "shared policy delegation"):
+            verifier.require_method_delegation(
+                source,
+                "druid_rdbc::statement::PreparedStatement",
+                "DruidPooledPreparedStatement",
+                {"execute_prepared": "execute_standard_prepared_results"},
+                "druid_pooled_prepared_statement.rs",
+            )
+
+    def test_pending_admission_policy_rejects_missing_producer_permit(self) -> None:
+        with self.assertRaisesRegex(VerificationError, "pending admission"):
+            verifier.require_pending_admission_policy(
+                "struct StandardResourceRegistry; fn begin_admission() {}",
+                "struct StandardResourceAdmission;",
+                {
+                    "druid_pooled_connection.rs": "begin_admission begin_admission begin_admission",
+                    "druid_pooled_statement.rs": "begin_standard_admission begin_standard_admission begin_standard_admission",
+                    "druid_pooled_prepared_statement.rs": "begin_standard_admission begin_standard_admission begin_standard_admission",
+                    "druid_pooled_callable_statement.rs": "begin_standard_admission",
+                    "database_meta_data_proxy_impl.rs": "begin_admission",
+                    "druid_pooled_result_set.rs": "register(admission)",
+                },
+            )
 
     def test_exact_runtime_source_rejects_name_in_comment_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
