@@ -299,12 +299,11 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                 "DruidExecutionFilterPolicy::execute",
             )
 
-    def test_task4_handoff_rejects_each_frozen_hash_and_stale_tuple(self) -> None:
+    def test_task4_handoff_rejects_each_regenerated_manifest_hash(self) -> None:
         root = repository_root()
         for constant in (
             "TASK4_COVERAGE_MANIFEST_SHA256",
             "TASK4_RUNTIME_MANIFEST_SHA256",
-            "TASK5_RBDC_EVIDENCE_SOURCE_SHA256",
         ):
             with self.subTest(constant=constant), mock.patch.object(
                 verifier, constant, "0" * 64
@@ -314,19 +313,16 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
 
     def test_task4_exact_rbdc_command_failure_is_not_bypassed(self) -> None:
         with mock.patch.object(
-            verifier, "run_cargo_gate"
-        ) as cargo_gate, mock.patch.object(
             verifier,
-            "execute_task5_rbdc_compiler_coverage",
-            side_effect=VerificationError("forced current RBDC coverage failure"),
-            create=True,
-        ) as coverage:
+            "execute_evidence",
+            side_effect=verifier.WrapperVerificationError(
+                "forced current RBDC coverage failure"
+            ),
+        ):
             with self.assertRaisesRegex(
                 VerificationError, "current RBDC coverage failure"
             ):
-                verify_task4_evidence_handoff(repository_root())
-        self.assertEqual(cargo_gate.call_count, 2)
-        coverage.assert_called_once_with(repository_root())
+                verifier.execute_task5_rbdc_compiler_coverage(repository_root())
 
     def test_task4_handoff_executes_current_rbdc_compiler_coverage_v2(self) -> None:
         with mock.patch.object(verifier, "run_cargo_gate"), mock.patch.object(

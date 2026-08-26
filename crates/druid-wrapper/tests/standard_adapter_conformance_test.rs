@@ -12,15 +12,15 @@ fn configured_core_adapter_families_implement_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::sqlx::SqlxConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::sqlx::SqlxConnectionFactory: ConnectionFactory);
     assert_impl_all!(druid_wrapper::sqlx::SqlxPreparedStatement: PreparedStatement);
-    assert_impl_all!(druid_wrapper::sqlx::SqlxDatabaseMetaData<'static>: DatabaseMetaData);
+    assert_impl_all!(druid_wrapper::sqlx::SqlxDatabaseMetaData: DatabaseMetaData);
 
     assert_impl_all!(druid_wrapper::rbdc::RbdcConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::rbdc::RbdcConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::rbdc::RbdcDatabaseMetaData<'static>: DatabaseMetaData);
+    assert_impl_all!(druid_wrapper::rbdc::RbdcDatabaseMetaData: DatabaseMetaData);
 
     assert_impl_all!(druid_wrapper::toasty::ToastyConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::toasty::ToastyConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::toasty::ToastyDatabaseMetaData<'static>: DatabaseMetaData);
+    assert_impl_all!(druid_wrapper::toasty::ToastyDatabaseMetaData: DatabaseMetaData);
 }
 
 #[test]
@@ -45,7 +45,6 @@ fn catalog_data_sources_implement_canonical_wrapper_identity() {
 fn duckdb_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::duckdb::DuckDbConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::duckdb::DuckDbConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::duckdb::DuckDbDatabaseMetaData: DatabaseMetaData);
 }
 
 #[cfg(feature = "http-sql")]
@@ -53,7 +52,6 @@ fn duckdb_family_implements_the_single_standard_directly() {
 fn http_sql_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::http_sql::HttpSqlConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::http_sql::HttpSqlConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::http_sql::HttpSqlDatabaseMetaData: DatabaseMetaData);
 }
 
 #[cfg(feature = "libsql-native")]
@@ -61,7 +59,6 @@ fn http_sql_family_implements_the_single_standard_directly() {
 fn libsql_family_implements_the_single_standard_directly() {
     assert_impl_all!(druid_wrapper::libsql::LibSqlConnectionAdapter: Connection);
     assert_impl_all!(druid_wrapper::libsql::LibSqlConnectionFactory: ConnectionFactory);
-    assert_impl_all!(druid_wrapper::libsql::LibSqlDatabaseMetaData: DatabaseMetaData);
 }
 
 #[cfg(feature = "jdbc-agent")]

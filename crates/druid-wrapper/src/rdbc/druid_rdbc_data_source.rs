@@ -1,4 +1,4 @@
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 
 use async_trait::async_trait;
 use druid::core::DruidPooledConnection;
@@ -6,7 +6,6 @@ use druid::pool::DruidDataSource;
 use druid::sql::{CommonDataSource, DataSource};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
-use druid_rdbc::spi::Wrapper;
 
 use crate::driver::{DriverRegistryError, DruidDatabasePoolBuilder};
 
@@ -66,12 +65,6 @@ impl DruidRdbcDataSource {
             .with_class_name("java.sql.SQLInvalidAuthorizationSpecException")
             .with_assignable_type("java.sql.SQLNonTransientException"),
         ))
-    }
-}
-
-impl Wrapper for DruidRdbcDataSource {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 

@@ -2,8 +2,8 @@
 
 use super::CharsetConvert;
 use crate::core::{
-    AfterFilter, BeforeFilter, ClobFilterChain, DruidError, ExecContext, ExecResult, RdbcObject,
-    RdbcReader, RdbcString, ResultSetFilter, ResultSetFilterChain, Value,
+    AfterFilter, BeforeFilter, ClobFilterChain, DruidError, ExecContext, ExecResult, RdbcReader,
+    RdbcString, ResultSetFilter, Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -60,27 +60,6 @@ impl EncodingConvertFilter {
         match value {
             Value::String(value) => self.decode(&value).map(Value::String),
             value => Ok(value),
-        }
-    }
-
-    fn decode_object(&self, object: RdbcObject) -> Result<RdbcObject, DruidError> {
-        match object {
-            RdbcObject::Scalar(value) => self.decode_value(value).map(RdbcObject::Scalar),
-            RdbcObject::String(value) => self.decode(&value).map(RdbcObject::String),
-            RdbcObject::NString(value) => self.decode(&value).map(RdbcObject::NString),
-            RdbcObject::CharacterStream(reader) => {
-                let value = reader.read_to_string()?;
-                self.decode(&value)
-                    .map(RdbcReader::from_string)
-                    .map(RdbcObject::CharacterStream)
-            }
-            RdbcObject::NCharacterStream(reader) => {
-                let value = reader.read_to_string()?;
-                self.decode(&value)
-                    .map(RdbcReader::from_string)
-                    .map(RdbcObject::NCharacterStream)
-            }
-            object => Ok(object),
         }
     }
 
@@ -217,62 +196,4 @@ impl AfterFilter for EncodingConvertFilter {
     }
 }
 
-impl ResultSetFilter for EncodingConvertFilter {
-    fn result_set_get_string(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_index: usize,
-    ) -> Result<Option<String>, DruidError> {
-        chain
-            .result_set_get_string(column_index)?
-            .map(|value| self.decode(&value))
-            .transpose()
-    }
-
-    fn result_set_get_string_by_label(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_label: &str,
-    ) -> Result<Option<String>, DruidError> {
-        chain
-            .result_set_get_string_by_label(column_label)?
-            .map(|value| self.decode(&value))
-            .transpose()
-    }
-
-    fn result_set_get_object(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_index: usize,
-    ) -> Result<Value, DruidError> {
-        self.decode_value(chain.result_set_get_object(column_index)?)
-    }
-
-    fn result_set_get_object_by_label(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_label: &str,
-    ) -> Result<Value, DruidError> {
-        self.decode_value(chain.result_set_get_object_by_label(column_label)?)
-    }
-
-    fn result_set_get_object_with_type_map(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_index: usize,
-        type_map: Option<&crate::core::RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
-        self.decode_object(chain.result_set_get_object_with_type_map(column_index, type_map)?)
-    }
-
-    fn result_set_get_object_by_label_with_type_map(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_label: &str,
-        type_map: Option<&crate::core::RdbcTypeMap>,
-    ) -> Result<RdbcObject, DruidError> {
-        self.decode_object(
-            chain.result_set_get_object_by_label_with_type_map(column_label, type_map)?,
-        )
-    }
-}
+impl ResultSetFilter for EncodingConvertFilter {}

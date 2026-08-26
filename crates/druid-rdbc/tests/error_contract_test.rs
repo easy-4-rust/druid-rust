@@ -5,51 +5,32 @@ use druid_rdbc::compat::{DataTruncation, SqlClientInfoException};
 use druid_rdbc::error::{
     BatchUpdateCounts, RdbcError, RdbcErrorKind, SqlException, SqlExceptionCause, SqlWarning,
 };
-use druid_rdbc::spi::{ExecResult, PhysicalConnection};
-use druid_rdbc::types::{Row, Value};
+use druid_rdbc::statement::Statement;
 
-struct LargeThenFailDefaultBatchConnection {
-    calls: usize,
+struct LargeThenFailBatchStatement {
+    batch_size: usize,
 }
 
+druid_rdbc::impl_standard_wrapper!(LargeThenFailBatchStatement => Statement);
+
 #[async_trait::async_trait]
-impl PhysicalConnection for LargeThenFailDefaultBatchConnection {
-    async fn exec(&mut self, _sql: &str, _params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        self.calls += 1;
-        if self.calls == 2 {
-            return Err(RdbcError::DriverError(
-                "second batch item failed".to_owned(),
-            ));
+impl Statement for LargeThenFailBatchStatement {
+    fn add_batch(&mut self, _sql: String) -> Result<(), RdbcError> {
+        self.batch_size += 1;
+        Ok(())
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        let large = i64::from(i32::MAX) + 7;
+        if self.batch_size > 1 {
+            return Err(RdbcError::BatchUpdateException {
+                update_counts: BatchUpdateCounts::from_large(vec![large]),
+                cause: Box::new(RdbcError::DriverError(
+                    "second batch item failed".to_owned(),
+                )),
+            });
         }
-        Ok(ExecResult {
-            rows_affected: u64::try_from(i64::from(i32::MAX) + 7).expect("fixture count fits u64"),
-            last_insert_id: None,
-            row_count: None,
-        })
-    }
-
-    async fn fetch(&mut self, _sql: &str, _params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        Ok(Vec::new())
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        Ok(())
-    }
-
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        Ok(())
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        Ok(())
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        Ok(())
+        Ok(vec![large])
     }
 }
 
@@ -199,14 +180,17 @@ fn batch_error_preserves_i64_counts_and_typed_cause_chain() {
 }
 
 #[tokio::test]
-async fn default_batch_path_preserves_large_failure_counts_and_java_success_view() {
+async fn canonical_batch_path_preserves_large_failure_counts_and_java_success_view() {
     let large = i64::from(i32::MAX) + 7;
-    let mut failing = LargeThenFailDefaultBatchConnection { calls: 0 };
+    let mut failing = LargeThenFailBatchStatement { batch_size: 0 };
+    failing
+        .add_batch("large".to_owned())
+        .expect("first batch item must be accepted");
+    failing
+        .add_batch("fail".to_owned())
+        .expect("second batch item must be accepted");
     let error = failing
-        .exec_batch(vec![
-            ("large".to_owned(), vec![]),
-            ("fail".to_owned(), vec![]),
-        ])
+        .execute_batch()
         .await
         .expect_err("second batch item must fail");
     let counts = error
@@ -216,12 +200,9 @@ async fn default_batch_path_preserves_large_failure_counts_and_java_success_view
     assert_eq!(counts.jdbc_i32(), vec![large as i32]);
     assert!(counts.try_i32().is_err());
 
-    let mut successful = LargeThenFailDefaultBatchConnection { calls: 0 };
-    assert_eq!(
-        successful
-            .exec_batch(vec![("large".to_owned(), vec![])])
-            .await
-            .expect("single large batch item must succeed"),
-        vec![large as i32]
-    );
+    let mut successful = LargeThenFailBatchStatement { batch_size: 0 };
+    successful
+        .add_batch("large".to_owned())
+        .expect("single batch item must be accepted");
+    assert_eq!(successful.execute_batch().await, Ok(vec![large]));
 }

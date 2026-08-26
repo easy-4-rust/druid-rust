@@ -1,661 +1,98 @@
-//! `SQLx` 原生行物化 `ResultSet`。
-//!
-//! 当前实现保留 `SQLx` 原生 Row 到 `next() / value(...)`，避免提前转换为 Druid
-//! `Vec<Row>`，但查询侧仍使用 `fetch_all`，因此不是流式游标。真正的流式结果集
-//! 需要先把同步 `PhysicalResultSet::next()` 演进为可等待的 C7 生命周期接口。
+//! Canonical eager SQLx ResultSet actor.
 
 use super::sqlx_connection_actor::SqlxConnectionActor;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::metadata::{
-    ColumnDescriptor, ColumnNullability, ResultSetMetaData as StandardResultSetMetaData,
-    ResultSetMetaDataSnapshot,
+    ColumnDescriptor, ColumnNullability, ResultSetMetaData, ResultSetMetaDataSnapshot,
 };
-use druid_rdbc::result_set::ColumnIndex;
-use druid_rdbc::spi::{
-    PhysicalResultSet, ResultSetColumnMeta, ResultSetColumnType, ResultSetMetaData,
-};
+use druid_rdbc::result_set::{ColumnIndex, ResultSet};
 use druid_rdbc::types::{Row, Value};
-use sqlx::mysql::MySqlRow;
-use sqlx::postgres::PgRow;
-use sqlx::sqlite::SqliteRow;
-use sqlx::{any::AnyRow, Column, Row as SqlxRowTrait, TypeInfo, ValueRef};
-use std::fmt;
 use std::sync::{Arc, Mutex};
 
-#[derive(Debug)]
-struct StreamingState {
+struct ResultSetState {
     closed: bool,
-    cursor: i64,
+    cursor: Option<usize>,
     was_null: bool,
 }
 
-enum StreamingRows {
-    Any(Vec<AnyRow>),
-    MySql(Vec<MySqlRow>),
-    PostgreSql(Vec<PgRow>),
-    Sqlite(Vec<SqliteRow>),
-    Values(Vec<Row>),
-}
-
-impl fmt::Debug for StreamingRows {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let (name, len) = match self {
-            StreamingRows::Any(rows) => ("any", rows.len()),
-            StreamingRows::MySql(rows) => ("mysql", rows.len()),
-            StreamingRows::PostgreSql(rows) => ("postgresql", rows.len()),
-            StreamingRows::Sqlite(rows) => ("sqlite", rows.len()),
-            StreamingRows::Values(rows) => ("values", rows.len()),
-        };
-        formatter
-            .debug_struct("StreamingRows")
-            .field("backend", &name)
-            .field("row_count", &len)
-            .finish()
-    }
-}
-
 pub struct SqlxStreamingResultSet {
-    rows: StreamingRows,
-    column_labels: Vec<String>,
-    meta_data: ResultSetMetaData,
-    state: Mutex<StreamingState>,
-    actor_lease: Option<Arc<SqlxConnectionActor>>,
-}
-
-impl fmt::Debug for SqlxStreamingResultSet {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SqlxStreamingResultSet")
-            .field("rows", &self.rows)
-            .field("column_labels", &self.column_labels)
-            .field("owns_actor_lease", &self.actor_lease.is_some())
-            .finish_non_exhaustive()
-    }
+    rows: Vec<Row>,
+    meta_data: ResultSetMetaDataSnapshot,
+    state: Mutex<ResultSetState>,
+    actor: Option<Arc<SqlxConnectionActor>>,
 }
 
 impl SqlxStreamingResultSet {
-    pub fn any(rows: Vec<AnyRow>, column_labels: Vec<String>) -> Self {
-        let meta_data = Self::build_meta(&rows, &column_labels, |row, i| {
-            let column = row.columns().get(i)?;
-            let kind = column.type_info().kind();
-            Some(match kind {
-                sqlx::any::AnyTypeInfoKind::Null => ResultSetColumnType::Unknown,
-                sqlx::any::AnyTypeInfoKind::Bool => ResultSetColumnType::Boolean,
-                sqlx::any::AnyTypeInfoKind::SmallInt
-                | sqlx::any::AnyTypeInfoKind::Integer
-                | sqlx::any::AnyTypeInfoKind::BigInt => ResultSetColumnType::Integer,
-                sqlx::any::AnyTypeInfoKind::Real | sqlx::any::AnyTypeInfoKind::Double => {
-                    ResultSetColumnType::Float
-                }
-                sqlx::any::AnyTypeInfoKind::Text => ResultSetColumnType::Text,
-                sqlx::any::AnyTypeInfoKind::Blob => ResultSetColumnType::Binary,
+    pub(crate) fn values(rows: Vec<Row>, labels: Vec<String>) -> Self {
+        let width = rows
+            .first()
+            .map_or(labels.len(), Row::len)
+            .max(labels.len());
+        let columns = (0..width)
+            .map(|index| {
+                ColumnDescriptor::new(
+                    labels.get(index).cloned().unwrap_or_default(),
+                    "UNKNOWN",
+                    ColumnNullability::Unknown,
+                )
             })
-        });
+            .collect();
         Self {
-            rows: StreamingRows::Any(rows),
-            column_labels,
-            meta_data,
-            state: Mutex::new(StreamingState {
+            rows,
+            meta_data: ResultSetMetaDataSnapshot::new(columns),
+            state: Mutex::new(ResultSetState {
                 closed: false,
-                cursor: -1,
+                cursor: None,
                 was_null: false,
             }),
-            actor_lease: None,
+            actor: None,
         }
     }
 
-    pub fn mysql(rows: Vec<MySqlRow>, column_labels: Vec<String>) -> Self {
-        let meta_data = Self::build_meta(&rows, &column_labels, |row, i| {
-            let col = row.columns().get(i)?;
-            let name = TypeInfo::name(col.type_info()).to_ascii_uppercase();
-            Some(match_type_mysql(&name))
-        });
-        Self {
-            rows: StreamingRows::MySql(rows),
-            column_labels,
-            meta_data,
-            state: Mutex::new(StreamingState {
-                closed: false,
-                cursor: -1,
-                was_null: false,
-            }),
-            actor_lease: None,
-        }
-    }
-
-    pub fn postgresql(rows: Vec<PgRow>, column_labels: Vec<String>) -> Self {
-        let meta_data = Self::build_meta(&rows, &column_labels, |row, i| {
-            let col = row.columns().get(i)?;
-            let name = TypeInfo::name(col.type_info()).to_ascii_uppercase();
-            Some(match_type_postgresql(&name))
-        });
-        Self {
-            rows: StreamingRows::PostgreSql(rows),
-            column_labels,
-            meta_data,
-            state: Mutex::new(StreamingState {
-                closed: false,
-                cursor: -1,
-                was_null: false,
-            }),
-            actor_lease: None,
-        }
-    }
-
-    pub fn sqlite(rows: Vec<SqliteRow>, column_labels: Vec<String>) -> Self {
-        let meta_data = Self::build_meta(&rows, &column_labels, |row, i| {
-            let col = row.columns().get(i)?;
-            let name = TypeInfo::name(col.type_info()).to_ascii_uppercase();
-            Some(match_type_sqlite(&name))
-        });
-        Self {
-            rows: StreamingRows::Sqlite(rows),
-            column_labels,
-            meta_data,
-            state: Mutex::new(StreamingState {
-                closed: false,
-                cursor: -1,
-                was_null: false,
-            }),
-            actor_lease: None,
-        }
-    }
-
-    /// 使用 driver-neutral values 构造 owned eager result set。
-    pub(crate) fn values(rows: Vec<Row>, column_labels: Vec<String>) -> Self {
-        let meta_data = Self::build_meta::<SqliteRow, _>(&[], &column_labels, |_row, _index| None);
-        Self {
-            rows: StreamingRows::Values(rows),
-            column_labels,
-            meta_data,
-            state: Mutex::new(StreamingState {
-                closed: false,
-                cursor: -1,
-                was_null: false,
-            }),
-            actor_lease: None,
-        }
-    }
-
-    /// 让结果集持有执行 query 的 actor/connection lease。
     pub(crate) fn with_actor_lease(mut self, actor: Arc<SqlxConnectionActor>) -> Self {
-        self.actor_lease = Some(actor);
+        self.actor = Some(actor);
         self
     }
 
-    fn build_meta<R, F>(rows: &[R], labels: &[String], mut typer: F) -> ResultSetMetaData
-    where
-        R: SqlxRowTrait,
-        F: FnMut(&R, usize) -> Option<ResultSetColumnType>,
-    {
-        let column_count = rows
-            .first()
-            .map_or(labels.len(), |row| row.columns().len())
-            .max(labels.len());
-        let columns = (0..column_count)
-            .map(|column_index| {
-                let label = labels.get(column_index).cloned().unwrap_or_default();
-                let mut column_type = ResultSetColumnType::Unknown;
-                for row in rows {
-                    if let Some(ty) = typer(row, column_index) {
-                        column_type = ty;
-                        break;
-                    }
-                }
-                let nullable = rows.is_empty();
-                ResultSetColumnMeta::new(label, column_type, nullable)
-            })
-            .collect::<Vec<_>>();
-        ResultSetMetaData::new(columns)
-    }
-
-    fn len(&self) -> i64 {
-        match &self.rows {
-            StreamingRows::Any(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
-            StreamingRows::MySql(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
-            StreamingRows::PostgreSql(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
-            StreamingRows::Sqlite(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
-            StreamingRows::Values(rows) => i64::try_from(rows.len()).unwrap_or(i64::MAX),
-        }
-    }
-
-    fn current_row(&self, index: usize) -> Option<ValueAt<'_>> {
-        match &self.rows {
-            StreamingRows::Any(rows) => rows.get(index).map(ValueAt::Any),
-            StreamingRows::MySql(rows) => rows.get(index).map(ValueAt::MySql),
-            StreamingRows::PostgreSql(rows) => rows.get(index).map(ValueAt::PostgreSql),
-            StreamingRows::Sqlite(rows) => rows.get(index).map(ValueAt::Sqlite),
-            StreamingRows::Values(rows) => rows.get(index).map(ValueAt::Values),
-        }
-    }
-}
-
-enum ValueAt<'a> {
-    Any(&'a AnyRow),
-    MySql(&'a MySqlRow),
-    PostgreSql(&'a PgRow),
-    Sqlite(&'a SqliteRow),
-    Values(&'a Row),
-}
-
-impl ValueAt<'_> {
-    fn column_len(&self) -> usize {
-        match self {
-            ValueAt::Any(row) => row.columns().len(),
-            ValueAt::MySql(row) => row.columns().len(),
-            ValueAt::PostgreSql(row) => row.columns().len(),
-            ValueAt::Sqlite(row) => row.columns().len(),
-            ValueAt::Values(row) => row.values.len(),
-        }
-    }
-
-    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
-        match self {
-            ValueAt::Any(row) => decode_any_value(row, column_index),
-            ValueAt::MySql(row) => decode_mysql_value(row, column_index),
-            ValueAt::PostgreSql(row) => decode_postgresql_value(row, column_index),
-            ValueAt::Sqlite(row) => decode_sqlite_value(row, column_index),
-            ValueAt::Values(row) => row.values.get(column_index).cloned().ok_or_else(|| {
-                RdbcError::InvalidArgument(format!("column {column_index} is out of range"))
-            }),
-        }
-    }
-}
-
-fn decode_any_value(row: &AnyRow, index: usize) -> Result<Value, RdbcError> {
-    let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
-    if ValueRef::is_null(&raw) {
-        return Ok(Value::Null);
-    }
-    let Some(column) = row.columns().get(index) else {
-        return Err(RdbcError::DriverError(format!(
-            "column {index} is out of range"
-        )));
-    };
-    Ok(match column.type_info().kind() {
-        sqlx::any::AnyTypeInfoKind::Null => Value::Null,
-        sqlx::any::AnyTypeInfoKind::Bool => {
-            Value::Bool(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        sqlx::any::AnyTypeInfoKind::SmallInt => {
-            let v: i16 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        sqlx::any::AnyTypeInfoKind::Integer => {
-            let v: i32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        sqlx::any::AnyTypeInfoKind::BigInt => {
-            Value::Int(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        sqlx::any::AnyTypeInfoKind::Real => {
-            let v: f32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Float(f64::from(v))
-        }
-        sqlx::any::AnyTypeInfoKind::Double => {
-            Value::Float(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        sqlx::any::AnyTypeInfoKind::Text => {
-            Value::String(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        sqlx::any::AnyTypeInfoKind::Blob => {
-            Value::Bytes(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-    })
-}
-
-fn decode_mysql_value(row: &MySqlRow, index: usize) -> Result<Value, RdbcError> {
-    let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
-    if ValueRef::is_null(&raw) {
-        return Ok(Value::Null);
-    }
-    let Some(column) = row.columns().get(index) else {
-        return Err(RdbcError::DriverError(format!(
-            "column {index} is out of range"
-        )));
-    };
-    let name = TypeInfo::name(column.type_info()).to_ascii_uppercase();
-    Ok(match name.as_str() {
-        "BOOLEAN" | "BOOL" => Value::Bool(row.try_get(index).map_err(sqlx_driver_error)?),
-        "TINYINT" => {
-            let v: i8 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "SMALLINT" => {
-            let v: i16 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "MEDIUMINT" | "INT" | "INTEGER" => {
-            let v: i32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "BIGINT" => Value::Int(row.try_get(index).map_err(sqlx_driver_error)?),
-        "FLOAT" => {
-            let v: f32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Float(f64::from(v))
-        }
-        "DOUBLE" | "REAL" => Value::Float(row.try_get(index).map_err(sqlx_driver_error)?),
-        "DECIMAL" | "NUMERIC" | "NEWDECIMAL" => {
-            Value::Decimal(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        "DATE" => Value::Date(row.try_get(index).map_err(sqlx_driver_error)?),
-        "TIME" => Value::Time(row.try_get(index).map_err(sqlx_driver_error)?),
-        "DATETIME" | "TIMESTAMP" => {
-            Value::Timestamp(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        other if other.contains("BLOB") || other.contains("BINARY") => {
-            Value::Bytes(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        _ => Value::String(row.try_get(index).map_err(sqlx_driver_error)?),
-    })
-}
-
-fn decode_postgresql_value(row: &PgRow, index: usize) -> Result<Value, RdbcError> {
-    let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
-    if ValueRef::is_null(&raw) {
-        return Ok(Value::Null);
-    }
-    let Some(column) = row.columns().get(index) else {
-        return Err(RdbcError::DriverError(format!(
-            "column {index} is out of range"
-        )));
-    };
-    let name = TypeInfo::name(column.type_info()).to_ascii_uppercase();
-    Ok(match name.as_str() {
-        "BOOL" | "BOOLEAN" => Value::Bool(row.try_get(index).map_err(sqlx_driver_error)?),
-        "INT2" | "SMALLINT" => {
-            let v: i16 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "INT4" | "INTEGER" => {
-            let v: i32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "INT8" | "BIGINT" => Value::Int(row.try_get(index).map_err(sqlx_driver_error)?),
-        "FLOAT4" | "REAL" => {
-            let v: f32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Float(f64::from(v))
-        }
-        "FLOAT8" | "DOUBLE PRECISION" => {
-            Value::Float(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        "NUMERIC" | "DECIMAL" => Value::Decimal(row.try_get(index).map_err(sqlx_driver_error)?),
-        "DATE" => Value::Date(row.try_get(index).map_err(sqlx_driver_error)?),
-        "TIME" => Value::Time(row.try_get(index).map_err(sqlx_driver_error)?),
-        "TIMESTAMP" => Value::Timestamp(row.try_get(index).map_err(sqlx_driver_error)?),
-        "BYTEA" => Value::Bytes(row.try_get(index).map_err(sqlx_driver_error)?),
-        _ => Value::String(row.try_get(index).map_err(sqlx_driver_error)?),
-    })
-}
-
-fn decode_sqlite_value(row: &SqliteRow, index: usize) -> Result<Value, RdbcError> {
-    let raw = row.try_get_raw(index).map_err(sqlx_driver_error)?;
-    if ValueRef::is_null(&raw) {
-        return Ok(Value::Null);
-    }
-    let Some(column) = row.columns().get(index) else {
-        return Err(RdbcError::DriverError(format!(
-            "column {index} is out of range"
-        )));
-    };
-    // SQLite expression columns such as `SELECT ? AS value` report a declared
-    // type of NULL even when the current value is BLOB/TEXT/INTEGER. Preserve
-    // the runtime storage class instead of turning a non-null value into NULL.
-    let runtime_type = raw.type_info();
-    let name = match TypeInfo::name(column.type_info()) {
-        "NULL" => runtime_type.name(),
-        declared => declared,
-    }
-    .to_ascii_uppercase();
-    Ok(match name.as_str() {
-        "BOOLEAN" | "BOOL" => Value::Bool(row.try_get(index).map_err(sqlx_driver_error)?),
-        "TINYINT" => {
-            let v: i8 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "SMALLINT" => {
-            let v: i16 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "MEDIUMINT" | "INT" | "INTEGER" => {
-            let v: i32 = row.try_get(index).map_err(sqlx_driver_error)?;
-            Value::Int(i64::from(v))
-        }
-        "BIGINT" => Value::Int(row.try_get(index).map_err(sqlx_driver_error)?),
-        "FLOAT" | "REAL" | "DOUBLE" | "DOUBLE PRECISION" => {
-            Value::Float(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        "DECIMAL" | "NUMERIC" => {
-            let v: String = row.try_get(index).map_err(sqlx_driver_error)?;
-            match v.parse::<bigdecimal::BigDecimal>() {
-                Ok(decimal) => Value::Decimal(decimal),
-                Err(_) => Value::String(v),
-            }
-        }
-        "DATE" => Value::Date(row.try_get(index).map_err(sqlx_driver_error)?),
-        "TIME" => Value::Time(row.try_get(index).map_err(sqlx_driver_error)?),
-        "DATETIME" | "TIMESTAMP" => {
-            Value::Timestamp(row.try_get(index).map_err(sqlx_driver_error)?)
-        }
-        "BLOB" | "BINARY" | "BYTEA" => Value::Bytes(row.try_get(index).map_err(sqlx_driver_error)?),
-        "NULL" => Value::Null,
-        _ => Value::String(row.try_get(index).map_err(sqlx_driver_error)?),
-    })
-}
-
-fn match_type_mysql(name: &str) -> ResultSetColumnType {
-    match name {
-        "BOOLEAN" | "BOOL" => ResultSetColumnType::Boolean,
-        "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "INTEGER" | "BIGINT" => {
-            ResultSetColumnType::Integer
-        }
-        "FLOAT" | "DOUBLE" | "REAL" => ResultSetColumnType::Float,
-        "DECIMAL" | "NUMERIC" | "NEWDECIMAL" => ResultSetColumnType::Decimal,
-        "DATE" => ResultSetColumnType::Date,
-        "TIME" => ResultSetColumnType::Time,
-        "DATETIME" | "TIMESTAMP" => ResultSetColumnType::Timestamp,
-        other if other.contains("BLOB") || other.contains("BINARY") => ResultSetColumnType::Binary,
-        _ => ResultSetColumnType::Text,
-    }
-}
-
-fn match_type_postgresql(name: &str) -> ResultSetColumnType {
-    match name {
-        "BOOL" | "BOOLEAN" => ResultSetColumnType::Boolean,
-        "INT2" | "SMALLINT" | "INT4" | "INTEGER" | "INT8" | "BIGINT" => {
-            ResultSetColumnType::Integer
-        }
-        "FLOAT4" | "REAL" | "FLOAT8" | "DOUBLE PRECISION" => ResultSetColumnType::Float,
-        "NUMERIC" | "DECIMAL" => ResultSetColumnType::Decimal,
-        "DATE" => ResultSetColumnType::Date,
-        "TIME" => ResultSetColumnType::Time,
-        "TIMESTAMP" => ResultSetColumnType::Timestamp,
-        "BYTEA" => ResultSetColumnType::Binary,
-        _ => ResultSetColumnType::Text,
-    }
-}
-
-fn match_type_sqlite(name: &str) -> ResultSetColumnType {
-    match name {
-        "BOOLEAN" | "BOOL" => ResultSetColumnType::Boolean,
-        "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "INTEGER" | "BIGINT" => {
-            ResultSetColumnType::Integer
-        }
-        "FLOAT" | "REAL" | "DOUBLE" | "DOUBLE PRECISION" => ResultSetColumnType::Float,
-        "DECIMAL" | "NUMERIC" => ResultSetColumnType::Decimal,
-        "DATE" => ResultSetColumnType::Date,
-        "TIME" => ResultSetColumnType::Time,
-        "DATETIME" | "TIMESTAMP" => ResultSetColumnType::Timestamp,
-        "BLOB" | "BINARY" | "BYTEA" => ResultSetColumnType::Binary,
-        "NULL" => ResultSetColumnType::Unknown,
-        _ => ResultSetColumnType::Text,
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-fn sqlx_driver_error(error: sqlx::Error) -> RdbcError {
-    RdbcError::DriverError(error.to_string())
-}
-
-impl PhysicalResultSet for SqlxStreamingResultSet {
-    fn close(&self) -> Result<(), RdbcError> {
-        self.close_core()
-    }
-
-    fn is_closed(&self) -> bool {
-        self.is_closed_core()
-    }
-
-    fn next(&self) -> Result<bool, RdbcError> {
-        self.next_core()
-    }
-
-    fn first(&self) -> Result<bool, RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let present = self.len() > 0;
-        state.cursor = if present { 0 } else { -1 };
-        state.was_null = false;
-        Ok(present)
-    }
-
-    fn last(&self) -> Result<bool, RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let len = self.len();
-        let present = len > 0;
-        state.cursor = if present { len.saturating_sub(1) } else { len };
-        state.was_null = false;
-        Ok(present)
-    }
-
-    fn before_first(&self) -> Result<(), RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        state.cursor = -1;
-        state.was_null = false;
-        Ok(())
-    }
-
-    fn after_last(&self) -> Result<(), RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        state.cursor = self.len();
-        state.was_null = false;
-        Ok(())
-    }
-
-    fn absolute(&self, row: i32) -> Result<bool, RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let len = self.len();
-        let cursor = match row.cmp(&0) {
-            std::cmp::Ordering::Greater => i64::from(row).saturating_sub(1),
-            std::cmp::Ordering::Less => len.saturating_add(i64::from(row)),
-            std::cmp::Ordering::Equal => -1,
-        };
-        let present = cursor >= 0 && cursor < len;
-        state.cursor = if present {
-            cursor
-        } else if row > 0 {
-            len
+    fn ensure_open(&self) -> Result<(), RdbcError> {
+        if self.actor.as_ref().is_some_and(|actor| actor.is_closed()) || self.state().closed {
+            Err(RdbcError::ConnectionDiscarded)
         } else {
-            -1
-        };
-        state.was_null = false;
-        Ok(present)
-    }
-
-    fn relative(&self, rows: i32) -> Result<bool, RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let len = self.len();
-        let next = state
-            .cursor
-            .checked_add(i64::from(rows))
-            .unwrap_or(if rows < 0 { -1 } else { len });
-        let present = next >= 0 && next < len;
-        state.cursor = if next < 0 {
-            -1
-        } else if next >= len {
-            len
-        } else {
-            next
-        };
-        state.was_null = false;
-        Ok(present)
-    }
-
-    fn previous(&self) -> Result<bool, RdbcError> {
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let len = self.len();
-        let previous = if state.cursor >= len {
-            len.saturating_sub(1)
-        } else {
-            state.cursor.saturating_sub(1)
-        };
-        let present = previous >= 0 && previous < len;
-        state.cursor = if present { previous } else { -1 };
-        state.was_null = false;
-        Ok(present)
-    }
-
-    fn row(&self) -> Result<i32, RdbcError> {
-        let state = self.state();
-        if state.cursor < 0 || state.cursor >= self.len() {
-            Ok(0)
-        } else {
-            i32::try_from(state.cursor.saturating_add(1))
-                .map_err(|error| RdbcError::DriverError(error.to_string()))
+            Ok(())
         }
     }
 
-    fn was_null(&self) -> Result<bool, RdbcError> {
-        Ok(self.was_null_core())
+    fn state(&self) -> std::sync::MutexGuard<'_, ResultSetState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
+}
 
-    fn find_column(&self, column_label: &str) -> Result<usize, RdbcError> {
-        self.column_labels
-            .iter()
-            .position(|label| label.eq_ignore_ascii_case(column_label))
-            .map(|index| index + 1)
-            .ok_or_else(|| {
-                RdbcError::DriverError(format!("column label {column_label:?} not found"))
-            })
-    }
-
-    fn value(&self, column_index: usize) -> Result<Value, RdbcError> {
-        self.value_core(column_index)
-    }
-
-    fn meta_data(&self) -> Result<ResultSetMetaData, RdbcError> {
-        Ok(self.meta_data.clone())
+impl std::fmt::Debug for SqlxStreamingResultSet {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("SqlxStreamingResultSet")
+            .field("row_count", &self.rows.len())
+            .field("owns_actor", &self.actor.is_some())
+            .finish_non_exhaustive()
     }
 }
 
 druid_rdbc::impl_standard_wrapper!(SqlxStreamingResultSet => ResultSet);
 
 #[async_trait::async_trait]
-impl druid_rdbc::result_set::ResultSet for SqlxStreamingResultSet {
+impl ResultSet for SqlxStreamingResultSet {
     async fn next(&mut self) -> Result<bool, RdbcError> {
-        let present = self.next_core()?;
+        self.ensure_open()?;
+        let mut state = self.state();
+        let next = state.cursor.map_or(0, |cursor| cursor.saturating_add(1));
+        let present = next < self.rows.len();
+        state.cursor = present.then_some(next);
+        state.was_null = false;
+        drop(state);
         if present {
-            if let Some(actor) = &self.actor_lease {
+            if let Some(actor) = &self.actor {
                 actor.task4_trace_result_next();
             }
         }
@@ -663,112 +100,39 @@ impl druid_rdbc::result_set::ResultSet for SqlxStreamingResultSet {
     }
 
     fn value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
-        self.value_core(column.get())
+        self.ensure_open()?;
+        let offset = column.get() - 1;
+        let mut state = self.state();
+        let row = state
+            .cursor
+            .and_then(|cursor| self.rows.get(cursor))
+            .ok_or_else(|| RdbcError::InvalidArgument("result set is not on a row".to_owned()))?;
+        let value = row.get(offset).cloned().ok_or_else(|| {
+            RdbcError::InvalidArgument(format!("column {} is out of range", column.get()))
+        })?;
+        state.was_null = matches!(value, Value::Null);
+        Ok(value)
     }
 
-    fn meta_data(&self) -> Result<Arc<dyn StandardResultSetMetaData>, RdbcError> {
-        let columns = self
-            .column_labels
-            .iter()
-            .map(|label| ColumnDescriptor::new(label, "UNKNOWN", ColumnNullability::Unknown))
-            .collect();
-        if let Some(actor) = &self.actor_lease {
+    fn meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
+        self.ensure_open()?;
+        if let Some(actor) = &self.actor {
             actor.task4_trace_result_set_metadata();
         }
-        Ok(Arc::new(ResultSetMetaDataSnapshot::new(columns)))
+        Ok(Arc::new(self.meta_data.clone()))
     }
 
     fn was_null(&self) -> Result<bool, RdbcError> {
-        Ok(self.was_null_core())
+        Ok(self.state().was_null)
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_core()?;
-        self.actor_lease.take();
+        self.state().closed = true;
+        self.actor.take();
         Ok(())
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
-        Ok(self.is_closed_core())
-    }
-}
-
-impl SqlxStreamingResultSet {
-    fn close_core(&self) -> Result<(), RdbcError> {
-        self.state().closed = true;
-        Ok(())
-    }
-
-    fn is_closed_core(&self) -> bool {
-        self.state().closed
-    }
-
-    fn next_core(&self) -> Result<bool, RdbcError> {
-        if self
-            .actor_lease
-            .as_ref()
-            .is_some_and(|actor| actor.is_closed())
-        {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        let mut state = self.state();
-        if state.closed {
-            return Err(RdbcError::Other("result set is closed".to_string()));
-        }
-        let next = state.cursor.saturating_add(1);
-        let len = self.len();
-        let present = next < len;
-        state.cursor = if present { next } else { len };
-        state.was_null = false;
-        Ok(present)
-    }
-
-    fn was_null_core(&self) -> bool {
-        self.state().was_null
-    }
-
-    fn value_core(&self, column_index: usize) -> Result<Value, RdbcError> {
-        if self
-            .actor_lease
-            .as_ref()
-            .is_some_and(|actor| actor.is_closed())
-        {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        let zero_index = column_index.checked_sub(1).ok_or_else(|| {
-            RdbcError::DriverError(format!(
-                "column_index {column_index} is not a valid 1-based index"
-            ))
-        })?;
-        let current_index = {
-            let state = self.state();
-            if state.closed {
-                return Err(RdbcError::Other("result set is closed".to_string()));
-            }
-            if state.cursor < 0 || state.cursor >= self.len() {
-                return Err(RdbcError::DriverError(
-                    "result set is not positioned on a row".to_string(),
-                ));
-            }
-            usize::try_from(state.cursor)
-                .map_err(|error| RdbcError::DriverError(error.to_string()))?
-        };
-        let row = self.current_row(current_index).ok_or_else(|| {
-            RdbcError::DriverError("result set cursor is out of range".to_string())
-        })?;
-        if zero_index >= row.column_len() {
-            return Err(RdbcError::DriverError(format!(
-                "column_index {column_index} is out of range"
-            )));
-        }
-        let value = row.value(zero_index)?;
-        self.state().was_null = matches!(value, Value::Null);
-        Ok(value)
-    }
-
-    fn state(&self) -> std::sync::MutexGuard<'_, StreamingState> {
-        self.state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
+        Ok(self.state().closed)
     }
 }

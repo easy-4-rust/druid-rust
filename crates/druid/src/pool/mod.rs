@@ -11,7 +11,6 @@ pub mod druid_data_source_factory;
 pub mod druid_pool;
 pub mod managed_data_source;
 pub mod pool_inner;
-mod pool_validation_factory;
 pub mod tracing_data_source_stat_sink;
 
 pub use crate::core::DruidPooledConnection;

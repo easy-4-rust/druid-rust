@@ -6,23 +6,12 @@
 //! as the lossless driver boundary.
 
 use crate::error::RdbcError;
+use crate::extensions::CharacterReader;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 static NEXT_READER_ID: AtomicU64 = AtomicU64::new(1);
-
-/// Service-provider interface for a physical character reader.
-///
-/// Corresponds to `java.io.Reader#read(char[])` and `Reader#close()`.
-pub trait PhysicalCharacterReader: fmt::Debug + Send {
-    /// Reads UTF-16 code units and advances the cursor; zero denotes end of
-    /// stream.
-    fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, RdbcError>;
-
-    /// Closes the underlying reader.
-    fn close(&mut self) -> Result<(), RdbcError>;
-}
 
 #[derive(Debug)]
 struct Utf16SliceReader {
@@ -30,7 +19,7 @@ struct Utf16SliceReader {
     position: usize,
 }
 
-impl PhysicalCharacterReader for Utf16SliceReader {
+impl CharacterReader for Utf16SliceReader {
     fn read_utf16(&mut self, buffer: &mut [u16]) -> Result<usize, RdbcError> {
         let remaining = &self.code_units[self.position..];
         let length = remaining.len().min(buffer.len());
@@ -45,7 +34,7 @@ impl PhysicalCharacterReader for Utf16SliceReader {
 }
 
 struct RdbcReaderState {
-    reader: Option<Box<dyn PhysicalCharacterReader>>,
+    reader: Option<Box<dyn CharacterReader>>,
 }
 
 struct RdbcReaderInner {
@@ -67,7 +56,7 @@ impl RdbcReader {
     ///
     /// # Parameters
     /// - `reader`: the character stream supplied by a driver or caller.
-    pub fn new(reader: impl PhysicalCharacterReader + 'static) -> Self {
+    pub fn new(reader: impl CharacterReader + 'static) -> Self {
         Self {
             inner: Arc::new(RdbcReaderInner {
                 id: NEXT_READER_ID.fetch_add(1, Ordering::Relaxed),

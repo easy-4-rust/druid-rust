@@ -142,10 +142,10 @@ fn ha_set_max_evictable_idle_time() {
 }
 
 #[test]
-fn ha_set_physical_timeout() {
+fn ha_set_driver_timeout() {
     let ha = HighAvailableDataSource::new("test", DataSourceCreator::noop_for_test());
-    ha.set_physical_timeout(Some(Duration::from_secs(10)));
-    ha.set_physical_timeout(None);
+    ha.set_driver_timeout(Some(Duration::from_secs(10)));
+    ha.set_driver_timeout(None);
 }
 
 #[test]

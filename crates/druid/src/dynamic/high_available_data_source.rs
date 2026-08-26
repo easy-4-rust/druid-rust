@@ -34,7 +34,7 @@ pub(crate) struct HighAvailableDataSourceConfig {
     pub(crate) time_between_eviction_runs: Duration,
     pub(crate) min_evictable_idle_time: Duration,
     pub(crate) max_evictable_idle_time: Duration,
-    pub(crate) physical_timeout: Option<Duration>,
+    pub(crate) driver_timeout: Option<Duration>,
     pub(crate) time_between_connect_error: Duration,
     pub(crate) remove_abandoned: bool,
     pub(crate) remove_abandoned_timeout: Duration,
@@ -69,7 +69,7 @@ impl Default for HighAvailableDataSourceConfig {
             time_between_eviction_runs: Duration::from_secs(60),
             min_evictable_idle_time: Duration::from_secs(30 * 60),
             max_evictable_idle_time: Duration::from_secs(7 * 60 * 60),
-            physical_timeout: None,
+            driver_timeout: None,
             time_between_connect_error: Duration::from_millis(500),
             remove_abandoned: false,
             remove_abandoned_timeout: Duration::from_secs(300),
@@ -487,8 +487,8 @@ impl HighAvailableDataSource {
     }
 
     /// 设置物理连接最大生命周期；`None` 对应 Java `-1`。
-    pub fn set_physical_timeout(&self, value: Option<Duration>) {
-        self.inner.config.write().physical_timeout = value;
+    pub fn set_driver_timeout(&self, value: Option<Duration>) {
+        self.inner.config.write().driver_timeout = value;
     }
 
     /// 设置连续建连错误重试间隔。

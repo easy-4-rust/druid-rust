@@ -411,9 +411,9 @@ fn stat_value_default_and_field_access() {
         not_empty_wait_count: 0,
         not_empty_wait_nanos: 0,
         logic_connect_error_count: 0,
-        physical_connect_count: 0,
-        physical_close_count: 0,
-        physical_connect_error_count: 0,
+        driver_connect_count: 0,
+        driver_close_count: 0,
+        driver_connect_error_count: 0,
         execute_count: 0,
         error_count: 0,
         commit_count: 0,
@@ -561,9 +561,9 @@ fn stat_value_default_and_field_assignment() {
         not_empty_wait_count: 0,
         not_empty_wait_nanos: 0,
         logic_connect_error_count: 0,
-        physical_connect_count: 0,
-        physical_close_count: 0,
-        physical_connect_error_count: 0,
+        driver_connect_count: 0,
+        driver_close_count: 0,
+        driver_connect_error_count: 0,
         execute_count: 0,
         error_count: 0,
         commit_count: 0,
@@ -701,10 +701,10 @@ fn stat_filter_context_listener_lifecycle() {
         fn pool_close(&self, _nanos: i64) -> Result<(), druid::core::DruidError> {
             Ok(())
         }
-        fn physical_connection_connect(&self) -> Result<(), druid::core::DruidError> {
+        fn connection_open(&self) -> Result<(), druid::core::DruidError> {
             Ok(())
         }
-        fn physical_connection_close(&self, _nanos: i64) -> Result<(), druid::core::DruidError> {
+        fn connection_close(&self, _nanos: i64) -> Result<(), druid::core::DruidError> {
             Ok(())
         }
         fn result_set_open(&self) -> Result<(), druid::core::DruidError> {
@@ -756,8 +756,8 @@ fn stat_filter_context_dispatch_without_listeners() {
     ctx.rollback().unwrap();
     ctx.pool_connection_open().unwrap();
     ctx.pool_connection_close(1000).unwrap();
-    ctx.physical_connection_connect().unwrap();
-    ctx.physical_connection_close(1000).unwrap();
+    ctx.connection_open().unwrap();
+    ctx.connection_close(1000).unwrap();
     ctx.result_set_open().unwrap();
     ctx.result_set_close(1000).unwrap();
     ctx.clob_open().unwrap();

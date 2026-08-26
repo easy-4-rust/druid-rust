@@ -1,15 +1,12 @@
-//! `SQLx` 物理连接工厂。
+//! `SQLx` canonical 连接工厂。
 
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
 use crate::task4_runtime_trace::{
     sqlx_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
 };
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
-/// `SQLx` 物理连接工厂。
-///
-/// 对应 Java: `DruidDataSource#createPhysicalConnection`。
+/// `SQLx` canonical 连接工厂。
 /// 每次 `create` 都打开一个未池化的 `SQLx` 连接，由 `DruidPool` 独占池化职责。
 #[derive(Clone)]
 pub struct SqlxConnectionFactory {
@@ -18,7 +15,7 @@ pub struct SqlxConnectionFactory {
 }
 
 impl SqlxConnectionFactory {
-    /// 创建 `SQLx` 物理连接工厂。
+    /// 创建 `SQLx` canonical 连接工厂。
     ///
     /// 参数 `url` 为 `SQLx` 支持的数据库连接 URL。
     pub fn new(url: impl Into<String>) -> Self {
@@ -75,26 +72,11 @@ impl std::fmt::Debug for SqlxConnectionFactory {
 }
 
 #[async_trait::async_trait]
-impl PhysicalConnectionFactory for SqlxConnectionFactory {
+impl druid_rdbc::driver::ConnectionFactory for SqlxConnectionFactory {
     fn connection_url(&self) -> Option<&str> {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        let connection = self.create_adapter_core().await?;
-        Ok(Box::new(connection))
-    }
-
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), RdbcError> {
-        connection.ping().await
-    }
-}
-
-#[async_trait::async_trait]
-impl druid_rdbc::driver::ConnectionFactory for SqlxConnectionFactory {
     async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
         Ok(Box::new(self.create_adapter_core().await?))
     }

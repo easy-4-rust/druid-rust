@@ -2,10 +2,8 @@
 //! 来源文件：`core/src/main/java/com/alibaba/druid/filter/FilterAdapter.java`。
 
 use super::{
-    AfterFilter, BeforeFilter, DruidError, ExecContext, ExecResult, ExtendedFilter,
-    ResultSetFilter, Wrapper,
+    AfterFilter, BeforeFilter, DruidError, ExecContext, ExecResult, ExtendedFilter, ResultSetFilter,
 };
-use std::any::Any;
 use std::time::Duration;
 
 /// Druid Filter 的默认适配对象。
@@ -17,7 +15,7 @@ use std::time::Duration;
 /// - SQL before/after 默认放行；
 /// - 已迁移的 `ResultSet` hook 通过 [`ResultSetFilter`] 默认方法继续调用链；
 /// - Extended hook、生命周期和属性配置使用对应 trait 的默认空语义；
-/// - [`Wrapper`] 只识别并返回当前 `FilterAdapter` 对象。
+/// - [`druid_rdbc::wrapper::Wrapper`] 只识别并返回当前 `FilterAdapter` 对象。
 ///
 /// Java 尚未迁移的 CallableStatement、其他 Connection/Statement、Clob 与
 /// `DataSource` 精确 hook 仍由各自迁移账目跟踪；`Connection#getMetaData` 和
@@ -74,8 +72,4 @@ impl ExtendedFilter for FilterAdapter {
 // `ResultSetFilter` 的逐方法默认实现正是该继续链语义，不用生成第二份委托代码。
 impl ResultSetFilter for FilterAdapter {}
 
-impl Wrapper for FilterAdapter {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
+druid_rdbc::impl_standard_wrapper!(FilterAdapter => Wrapper);

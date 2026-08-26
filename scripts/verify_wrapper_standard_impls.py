@@ -559,7 +559,7 @@ def task_adapter_rows(path: Path, evidence_path: Path) -> list[AdapterRow]:
     selected = [
         row
         for row in raw_rows
-        if row["target_task"] == TASK and row["owner"] == "WRAPPER_ADAPTER"
+        if row["target_task"] == TASK and row["owner"] == "WRAPPER_STANDARD"
     ]
     selected_keys = {(row["source_path"], row["target_trait"]) for row in selected}
     if set(evidence_by_key) != selected_keys:
@@ -2177,24 +2177,22 @@ def has_wrapper_macro(source: str, type_name: str, target_trait: str) -> bool:
 
 
 def verify_adapter_source(root: Path, row: AdapterRow) -> None:
-    """Require parallel Physical/standard impls and a single production execution core."""
+    """Require one canonical implementation and a source-bound execution core."""
 
     path = root / row.source_path
     if not path.is_file():
         fail(f"adapter source is missing: {row.source_path}")
     source = path.read_text(encoding="utf-8")
     tokens = code_tokens(source)
-    current = extract_impl_bodies(source, row.current_trait, row.implementation_type)
-    if not current and row.current_trait.rsplit("::", 1)[-1] != "Wrapper":
-        fail(
-            f"temporary Physical impl missing: {row.implementation_type} in {row.source_path}"
-        )
     if row.state != LIVE_ADAPTER_STATE:
-        if row.state != "CURRENT_IMPL_TARGET_PLANNED":
-            fail(
-                f"adapter inventory row has unknown state: {row.implementation_type}: {row.state}"
-            )
-        return
+        fail(
+            f"adapter inventory row is not canonical live: {row.implementation_type}: {row.state}"
+        )
+    if row.current_trait != row.target_trait:
+        fail(
+            f"adapter inventory retains a transitional trait: {row.implementation_type}: "
+            f"{row.current_trait} != {row.target_trait}"
+        )
     standard_path = root / row.standard_source_path
     if not standard_path.is_file():
         fail(f"canonical standard source is missing: {row.standard_source_path}")
@@ -2235,6 +2233,24 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
                 f"family prepared executor provenance is missing: {row.implementation_type}"
             )
         return
+    if row.standard_implementation_type == "StandardAdapterDatabaseMetaData":
+        standard_source = standard_path.read_text(encoding="utf-8")
+        required = (
+            "impl DatabaseMetaData for StandardAdapterDatabaseMetaData",
+            "database_product_name",
+            "tables",
+            "ensure_open_core",
+        )
+        if any(marker not in standard_source for marker in required):
+            fail(
+                f"common canonical metadata behavior is incomplete: {row.implementation_type}"
+            )
+        owner = row.standard_core_evidence.split("::", 1)[0]
+        if owner not in source or "standard_executor_core" not in source:
+            fail(
+                f"family metadata executor provenance is missing: {row.implementation_type}"
+            )
+        return
     target_leaf = row.target_trait.rsplit("::", 1)[-1]
     standard = extract_impl_bodies(source, row.target_trait, row.implementation_type)
     wrapper_only = target_leaf == "Wrapper" and has_wrapper_macro(
@@ -2242,8 +2258,8 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
     )
     if not standard and not wrapper_only:
         fail(
-            f"canonical adapter implements only Physical*: {row.implementation_type} "
-            f"missing {row.target_trait}"
+            f"canonical adapter implementation is missing: {row.implementation_type} "
+            f"for {row.target_trait}"
         )
     canonical_path = row.target_trait.replace("druid_rdbc::", "druid_rdbc :: ").replace(
         "::", " :: "
@@ -2251,9 +2267,8 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
     canonical_import = (
         row.target_trait.rsplit("::", 1)[0].replace("::", " :: ") + f" :: {target_leaf}"
     )
-    macro_provenance = (
-        "druid_rdbc :: impl_standard_wrapper" in tokens
-        and f"=> {target_leaf}" in tokens
+    macro_provenance = "druid_rdbc :: impl_standard_wrapper" in tokens and (
+        f"=> {target_leaf}" in tokens or f"= > {target_leaf}" in tokens
     )
     if (
         canonical_path not in tokens
@@ -2272,34 +2287,12 @@ def verify_adapter_source(root: Path, row: AdapterRow) -> None:
             fail(
                 f"canonical impl inherits only empty/default behavior: {row.implementation_type}"
             )
-        if "Physical" in body:
-            fail(f"standard impl delegates back to Physical: {row.implementation_type}")
         markers = [marker for marker in SQL_EXECUTION_MARKERS if marker in body]
         delegates = "_core(" in body or "actor" in body.lower()
         if markers and not delegates:
             fail(
                 "standard impl duplicates SQL/default/error logic instead of delegating one core: "
                 f"{row.implementation_type}: {markers}"
-            )
-    current_cores = (
-        set().union(*(core_calls(body) for body in current)) if current else set()
-    )
-    standard_cores = (
-        set().union(*(core_calls(body) for body in standard)) if standard else set()
-    )
-    if target_leaf in {"ConnectionFactory", "DatabaseMetaData", "ResultSet"}:
-        transitive_factory_core = (
-            target_leaf == "ConnectionFactory"
-            and "create_adapter_core" in source
-            and standard
-            and "create_adapter_core" in standard[0]
-        )
-        if (
-            not current_cores.intersection(standard_cores)
-            and not transitive_factory_core
-        ):
-            fail(
-                f"standard and Physical impls use split cores: {row.implementation_type}"
             )
     if target_leaf == "Connection":
         required = ("create_statement", "prepare_statement")

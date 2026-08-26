@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::ResultSetColumnType;
+pub use druid_rdbc::metadata::ResultSetColumnType;

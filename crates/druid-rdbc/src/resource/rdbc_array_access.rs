@@ -1,6 +1,6 @@
 use crate::error::RdbcError;
 use crate::resource::RdbcResourceAccess;
-use crate::spi::RdbcResultSet;
+use crate::result_set::ResultSet;
 use crate::types::{RdbcObject, RdbcTypeMap};
 
 /// Driver access contract for the operations defined by Java `java.sql.Array`.
@@ -35,18 +35,22 @@ pub trait RdbcArrayAccess: RdbcResourceAccess {
         ))
     }
     /// Returns all elements as a result set using the default type map.
-    async fn result_set(&self) -> Result<RdbcResultSet, RdbcError> {
+    async fn result_set(&self) -> Result<Box<dyn ResultSet>, RdbcError> {
         Err(RdbcError::feature_not_supported("Array#getResultSet"))
     }
     /// Returns all elements as a result set using an explicit type map.
     async fn result_set_with_type_map(
         &self,
         _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, RdbcError> {
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
         Err(RdbcError::feature_not_supported("Array#getResultSet(Map)"))
     }
     /// Returns a range as a result set.
-    async fn result_set_range(&self, _index: i64, _count: i32) -> Result<RdbcResultSet, RdbcError> {
+    async fn result_set_range(
+        &self,
+        _index: i64,
+        _count: i32,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
         Err(RdbcError::feature_not_supported(
             "Array#getResultSet(long,int)",
         ))
@@ -57,7 +61,7 @@ pub trait RdbcArrayAccess: RdbcResourceAccess {
         _index: i64,
         _count: i32,
         _type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, RdbcError> {
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
         Err(RdbcError::feature_not_supported(
             "Array#getResultSet(long,int,Map)",
         ))

@@ -90,12 +90,12 @@ pub struct DataSourceContent {
     pub logic_close_count: i64,
     #[serde(rename = "LogicConnectErrorCount")]
     pub logic_connect_error_count: i64,
-    #[serde(rename = "PhysicalConnectCount")]
-    pub physical_connect_count: i64,
-    #[serde(rename = "PhysicalCloseCount")]
-    pub physical_close_count: i64,
-    #[serde(rename = "PhysicalConnectErrorCount")]
-    pub physical_connect_error_count: i64,
+    #[serde(rename = "DriverConnectCount")]
+    pub driver_connect_count: i64,
+    #[serde(rename = "DriverCloseCount")]
+    pub driver_close_count: i64,
+    #[serde(rename = "DriverConnectErrorCount")]
+    pub driver_connect_error_count: i64,
     #[serde(rename = "ExecuteCount")]
     pub execute_count: i64,
     #[serde(rename = "ExecuteUpdateCount")]

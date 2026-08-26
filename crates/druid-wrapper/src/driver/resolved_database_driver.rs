@@ -1,21 +1,21 @@
 use super::DatabaseProfile;
-use druid_rdbc::spi::PhysicalConnectionFactory;
+use druid_rdbc::driver::ConnectionFactory;
 use std::fmt;
 use std::sync::Arc;
 
-/// 已解析为 Druid 未池化物理连接工厂的数据库产品驱动。
+/// 已解析为 Druid 未池化 canonical 连接工厂的数据库产品驱动。
 #[derive(Clone)]
 pub struct ResolvedDatabaseDriver {
     profile: DatabaseProfile,
     url: String,
-    factory: Arc<dyn PhysicalConnectionFactory>,
+    factory: Arc<dyn ConnectionFactory>,
 }
 
 impl ResolvedDatabaseDriver {
     pub(crate) fn new(
         profile: DatabaseProfile,
         url: String,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
     ) -> Self {
         Self {
             profile,
@@ -33,7 +33,7 @@ impl ResolvedDatabaseDriver {
         &self.url
     }
     #[must_use]
-    pub fn factory(&self) -> Arc<dyn PhysicalConnectionFactory> {
+    pub fn factory(&self) -> Arc<dyn ConnectionFactory> {
         Arc::clone(&self.factory)
     }
 }

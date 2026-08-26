@@ -24,9 +24,28 @@ REQUIRED_CANONICAL_MODULES = (
 )
 TRANSITIONAL_ROOT_MODULES = {"compat", "error", "resource", "spi", "types"}
 ALLOWED_EXTERNAL_IMPORT_ROOTS = {
-    "alloc", "async_trait", "bool", "char", "clippy", "core", "f32", "f64", "i8",
-    "i16", "i32", "i64", "i128", "isize", "str", "std", "u8", "u16", "u32",
-    "u64", "u128", "usize",
+    "alloc",
+    "async_trait",
+    "bool",
+    "char",
+    "clippy",
+    "core",
+    "f32",
+    "f64",
+    "i8",
+    "i16",
+    "i32",
+    "i64",
+    "i128",
+    "isize",
+    "str",
+    "std",
+    "u8",
+    "u16",
+    "u32",
+    "u64",
+    "u128",
+    "usize",
 }
 ALLOWED_BARE_PRELUDE_MACROS = {"format"}
 ALLOWED_QUALIFIED_MACRO_ROOTS = {"alloc", "core", "std"}
@@ -38,11 +57,41 @@ CANONICAL_CRATE_MACRO_SOURCES = {
 }
 FORBIDDEN_TRANSITIONAL_PATH_ROOTS = {"compat", "resource", "spi"}
 RUST_PRELUDE_ROOTS = {
-    "Box", "Clone", "Copy", "Default", "DoubleEndedIterator", "Drop", "Eq", "Err",
-    "ExactSizeIterator", "Extend", "Fn", "FnMut", "FnOnce", "From", "Into",
-    "IntoIterator", "Iterator", "None", "Ok", "Option", "Ord", "PartialEq",
-    "PartialOrd", "Result", "Send", "Sized", "Some", "String", "Sync", "ToOwned",
-    "ToString", "TryFrom", "TryInto", "Unpin", "Vec",
+    "Box",
+    "Clone",
+    "Copy",
+    "Default",
+    "DoubleEndedIterator",
+    "Drop",
+    "Eq",
+    "Err",
+    "ExactSizeIterator",
+    "Extend",
+    "Fn",
+    "FnMut",
+    "FnOnce",
+    "From",
+    "Into",
+    "IntoIterator",
+    "Iterator",
+    "None",
+    "Ok",
+    "Option",
+    "Ord",
+    "PartialEq",
+    "PartialOrd",
+    "Result",
+    "Send",
+    "Sized",
+    "Some",
+    "String",
+    "Sync",
+    "ToOwned",
+    "ToString",
+    "TryFrom",
+    "TryInto",
+    "Unpin",
+    "Vec",
 }
 DELIMITER_PAIRS = {"(": ")", "[": "]", "{": "}"}
 
@@ -74,7 +123,10 @@ def forbidden_identity(identifier: str) -> bool:
         )
     ):
         return True
-    if normalized.startswith("pooledconnection") or normalized == "connectionpooldatasource":
+    if (
+        normalized.startswith("pooledconnection")
+        or normalized == "connectionpooldatasource"
+    ):
         return False
     if identifier in {"spi", "compat"}:
         return True
@@ -84,10 +136,22 @@ def forbidden_identity(identifier: str) -> bool:
 def verify_module_root(path: Path, token_texts: list[str]) -> None:
     """Require module roots to contain declarations and re-exports only."""
 
-    forbidden_items = {"trait", "struct", "enum", "union", "impl", "fn", "const", "static", "type"}
+    forbidden_items = {
+        "trait",
+        "struct",
+        "enum",
+        "union",
+        "impl",
+        "fn",
+        "const",
+        "static",
+        "type",
+    }
     present = sorted(forbidden_items.intersection(token_texts))
     if present:
-        fail(f"module root defines items instead of declaring/re-exporting modules: {path}: {present}")
+        fail(
+            f"module root defines items instead of declaring/re-exporting modules: {path}: {present}"
+        )
 
 
 @dataclass(frozen=True)
@@ -262,7 +326,9 @@ def canonical_identifier(token: Token) -> str:
     return token.text.removeprefix("r#")
 
 
-def delimiter_index(tokens: list[Token], source: Path) -> tuple[dict[int, int], dict[int, int]]:
+def delimiter_index(
+    tokens: list[Token], source: Path
+) -> tuple[dict[int, int], dict[int, int]]:
     """Build exact delimiter pairs for one tokenized source file."""
 
     matching: dict[int, int] = {}
@@ -378,12 +444,13 @@ def macro_invocation_sites(unit: SourceUnit) -> tuple[MacroInvocationSite, ...]:
             raw = raw or tokens[cursor + 1].text.startswith("r#")
             path.append(canonical_identifier(tokens[cursor + 1]))
             cursor += 2
-        if cursor < len(tokens) and cursor not in excluded and tokens[cursor].text == "!":
+        if (
+            cursor < len(tokens)
+            and cursor not in excluded
+            and tokens[cursor].text == "!"
+        ):
             root_token = tokens[start + int(absolute)]
-            if (
-                len(path) == 1
-                and root_token.text in RUST_2021_STRICT_RESERVED_KEYWORDS
-            ):
+            if len(path) == 1 and root_token.text in RUST_2021_STRICT_RESERVED_KEYWORDS:
                 index = cursor + 1
                 continue
             sites.append(
@@ -579,9 +646,7 @@ def generic_bound_sites_in_predicate(
         ):
             path.append(canonical_identifier(tokens[cursor + 1]))
             cursor += 2
-        sites.append(
-            GenericBoundSite(unit.relative, path_start, tuple(path), absolute)
-        )
+        sites.append(GenericBoundSite(unit.relative, path_start, tuple(path), absolute))
     return tuple(sites)
 
 
@@ -625,9 +690,7 @@ def where_bound_sites(
     return tuple(sites)
 
 
-def generic_parameter_bindings(
-    unit: SourceUnit, opening: int, closing: int
-) -> tuple[
+def generic_parameter_bindings(unit: SourceUnit, opening: int, closing: int) -> tuple[
     frozenset[str],
     frozenset[str],
     frozenset[str],
@@ -665,8 +728,10 @@ def generic_parameter_bindings(
     for segment_start, segment_end in segments:
         cursor = segment_start
         while cursor < segment_end and tokens[cursor].text == "#":
-            bracket = cursor + 1 + int(
-                cursor + 1 < segment_end and tokens[cursor + 1].text == "!"
+            bracket = (
+                cursor
+                + 1
+                + int(cursor + 1 < segment_end and tokens[cursor + 1].text == "!")
             )
             end = unit.matching.get(bracket)
             if end is None or end >= segment_end:
@@ -720,16 +785,22 @@ class ModuleScopeIndex:
         if not (root / crate_root).is_file():
             fail("standard scaffold is incomplete: ['lib.rs']")
         unit = self.source(crate_root)
-        root_scope = self.register_scope((), crate_root, 0, len(unit.tokens), None, True)
+        root_scope = self.register_scope(
+            (), crate_root, 0, len(unit.tokens), None, True
+        )
         self.scan_scope(root_scope)
         root_names = {
             name
             for name, identity in root_scope.children.items()
-            if root_scope.child_visibility[name] and identity and name not in TRANSITIONAL_ROOT_MODULES
+            if root_scope.child_visibility[name]
+            and identity
+            and name not in TRANSITIONAL_ROOT_MODULES
         }
         missing = sorted(set(REQUIRED_CANONICAL_MODULES).difference(root_names))
         if missing:
-            fail(f"standard scaffold is incomplete or unreachable from lib.rs: {missing}")
+            fail(
+                f"standard scaffold is incomplete or unreachable from lib.rs: {missing}"
+            )
         self.canonical_roots = tuple(sorted(root_names))
         self.index_lexical_generic_scopes()
         for unit in tuple(self.sources.values()):
@@ -804,7 +875,11 @@ class ModuleScopeIndex:
             return True
         if unit.tokens[previous].text == ")":
             opening = unit.reverse_matching.get(previous)
-            return bool(opening is not None and opening - 1 >= scope.start and unit.tokens[opening - 1].text == "pub")
+            return bool(
+                opening is not None
+                and opening - 1 >= scope.start
+                and unit.tokens[opening - 1].text == "pub"
+            )
         return False
 
     def external_module_source(self, identity: tuple[str, ...]) -> Path:
@@ -829,7 +904,11 @@ class ModuleScopeIndex:
     ) -> None:
         """Bind one declared child, rejecting duplicate/ambiguous namespace entries."""
 
-        if name in scope.children or name in scope.bindings or name in scope.local_items:
+        if (
+            name in scope.children
+            or name in scope.bindings
+            or name in scope.local_items
+        ):
             fail(f"ambiguous module child binding in {scope.source}: {name}")
         scope.children[name] = child.identity
         scope.child_visibility[name] = public
@@ -855,7 +934,11 @@ class ModuleScopeIndex:
         while index < scope.end:
             token = tokens[index]
             if token.text == "#":
-                bracket = index + 1 + int(index + 1 < len(tokens) and tokens[index + 1].text == "!")
+                bracket = (
+                    index
+                    + 1
+                    + int(index + 1 < len(tokens) and tokens[index + 1].text == "!")
+                )
                 end = unit.matching.get(bracket)
                 if end is None or end >= scope.end:
                     fail(f"attribute escapes module source range in {scope.source}")
@@ -867,7 +950,11 @@ class ModuleScopeIndex:
                     fail(f"delimiter escapes module source range in {scope.source}")
                 index = end + 1
                 continue
-            if token.text == "mod" and index + 2 < scope.end and tokens[index + 1].kind == "IDENT":
+            if (
+                token.text == "mod"
+                and index + 2 < scope.end
+                and tokens[index + 1].kind == "IDENT"
+            ):
                 name = canonical_identifier(tokens[index + 1])
                 public = self.public_before(unit, index, scope)
                 delimiter = tokens[index + 2].text
@@ -907,7 +994,9 @@ class ModuleScopeIndex:
                     self.scan_scope(child)
                     index = end + 1
                     continue
-                fail(f"unknown or macro-generated module edge in {scope.source}: mod {name}")
+                fail(
+                    f"unknown or macro-generated module edge in {scope.source}: mod {name}"
+                )
             if token.text == "use":
                 try:
                     entries, end = parse_use_tree(tokens, index + 1)
@@ -922,7 +1011,9 @@ class ModuleScopeIndex:
                     if not path:
                         fail(f"empty canonical import in {scope.source}")
                     if path[-1] == "*":
-                        fail(f"wildcard import is forbidden in canonical source: {scope.source}")
+                        fail(
+                            f"wildcard import is forbidden in canonical source: {scope.source}"
+                        )
                     name = (entry.alias or path[-1]).removeprefix("r#")
                     if name == "_":
                         continue
@@ -936,7 +1027,11 @@ class ModuleScopeIndex:
             if token.text in item_keywords and index + 1 < scope.end:
                 if tokens[index + 1].kind == "IDENT":
                     name = canonical_identifier(tokens[index + 1])
-                    if name in scope.children or name in scope.bindings or name in scope.local_items:
+                    if (
+                        name in scope.children
+                        or name in scope.bindings
+                        or name in scope.local_items
+                    ):
                         fail(f"ambiguous local item binding in {scope.source}: {name}")
                     scope.local_items[name] = LocalItem(
                         self.public_before(unit, index, scope),
@@ -951,25 +1046,37 @@ class ModuleScopeIndex:
             elif token.text in {"const", "static"}:
                 if token.text == "const":
                     function_cursor = index + 1
-                    while function_cursor < scope.end and tokens[function_cursor].text in {
+                    while function_cursor < scope.end and tokens[
+                        function_cursor
+                    ].text in {
                         "async",
                         "unsafe",
                     }:
                         function_cursor += 1
-                    if function_cursor < scope.end and tokens[function_cursor].text == "extern":
+                    if (
+                        function_cursor < scope.end
+                        and tokens[function_cursor].text == "extern"
+                    ):
                         function_cursor += 1
                         if (
                             function_cursor < scope.end
                             and tokens[function_cursor].kind == "STRING"
                         ):
                             function_cursor += 1
-                    if function_cursor < scope.end and tokens[function_cursor].text == "fn":
+                    if (
+                        function_cursor < scope.end
+                        and tokens[function_cursor].text == "fn"
+                    ):
                         index += 1
                         continue
                 cursor = index + 1
                 if cursor < scope.end and tokens[cursor].text == "mut":
                     cursor += 1
-                if cursor < scope.end and tokens[cursor].kind == "IDENT" and tokens[cursor].text != "fn":
+                if (
+                    cursor < scope.end
+                    and tokens[cursor].kind == "IDENT"
+                    and tokens[cursor].text != "fn"
+                ):
                     name = canonical_identifier(tokens[cursor])
                     if name != "_":
                         scope.local_items.setdefault(
@@ -990,7 +1097,10 @@ class ModuleScopeIndex:
                         LocalItem(False, "macro_rules", "macro"),
                     )
                     opening = index + 3
-                    if opening >= scope.end or tokens[opening].text not in DELIMITER_PAIRS:
+                    if (
+                        opening >= scope.end
+                        or tokens[opening].text not in DELIMITER_PAIRS
+                    ):
                         fail(f"unknown macro_rules declaration in {scope.source}")
                     end = unit.matching.get(opening)
                     if end is None or end >= scope.end:
@@ -1026,7 +1136,9 @@ class ModuleScopeIndex:
                     excluded_cursor += 1
                 if (
                     excluded_cursor < len(excluded)
-                    and excluded[excluded_cursor][0] <= index < excluded[excluded_cursor][1]
+                    and excluded[excluded_cursor][0]
+                    <= index
+                    < excluded[excluded_cursor][1]
                 ):
                     index = excluded[excluded_cursor][1]
                     continue
@@ -1076,9 +1188,7 @@ class ModuleScopeIndex:
                     inline_bound_sites,
                 ) = generic_parameter_bindings(unit, opening, closing)
                 unit.generic_bound_sites.extend(inline_bound_sites)
-                unit.generic_bound_sites.extend(
-                    where_bound_sites(unit, closing, end)
-                )
+                unit.generic_bound_sites.extend(where_bound_sites(unit, closing, end))
                 if type_bindings or const_bindings or lifetime_bindings:
                     unit.lexical_generic_scopes.append(
                         LexicalGenericScope(
@@ -1108,8 +1218,7 @@ class ModuleScopeIndex:
             parents = [
                 parent
                 for parent in unit.declaration_scopes
-                if parent.start < declaration.start
-                and declaration.end <= parent.end
+                if parent.start < declaration.start and declaration.end <= parent.end
             ]
             if not parents:
                 continue
@@ -1135,9 +1244,7 @@ class ModuleScopeIndex:
                 (
                     "value"
                     if declaration.declaration_kind == "fn"
-                    else "module"
-                    if declaration.declaration_kind == "mod"
-                    else "type"
+                    else "module" if declaration.declaration_kind == "mod" else "type"
                 ),
                 unit.relative,
                 opening + 1,
@@ -1174,8 +1281,7 @@ class ModuleScopeIndex:
 
         for unit in self.sources.values():
             if not any(
-                not scope.identity
-                or scope.identity[0] in self.canonical_roots
+                not scope.identity or scope.identity[0] in self.canonical_roots
                 for scope in unit.scopes
             ):
                 continue
@@ -1218,8 +1324,7 @@ class ModuleScopeIndex:
         module_boundaries = {
             (scope.start - 1, scope.end)
             for scope in unit.scopes
-            if scope.start > 0
-            and unit.tokens[scope.start - 1].text == "{"
+            if scope.start > 0 and unit.tokens[scope.start - 1].text == "{"
         }
         for start, end in macro_definition_ranges(unit):
             name_token = unit.tokens[start + 2]
@@ -1237,9 +1342,7 @@ class ModuleScopeIndex:
             active_end = (
                 scope.end
                 if module_scoped and scope is not None
-                else len(unit.tokens)
-                if module_scoped
-                else block[1]
+                else len(unit.tokens) if module_scoped else block[1]
             )
             definition = MacroDefinition(
                 name,
@@ -1272,7 +1375,11 @@ class ModuleScopeIndex:
         tokens = unit.tokens
         index = 0
         while index + 2 < len(tokens):
-            if index in excluded or tokens[index].text != "extern" or tokens[index + 1].text != "crate":
+            if (
+                index in excluded
+                or tokens[index].text != "extern"
+                or tokens[index + 1].text != "crate"
+            ):
                 index += 1
                 continue
             crate_token = tokens[index + 2]
@@ -1287,7 +1394,10 @@ class ModuleScopeIndex:
                 )
             if cursor >= len(tokens) or tokens[cursor].text != ";":
                 fail(f"extern crate is not terminated in {unit.relative}: {crate_name}")
-            if crate_token.text.startswith("r#") or crate_name not in ALLOWED_QUALIFIED_MACRO_ROOTS:
+            if (
+                crate_token.text.startswith("r#")
+                or crate_name not in ALLOWED_QUALIFIED_MACRO_ROOTS
+            ):
                 fail(f"extern crate is forbidden in {unit.relative}: {crate_name}")
             index = cursor + 1
 
@@ -1295,9 +1405,7 @@ class ModuleScopeIndex:
         """Record use aliases inside functions/blocks with exact block ranges."""
 
         module_use_starts = {
-            start
-            for scope in unit.scopes
-            for start, _ in scope.use_ranges
+            start for scope in unit.scopes for start, _ in scope.use_ranges
         }
         excluded = {
             cursor
@@ -1312,7 +1420,11 @@ class ModuleScopeIndex:
         tokens = unit.tokens
         index = 0
         while index < len(tokens):
-            if index in excluded or tokens[index].text != "use" or index in module_use_starts:
+            if (
+                index in excluded
+                or tokens[index].text != "use"
+                or index in module_use_starts
+            ):
                 index += 1
                 continue
             try:
@@ -1354,9 +1466,7 @@ class ModuleScopeIndex:
                     and current.end == binding.end
                     for current in unit.lexical_use_bindings
                 ):
-                    fail(
-                        f"ambiguous lexical macro binding in {unit.relative}: {name}"
-                    )
+                    fail(f"ambiguous lexical macro binding in {unit.relative}: {name}")
                 unit.lexical_use_bindings.append(binding)
             index = end + 1
 
@@ -1381,7 +1491,10 @@ class ModuleScopeIndex:
                 definition.source == site.source
                 and definition.active_start <= site.token_index < definition.active_end
             )
-        if invocation_scope.identity[: len(definition.scope_identity)] != definition.scope_identity:
+        if (
+            invocation_scope.identity[: len(definition.scope_identity)]
+            != definition.scope_identity
+        ):
             return False
         child_identity = invocation_scope.identity[: len(definition.scope_identity) + 1]
         child = self.scopes.get(child_identity)
@@ -1414,7 +1527,9 @@ class ModuleScopeIndex:
             and binding.name == name
             and binding.start <= token_index < binding.end
         ]
-        return min(candidates, key=lambda binding: binding.end - binding.start, default=None)
+        return min(
+            candidates, key=lambda binding: binding.end - binding.start, default=None
+        )
 
     def resolve_lexical_use_binding(
         self,
@@ -1534,13 +1649,13 @@ class ModuleScopeIndex:
             )
         return None
 
-    def bare_macro_shadow(
-        self, site: MacroInvocationSite, name: str
-    ) -> str | None:
+    def bare_macro_shadow(self, site: MacroInvocationSite, name: str) -> str | None:
         """Return textual/path-based provenance shadowing a standard-prelude macro."""
 
         for definition in self.macro_definitions:
-            if definition.name == name and self.macro_definition_active(definition, site):
+            if definition.name == name and self.macro_definition_active(
+                definition, site
+            ):
                 return f"textual macro definition in {definition.source}"
         scope = self.scope_for(site.source, site.token_index)
         try:
@@ -1594,7 +1709,9 @@ class ModuleScopeIndex:
 
         rendered = "::".join(site.path)
         if site.raw:
-            fail(f"raw macro identifier has unprovable provenance in {site.source}: {rendered}!")
+            fail(
+                f"raw macro identifier has unprovable provenance in {site.source}: {rendered}!"
+            )
         if len(site.path) == 1:
             name = site.path[0]
             if name == "impl_standard_wrapper":
@@ -1605,9 +1722,7 @@ class ModuleScopeIndex:
             if name in ALLOWED_BARE_PRELUDE_MACROS:
                 shadow = self.bare_macro_shadow(site, name)
                 if shadow is not None:
-                    fail(
-                        f"bare macro is shadowed in {site.source}: {name}! ({shadow})"
-                    )
+                    fail(f"bare macro is shadowed in {site.source}: {name}! ({shadow})")
                 return
         if not site.absolute and site.path == ("crate", "impl_standard_wrapper"):
             self.prove_canonical_crate_macro(site, "impl_standard_wrapper")
@@ -1627,10 +1742,7 @@ class ModuleScopeIndex:
                     "qualified standard macro root has untrusted binding provenance in "
                     f"{site.source}: {rendered}! ({error})"
                 )
-            if (
-                target.kind != "external"
-                or target.external_root != site.path[0]
-            ):
+            if target.kind != "external" or target.external_root != site.path[0]:
                 fail(
                     "qualified standard macro root does not resolve to external provenance in "
                     f"{site.source}: {rendered}!"
@@ -1665,10 +1777,7 @@ class ModuleScopeIndex:
             scope
             for scope in unit.lexical_generic_scopes
             if scope.start <= token_index < scope.end
-            and (
-                name in scope.type_bindings
-                or name in scope.const_bindings
-            )
+            and (name in scope.type_bindings or name in scope.const_bindings)
         ]
         for lexical_scope in sorted(
             candidates, key=lambda scope: (scope.end - scope.start, -scope.start)
@@ -1711,7 +1820,11 @@ class ModuleScopeIndex:
             return None
         path = [canonical_identifier(tokens[index])]
         cursor = index + 1
-        while cursor + 1 < end and tokens[cursor].text == "::" and tokens[cursor + 1].kind == "IDENT":
+        while (
+            cursor + 1 < end
+            and tokens[cursor].text == "::"
+            and tokens[cursor + 1].kind == "IDENT"
+        ):
             path.append(canonical_identifier(tokens[cursor + 1]))
             cursor += 2
         if cursor < end and tokens[cursor].text == "!":
@@ -1724,7 +1837,9 @@ class ModuleScopeIndex:
         unit = self.sources.get(relative)
         if unit is None:
             return None
-        candidates = [scope for scope in unit.scopes if scope.start <= token_index < scope.end]
+        candidates = [
+            scope for scope in unit.scopes if scope.start <= token_index < scope.end
+        ]
         return max(candidates, key=lambda scope: len(scope.identity), default=None)
 
     def resolve_binding(
@@ -1742,7 +1857,9 @@ class ModuleScopeIndex:
             return self.binding_cache[cache_key]
         recursion_key = (scope.identity, name)
         if recursion_key in resolving:
-            fail(f"cyclic re-export binding at crate::{'::'.join(scope.identity + (name,))}")
+            fail(
+                f"cyclic re-export binding at crate::{'::'.join(scope.identity + (name,))}"
+            )
         binding = scope.bindings[name]
         resolving.add(recursion_key)
         target = self.resolve_path(
@@ -1775,21 +1892,29 @@ class ModuleScopeIndex:
         require_public = not requester_is_descendant
         if name in module.children:
             if require_public and not module.child_visibility[name]:
-                fail(f"module child is not reachable: crate::{'::'.join(module.identity + (name,))}")
+                fail(
+                    f"module child is not reachable: crate::{'::'.join(module.identity + (name,))}"
+                )
             return ResolvedTarget("module", module.children[name])
         if name in module.bindings:
             binding = module.bindings[name]
             if require_public and not binding.public:
-                fail(f"binding is not reachable: crate::{'::'.join(module.identity + (name,))}")
+                fail(
+                    f"binding is not reachable: crate::{'::'.join(module.identity + (name,))}"
+                )
             return self.resolve_binding(
                 module, name, canonical=canonical, resolving=resolving
             )
         if name in module.local_items:
             item = module.local_items[name]
             if require_public and not item.public:
-                fail(f"item is not reachable: crate::{'::'.join(module.identity + (name,))}")
+                fail(
+                    f"item is not reachable: crate::{'::'.join(module.identity + (name,))}"
+                )
             return ResolvedTarget("item", module.identity)
-        fail(f"absent child/binding/re-export: crate::{'::'.join(module.identity + (name,))}")
+        fail(
+            f"absent child/binding/re-export: crate::{'::'.join(module.identity + (name,))}"
+        )
 
     def resolve_path(
         self,
@@ -1809,7 +1934,9 @@ class ModuleScopeIndex:
         if not path:
             fail("cannot resolve an empty Rust path")
         resolving = resolving if resolving is not None else set()
-        lexical_resolving = lexical_resolving if lexical_resolving is not None else set()
+        lexical_resolving = (
+            lexical_resolving if lexical_resolving is not None else set()
+        )
         root_scope = self.scopes[()]
         cursor = 0
         first = path[0]
@@ -1857,11 +1984,16 @@ class ModuleScopeIndex:
                     ) from None
                 target = None
             if target is None:
-                if first in ALLOWED_EXTERNAL_IMPORT_ROOTS or first in RUST_PRELUDE_ROOTS:
+                if (
+                    first in ALLOWED_EXTERNAL_IMPORT_ROOTS
+                    or first in RUST_PRELUDE_ROOTS
+                ):
                     return ResolvedTarget("external", external_root=first)
                 if scope is None:
                     if canonical:
-                        fail(f"unknown path root without reachable module scope: {first}")
+                        fail(
+                            f"unknown path root without reachable module scope: {first}"
+                        )
                     return ResolvedTarget("external", external_root=first)
                 if canonical:
                     raise VerificationError(
@@ -1881,7 +2013,9 @@ class ModuleScopeIndex:
                 break
             module = self.scopes.get(target.module)
             if module is None:
-                fail(f"resolved module is absent from reachable index: {'::'.join(target.module)}")
+                fail(
+                    f"resolved module is absent from reachable index: {'::'.join(target.module)}"
+                )
             try:
                 target = self.member(
                     module,
@@ -1908,13 +2042,17 @@ class ModuleScopeIndex:
             return
         if target.kind == "external":
             root = target.external_root or path[0]
-            if root not in ALLOWED_EXTERNAL_IMPORT_ROOTS and root not in RUST_PRELUDE_ROOTS:
+            if (
+                root not in ALLOWED_EXTERNAL_IMPORT_ROOTS
+                and root not in RUST_PRELUDE_ROOTS
+            ):
                 fail(f"backend/external root is forbidden: {root}")
         if target.module and target.module[0] in FORBIDDEN_TRANSITIONAL_PATH_ROOTS:
             fail(
                 "canonical path resolves into transitional module: "
                 f"{'::'.join(target.module)} via {'::'.join(path)}"
             )
+
 
 def discover_standard_files(index: ModuleScopeIndex) -> tuple[Path, ...]:
     """Keep every physical Rust file under canonical roots in the pollution denominator."""
@@ -1965,7 +2103,11 @@ def parse_candidate_path(
         start = index
         path = ["crate"]
         cursor = index + 2
-        while cursor + 1 < len(tokens) and tokens[cursor].text == "::" and tokens[cursor + 1].kind == "IDENT":
+        while (
+            cursor + 1 < len(tokens)
+            and tokens[cursor].text == "::"
+            and tokens[cursor + 1].kind == "IDENT"
+        ):
             path.append(canonical_identifier(tokens[cursor + 1]))
             cursor += 2
         return tuple(path), False, max(cursor, start + 1)
@@ -1979,7 +2121,11 @@ def parse_candidate_path(
         return None
     path = [canonical_identifier(tokens[index])]
     cursor = index + 1
-    while cursor + 1 < len(tokens) and tokens[cursor].text == "::" and tokens[cursor + 1].kind == "IDENT":
+    while (
+        cursor + 1 < len(tokens)
+        and tokens[cursor].text == "::"
+        and tokens[cursor + 1].kind == "IDENT"
+    ):
         path.append(canonical_identifier(tokens[cursor + 1]))
         cursor += 2
     return tuple(path), absolute, cursor
@@ -2001,16 +2147,18 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
     attribute_ranges(unit)
     macro_ranges = macro_definition_ranges(unit)
     macro_indexes = {
-        cursor
-        for start, end in macro_ranges
-        for cursor in range(start, end)
+        cursor for start, end in macro_ranges for cursor in range(start, end)
     }
     tokens = unit.tokens
     for cursor, token in enumerate(tokens):
         if cursor in macro_indexes:
             continue
         name = token.text.removeprefix("r#")
-        if name == "include" and cursor + 1 < len(tokens) and tokens[cursor + 1].text == "!":
+        if (
+            name == "include"
+            and cursor + 1 < len(tokens)
+            and tokens[cursor + 1].text == "!"
+        ):
             fail(f"include! escapes reachable module discovery in {relative}")
         if (
             name == "extern"
@@ -2082,7 +2230,7 @@ def verify_file_paths(index: ModuleScopeIndex, relative: Path) -> None:
 def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
     """Verify one source tree for the requested migration phase."""
 
-    if phase not in {"scaffold", "transitional"}:
+    if phase not in {"scaffold", "transitional", "final"}:
         fail(f"unknown purity phase: {phase}")
     module_index = ModuleScopeIndex(root)
     standard_files = discover_standard_files(module_index)
@@ -2102,7 +2250,9 @@ def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
             }
         )
         if polluted:
-            fail(f"standard source contains product/runtime identities: {relative}: {polluted}")
+            fail(
+                f"standard source contains product/runtime identities: {relative}: {polluted}"
+            )
         verify_file_paths(module_index, relative)
         if relative.name == "mod.rs":
             verify_module_root(relative, token_texts)
@@ -2113,7 +2263,9 @@ def main() -> int:
     """Run the repository purity gate."""
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phase", choices=("scaffold", "transitional"), required=True)
+    parser.add_argument(
+        "--phase", choices=("scaffold", "transitional", "final"), required=True
+    )
     arguments = parser.parse_args()
     root = Path(__file__).resolve().parent.parent / "crates/druid-rdbc/src"
     try:

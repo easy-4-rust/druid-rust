@@ -2,7 +2,7 @@
 
 use crate::error::RdbcError;
 use crate::resource::{RdbcArrayAccess, ResourceLifecycle, ResourceOperations};
-use crate::spi::RdbcResultSet;
+use crate::result_set::ResultSet;
 use crate::types::{RdbcObject, RdbcTypeMap};
 use std::fmt;
 use std::sync::Arc;
@@ -103,7 +103,7 @@ impl RdbcArray {
     }
 
     /// Returns all elements as a result set. Corresponds to `Array#getResultSet()`.
-    pub async fn result_set(&self) -> Result<RdbcResultSet, RdbcError> {
+    pub async fn result_set(&self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.context.require(
             ResourceOperations::READ | ResourceOperations::RESULT_SET,
             "Array#getResultSet",
@@ -115,7 +115,7 @@ impl RdbcArray {
     pub async fn result_set_with_type_map(
         &self,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, RdbcError> {
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.context.require(
             ResourceOperations::READ
                 | ResourceOperations::RESULT_SET
@@ -131,7 +131,7 @@ impl RdbcArray {
         &self,
         index: i64,
         count: i32,
-    ) -> Result<RdbcResultSet, RdbcError> {
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.context.require(
             ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::RESULT_SET,
             "Array#getResultSet(long,int)",
@@ -146,7 +146,7 @@ impl RdbcArray {
         index: i64,
         count: i32,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcResultSet, RdbcError> {
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.context.require(
             ResourceOperations::READ
                 | ResourceOperations::RANGE

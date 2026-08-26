@@ -19,7 +19,4 @@ pub(crate) trait FatalErrorHandler: Send + Sync {
 
     /// 在 fatal 处置未触发常规 `minIdle` 补池时唤醒一次创建路径。
     fn request_fatal_error_refill(&self);
-
-    /// 成功验证连接后解除 `onFatalError` 门禁。
-    fn clear_on_fatal_error(&self);
 }

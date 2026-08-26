@@ -5,26 +5,15 @@
 //! when a Rust string cannot represent unpaired surrogates.
 
 use crate::error::RdbcError;
+use crate::extensions::CharacterWriter;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 static NEXT_WRITER_ID: AtomicU64 = AtomicU64::new(1);
 
-/// Service-provider interface for a physical character writer.
-pub trait PhysicalCharacterWriter: fmt::Debug + Send {
-    /// Writes UTF-16 code units.
-    fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, RdbcError>;
-
-    /// Flushes the underlying writer.
-    fn flush(&mut self) -> Result<(), RdbcError>;
-
-    /// Closes the underlying writer.
-    fn close(&mut self) -> Result<(), RdbcError>;
-}
-
 struct RdbcWriterState {
-    writer: Option<Box<dyn PhysicalCharacterWriter>>,
+    writer: Option<Box<dyn CharacterWriter>>,
 }
 
 struct RdbcWriterInner {
@@ -42,7 +31,7 @@ pub struct RdbcWriter {
 
 impl RdbcWriter {
     /// Wraps a physical character writer.
-    pub fn new(writer: impl PhysicalCharacterWriter + 'static) -> Self {
+    pub fn new(writer: impl CharacterWriter + 'static) -> Self {
         Self {
             inner: Arc::new(RdbcWriterInner {
                 id: NEXT_WRITER_ID.fetch_add(1, Ordering::Relaxed),

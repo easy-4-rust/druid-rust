@@ -1,7 +1,7 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.selector.RandomDataSourceValidateThread`。
 
 use super::random_data_source_selector::RandomDataSourceSelectorState;
-use crate::core::{PhysicalConnection, Pool};
+use crate::core::Pool;
 use dashmap::DashMap;
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
@@ -101,7 +101,11 @@ impl RandomDataSourceValidateTask {
                 ))
                 .await;
             }
-            PhysicalConnection::ping(&mut connection).await
+            if druid_rdbc::connection::Connection::is_valid(&mut connection, 1).await? {
+                Ok(())
+            } else {
+                Err(crate::core::DruidError::ConnectionDiscarded)
+            }
         }
         .await;
         if result.is_ok() {

@@ -1,8 +1,9 @@
-//! `DuckDB` 原生物理连接适配器。
+//! `DuckDB` 原生 canonical 连接适配器。
 
-use super::{DuckDbDatabaseMetaData, DuckDbPreparedStatement};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
-use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_executor::{
+    owned_executor, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
+};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
@@ -10,12 +11,7 @@ use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use bigdecimal::{num_bigint::BigInt, BigDecimal};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::error::{SqlException, SqlWarning};
-use druid_rdbc::spi::{
-    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
-    StatementExecuteResult, StatementGeneratedKeys,
-};
+use druid_rdbc::error::SqlException;
 use druid_rdbc::types::{Row, Value};
 use duckdb::types::{
     Decimal as DuckDbDecimal, FromSql as DuckDbFromSql, Null, ValueRef as DuckDbValueRef,
@@ -25,11 +21,10 @@ use parking_lot::Mutex;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
 
-/// `DuckDB` 原生物理连接适配器。
+/// `DuckDB` 原生 canonical 连接适配器。
 ///
 /// 对应 Java 平台依赖：具体 JDBC driver 的 `java.sql.Connection`。本对象只
 /// 持有一个 duckdb-rs `Connection`，不持有外部连接池。所有同步 FFI 调用都在
@@ -101,7 +96,7 @@ impl DuckDbConnectionAdapter {
         &self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         let sql = sql.to_owned();
         self.run_blocking(move |connection| {
             let mut statement = connection
@@ -109,23 +104,11 @@ impl DuckDbConnectionAdapter {
                 .map_err(Self::driver_error)?;
             Self::bind_parameters(&mut statement, &params)?;
             let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
-            Ok(ExecResult {
+            Ok(AdapterUpdateResult {
                 rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
                 last_insert_id: None,
                 row_count: None,
             })
-        })
-        .await
-    }
-
-    async fn execute_query_core(
-        &self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let sql = sql.to_owned();
-        self.run_blocking(move |connection| {
-            Self::query(connection, &sql, &params).map(|value| value.0)
         })
         .await
     }
@@ -192,39 +175,6 @@ impl DuckDbConnectionAdapter {
         tokio::task::spawn_blocking(move || operation(&connection.lock()))
             .await
             .map_err(Self::worker_error)?
-    }
-
-    async fn run_prepared_blocking<T, F>(
-        &self,
-        statement: &DuckDbPreparedStatement,
-        operation: F,
-    ) -> Result<T, RdbcError>
-    where
-        T: Send + 'static,
-        F: FnOnce(&Connection) -> Result<T, RdbcError> + Send + 'static,
-    {
-        let timeout_seconds = statement.query_timeout()?;
-        let connection = self.connection_ref()?;
-        let mut worker = tokio::task::spawn_blocking(move || operation(&connection.lock()));
-        if timeout_seconds == 0 {
-            return worker.await.map_err(Self::worker_error)?;
-        }
-
-        tokio::select! {
-            result = &mut worker => result.map_err(Self::worker_error)?,
-            () = tokio::time::sleep(Duration::from_secs(timeout_seconds as u64)) => {
-                self.interrupt_handle.interrupt();
-                let _ = worker.await.map_err(Self::worker_error)?;
-                Err(RdbcError::SqlException(Box::new(
-                    SqlException::new(
-                        0,
-                        Some("HYT00".to_owned()),
-                        Some(format!("DuckDB query timed out after {timeout_seconds} second(s)")),
-                    )
-                    .with_class_name("java.sql.SQLTimeoutException"),
-                )))
-            }
-        }
     }
 
     fn worker_error(error: tokio::task::JoinError) -> RdbcError {
@@ -412,293 +362,6 @@ impl DuckDbConnectionAdapter {
             rows.push(Row::new(values));
         }
         Ok((rows, labels))
-    }
-
-    fn prepared_statement<'statement>(
-        &self,
-        statement: &'statement dyn PhysicalPreparedStatement,
-    ) -> Result<&'statement DuckDbPreparedStatement, RdbcError> {
-        let statement = statement
-            .as_any()
-            .downcast_ref::<DuckDbPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by DuckDbConnectionAdapter".to_string(),
-                )
-            })?;
-        if statement.is_closed() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        if statement.connection_id() != self.connection_id {
-            return Err(RdbcError::DriverError(
-                "DuckDB prepared statement belongs to another physical connection".to_string(),
-            ));
-        }
-        Ok(statement)
-    }
-
-    async fn control_statement(&self, sql: &'static str) -> Result<(), RdbcError> {
-        self.run_blocking(move |connection| {
-            connection.execute_batch(sql).map_err(Self::driver_error)
-        })
-        .await
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnection for DuckDbConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        self.execute_update_core(sql, params).await
-    }
-
-    async fn execute(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-        generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        if !matches!(generated_keys, StatementGeneratedKeys::None) {
-            return Err(RdbcError::UnsupportedOperation {
-                operation: "duckdb_generated_keys",
-            });
-        }
-        let sql = sql.to_owned();
-        self.run_blocking(move |connection| {
-            let mut statement = connection
-                .prepare_cached(&sql)
-                .map_err(Self::driver_error)?;
-            Self::bind_parameters(&mut statement, &params)?;
-            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
-            if statement.column_count() > 0 {
-                Self::collect_executed_rows(&statement)
-                    .map(|(rows, _)| vec![StatementExecuteResult::ResultSet(rows)])
-            } else {
-                Ok(vec![StatementExecuteResult::Update(ExecResult {
-                    rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
-                    last_insert_id: None,
-                    row_count: None,
-                })])
-            }
-        })
-        .await
-    }
-
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, params).await
-    }
-
-    async fn fetch_result_set(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let sql = sql.to_owned();
-        let (rows, labels) = self
-            .run_blocking(move |connection| Self::query(connection, &sql, &params))
-            .await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        let sql = key.sql().to_owned();
-        let prepare_sql = sql.clone();
-        self.run_blocking(move |connection| {
-            connection
-                .prepare_cached(&prepare_sql)
-                .map(drop)
-                .map_err(Self::driver_error)
-        })
-        .await?;
-        Ok(Arc::new(DuckDbPreparedStatement::new(
-            self.connection_id,
-            sql,
-            Arc::clone(&self.interrupt_handle),
-        )))
-    }
-
-    async fn exec_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
-        let statement = self.prepared_statement(statement)?;
-        let sql = statement.sql().to_owned();
-        self.run_prepared_blocking(statement, move |connection| {
-            let mut statement = connection
-                .prepare_cached(&sql)
-                .map_err(Self::driver_error)?;
-            Self::bind_parameters(&mut statement, &params)?;
-            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
-            Ok(ExecResult {
-                rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
-                last_insert_id: None,
-                row_count: None,
-            })
-        })
-        .await
-    }
-
-    async fn execute_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-        generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        if !matches!(generated_keys, StatementGeneratedKeys::None) {
-            return Err(RdbcError::UnsupportedOperation {
-                operation: "duckdb_generated_keys",
-            });
-        }
-        let statement = self.prepared_statement(statement)?;
-        let sql = statement.sql().to_owned();
-        self.run_prepared_blocking(statement, move |connection| {
-            let mut statement = connection
-                .prepare_cached(&sql)
-                .map_err(Self::driver_error)?;
-            Self::bind_parameters(&mut statement, &params)?;
-            let rows_affected = statement.raw_execute().map_err(Self::driver_error)?;
-            if statement.column_count() > 0 {
-                Self::collect_executed_rows(&statement)
-                    .map(|(rows, _)| vec![StatementExecuteResult::ResultSet(rows)])
-            } else {
-                Ok(vec![StatementExecuteResult::Update(ExecResult {
-                    rows_affected: u64::try_from(rows_affected).unwrap_or(u64::MAX),
-                    last_insert_id: None,
-                    row_count: None,
-                })])
-            }
-        })
-        .await
-    }
-
-    async fn fetch_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let statement = self.prepared_statement(statement)?;
-        let sql = statement.sql().to_owned();
-        self.run_prepared_blocking(statement, move |connection| {
-            Self::query(connection, &sql, &params).map(|value| value.0)
-        })
-        .await
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        if !self.auto_commit {
-            return Err(RdbcError::DriverError(
-                "DuckDB transaction is already active".to_string(),
-            ));
-        }
-        self.control_statement("BEGIN TRANSACTION").await?;
-        self.auto_commit = false;
-        Ok(())
-    }
-
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        if self.auto_commit {
-            return Err(RdbcError::DriverError(
-                "DuckDB has no active transaction to commit".to_string(),
-            ));
-        }
-        self.control_statement("COMMIT").await?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        if self.auto_commit {
-            return Err(RdbcError::DriverError(
-                "DuckDB has no active transaction to roll back".to_string(),
-            ));
-        }
-        self.control_statement("ROLLBACK").await?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn abort(&mut self) -> Result<(), RdbcError> {
-        self.interrupt_handle.interrupt();
-        self.close().await
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        self.run_blocking(|connection| {
-            connection
-                .query_row("SELECT 1", [], |_row| Ok(()))
-                .map_err(Self::driver_error)
-        })
-        .await
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_connection_core().await
-    }
-
-    fn is_closed(&self) -> bool {
-        self.connection.is_none()
-    }
-
-    fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        PhysicalConnectionCapabilities {
-            transactions: true,
-            savepoints: false,
-            auto_commit: true,
-            read_only: false,
-            transaction_isolation: false,
-            holdability: false,
-            clear_warnings: true,
-            catalog: false,
-            schema: false,
-        }
-    }
-
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        Ok(Box::new(DuckDbDatabaseMetaData::new(
-            self.connection_ref()?,
-            self.url.clone(),
-        )))
-    }
-
-    fn auto_commit(&self) -> bool {
-        self.auto_commit
-    }
-
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
-        match (self.auto_commit, auto_commit) {
-            (true, false) => self.begin().await,
-            (false, true) => self.commit().await,
-            _ => Ok(()),
-        }
-    }
-
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.connection_ref()?;
-        Ok(None)
-    }
-
-    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.connection_ref()?;
-        Ok(())
-    }
-
-    fn mark_discarded(&mut self) {
-        self.discarded = true;
-    }
-
-    fn is_discarded(&self) -> bool {
-        self.discarded
-    }
-
-    fn driver_name(&self) -> &str {
-        if self.is_closed() {
-            "duckdb-rs-closed"
-        } else {
-            "duckdb-rs"
-        }
     }
 }
 

@@ -69,7 +69,7 @@ pub struct PoolInnerConfig {
     /// Java `maxEvictableIdleTimeMillis`。
     pub max_evictable_idle_time: Duration,
     /// Java `phyTimeoutMillis`；`None` 对应默认值 `-1`。
-    pub physical_connection_timeout: Option<Duration>,
+    pub driver_connection_timeout: Option<Duration>,
     pub test_on_borrow: bool,
     pub test_on_return: bool,
     pub test_while_idle: bool,
@@ -134,7 +134,7 @@ impl Default for PoolInnerConfig {
             max_lifetime: Duration::MAX,
             idle_timeout: Duration::from_secs(1800),
             max_evictable_idle_time: Duration::from_secs(7 * 60 * 60),
-            physical_connection_timeout: None,
+            driver_connection_timeout: None,
             test_on_borrow: false,
             test_on_return: false,
             test_while_idle: false,
@@ -177,7 +177,7 @@ pub struct DruidPoolBuilder {
     url: Option<String>,
     raw_url: Option<String>,
     connection_properties: std::collections::HashMap<String, String>,
-    factory: Option<Arc<dyn crate::core::PhysicalConnectionFactory>>,
+    factory: Option<Arc<dyn crate::core::ConnectionFactory>>,
     max_open: usize,
     initial_size: usize,
     async_init: bool,
@@ -195,7 +195,7 @@ pub struct DruidPoolBuilder {
     max_lifetime: Duration,
     idle_timeout: Duration,
     max_evictable_idle_time: Duration,
-    physical_connection_timeout: Option<Duration>,
+    driver_connection_timeout: Option<Duration>,
     test_on_borrow: bool,
     test_on_return: bool,
     test_while_idle: bool,
@@ -273,7 +273,7 @@ impl DruidPoolBuilder {
             max_lifetime: Duration::MAX,
             idle_timeout: Duration::from_secs(1800),
             max_evictable_idle_time: Duration::from_secs(7 * 60 * 60),
-            physical_connection_timeout: None,
+            driver_connection_timeout: None,
             test_on_borrow: false,
             test_on_return: false,
             test_while_idle: false,
@@ -394,14 +394,14 @@ impl DruidPoolBuilder {
         );
         self
     }
-    pub fn factory(mut self, factory: Arc<dyn crate::core::PhysicalConnectionFactory>) -> Self {
+    pub fn factory(mut self, factory: Arc<dyn crate::core::ConnectionFactory>) -> Self {
         self.factory = Some(factory);
         self
     }
 
     /// 设置物理连接创建边界的逻辑驱动属性快照。
     ///
-    /// 对应 Java `DruidAbstractDataSource#createPhysicalConnection()` 构造的
+    /// 对应 Java `DruidAbstractDataSource#createConnection()` 构造的
     /// `physicalConnectProperties`。属性在数据源构造完成后由所有连接租约共享
     /// 只读快照，避免把连接池配置项误当成驱动属性；具体 Adapter 负责把这些
     /// 属性编码为 URL 参数或驱动选项。
@@ -520,10 +520,10 @@ impl DruidPoolBuilder {
         self.on_fatal_error_max_active = on_fatal_error_max_active;
         self
     }
-    /// 设置 Rust 扩展的物理连接最大生命周期。
+    /// 设置 Rust 扩展的 driver connection 最大生命周期。
     ///
     /// Java Druid 默认没有这一额外限制，因此默认值为 `Duration::MAX`。
-    /// Java `phyTimeoutMillis` 应使用 [`Self::physical_connection_timeout`]。
+    /// Java `phyTimeoutMillis` 应使用 [`Self::driver_connection_timeout`]。
     pub fn max_lifetime(mut self, max_lifetime: Duration) -> Self {
         self.max_lifetime = max_lifetime;
         self
@@ -547,18 +547,13 @@ impl DruidPoolBuilder {
         self
     }
 
-    /// 设置物理连接绝对寿命。
+    /// 设置 driver connection 绝对寿命。
     ///
     /// 对应 Java：`DruidAbstractDataSource#setPhyTimeoutMillis(long)`。
     /// Java 默认 `-1` 表示禁用，因此 Rust 使用 `Option<Duration>` 保存配置。
-    pub fn physical_connection_timeout(mut self, physical_connection_timeout: Duration) -> Self {
-        self.physical_connection_timeout = Some(physical_connection_timeout);
+    pub fn driver_connection_timeout(mut self, driver_connection_timeout: Duration) -> Self {
+        self.driver_connection_timeout = Some(driver_connection_timeout);
         self
-    }
-
-    /// `physical_connection_timeout` 的 Java 字段名兼容入口。
-    pub fn phy_timeout(self, phy_timeout: Duration) -> Self {
-        self.physical_connection_timeout(phy_timeout)
     }
 
     pub fn test_on_borrow(mut self, v: bool) -> Self {
@@ -635,7 +630,7 @@ impl DruidPoolBuilder {
     /// 设置数据源局部登录超时秒数。
     ///
     /// Java 使用进程级 `DriverManager`；Rust 不创建全局 RDBC 状态，而把同一
-    /// 可观察配置收敛到数据源及其 `PhysicalConnectionFactory` 边界。
+    /// 可观察配置收敛到数据源及其 `ConnectionFactory` 边界。
     pub fn login_timeout(mut self, login_timeout: i32) -> Self {
         self.login_timeout = login_timeout;
         self
@@ -1015,7 +1010,7 @@ impl DruidPoolBuilder {
             max_lifetime: self.max_lifetime,
             idle_timeout: self.idle_timeout,
             max_evictable_idle_time: self.max_evictable_idle_time,
-            physical_connection_timeout: self.physical_connection_timeout,
+            driver_connection_timeout: self.driver_connection_timeout,
             test_on_borrow: self.test_on_borrow,
             test_on_return: self.test_on_return,
             test_while_idle: self.test_while_idle,

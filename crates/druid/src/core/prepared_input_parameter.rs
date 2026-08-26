@@ -1,2 +1,2 @@
-pub use druid_rdbc::spi::PreparedInputParameter;
-pub use druid_rdbc::spi::PreparedTypeNameArgument;
+pub use druid_rdbc::statement::PreparedInputParameter;
+pub use druid_rdbc::statement::PreparedTypeNameArgument;

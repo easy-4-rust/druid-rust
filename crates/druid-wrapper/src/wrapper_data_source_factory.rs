@@ -4,8 +4,8 @@ use crate::sqlx::SqlxConnectionFactory;
 use crate::{ManagedWrapperPool, ProxoolConfigKey};
 use druid::pool::DruidPoolBuilder;
 use druid::sql::RdbcUtils;
+use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -22,10 +22,10 @@ impl WrapperDataSourceFactory {
     /// 使用调用方提供的 raw connection factory 创建 native Druid wrapper。
     ///
     /// RBDC 及其他扩展通过此入口复用 DBCP/Proxool 属性语义；factory 每次只
-    /// 创建一条物理连接，池化仍唯一属于 `DruidPool`。
+    /// 创建一条 driver connection，池化仍唯一属于 `DruidPool`。
     pub async fn create_with_factory(
         properties: &HashMap<String, String>,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         driver_name: impl Into<String>,
     ) -> Result<ManagedWrapperPool, RdbcError> {
         let url = first(
@@ -214,7 +214,7 @@ impl WrapperDataSourceFactory {
 
         let native_url = RdbcUtils::to_rust_url(url).ok_or_else(|| {
             RdbcError::InvalidArgument(format!(
-                "SQLx provider does not support JDBC URL `{url}`; inject a matching PhysicalConnectionFactory"
+                "SQLx provider does not support JDBC URL `{url}`; inject a matching ConnectionFactory"
             ))
         })?;
         let sqlx_url = apply_credentials(native_url.as_ref(), properties)?;

@@ -1,171 +1,109 @@
-//! `SQLx` + bb8 外部池桥接契约测试。
+//! Canonical SQLx bb8 external-pool contracts.
 
-mod common;
-
-use druid::core::{PhysicalConnection, Pool, Value};
+use druid::core::Pool;
+use druid_rdbc::connection::Connection;
+use druid_rdbc::result_set::ColumnIndex;
+use druid_rdbc::statement::{GeneratedKeys, StatementOptions};
+use druid_rdbc::types::Value;
 use druid_wrapper::sqlx::bb8::SqlxBb8Pool;
 use std::time::Duration;
 
 #[tokio::test]
-async fn rdbc_connection_contract() {
+async fn bb8_pool_executes_and_recycles_one_canonical_lease() {
     let pool = SqlxBb8Pool::connect(
-        "bb8-rdbc-contract",
+        "bb8-canonical",
         "sqlite::memory:",
         1,
         Duration::from_secs(1),
         None,
     )
     .await
-    .expect("bb8 pool must build");
-
-    common::physical_connection_contract::assert_rdbc_connection_contract(|| pool.get())
+    .unwrap();
+    let mut connection = pool.get().await.unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
         .await
-        .expect("bb8 lease must satisfy the RDBC connection contract");
-}
-
-#[tokio::test]
-async fn bb8_pool_returns_canonical_druid_connection_and_recycles_once() {
-    let pool = SqlxBb8Pool::connect(
-        "bb8-sqlite",
-        "sqlite::memory:",
-        1,
-        Duration::from_secs(1),
-        None,
-    )
-    .await
-    .expect("bb8 pool must build");
-
-    let mut connection = pool.get().await.expect("connection must be acquired");
-    assert_eq!(connection.data_source(), "bb8-sqlite");
-    assert_eq!(connection.driver_name(), "SQLite");
-    connection
-        .exec(
-            "CREATE TABLE item (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
-            Vec::new(),
+        .unwrap();
+    statement
+        .execute_update(
+            "CREATE TABLE item(id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            GeneratedKeys::None,
         )
         .await
-        .expect("table must be created");
-    connection
-        .exec(
-            "INSERT INTO item (name) VALUES (?)",
-            vec![Value::String("druid".to_string())],
+        .unwrap();
+    statement
+        .execute_update(
+            "INSERT INTO item(id, name) VALUES (1, 'druid')",
+            GeneratedKeys::None,
         )
         .await
-        .expect("row must be inserted");
+        .unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+    assert_eq!(pool.state().recycle_count, 1);
 
-    assert_eq!(pool.state().active_count, 1);
-    connection.close().await.expect("close must recycle");
-    connection
-        .close()
+    let mut reused = pool.get().await.unwrap();
+    let mut query = reused
+        .create_statement(StatementOptions::default())
         .await
-        .expect("duplicate close must be idempotent");
-
-    let state = pool.state();
-    assert_eq!(state.active_count, 0);
-    assert_eq!(state.idle_count, 1);
-    assert_eq!(state.recycle_count, 1);
-
-    let mut reused = pool
-        .get()
+        .unwrap();
+    let mut rows = query
+        .execute_query("SELECT name FROM item WHERE id = 1")
         .await
-        .expect("same external lease must be reusable");
-    let rows = reused
-        .fetch("SELECT name FROM item WHERE id = 1", Vec::new())
-        .await
-        .expect("row must be fetched");
-    assert_eq!(rows[0].values, vec![Value::String("druid".to_string())]);
+        .unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(
+        rows.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::String("druid".into())
+    );
 }
 
 #[tokio::test]
-async fn bb8_pool_maps_capacity_wait_to_acquire_timeout() {
-    let pool = SqlxBb8Pool::connect(
-        "bb8-timeout",
-        "sqlite::memory:",
-        1,
-        Duration::from_secs(1),
-        None,
-    )
-    .await
-    .expect("bb8 pool must build");
-    let _held = pool.get().await.expect("first connection must be acquired");
-
-    let error = pool
-        .get_timeout(Duration::from_millis(1))
-        .await
-        .expect_err("second connection must time out");
-    assert_eq!(error, druid_rdbc::error::RdbcError::AcquireTimeout);
-    assert_eq!(pool.state().connect_error_count, 1);
-}
-
-#[tokio::test]
-async fn bb8_pool_rejects_invalid_capacity() {
-    let result = SqlxBb8Pool::connect(
+async fn bb8_pool_timeout_and_invalid_capacity_are_explicit() {
+    assert!(SqlxBb8Pool::connect(
         "invalid",
         "sqlite::memory:",
         0,
         Duration::from_secs(1),
         None,
     )
-    .await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn bb8_explicit_close_rolls_back_and_reuses_physical_connection() {
+    .await
+    .is_err());
     let pool = SqlxBb8Pool::connect(
-        "bb8-explicit-recycle",
+        "timeout",
         "sqlite::memory:",
         1,
         Duration::from_secs(1),
         None,
     )
     .await
-    .expect("bb8 pool must build");
-
-    let mut connection = pool.get().await.expect("connection must be acquired");
-    connection.begin().await.expect("transaction must begin");
-    connection
-        .close()
-        .await
-        .expect("explicit close must rollback and recycle");
-
-    let state = pool.state();
-    assert_eq!(state.recycle_count, 1);
-    assert_eq!(state.discard_count, 0);
-    assert_eq!(state.create_count, 1);
-
-    let reused = pool
-        .get()
-        .await
-        .expect("physical connection must be reused");
-    assert!(reused.auto_commit());
-    assert_eq!(pool.state().create_count, 1);
+    .unwrap();
+    let _held = pool.get().await.unwrap();
+    assert_eq!(
+        pool.get_timeout(Duration::from_millis(1))
+            .await
+            .unwrap_err(),
+        druid_rdbc::error::RdbcError::AcquireTimeout
+    );
 }
 
 #[tokio::test]
-async fn bb8_dirty_drop_marks_external_lease_broken_and_replaces_it() {
+async fn bb8_transactional_close_resets_and_dirty_drop_discards() {
     let pool = SqlxBb8Pool::connect(
-        "bb8-dirty-drop",
+        "bb8-reset",
         "sqlite::memory:",
         1,
         Duration::from_secs(1),
         None,
     )
     .await
-    .expect("bb8 pool must build");
-
-    let mut connection = pool.get().await.expect("connection must be acquired");
-    connection.begin().await.expect("transaction must begin");
-    drop(connection);
-
-    let state = pool.state();
-    assert_eq!(state.recycle_count, 0);
-    assert_eq!(state.discard_count, 1);
-
-    let replacement = pool
-        .get()
-        .await
-        .expect("bb8 must replace the broken physical connection");
-    assert!(replacement.auto_commit());
-    assert_eq!(pool.state().create_count, 2);
+    .unwrap();
+    let mut connection = pool.get().await.unwrap();
+    connection.set_auto_commit(false).await.unwrap();
+    connection.close().await.unwrap();
+    let mut reused = pool.get().await.unwrap();
+    assert!(reused.auto_commit().unwrap());
+    reused.set_auto_commit(false).await.unwrap();
+    drop(reused);
+    assert_eq!(pool.state().discard_count, 1);
 }

@@ -1,22 +1,18 @@
-//! RBDC 物理连接适配器。
+//! RBDC canonical 连接适配器。
 
-use super::rbdc_prepared_statement::RbdcPreparedStatement;
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
-use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_executor::{
+    owned_executor, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
+};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
-use druid_rdbc::error::{SqlException, SqlWarning};
-use druid_rdbc::spi::{
-    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
-    RowSetResultSet,
-};
-use druid_rdbc::types::{Row, Savepoint, Value};
+use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::SqlException;
+use druid_rdbc::types::{Row, Value};
 use futures::StreamExt;
 use std::sync::Arc;
 
@@ -36,7 +32,7 @@ fn parse_rbdc_datetime(value: &str) -> Result<NaiveDateTime, RdbcError> {
         .map_err(|error| RdbcError::DriverError(error.to_string()))
 }
 
-/// RBDC 物理连接适配器。
+/// RBDC canonical 连接适配器。
 ///
 /// 对应 Java 平台依赖: `java.sql.Connection` 的驱动实现。
 /// 本对象包装单个 `rbdc::db::Connection`，不包装 RBDC Pool。
@@ -107,7 +103,7 @@ impl RbdcConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         let result = self
             .connection_mut()?
             .exec(sql, Self::params_to_rbdc(params))
@@ -122,7 +118,7 @@ impl RbdcConnectionAdapter {
                 )));
             }
         };
-        Ok(ExecResult {
+        Ok(AdapterUpdateResult {
             rows_affected: result.rows_affected,
             last_insert_id,
             row_count: None,
@@ -261,324 +257,6 @@ impl RbdcConnectionAdapter {
 
     fn params_to_rbdc(params: Vec<Value>) -> Vec<rbs::Value> {
         params.into_iter().map(Self::to_rbdc_value).collect()
-    }
-
-    fn validate_savepoint_name(name: &str) -> Result<(), RdbcError> {
-        let valid = !name.is_empty()
-            && name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
-        if valid {
-            Ok(())
-        } else {
-            Err(RdbcError::DriverError(
-                "savepoint name must contain only ASCII letters, digits, or '_'".to_string(),
-            ))
-        }
-    }
-
-    async fn execute_control_statement(&mut self, sql: &str) -> Result<(), RdbcError> {
-        self.connection_mut()?
-            .exec(sql, Vec::new())
-            .await
-            .map_err(Self::driver_error)?;
-        Ok(())
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnection for RbdcConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        self.execute_update_core(sql, params).await
-    }
-
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.fetch_rows_with_labels(sql, params)
-            .await
-            .map(|(rows, _)| rows)
-    }
-
-    async fn fetch_result_set(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let (rows, labels) = self.fetch_rows_with_labels(sql, params).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        if self.closed || self.discarded {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        // RBDC 的公开 Connection SPI 在 exec 内部完成驱动 prepare/cache，
-        // 因此这里保存经过完整 Druid key 区分后的 SQL token。
-        Ok(Arc::new(RbdcPreparedStatement::new(key.sql())))
-    }
-
-    async fn exec_prepared_parameters(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, RdbcError> {
-        let statement = statement
-            .as_any()
-            .downcast_ref::<RbdcPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by RbdcConnectionAdapter".to_string(),
-                )
-            })?;
-        let params = statement.materialized_parameters(parameters.len()).await?;
-        self.exec_prepared(statement, params).await
-    }
-
-    async fn exec_prepared_parameter_batch(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, RdbcError> {
-        let rbdc_statement = statement
-            .as_any()
-            .downcast_ref::<RbdcPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by RbdcConnectionAdapter".to_string(),
-                )
-            })?;
-        let parameter_sets = rbdc_statement
-            .take_batches(parameter_sets.len())
-            .await?
-            .ok_or_else(|| {
-                RdbcError::InvalidArgument(
-                    "RBDC physical prepared batch has not been populated".to_string(),
-                )
-            })?;
-        let mut update_counts = BatchUpdateCounts::default();
-        for params in parameter_sets {
-            match self.exec_prepared(statement, params).await {
-                Ok(result) => {
-                    if let Err(cause) = update_counts.try_push_rows_affected(result.rows_affected) {
-                        return Err(RdbcError::BatchUpdateException {
-                            update_counts,
-                            cause: Box::new(cause),
-                        });
-                    }
-                }
-                Err(error) => {
-                    return Err(RdbcError::BatchUpdateException {
-                        update_counts,
-                        cause: Box::new(error),
-                    });
-                }
-            }
-        }
-        Ok(update_counts.jdbc_i32())
-    }
-
-    async fn fetch_prepared_parameters(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let statement = statement
-            .as_any()
-            .downcast_ref::<RbdcPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by RbdcConnectionAdapter".to_string(),
-                )
-            })?;
-        let params = statement.materialized_parameters(parameters.len()).await?;
-        self.fetch_prepared(statement, params).await
-    }
-
-    async fn fetch_prepared_result_set(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        if statement.is_closed() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        let (rows, labels) = self.fetch_rows_with_labels(statement.sql(), params).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
-    }
-
-    async fn fetch_prepared_parameters_result_set(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let rbdc_statement = statement
-            .as_any()
-            .downcast_ref::<RbdcPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by RbdcConnectionAdapter".to_string(),
-                )
-            })?;
-        let params = rbdc_statement
-            .materialized_parameters(parameters.len())
-            .await?;
-        self.fetch_prepared_result_set(statement, params).await
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        self.connection_mut()?
-            .begin()
-            .await
-            .map_err(Self::driver_error)?;
-        self.auto_commit = false;
-        Ok(())
-    }
-
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        self.connection_mut()?
-            .commit()
-            .await
-            .map_err(Self::driver_error)?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        self.connection_mut()?
-            .rollback()
-            .await
-            .map_err(Self::driver_error)?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        let name = savepoint
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
-        Self::validate_savepoint_name(&name)?;
-        self.execute_control_statement(&format!("ROLLBACK TO SAVEPOINT {name}"))
-            .await
-    }
-
-    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        let savepoint = Savepoint {
-            id: self.savepoint_sequence,
-            name: None,
-        };
-        self.execute_control_statement(&format!("SAVEPOINT druid_sp_{}", savepoint.id))
-            .await?;
-        Ok(savepoint)
-    }
-
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
-        Self::validate_savepoint_name(name)?;
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        self.execute_control_statement(&format!("SAVEPOINT {name}"))
-            .await?;
-        Ok(Savepoint {
-            id: self.savepoint_sequence,
-            name: Some(name.to_string()),
-        })
-    }
-
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        let name = savepoint
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
-        Self::validate_savepoint_name(&name)?;
-        self.execute_control_statement(&format!("RELEASE SAVEPOINT {name}"))
-            .await
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        self.connection_mut()?
-            .ping()
-            .await
-            .map_err(Self::driver_error)
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_connection_core().await
-    }
-
-    fn is_closed(&self) -> bool {
-        self.closed || self.connection.is_none()
-    }
-
-    fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        PhysicalConnectionCapabilities {
-            transactions: true,
-            savepoints: true,
-            auto_commit: true,
-            read_only: false,
-            transaction_isolation: false,
-            holdability: false,
-            clear_warnings: true,
-            catalog: false,
-            schema: false,
-        }
-    }
-
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        if self.closed || self.discarded {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        Ok(Box::new(
-            super::rbdc_database_meta_data::RbdcDatabaseMetaData::new(&self.driver_name),
-        ))
-    }
-
-    fn auto_commit(&self) -> bool {
-        self.auto_commit
-    }
-
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
-        match (self.auto_commit, auto_commit) {
-            (true, false) => self.begin().await,
-            (false, true) => self.commit().await,
-            _ => Ok(()),
-        }
-    }
-
-    /// 返回 RBDC 连接的 `SQLWarning` 链。
-    ///
-    /// 对应 Java：`java.sql.Connection#getWarnings()`。RBDC 的公开 Connection
-    /// SPI 不暴露 JDBC warning 链，因此存活连接返回 `None`；关闭或已丢弃连接
-    /// 返回 `ConnectionDiscarded`。
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        if self.closed || self.discarded {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        Ok(None)
-    }
-
-    /// 清除 RBDC 连接的 `SQLWarning`。
-    ///
-    /// 对应 Java：`java.sql.Connection#clearWarnings()`。RBDC 不保留可清理的
-    /// warning 状态，存活连接无操作成功。
-    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        if self.closed || self.discarded {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        Ok(())
-    }
-
-    fn mark_discarded(&mut self) {
-        self.discarded = true;
-    }
-
-    fn is_discarded(&self) -> bool {
-        self.discarded
-    }
-
-    fn driver_name(&self) -> &str {
-        &self.driver_name
     }
 }
 

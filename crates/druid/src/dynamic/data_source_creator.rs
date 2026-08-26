@@ -2,7 +2,7 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.DataSourceCreator`。
 
 use super::high_available_data_source::HighAvailableDataSourceInner;
-use crate::core::{PhysicalConnectionFactory, Pool, RdbcError};
+use crate::core::{ConnectionFactory, Pool, RdbcError};
 use crate::pool::DruidPoolBuilder;
 use crate::sql::RdbcUtils;
 use std::sync::Arc;
@@ -12,13 +12,13 @@ use std::sync::Arc;
 /// 对应 Java: `com.alibaba.druid.pool.ha.DataSourceCreator`。工厂由外部通过
 /// `DataSourceCreator::new` 注入，Core 不绑定具体驱动。
 pub struct DataSourceCreator {
-    factory_creator: Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync>,
+    factory_creator: Arc<dyn Fn(&str) -> Arc<dyn ConnectionFactory> + Send + Sync>,
 }
 
 impl DataSourceCreator {
     /// 使用指定工厂创建器构造 `DataSourceCreator`。
     pub fn new(
-        factory_creator: Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync>,
+        factory_creator: Arc<dyn Fn(&str) -> Arc<dyn ConnectionFactory> + Send + Sync>,
     ) -> Self {
         Self { factory_creator }
     }
@@ -26,25 +26,25 @@ impl DataSourceCreator {
     /// 返回工厂创建器的克隆，供内部派生使用。
     pub(crate) fn clone_factory_creator(
         &self,
-    ) -> Arc<dyn Fn(&str) -> Arc<dyn PhysicalConnectionFactory> + Send + Sync> {
+    ) -> Arc<dyn Fn(&str) -> Arc<dyn ConnectionFactory> + Send + Sync> {
         Arc::clone(&self.factory_creator)
     }
 
     /// 创建一个用于测试的 no-op creator；调用 `create` 会 panic。
     pub fn noop_for_test() -> Self {
-        use crate::core::PhysicalConnection;
+        use crate::core::Connection;
         struct NoopFactory;
         #[async_trait::async_trait]
-        impl PhysicalConnectionFactory for NoopFactory {
+        impl ConnectionFactory for NoopFactory {
             fn connection_url(&self) -> Option<&str> {
                 None
             }
-            async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+            async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
                 panic!("noop factory should not be called")
             }
             async fn validate(
                 &self,
-                _connection: &mut Box<dyn PhysicalConnection>,
+                _connection: &mut Box<dyn Connection>,
             ) -> Result<(), RdbcError> {
                 Ok(())
             }
@@ -80,7 +80,7 @@ impl DataSourceCreator {
 
         let mut builder = DruidPoolBuilder::new()
             .name(format!("{node_name}-{}", uuid::Uuid::new_v4()))
-            .driver_name(factory.driver_name().unwrap_or("unknown"))
+            .driver_name(factory.name())
             .url(raw_url)
             .raw_url(driver_url)
             .factory(factory)
@@ -111,8 +111,8 @@ impl DataSourceCreator {
         if let Some(validation_query) = config.validation_query {
             builder = builder.validation_query(validation_query);
         }
-        if let Some(physical_timeout) = config.physical_timeout {
-            builder = builder.physical_connection_timeout(physical_timeout);
+        if let Some(driver_timeout) = config.driver_timeout {
+            builder = builder.driver_connection_timeout(driver_timeout);
         }
         if let Some(filters) = config.filters.as_deref() {
             builder.set_filters(Some(filters))?;

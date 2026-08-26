@@ -2,19 +2,17 @@
 //!
 //! 连接池内部状态：空闲队列、活跃计数、等待通知。
 
+use crate::core::connection_info::ConnectionInfo;
 use crate::core::fatal_error_handler::FatalErrorHandler;
-use crate::core::physical_connection_info::PhysicalConnectionInfo;
 use crate::core::Value as RdbcValue;
 use crate::core::{
-    ConnectionRecycleDisposition, ConnectionState, DruidConnectionHolder, DruidError, FilterChain,
-    PhysicalConnection, PhysicalConnectionConnectResult, PhysicalConnectionFactory,
-    PreparedStatementCacheStats, RdbcString, StandardConnectionCompatibility,
-    StatementGeneratedKeys, ValidConnectionCheckerAdapter,
+    Connection, ConnectionFactory, ConnectionOpenResult, ConnectionRecycleDisposition,
+    ConnectionState, DruidConnectionHolder, DruidError, FilterChain, PreparedStatementCacheStats,
+    RdbcString, ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, RdbcUtils};
 use crate::stats::StatsCollector;
 use serde_json::{Number as JsonNumber, Value as JsonValue};
-use std::any::TypeId;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -22,7 +20,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::Notify;
 
-use super::connection_close_worker::{ConnectionCloseCommand, ConnectionCloseTarget};
+use super::connection_close_worker::ConnectionCloseCommand;
 
 /// `DruidAbstractDataSource` fatal-error 字段的同锁状态。
 ///
@@ -60,7 +58,7 @@ struct CreateFailureState {
 
 /// 连接池内部状态。
 pub struct PoolInner {
-    pub(crate) factory: Arc<dyn PhysicalConnectionFactory>,
+    pub(crate) factory: Arc<dyn ConnectionFactory>,
     /// 包围物理驱动建连的 Druid Filter chain。
     ///
     /// 受监管 creator 只持有 `PoolInner`，因此该链必须与 factory 同属内部
@@ -94,7 +92,7 @@ pub struct PoolInner {
     pub(crate) destroy_count: AtomicU64,
     pub(crate) connect_count: AtomicU64,
     pub(crate) connect_error_count: AtomicU64,
-    pub(crate) physical_connect_error_count: AtomicU64,
+    pub(crate) driver_connect_error_count: AtomicU64,
     pub(crate) pooling_peak: AtomicUsize,
     pub(crate) pooling_peak_time_millis: AtomicU64,
     pub(crate) not_empty_wait_count: AtomicU64,
@@ -112,7 +110,7 @@ pub struct PoolInner {
 
 impl PoolInner {
     pub fn new(
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         config: super::config::PoolInnerConfig,
     ) -> Self {
         Self::new_with_stats(factory, config, Arc::new(StatsCollector::default()))
@@ -120,7 +118,7 @@ impl PoolInner {
 
     /// 使用数据源共享分层统计创建内部池状态。
     pub(crate) fn new_with_stats(
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         config: super::config::PoolInnerConfig,
         stats_collector: Arc<StatsCollector>,
     ) -> Self {
@@ -152,7 +150,7 @@ impl PoolInner {
             destroy_count: AtomicU64::new(0),
             connect_count: AtomicU64::new(0),
             connect_error_count: AtomicU64::new(0),
-            physical_connect_error_count: AtomicU64::new(0),
+            driver_connect_error_count: AtomicU64::new(0),
             pooling_peak: AtomicUsize::new(0),
             pooling_peak_time_millis: AtomicU64::new(0),
             not_empty_wait_count: AtomicU64::new(0),
@@ -331,7 +329,7 @@ impl PoolInner {
             max_active: self.config.max_open,
             creating_count,
             create_elapsed_millis,
-            create_error_count: self.physical_connect_error_count.load(Ordering::Acquire),
+            create_error_count: self.driver_connect_error_count.load(Ordering::Acquire),
             running_sql,
             cause,
         }
@@ -533,11 +531,9 @@ impl PoolInner {
             not_empty_wait_count: self.not_empty_wait_count.swap(0, Ordering::AcqRel),
             not_empty_wait_nanos: self.not_empty_wait_nanos.swap(0, Ordering::AcqRel),
             logic_connect_error_count: self.connect_error_count.swap(0, Ordering::AcqRel),
-            physical_connect_count: self.create_count.swap(0, Ordering::AcqRel),
-            physical_close_count: self.destroy_count.swap(0, Ordering::AcqRel),
-            physical_connect_error_count: self
-                .physical_connect_error_count
-                .swap(0, Ordering::AcqRel),
+            driver_connect_count: self.create_count.swap(0, Ordering::AcqRel),
+            driver_close_count: self.destroy_count.swap(0, Ordering::AcqRel),
+            driver_connect_error_count: self.driver_connect_error_count.swap(0, Ordering::AcqRel),
             keep_alive_check_count: self.keep_alive_check_count.swap(0, Ordering::AcqRel),
             pstmt_cache_hit_count: self
                 .prepared_statement_stats
@@ -569,9 +565,9 @@ impl PoolInner {
     /// 使用数据源配置的 Java `ValidConnectionChecker` 校验物理连接。
     pub(crate) async fn validate_connection(
         &self,
-        connection: &mut Box<dyn PhysicalConnection>,
+        connection: &mut Box<dyn Connection>,
     ) -> Result<(), DruidError> {
-        let result = if connection.is_closed() {
+        let result = if connection.is_closed()? {
             Err(DruidError::ValidationFailed(
                 "validateConnection: connection closed".to_owned(),
             ))
@@ -613,28 +609,14 @@ impl PoolInner {
         result
     }
 
-    /// 执行 Java `testConnectionInternal` 的吞错布尔校验。
-    ///
-    /// 与公开 `validateConnection` 不同，本方法把 checker、验证 SQL、timeout
-    /// 和 driver 的所有错误折叠为 false，供 borrow/return/keepAlive 使用。
-    pub(crate) async fn test_connection_internal(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> bool {
-        self.validate_connection(connection).await.is_ok()
-    }
-
     /// 对 holder 的实际 raw slot 执行同一 borrow/return/keep-alive 校验。
     pub(crate) async fn test_holder_internal(&self, holder: &mut DruidConnectionHolder) -> bool {
-        if let Some(connection) = holder.standard_connection_mut() {
-            let timeout_seconds =
-                u32::try_from(self.config.validation_query_timeout.as_secs()).unwrap_or(u32::MAX);
-            return matches!(connection.is_valid(timeout_seconds).await, Ok(true));
-        }
-        match holder.physical_connection_box_mut() {
-            Some(connection) => self.test_connection_internal(connection).await,
-            None => false,
-        }
+        let Some(connection) = holder.standard_connection_mut() else {
+            return false;
+        };
+        let timeout_seconds =
+            u32::try_from(self.config.validation_query_timeout.as_secs()).unwrap_or(u32::MAX);
+        matches!(connection.is_valid(timeout_seconds).await, Ok(true))
     }
 
     /// 按 Java `initialSize` 预建空闲物理连接。
@@ -754,7 +736,7 @@ impl PoolInner {
             Some(filter_chain) => {
                 let mut next_connection_id = || self.next_id();
                 filter_chain
-                    .physical_connection_connect(
+                    .connection_open(
                         self.factory.as_ref(),
                         &mut connection_properties,
                         self.config.login_timeout,
@@ -765,15 +747,16 @@ impl PoolInner {
             None if self.config.login_timeout > 0 => {
                 match tokio::time::timeout(
                     Duration::from_secs(self.config.login_timeout as u64),
-                    self.factory
-                        .create_info_with_properties(&connection_properties),
+                    self.factory.create_with_properties(&connection_properties),
                 )
                 .await
                 {
                     Ok(result) => result
-                        .and_then(PhysicalConnectionInfo::from_compat)
-                        .map(|connection_info| {
-                            PhysicalConnectionConnectResult::new(connection_info, self.next_id())
+                        .map(|connection| {
+                            ConnectionOpenResult::new(
+                                ConnectionInfo::connected(connection, connect_started_at),
+                                self.next_id(),
+                            )
                         })
                         .map_err(DruidError::from),
                     Err(_) => Err(DruidError::LoginTimeout),
@@ -781,11 +764,13 @@ impl PoolInner {
             }
             None => self
                 .factory
-                .create_info_with_properties(&connection_properties)
+                .create_with_properties(&connection_properties)
                 .await
-                .and_then(PhysicalConnectionInfo::from_compat)
-                .map(|connection_info| {
-                    PhysicalConnectionConnectResult::new(connection_info, self.next_id())
+                .map(|connection| {
+                    ConnectionOpenResult::new(
+                        ConnectionInfo::connected(connection, connect_started_at),
+                        self.next_id(),
+                    )
                 })
                 .map_err(DruidError::from),
         };
@@ -808,15 +793,12 @@ impl PoolInner {
                     return Err(error);
                 }
 
-                let initialize_result = match connection_info.physical_connection_box_mut() {
-                    Some(connection) => {
-                        self.initialize_physical_connection(connection.as_mut())
-                            .await
-                    }
+                let initialize_result = match connection_info.connection_mut() {
+                    Some(connection) => self.initialize_connection(connection.as_mut()).await,
                     None => Err(DruidError::ConnectionDiscarded),
                 };
                 if let Err(error) = initialize_result {
-                    // 对应 Java createPhysicalConnection() 的异常路径：初始化失败时
+                    // 对应 Java createConnection() 的异常路径：初始化失败时
                     // 关闭刚创建的物理连接，但它从未进入池，不增加 destroyCount。
                     self.close_connected_connection(
                         filter_chain.as_ref(),
@@ -825,7 +807,7 @@ impl PoolInner {
                         connect_started_at.elapsed(),
                     )
                     .await;
-                    self.physical_connect_error_count
+                    self.driver_connect_error_count
                         .fetch_add(1, Ordering::Relaxed);
                     return Err(error);
                 }
@@ -844,7 +826,7 @@ impl PoolInner {
                             connect_started_at.elapsed(),
                         )
                         .await;
-                        self.physical_connect_error_count
+                        self.driver_connect_error_count
                             .fetch_add(1, Ordering::Relaxed);
                         return Err(error);
                     }
@@ -853,7 +835,7 @@ impl PoolInner {
                 let validate_result = if init_sql_checked {
                     Ok(())
                 } else {
-                    match connection_info.physical_connection_box_mut() {
+                    match connection_info.connection_mut() {
                         Some(connection) => self.validate_connection(connection).await,
                         None => Err(DruidError::ConnectionDiscarded),
                     }
@@ -866,7 +848,7 @@ impl PoolInner {
                         connect_started_at.elapsed(),
                     )
                     .await;
-                    self.physical_connect_error_count
+                    self.driver_connect_error_count
                         .fetch_add(1, Ordering::Relaxed);
                     return Err(error);
                 }
@@ -907,7 +889,7 @@ impl PoolInner {
                 Ok(holder)
             }
             Err(e) => {
-                self.physical_connect_error_count
+                self.driver_connect_error_count
                     .fetch_add(1, Ordering::Relaxed);
                 Err(e)
             }
@@ -922,21 +904,21 @@ impl PoolInner {
     async fn close_connected_connection(
         &self,
         filter_chain: Option<&Arc<FilterChain>>,
-        connection_info: &mut PhysicalConnectionInfo,
+        connection_info: &mut ConnectionInfo,
         connection_id: u64,
-        physical_age: Duration,
+        connection_age: Duration,
     ) {
-        let Some(connection) = connection_info.physical_connection_box_mut() else {
+        let Some(connection) = connection_info.connection_mut() else {
             return;
         };
         let result = match filter_chain {
             Some(filter_chain) if !filter_chain.is_empty() => {
                 filter_chain
-                    .physical_connection_close(
+                    .connection_close(
                         self.factory.as_ref(),
                         connection,
                         connection_id,
-                        physical_age,
+                        connection_age,
                     )
                     .await
             }
@@ -955,55 +937,38 @@ impl PoolInner {
         }
     }
 
-    /// 按 Java `DruidAbstractDataSource#initPhysicalConnection` 顺序初始化连接。
-    async fn initialize_physical_connection(
+    /// 按 Java `DruidAbstractDataSource#initConnection` 顺序初始化连接。
+    async fn initialize_connection(
         &self,
-        connection: &mut dyn PhysicalConnection,
+        connection: &mut dyn Connection,
     ) -> Result<(), DruidError> {
         let skip_auto_commit = self.config.db_type_name.as_deref() == Some("odps");
-        let capabilities = connection.capabilities();
-        let standard_compatibility =
-            connection.type_id() == TypeId::of::<StandardConnectionCompatibility>();
-
         if !skip_auto_commit
-            && (!standard_compatibility || capabilities.auto_commit)
-            && connection.auto_commit() != self.config.default_auto_commit
+            && connection
+                .auto_commit()
+                .is_ok_and(|value| value != self.config.default_auto_commit)
         {
             connection
                 .set_auto_commit(self.config.default_auto_commit)
                 .await?;
         }
 
-        if let Some(default_read_only) = self
-            .config
-            .default_read_only
-            .filter(|_| !standard_compatibility || capabilities.read_only)
-        {
-            if connection.read_only() != default_read_only {
+        if let Some(default_read_only) = self.config.default_read_only {
+            if connection
+                .read_only()
+                .is_ok_and(|value| value != default_read_only)
+            {
                 connection.set_read_only(default_read_only).await?;
             }
         }
 
-        if let Some(default_transaction_isolation) = self
-            .config
-            .default_transaction_isolation
-            .filter(|_| !standard_compatibility || capabilities.transaction_isolation)
-        {
-            if connection.transaction_isolation() != default_transaction_isolation {
-                connection
-                    .set_transaction_isolation(default_transaction_isolation)
-                    .await?;
-            }
-        }
-
-        if let Some(default_catalog) = self
-            .config
-            .default_catalog
-            .as_deref()
-            .filter(|_| !standard_compatibility || capabilities.catalog)
-        {
-            if !default_catalog.is_empty() {
-                connection.set_catalog(default_catalog).await?;
+        if let Some(default_catalog) = self.config.default_catalog.as_deref() {
+            if !default_catalog.is_empty()
+                && connection
+                    .catalog()
+                    .is_ok_and(|value| value.as_deref() != Some(default_catalog))
+            {
+                connection.set_catalog(Some(default_catalog)).await?;
             }
         }
 
@@ -1016,19 +981,17 @@ impl PoolInner {
     /// `MySQL` variables 查询，创建流程就不再追加 validation query。
     async fn initialize_sqls_and_variables(
         &self,
-        connection_info: &mut PhysicalConnectionInfo,
+        connection_info: &mut ConnectionInfo,
     ) -> Result<bool, DruidError> {
         let mut variables = self.config.init_variants.then(HashMap::new);
         let mut global_variables = self.config.init_global_variants.then(HashMap::new);
         let connection = connection_info
-            .physical_connection_box_mut()
+            .connection_mut()
             .ok_or(DruidError::ConnectionDiscarded)?;
         let mut checked = false;
 
         for sql in &self.config.connection_init_sqls {
-            connection
-                .execute(sql, Vec::new(), StatementGeneratedKeys::None)
-                .await?;
+            Self::execute_init_sql(connection.as_mut(), sql).await?;
             checked = true;
         }
 
@@ -1040,14 +1003,12 @@ impl PoolInner {
             .is_some_and(RdbcUtils::is_mysql_db_type);
         if is_mysql_family {
             if let Some(values) = variables.as_mut() {
-                let rows = connection.fetch("show variables", Vec::new()).await?;
+                let rows = Self::fetch_rows(connection.as_mut(), "show variables").await?;
                 Self::collect_variable_rows(values, rows);
                 checked = true;
             }
             if let Some(values) = global_variables.as_mut() {
-                let rows = connection
-                    .fetch("show global variables", Vec::new())
-                    .await?;
+                let rows = Self::fetch_rows(connection.as_mut(), "show global variables").await?;
                 Self::collect_variable_rows(values, rows);
                 checked = true;
             }
@@ -1056,6 +1017,43 @@ impl PoolInner {
         connection_info.set_variables(variables);
         connection_info.set_global_variables(global_variables);
         Ok(checked)
+    }
+
+    async fn execute_init_sql(
+        connection: &mut dyn Connection,
+        sql: &str,
+    ) -> Result<(), DruidError> {
+        let mut statement = connection
+            .create_statement(druid_rdbc::statement::StatementOptions::default())
+            .await?;
+        statement
+            .execute(sql, druid_rdbc::statement::GeneratedKeys::None)
+            .await?;
+        statement.close().await?;
+        Ok(())
+    }
+
+    async fn fetch_rows(
+        connection: &mut dyn Connection,
+        sql: &str,
+    ) -> Result<Vec<crate::core::Row>, DruidError> {
+        let mut statement = connection
+            .create_statement(druid_rdbc::statement::StatementOptions::default())
+            .await?;
+        let mut result_set = statement.execute_query(sql).await?;
+        let width = result_set.meta_data()?.column_count();
+        let mut rows = Vec::new();
+        while result_set.next().await? {
+            let mut row = Vec::with_capacity(width);
+            for column in 1..=width {
+                let index = druid_rdbc::result_set::ColumnIndex::new(column)?;
+                row.push(result_set.value(index)?);
+            }
+            rows.push(crate::core::Row::new(row));
+        }
+        result_set.close().await?;
+        statement.close().await?;
+        Ok(rows)
     }
 
     fn collect_variable_rows(target: &mut HashMap<String, JsonValue>, rows: Vec<crate::core::Row>) {
@@ -1145,19 +1143,16 @@ impl PoolInner {
             return self.discard_recycled_holder(holder);
         }
 
-        let physical_age = holder.physical_age();
-        let lifetime_expired = physical_age >= self.config.max_lifetime;
-        let physical_timeout_expired = self
+        let connection_age = holder.connection_age();
+        let lifetime_expired = connection_age >= self.config.max_lifetime;
+        let driver_timeout_expired = self
             .config
-            .physical_connection_timeout
-            .is_some_and(|timeout| !timeout.is_zero() && physical_age > timeout);
+            .driver_connection_timeout
+            .is_some_and(|timeout| !timeout.is_zero() && connection_age > timeout);
         let max_use_count_reached =
             self.config.max_use_count > 0 && holder.use_count() >= self.config.max_use_count as u64;
         let credentials_stale = holder.user_password_version() < self.user_password_version();
-        if lifetime_expired
-            || physical_timeout_expired
-            || max_use_count_reached
-            || credentials_stale
+        if lifetime_expired || driver_timeout_expired || max_use_count_reached || credentials_stale
         {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
             return self.discard_recycled_holder(holder);
@@ -1219,62 +1214,17 @@ impl PoolInner {
         }
     }
 
-    /// 销毁 canonical holder 中的物理连接。
+    /// 销毁 canonical holder 中的 driver connection。
     pub fn destroy_holder(&self, mut holder: DruidConnectionHolder) {
         let connection_id = holder.connection_id();
-        let physical_age = holder.physical_age();
+        let connection_age = holder.connection_age();
         holder.mark_discarded();
-        holder.clear_statement_cache();
-        if holder.has_standard_connection() {
-            self.destroy_standard_holder(connection_id, physical_age, holder);
-            return;
-        }
-        if let Some(connection) = holder.take_physical_connection() {
-            self.destroy_connection(connection_id, physical_age, connection);
-        } else {
-            self.record_destroy();
-        }
-    }
-
-    /// 销毁连接。
-    fn destroy_connection(
-        &self,
-        connection_id: u64,
-        physical_age: Duration,
-        connection: Box<dyn PhysicalConnection>,
-    ) {
-        self.record_destroy();
-        let sender = self.close_sender.read().clone();
-        if let Some(sender) = sender {
-            let command = ConnectionCloseCommand {
-                connection_id,
-                physical_age,
-                connection: ConnectionCloseTarget::Physical(connection),
-            };
-            if let Err(error) = sender.send(Some(command)) {
-                // worker 已退出时，Drop 仍会释放 driver 资源；禁止重新 spawn
-                // 一条不可追踪任务。
-                drop(error.0);
-            }
-        } else {
-            // 只有直接构造公开 PoolInner 的测试/低层调用会走到这里；canonical
-            // DruidPool 在对外可借用前必定安装 worker。
-            drop(connection);
-        }
-    }
-
-    fn destroy_standard_holder(
-        &self,
-        connection_id: u64,
-        physical_age: Duration,
-        holder: DruidConnectionHolder,
-    ) {
         self.record_destroy();
         if let Some(sender) = self.close_sender.read().clone() {
             let command = ConnectionCloseCommand {
                 connection_id,
-                physical_age,
-                connection: ConnectionCloseTarget::Standard(Box::new(holder)),
+                connection_age,
+                holder: Box::new(holder),
             };
             if let Err(error) = sender.send(Some(command)) {
                 drop(error.0);
@@ -1303,49 +1253,17 @@ impl PoolInner {
         self.destroy_count.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// 等待 holder 中的物理连接完成关闭。
+    /// 等待 holder 中的 driver connection 完成关闭。
     pub async fn destroy_holder_now(&self, mut holder: DruidConnectionHolder) {
         let connection_id = holder.connection_id();
-        let physical_age = holder.physical_age();
         holder.mark_discarded();
-        holder.clear_statement_cache();
         self.record_destroy();
-        if holder.has_standard_connection() {
-            if let Err(error) = holder.close_standard_connection().await {
-                tracing::warn!(
-                    %error,
-                    connection_id,
-                    "close standard connection immediately failed"
-                );
-            }
-            return;
-        }
-        if let Some(mut connection) = holder.take_physical_connection() {
-            let filter_chain = self.filter_chain.read().clone();
-            let result = match filter_chain {
-                Some(filter_chain) if !filter_chain.is_empty() => {
-                    filter_chain
-                        .physical_connection_close(
-                            self.factory.as_ref(),
-                            &mut connection,
-                            connection_id,
-                            physical_age,
-                        )
-                        .await
-                }
-                _ => self
-                    .factory
-                    .close(&mut connection)
-                    .await
-                    .map_err(DruidError::from),
-            };
-            if let Err(error) = result {
-                tracing::warn!(
-                    %error,
-                    connection_id,
-                    "close physical connection immediately failed"
-                );
-            }
+        if let Err(error) = holder.close_standard_connection().await {
+            tracing::warn!(
+                %error,
+                connection_id,
+                "close canonical connection immediately failed"
+            );
         }
     }
 
@@ -1393,11 +1311,11 @@ impl PoolInner {
                     continue;
                 }
 
-                let physical_timeout_expired = self
+                let driver_timeout_expired = self
                     .config
-                    .physical_connection_timeout
-                    .is_some_and(|timeout| !timeout.is_zero() && holder.physical_age() > timeout);
-                if physical_timeout_expired {
+                    .driver_connection_timeout
+                    .is_some_and(|timeout| !timeout.is_zero() && holder.connection_age() > timeout);
+                if driver_timeout_expired {
                     evicted.push(holder);
                     index += 1;
                     continue;
@@ -1583,10 +1501,6 @@ impl FatalErrorHandler for PoolInner {
         // Java `emptySignal()` 请求一次创建，不受 minIdle 是否为零影响。
         self.request_refill(1);
     }
-
-    fn clear_on_fatal_error(&self) {
-        PoolInner::clear_on_fatal_error(self);
-    }
 }
 
 /// Java `DruidDataSource#getStatValueAndReset()` 的池级区间快照。
@@ -1603,9 +1517,9 @@ pub(crate) struct PoolStatSnapshot {
     pub(crate) not_empty_wait_count: u64,
     pub(crate) not_empty_wait_nanos: u64,
     pub(crate) logic_connect_error_count: u64,
-    pub(crate) physical_connect_count: u64,
-    pub(crate) physical_close_count: u64,
-    pub(crate) physical_connect_error_count: u64,
+    pub(crate) driver_connect_count: u64,
+    pub(crate) driver_close_count: u64,
+    pub(crate) driver_connect_error_count: u64,
     pub(crate) keep_alive_check_count: u64,
     pub(crate) pstmt_cache_hit_count: u64,
     pub(crate) pstmt_cache_miss_count: u64,

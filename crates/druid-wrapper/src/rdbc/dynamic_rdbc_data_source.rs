@@ -1,4 +1,4 @@
-use std::any::{Any, TypeId};
+use std::any::TypeId;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,7 +6,6 @@ use druid::core::{DruidPooledConnection, Pool};
 use druid::dynamic::{DataSourceGroup, DynamicDataSource, SqlHint};
 use druid::sql::{CommonDataSource, DataSource};
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::Wrapper;
 
 /// wrapper 层动态 RDBC 数据源，支持主从路由与数据源组热切换。
 ///
@@ -50,12 +49,6 @@ impl DynamicRdbcDataSource {
     #[must_use]
     pub fn current_name(&self) -> String {
         self.inner.current_name()
-    }
-}
-
-impl Wrapper for DynamicRdbcDataSource {
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }
 

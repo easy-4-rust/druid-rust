@@ -4,11 +4,10 @@ use crate::task4_runtime_trace::{
     jdbc_agent_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
 };
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// 每次创建一个未池化 JDBC Agent 物理连接的 Druid 工厂。
+/// 每次创建一个未池化 JDBC Agent connection 的 Druid 工厂。
 #[derive(Clone)]
 pub struct JdbcAgentConnectionFactory {
     url: String,
@@ -70,13 +69,6 @@ impl JdbcAgentConnectionFactory {
         let (emitter, probe, expectation) = jdbc_agent_trace_session();
         self.runtime_trace = Some(emitter);
         (probe, expectation)
-    }
-
-    async fn create_with_properties(
-        &self,
-        properties: HashMap<String, String>,
-    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(self.create_adapter_core(properties).await?))
     }
 
     async fn create_adapter_core(
@@ -150,6 +142,24 @@ impl druid_rdbc::driver::ConnectionFactory for JdbcAgentConnectionFactory {
         ))
     }
 
+    async fn create_with_properties(
+        &self,
+        properties: &HashMap<String, String>,
+    ) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(
+            self.create_adapter_core(self.merged_properties(Some(properties)))
+                .await?,
+        ))
+    }
+
+    fn connection_url(&self) -> Option<&str> {
+        Some(&self.url)
+    }
+
+    fn user_name(&self) -> Option<&str> {
+        self.user_name.as_deref()
+    }
+
     fn name(&self) -> &str {
         "jdbc-agent"
     }
@@ -166,42 +176,6 @@ impl std::fmt::Debug for JdbcAgentConnectionFactory {
             .field("property_names", &self.properties.keys())
             .field("options", &self.options)
             .finish_non_exhaustive()
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnectionFactory for JdbcAgentConnectionFactory {
-    fn connection_url(&self) -> Option<&str> {
-        Some(&self.url)
-    }
-
-    fn user_name(&self) -> Option<&str> {
-        self.user_name.as_deref()
-    }
-
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        self.create_with_properties(self.merged_properties(None))
-            .await
-    }
-
-    async fn create_info_with_properties(
-        &self,
-        properties: &HashMap<String, String>,
-    ) -> Result<druid_rdbc::spi::PhysicalConnectionInfo, RdbcError> {
-        let started_at = std::time::Instant::now();
-        let connection = self
-            .create_with_properties(self.merged_properties(Some(properties)))
-            .await?;
-        Ok(druid_rdbc::spi::PhysicalConnectionInfo::connected(
-            connection, started_at,
-        ))
-    }
-
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), RdbcError> {
-        connection.ping().await
     }
 }
 
@@ -280,10 +254,6 @@ mod tests {
 
         fn is_unusable(&self) -> bool {
             self.closed
-        }
-
-        fn statement_context(&self) -> Option<(super::super::AgentRequestHandle, String)> {
-            None
         }
     }
 

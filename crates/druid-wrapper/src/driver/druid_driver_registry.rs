@@ -12,11 +12,11 @@ use crate::jdbc_agent::{JdbcAgentConnectionFactory, JdbcAgentOptions};
 use crate::libsql::LibSqlConnectionFactory;
 use crate::sqlx::SqlxConnectionFactory;
 use druid::sql::RdbcUrl;
-use druid_rdbc::spi::PhysicalConnectionFactory;
+use druid_rdbc::driver::ConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// 将产品档案解析为 Druid 物理连接工厂的只读注册中心。
+/// 将产品档案解析为 Druid canonical 连接工厂的只读注册中心。
 #[derive(Debug, Clone)]
 pub struct DruidDriverRegistry {
     manifest: DriverManifest,
@@ -125,7 +125,7 @@ impl DruidDriverRegistry {
         match profile.runtime_mode() {
             DriverRuntimeMode::Sqlx => {
                 let driver_url = Self::normalize_sqlx_url(&profile, &driver_url)?;
-                let factory: Arc<dyn PhysicalConnectionFactory> =
+                let factory: Arc<dyn ConnectionFactory> =
                     Arc::new(SqlxConnectionFactory::new(driver_url));
                 Ok(ResolvedDatabaseDriver::new(
                     profile,
@@ -163,7 +163,7 @@ impl DruidDriverRegistry {
                     for (name, value) in &properties {
                         factory = factory.property(name, value);
                     }
-                    let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                    let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
                     Ok(ResolvedDatabaseDriver::new(
                         profile,
                         display_url.clone(),
@@ -181,7 +181,7 @@ impl DruidDriverRegistry {
                                 url: display_url.clone(),
                             });
                         }
-                        let factory: Arc<dyn PhysicalConnectionFactory> =
+                        let factory: Arc<dyn ConnectionFactory> =
                             Arc::new(DuckDbConnectionFactory::new(&driver_url));
                         return Ok(ResolvedDatabaseDriver::new(
                             profile,
@@ -210,7 +210,7 @@ impl DruidDriverRegistry {
                         for (name, value) in &properties {
                             factory = factory.property(name, value);
                         }
-                        let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                        let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
                         return Ok(ResolvedDatabaseDriver::new(
                             profile,
                             display_url.clone(),
@@ -253,7 +253,7 @@ impl DruidDriverRegistry {
                     for (name, value) in &properties {
                         factory = factory.property(name, value);
                     }
-                    let factory: Arc<dyn PhysicalConnectionFactory> = Arc::new(factory);
+                    let factory: Arc<dyn ConnectionFactory> = Arc::new(factory);
                     Ok(ResolvedDatabaseDriver::new(profile, display_url, factory))
                 }
             }

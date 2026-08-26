@@ -4,7 +4,6 @@ use crate::task4_runtime_trace::{
     http_sql_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
 };
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -58,7 +57,7 @@ impl HttpSqlConnectionFactory {
             self.properties.clone(),
             Arc::clone(&self.transport),
         )?;
-        connection.ping().await?;
+        druid_rdbc::connection::Connection::is_valid(&mut connection, 1).await?;
         if let Some(trace) = &self.runtime_trace {
             connection.install_runtime_trace(trace.clone());
             trace.task4_trace_connection_create();
@@ -94,25 +93,11 @@ impl std::fmt::Debug for HttpSqlConnectionFactory {
 }
 
 #[async_trait::async_trait]
-impl PhysicalConnectionFactory for HttpSqlConnectionFactory {
+impl druid_rdbc::driver::ConnectionFactory for HttpSqlConnectionFactory {
     fn connection_url(&self) -> Option<&str> {
         Some(&self.endpoint)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(self.create_adapter_core().await?))
-    }
-
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), RdbcError> {
-        connection.ping().await
-    }
-}
-
-#[async_trait::async_trait]
-impl druid_rdbc::driver::ConnectionFactory for HttpSqlConnectionFactory {
     async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
         Ok(Box::new(self.create_adapter_core().await?))
     }

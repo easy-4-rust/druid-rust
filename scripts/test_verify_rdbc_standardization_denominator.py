@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import io
+import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from collections import Counter
@@ -13,6 +16,7 @@ from pathlib import Path
 
 SCRIPTS = Path(__file__).resolve().parent
 REPOSITORY_ROOT = SCRIPTS.parent
+TASK6_BASE = "5afe8609b177544ff7d18461aa84f69efe8ee90e"
 sys.path.insert(0, str(SCRIPTS))
 
 from verify_rdbc_standardization_denominator import (  # noqa: E402
@@ -28,6 +32,7 @@ from verify_rdbc_standardization_denominator import (  # noqa: E402
     parse_consumer_payload,
     scan_source_text,
     verify_denominator,
+    verify_final_denominator,
 )
 import verify_rdbc_standardization_denominator as standardizer  # noqa: E402
 
@@ -37,24 +42,44 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
+        cls.base_directory = tempfile.TemporaryDirectory()
+        cls.base_root = Path(cls.base_directory.name)
+        archive = subprocess.run(
+            [
+                "git",
+                "archive",
+                "--format=tar",
+                TASK6_BASE,
+                "crates/druid-rdbc/src",
+                "crates/druid/src",
+                "crates/druid-wrapper/src",
+            ],
+            cwd=REPOSITORY_ROOT,
+            check=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as bundle:
+            bundle.extractall(cls.base_root, filter="data")
+
+        def base_payload(path: str) -> bytes:
+            return subprocess.check_output(
+                ["git", "show", f"{TASK6_BASE}:{path}"], cwd=REPOSITORY_ROOT
+            )
+
         cls.live = derive_live_manifests(
-            REPOSITORY_ROOT,
-            REPOSITORY_ROOT
-            / "docs/verification/rdbc-first/rdbc-physical-standardization.tsv",
+            cls.base_root,
+            Path("docs/verification/rdbc-first/rdbc-physical-standardization.tsv"),
             phase="task5",
         )
-        cls.physical_payload = (
-            REPOSITORY_ROOT
-            / "docs/verification/rdbc-first/rdbc-physical-standardization.tsv"
-        ).read_bytes()
-        cls.adapter_payload = (
-            REPOSITORY_ROOT
-            / "docs/verification/rdbc-first/rdbc-adapter-implementations.tsv"
-        ).read_bytes()
-        cls.consumer_payload = (
-            REPOSITORY_ROOT
-            / "docs/verification/rdbc-first/rdbc-production-consumers.tsv"
-        ).read_bytes()
+        cls.physical_payload = base_payload(
+            "docs/verification/rdbc-first/rdbc-physical-standardization.tsv"
+        )
+        cls.adapter_payload = base_payload(
+            "docs/verification/rdbc-first/rdbc-adapter-implementations.tsv"
+        )
+        cls.consumer_payload = base_payload(
+            "docs/verification/rdbc-first/rdbc-production-consumers.tsv"
+        )
         cls.manifest_adapters = tuple(
             standardizer.parse_adapter_payload(cls.adapter_payload)
         )
@@ -64,6 +89,10 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
             for row in cls.manifest_consumers
             if row.state == "STANDARD_REFERENCE_CLOSED"
         )
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.base_directory.cleanup()
 
     def setUp(self) -> None:
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -82,7 +111,7 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         """Run the real live comparison against the temporary manifests."""
 
         verify_denominator(
-            REPOSITORY_ROOT,
+            self.base_root,
             self.physical,
             self.adapters,
             self.consumers,
@@ -103,6 +132,47 @@ class RdbcStandardizationDenominatorTest(unittest.TestCase):
         self.assertGreaterEqual(len(self.live.physical), 48)
         self.assertGreater(len(self.live.adapters), 0)
         self.assertGreater(len(self.live.consumers), 0)
+
+    def test_accepts_exact_task6_final_manifests_and_rejects_reopened_state(
+        self,
+    ) -> None:
+        """The current historical manifests close Task 6 exactly and remain canonical."""
+
+        manifest_root = REPOSITORY_ROOT / "docs/verification/rdbc-first"
+        live = verify_final_denominator(
+            REPOSITORY_ROOT,
+            manifest_root / "rdbc-physical-standardization.tsv",
+            manifest_root / "rdbc-adapter-implementations.tsv",
+            manifest_root / "rdbc-production-consumers.tsv",
+        )
+        self.assertEqual(73, len(live.physical))
+        self.assertEqual(31, len(live.adapters))
+        self.assertEqual(3647, len(live.consumers))
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            physical = root / "physical.tsv"
+            adapters = root / "adapters.tsv"
+            consumers = root / "consumers.tsv"
+            physical.write_bytes(
+                (manifest_root / "rdbc-physical-standardization.tsv").read_bytes()
+            )
+            adapters.write_bytes(
+                (manifest_root / "rdbc-adapter-implementations.tsv").read_bytes()
+            )
+            payload = (manifest_root / "rdbc-production-consumers.tsv").read_text(
+                encoding="utf-8"
+            )
+            consumers.write_text(
+                payload.replace(
+                    "TASK6_COMPATIBILITY_CLOSED",
+                    "TASK6_COMPATIBILITY_PENDING",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaises(VerificationError):
+                verify_final_denominator(REPOSITORY_ROOT, physical, adapters, consumers)
 
     def test_accepts_only_task4_wrapper_live_state_projection(self) -> None:
         """Task 4 may advance its wrapper rows while every source-derived field stays exact."""
@@ -1132,6 +1202,34 @@ pub trait VisibleTrait {
             )
             methods = standardizer.derive_trait_methods(root, (row,))[trait_path]
             self.assertEqual({"live", "visible_any"}, methods)
+
+    def test_final_scan_accepts_deleted_spi_but_requires_canonical_resource(
+        self,
+    ) -> None:
+        """Task 6 may delete SPI only when the crate root no longer declares that module."""
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "crates/druid-rdbc/src"
+            resource = source / "resource"
+            resource.mkdir(parents=True)
+            (source / "lib.rs").write_text("pub mod resource;\n", encoding="utf-8")
+            (resource / "fixture.rs").write_text(
+                "pub struct CanonicalResource;\n", encoding="utf-8"
+            )
+            public = standardizer.scan_public_items(root)
+            self.assertIn("druid_rdbc::resource::CanonicalResource", public)
+
+            (source / "lib.rs").write_text(
+                "pub mod resource;\npub mod spi;\n", encoding="utf-8"
+            )
+            with self.assertRaises(VerificationError):
+                standardizer.scan_public_items(root)
+
+            (source / "lib.rs").write_text("pub mod resource;\n", encoding="utf-8")
+            resource.rename(source / "removed_resource")
+            with self.assertRaises(VerificationError):
+                standardizer.scan_public_items(root)
 
     def test_wildcard_imports_fail_closed_instead_of_hiding_symbols(self) -> None:
         """A wildcard over a standardized module is ambiguous and must be rejected."""

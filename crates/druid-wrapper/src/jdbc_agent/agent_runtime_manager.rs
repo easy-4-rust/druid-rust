@@ -28,14 +28,6 @@ pub(crate) struct AgentRuntimeLease {
     released: bool,
 }
 
-/// 不增加 session 引用计数的运行时请求句柄，供同步 Statement 生命周期回调使用。
-#[derive(Clone)]
-pub(crate) struct AgentRequestHandle {
-    runtime: Arc<AgentRuntime>,
-    healthy: Arc<AtomicBool>,
-    request_timeout: Duration,
-}
-
 impl AgentRuntimeManager {
     fn global() -> &'static Self {
         static MANAGER: OnceLock<AgentRuntimeManager> = OnceLock::new();
@@ -161,15 +153,6 @@ impl AgentRuntimeLease {
         !self.managed.healthy.load(Ordering::Acquire)
     }
 
-    /// 创建不改变 session 生命周期的轻量请求句柄。
-    pub(crate) fn request_handle(&self) -> AgentRequestHandle {
-        AgentRequestHandle {
-            runtime: Arc::clone(&self.managed.runtime),
-            healthy: Arc::clone(&self.managed.healthy),
-            request_timeout: self.request_timeout,
-        }
-    }
-
     /// 提前释放 session 租约并启动空闲 TTL；重复调用无副作用。
     pub(crate) fn release_now(&mut self) {
         self.release();
@@ -189,31 +172,6 @@ impl AgentRuntimeLease {
         let generation = managed.generation.load(Ordering::Acquire);
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(AgentRuntimeManager::evict_if_idle(managed, generation));
-        }
-    }
-}
-
-impl AgentRequestHandle {
-    /// 在当前 Tokio 运行时中发送尽力而为的异步请求。
-    pub(crate) fn spawn_request(&self, method: &'static str, params: JsonValue) {
-        if !self.healthy.load(Ordering::Acquire) {
-            return;
-        }
-        let runtime = Arc::clone(&self.runtime);
-        let timeout = self.request_timeout;
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            if method == "cancel" {
-                JdbcAgentRuntimeMetrics::cancellation_requested();
-            }
-            handle.spawn(async move {
-                let started = Instant::now();
-                let result = tokio::time::timeout(timeout, runtime.request(method, params)).await;
-                let failed = !matches!(result, Ok(Ok(_)));
-                JdbcAgentRuntimeMetrics::rpc_completed(started.elapsed(), failed);
-                if result.is_err() {
-                    JdbcAgentRuntimeMetrics::request_timed_out();
-                }
-            });
         }
     }
 }

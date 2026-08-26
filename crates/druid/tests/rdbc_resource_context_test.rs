@@ -1,7 +1,7 @@
-use druid::core::{RdbcError, RdbcObject, RdbcTypeMap, Value};
-use druid::spi::{
+use druid::core::{
     RdbcBlobAccess, RdbcRefAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations,
 };
+use druid::core::{RdbcError, RdbcObject, RdbcTypeMap, Value};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 

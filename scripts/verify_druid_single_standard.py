@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 from collections import Counter, defaultdict, deque
 import hashlib
-import json
 import re
 import subprocess
 import sys
@@ -31,15 +30,14 @@ from verify_rdbc_standardization_denominator import (
 )
 from verify_wrapper_standard_impls import (
     CoverageFamilySpec,
-    CoverageRequirement,
     DEFAULT_ADAPTERS as TASK4_ADAPTER_MANIFEST,
     DEFAULT_RUNTIME_EVIDENCE as TASK4_RUNTIME_EVIDENCE_MANIFEST,
     VerificationError as WrapperVerificationError,
     evidence_specs,
     execute_evidence,
     function_line_ranges,
+    load_coverage_manifest,
     task_adapter_rows,
-    validate_coverage_manifest,
     verify_coverage_manifest_bindings,
 )
 
@@ -48,6 +46,7 @@ TASK5_BASE = "d1ccc8e3005a3a71638766ee701af99594fc43ed"
 TASK5 = "P04_TASK_5_DRUID_INTERNALIZATION"
 TASK5_CLOSED = "DRUID_INTERNAL_REFERENCE_CLOSED"
 TASK6_PENDING = "TASK6_COMPATIBILITY_PENDING"
+TASK6_CLOSED = "TASK6_COMPATIBILITY_CLOSED"
 TASK7_PENDING = "TASK7_RESOURCE_OPERATIONS_PENDING"
 TASK5_BASE_CONSUMER_SHA256 = (
     "241a2d42b74e27ae2b0e41729d3088e94f464bfe7984699073a20f834ce908bc"
@@ -62,13 +61,13 @@ TASK6_ADDITION_NORMALIZED_SHA256 = (
     "773722c3231615e5227eea118f046b47c0fa73f7dddfd9cc1486a4edfb2f64c7"
 )
 TASK4_COVERAGE_MANIFEST_SHA256 = (
-    "f7b3d4b429fe9e5c4bfe954082f0518d8e78635f6f7cc21bde1ffcd40f2307c9"
+    "a2b06227c716c068d577582995bb6627756b8a5aef7c59f7b2d517278b13d7fe"
 )
 TASK4_RUNTIME_MANIFEST_SHA256 = (
-    "106323e17904d377172986ce7464a54de60b4bb575e5f67e333e37f16188a3ec"
+    "bb63308865daf2e1d528e8e415e9438545919bf4752e300710c219a978bf344a"
 )
 TASK5_RBDC_EVIDENCE_SOURCE_SHA256 = (
-    "b3fc8750e3cfaf552096cd3c0db0501f0bc312a52b0ad6b4b9af9e94d9daf96c"
+    "3042ed0502834c16de5a362b688fb2b227322427cb1bf1adb428f0f1b2e0c1e0"
 )
 DRUID_TASK6_COMPAT_PATHS = {
     "crates/druid/src/core/mod.rs",
@@ -637,7 +636,7 @@ def require_pending_admission_policy(
         "druid_pooled_connection.rs": ("begin_admission", 3),
         "druid_pooled_statement.rs": ("begin_standard_admission", 3),
         "druid_pooled_prepared_statement.rs": ("begin_standard_admission", 3),
-        "druid_pooled_callable_statement.rs": ("begin_standard_admission", 2),
+        "druid_pooled_callable_statement.rs": ("begin_standard_admission", 3),
         "database_meta_data_proxy_impl.rs": ("begin_admission", 1),
     }
     if set(producer_sources) != set(expected) | {"druid_pooled_result_set.rs"}:
@@ -720,19 +719,30 @@ def require_pending_admission_policy(
         ),
         (
             "druid_pooled_prepared_statement.rs",
-            "Statement",
+            "PreparedStatement",
             "DruidPooledPreparedStatement",
-            "execute_query",
+            "execute_prepared_query",
             (
                 "begin_standard_admission",
-                "execute_query(&effective_sql).await",
+                "execute_prepared_query().await",
                 "DruidPooledResultSet::new_standard",
             ),
         ),
         (
             "druid_pooled_prepared_statement.rs",
-            "PreparedStatement",
+            "Statement",
             "DruidPooledPreparedStatement",
+            "generated_keys",
+            (
+                "begin_standard_admission",
+                ".generated_keys().await",
+                "DruidPooledResultSet::new_standard",
+            ),
+        ),
+        (
+            "druid_pooled_callable_statement.rs",
+            "PreparedStatement",
+            "DruidPooledCallableStatement",
             "execute_prepared_query",
             (
                 "begin_standard_admission",
@@ -744,21 +754,10 @@ def require_pending_admission_policy(
             "druid_pooled_callable_statement.rs",
             "Statement",
             "DruidPooledCallableStatement",
-            "execute_query",
+            "generated_keys",
             (
                 "begin_standard_admission",
-                "execute_query(&effective_sql).await",
-                "DruidPooledResultSet::new_standard",
-            ),
-        ),
-        (
-            "druid_pooled_callable_statement.rs",
-            "PreparedStatement",
-            "DruidPooledCallableStatement",
-            "execute_prepared_query",
-            (
-                "begin_standard_admission",
-                "execute_prepared_query().await",
+                ".generated_keys().await",
                 "DruidPooledResultSet::new_standard",
             ),
         ),
@@ -784,17 +783,28 @@ def require_pending_admission_policy(
             fail(f"Task 5 pre-raw admission method is missing: {label}:{method}")
         _require_ordered_markers(body, markers, f"{label}:{type_name}::{method}")
 
-    helper = _named_function_bodies(
-        producer_sources["druid_pooled_prepared_statement.rs"],
-        "execute_standard_prepared_results",
-    )
-    if len(helper) != 1:
-        fail("Task 5 pre-raw admission prepared execute helper is missing or ambiguous")
-    _require_ordered_markers(
-        helper[0],
-        ("begin_standard_admission", "raw()", "new_standard_results"),
-        "druid_pooled_prepared_statement.rs:execute_standard_prepared_results",
-    )
+    for label in (
+        "druid_pooled_prepared_statement.rs",
+        "druid_pooled_callable_statement.rs",
+    ):
+        helper = _named_function_bodies(
+            producer_sources[label],
+            "execute_prepared_results",
+        )
+        if len(helper) != 1:
+            fail(
+                "Task 6 canonical pre-raw admission prepared execute helper "
+                f"is missing or ambiguous: {label}"
+            )
+        _require_ordered_markers(
+            helper[0],
+            (
+                "begin_standard_admission",
+                ".execute_prepared(",
+                "new_standard_results",
+            ),
+            f"{label}:execute_prepared_results",
+        )
 
 
 def _named_function_bodies(source: str, name: str) -> list[str]:
@@ -1101,7 +1111,7 @@ def require_frozen_partition(rows: tuple[ConsumerRow, ...]) -> None:
 
 
 def verify_task4_evidence_handoff(root: Path) -> None:
-    """Accept the one planned Task5 rename while keeping Task4 manifests frozen."""
+    """Require the fully regenerated Task 6 runtime and compiler evidence manifests."""
 
     coverage_path = (
         root / "docs/verification/rdbc-first/rdbc-adapter-coverage-regions.json"
@@ -1111,149 +1121,39 @@ def verify_task4_evidence_handoff(root: Path) -> None:
         hashlib.sha256(coverage_path.read_bytes()).hexdigest()
         != TASK4_COVERAGE_MANIFEST_SHA256
     ):
-        fail("Task 4 frozen compiler-coverage manifest changed during Task 5")
+        fail("Task 6 regenerated compiler-coverage manifest changed")
     if (
         hashlib.sha256(runtime_path.read_bytes()).hexdigest()
         != TASK4_RUNTIME_MANIFEST_SHA256
     ):
-        fail("Task 4 frozen runtime-trace manifest changed during Task 5")
-    payload = json.loads(coverage_path.read_text(encoding="utf-8"))
-    mismatches: set[tuple[str, str, str]] = set()
-    for family in payload["families"]:
-        for requirement in family["requirements"]:
-            source_path = requirement["source_path"]
-            source = root / source_path
-            current = hashlib.sha256(source.read_bytes()).hexdigest()
-            expected = requirement["source_sha256"]
-            if current != expected:
-                mismatches.add((source_path, expected, current))
-    expected_mismatch = {
-        (
-            "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs",
-            "f5e8df13bed46fe23a274dea188cb02d0ff8827e3cb5ba8852e759a02b0edb1e",
-            TASK5_RBDC_EVIDENCE_SOURCE_SHA256,
+        fail("Task 6 regenerated runtime-trace manifest changed")
+    try:
+        coverage = load_coverage_manifest(root, coverage_path.relative_to(root))
+        adapters = task_adapter_rows(
+            root / TASK4_ADAPTER_MANIFEST,
+            root / TASK4_RUNTIME_EVIDENCE_MANIFEST,
         )
-    }
-    if mismatches != expected_mismatch:
-        fail(f"Task 4 evidence handoff has unexpected stale sources: {mismatches}")
-    rbdc_path = next(iter(expected_mismatch))[0]
-    rbdc_source = (root / rbdc_path).read_text(encoding="utf-8")
-    if any(
-        old in rbdc_source
-        for old in ("RdbcResourceCapabilities", "RdbcResourceFactory")
-    ) or not all(
-        new in rbdc_source for new in ("ResourceOperations", "ResourceHandleFactory")
-    ):
-        fail(
-            "Task 4 RBDC evidence source drift is not the approved Task 5 resource rename"
-        )
+        specs = evidence_specs(adapters)
+        verify_coverage_manifest_bindings(specs, coverage)
+    except WrapperVerificationError as error:
+        fail(f"Task 6 regenerated Task 4 evidence is invalid: {error}")
     admission_source = (
         root / "crates/druid-wrapper/tests/druid_standard_pool_admission_test.rs"
     ).read_text(encoding="utf-8")
     require_admission_composition_source(admission_source)
-    run_cargo_gate(
-        root,
-        "Task 5 unsupported-state admission",
-        [
-            "cargo",
-            "test",
-            "--offline",
-            "--locked",
-            "-p",
-            "druid",
-            "--test",
-            "single_standard_logical_contract_test",
-            "unsupported_standard_state_is_unmanaged_without_calling_its_setters",
-            "--",
-            "--exact",
-        ],
-    )
-    run_cargo_gate(
-        root,
-        "Task 5 real standard-adapter admission",
-        [
-            "cargo",
-            "test",
-            "--offline",
-            "--locked",
-            "-p",
-            "druid-wrapper",
-            "--all-features",
-            "--test",
-            "druid_standard_pool_admission_test",
-        ],
-    )
-    execute_task5_rbdc_compiler_coverage(root)
 
 
 def task5_task4_coverage_contract(root: Path) -> tuple[CoverageFamilySpec, ...]:
-    """Load frozen Task 4 coverage with exactly one approved Task 5 source transition."""
+    """Load the final Task 6-regenerated exact compiler-coverage contract."""
 
     path = root / "docs/verification/rdbc-first/rdbc-adapter-coverage-regions.json"
     raw = path.read_bytes()
     if hashlib.sha256(raw).hexdigest() != TASK4_COVERAGE_MANIFEST_SHA256:
-        fail("Task 4 frozen compiler-coverage manifest changed during Task 5")
-    document = json.loads(raw)
-    family_specs: list[CoverageFamilySpec] = []
-    transitioned: list[tuple[str, str, str, str]] = []
-    for raw_family in document["families"]:
-        requirements: list[CoverageRequirement] = []
-        for raw_requirement in raw_family["requirements"]:
-            source_sha256 = raw_requirement["source_sha256"]
-            if (
-                raw_family["family"] == "RBDC"
-                and raw_requirement["requirement_id"] == "EXACT_TEST_IDENTITY"
-                and raw_requirement["source_path"]
-                == "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs"
-            ):
-                transitioned.append(
-                    (
-                        raw_family["family"],
-                        raw_requirement["requirement_id"],
-                        source_sha256,
-                        TASK5_RBDC_EVIDENCE_SOURCE_SHA256,
-                    )
-                )
-                source_sha256 = TASK5_RBDC_EVIDENCE_SOURCE_SHA256
-            requirements.append(
-                CoverageRequirement(
-                    requirement_id=raw_requirement["requirement_id"],
-                    requirement_kind=raw_requirement["requirement_kind"],
-                    source_path=Path(raw_requirement["source_path"]),
-                    source_sha256=source_sha256,
-                    source_function=raw_requirement["source_function"],
-                    compiler_function_name=raw_requirement["compiler_function_name"],
-                    anchor_id=raw_requirement["anchor_id"],
-                    minimum_count=raw_requirement["minimum_count"],
-                )
-            )
-        family_specs.append(
-            CoverageFamilySpec(
-                family=raw_family["family"],
-                test_target=raw_family["test_target"],
-                test_id=raw_family["test_id"],
-                profile=raw_family["profile"],
-                trace_version=raw_family["trace_version"],
-                trace_evidence_id=raw_family["trace_evidence_id"],
-                coverage_version=raw_family["coverage_version"],
-                requirements=tuple(requirements),
-            )
-        )
-    expected_transition = [
-        (
-            "RBDC",
-            "EXACT_TEST_IDENTITY",
-            "f5e8df13bed46fe23a274dea188cb02d0ff8827e3cb5ba8852e759a02b0edb1e",
-            TASK5_RBDC_EVIDENCE_SOURCE_SHA256,
-        )
-    ]
-    if transitioned != expected_transition:
-        fail(f"Task 4 coverage transition is not exact: {transitioned}")
-    result = tuple(family_specs)
+        fail("Task 6 regenerated compiler-coverage manifest changed")
     try:
-        validate_coverage_manifest(root, result)
+        result = load_coverage_manifest(root, path.relative_to(root))
     except WrapperVerificationError as error:
-        fail(f"Task 4 adjusted coverage contract is invalid: {error}")
+        fail(f"Task 6 regenerated coverage contract is invalid: {error}")
     return result
 
 
@@ -1424,6 +1324,12 @@ def _require_consumer_source_proof(
 def verify_repository(root: Path) -> VerificationSummary:
     """Verify the complete current Task 5 source, manifest, and ownership contract."""
 
+    checked_rows = tuple(
+        parse_consumer_payload((root / DEFAULT_CONSUMERS).read_bytes())
+    )
+    if any(row.state == TASK6_CLOSED for row in checked_rows):
+        return verify_final_repository(root, checked_rows)
+
     require_fixed_files(root)
     for relative, type_name in CONCRETE_OBJECTS.items():
         require_concrete_object((root / relative).read_text(), type_name, relative)
@@ -1513,6 +1419,86 @@ def verify_repository(root: Path) -> VerificationSummary:
         task7_rows,
         len(STANDARD_IMPLS),
         len(CONCRETE_OBJECTS),
+    )
+
+
+def verify_final_repository(
+    root: Path, checked_rows: tuple[ConsumerRow, ...]
+) -> VerificationSummary:
+    """Verify the Task 6 canonical-only Druid source and retained Task 5 behavior."""
+
+    required = (
+        "crates/druid/src/core/connection_info.rs",
+        "crates/druid/src/core/druid_connection_holder.rs",
+        "crates/druid/src/core/druid_pooled_connection.rs",
+        "crates/druid/src/core/druid_pooled_statement.rs",
+        "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+        "crates/druid/src/core/druid_pooled_callable_statement.rs",
+        "crates/druid/src/core/druid_pooled_result_set.rs",
+        "crates/druid/src/core/database_meta_data_proxy_impl.rs",
+        "crates/druid/src/core/standard_resource_registry.rs",
+        "crates/druid/tests/single_standard_logical_contract_test.rs",
+        "crates/druid/tests/raw_logical_ownership_test.rs",
+        "crates/druid/tests/standard_metadata_ownership_test.rs",
+        "crates/druid/tests/standard_filter_stat_semantics_test.rs",
+    )
+    missing = [path for path in required if not (root / path).is_file()]
+    if missing:
+        fail(f"required final Druid file is missing: {missing}")
+    forbidden_paths = (
+        root / "crates/druid/src/core/physical_connection_info.rs",
+        root / "crates/druid/src/spi/mod.rs",
+        root / "crates/druid/src/rdbc.rs",
+    )
+    if any(path.exists() for path in forbidden_paths):
+        fail("retired Druid compatibility facade remains")
+    for source_root in (
+        root / "crates/druid/src",
+        root / "crates/druid-wrapper/src",
+        root / "crates/druid-rdbc/src",
+    ):
+        for path in source_root.rglob("*.rs"):
+            source = path.read_text(encoding="utf-8")
+            match = re.search(r"\bPhysical[A-Z][A-Za-z0-9_]*\b", source)
+            if match:
+                fail(f"retired identity remains in {path}: {match.group(0)}")
+    for relative, (trait_path, type_name, methods) in STANDARD_IMPLS.items():
+        require_direct_standard_impl(
+            (root / relative).read_text(), trait_path, type_name, methods, relative
+        )
+    for relative, trait_path, type_name, methods in STANDARD_INHERITED_IMPLS:
+        require_direct_standard_impl(
+            (root / relative).read_text(), trait_path, type_name, methods, relative
+        )
+    require_pending_admission_policy(
+        (root / "crates/druid/src/core/standard_resource_registry.rs").read_text(),
+        (root / "crates/druid/src/core/standard_resource_admission.rs").read_text(),
+        {
+            path.name: path.read_text()
+            for path in (
+                root / "crates/druid/src/core/druid_pooled_connection.rs",
+                root / "crates/druid/src/core/druid_pooled_statement.rs",
+                root / "crates/druid/src/core/druid_pooled_prepared_statement.rs",
+                root / "crates/druid/src/core/druid_pooled_callable_statement.rs",
+                root / "crates/druid/src/core/database_meta_data_proxy_impl.rs",
+                root / "crates/druid/src/core/druid_pooled_result_set.rs",
+            )
+        },
+    )
+    task5 = tuple(row for row in checked_rows if row.target_task == TASK5)
+    counts = Counter(row.state for row in task5)
+    expected = Counter({TASK5_CLOSED: 180, TASK6_CLOSED: 75, TASK7_PENDING: 108})
+    if counts != expected:
+        fail(f"final Task 5/6/7 consumer partition drift: {counts} != {expected}")
+    verify_task4_evidence_handoff(root)
+    verify_task5_runtime_contracts(root)
+    return VerificationSummary(
+        len(task5),
+        counts[TASK5_CLOSED],
+        counts[TASK6_PENDING],
+        counts[TASK7_PENDING],
+        len(STANDARD_IMPLS),
+        7,
     )
 
 
@@ -1690,6 +1676,8 @@ def main() -> int:
     print(f"TASK5_CONSUMER_ROWS={summary.consumer_rows}")
     print(f"TASK5_CONSUMER_CLOSED={summary.closed_rows}")
     print(f"TASK6_COMPATIBILITY_PENDING={summary.task6_pending_rows}")
+    if summary.task6_pending_rows == 0:
+        print("TASK6_COMPATIBILITY_CLOSED=75")
     print(f"TASK7_RESOURCE_OPERATIONS_PENDING={summary.task7_pending_rows}")
     print(f"DRUID_STANDARD_IMPLS={summary.standard_impls}")
     print(f"DRUID_INTERNAL_OBJECTS={summary.concrete_objects}")

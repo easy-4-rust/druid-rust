@@ -1,7 +1,7 @@
 //! 对应 Java：`com.alibaba.druid.proxy.rdbc.DataSourceProxy`。
 //! 来源文件：`core/src/main/java/com/alibaba/druid/proxy/rdbc/DataSourceProxy.java`。
 
-use crate::core::PhysicalConnectionFactory;
+use crate::core::ConnectionFactory;
 use crate::stats::StatsCollector;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -24,7 +24,7 @@ pub trait DataSourceProxy {
     fn db_type(&self) -> Option<&str>;
 
     /// 返回未池化物理驱动工厂。
-    fn raw_driver(&self) -> &dyn PhysicalConnectionFactory;
+    fn raw_driver(&self) -> &dyn ConnectionFactory;
 
     /// 返回对外配置 URL。
     fn url(&self) -> Option<&str>;

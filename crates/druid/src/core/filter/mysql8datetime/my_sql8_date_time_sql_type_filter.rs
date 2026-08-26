@@ -1,10 +1,8 @@
 //! 对应 Java：
 //! `com.alibaba.druid.filter.mysql8datetime.MySQL8DateTimeSqlTypeFilter`。
 
-use super::MySQL8DateTimeResultSetMetaData;
 use crate::core::{
-    AfterFilter, BeforeFilter, DruidError, ExecContext, ExecResult, ResultSetFilter,
-    ResultSetFilterChain, ResultSetMetaData, Value,
+    AfterFilter, BeforeFilter, DruidError, ExecContext, ExecResult, ResultSetFilter, Value,
 };
 use std::time::Duration;
 
@@ -60,33 +58,4 @@ impl AfterFilter for MySQL8DateTimeSqlTypeFilter {
     }
 }
 
-impl ResultSetFilter for MySQL8DateTimeSqlTypeFilter {
-    fn result_set_get_object(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_index: usize,
-    ) -> Result<Value, DruidError> {
-        chain
-            .result_set_get_object(column_index)
-            .map(Self::get_object_replace_local_date_time)
-    }
-
-    fn result_set_get_object_by_label(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-        column_label: &str,
-    ) -> Result<Value, DruidError> {
-        chain
-            .result_set_get_object_by_label(column_label)
-            .map(Self::get_object_replace_local_date_time)
-    }
-
-    fn result_set_get_meta_data(
-        &self,
-        chain: &mut ResultSetFilterChain<'_>,
-    ) -> Result<ResultSetMetaData, DruidError> {
-        chain.result_set_get_meta_data().map(|metadata| {
-            MySQL8DateTimeResultSetMetaData::new(metadata).into_result_set_meta_data()
-        })
-    }
-}
+impl ResultSetFilter for MySQL8DateTimeSqlTypeFilter {}

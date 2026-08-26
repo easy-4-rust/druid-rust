@@ -59,11 +59,11 @@ impl StatFilterContextListener for StatFilterContextListenerAdapter {
         Ok(())
     }
 
-    fn physical_connection_connect(&self) -> Result<(), DruidError> {
+    fn connection_open(&self) -> Result<(), DruidError> {
         Ok(())
     }
 
-    fn physical_connection_close(&self, _nanos: i64) -> Result<(), DruidError> {
+    fn connection_close(&self, _nanos: i64) -> Result<(), DruidError> {
         Ok(())
     }
 

@@ -147,9 +147,14 @@ async fn sqlx_standard_close_defaults_and_generated_keys_are_consistent() {
         .await
         .unwrap();
     let capabilities = Connection::capabilities(&connection);
-    assert!(!capabilities.transactions);
+    assert!(capabilities.transactions);
     assert!(!capabilities.savepoints);
-    assert!(Connection::commit(&mut connection).await.is_err());
+    Connection::set_auto_commit(&mut connection, false)
+        .await
+        .unwrap();
+    assert!(!Connection::auto_commit(&connection).unwrap());
+    Connection::commit(&mut connection).await.unwrap();
+    assert!(Connection::auto_commit(&connection).unwrap());
 
     let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
         .await
@@ -286,4 +291,18 @@ async fn sqlx_connection_first_close_rejects_prepared_mutation_and_preserves_sna
     assert!(prepared.clear_parameters().is_err());
     assert!(prepared.execute_prepared_query().await.is_err());
     assert_eq!(snapshot.parameter_count(), 1);
+}
+
+#[tokio::test]
+async fn sqlx_standard_query_timeout_round_trips_and_rejects_negative_values() {
+    let mut connection = SqlxConnectionAdapter::connect("sqlite::memory:")
+        .await
+        .expect("SQLite connection");
+    let mut statement = Connection::create_statement(&mut connection, StatementOptions::default())
+        .await
+        .expect("canonical statement");
+    assert_eq!(statement.query_timeout().unwrap(), 0);
+    statement.set_query_timeout(3).unwrap();
+    assert_eq!(statement.query_timeout().unwrap(), 3);
+    assert!(statement.set_query_timeout(-1).is_err());
 }

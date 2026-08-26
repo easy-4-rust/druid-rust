@@ -1,19 +1,13 @@
-//! `SQLx` 物理连接适配器。
+//! `SQLx` canonical 连接适配器。
 
 use super::sqlx_connection_actor::SqlxConnectionActor;
-use super::sqlx_prepared_statement::{SqlxPreparedStatement, SqlxStatementExecutionError};
-use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
+use super::sqlx_prepared_statement::SqlxPreparedStatement;
+use crate::standard_adapter_executor::AdapterUpdateResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use bigdecimal::{BigDecimal, FromPrimitive};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use druid_rdbc::error::SqlWarning;
-use druid_rdbc::error::{BatchUpdateCounts, RdbcError};
-use druid_rdbc::spi::{
-    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedInputParameter, PreparedStatementKey,
-    StatementExecuteResult, StatementGeneratedKeys,
-};
-use druid_rdbc::types::{Row, Savepoint, Value};
+use druid_rdbc::error::RdbcError;
+use druid_rdbc::types::{Row, Value};
 use sqlx::any::{AnyRow, AnyTransactionManager, AnyTypeInfoKind};
 use sqlx::mysql::{MySqlArguments, MySqlConnection, MySqlRow, MySqlTransactionManager};
 use sqlx::postgres::{PgArguments, PgConnection, PgRow, PgTransactionManager};
@@ -24,7 +18,7 @@ use sqlx::{
 };
 use std::sync::Arc;
 
-type SqlxExecResult = ExecResult;
+type SqlxExecResult = AdapterUpdateResult;
 
 fn any_bind_unsupported(value_type: &'static str) -> RdbcError {
     RdbcError::UnsupportedOperation {
@@ -38,6 +32,7 @@ fn any_bind_unsupported(value_type: &'static str) -> RdbcError {
     }
 }
 
+#[cfg(test)]
 fn read_only_session_sql(backend: &str, read_only: bool) -> Option<&'static str> {
     match (backend, read_only) {
         ("postgresql", true) => Some("SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY"),
@@ -189,6 +184,137 @@ impl SqlxConnectionAdapter {
         Ok(())
     }
 
+    pub(super) async fn ping_connection_core(&mut self) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            return actor.ping().await;
+        }
+        self.ping_raw_core().await
+    }
+
+    pub(super) async fn ping_raw_core(&mut self) -> Result<(), RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::MySql(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::PostgreSql(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::Sqlite(connection) => SqlxConnection::ping(connection)
+                .await
+                .map_err(Self::driver_error),
+        }
+    }
+
+    pub(super) async fn begin_raw_core(&mut self) -> Result<(), RdbcError> {
+        if !self.auto_commit {
+            return Err(RdbcError::DriverError(
+                "SQLx transaction is already active".to_owned(),
+            ));
+        }
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                AnyTransactionManager::begin(connection, None)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                MySqlTransactionManager::begin(connection, None)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                PgTransactionManager::begin(connection, None)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                SqliteTransactionManager::begin(connection, None)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+        }?;
+        self.auto_commit = false;
+        Ok(())
+    }
+
+    pub(super) async fn commit_raw_core(&mut self) -> Result<(), RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => AnyTransactionManager::commit(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::MySql(connection) => MySqlTransactionManager::commit(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                PgTransactionManager::commit(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                SqliteTransactionManager::commit(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+        }?;
+        self.auto_commit = true;
+        Ok(())
+    }
+
+    pub(super) async fn rollback_raw_core(&mut self) -> Result<(), RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => AnyTransactionManager::rollback(connection)
+                .await
+                .map_err(Self::driver_error),
+            SqlxConnectionBackend::MySql(connection) => {
+                MySqlTransactionManager::rollback(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                PgTransactionManager::rollback(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                SqliteTransactionManager::rollback(connection)
+                    .await
+                    .map_err(Self::driver_error)
+            }
+        }?;
+        self.auto_commit = true;
+        Ok(())
+    }
+
+    async fn set_auto_commit_core(&mut self, enabled: bool) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            return actor.set_auto_commit(enabled).await;
+        }
+        match (self.auto_commit, enabled) {
+            (true, false) => self.begin_raw_core().await,
+            (false, true) => self.commit_raw_core().await,
+            _ => Ok(()),
+        }
+    }
+
+    async fn commit_core(&mut self) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.commit().await
+        } else {
+            self.commit_raw_core().await
+        }
+    }
+
+    async fn rollback_core(&mut self) -> Result<(), RdbcError> {
+        if let Some(actor) = &self.standard_actor {
+            actor.rollback().await
+        } else {
+            self.rollback_raw_core().await
+        }
+    }
+
     fn connection_mut(&mut self) -> Result<&mut SqlxConnectionBackend, RdbcError> {
         if self.discarded {
             return Err(RdbcError::ConnectionDiscarded);
@@ -261,76 +387,6 @@ impl SqlxConnectionAdapter {
             )),
             error => RdbcError::DriverError(error.to_string()),
         }
-    }
-
-    fn finish_statement_execution<T>(
-        &mut self,
-        result: Result<T, SqlxStatementExecutionError>,
-    ) -> Result<T, RdbcError> {
-        match result {
-            Ok(value) => Ok(value),
-            Err(SqlxStatementExecutionError::Driver(error)) => Err(error),
-            Err(SqlxStatementExecutionError::TimedOut) => {
-                self.discarded = true;
-                self.connection.take();
-                Err(RdbcError::SqlException(Box::new(
-                    druid_rdbc::error::SqlException::new(
-                        0,
-                        Some("HYT00".to_owned()),
-                        Some("SQLx prepared statement query timed out".to_owned()),
-                    )
-                    .with_class_name("java.sql.SQLTimeoutException"),
-                )))
-            }
-            Err(SqlxStatementExecutionError::Cancelled) => {
-                self.discarded = true;
-                self.connection.take();
-                Err(RdbcError::SqlException(Box::new(
-                    druid_rdbc::error::SqlException::new(
-                        0,
-                        Some("HY008".to_owned()),
-                        Some("SQLx prepared statement execution was cancelled".to_owned()),
-                    )
-                    .with_class_name("java.sql.SQLException"),
-                )))
-            }
-        }
-    }
-
-    fn validate_savepoint_name(name: &str) -> Result<(), RdbcError> {
-        let valid = !name.is_empty()
-            && name
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_');
-        if valid {
-            Ok(())
-        } else {
-            Err(RdbcError::DriverError(
-                "savepoint name must contain only ASCII letters, digits, or '_'".to_string(),
-            ))
-        }
-    }
-
-    fn prepared_statement(
-        statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&SqlxPreparedStatement, RdbcError> {
-        statement
-            .as_any()
-            .downcast_ref::<SqlxPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by SqlxConnectionAdapter".to_string(),
-                )
-            })
-    }
-
-    async fn materialized_parameters(
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: &[PreparedInputParameter],
-    ) -> Result<Vec<Value>, RdbcError> {
-        Self::prepared_statement(statement)?
-            .materialized_parameters(parameters.len())
-            .await
     }
 
     fn bind_any_values(
@@ -875,36 +931,6 @@ impl SqlxConnectionAdapter {
         }
     }
 
-    async fn execute_control_statement(&mut self, sql: &str) -> Result<(), RdbcError> {
-        match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                sqlx::query(sql)
-                    .execute(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                sqlx::query(sql)
-                    .execute(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                sqlx::query(sql)
-                    .execute(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                sqlx::query(sql)
-                    .execute(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-            }
-        }
-        Ok(())
-    }
-
     pub(super) async fn execute_update_core(
         &mut self,
         sql: &str,
@@ -916,7 +942,7 @@ impl SqlxConnectionAdapter {
                     .execute(connection)
                     .await
                     .map_err(Self::driver_error)?;
-                Ok(ExecResult {
+                Ok(AdapterUpdateResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id: result.last_insert_id(),
                     row_count: None,
@@ -927,7 +953,7 @@ impl SqlxConnectionAdapter {
                     .execute(connection)
                     .await
                     .map_err(Self::driver_error)?;
-                Ok(ExecResult {
+                Ok(AdapterUpdateResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id: (result.last_insert_id() != 0)
                         .then(|| i64::try_from(result.last_insert_id()).unwrap_or(i64::MAX)),
@@ -939,7 +965,7 @@ impl SqlxConnectionAdapter {
                     .execute(connection)
                     .await
                     .map_err(Self::driver_error)?;
-                Ok(ExecResult {
+                Ok(AdapterUpdateResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id: None,
                     row_count: None,
@@ -952,816 +978,12 @@ impl SqlxConnectionAdapter {
                     .map_err(Self::driver_error)?;
                 let last_insert_id =
                     (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
-                Ok(ExecResult {
+                Ok(AdapterUpdateResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id,
                     row_count: None,
                 })
             }
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnection for SqlxConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<SqlxExecResult, RdbcError> {
-        self.execute_update_core(sql, params).await
-    }
-
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.fetch_rows_with_labels(sql, params)
-            .await
-            .map(|(rows, _)| rows)
-    }
-
-    async fn fetch_result_set(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                let statement = {
-                    let statement = (&mut *connection)
-                        .prepare(sql)
-                        .await
-                        .map_err(Self::driver_error)?;
-                    Statement::to_owned(&statement)
-                };
-                let labels = statement
-                    .columns()
-                    .iter()
-                    .map(|column| column.name().to_string())
-                    .collect();
-                let rows = Self::bind_any_prepared_values(&statement, params)?
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Ok(Arc::new(SqlxStreamingResultSet::any(rows, labels)))
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                let statement = {
-                    let statement = (&mut *connection)
-                        .prepare(sql)
-                        .await
-                        .map_err(Self::driver_error)?;
-                    Statement::to_owned(&statement)
-                };
-                let labels = statement
-                    .columns()
-                    .iter()
-                    .map(|column| column.name().to_owned())
-                    .collect();
-                let rows = Self::bind_mysql_prepared_values(&statement, params)
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Ok(Arc::new(SqlxStreamingResultSet::mysql(rows, labels)))
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                let statement = {
-                    let statement = (&mut *connection)
-                        .prepare(sql)
-                        .await
-                        .map_err(Self::driver_error)?;
-                    Statement::to_owned(&statement)
-                };
-                let labels = statement
-                    .columns()
-                    .iter()
-                    .map(|column| column.name().to_owned())
-                    .collect();
-                let rows = Self::bind_postgresql_prepared_values(&statement, params)
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Ok(Arc::new(SqlxStreamingResultSet::postgresql(rows, labels)))
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                let statement = {
-                    let statement = (&mut *connection)
-                        .prepare(sql)
-                        .await
-                        .map_err(Self::driver_error)?;
-                    Statement::to_owned(&statement)
-                };
-                let labels = statement
-                    .columns()
-                    .iter()
-                    .map(|column| column.name().to_string())
-                    .collect();
-                let rows = Self::bind_sqlite_prepared_values(&statement, params)
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Ok(Arc::new(SqlxStreamingResultSet::sqlite(rows, labels)))
-            }
-        }
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        let sql = key.sql().to_string();
-        let statement: Arc<dyn PhysicalPreparedStatement> = match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                let statement = (&mut *connection)
-                    .prepare(key.sql())
-                    .await
-                    .map_err(Self::driver_error)?;
-                let statement = Statement::to_owned(&statement);
-                Arc::new(SqlxPreparedStatement::any(sql, statement))
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                let statement = (&mut *connection)
-                    .prepare(key.sql())
-                    .await
-                    .map_err(Self::driver_error)?;
-                let statement = Statement::to_owned(&statement);
-                Arc::new(SqlxPreparedStatement::mysql(sql, statement))
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                let statement = (&mut *connection)
-                    .prepare(key.sql())
-                    .await
-                    .map_err(Self::driver_error)?;
-                let statement = Statement::to_owned(&statement);
-                Arc::new(SqlxPreparedStatement::postgresql(sql, statement))
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                let statement = (&mut *connection)
-                    .prepare(key.sql())
-                    .await
-                    .map_err(Self::driver_error)?;
-                let statement = Statement::to_owned(&statement);
-                Arc::new(SqlxPreparedStatement::sqlite(sql, statement))
-            }
-        };
-        Ok(statement)
-    }
-
-    async fn exec_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
-        let statement = statement
-            .as_any()
-            .downcast_ref::<SqlxPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by SqlxConnectionAdapter".to_string(),
-                )
-            })?;
-        if statement.is_closed() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        if !statement.matches_backend(self.backend_key()) {
-            return Err(RdbcError::DriverError(
-                "SQLx prepared statement backend does not match connection".to_string(),
-            ));
-        }
-        let execution = match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                let backend_statement = statement.any_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_any_prepared_values(backend_statement, params)?;
-                statement
-                    .execute_with_controls(async move {
-                        let result = query
-                            .execute(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        Ok(ExecResult {
-                            rows_affected: result.rows_affected(),
-                            last_insert_id: result.last_insert_id(),
-                            row_count: None,
-                        })
-                    })
-                    .await
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                let backend_statement = statement.mysql_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_mysql_prepared_values(backend_statement, params);
-                statement
-                    .execute_with_controls(async move {
-                        let result = query
-                            .execute(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        Ok(ExecResult {
-                            rows_affected: result.rows_affected(),
-                            last_insert_id: (result.last_insert_id() != 0).then(|| {
-                                i64::try_from(result.last_insert_id()).unwrap_or(i64::MAX)
-                            }),
-                            row_count: None,
-                        })
-                    })
-                    .await
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                let backend_statement = statement.postgresql_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_postgresql_prepared_values(backend_statement, params);
-                statement
-                    .execute_with_controls(async move {
-                        let result = query
-                            .execute(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        Ok(ExecResult {
-                            rows_affected: result.rows_affected(),
-                            last_insert_id: None,
-                            row_count: None,
-                        })
-                    })
-                    .await
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                let backend_statement = statement.sqlite_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_sqlite_prepared_values(backend_statement, params);
-                statement
-                    .execute_with_controls(async move {
-                        let result = query
-                            .execute(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        let last_insert_id =
-                            (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
-                        Ok(ExecResult {
-                            rows_affected: result.rows_affected(),
-                            last_insert_id,
-                            row_count: None,
-                        })
-                    })
-                    .await
-            }
-        };
-        self.finish_statement_execution(execution)
-    }
-
-    async fn exec_prepared_parameters(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-    ) -> Result<ExecResult, RdbcError> {
-        let params = Self::materialized_parameters(statement, &parameters).await?;
-        self.exec_prepared(statement, params).await
-    }
-
-    async fn execute_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-        _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        let statement_ref = Self::prepared_statement(statement)?;
-        let returns_rows = statement_ref.returns_rows();
-        if returns_rows {
-            self.fetch_prepared(statement, params)
-                .await
-                .map(|rows| vec![StatementExecuteResult::ResultSet(rows)])
-        } else {
-            self.exec_prepared(statement, params)
-                .await
-                .map(|result| vec![StatementExecuteResult::Update(result)])
-        }
-    }
-
-    async fn execute_prepared_parameters(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-        generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        let params = Self::materialized_parameters(statement, &parameters).await?;
-        self.execute_prepared(statement, params, generated_keys)
-            .await
-    }
-
-    async fn exec_prepared_parameter_batch(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameter_sets: Vec<Vec<PreparedInputParameter>>,
-    ) -> Result<Vec<i32>, RdbcError> {
-        let statement_ref = Self::prepared_statement(statement)?;
-        let parameter_sets =
-            if let Some(parameter_sets) = statement_ref.take_batches(parameter_sets.len()).await? {
-                parameter_sets
-            } else {
-                let mut materialized_sets = Vec::with_capacity(parameter_sets.len());
-                for parameters in &parameter_sets {
-                    let mut materialized = Vec::with_capacity(parameters.len());
-                    for parameter in parameters {
-                        let value = SqlxPreparedStatement::materialize_parameter(parameter)
-                            .await
-                            .map_err(|error| RdbcError::BatchUpdateException {
-                                update_counts: Vec::<i32>::new().into(),
-                                cause: Box::new(error),
-                            })?;
-                        materialized.push(value);
-                    }
-                    materialized_sets.push(materialized);
-                }
-                materialized_sets
-            };
-
-        let mut update_counts = BatchUpdateCounts::default();
-        for params in parameter_sets {
-            match self.exec_prepared(statement, params).await {
-                Ok(result) => {
-                    if let Err(cause) = update_counts.try_push_rows_affected(result.rows_affected) {
-                        return Err(RdbcError::BatchUpdateException {
-                            update_counts,
-                            cause: Box::new(cause),
-                        });
-                    }
-                }
-                Err(error) => {
-                    return Err(RdbcError::BatchUpdateException {
-                        update_counts,
-                        cause: Box::new(error),
-                    });
-                }
-            }
-        }
-        Ok(update_counts.jdbc_i32())
-    }
-
-    async fn fetch_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let statement = statement
-            .as_any()
-            .downcast_ref::<SqlxPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by SqlxConnectionAdapter".to_string(),
-                )
-            })?;
-        if statement.is_closed() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        if !statement.matches_backend(self.backend_key()) {
-            return Err(RdbcError::DriverError(
-                "SQLx prepared statement backend does not match connection".to_string(),
-            ));
-        }
-        let execution = match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                let backend_statement = statement.any_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_any_prepared_values(backend_statement, params)?;
-                statement
-                    .execute_with_controls(async move {
-                        let rows = query
-                            .fetch_all(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        rows.into_iter().map(Self::decode_any_row).collect()
-                    })
-                    .await
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                let backend_statement = statement.mysql_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_mysql_prepared_values(backend_statement, params);
-                statement
-                    .execute_with_controls(async move {
-                        let rows = query
-                            .fetch_all(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        rows.into_iter().map(Self::decode_mysql_row).collect()
-                    })
-                    .await
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                let backend_statement = statement.postgresql_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_postgresql_prepared_values(backend_statement, params);
-                statement
-                    .execute_with_controls(async move {
-                        let rows = query
-                            .fetch_all(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        rows.into_iter().map(Self::decode_postgresql_row).collect()
-                    })
-                    .await
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                let backend_statement = statement.sqlite_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_sqlite_prepared_values(backend_statement, params);
-                statement
-                    .execute_with_controls(async move {
-                        let rows = query
-                            .fetch_all(connection)
-                            .await
-                            .map_err(Self::driver_error)?;
-                        rows.into_iter().map(Self::decode_sqlite_row).collect()
-                    })
-                    .await
-            }
-        };
-        self.finish_statement_execution(execution)
-    }
-
-    async fn fetch_prepared_parameters(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let params = Self::materialized_parameters(statement, &parameters).await?;
-        self.fetch_prepared(statement, params).await
-    }
-
-    async fn fetch_prepared_result_set(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let sqlx_statement = statement
-            .as_any()
-            .downcast_ref::<SqlxPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by SqlxConnectionAdapter".to_string(),
-                )
-            })?;
-        let labels = sqlx_statement.column_labels();
-        if sqlx_statement.is_closed() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        if !sqlx_statement.matches_backend(self.backend_key()) {
-            return Err(RdbcError::DriverError(
-                "SQLx prepared statement backend does not match connection".to_string(),
-            ));
-        }
-        let result = match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                let backend_statement = sqlx_statement.any_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_any_prepared_values(backend_statement, params)?;
-                let rows = query
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Arc::new(SqlxStreamingResultSet::any(rows, labels)) as Arc<dyn PhysicalResultSet>
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                let backend_statement = sqlx_statement.mysql_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_mysql_prepared_values(backend_statement, params);
-                let rows = query
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Arc::new(SqlxStreamingResultSet::mysql(rows, labels)) as Arc<dyn PhysicalResultSet>
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                let backend_statement = sqlx_statement.postgresql_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_postgresql_prepared_values(backend_statement, params);
-                let rows = query
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Arc::new(SqlxStreamingResultSet::postgresql(rows, labels))
-                    as Arc<dyn PhysicalResultSet>
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                let backend_statement = sqlx_statement.sqlite_statement().ok_or_else(|| {
-                    RdbcError::DriverError(
-                        "SQLx prepared statement backend does not match connection".to_string(),
-                    )
-                })?;
-                let query = Self::bind_sqlite_prepared_values(backend_statement, params);
-                let rows = query
-                    .fetch_all(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
-                Arc::new(SqlxStreamingResultSet::sqlite(rows, labels)) as Arc<dyn PhysicalResultSet>
-            }
-        };
-        Ok(result)
-    }
-
-    async fn fetch_prepared_parameters_result_set(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameters: Vec<PreparedInputParameter>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let params = Self::materialized_parameters(statement, &parameters).await?;
-        self.fetch_prepared_result_set(statement, params).await
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        if !self.auto_commit {
-            return Err(RdbcError::DriverError(
-                "SQLx transaction is already active".to_owned(),
-            ));
-        }
-        match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => {
-                AnyTransactionManager::begin(connection, None)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::MySql(connection) => {
-                MySqlTransactionManager::begin(connection, None)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                PgTransactionManager::begin(connection, None)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                SqliteTransactionManager::begin(connection, None)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-        }?;
-        self.auto_commit = false;
-        Ok(())
-    }
-
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => AnyTransactionManager::commit(connection)
-                .await
-                .map_err(Self::driver_error),
-            SqlxConnectionBackend::MySql(connection) => MySqlTransactionManager::commit(connection)
-                .await
-                .map_err(Self::driver_error),
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                PgTransactionManager::commit(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                SqliteTransactionManager::commit(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-        }?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => AnyTransactionManager::rollback(connection)
-                .await
-                .map_err(Self::driver_error),
-            SqlxConnectionBackend::MySql(connection) => {
-                MySqlTransactionManager::rollback(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::PostgreSql(connection) => {
-                PgTransactionManager::rollback(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-            SqlxConnectionBackend::Sqlite(connection) => {
-                SqliteTransactionManager::rollback(connection)
-                    .await
-                    .map_err(Self::driver_error)
-            }
-        }?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        let name = savepoint
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
-        Self::validate_savepoint_name(&name)?;
-        self.execute_control_statement(&format!("ROLLBACK TO SAVEPOINT {name}"))
-            .await
-    }
-
-    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        let savepoint = Savepoint {
-            id: self.savepoint_sequence,
-            name: None,
-        };
-        self.execute_control_statement(&format!("SAVEPOINT druid_sp_{}", savepoint.id))
-            .await?;
-        Ok(savepoint)
-    }
-
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
-        Self::validate_savepoint_name(name)?;
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        self.execute_control_statement(&format!("SAVEPOINT {name}"))
-            .await?;
-        Ok(Savepoint {
-            id: self.savepoint_sequence,
-            name: Some(name.to_string()),
-        })
-    }
-
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        let name = savepoint
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
-        Self::validate_savepoint_name(&name)?;
-        self.execute_control_statement(&format!("RELEASE SAVEPOINT {name}"))
-            .await
-    }
-
-    async fn abort(&mut self) -> Result<(), RdbcError> {
-        self.close().await
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        match self.connection_mut()? {
-            SqlxConnectionBackend::Any(connection) => SqlxConnection::ping(connection)
-                .await
-                .map_err(Self::driver_error),
-            SqlxConnectionBackend::MySql(connection) => SqlxConnection::ping(connection)
-                .await
-                .map_err(Self::driver_error),
-            SqlxConnectionBackend::PostgreSql(connection) => SqlxConnection::ping(connection)
-                .await
-                .map_err(Self::driver_error),
-            SqlxConnectionBackend::Sqlite(connection) => SqlxConnection::ping(connection)
-                .await
-                .map_err(Self::driver_error),
-        }
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_connection_core().await
-    }
-
-    fn is_closed(&self) -> bool {
-        self.connection.is_none()
-    }
-
-    fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        PhysicalConnectionCapabilities {
-            transactions: true,
-            savepoints: true,
-            auto_commit: true,
-            read_only: read_only_session_sql(self.backend_key(), true).is_some(),
-            transaction_isolation: false,
-            holdability: false,
-            clear_warnings: true,
-            catalog: false,
-            schema: false,
-        }
-    }
-
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        if self.discarded {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        let url = self.url.as_str();
-        match self
-            .connection
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-        {
-            SqlxConnectionBackend::Any(connection) => Ok(Box::new(
-                super::sqlx_database_meta_data::SqlxDatabaseMetaData::any(connection, url),
-            )),
-            SqlxConnectionBackend::MySql(connection) => Ok(Box::new(
-                super::sqlx_database_meta_data::SqlxDatabaseMetaData::mysql(connection, url),
-            )),
-            SqlxConnectionBackend::PostgreSql(connection) => Ok(Box::new(
-                super::sqlx_database_meta_data::SqlxDatabaseMetaData::postgresql(connection, url),
-            )),
-            SqlxConnectionBackend::Sqlite(connection) => Ok(Box::new(
-                super::sqlx_database_meta_data::SqlxDatabaseMetaData::sqlite(connection, url),
-            )),
-        }
-    }
-
-    fn auto_commit(&self) -> bool {
-        self.auto_commit
-    }
-
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
-        let current = self.auto_commit();
-        match (current, auto_commit) {
-            (true, false) => self.begin().await,
-            (false, true) => self.commit().await,
-            _ => Ok(()),
-        }
-    }
-
-    fn read_only(&self) -> bool {
-        self.read_only
-    }
-
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
-        if !self.auto_commit {
-            return Err(RdbcError::InvalidArgument(
-                "read_only cannot change while a transaction is active".to_string(),
-            ));
-        }
-        self.connection_mut()?;
-        let backend = self.backend_key();
-        let Some(sql) = read_only_session_sql(backend, read_only) else {
-            if read_only {
-                return Err(RdbcError::UnsupportedOperation {
-                    operation: if backend == "sqlite" {
-                        "sqlx_sqlite_read_only_transaction"
-                    } else {
-                        "sqlx_driver_read_only_transaction"
-                    },
-                });
-            }
-            self.read_only = false;
-            return Ok(());
-        };
-        self.execute_control_statement(sql).await?;
-        self.read_only = read_only;
-        Ok(())
-    }
-
-    /// 返回 `SQLx` 连接的 `SQLWarning` 链。
-    ///
-    /// 对应 Java：`java.sql.Connection#getWarnings()`。`SQLx` 的公开 Connection
-    /// SPI 不暴露 JDBC warning 链，因此存活连接返回 `None`；关闭或已丢弃连接
-    /// 仍按 Druid 连接状态语义返回 `ConnectionDiscarded`。
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.connection_mut()?;
-        Ok(None)
-    }
-
-    /// 清除 `SQLx` 连接的 `SQLWarning`。
-    ///
-    /// 对应 Java：`java.sql.Connection#clearWarnings()`。`SQLx` 不保留可清理的
-    /// warning 状态，存活连接无操作成功，关闭或已丢弃连接返回状态错误。
-    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.connection_mut()?;
-        Ok(())
-    }
-
-    fn mark_discarded(&mut self) {
-        self.discarded = true;
-    }
-
-    fn is_discarded(&self) -> bool {
-        self.discarded
-    }
-
-    fn driver_name(&self) -> &str {
-        match &self.connection {
-            Some(SqlxConnectionBackend::Any(connection)) => connection.backend_name(),
-            Some(SqlxConnectionBackend::MySql(_)) => "MySQL",
-            Some(SqlxConnectionBackend::PostgreSql(_)) => "PostgreSQL",
-            Some(SqlxConnectionBackend::Sqlite(_)) => "SQLite",
-            None => "sqlx-closed",
         }
     }
 }
@@ -1808,6 +1030,18 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         ))
     }
 
+    async fn commit(&mut self) -> Result<(), RdbcError> {
+        self.commit_core().await
+    }
+
+    async fn rollback(&mut self) -> Result<(), RdbcError> {
+        self.rollback_core().await
+    }
+
+    async fn set_auto_commit(&mut self, enabled: bool) -> Result<(), RdbcError> {
+        self.set_auto_commit_core(enabled).await
+    }
+
     fn auto_commit(&self) -> Result<bool, RdbcError> {
         Ok(self.standard_actor.as_ref().map_or_else(
             || self.standard_auto_commit_core(),
@@ -1817,11 +1051,19 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
 
     fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
         druid_rdbc::extensions::ConnectionCapabilities {
-            transactions: false,
+            transactions: true,
             savepoints: false,
             catalogs: false,
             schemas: false,
             callable_statements: false,
+        }
+    }
+
+    async fn is_valid(&mut self, _timeout_seconds: u32) -> Result<bool, RdbcError> {
+        match self.ping_connection_core().await {
+            Ok(()) => Ok(true),
+            Err(RdbcError::ConnectionDiscarded) => Ok(false),
+            Err(error) => Err(error),
         }
     }
 

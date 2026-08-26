@@ -4,9 +4,8 @@ use super::{
     TenantStatementType, WallConfig, WallProvider, WallSqlStat,
 };
 use crate::core::{
-    AfterFilter, BatchExecContext, BeforeFilter, ConnectionDatabaseMetaDataFilterChain, DruidError,
-    ExecContext, ExecResult, PhysicalDatabaseMetaData, ResultSetFilter, ResultSetFilterChain,
-    ResultSetOpenContext, StandardResultSetFilterChain,
+    AfterFilter, BatchExecContext, BeforeFilter, DruidError, ExecContext, ExecResult,
+    ResultSetFilter, StandardResultSetFilterChain,
 };
 use dashmap::DashMap;
 use std::collections::HashMap;
@@ -321,30 +320,6 @@ impl WallFilter {
         }
     }
 
-    fn preprocess_result_set(
-        &self,
-        context: &mut ResultSetOpenContext<'_>,
-    ) -> Result<(), DruidError> {
-        let meta_data = context.raw_result_set().meta_data()?;
-        let column_count = meta_data.column_count()?;
-        let (logic, physical, hidden, tenant) = self.result_set_column_mappings(
-            column_count,
-            |column| meta_data.table_name(column).map_err(DruidError::from),
-            |column| meta_data.column_name(column).map_err(DruidError::from),
-        )?;
-        if let Some(logic) = logic {
-            context.set_logic_column_map(logic);
-        }
-        if let Some(physical) = physical {
-            context.set_physical_column_map(physical);
-        }
-        if let Some(hidden) = hidden {
-            context.set_hidden_columns(hidden);
-        }
-        context.set_tenant_columns(tenant);
-        Ok(())
-    }
-
     fn preprocess_standard_result_set(
         &self,
         context: &mut crate::core::StandardResultSetOpenContext<'_>,
@@ -427,14 +402,6 @@ impl BeforeFilter for WallFilter {
     fn statement_add_batch_sql(&self, sql: &str) -> Result<String, DruidError> {
         self.before_sql(sql, &[], false, true)
             .map(|(_, rewritten_sql)| rewritten_sql)
-    }
-
-    fn connection_get_meta_data<'filters, 'connection>(
-        &self,
-        chain: ConnectionDatabaseMetaDataFilterChain<'filters, 'connection>,
-    ) -> Result<Box<dyn PhysicalDatabaseMetaData + 'connection>, DruidError> {
-        self.check_metadata_allowed(chain.connection_id())?;
-        chain.connection_get_meta_data()
     }
 
     async fn standard_connection_get_meta_data_before(
@@ -532,33 +499,11 @@ impl AfterFilter for WallFilter {
 #[allow(private_interfaces)]
 #[async_trait::async_trait]
 impl ResultSetFilter for WallFilter {
-    fn result_set_open_after_with_proxy(
-        &self,
-        context: &mut ResultSetOpenContext<'_>,
-    ) -> Result<(), DruidError> {
-        self.preprocess_result_set(context)
-    }
-
     fn standard_result_set_open_after_with_proxy(
         &self,
         context: &mut crate::core::StandardResultSetOpenContext<'_>,
     ) -> Result<(), DruidError> {
         self.preprocess_standard_result_set(context)
-    }
-
-    fn result_set_next(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<bool, DruidError> {
-        let has_next = chain.result_set_next()?;
-        if !has_next {
-            return Ok(false);
-        }
-        let Some(tenant_call_back) = self.provider.config().tenant_call_back() else {
-            return Ok(true);
-        };
-        for column_index in chain.context().tenant_columns() {
-            let value = chain.raw_value(column_index)?;
-            tenant_call_back.filter_resultset_tenant_column(&value);
-        }
-        Ok(true)
     }
 
     async fn standard_result_set_next(

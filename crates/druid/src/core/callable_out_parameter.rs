@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::CallableOutParameter;
+pub use druid_rdbc::statement::CallableOutParameter;

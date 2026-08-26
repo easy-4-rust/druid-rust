@@ -7,16 +7,14 @@ use super::config::DruidPoolBuilder;
 use super::connection_close_worker::ConnectionCloseWorker;
 use super::connection_create_worker::ConnectionCreateWorker;
 use super::pool_inner::PoolInner;
-use super::pool_validation_factory::PoolValidationFactory;
 use crate::core::fatal_error_handler::FatalErrorHandler;
 use crate::core::{
-    DataSourceConnectionProvider, Db2ExceptionSorter, DruidConnectionHolder, DruidError,
-    DruidPooledConnection, ExceptionSorter, FilterChain, InformixExceptionSorter,
+    ConnectionFactory, DataSourceConnectionProvider, Db2ExceptionSorter, DruidConnectionHolder,
+    DruidError, DruidPooledConnection, ExceptionSorter, FilterChain, InformixExceptionSorter,
     MockExceptionSorter, MsSqlValidConnectionChecker, MySqlExceptionSorter,
     MySqlValidConnectionChecker, OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker,
     OracleExceptionSorter, OracleValidConnectionChecker, PgExceptionSorter,
-    PgValidConnectionChecker, PhoenixExceptionSorter, PhysicalConnectionFactory, PoolState,
-    RdbcError, StandardConnectionFactoryCompatibility, SybaseExceptionSorter,
+    PgValidConnectionChecker, PhoenixExceptionSorter, PoolState, RdbcError, SybaseExceptionSorter,
     ValidConnectionChecker,
 };
 use crate::sql::WallProvider;
@@ -134,9 +132,9 @@ impl DataSourceStatSnapshotContext {
             not_empty_wait_count: pool.not_empty_wait_count,
             not_empty_wait_nanos: pool.not_empty_wait_nanos,
             logic_connect_error_count: pool.logic_connect_error_count,
-            physical_connect_count: pool.physical_connect_count,
-            physical_close_count: pool.physical_close_count,
-            physical_connect_error_count: pool.physical_connect_error_count,
+            driver_connect_count: pool.driver_connect_count,
+            driver_close_count: pool.driver_close_count,
+            driver_connect_error_count: pool.driver_connect_error_count,
             execute_count: runtime.execute_count,
             error_count: runtime.error_count,
             commit_count: runtime.commit_count,
@@ -170,15 +168,13 @@ impl DruidPool {
         config: super::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
     ) -> Self {
-        let compatibility: Arc<dyn PhysicalConnectionFactory> =
-            Arc::new(StandardConnectionFactoryCompatibility::new(factory));
-        Self::new(name, driver_name, compatibility, config, filter_chain)
+        Self::new(name, driver_name, factory, config, filter_chain)
     }
 
     pub fn new(
         name: String,
         driver_name: String,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         config: super::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
     ) -> Self {
@@ -198,7 +194,7 @@ impl DruidPool {
     pub fn new_with_observability(
         name: String,
         driver_name: String,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         config: super::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
         stats_collector: Arc<StatsCollector>,
@@ -221,7 +217,7 @@ impl DruidPool {
     pub fn new_with_observability_and_exception_sorter(
         name: String,
         driver_name: String,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         mut config: super::config::PoolInnerConfig,
         filter_chain: Option<Arc<FilterChain>>,
         stats_collector: Arc<StatsCollector>,
@@ -614,7 +610,7 @@ impl DruidPool {
                 if holder.user_password_version() < self.inner.user_password_version() {
                     continue;
                 }
-                let lifetime_expired = holder.physical_age() >= self.inner.config.max_lifetime;
+                let lifetime_expired = holder.connection_age() >= self.inner.config.max_lifetime;
                 let idle_expired = remaining_idle >= self.inner.config.min_idle
                     && holder.idle_duration() >= self.inner.config.idle_timeout;
                 if lifetime_expired || idle_expired {
@@ -830,9 +826,9 @@ impl DruidPool {
                 .inner
                 .connect_error_count
                 .load(std::sync::atomic::Ordering::Relaxed),
-            physical_connect_error_count: self
+            driver_connect_error_count: self
                 .inner
-                .physical_connect_error_count
+                .driver_connect_error_count
                 .load(Ordering::Relaxed),
             fail_continuous: self.inner.is_fail_continuous(),
             fail_continuous_time_millis: self.inner.fail_continuous_time_millis(),
@@ -982,7 +978,7 @@ impl DruidPool {
 
     /// 返回未池化物理驱动工厂。
     #[must_use]
-    pub fn raw_driver(&self) -> &dyn PhysicalConnectionFactory {
+    pub fn raw_driver(&self) -> &dyn ConnectionFactory {
         self.inner.factory.as_ref()
     }
 
@@ -1042,7 +1038,7 @@ impl DruidPool {
                 serde_json::json!({
                     "connectionId": holder.connection_id(),
                     "useCount": holder.use_count(),
-                    "connectTimeMillis": holder.physical_age().as_millis(),
+                    "connectTimeMillis": holder.connection_age().as_millis(),
                     "idleMillis": holder.idle_duration().as_millis(),
                     "lastExecIdleMillis": holder.last_exec_idle_duration().as_millis(),
                     "lastKeepElapsedMillis": holder.last_keep_elapsed().map(|value| value.as_millis()),
@@ -1174,7 +1170,7 @@ impl DruidPool {
         self.inner.fill(to_count).await
     }
 
-    /// 通知池：外部 `PhysicalConnectionFactory` 的连接凭据已经更新。
+    /// 通知池：外部 `ConnectionFactory` 的连接凭据已经更新。
     ///
     /// 调用方应先更新 factory，再调用本方法。池会递增凭据版本，替换旧空闲
     /// 连接，并在旧活跃连接归还时销毁它们。
@@ -1380,40 +1376,22 @@ impl DruidPool {
     fn wrap_connection(&self, holder: DruidConnectionHolder) -> DruidPooledConnection {
         let connection_id = holder.connection_id();
         let connection_properties = holder.connection_properties();
-        let standard = holder.has_standard_connection();
         let pool = self.inner.clone();
         let active_leases = Arc::clone(&self.active_leases);
         let return_connection = Box::new(move |holder, disposition| {
             active_leases.remove(&connection_id);
             pool.return_connection(holder, disposition)
         });
-        let mut connection = if standard {
-            DruidPooledConnection::with_standard_holder(
-                holder,
-                self.name.clone(),
-                self.filter_chain.clone(),
-                self.inner
-                    .config
-                    .keep_connection_underlying_transaction_isolation,
-                self.inner.config.test_on_return,
-                return_connection,
-            )
-        } else {
-            let recycle_validator = self.inner.config.test_on_return.then(|| {
-                Arc::new(PoolValidationFactory::new(self.inner.clone()))
-                    as Arc<dyn PhysicalConnectionFactory>
-            });
-            DruidPooledConnection::with_holder(
-                holder,
-                self.name.clone(),
-                self.filter_chain.clone(),
-                self.inner
-                    .config
-                    .keep_connection_underlying_transaction_isolation,
-                recycle_validator,
-                return_connection,
-            )
-        };
+        let mut connection = DruidPooledConnection::with_standard_holder(
+            holder,
+            self.name.clone(),
+            self.filter_chain.clone(),
+            self.inner
+                .config
+                .keep_connection_underlying_transaction_isolation,
+            self.inner.config.test_on_return,
+            return_connection,
+        );
         if let Some(exception_sorter) = self.exception_sorter.clone() {
             connection.set_exception_sorter(exception_sorter);
         }
@@ -1428,7 +1406,6 @@ impl DruidPool {
             Arc::clone(&self.statement_id_seed),
             Arc::clone(&self.result_set_id_seed),
             Arc::clone(&self.metadata_id_seed),
-            Arc::clone(&self.transaction_id_seed),
         );
         connection.set_connection_properties(connection_properties);
         if self.inner.config.remove_abandoned {

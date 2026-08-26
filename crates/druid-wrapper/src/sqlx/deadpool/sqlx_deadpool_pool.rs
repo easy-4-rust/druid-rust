@@ -3,8 +3,8 @@
 use super::sqlx_deadpool_connection_manager::SqlxDeadpoolConnectionManager;
 use deadpool::managed::{Pool as DeadpoolPool, PoolError, Timeouts};
 use druid::core::{
-    ConnectionRecycleDisposition, DruidPooledConnection, FilterChain, PhysicalConnectionLease,
-    Pool as DruidPool, PoolState,
+    ConnectionRecycleDisposition, DruidConnectionHolder, DruidPooledConnection,
+    ExternalConnectionLease, FilterChain, Pool as DruidPool, PoolState,
 };
 use druid_rdbc::error::RdbcError;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,7 +15,7 @@ use std::time::Duration;
 ///
 /// 对应 Java: `javax.sql.DataSource` 的连接获取边界。该对象直接实现
 /// druid-rust 的 `Pool`，不会作为 `ConnectionFactory` 嵌套到 `DruidPool`。
-/// deadpool 租约经 `PhysicalConnectionLease` 委托到底层
+/// deadpool 租约经 `ExternalConnectionLease` 委托到底层
 /// `SqlxConnectionAdapter`，对外仍返回统一的 `DruidPooledConnection`。
 pub struct SqlxDeadpoolPool {
     name: String,
@@ -136,21 +136,28 @@ impl SqlxDeadpoolPool {
         let recycle_count = self.recycle_count.clone();
         let recycle_error_count = self.recycle_error_count.clone();
         let discard_count = self.discard_count.clone();
-        Ok(DruidPooledConnection::with_recycle_policy(
-            Box::new(PhysicalConnectionLease::new(lease)),
+        let holder = DruidConnectionHolder::with_external_connection(
+            Box::new(ExternalConnectionLease::new(lease)),
             id,
+            Duration::ZERO,
+            0,
+        )
+        .await
+        .map_err(RdbcError::from)?;
+        Ok(DruidPooledConnection::with_standard_holder(
+            holder,
             self.name.clone(),
             self.filter_chain.clone(),
             false,
-            None,
-            Box::new(move |mut connection, _connection_id, disposition| {
+            false,
+            Box::new(move |mut holder, disposition| {
                 close_count.fetch_add(1, Ordering::Relaxed);
                 match disposition {
                     ConnectionRecycleDisposition::Reusable => {
                         recycle_count.fetch_add(1, Ordering::Relaxed);
                     }
                     ConnectionRecycleDisposition::Discard { recycle_error } => {
-                        connection.mark_discarded();
+                        holder.mark_discarded();
                         discard_count.fetch_add(1, Ordering::Relaxed);
                         if recycle_error.is_some() {
                             recycle_error_count.fetch_add(1, Ordering::Relaxed);
@@ -158,7 +165,7 @@ impl SqlxDeadpoolPool {
                     }
                 }
                 // 丢弃透明租约桥接会触发 deadpool 自身唯一的归还路径。
-                drop(connection);
+                drop(holder);
                 false
             }),
         ))

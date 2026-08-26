@@ -1,4 +1,4 @@
-//! RBDC 物理连接工厂。
+//! RBDC canonical 连接工厂。
 
 use super::rbdc_connection_adapter::RbdcConnectionAdapter;
 use crate::task4_runtime_trace::{
@@ -6,12 +6,9 @@ use crate::task4_runtime_trace::{
 };
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::Arc;
 
-/// RBDC 物理连接工厂。
-///
-/// 对应 Java: `DruidDataSource#createPhysicalConnection`。
+/// RBDC canonical 连接工厂。
 /// Factory 持有可共享 Driver，但每次只创建未池化的 RBDC Connection。
 pub struct RbdcConnectionFactory {
     driver: Arc<dyn rbdc::db::Driver>,
@@ -20,7 +17,7 @@ pub struct RbdcConnectionFactory {
 }
 
 impl RbdcConnectionFactory {
-    /// 创建 RBDC 物理连接工厂。
+    /// 创建 RBDC canonical 连接工厂。
     ///
     /// 参数 `driver` 为具体 RBDC Driver，`url` 为数据库 URL。
     pub fn new(driver: Arc<dyn rbdc::db::Driver>, url: impl Into<String>) -> Self {
@@ -70,25 +67,11 @@ impl RbdcConnectionFactory {
 }
 
 #[async_trait::async_trait]
-impl PhysicalConnectionFactory for RbdcConnectionFactory {
+impl druid_rdbc::driver::ConnectionFactory for RbdcConnectionFactory {
     fn connection_url(&self) -> Option<&str> {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(self.create_adapter_core().await?))
-    }
-
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), RdbcError> {
-        connection.ping().await
-    }
-}
-
-#[async_trait::async_trait]
-impl druid_rdbc::driver::ConnectionFactory for RbdcConnectionFactory {
     async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
         Ok(Box::new(self.create_adapter_core().await?))
     }

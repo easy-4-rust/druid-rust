@@ -1,14 +1,13 @@
-//! `SQLx` 物理连接的 deadpool 管理器。
+//! `SQLx` canonical 连接的 deadpool 管理器。
 
 use crate::sqlx::SqlxConnectionFactory;
 use deadpool::managed::{Manager, Metrics, RecycleResult};
+use druid_rdbc::connection::Connection;
+use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-/// `SQLx` 物理连接的 deadpool 管理器。
-///
-/// 对应 Java: `DruidDataSource#createPhysicalConnection` 与连接有效性检查。
+/// `SQLx` canonical 连接的 deadpool 管理器。
 /// 每次 `create` 只创建一个未池化的 `SqlxConnectionAdapter`。
 #[derive(Debug, Clone)]
 pub struct SqlxDeadpoolConnectionManager {
@@ -39,7 +38,7 @@ impl SqlxDeadpoolConnectionManager {
 }
 
 impl Manager for SqlxDeadpoolConnectionManager {
-    type Type = Box<dyn PhysicalConnection>;
+    type Type = Box<dyn Connection>;
     type Error = RdbcError;
 
     async fn create(&self) -> Result<Self::Type, Self::Error> {
@@ -53,7 +52,7 @@ impl Manager for SqlxDeadpoolConnectionManager {
         connection: &mut Self::Type,
         _metrics: &Metrics,
     ) -> RecycleResult<Self::Error> {
-        if connection.is_discarded() {
+        if connection.is_closed().unwrap_or(true) {
             return Err(deadpool::managed::RecycleError::Backend(
                 RdbcError::ConnectionDiscarded,
             ));

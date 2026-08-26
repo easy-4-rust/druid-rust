@@ -6,7 +6,9 @@ use std::time::Duration;
 use parking_lot::RwLock;
 
 use super::{Driver, DriverAction, RdbcLogWriter};
-use crate::core::{PhysicalConnection, RdbcError};
+use crate::core::RdbcError;
+use druid_rdbc::connection::Connection;
+use druid_rdbc::driver::ConnectionProperties;
 
 #[derive(Clone)]
 struct RegisteredDriver {
@@ -164,13 +166,13 @@ impl DriverManager {
         Ok(())
     }
 
-    /// Opens a physical connection with the first driver that accepts `url`.
+    /// Opens a canonical connection with the first driver that accepts `url`.
     ///
     /// Returns an unpooled connection. Missing drivers, driver failures, and login timeouts retain
     /// their error semantics. Corresponds to Java: `getConnection(String)`.
-    pub async fn get_connection(url: &str) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+    pub async fn get_connection(url: &str) -> Result<Box<dyn Connection>, RdbcError> {
         let driver = Self::driver_for(url)?;
-        Self::with_login_timeout(driver.connect(url)).await
+        Self::with_login_timeout(driver.connect(url, &ConnectionProperties::new()), url).await
     }
 
     /// Opens a physical connection using RDBC property semantics.
@@ -180,9 +182,13 @@ impl DriverManager {
     pub async fn get_connection_with_properties(
         url: &str,
         info: &HashMap<String, String>,
-    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+    ) -> Result<Box<dyn Connection>, RdbcError> {
         let driver = Self::driver_for(url)?;
-        Self::with_login_timeout(driver.connect_with_properties(url, info)).await
+        let properties = info
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        Self::with_login_timeout(driver.connect(url, &properties), url).await
     }
 
     /// Opens a physical connection with a URL, user name, and password.
@@ -193,9 +199,13 @@ impl DriverManager {
         url: &str,
         username: &str,
         password: &str,
-    ) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
+    ) -> Result<Box<dyn Connection>, RdbcError> {
         let driver = Self::driver_for(url)?;
-        Self::with_login_timeout(driver.connect_with_auth(url, username, password)).await
+        let properties = ConnectionProperties::from([
+            ("user".to_owned(), username.to_owned()),
+            ("password".to_owned(), password.to_owned()),
+        ]);
+        Self::with_login_timeout(driver.connect(url, &properties), url).await
     }
 
     fn driver_for(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
@@ -207,17 +217,19 @@ impl DriverManager {
             .ok_or_else(|| RdbcError::DriverError(format!("No suitable driver found for {url}")))
     }
 
-    async fn with_login_timeout<F>(future: F) -> Result<Box<dyn PhysicalConnection>, RdbcError>
+    async fn with_login_timeout<F>(future: F, url: &str) -> Result<Box<dyn Connection>, RdbcError>
     where
-        F: std::future::Future<Output = Result<Box<dyn PhysicalConnection>, RdbcError>>,
+        F: std::future::Future<Output = Result<Option<Box<dyn Connection>>, RdbcError>>,
     {
         let seconds = Self::login_timeout();
-        if seconds == 0 {
+        let connection = if seconds == 0 {
             future.await
         } else {
             tokio::time::timeout(Duration::from_secs(seconds), future)
                 .await
                 .map_err(|_| RdbcError::LoginTimeout)?
-        }
+        }?;
+        connection
+            .ok_or_else(|| RdbcError::DriverError(format!("No suitable driver found for {url}")))
     }
 }

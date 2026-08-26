@@ -151,8 +151,8 @@ impl StandardLogicalPolicy {
     {
         let params = prepared_parameters
             .iter()
-            .map(PreparedInputParameter::scalar_value)
-            .collect::<Result<Vec<_>, _>>()?;
+            .map(|parameter| parameter.value.clone())
+            .collect();
         self.execute_with_parameter_context(
             sql,
             params,
@@ -261,10 +261,10 @@ impl StandardLogicalPolicy {
             .map(|parameters| {
                 parameters
                     .iter()
-                    .map(PreparedInputParameter::scalar_value)
-                    .collect::<Result<Vec<_>, _>>()
+                    .map(|parameter| parameter.value.clone())
+                    .collect::<Vec<_>>()
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Vec<_>>();
         self.execute_batch_counts(
             sql,
             &[],

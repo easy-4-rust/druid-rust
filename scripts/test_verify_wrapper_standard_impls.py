@@ -47,7 +47,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         (self.root / self.source_path).parent.mkdir(parents=True)
         self.row = AdapterRow(
             source_path=self.source_path,
-            current_trait="druid_rdbc::spi::PhysicalConnection",
+            current_trait="druid_rdbc::connection::Connection",
             implementation_type="DemoConnection",
             target_trait="druid_rdbc::connection::Connection",
             standard_implementation_type="DemoConnection",
@@ -65,7 +65,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
 
     def test_rejects_adapter_that_only_implements_physical(self) -> None:
         self.write_source("impl PhysicalConnection for DemoConnection {}\n")
-        with self.assertRaisesRegex(VerificationError, "implements only Physical"):
+        with self.assertRaisesRegex(
+            VerificationError, "canonical adapter implementation"
+        ):
             verify_adapter_source(self.root, self.row)
 
     def test_rejects_duplicated_sql_in_standard_impl(self) -> None:
@@ -79,10 +81,9 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, "duplicates SQL"):
             verify_adapter_source(self.root, self.row)
 
-    def test_accepts_parallel_impls_that_delegate_one_core(self) -> None:
+    def test_accepts_canonical_impl_that_delegates_one_core(self) -> None:
         self.write_source(
             "use druid_rdbc::connection::Connection;\n"
-            "impl PhysicalConnection for DemoConnection { fn run(&mut self) { self.run_core(); } }\n"
             "impl Connection for DemoConnection {\n"
             " fn create_statement(&mut self) { self.run_core(); }\n"
             " fn prepare_statement(&mut self) { self.run_core(); }\n"

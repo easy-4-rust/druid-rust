@@ -112,13 +112,13 @@ impl StatFilterContext {
     }
 
     /// 分发物理连接创建事件。
-    pub fn physical_connection_connect(&self) -> Result<(), DruidError> {
-        self.dispatch(|listener| listener.physical_connection_connect())
+    pub fn connection_open(&self) -> Result<(), DruidError> {
+        self.dispatch(|listener| listener.connection_open())
     }
 
     /// 分发物理连接关闭事件。
-    pub fn physical_connection_close(&self, nanos: i64) -> Result<(), DruidError> {
-        self.dispatch(|listener| listener.physical_connection_close(nanos))
+    pub fn connection_close(&self, nanos: i64) -> Result<(), DruidError> {
+        self.dispatch(|listener| listener.connection_close(nanos))
     }
 
     /// 分发 `ResultSet` 打开事件。

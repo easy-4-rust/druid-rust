@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use super::physical_connection::PhysicalConnection;
+use super::Connection;
 use super::DruidError;
 
 /// 物理连接验证 SPI。
@@ -22,7 +22,7 @@ pub trait ValidConnectionChecker: Send + Sync {
     /// `validationQueryTimeout`。驱动异常通过 `Result` 原样传播。
     async fn is_valid_connection(
         &self,
-        connection: &mut Box<dyn PhysicalConnection>,
+        connection: &mut Box<dyn Connection>,
         query: Option<&str>,
         validation_query_timeout: Duration,
     ) -> Result<bool, DruidError>;
@@ -31,7 +31,7 @@ pub trait ValidConnectionChecker: Send + Sync {
     fn config_from_properties(&mut self, _properties: &HashMap<String, String>) {}
 
     /// 早期 Rust API 的兼容入口；使用驱动原生校验且不设置超时。
-    async fn is_valid(&self, connection: &mut Box<dyn PhysicalConnection>) -> bool {
+    async fn is_valid(&self, connection: &mut Box<dyn Connection>) -> bool {
         self.is_valid_connection(connection, None, Duration::ZERO)
             .await
             .unwrap_or(false)

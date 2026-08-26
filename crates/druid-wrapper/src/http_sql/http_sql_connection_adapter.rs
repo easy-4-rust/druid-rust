@@ -1,21 +1,14 @@
-use super::{
-    http_sql_prepared_statement::HttpSqlStatementExecutionError, HttpSqlDatabaseMetaData,
-    HttpSqlPreparedStatement, HttpSqlProvider,
-};
+use super::HttpSqlProvider;
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
-use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_executor::{
+    owned_executor, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
+};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use base64::Engine;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::error::SqlWarning;
-use druid_rdbc::spi::{
-    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
-    StatementExecuteResult, StatementGeneratedKeys,
-};
 use druid_rdbc::types::{Row, Value};
 use reqwest::{StatusCode, Url};
 use serde_json::{json, Value as JsonValue};
@@ -155,21 +148,13 @@ impl HttpSqlConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         let result = self.request(sql, params).await?;
-        Ok(ExecResult {
+        Ok(AdapterUpdateResult {
             rows_affected: result.rows_affected,
             last_insert_id: result.last_insert_id,
             row_count: Some(u64::try_from(result.rows.len()).unwrap_or(u64::MAX)),
         })
-    }
-
-    async fn execute_query_core(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.request(sql, params).await.map(|result| result.rows)
     }
 
     #[allow(
@@ -443,209 +428,6 @@ impl HttpSqlConnectionAdapter {
                 .and_then(JsonValue::as_i64),
         })
     }
-
-    fn prepared_statement(
-        statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&HttpSqlPreparedStatement, RdbcError> {
-        statement
-            .as_any()
-            .downcast_ref::<HttpSqlPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by HttpSqlConnectionAdapter".to_owned(),
-                )
-            })
-    }
-
-    fn finish_controlled<T>(
-        &mut self,
-        result: Result<T, HttpSqlStatementExecutionError>,
-    ) -> Result<T, RdbcError> {
-        match result {
-            Ok(value) => Ok(value),
-            Err(HttpSqlStatementExecutionError::Driver(error)) => Err(error),
-            Err(HttpSqlStatementExecutionError::TimedOut) => {
-                self.discarded = true;
-                Err(RdbcError::SqlException(Box::new(
-                    druid_rdbc::error::SqlException::new(
-                        0,
-                        Some("HYT00".to_owned()),
-                        Some("HTTP SQL request timed out".to_owned()),
-                    )
-                    .with_class_name("java.sql.SQLTimeoutException"),
-                )))
-            }
-            Err(HttpSqlStatementExecutionError::Cancelled) => {
-                self.discarded = true;
-                Err(RdbcError::SqlException(Box::new(
-                    druid_rdbc::error::SqlException::new(
-                        0,
-                        Some("HY008".to_owned()),
-                        Some("HTTP SQL request was cancelled".to_owned()),
-                    )
-                    .with_class_name("java.sql.SQLException"),
-                )))
-            }
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnection for HttpSqlConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        self.execute_update_core(sql, params).await
-    }
-
-    async fn execute(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-        _generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        let result = self.request(sql, params).await?;
-        if result.column_labels.is_empty() {
-            Ok(vec![StatementExecuteResult::Update(ExecResult {
-                rows_affected: result.rows_affected,
-                last_insert_id: result.last_insert_id,
-                row_count: None,
-            })])
-        } else {
-            Ok(vec![StatementExecuteResult::ResultSet(result.rows)])
-        }
-    }
-
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, params).await
-    }
-
-    async fn fetch_result_set(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let result = self.request(sql, params).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(
-            result.rows,
-            result.column_labels,
-        )))
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        self.ensure_open()?;
-        Ok(Arc::new(HttpSqlPreparedStatement::new(key.sql())))
-    }
-
-    async fn exec_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
-        let statement = Self::prepared_statement(statement)?;
-        let result = statement
-            .execute_with_controls(self.request(statement.sql(), params))
-            .await;
-        let result = self.finish_controlled(result)?;
-        Ok(ExecResult {
-            rows_affected: result.rows_affected,
-            last_insert_id: result.last_insert_id,
-            row_count: Some(u64::try_from(result.rows.len()).unwrap_or(u64::MAX)),
-        })
-    }
-
-    async fn fetch_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let statement = Self::prepared_statement(statement)?;
-        let result = statement
-            .execute_with_controls(self.request(statement.sql(), params))
-            .await;
-        self.finish_controlled(result).map(|result| result.rows)
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        let result = self.request("SELECT 1", Vec::new()).await?;
-        if result.rows.is_empty() {
-            return Err(RdbcError::ValidationFailed(
-                "HTTP SQL validation returned no rows".to_owned(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        Err(RdbcError::UnsupportedOperation {
-            operation: "http_sql_transactions",
-        })
-    }
-
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        Err(RdbcError::UnsupportedOperation {
-            operation: "http_sql_transactions",
-        })
-    }
-
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        Err(RdbcError::UnsupportedOperation {
-            operation: "http_sql_transactions",
-        })
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_connection_core().await
-    }
-
-    fn is_closed(&self) -> bool {
-        self.closed
-    }
-
-    fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        PhysicalConnectionCapabilities {
-            transactions: false,
-            savepoints: false,
-            auto_commit: false,
-            read_only: false,
-            transaction_isolation: false,
-            holdability: false,
-            clear_warnings: true,
-            catalog: false,
-            schema: false,
-        }
-    }
-
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        self.ensure_open()?;
-        Ok(Box::new(HttpSqlDatabaseMetaData::new(
-            self.provider,
-            self.endpoint.to_string(),
-            self.product_version.clone(),
-        )))
-    }
-
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.ensure_open()?;
-        Ok(None)
-    }
-
-    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()
-    }
-
-    fn mark_discarded(&mut self) {
-        self.discarded = true;
-    }
-
-    fn is_discarded(&self) -> bool {
-        self.discarded
-    }
-
-    fn driver_name(&self) -> &str {
-        self.provider.as_str()
-    }
 }
 
 #[async_trait::async_trait]
@@ -730,5 +512,9 @@ impl druid_rdbc::connection::Connection for HttpSqlConnectionAdapter {
             .standard_executor
             .as_ref()
             .map_or(self.closed, |executor| executor.is_closed()))
+    }
+
+    async fn is_valid(&mut self, _timeout_seconds: u32) -> Result<bool, RdbcError> {
+        self.request("SELECT 1", Vec::new()).await.map(|_| true)
     }
 }

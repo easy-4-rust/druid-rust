@@ -1,4 +1,4 @@
-use super::{AgentRequestHandle, AgentRuntimeLease, JdbcAgentOptions};
+use super::{AgentRuntimeLease, JdbcAgentOptions};
 use druid_rdbc::error::RdbcError;
 use serde_json::{json, Value as JsonValue};
 
@@ -81,10 +81,5 @@ impl JdbcAgentClient {
 
     pub(crate) fn is_unusable(&self) -> bool {
         self.closed || self.runtime.is_unusable()
-    }
-
-    /// 返回 Statement 同步 close/cancel 可使用的轻量运行时句柄和 session ID。
-    pub(crate) fn statement_context(&self) -> (AgentRequestHandle, String) {
-        (self.runtime.request_handle(), self.session_id.clone())
     }
 }

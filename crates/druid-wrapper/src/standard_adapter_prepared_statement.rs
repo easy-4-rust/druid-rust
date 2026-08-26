@@ -41,10 +41,10 @@ impl StandardAdapterPreparedStatement {
         Ok(executor)
     }
 
-    async fn values_core(&self) -> Result<Vec<druid_rdbc::types::Value>, RdbcError> {
+    fn values_core(&self) -> Result<Vec<druid_rdbc::types::Value>, RdbcError> {
         match self.parameter_count {
-            Some(count) => self.parameters.values(count).await,
-            None => self.parameters.values_contiguous().await,
+            Some(count) => self.parameters.values(count),
+            None => self.parameters.values_contiguous(),
         }
     }
 }
@@ -81,7 +81,7 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
         let result = executor
-            .execute_query(&self.sql, self.values_core().await?)
+            .execute_query(&self.sql, self.values_core()?)
             .await?;
         executor.task4_trace_prepared_query();
         Ok(Box::new(StandardAdapterResultSet::new(result, executor)))
@@ -89,7 +89,7 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
         self.executor_core()?
-            .execute_update(&self.sql, self.values_core().await?)
+            .execute_update(&self.sql, self.values_core()?)
             .await
     }
 

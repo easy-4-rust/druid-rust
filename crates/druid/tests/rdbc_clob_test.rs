@@ -1,10 +1,10 @@
 //! java.sql.Clob/NClob 与 java.io.Reader/Writer 的资源语义契约。
 
 use druid::core::{
-    PhysicalCharacterReader, PhysicalCharacterWriter, RdbcClob, RdbcError, RdbcInputStream,
-    RdbcNClob, RdbcObject, RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
+    CharacterReader, CharacterWriter, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject,
+    RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
-use druid::spi::{
+use druid::core::{
     RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations,
 };
 use std::io::{Error, Write};
@@ -83,7 +83,7 @@ struct ClobCharacterWriter {
     position: usize,
 }
 
-impl PhysicalCharacterWriter for ClobCharacterWriter {
+impl CharacterWriter for ClobCharacterWriter {
     fn write_utf16(&mut self, code_units: &[u16]) -> Result<usize, RdbcError> {
         let mut state = self
             .state
@@ -321,7 +321,7 @@ struct FailingReader {
     fail_close: bool,
 }
 
-impl PhysicalCharacterReader for FailingReader {
+impl CharacterReader for FailingReader {
     fn read_utf16(&mut self, _buffer: &mut [u16]) -> Result<usize, RdbcError> {
         Err(RdbcError::DriverError(
             "injected Reader failure".to_string(),
@@ -342,7 +342,7 @@ impl PhysicalCharacterReader for FailingReader {
 #[derive(Debug)]
 struct FailingWriter;
 
-impl PhysicalCharacterWriter for FailingWriter {
+impl CharacterWriter for FailingWriter {
     fn write_utf16(&mut self, _code_units: &[u16]) -> Result<usize, RdbcError> {
         Err(RdbcError::DriverError(
             "injected Writer failure".to_string(),

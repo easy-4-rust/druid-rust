@@ -7,7 +7,6 @@ mod managed_wrapper_pool;
 mod prepared_parameter_materializer;
 mod prepared_parameter_meta_data_snapshot;
 mod prepared_parameter_state;
-mod prepared_statement_resource_state;
 mod proxool_config_key;
 mod standard_adapter_database_meta_data;
 mod standard_adapter_executor;
@@ -27,22 +26,22 @@ pub mod c3p0;
 pub mod dbcp;
 /// Apache DBCP 2 兼容对象。
 pub mod dbcp2;
-/// 以 Druid 物理连接 SPI 为核心的多数据库驱动目录与解析入口。
+/// 以 canonical RDBC standard 为核心的多数据库驱动目录与解析入口。
 #[cfg(feature = "driver-catalog")]
 pub mod driver;
 /// 显式 JDBC 驱动安装、内容校验和运行时诊断。
 #[cfg(feature = "managed-driver-install")]
 pub mod driver_admin;
-/// DuckDB 原生未池化物理连接 Adapter。
+/// DuckDB 原生未池化连接 Adapter。
 #[cfg(feature = "duckdb-native")]
 pub mod duckdb;
-/// RQLite、Cloudflare D1 等产品的未池化 HTTP SQL 物理连接 Adapter。
+/// RQLite、Cloudflare D1 等产品的未池化 HTTP SQL 连接 Adapter。
 #[cfg(feature = "http-sql")]
 pub mod http_sql;
-/// Druid 自有 JDBC Agent 协议、进程运行时与物理连接 Adapter。
+/// Druid 自有 JDBC Agent 协议、进程运行时与连接 Adapter。
 #[cfg(feature = "jdbc-agent")]
 pub mod jdbc_agent;
-/// Turso/libSQL 远程原生未池化物理连接 Adapter。
+/// Turso/libSQL 远程原生未池化连接 Adapter。
 #[cfg(feature = "libsql-native")]
 pub mod libsql;
 /// Proxool 兼容对象。

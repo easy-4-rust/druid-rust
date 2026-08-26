@@ -1,6 +1,6 @@
 use druid::pool::DruidDataSource;
+use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -21,10 +21,10 @@ impl ManagedBasicDataSourceFactory {
         BasicDataSourceFactory::create_data_source(properties).await
     }
 
-    /// 使用扩展物理连接 factory 创建 managed 数据源。
+    /// 使用扩展 canonical connection factory 创建 managed 数据源。
     pub async fn create_data_source_with_factory(
         properties: &HashMap<String, String>,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         driver_name: impl Into<String>,
     ) -> Result<DruidDataSource, RdbcError> {
         BasicDataSourceFactory::create_data_source_with_factory(properties, factory, driver_name)

@@ -5,13 +5,12 @@
 
 use super::{RdbcStatManager, StatFilterContext, StatsCollector};
 use crate::core::{
-    AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionEvent,
+    AfterFilter, BatchExecContext, BatchExecKind, BeforeFilter, ConnectionCloseFilterChain,
+    ConnectionEvent, ConnectionOpenFilterChain, ConnectionOpenResult,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
-    DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
-    PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
-    PhysicalConnectionConnectResult, PreparedInputParameter, RdbcObject, ResultSetFilter,
-    ResultSetFilterChain, ResultSetFilterContext, StandardResultSetFilterChain,
-    StatementEventContext, Value,
+    DruidPooledConnection, ExecContext, ExecOperation, ExecResult, PreparedInputParameter,
+    ResultSetFilter, ResultSetFilterContext, StandardResultSetFilterChain, StatementEventContext,
+    Value,
 };
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -297,9 +296,9 @@ impl BeforeFilter for StatFilter {
 
     async fn connection_connect(
         &self,
-        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        chain: &mut ConnectionOpenFilterChain<'_>,
         properties: &mut HashMap<String, String>,
-    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+    ) -> Result<ConnectionOpenResult, DruidError> {
         let started_at = Instant::now();
         let start_time_millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -337,7 +336,7 @@ impl BeforeFilter for StatFilter {
 
     async fn connection_close(
         &self,
-        chain: &mut PhysicalConnectionCloseFilterChain<'_>,
+        chain: &mut ConnectionCloseFilterChain<'_>,
     ) -> Result<(), DruidError> {
         let context = chain.context();
         let connection_stat = self.collector.connection_stat();
@@ -345,7 +344,7 @@ impl BeforeFilter for StatFilter {
         // 即使驱动 close 随后失败，这两个可观察动作也不会回滚。
         connection_stat.increment_connection_close_count();
         if connection_stat.remove_entry(context.connection_id) {
-            connection_stat.after_close(context.physical_age);
+            connection_stat.after_close(context.connection_age);
         }
         chain.connection_close().await
     }
@@ -611,12 +610,6 @@ impl ResultSetFilter for StatFilter {
         StatFilterContext::global().result_set_open()
     }
 
-    fn result_set_close(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<(), DruidError> {
-        let listener_elapsed_nanos = self.record_result_set_close(chain.context())?;
-        chain.result_set_close()?;
-        StatFilterContext::global().result_set_close(listener_elapsed_nanos)
-    }
-
     async fn standard_result_set_close(
         &self,
         chain: &mut StandardResultSetFilterChain<'_>,
@@ -643,61 +636,7 @@ fn build_slow_parameters(
 }
 
 fn slow_prepared_parameter(parameter: &PreparedInputParameter) -> serde_json::Value {
-    match parameter {
-        PreparedInputParameter::RustValue(value) => slow_value(value),
-        PreparedInputParameter::Null { .. } => serde_json::Value::Null,
-        PreparedInputParameter::Boolean(value) => serde_json::Value::Bool(*value),
-        PreparedInputParameter::Byte(value) => json_integer(i64::from(*value)),
-        PreparedInputParameter::Short(value) => json_integer(i64::from(*value)),
-        PreparedInputParameter::Int(value) => json_integer(i64::from(*value)),
-        PreparedInputParameter::Long(value) => json_integer(*value),
-        PreparedInputParameter::Float(value) => json_float(f64::from(*value)),
-        PreparedInputParameter::Double(value) => json_float(*value),
-        PreparedInputParameter::BigDecimal(value) => {
-            value.as_ref().map_or(serde_json::Value::Null, json_decimal)
-        }
-        PreparedInputParameter::String(value) | PreparedInputParameter::NString(value) => value
-            .as_deref()
-            .map_or(serde_json::Value::Null, json_rdbc_string),
-        PreparedInputParameter::Bytes(value) => value
-            .as_ref()
-            .map_or(serde_json::Value::Null, |_| json_marker("<[B>")),
-        PreparedInputParameter::Date { value, .. } => value
-            .map_or(serde_json::Value::Null, |value| {
-                json_marker(&value.format("%Y-%m-%d").to_string())
-            }),
-        PreparedInputParameter::Time { value, .. } => value
-            .map_or(serde_json::Value::Null, |value| {
-                json_marker(&value.format("%H:%M:%S").to_string())
-            }),
-        PreparedInputParameter::Timestamp { value, .. } => value
-            .map_or(serde_json::Value::Null, |value| {
-                json_marker(&value.format("%Y-%m-%d %H:%M:%S").to_string())
-            }),
-        PreparedInputParameter::AsciiStream { stream, .. }
-        | PreparedInputParameter::UnicodeStream { stream, .. }
-        | PreparedInputParameter::BinaryStream { stream, .. }
-        | PreparedInputParameter::BlobStream { stream, .. } => stream
-            .as_ref()
-            .map_or(serde_json::Value::Null, |_| json_marker("<InputStream>")),
-        PreparedInputParameter::CharacterStream { reader, .. }
-        | PreparedInputParameter::NCharacterStream { reader, .. }
-        | PreparedInputParameter::ClobReader { reader, .. }
-        | PreparedInputParameter::NClobReader { reader, .. } => reader
-            .as_ref()
-            .map_or(serde_json::Value::Null, |_| json_marker("<java.io.Reader>")),
-        PreparedInputParameter::Object { value, .. } => value
-            .as_ref()
-            .map_or(serde_json::Value::Null, slow_rdbc_object),
-        PreparedInputParameter::Ref(value) => resource_marker(value, "<java.sql.Ref>"),
-        PreparedInputParameter::Blob(value) => resource_marker(value, "<Blob>"),
-        PreparedInputParameter::Clob(value) => resource_marker(value, "<Clob>"),
-        PreparedInputParameter::NClob(value) => resource_marker(value, "<NClob>"),
-        PreparedInputParameter::Array(value) => resource_marker(value, "<java.sql.Array>"),
-        PreparedInputParameter::Url(value) => resource_marker(value, "<java.net.URL>"),
-        PreparedInputParameter::RowId(value) => resource_marker(value, "<java.sql.RowId>"),
-        PreparedInputParameter::SqlXml(value) => resource_marker(value, "<java.sql.SQLXML>"),
-    }
+    slow_value(&parameter.value)
 }
 
 fn slow_value(value: &Value) -> serde_json::Value {
@@ -712,37 +651,6 @@ fn slow_value(value: &Value) -> serde_json::Value {
         Value::Timestamp(value) => json_marker(&value.format("%Y-%m-%d %H:%M:%S").to_string()),
         Value::String(value) => json_rdbc_string(value),
         Value::Bytes(_) => json_marker("<[B>"),
-    }
-}
-
-fn slow_rdbc_object(value: &RdbcObject) -> serde_json::Value {
-    match value {
-        RdbcObject::Scalar(value) => slow_value(value),
-        RdbcObject::String(value) | RdbcObject::NString(value) => json_rdbc_string(value),
-        RdbcObject::Boolean(value) => serde_json::Value::Bool(*value),
-        RdbcObject::Byte(value) => json_integer(i64::from(*value)),
-        RdbcObject::Short(value) => json_integer(i64::from(*value)),
-        RdbcObject::Integer(value) => json_integer(i64::from(*value)),
-        RdbcObject::Long(value) => json_integer(*value),
-        RdbcObject::Float(value) => json_float(f64::from(*value)),
-        RdbcObject::Double(value) => json_float(*value),
-        RdbcObject::BigDecimal(value) => json_decimal(value),
-        RdbcObject::Date(value) => json_marker(&value.format("%Y-%m-%d").to_string()),
-        RdbcObject::Time(value) => json_marker(&value.format("%H:%M:%S").to_string()),
-        RdbcObject::Timestamp(value) => json_marker(&value.format("%Y-%m-%d %H:%M:%S").to_string()),
-        RdbcObject::Bytes(_) => json_marker("<[B>"),
-        RdbcObject::Url(_) => json_marker("<java.net.URL>"),
-        RdbcObject::Ref(_) => json_marker("<java.sql.Ref>"),
-        RdbcObject::Array(_) => json_marker("<java.sql.Array>"),
-        RdbcObject::RowId(_) => json_marker("<java.sql.RowId>"),
-        RdbcObject::SqlXml(_) => json_marker("<java.sql.SQLXML>"),
-        RdbcObject::Blob(_) => json_marker("<Blob>"),
-        RdbcObject::Clob(_) => json_marker("<Clob>"),
-        RdbcObject::NClob(_) => json_marker("<NClob>"),
-        RdbcObject::CharacterStream(_) | RdbcObject::NCharacterStream(_) => {
-            json_marker("<java.io.Reader>")
-        }
-        RdbcObject::Custom(value) => json_marker(&format!("<{}>", value.class_name())),
     }
 }
 
@@ -773,10 +681,4 @@ fn json_decimal(value: &bigdecimal::BigDecimal) -> serde_json::Value {
 
 fn json_marker(value: &str) -> serde_json::Value {
     serde_json::Value::String(value.to_owned())
-}
-
-fn resource_marker<T>(value: &Option<T>, marker: &str) -> serde_json::Value {
-    value
-        .as_ref()
-        .map_or(serde_json::Value::Null, |_| json_marker(marker))
 }

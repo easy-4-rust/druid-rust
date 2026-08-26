@@ -3,4 +3,4 @@
 /// Corresponds to Java: `java.sql.ResultSetMetaData`. Column indexes are 1-based. Metadata
 /// includes names, labels, origin, SQL type, mapped class, precision, scale, nullability,
 /// signedness, mutability, and auto-increment behavior.
-pub use druid_rdbc::spi::ResultSetMetaData;
+pub use druid_rdbc::metadata::{ResultSetMetaData, ResultSetMetaDataSnapshot};

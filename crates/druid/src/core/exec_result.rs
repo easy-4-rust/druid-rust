@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::ExecResult;
+pub use druid_rdbc::statement::ExecResult;

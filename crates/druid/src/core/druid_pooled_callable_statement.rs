@@ -1,217 +1,68 @@
-//! 对外池化 `CallableStatement`。
-//!
-//! 对应 Java：
-//! `com.alibaba.druid.pool.DruidPooledCallableStatement`。
-//! 来源文件：
-//! `core/src/main/java/com/alibaba/druid/pool/DruidPooledCallableStatement.java`。
+//! Canonical pooled CallableStatement proxy.
 
 use super::filter::ExecOperation;
 use super::standard_resource_admission::StandardResourceAdmission;
-use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
-use super::{
-    CallableCalendar, CallableCalendarArgument, CallableInputParameter, CallableOutParameter,
-    CallableParameter, DruidPooledConnection, DruidPooledPreparedStatement,
-    DruidPooledPreparedStatementHandle, DruidPooledResultSet, DruidPooledStatement, ExecResult,
-    PhysicalCallableStatement, PhysicalPreparedStatement, RdbcArray, RdbcBlob, RdbcCharacterLength,
-    RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject, RdbcReader, RdbcRef, RdbcRowId,
-    RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row, Unwrapped, Value,
-    Wrapper,
+use super::{DruidPooledResultSet, DruidPooledStatement, ExecResult, FilterChain, RdbcError};
+use crate::stats::StatsCollector;
+use druid_rdbc::metadata::ParameterMetaData;
+use druid_rdbc::result_set::ResultSet;
+use druid_rdbc::statement::{
+    CallableOutParameter, CallableStatement, ExecutionResult, GeneratedKeys, ParameterIndex,
+    PreparedParameter, PreparedStatement, Statement,
 };
-use bigdecimal::BigDecimal;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
-use std::any::{Any, TypeId};
+use druid_rdbc::types::Value;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex};
 
-struct StandardCallableStatementResource {
-    statement: tokio::sync::Mutex<Option<Box<dyn druid_rdbc::statement::CallableStatement>>>,
+struct CallableStatementResource {
+    statement: tokio::sync::Mutex<Option<Box<dyn CallableStatement>>>,
     closed: AtomicBool,
-    registration: OnceLock<super::standard_resource_registration::StandardResourceRegistration>,
 }
 
-impl StandardCallableStatementResource {
-    fn new(statement: Box<dyn druid_rdbc::statement::CallableStatement>) -> Arc<Self> {
+impl CallableStatementResource {
+    fn new(statement: Box<dyn CallableStatement>) -> Arc<Self> {
         Arc::new(Self {
             statement: tokio::sync::Mutex::new(Some(statement)),
             closed: AtomicBool::new(false),
-            registration: OnceLock::new(),
         })
     }
-}
 
-#[async_trait::async_trait]
-impl StandardResourceHandle for StandardCallableStatementResource {
-    async fn close_resource(&self) -> Result<(), RdbcError> {
+    fn ensure_open(&self) -> Result<(), RdbcError> {
         if self.closed.load(Ordering::Acquire) {
-            self.unregister_resource();
+            Err(RdbcError::ConnectionDiscarded)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn close_raw(&self) -> Result<(), RdbcError> {
+        if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
         let mut statement = self.statement.lock().await;
         let Some(raw) = statement.as_mut() else {
             self.closed.store(true, Ordering::Release);
-            self.unregister_resource();
             return Ok(());
         };
         raw.close().await?;
         statement.take();
         self.closed.store(true, Ordering::Release);
-        self.unregister_resource();
         Ok(())
     }
-
-    fn is_resource_closed(&self) -> bool {
-        self.closed.load(Ordering::Acquire)
-    }
-
-    fn registration_slot(
-        &self,
-    ) -> &OnceLock<super::standard_resource_registration::StandardResourceRegistration> {
-        &self.registration
-    }
 }
 
-/// 池化存储过程调用语句。
-///
-/// 组合 `DruidPooledPreparedStatement` 复用 Java 的 prepared 缓存、异常删除、
-/// fetch peak、逻辑关闭和连接租约约束；CallableStatement 特有行为委托给
-/// `PhysicalCallableStatement`。
-pub struct DruidPooledCallableStatement {
-    prepared_statement: DruidPooledPreparedStatement,
-    standard_callable: Option<Arc<StandardCallableStatementResource>>,
+struct CallableStatementView {
+    resource: Arc<CallableStatementResource>,
 }
 
-/// `ResultSet#getStatement()` 返回的 `CallableStatement` 共享身份句柄。
-///
-/// 对应 Java：`DruidPooledCallableStatement` 继承
-/// `DruidPooledPreparedStatement`，结果集保存并返回原 callable 对象。Rust
-/// 句柄保留相同的 prepared 生命周期、物理 callable 能力和关闭级联。
-#[derive(Clone)]
-pub struct DruidPooledCallableStatementHandle {
-    prepared_statement: DruidPooledPreparedStatementHandle,
-}
-
-impl DruidPooledCallableStatementHandle {
-    /// 返回继承自 Statement proxy 的 ID。
-    #[must_use]
-    pub fn id(&self) -> u64 {
-        self.prepared_statement.id()
-    }
-
-    /// 返回继承的池化 Statement 视图。
-    pub fn pooled_statement(&self) -> &DruidPooledStatement {
-        self.prepared_statement.pooled_statement()
-    }
-
-    /// 返回继承的 `PreparedStatement` 身份视图。
-    pub fn prepared_statement(&self) -> &DruidPooledPreparedStatementHandle {
-        &self.prepared_statement
-    }
-
-    /// 返回原逻辑 `CallableStatement` 是否已关闭。
-    pub fn is_closed(&self) -> bool {
-        self.prepared_statement.is_closed()
-    }
-
-    /// 判断句柄是否与给定 `CallableStatement` 表示同一逻辑 Java 对象。
-    pub fn is_same_statement(&self, statement: &DruidPooledCallableStatement) -> bool {
-        self.prepared_statement
-            .is_same_statement(&statement.prepared_statement)
-    }
-
-    /// 关闭原逻辑 `CallableStatement`。
-    pub fn close(&self) -> Result<(), RdbcError> {
-        self.prepared_statement.close()
-    }
-}
-
-impl Wrapper for DruidPooledCallableStatementHandle {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn is_wrapper_for(&self, iface: Option<TypeId>) -> bool {
-        let Some(iface) = iface else {
-            return false;
-        };
-        iface == TypeId::of::<Self>()
-            || iface == TypeId::of::<dyn PhysicalCallableStatement>()
-            || self.prepared_statement.is_wrapper_for(Some(iface))
-    }
-
-    fn unwrap(&self, iface: Option<TypeId>) -> Option<Unwrapped<'_>> {
-        let iface = iface?;
-        if iface == TypeId::of::<Self>() {
-            return Some(Unwrapped::Object(self));
-        }
-        if iface == TypeId::of::<dyn PhysicalCallableStatement>() {
-            return self
-                .prepared_statement
-                .physical_statement()
-                .as_callable()
-                .map(Unwrapped::CallableStatement);
-        }
-        self.prepared_statement.unwrap(Some(iface))
-    }
-}
-
-impl Wrapper for DruidPooledCallableStatement {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn is_wrapper_for(&self, iface: Option<TypeId>) -> bool {
-        let Some(iface) = iface else {
-            return false;
-        };
-        let raw = self
-            .prepared_statement
-            .prepared_statement_holder()
-            .statement();
-        iface == TypeId::of::<Self>()
-            || iface == TypeId::of::<dyn PhysicalCallableStatement>()
-            || iface == TypeId::of::<dyn PhysicalPreparedStatement>()
-            || raw.as_any().type_id() == iface
-    }
-
-    fn unwrap(&self, iface: Option<TypeId>) -> Option<Unwrapped<'_>> {
-        let iface = iface?;
-        if iface == TypeId::of::<Self>() {
-            return Some(Unwrapped::Object(self));
-        }
-        let raw = self
-            .prepared_statement
-            .prepared_statement_holder()
-            .statement();
-        if iface == TypeId::of::<dyn PhysicalCallableStatement>() {
-            return raw.as_callable().map(Unwrapped::CallableStatement);
-        }
-        if iface == TypeId::of::<dyn PhysicalPreparedStatement>() {
-            return Some(Unwrapped::PreparedStatement(raw.as_ref()));
-        }
-        (raw.as_any().type_id() == iface).then(|| Unwrapped::Object(raw.as_any()))
-    }
-}
-
-impl std::fmt::Debug for DruidPooledCallableStatement {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("DruidPooledCallableStatement")
-            .field("prepared_statement", &self.prepared_statement)
-            .field("standard_callable", &self.standard_callable.is_some())
-            .finish()
-    }
-}
-
-druid_rdbc::impl_standard_wrapper!(DruidPooledCallableStatement => CallableStatement);
+druid_rdbc::impl_standard_wrapper!(CallableStatementView => Statement);
 
 #[async_trait::async_trait]
-impl druid_rdbc::statement::Statement for DruidPooledCallableStatement {
+impl Statement for CallableStatementView {
     fn query_timeout(&self) -> Result<i32, RdbcError> {
-        self.ensure_standard_callable()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+        self.resource.ensure_open()?;
+        self.resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
@@ -221,138 +72,384 @@ impl druid_rdbc::statement::Statement for DruidPooledCallableStatement {
     }
 
     fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
-        self.ensure_standard_callable()?;
-        self.configure_standard_query_timeout(seconds)
+        self.resource.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .set_query_timeout(seconds)
     }
 
-    async fn execute_query(
-        &mut self,
-        sql: &str,
-    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.ensure_standard_callable()?;
-        let admission = self
-            .prepared_statement
-            .standard_statement_inner()
-            .begin_standard_admission()?;
-        let resource = Arc::clone(
-            self.standard_callable
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?,
-        );
-        let policy = self.prepared_statement.standard_policy()?;
-        let raw = policy
-            .execute(
-                sql,
-                Vec::new(),
-                self.id(),
-                ExecOperation::Query,
-                move |effective_sql| async move {
-                    resource
-                        .statement
-                        .lock()
-                        .await
-                        .as_mut()
-                        .ok_or(RdbcError::ConnectionDiscarded)?
-                        .execute_query(&effective_sql)
-                        .await
-                },
-                |_| ExecResult {
-                    rows_affected: 0,
-                    last_insert_id: None,
-                    row_count: None,
-                },
-            )
-            .await?;
-        Ok(Box::new(
-            DruidPooledResultSet::new_standard(
-                self.prepared_statement.standard_statement_inner(),
-                raw,
-                &admission,
-            )
-            .await?,
-        ))
+    async fn execute_query(&mut self, sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.resource
+            .statement
+            .lock()
+            .await
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .execute_query(sql)
+            .await
     }
 
     async fn execute_update(
         &mut self,
         sql: &str,
-        generated_keys: druid_rdbc::statement::GeneratedKeys,
+        generated_keys: GeneratedKeys,
     ) -> Result<i64, RdbcError> {
-        self.ensure_standard_callable()?;
-        let resource = Arc::clone(
-            self.standard_callable
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?,
+        self.resource
+            .statement
+            .lock()
+            .await
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .execute_update(sql, generated_keys)
+            .await
+    }
+
+    async fn execute(
+        &mut self,
+        sql: &str,
+        generated_keys: GeneratedKeys,
+    ) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.resource
+            .statement
+            .lock()
+            .await
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .execute(sql, generated_keys)
+            .await
+    }
+
+    fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .add_batch(sql)
+    }
+
+    fn clear_batch(&mut self) -> Result<(), RdbcError> {
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clear_batch()
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.resource
+            .statement
+            .lock()
+            .await
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .execute_batch()
+            .await
+    }
+
+    async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.resource
+            .statement
+            .lock()
+            .await
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .generated_keys()
+            .await
+    }
+
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        self.resource.close_raw().await
+    }
+
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        if self.resource.closed.load(Ordering::Acquire) {
+            return Ok(true);
+        }
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .is_closed()
+    }
+
+    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .warning_messages()
+    }
+
+    fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clear_warnings()
+    }
+}
+
+struct CallableStatementState {
+    parameters: Vec<Option<PreparedParameter>>,
+    batch_parameter_sets: Vec<Vec<PreparedParameter>>,
+}
+
+/// Druid logical proxy over one canonical driver CallableStatement.
+pub struct DruidPooledCallableStatement {
+    statement_base: DruidPooledStatement,
+    resource: Arc<CallableStatementResource>,
+    sql: String,
+    state: Mutex<CallableStatementState>,
+}
+
+druid_rdbc::impl_standard_wrapper!(DruidPooledCallableStatement => CallableStatement);
+
+impl DruidPooledCallableStatement {
+    /// Wraps one owned canonical CallableStatement.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn new_standard(
+        statement: Box<dyn CallableStatement>,
+        sql: &str,
+        resources: Arc<StandardResourceRegistry>,
+        admission: &StandardResourceAdmission,
+        policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+        connection_id: u64,
+        statement_id: u64,
+        result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
+        lease_active: Arc<AtomicBool>,
+        filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Option<Arc<StatsCollector>>,
+    ) -> Result<Self, RdbcError> {
+        let resource = CallableStatementResource::new(statement);
+        let statement_base = DruidPooledStatement::new_standard(
+            Box::new(CallableStatementView {
+                resource: Arc::clone(&resource),
+            }),
+            Arc::clone(&resources),
+            policy,
+            connection_id,
+            statement_id,
+            result_set_id_seed,
+            metadata_id_seed,
+            lease_active,
+            filter_chain,
+            stats_collector,
         );
-        let policy = self.prepared_statement.standard_policy()?;
-        policy
-            .execute(
-                sql,
-                Vec::new(),
+        resources
+            .register(admission, Arc::clone(&statement_base.inner))
+            .await?;
+        Ok(Self {
+            statement_base,
+            resource,
+            sql: sql.to_owned(),
+            state: Mutex::new(CallableStatementState {
+                parameters: Vec::new(),
+                batch_parameter_sets: Vec::new(),
+            }),
+        })
+    }
+
+    /// Returns whether this logical statement is closed.
+    #[must_use]
+    pub fn is_closed(&self) -> bool {
+        self.statement_base.is_closed()
+            || self.resource.closed.load(Ordering::Acquire)
+            || !self
+                .statement_base
+                .inner
+                .lease_active
+                .load(Ordering::Acquire)
+    }
+
+    /// Returns the inherited statement view.
+    #[must_use]
+    pub fn pooled_statement(&self) -> &DruidPooledStatement {
+        &self.statement_base
+    }
+
+    /// Returns the statement identifier.
+    #[must_use]
+    pub fn id(&self) -> u64 {
+        self.statement_base.id()
+    }
+
+    pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
+        self.resource.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .set_query_timeout(seconds)
+    }
+
+    fn ensure_open(&self) -> Result<(), RdbcError> {
+        if self.is_closed() {
+            Err(RdbcError::ConnectionDiscarded)
+        } else {
+            self.resource.ensure_open()
+        }
+    }
+
+    fn parameter_snapshot(&self) -> Result<Vec<PreparedParameter>, RdbcError> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .parameters
+            .iter()
+            .enumerate()
+            .map(|(index, parameter)| {
+                parameter.clone().ok_or_else(|| {
+                    RdbcError::InvalidArgument(format!(
+                        "parameter {} has not been bound",
+                        index + 1
+                    ))
+                })
+            })
+            .collect()
+    }
+
+    async fn execute_prepared_results(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.ensure_open()?;
+        let admission = self.statement_base.inner.begin_standard_admission()?;
+        let parameters = self.parameter_snapshot()?;
+        let resource = Arc::clone(&self.resource);
+        let results = self
+            .statement_base
+            .inner
+            .policy
+            .execute_prepared(
+                &self.sql,
+                parameters,
                 self.id(),
-                ExecOperation::Update,
-                move |effective_sql| async move {
+                ExecOperation::Execute,
+                move |_| async move {
                     resource
                         .statement
                         .lock()
                         .await
                         .as_mut()
                         .ok_or(RdbcError::ConnectionDiscarded)?
-                        .execute_update(&effective_sql, generated_keys)
+                        .execute_prepared()
                         .await
                 },
-                |count| ExecResult {
-                    rows_affected: u64::try_from(*count).unwrap_or_default(),
-                    last_insert_id: None,
-                    row_count: None,
+                |results| match results.first() {
+                    Some(ExecutionResult::UpdateCount(count)) => ExecResult {
+                        rows_affected: u64::try_from(*count).unwrap_or_default(),
+                        ..ExecResult::default()
+                    },
+                    Some(ExecutionResult::ResultSet(_)) | None => ExecResult::default(),
                 },
             )
-            .await
+            .await?;
+        DruidPooledResultSet::new_standard_results(
+            Arc::clone(&self.statement_base.inner),
+            results,
+            &admission,
+        )
+        .await
+    }
+}
+
+#[async_trait::async_trait]
+impl Statement for DruidPooledCallableStatement {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        self.ensure_open()?;
+        Statement::query_timeout(&self.statement_base)
+    }
+
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        self.configure_standard_query_timeout(seconds)
+    }
+
+    async fn execute_query(&mut self, sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.ensure_open()?;
+        Statement::execute_query(&mut self.statement_base, sql).await
+    }
+
+    async fn execute_update(
+        &mut self,
+        sql: &str,
+        generated_keys: GeneratedKeys,
+    ) -> Result<i64, RdbcError> {
+        self.ensure_open()?;
+        Statement::execute_update(&mut self.statement_base, sql, generated_keys).await
+    }
+
+    async fn execute(
+        &mut self,
+        sql: &str,
+        generated_keys: GeneratedKeys,
+    ) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.ensure_open()?;
+        Statement::execute(&mut self.statement_base, sql, generated_keys).await
     }
 
     fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
-        self.ensure_standard_callable()?;
-        let parameters = self.prepared_statement.standard_parameter_snapshot()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+        self.ensure_open()?;
+        let parameters = self.parameter_snapshot()?;
+        self.resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .add_batch(sql)?;
-        self.prepared_statement.push_standard_batch(parameters);
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .batch_parameter_sets
+            .push(parameters);
         Ok(())
     }
 
     fn clear_batch(&mut self) -> Result<(), RdbcError> {
-        self.ensure_standard_callable()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+        self.ensure_open()?;
+        self.resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clear_batch()?;
-        self.prepared_statement.clear_standard_batch();
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .batch_parameter_sets
+            .clear();
         Ok(())
     }
 
     async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
-        self.ensure_standard_callable()?;
-        let resource = Arc::clone(
-            self.standard_callable
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?,
-        );
-        let policy = self.prepared_statement.standard_policy()?;
-        let sql = self.prepared_statement.standard_sql();
-        let parameter_sets = self.prepared_statement.standard_batch_snapshot();
-        let result = policy
-            .execute_prepared_batch(&sql, &parameter_sets, self.id(), move || async move {
+        self.ensure_open()?;
+        let parameter_sets = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .batch_parameter_sets
+            .clone();
+        let resource = Arc::clone(&self.resource);
+        let result = self
+            .statement_base
+            .inner
+            .policy
+            .execute_prepared_batch(&self.sql, &parameter_sets, self.id(), move || async move {
                 resource
                     .statement
                     .lock()
@@ -364,102 +461,136 @@ impl druid_rdbc::statement::Statement for DruidPooledCallableStatement {
             })
             .await;
         if result.is_ok() {
-            self.prepared_statement.clear_standard_batch();
+            self.state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .batch_parameter_sets
+                .clear();
         }
         result
+    }
+
+    async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.ensure_open()?;
+        let admission = self.statement_base.inner.begin_standard_admission()?;
+        let raw = self
+            .resource
+            .statement
+            .lock()
+            .await
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .generated_keys()
+            .await?;
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard(
+                Arc::clone(&self.statement_base.inner),
+                raw,
+                &admission,
+            )
+            .await?,
+        ))
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
-        if self.is_closed() {
+        if self.statement_base.is_closed() {
             return Ok(());
         }
-        let resource = self
-            .standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?;
-        let result = resource.close_resource().await;
-        if result.is_ok() {
-            self.prepared_statement.close()?;
-        }
-        result
+        self.resource.close_raw().await?;
+        self.statement_base.inner.finish_logical_close()
     }
 
     fn is_closed(&self) -> Result<bool, RdbcError> {
-        if self.is_closed() || self.prepared_statement.ensure_open().is_err() {
+        if self.is_closed() {
             return Ok(true);
         }
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+        self.resource
             .statement
             .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .is_closed()
     }
+
+    fn warning_messages(&self) -> Result<Vec<String>, RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .warning_messages()
+    }
+
+    fn clear_warnings(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clear_warnings()
+    }
 }
 
 #[async_trait::async_trait]
-impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
-    fn set_parameter(
-        &mut self,
-        parameter: druid_rdbc::statement::PreparedParameter,
-    ) -> Result<(), RdbcError> {
-        self.ensure_standard_callable()?;
-        let parameter_index = parameter.index.get();
-        let snapshot = super::PreparedInputParameter::RustValue(parameter.value.clone());
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+impl PreparedStatement for DruidPooledCallableStatement {
+    fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        let index = parameter.index.get() - 1;
+        self.resource
             .statement
             .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .set_parameter(parameter)?;
-        self.prepared_statement
-            .record_standard_parameter(parameter_index, snapshot)
-    }
-
-    fn clear_parameters(&mut self) -> Result<(), RdbcError> {
-        self.ensure_standard_callable()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .clear_parameters()?;
-        self.prepared_statement.clear_standard_parameters();
+            .set_parameter(parameter.clone())?;
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.parameters.len() <= index {
+            state.parameters.resize_with(index + 1, || None);
+        }
+        state.parameters[index] = Some(parameter);
         Ok(())
     }
 
-    async fn execute_prepared_query(
-        &mut self,
-    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.ensure_standard_callable()?;
-        let admission = self
-            .prepared_statement
-            .standard_statement_inner()
-            .begin_standard_admission()?;
-        let resource = Arc::clone(
-            self.standard_callable
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?,
-        );
-        let policy = self.prepared_statement.standard_policy()?;
-        let sql = self.prepared_statement.standard_sql();
-        let parameters = self.prepared_statement.standard_parameter_snapshot()?;
-        let raw = policy
+    fn clear_parameters(&mut self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clear_parameters()?;
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .parameters
+            .clear();
+        Ok(())
+    }
+
+    async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.ensure_open()?;
+        let admission = self.statement_base.inner.begin_standard_admission()?;
+        let parameters = self.parameter_snapshot()?;
+        let resource = Arc::clone(&self.resource);
+        let raw = self
+            .statement_base
+            .inner
+            .policy
             .execute_prepared(
-                &sql,
+                &self.sql,
                 parameters,
                 self.id(),
                 ExecOperation::Query,
-                move |_effective_sql| async move {
+                move |_| async move {
                     resource
                         .statement
                         .lock()
@@ -469,16 +600,12 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
                         .execute_prepared_query()
                         .await
                 },
-                |_| ExecResult {
-                    rows_affected: 0,
-                    last_insert_id: None,
-                    row_count: None,
-                },
+                |_| ExecResult::default(),
             )
             .await?;
         Ok(Box::new(
             DruidPooledResultSet::new_standard(
-                self.prepared_statement.standard_statement_inner(),
+                Arc::clone(&self.statement_base.inner),
                 raw,
                 &admission,
             )
@@ -487,22 +614,18 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
-        self.ensure_standard_callable()?;
-        let resource = Arc::clone(
-            self.standard_callable
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?,
-        );
-        let policy = self.prepared_statement.standard_policy()?;
-        let sql = self.prepared_statement.standard_sql();
-        let parameters = self.prepared_statement.standard_parameter_snapshot()?;
-        policy
+        self.ensure_open()?;
+        let parameters = self.parameter_snapshot()?;
+        let resource = Arc::clone(&self.resource);
+        self.statement_base
+            .inner
+            .policy
             .execute_prepared(
-                &sql,
+                &self.sql,
                 parameters,
                 self.id(),
                 ExecOperation::Update,
-                move |_effective_sql| async move {
+                move |_| async move {
                     resource
                         .statement
                         .lock()
@@ -514,1598 +637,59 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledCallableStatement {
                 },
                 |count| ExecResult {
                     rows_affected: u64::try_from(*count).unwrap_or_default(),
-                    last_insert_id: None,
-                    row_count: None,
+                    ..ExecResult::default()
                 },
             )
             .await
     }
 
-    async fn execute_prepared(
-        &mut self,
-    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
-        self.ensure_standard_callable()?;
-        let resource = Arc::clone(
-            self.standard_callable
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?,
-        );
-        self.prepared_statement
-            .execute_standard_prepared_results(move || async move {
-                resource
-                    .statement
-                    .lock()
-                    .await
-                    .as_mut()
-                    .ok_or(RdbcError::ConnectionDiscarded)?
-                    .execute_prepared()
-                    .await
-            })
-            .await
+    async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.execute_prepared_results().await
     }
 
-    fn parameter_meta_data(
-        &self,
-    ) -> Result<std::sync::Arc<dyn druid_rdbc::metadata::ParameterMetaData>, RdbcError> {
-        self.ensure_standard_callable()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+    fn parameter_meta_data(&self) -> Result<Arc<dyn ParameterMetaData>, RdbcError> {
+        self.ensure_open()?;
+        self.resource
             .statement
             .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .parameter_meta_data()
     }
 }
 
-#[async_trait::async_trait]
-impl druid_rdbc::statement::CallableStatement for DruidPooledCallableStatement {
-    fn register_out_parameter(
-        &mut self,
-        parameter: druid_rdbc::statement::CallableOutParameter,
-    ) -> Result<(), RdbcError> {
-        self.ensure_standard_callable()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+impl CallableStatement for DruidPooledCallableStatement {
+    fn register_out_parameter(&mut self, parameter: CallableOutParameter) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        self.resource
             .statement
             .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .register_out_parameter(parameter)
     }
 
-    fn out_value(&self, index: druid_rdbc::statement::ParameterIndex) -> Result<Value, RdbcError> {
-        self.ensure_standard_callable()?;
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
+    fn out_value(&self, index: ParameterIndex) -> Result<Value, RdbcError> {
+        self.ensure_open()?;
+        self.resource
             .statement
             .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_string()))?
+            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .out_value(index)
     }
 }
 
-impl DruidPooledCallableStatement {
-    /// 返回继承自 Statement proxy 的 ID。
-    #[must_use]
-    pub fn id(&self) -> u64 {
-        self.prepared_statement.id()
-    }
-
-    pub(crate) fn new(prepared_statement: DruidPooledPreparedStatement) -> Self {
-        Self {
-            prepared_statement,
-            standard_callable: None,
-        }
-    }
-
-    fn ensure_standard_callable(&self) -> Result<(), RdbcError> {
-        self.prepared_statement.ensure_open()?;
-        if self.standard_callable.is_none() {
-            Err(RdbcError::ConnectionDiscarded)
-        } else {
-            Ok(())
-        }
-    }
-
-    /// 包装 owned canonical CallableStatement。
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) async fn new_standard(
-        callable: Box<dyn druid_rdbc::statement::CallableStatement>,
-        sql: &str,
-        standard_resources: Arc<StandardResourceRegistry>,
-        admission: &StandardResourceAdmission,
-        standard_policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
-        connection_id: u64,
-        statement_id: u64,
-        result_set_id_seed: std::sync::Arc<std::sync::atomic::AtomicU64>,
-        metadata_id_seed: std::sync::Arc<std::sync::atomic::AtomicU64>,
-        lease_active: std::sync::Arc<std::sync::atomic::AtomicBool>,
-        filter_chain: Option<std::sync::Arc<super::FilterChain>>,
-        stats_collector: Option<std::sync::Arc<crate::stats::StatsCollector>>,
-    ) -> Result<Self, RdbcError> {
-        let callable = StandardCallableStatementResource::new(callable);
-        standard_resources
-            .register(admission, Arc::clone(&callable))
-            .await?;
-        Ok(Self {
-            prepared_statement: DruidPooledPreparedStatement::new_standard_shell(
-                sql,
-                connection_id,
-                statement_id,
-                result_set_id_seed,
-                metadata_id_seed,
-                lease_active,
-                filter_chain,
-                stats_collector,
-                Some(standard_resources),
-                Some(standard_policy),
-            ),
-            standard_callable: Some(callable),
-        })
-    }
-
-    /// 返回逻辑语句是否关闭。
-    pub fn is_closed(&self) -> bool {
-        self.prepared_statement.is_closed()
-    }
-
-    pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
-        self.standard_callable
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
-            .as_mut()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .set_query_timeout(seconds)
-    }
-
-    /// 返回物理 `CallableStatement` SPI。
-    ///
-    /// 对应 Java：`getCallableStatementRaw()` 的平台能力语义，但不泄漏具体驱动类型。
-    pub fn physical_callable_statement(&self) -> Result<&dyn PhysicalCallableStatement, RdbcError> {
-        self.prepared_statement.ensure_open()?;
-        self.prepared_statement
-            .prepared_statement_holder()
-            .statement()
-            .as_callable()
-            .ok_or(RdbcError::UnsupportedOperation {
-                operation: "physical_callable_statement",
-            })
-    }
-
-    /// 执行存储过程调用。
-    pub async fn exec(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
-        self.prepared_statement.exec(connection, params).await
-    }
-
-    /// 执行返回行集的存储过程调用。
-    pub async fn fetch(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.prepared_statement.fetch(connection, params).await
-    }
-
-    /// 执行查询并返回保持 `CallableStatement` 动态身份的池化结果集。
-    pub async fn fetch_result_set(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        params: Vec<Value>,
-    ) -> Result<DruidPooledResultSet, RdbcError> {
-        let result_set = self
-            .prepared_statement
-            .fetch_result_set(connection, params)
-            .await?;
-        Ok(result_set.with_callable_statement(self.result_set_statement_handle()))
-    }
-
-    /// 执行 `CallableStatement#execute()` 并返回首结果是否为 `ResultSet`。
-    pub async fn execute(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        params: Vec<Value>,
-    ) -> Result<bool, RdbcError> {
-        self.prepared_statement.execute(connection, params).await
-    }
-
-    /// 返回 generic execute 的当前结果集，并恢复 `CallableStatement` 身份。
-    pub fn result_set(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<Option<DruidPooledResultSet>, RdbcError> {
-        self.prepared_statement
-            .result_set(connection)
-            .map(|result_set| {
-                result_set.map(|result_set| {
-                    result_set.with_callable_statement(self.result_set_statement_handle())
-                })
-            })
-    }
-
-    /// 返回最近一次执行的更新计数。
-    pub fn update_count(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<i64, RdbcError> {
-        self.prepared_statement.update_count(connection)
-    }
-
-    /// 返回 generated keys，并恢复 `CallableStatement` 身份。
-    pub fn generated_keys(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<DruidPooledResultSet, RdbcError> {
-        self.prepared_statement
-            .generated_keys(connection)
-            .map(|result_set| {
-                result_set.with_callable_statement(self.result_set_statement_handle())
-            })
-    }
-
-    /// 推进到下一个 RDBC 结果。
-    pub fn more_results(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<bool, RdbcError> {
-        self.prepared_statement.more_results(connection)
-    }
-
-    /// 使用 RDBC current 常量推进到下一个结果。
-    pub fn more_results_with_current(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-        current: i32,
-    ) -> Result<bool, RdbcError> {
-        self.prepared_statement
-            .more_results_with_current(connection, current)
-    }
-
-    /// 关闭逻辑 `CallableStatement`。
-    pub fn close(&mut self) -> Result<(), RdbcError> {
-        self.prepared_statement.close()
-    }
-
-    /// 在原池化连接上下文中关闭 `CallableStatement`。
-    ///
-    /// 对应 Java：`DruidPooledConnection#closePoolableStatement`。除执行
-    /// `PreparedStatement` 的缓存归还与异常分类外，还会从 holder 的
-    /// statement trace 中移除该逻辑对象。
-    pub fn close_with_connection(
-        &mut self,
-        connection: &mut DruidPooledConnection,
-    ) -> Result<(), RdbcError> {
-        self.prepared_statement.close_with_connection(connection)
-    }
-
-    fn result_set_statement_handle(&self) -> DruidPooledCallableStatementHandle {
-        DruidPooledCallableStatementHandle {
-            prepared_statement: self.prepared_statement.result_set_statement_handle(),
-        }
-    }
-
-    /// 注册 `registerOutParameter(int, int)`。
-    pub fn register_out_parameter(
-        &mut self,
-        parameter_index: usize,
-        sql_type: i32,
-    ) -> Result<(), RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.register(parameter, CallableOutParameter::new(sql_type))
-    }
-
-    /// 注册 `registerOutParameter(int, int, int)`。
-    pub fn register_out_parameter_with_scale(
-        &mut self,
-        parameter_index: usize,
-        sql_type: i32,
-        scale: i32,
-    ) -> Result<(), RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.register(parameter, CallableOutParameter::with_scale(sql_type, scale))
-    }
-
-    /// 注册 `registerOutParameter(int, int, String)`。
-    pub fn register_out_parameter_with_type_name(
-        &mut self,
-        parameter_index: usize,
-        sql_type: i32,
-        type_name: impl Into<String>,
-    ) -> Result<(), RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.register(
-            parameter,
-            CallableOutParameter::with_type_name(sql_type, type_name),
-        )
-    }
-
-    /// 注册 `registerOutParameter(String, int)`。
-    pub fn register_named_out_parameter(
-        &mut self,
-        parameter_name: impl Into<String>,
-        sql_type: i32,
-    ) -> Result<(), RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.register(parameter, CallableOutParameter::new(sql_type))
-    }
-
-    /// 注册 `registerOutParameter(String, int, int)`。
-    pub fn register_named_out_parameter_with_scale(
-        &mut self,
-        parameter_name: impl Into<String>,
-        sql_type: i32,
-        scale: i32,
-    ) -> Result<(), RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.register(parameter, CallableOutParameter::with_scale(sql_type, scale))
-    }
-
-    /// 注册 `registerOutParameter(String, int, String)`。
-    pub fn register_named_out_parameter_with_type_name(
-        &mut self,
-        parameter_name: impl Into<String>,
-        sql_type: i32,
-        type_name: impl Into<String>,
-    ) -> Result<(), RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.register(
-            parameter,
-            CallableOutParameter::with_type_name(sql_type, type_name),
-        )
-    }
-
-    /// 设置命名参数的通用值。
-    pub fn set_named_object(
-        &mut self,
-        parameter_name: &str,
-        value: Value,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::object(value))
-    }
-
-    /// 设置带目标 SQL 类型的命名对象参数。
-    ///
-    /// 对应 Java：`setObject(String parameterName, Object x, int targetSqlType)`。
-    pub fn set_named_object_with_sql_type(
-        &mut self,
-        parameter_name: &str,
-        value: Value,
-        target_sql_type: i32,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::object_with_sql_type(value, target_sql_type),
-        )
-    }
-
-    /// 设置带目标 SQL 类型和 scale 的命名对象参数。
-    ///
-    /// 对应 Java：
-    /// `setObject(String parameterName, Object x, int targetSqlType, int scale)`。
-    pub fn set_named_object_with_sql_type_and_scale(
-        &mut self,
-        parameter_name: &str,
-        value: Value,
-        target_sql_type: i32,
-        scale: i32,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::object_with_sql_type_and_scale(value, target_sql_type, scale),
-        )
-    }
-
-    /// 设置命名 SQL NULL。
-    ///
-    /// 对应 Java：`setNull(String parameterName, int sqlType)`。
-    pub fn set_named_null(&mut self, parameter_name: &str, sql_type: i32) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::null(sql_type))
-    }
-
-    /// 设置带数据库类型名的命名 SQL NULL。
-    ///
-    /// 对应 Java：
-    /// `setNull(String parameterName, int sqlType, String typeName)`。
-    pub fn set_named_null_with_type_name(
-        &mut self,
-        parameter_name: &str,
-        sql_type: i32,
-        type_name: impl Into<String>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::null_with_type_name(sql_type, type_name),
-        )
-    }
-
-    fn set_named_input(
-        &mut self,
-        parameter_name: &str,
-        parameter: CallableInputParameter,
-    ) -> Result<(), RdbcError> {
-        let parameter_name = match self.named_parameter(parameter_name)? {
-            CallableParameter::Name(parameter_name) => parameter_name,
-            CallableParameter::Index(_) => {
-                unreachable!("named parameter validation returned index")
-            }
-        };
-        self.apply_callable(|statement| statement.set_named_parameter(&parameter_name, parameter))
-    }
-
-    /// 设置命名布尔参数。
-    pub fn set_named_boolean(
-        &mut self,
-        parameter_name: &str,
-        value: bool,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Boolean(value))
-    }
-
-    /// 设置命名 byte 参数。
-    ///
-    /// 对应 Java：`setByte(String parameterName, byte x)`。
-    pub fn set_named_byte(&mut self, parameter_name: &str, value: i8) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Byte(value))
-    }
-
-    /// 设置命名 short 参数。
-    ///
-    /// 对应 Java：`setShort(String parameterName, short x)`。
-    pub fn set_named_short(&mut self, parameter_name: &str, value: i16) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Short(value))
-    }
-
-    /// 设置命名整数参数。
-    pub fn set_named_int(&mut self, parameter_name: &str, value: i32) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Int(value))
-    }
-
-    /// 设置命名长整数参数。
-    pub fn set_named_long(&mut self, parameter_name: &str, value: i64) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Long(value))
-    }
-
-    /// 设置命名单精度参数。
-    ///
-    /// 对应 Java：`setFloat(String parameterName, float x)`。
-    pub fn set_named_float(&mut self, parameter_name: &str, value: f32) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Float(value))
-    }
-
-    /// 设置命名浮点参数。
-    pub fn set_named_double(&mut self, parameter_name: &str, value: f64) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Double(value))
-    }
-
-    /// 设置命名字符串参数。
-    pub fn set_named_string(
-        &mut self,
-        parameter_name: &str,
-        value: Option<String>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::String(value))
-    }
-
-    /// 设置命名 Unicode `NString` 参数。
-    ///
-    /// 对应 Java：`setNString(String parameterName, String value)`。独立 variant
-    /// 保留 national-character setter 身份，交由具体驱动映射。
-    pub fn set_named_n_string(
-        &mut self,
-        parameter_name: &str,
-        value: Option<String>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::NString(value))
-    }
-
-    /// 设置命名字节参数。
-    pub fn set_named_bytes(
-        &mut self,
-        parameter_name: &str,
-        value: Option<Vec<u8>>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Bytes(value))
-    }
-
-    /// 设置命名 URL 参数。
-    pub fn set_named_url(
-        &mut self,
-        parameter_name: &str,
-        value: Option<RdbcUrl>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Url(value))
-    }
-
-    /// 设置命名 `RowId` 参数。
-    pub fn set_named_row_id(
-        &mut self,
-        parameter_name: &str,
-        value: Option<RdbcRowId>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::RowId(value))
-    }
-
-    /// 设置命名 `SQLXML` 参数。
-    pub fn set_named_sql_xml(
-        &mut self,
-        parameter_name: &str,
-        value: Option<RdbcSqlXml>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::SqlXml(value))
-    }
-
-    /// 设置未指定长度的命名 ASCII 输入流。
-    pub fn set_named_ascii_stream(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::AsciiStream {
-                stream,
-                length: RdbcStreamLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 Java int 长度的命名 ASCII 输入流。
-    pub fn set_named_ascii_stream_with_int_length(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-        length: i32,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::AsciiStream {
-                stream,
-                length: RdbcStreamLength::Int(length),
-            },
-        )
-    }
-
-    /// 设置带 Java long 长度的命名 ASCII 输入流。
-    pub fn set_named_ascii_stream_with_length(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::AsciiStream {
-                stream,
-                length: RdbcStreamLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置未指定长度的命名二进制输入流。
-    pub fn set_named_binary_stream(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::BinaryStream {
-                stream,
-                length: RdbcStreamLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 Java int 长度的命名二进制输入流。
-    pub fn set_named_binary_stream_with_int_length(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-        length: i32,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::BinaryStream {
-                stream,
-                length: RdbcStreamLength::Int(length),
-            },
-        )
-    }
-
-    /// 设置带 Java long 长度的命名二进制输入流。
-    pub fn set_named_binary_stream_with_length(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::BinaryStream {
-                stream,
-                length: RdbcStreamLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置命名 Blob 对象参数。
-    ///
-    /// 对应 Java：`setBlob(String parameterName, Blob x)`。`None` 保留通过
-    /// Blob setter 传入 Java null 的身份，不等价于 `setNull`。
-    pub fn set_named_blob(
-        &mut self,
-        parameter_name: &str,
-        value: Option<RdbcBlob>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Blob(value))
-    }
-
-    /// 设置未指定长度的命名 Blob 输入流。
-    ///
-    /// 对应 Java：`setBlob(String parameterName, InputStream inputStream)`。
-    pub fn set_named_blob_stream(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::BlobStream {
-                stream,
-                length: RdbcStreamLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 long 长度的命名 Blob 输入流。
-    ///
-    /// 对应 Java：
-    /// `setBlob(String parameterName, InputStream inputStream, long length)`。
-    /// 长度原样传给物理驱动，包括驱动应拒绝的负值。
-    pub fn set_named_blob_stream_with_length(
-        &mut self,
-        parameter_name: &str,
-        stream: Option<RdbcInputStream>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::BlobStream {
-                stream,
-                length: RdbcStreamLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置命名 Clob 对象参数。
-    ///
-    /// 对应 Java：`setClob(String parameterName, Clob x)`。
-    pub fn set_named_clob(
-        &mut self,
-        parameter_name: &str,
-        value: Option<RdbcClob>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::Clob(value))
-    }
-
-    /// 设置未指定长度的命名 Clob Reader。
-    ///
-    /// 对应 Java：`setClob(String parameterName, Reader reader)`。
-    pub fn set_named_clob_reader(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::ClobReader {
-                reader,
-                length: RdbcCharacterLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 long 长度的命名 Clob Reader。
-    ///
-    /// 对应 Java：`setClob(String parameterName, Reader reader, long length)`。
-    pub fn set_named_clob_reader_with_length(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::ClobReader {
-                reader,
-                length: RdbcCharacterLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置命名 `NClob` 对象参数。
-    ///
-    /// 对应 Java：`setNClob(String parameterName, NClob value)`。
-    pub fn set_named_n_clob(
-        &mut self,
-        parameter_name: &str,
-        value: Option<RdbcNClob>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::NClob(value))
-    }
-
-    /// 设置未指定长度的命名 `NClob` Reader。
-    ///
-    /// 对应 Java：`setNClob(String parameterName, Reader reader)`。
-    pub fn set_named_n_clob_reader(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::NClobReader {
-                reader,
-                length: RdbcCharacterLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 long 长度的命名 `NClob` Reader。
-    ///
-    /// 对应 Java：`setNClob(String parameterName, Reader reader, long length)`。
-    pub fn set_named_n_clob_reader_with_length(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::NClobReader {
-                reader,
-                length: RdbcCharacterLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置未指定长度的普通字符 Reader。
-    ///
-    /// 对应 Java：`setCharacterStream(String parameterName, Reader reader)`。
-    pub fn set_named_character_stream(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::CharacterStream {
-                reader,
-                length: RdbcCharacterLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 int 长度的普通字符 Reader。
-    ///
-    /// 对应 Java：`setCharacterStream(String parameterName, Reader reader, int length)`。
-    pub fn set_named_character_stream_with_int_length(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-        length: i32,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::CharacterStream {
-                reader,
-                length: RdbcCharacterLength::Int(length),
-            },
-        )
-    }
-
-    /// 设置带 long 长度的普通字符 Reader。
-    ///
-    /// 对应 Java：`setCharacterStream(String parameterName, Reader reader, long length)`。
-    pub fn set_named_character_stream_with_length(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::CharacterStream {
-                reader,
-                length: RdbcCharacterLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置未指定长度的 national character Reader。
-    ///
-    /// 对应 Java：`setNCharacterStream(String parameterName, Reader value)`。
-    pub fn set_named_n_character_stream(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::NCharacterStream {
-                reader,
-                length: RdbcCharacterLength::Unspecified,
-            },
-        )
-    }
-
-    /// 设置带 long 长度的 national character Reader。
-    ///
-    /// 对应 Java：`setNCharacterStream(String parameterName, Reader value, long length)`。
-    pub fn set_named_n_character_stream_with_length(
-        &mut self,
-        parameter_name: &str,
-        reader: Option<RdbcReader>,
-        length: i64,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::NCharacterStream {
-                reader,
-                length: RdbcCharacterLength::Long(length),
-            },
-        )
-    }
-
-    /// 设置命名任意精度 Decimal 参数。
-    ///
-    /// 对应 Java：`setBigDecimal(String parameterName, BigDecimal x)`。
-    /// `None` 对应通过该 setter 传入 Java null，不等价于 `setNull`。
-    pub fn set_named_big_decimal(
-        &mut self,
-        parameter_name: &str,
-        value: Option<BigDecimal>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(parameter_name, CallableInputParameter::BigDecimal(value))
-    }
-
-    /// 设置不带 Calendar 的命名 Date 参数。
-    ///
-    /// 对应 Java：`setDate(String parameterName, Date x)`。
-    pub fn set_named_date(
-        &mut self,
-        parameter_name: &str,
-        value: Option<NaiveDate>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::Date {
-                value,
-                calendar: CallableCalendarArgument::unspecified(),
-            },
-        )
-    }
-
-    /// 设置带 Calendar 重载的命名 Date 参数。
-    ///
-    /// 对应 Java：`setDate(String parameterName, Date x, Calendar cal)`。
-    /// `calendar=None` 保留“显式调用 Calendar 重载并传入 null”的身份。
-    pub fn set_named_date_with_calendar(
-        &mut self,
-        parameter_name: &str,
-        value: Option<NaiveDate>,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::Date {
-                value,
-                calendar: CallableCalendarArgument::specified(calendar),
-            },
-        )
-    }
-
-    /// 设置不带 Calendar 的命名 Time 参数。
-    ///
-    /// 对应 Java：`setTime(String parameterName, Time x)`。
-    pub fn set_named_time(
-        &mut self,
-        parameter_name: &str,
-        value: Option<NaiveTime>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::Time {
-                value,
-                calendar: CallableCalendarArgument::unspecified(),
-            },
-        )
-    }
-
-    /// 设置带 Calendar 重载的命名 Time 参数。
-    ///
-    /// 对应 Java：`setTime(String parameterName, Time x, Calendar cal)`。
-    pub fn set_named_time_with_calendar(
-        &mut self,
-        parameter_name: &str,
-        value: Option<NaiveTime>,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::Time {
-                value,
-                calendar: CallableCalendarArgument::specified(calendar),
-            },
-        )
-    }
-
-    /// 设置不带 Calendar 的命名 Timestamp 参数。
-    ///
-    /// 对应 Java：`setTimestamp(String parameterName, Timestamp x)`。
-    pub fn set_named_timestamp(
-        &mut self,
-        parameter_name: &str,
-        value: Option<NaiveDateTime>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::Timestamp {
-                value,
-                calendar: CallableCalendarArgument::unspecified(),
-            },
-        )
-    }
-
-    /// 设置带 Calendar 重载的命名 Timestamp 参数。
-    ///
-    /// 对应 Java：
-    /// `setTimestamp(String parameterName, Timestamp x, Calendar cal)`。
-    pub fn set_named_timestamp_with_calendar(
-        &mut self,
-        parameter_name: &str,
-        value: Option<NaiveDateTime>,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<(), RdbcError> {
-        self.set_named_input(
-            parameter_name,
-            CallableInputParameter::Timestamp {
-                value,
-                calendar: CallableCalendarArgument::specified(calendar),
-            },
-        )
-    }
-
-    /// 读取索引 OUT 参数。
-    ///
-    /// 对应 Java：`getObject(int)` 的已迁移标量部分。ResultSet/LOB/Ref/Array
-    /// 必须由后续独立对象 SPI 表达，不能伪装成标量。
-    pub fn get_object(&mut self, parameter_index: usize) -> Result<RdbcObject, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.get(parameter)
-    }
-
-    /// 读取命名 OUT 参数。
-    ///
-    /// 对应 Java：`getObject(String)` 的已迁移标量部分。
-    pub fn get_named_object(&mut self, parameter_name: &str) -> Result<RdbcObject, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.get(parameter)
-    }
-
-    /// 使用 Java 类型 Map 读取索引对象。
-    pub fn get_object_with_type_map(
-        &mut self,
-        parameter_index: usize,
-        type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        let result = self.apply_callable(|statement| {
-            statement.out_parameter_with_type_map(&parameter, type_map)
-        });
-        self.record_object_lob_result(&result);
-        result
-    }
-
-    /// 使用 Java 类型 Map 读取命名对象。
-    pub fn get_named_object_with_type_map(
-        &mut self,
-        parameter_name: &str,
-        type_map: Option<&RdbcTypeMap>,
-    ) -> Result<RdbcObject, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        let result = self.apply_callable(|statement| {
-            statement.out_parameter_with_type_map(&parameter, type_map)
-        });
-        self.record_object_lob_result(&result);
-        result
-    }
-
-    /// 使用 Java `Class<T>` 对应目标类型读取索引对象。
-    pub fn get_object_as(
-        &mut self,
-        parameter_index: usize,
-        target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, RdbcError> {
-        // Java 4.1 typed `getObject` 直接委托给底层 stmt，不经过 checkException。
-        let parameter = CallableParameter::by_index(parameter_index)?;
-        self.physical_callable_statement()?
-            .out_parameter_as(&parameter, target_type)
-    }
-
-    /// 使用 Java `Class<T>` 对应目标类型读取命名对象。
-    pub fn get_named_object_as(
-        &mut self,
-        parameter_name: &str,
-        target_type: &RdbcTargetType,
-    ) -> Result<RdbcObject, RdbcError> {
-        // 与 Java 原方法一致：保留底层异常，不写入连接异常计数。
-        let parameter = CallableParameter::by_name(parameter_name)?;
-        self.physical_callable_statement()?
-            .out_parameter_as(&parameter, target_type)
-    }
-
-    /// 读取索引 `BigDecimal` OUT 参数。
-    ///
-    /// 对应 Java：`getBigDecimal(int)`。
-    pub fn get_big_decimal(
-        &mut self,
-        parameter_index: usize,
-    ) -> Result<Option<BigDecimal>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.big_decimal_out_parameter(&parameter))
-    }
-
-    /// 读取索引 `BigDecimal` OUT 参数并应用已废弃 RDBC scale 重载。
-    ///
-    /// 对应 Java：`getBigDecimal(int, int)`。
-    #[deprecated(note = "对应 RDBC 已废弃的 getBigDecimal(int, int)")]
-    pub fn get_big_decimal_with_scale(
-        &mut self,
-        parameter_index: usize,
-        scale: i32,
-    ) -> Result<Option<BigDecimal>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| {
-            statement.big_decimal_out_parameter_with_scale(&parameter, scale)
-        })
-    }
-
-    /// 读取命名 `BigDecimal` OUT 参数。
-    ///
-    /// 对应 Java：`getBigDecimal(String)`。
-    pub fn get_named_big_decimal(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<BigDecimal>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.big_decimal_out_parameter(&parameter))
-    }
-
-    /// 读取不带 Calendar 的索引 Date OUT 参数。
-    pub fn get_date(&mut self, parameter_index: usize) -> Result<Option<NaiveDate>, RdbcError> {
-        self.get_date_with_argument(
-            CallableParameter::by_index(parameter_index),
-            CallableCalendarArgument::unspecified(),
-        )
-    }
-
-    /// 读取带 Calendar 重载的索引 Date OUT 参数。
-    pub fn get_date_with_calendar(
-        &mut self,
-        parameter_index: usize,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDate>, RdbcError> {
-        self.get_date_with_argument(
-            CallableParameter::by_index(parameter_index),
-            CallableCalendarArgument::specified(calendar),
-        )
-    }
-
-    /// 读取不带 Calendar 的命名 Date OUT 参数。
-    pub fn get_named_date(&mut self, parameter_name: &str) -> Result<Option<NaiveDate>, RdbcError> {
-        self.get_date_with_argument(
-            CallableParameter::by_name(parameter_name),
-            CallableCalendarArgument::unspecified(),
-        )
-    }
-
-    /// 读取带 Calendar 重载的命名 Date OUT 参数。
-    pub fn get_named_date_with_calendar(
-        &mut self,
-        parameter_name: &str,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDate>, RdbcError> {
-        self.get_date_with_argument(
-            CallableParameter::by_name(parameter_name),
-            CallableCalendarArgument::specified(calendar),
-        )
-    }
-
-    /// 读取不带 Calendar 的索引 Time OUT 参数。
-    pub fn get_time(&mut self, parameter_index: usize) -> Result<Option<NaiveTime>, RdbcError> {
-        self.get_time_with_argument(
-            CallableParameter::by_index(parameter_index),
-            CallableCalendarArgument::unspecified(),
-        )
-    }
-
-    /// 读取带 Calendar 重载的索引 Time OUT 参数。
-    pub fn get_time_with_calendar(
-        &mut self,
-        parameter_index: usize,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveTime>, RdbcError> {
-        self.get_time_with_argument(
-            CallableParameter::by_index(parameter_index),
-            CallableCalendarArgument::specified(calendar),
-        )
-    }
-
-    /// 读取不带 Calendar 的命名 Time OUT 参数。
-    pub fn get_named_time(&mut self, parameter_name: &str) -> Result<Option<NaiveTime>, RdbcError> {
-        self.get_time_with_argument(
-            CallableParameter::by_name(parameter_name),
-            CallableCalendarArgument::unspecified(),
-        )
-    }
-
-    /// 读取带 Calendar 重载的命名 Time OUT 参数。
-    pub fn get_named_time_with_calendar(
-        &mut self,
-        parameter_name: &str,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveTime>, RdbcError> {
-        self.get_time_with_argument(
-            CallableParameter::by_name(parameter_name),
-            CallableCalendarArgument::specified(calendar),
-        )
-    }
-
-    /// 读取不带 Calendar 的索引 Timestamp OUT 参数。
-    pub fn get_timestamp(
-        &mut self,
-        parameter_index: usize,
-    ) -> Result<Option<NaiveDateTime>, RdbcError> {
-        self.get_timestamp_with_argument(
-            CallableParameter::by_index(parameter_index),
-            CallableCalendarArgument::unspecified(),
-        )
-    }
-
-    /// 读取带 Calendar 重载的索引 Timestamp OUT 参数。
-    pub fn get_timestamp_with_calendar(
-        &mut self,
-        parameter_index: usize,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDateTime>, RdbcError> {
-        self.get_timestamp_with_argument(
-            CallableParameter::by_index(parameter_index),
-            CallableCalendarArgument::specified(calendar),
-        )
-    }
-
-    /// 读取不带 Calendar 的命名 Timestamp OUT 参数。
-    pub fn get_named_timestamp(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<NaiveDateTime>, RdbcError> {
-        self.get_timestamp_with_argument(
-            CallableParameter::by_name(parameter_name),
-            CallableCalendarArgument::unspecified(),
-        )
-    }
-
-    /// 读取带 Calendar 重载的命名 Timestamp OUT 参数。
-    pub fn get_named_timestamp_with_calendar(
-        &mut self,
-        parameter_name: &str,
-        calendar: Option<CallableCalendar>,
-    ) -> Result<Option<NaiveDateTime>, RdbcError> {
-        self.get_timestamp_with_argument(
-            CallableParameter::by_name(parameter_name),
-            CallableCalendarArgument::specified(calendar),
-        )
-    }
-
-    /// 返回最近一次 OUT 参数读取是否得到 SQL NULL。
-    pub fn was_null(&mut self) -> Result<bool, RdbcError> {
-        self.apply_callable(|statement| statement.was_null())
-    }
-
-    /// 读取索引字符串 OUT 参数。
-    pub fn get_string(&mut self, parameter_index: usize) -> Result<Option<String>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.string_out_parameter(&parameter))
-    }
-
-    /// 读取命名字符串 OUT 参数。
-    pub fn get_named_string(&mut self, parameter_name: &str) -> Result<Option<String>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.string_out_parameter(&parameter))
-    }
-
-    /// 读取索引布尔 OUT 参数；SQL NULL 与 RDBC 一致返回 `false`。
-    pub fn get_boolean(&mut self, parameter_index: usize) -> Result<bool, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.boolean_out_parameter(&parameter))
-    }
-
-    /// 读取命名布尔 OUT 参数；SQL NULL 与 RDBC 一致返回 `false`。
-    pub fn get_named_boolean(&mut self, parameter_name: &str) -> Result<bool, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.boolean_out_parameter(&parameter))
-    }
-
-    /// 读取索引 byte OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_byte(&mut self, parameter_index: usize) -> Result<i8, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.byte_out_parameter(&parameter))
-    }
-
-    /// 读取命名 byte OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_named_byte(&mut self, parameter_name: &str) -> Result<i8, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.byte_out_parameter(&parameter))
-    }
-
-    /// 读取索引 short OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_short(&mut self, parameter_index: usize) -> Result<i16, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.short_out_parameter(&parameter))
-    }
-
-    /// 读取命名 short OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_named_short(&mut self, parameter_name: &str) -> Result<i16, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.short_out_parameter(&parameter))
-    }
-
-    /// 读取索引整数 OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_int(&mut self, parameter_index: usize) -> Result<i32, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.int_out_parameter(&parameter))
-    }
-
-    /// 读取命名整数 OUT 参数；SQL NULL 与 RDBC 一致返回 `0`。
-    pub fn get_named_int(&mut self, parameter_name: &str) -> Result<i32, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.int_out_parameter(&parameter))
-    }
-
-    /// 读取索引长整数 OUT 参数。
-    pub fn get_long(&mut self, parameter_index: usize) -> Result<i64, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.long_out_parameter(&parameter))
-    }
-
-    /// 读取命名长整数 OUT 参数。
-    pub fn get_named_long(&mut self, parameter_name: &str) -> Result<i64, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.long_out_parameter(&parameter))
-    }
-
-    /// 读取索引 float OUT 参数。
-    pub fn get_float(&mut self, parameter_index: usize) -> Result<f32, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.float_out_parameter(&parameter))
-    }
-
-    /// 读取命名 float OUT 参数。
-    pub fn get_named_float(&mut self, parameter_name: &str) -> Result<f32, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.float_out_parameter(&parameter))
-    }
-
-    /// 读取索引双精度 OUT 参数。
-    pub fn get_double(&mut self, parameter_index: usize) -> Result<f64, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.double_out_parameter(&parameter))
-    }
-
-    /// 读取命名双精度 OUT 参数。
-    pub fn get_named_double(&mut self, parameter_name: &str) -> Result<f64, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.double_out_parameter(&parameter))
-    }
-
-    /// 读取索引字节 OUT 参数。
-    pub fn get_bytes(&mut self, parameter_index: usize) -> Result<Option<Vec<u8>>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.bytes_out_parameter(&parameter))
-    }
-
-    /// 读取命名字节 OUT 参数。
-    pub fn get_named_bytes(&mut self, parameter_name: &str) -> Result<Option<Vec<u8>>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.bytes_out_parameter(&parameter))
-    }
-
-    /// 读取索引 national-character 字符串。
-    pub fn get_n_string(&mut self, parameter_index: usize) -> Result<Option<String>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.n_string_out_parameter(&parameter))
-    }
-
-    /// 读取命名 national-character 字符串。
-    pub fn get_named_n_string(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<String>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.n_string_out_parameter(&parameter))
-    }
-
-    /// 读取索引 URL。
-    pub fn get_url(&mut self, parameter_index: usize) -> Result<Option<RdbcUrl>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.url_out_parameter(&parameter))
-    }
-
-    /// 读取命名 URL。
-    pub fn get_named_url(&mut self, parameter_name: &str) -> Result<Option<RdbcUrl>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.url_out_parameter(&parameter))
-    }
-
-    /// 读取索引 RDBC `Ref`。
-    pub fn get_ref(&mut self, parameter_index: usize) -> Result<Option<RdbcRef>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.ref_out_parameter(&parameter))
-    }
-
-    /// 读取命名 RDBC `Ref`。
-    pub fn get_named_ref(&mut self, parameter_name: &str) -> Result<Option<RdbcRef>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.ref_out_parameter(&parameter))
-    }
-
-    /// 读取索引 RDBC `Array`。
-    pub fn get_array(&mut self, parameter_index: usize) -> Result<Option<RdbcArray>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.array_out_parameter(&parameter))
-    }
-
-    /// 读取命名 RDBC `Array`。
-    pub fn get_named_array(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<RdbcArray>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.array_out_parameter(&parameter))
-    }
-
-    /// 读取索引 RDBC `RowId`。
-    pub fn get_row_id(&mut self, parameter_index: usize) -> Result<Option<RdbcRowId>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.row_id_out_parameter(&parameter))
-    }
-
-    /// 读取命名 RDBC `RowId`。
-    pub fn get_named_row_id(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<RdbcRowId>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.row_id_out_parameter(&parameter))
-    }
-
-    /// 读取索引 RDBC `SQLXML`。
-    pub fn get_sql_xml(&mut self, parameter_index: usize) -> Result<Option<RdbcSqlXml>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.sql_xml_out_parameter(&parameter))
-    }
-
-    /// 读取命名 RDBC `SQLXML`。
-    pub fn get_named_sql_xml(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<RdbcSqlXml>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.sql_xml_out_parameter(&parameter))
-    }
-
-    /// 读取索引 Blob OUT 参数。
-    ///
-    /// 对应 Java：`getBlob(int parameterIndex)`。
-    pub fn get_blob(&mut self, parameter_index: usize) -> Result<Option<RdbcBlob>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
-        if result.as_ref().is_ok_and(Option::is_some) {
-            self.record_blob_open();
-        }
-        result
-    }
-
-    /// 读取命名 Blob OUT 参数。
-    ///
-    /// 对应 Java：`getBlob(String parameterName)`。
-    pub fn get_named_blob(&mut self, parameter_name: &str) -> Result<Option<RdbcBlob>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        let result = self.apply_callable(|statement| statement.blob_out_parameter(&parameter));
-        if result.as_ref().is_ok_and(Option::is_some) {
-            self.record_blob_open();
-        }
-        result
-    }
-
-    /// 读取索引 Clob OUT 参数。
-    pub fn get_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcClob>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
-        if result.as_ref().is_ok_and(Option::is_some) {
-            self.record_clob_open();
-        }
-        result
-    }
-
-    /// 读取命名 Clob OUT 参数。
-    pub fn get_named_clob(&mut self, parameter_name: &str) -> Result<Option<RdbcClob>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        let result = self.apply_callable(|statement| statement.clob_out_parameter(&parameter));
-        if result.as_ref().is_ok_and(Option::is_some) {
-            self.record_clob_open();
-        }
-        result
-    }
-
-    /// 读取索引 `NClob` OUT 参数。
-    pub fn get_n_clob(&mut self, parameter_index: usize) -> Result<Option<RdbcNClob>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
-    }
-
-    /// 读取命名 `NClob` OUT 参数。
-    pub fn get_named_n_clob(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<RdbcNClob>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.n_clob_out_parameter(&parameter))
-    }
-
-    /// 读取索引普通字符 Reader OUT 参数。
-    pub fn get_character_stream(
-        &mut self,
-        parameter_index: usize,
-    ) -> Result<Option<RdbcReader>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.character_stream_out_parameter(&parameter))
-    }
-
-    /// 读取命名普通字符 Reader OUT 参数。
-    pub fn get_named_character_stream(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<RdbcReader>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.character_stream_out_parameter(&parameter))
-    }
-
-    /// 读取索引 national character Reader OUT 参数。
-    pub fn get_n_character_stream(
-        &mut self,
-        parameter_index: usize,
-    ) -> Result<Option<RdbcReader>, RdbcError> {
-        let parameter = self.index_parameter(parameter_index)?;
-        self.apply_callable(|statement| statement.n_character_stream_out_parameter(&parameter))
-    }
-
-    /// 读取命名 national character Reader OUT 参数。
-    pub fn get_named_n_character_stream(
-        &mut self,
-        parameter_name: &str,
-    ) -> Result<Option<RdbcReader>, RdbcError> {
-        let parameter = self.named_parameter(parameter_name)?;
-        self.apply_callable(|statement| statement.n_character_stream_out_parameter(&parameter))
-    }
-
-    fn get_date_with_argument(
-        &mut self,
-        parameter: Result<CallableParameter, RdbcError>,
-        calendar: CallableCalendarArgument,
-    ) -> Result<Option<NaiveDate>, RdbcError> {
-        let parameter = self.record_result(parameter)?;
-        self.apply_callable(|statement| statement.date_out_parameter(&parameter, &calendar))
-    }
-
-    fn get_time_with_argument(
-        &mut self,
-        parameter: Result<CallableParameter, RdbcError>,
-        calendar: CallableCalendarArgument,
-    ) -> Result<Option<NaiveTime>, RdbcError> {
-        let parameter = self.record_result(parameter)?;
-        self.apply_callable(|statement| statement.time_out_parameter(&parameter, &calendar))
-    }
-
-    fn get_timestamp_with_argument(
-        &mut self,
-        parameter: Result<CallableParameter, RdbcError>,
-        calendar: CallableCalendarArgument,
-    ) -> Result<Option<NaiveDateTime>, RdbcError> {
-        let parameter = self.record_result(parameter)?;
-        self.apply_callable(|statement| statement.timestamp_out_parameter(&parameter, &calendar))
-    }
-
-    fn register(
-        &mut self,
-        parameter: CallableParameter,
-        out_parameter: CallableOutParameter,
-    ) -> Result<(), RdbcError> {
-        self.apply_callable(|statement| statement.register_out_parameter(parameter, out_parameter))
-    }
-
-    fn get(&mut self, parameter: CallableParameter) -> Result<RdbcObject, RdbcError> {
-        let result = self.apply_callable(|statement| statement.out_parameter(&parameter));
-        self.record_object_lob_result(&result);
-        result
-    }
-
-    fn apply_callable<T>(
-        &mut self,
-        operation: impl FnOnce(&dyn PhysicalCallableStatement) -> Result<T, RdbcError>,
-    ) -> Result<T, RdbcError> {
-        let result = self.physical_callable_statement().and_then(operation);
-        if result.is_err() {
-            self.prepared_statement.record_exception();
-        }
-        result
-    }
-
-    fn index_parameter(&mut self, parameter_index: usize) -> Result<CallableParameter, RdbcError> {
-        let result = CallableParameter::by_index(parameter_index);
-        self.record_result(result)
-    }
-
-    fn named_parameter(
-        &mut self,
-        parameter_name: impl Into<String>,
-    ) -> Result<CallableParameter, RdbcError> {
-        let result = CallableParameter::by_name(parameter_name);
-        self.record_result(result)
-    }
-
-    fn record_result<T>(&mut self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
-        if result.is_err() {
-            self.prepared_statement.record_exception();
-        }
-        result
-    }
-
-    fn record_blob_open(&self) {
-        self.prepared_statement
-            .pooled_statement()
-            .record_blob_open();
-    }
-
-    fn record_object_lob_result(&self, result: &Result<RdbcObject, RdbcError>) {
-        let Ok(value) = result.as_ref() else {
-            return;
-        };
-        match value {
-            RdbcObject::Blob(_) => self.record_blob_open(),
-            RdbcObject::Clob(_) | RdbcObject::NClob(_) => self.record_clob_open(),
-            _ => {}
-        }
-    }
-
-    fn record_clob_open(&self) {
-        self.prepared_statement
-            .pooled_statement()
-            .record_clob_open();
+impl std::fmt::Debug for DruidPooledCallableStatement {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("DruidPooledCallableStatement")
+            .field("sql", &self.sql)
+            .field("statement_base", &self.statement_base)
+            .field("closed", &self.is_closed())
+            .finish_non_exhaustive()
     }
 }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::core::{ConfigFilter, DruidError, PhysicalConnectionFactory};
+use crate::core::{ConfigFilter, ConnectionFactory, DruidError};
 use crate::sql::{RdbcUtils, WallConfig};
 
 use super::{DruidDataSource, DruidPoolBuilder};
@@ -12,14 +12,14 @@ use super::{DruidDataSource, DruidPoolBuilder};
 /// 从 Java Druid 属性创建 canonical 数据源。
 ///
 /// 对应 Java: `com.alibaba.druid.pool.DruidDataSourceFactory`。所有入口接受
-/// 外部 `PhysicalConnectionFactory`；Toasty 默认工厂已迁移至 `druid-wrapper`。
+/// 外部 `ConnectionFactory`；Toasty 默认工厂已迁移至 `druid-wrapper`。
 pub struct DruidDataSourceFactory;
 
 impl DruidDataSourceFactory {
     /// 在构造具体驱动 factory 前执行 Java `ConfigFilter` 初始化语义。
     ///
     /// SQLx/RBDC 等扩展应先调用此方法，再用返回的 URL、用户名与密码构造
-    /// `PhysicalConnectionFactory`，从而避免先建驱动、后下载配置的错误顺序。
+    /// `ConnectionFactory`，从而避免先建驱动、后下载配置的错误顺序。
     pub async fn resolve_config_properties(
         properties: &HashMap<String, String>,
     ) -> Result<HashMap<String, String>, DruidError> {
@@ -33,7 +33,7 @@ impl DruidDataSourceFactory {
     /// 使用外部未池化物理连接 factory 创建数据源。
     pub async fn create_data_source_with_factory(
         properties: &HashMap<String, String>,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         default_driver_name: impl Into<String>,
     ) -> Result<DruidDataSource, DruidError> {
         let properties = Self::resolve_config_properties(properties).await?;
@@ -43,14 +43,14 @@ impl DruidDataSourceFactory {
 
     async fn create_data_source_with_factory_resolved(
         properties: &HashMap<String, String>,
-        factory: Arc<dyn PhysicalConnectionFactory>,
+        factory: Arc<dyn ConnectionFactory>,
         default_driver_name: impl Into<String>,
     ) -> Result<DruidDataSource, DruidError> {
         let driver_name = properties
             .get(Self::PROP_DRIVER_CLASS_NAME)
             .cloned()
             .unwrap_or_else(|| default_driver_name.into());
-        let connection_properties = physical_connection_properties(properties);
+        let connection_properties = driver_connection_properties(properties);
         let mut builder = DruidPoolBuilder::new()
             .factory(factory)
             .driver_name(&driver_name)
@@ -208,7 +208,7 @@ impl DruidDataSourceFactory {
         if let Some(value) = optional_i64(properties, Self::PROP_PHY_TIMEOUT_MILLIS)?
             .or(optional_i64(properties, "druid.phyTimeoutMillis")?)
         {
-            builder = builder.physical_connection_timeout(non_negative_duration(
+            builder = builder.driver_connection_timeout(non_negative_duration(
                 Self::PROP_PHY_TIMEOUT_MILLIS,
                 value,
             )?);
@@ -557,7 +557,7 @@ fn parse_connection_properties(source: &str) -> HashMap<String, String> {
         .collect()
 }
 
-fn physical_connection_properties(properties: &HashMap<String, String>) -> HashMap<String, String> {
+fn driver_connection_properties(properties: &HashMap<String, String>) -> HashMap<String, String> {
     let mut connection_properties = properties
         .get("connectionProperties")
         .map(|source| parse_connection_properties(source))

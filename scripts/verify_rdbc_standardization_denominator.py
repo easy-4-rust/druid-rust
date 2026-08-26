@@ -163,9 +163,10 @@ def repository_root() -> Path:
 def run_git(root: Path, arguments: list[str]) -> bytes:
     """Run one read-only Git query used to anchor the P03 denominator."""
 
+    git_root = root if (root / ".git").exists() else repository_root()
     completed = subprocess.run(
         ["git", *arguments],
-        cwd=root,
+        cwd=git_root,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         check=False,
@@ -291,10 +292,10 @@ def parse_adapter_payload(payload: bytes) -> list[AdapterRow]:
     rows = parse_dataclass_tsv(payload, ADAPTER_HEADER, AdapterRow, "adapter")
     for row in rows:
         if row.state == "STANDARD_IMPL_LIVE":
-            if (
-                row.target_task != "P04_TASK_4_ADAPTER_CUTOVER"
-                or row.owner != "WRAPPER_ADAPTER"
-            ):
+            if row.target_task != "P04_TASK_4_ADAPTER_CUTOVER" or row.owner not in {
+                "WRAPPER_ADAPTER",
+                "WRAPPER_STANDARD",
+            }:
                 fail("adapter LIVE state is only valid for Task 4 wrapper rows")
             if any(
                 value == "-"
@@ -337,6 +338,7 @@ def parse_consumer_payload(payload: bytes) -> list[ConsumerRow]:
         elif row.state in {
             "DRUID_INTERNAL_REFERENCE_CLOSED",
             "TASK6_COMPATIBILITY_PENDING",
+            "TASK6_COMPATIBILITY_CLOSED",
             "TASK7_RESOURCE_OPERATIONS_PENDING",
         }:
             if row.target_task != "P04_TASK_5_DRUID_INTERNALIZATION":
@@ -717,6 +719,21 @@ def scan_public_items(root: Path) -> dict[str, tuple[str, str]]:
     for domain in ("spi", "resource"):
         source_root = root / "crates/druid-rdbc/src" / domain
         if not source_root.is_dir():
+            if domain == "spi":
+                crate_root = root / "crates/druid-rdbc/src/lib.rs"
+                if not crate_root.is_file():
+                    fail(f"RDBC crate root not found: {crate_root}")
+                tokens = rust_tokens(crate_root.read_text(encoding="utf-8"))
+                excluded = production_excluded_indexes(tokens)
+                declares_spi = any(
+                    index not in excluded
+                    and index + 1 < len(tokens)
+                    and tokens[index].text == "mod"
+                    and canonical_name(tokens[index + 1]) == "spi"
+                    for index in range(len(tokens))
+                )
+                if not declares_spi:
+                    continue
             fail(f"RDBC source domain not found: {source_root}")
         for source_file in sorted(source_root.rglob("*.rs")):
             relative = source_file.relative_to(root)
@@ -2824,18 +2841,7 @@ def pinned_task4_closed_consumers(root: Path) -> tuple[ConsumerRow, ...]:
     """Load and authenticate the exact 21 pre-cutover wrapper identities from 8252a20."""
 
     source = DEFAULT_CONSUMERS.as_posix()
-    result = subprocess.run(
-        ["git", "show", f"{TASK4_PRE_CUTOVER_COMMIT}:{source}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()
-        fail(
-            "cannot load pinned Task 4 consumer history from "
-            f"{TASK4_PRE_CUTOVER_COMMIT}: {detail or 'git show failed'}"
-        )
+    payload = run_git(root, ["show", f"{TASK4_PRE_CUTOVER_COMMIT}:{source}"])
     pinned = tuple(
         sorted(
             ConsumerRow(
@@ -2847,7 +2853,7 @@ def pinned_task4_closed_consumers(root: Path) -> tuple[ConsumerRow, ...]:
                 row.target_task,
                 "STANDARD_REFERENCE_CLOSED",
             )
-            for row in parse_consumer_payload(result.stdout)
+            for row in parse_consumer_payload(payload)
             if row.target_task == "P04_TASK_4_ADAPTER_CUTOVER"
             and row.source_path.startswith("crates/druid-wrapper/")
             and row.old_path
@@ -2872,20 +2878,10 @@ def pinned_task5_consumers(root: Path) -> tuple[ConsumerRow, ...]:
     """Load the complete source-derived Task 5 denominator from its authorized base."""
 
     source = DEFAULT_CONSUMERS.as_posix()
-    result = subprocess.run(
-        ["git", "show", f"{TASK5_PRE_CUTOVER_COMMIT}:{source}"],
-        cwd=root,
-        check=False,
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        detail = result.stderr.decode("utf-8", errors="replace").strip()
-        fail(
-            f"cannot load pinned Task 5 consumer history: {detail or 'git show failed'}"
-        )
+    payload = run_git(root, ["show", f"{TASK5_PRE_CUTOVER_COMMIT}:{source}"])
     rows = tuple(
         row
-        for row in parse_consumer_payload(result.stdout)
+        for row in parse_consumer_payload(payload)
         if row.target_task == "P04_TASK_5_DRUID_INTERNALIZATION"
     )
     if len(rows) != 357:
@@ -3037,6 +3033,69 @@ def verify_denominator(
     return LiveManifests(live.physical, projected_adapters, projected_consumers)
 
 
+def verify_final_denominator(
+    root: Path,
+    physical_path: Path,
+    adapter_path: Path,
+    consumer_path: Path,
+) -> LiveManifests:
+    """Verify the exact Task 6 historical manifests after transitional source deletion."""
+
+    physical_file = (
+        physical_path if physical_path.is_absolute() else root / physical_path
+    )
+    adapter_file = adapter_path if adapter_path.is_absolute() else root / adapter_path
+    consumer_file = (
+        consumer_path if consumer_path.is_absolute() else root / consumer_path
+    )
+    physical_payload = physical_file.read_bytes()
+    adapter_payload = adapter_file.read_bytes()
+    consumer_payload = consumer_file.read_bytes()
+    physical = tuple(parse_physical_payload(physical_payload, allow_legacy=False))
+    adapters = tuple(parse_adapter_payload(adapter_payload))
+    consumers = tuple(parse_consumer_payload(consumer_payload))
+    if physical_payload != render_physical_rows(physical):
+        fail("final physical manifest is not canonical")
+    if adapter_payload != render_adapter_rows(adapters):
+        fail("final adapter manifest is not canonical")
+    if consumer_payload != render_consumer_rows(consumers):
+        fail("final consumer manifest is not canonical")
+    if len(physical) != 73 or Counter(row.compatibility for row in physical) != Counter(
+        {
+            "TASK6_CLOSED": 57,
+            "MOVE_TO_DRUID_P04_TASK5": 10,
+            "REPLACE_VALUE_ALIAS_WITH_STANDARD_TRAIT_P04_TASK7": 6,
+        }
+    ):
+        fail(
+            "final physical denominator must retain the exact 73-row disposition history"
+        )
+    if len(adapters) != 31 or any(
+        row.owner != "WRAPPER_STANDARD"
+        or row.state != "STANDARD_IMPL_LIVE"
+        or "Physical" in row.current_trait
+        or row.current_trait != row.target_trait
+        or not (root / row.source_path).is_file()
+        for row in adapters
+    ):
+        fail("final adapter denominator must be 31 canonical live rows")
+    expected_states = Counter(
+        {
+            "CURRENT_REFERENCE_TARGET_PLANNED": 3263,
+            "DRUID_INTERNAL_REFERENCE_CLOSED": 180,
+            "TASK7_RESOURCE_OPERATIONS_PENDING": 108,
+            "TASK6_COMPATIBILITY_CLOSED": 75,
+            "STANDARD_REFERENCE_CLOSED": 21,
+        }
+    )
+    states = Counter(row.state for row in consumers)
+    if len(consumers) != 3647 or states != expected_states:
+        fail(f"final consumer denominator state drift: {states} != {expected_states}")
+    if states["TASK6_COMPATIBILITY_PENDING"] != 0:
+        fail("Task 6 consumer transitions remain active")
+    return LiveManifests(physical, adapters, consumers)
+
+
 def emit_live(
     root: Path,
     physical_path: Path,
@@ -3085,6 +3144,7 @@ def parse_arguments() -> argparse.Namespace:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--emit-live", action="store_true")
+    parser.add_argument("--require-consumers-final", action="store_true")
     parser.add_argument("physical", nargs="?", type=Path, default=P03_MANIFEST)
     parser.add_argument("adapters", nargs="?", type=Path, default=DEFAULT_ADAPTERS)
     parser.add_argument("consumers", nargs="?", type=Path, default=DEFAULT_CONSUMERS)
@@ -3097,7 +3157,11 @@ def main() -> int:
     arguments = parse_arguments()
     root = repository_root()
     try:
-        if arguments.emit_live:
+        if arguments.require_consumers_final:
+            live = verify_final_denominator(
+                root, arguments.physical, arguments.adapters, arguments.consumers
+            )
+        elif arguments.emit_live:
             live = emit_live(
                 root, arguments.physical, arguments.adapters, arguments.consumers
             )

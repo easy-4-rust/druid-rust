@@ -1,26 +1,24 @@
 //! `SQLXML#setResult` 返回的 XML Result 平台句柄。
 
+use crate::extensions::XmlResult;
 use std::fmt;
 use std::sync::Arc;
-
-/// 物理 XML Result marker SPI。
-pub trait PhysicalXmlResult: fmt::Debug + Send + Sync {}
 
 /// 不泄漏具体 XML 框架类型的 Result 句柄。
 #[derive(Clone)]
 pub struct RdbcXmlResult {
-    physical: Arc<dyn PhysicalXmlResult>,
+    value: Arc<dyn XmlResult>,
 }
 
 impl RdbcXmlResult {
-    /// 包装物理 XML Result。
-    pub fn new(physical: Arc<dyn PhysicalXmlResult>) -> Self {
-        Self { physical }
+    /// 包装一个 adapter XML Result。
+    pub fn new(value: Arc<dyn XmlResult>) -> Self {
+        Self { value }
     }
 
-    /// 返回物理 Result SPI。
-    pub fn physical(&self) -> &dyn PhysicalXmlResult {
-        self.physical.as_ref()
+    /// 返回底层 Result representation。
+    pub fn value(&self) -> &dyn XmlResult {
+        self.value.as_ref()
     }
 }
 
@@ -28,14 +26,14 @@ impl fmt::Debug for RdbcXmlResult {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("RdbcXmlResult")
-            .field("physical", &self.physical)
+            .field("value", &self.value)
             .finish()
     }
 }
 
 impl PartialEq for RdbcXmlResult {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.physical, &other.physical)
+        Arc::ptr_eq(&self.value, &other.value)
     }
 }
 

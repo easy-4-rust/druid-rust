@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::ResultSetMetaData;
+pub use druid_rdbc::metadata::{ResultSetMetaData, ResultSetMetaDataSnapshot};

@@ -1,23 +1,22 @@
-use super::{
-    AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions,
-    JdbcAgentPreparedStatement,
-};
+use super::{AgentValue, JdbcAgentClient, JdbcAgentDatabaseMetaData, JdbcAgentOptions};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
-use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_executor::{
+    owned_executor, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
+};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{
-    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
-    StatementExecuteResult, StatementGeneratedKeys,
-};
-use druid_rdbc::types::{Row, Savepoint, Value};
+use druid_rdbc::types::{Row, Value};
 use serde_json::{json, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+enum JdbcAgentExecutionResult {
+    Query,
+    Update(AdapterUpdateResult),
+}
 
 #[async_trait::async_trait]
 pub(super) trait JdbcAgentTransport: Send {
@@ -28,7 +27,6 @@ pub(super) trait JdbcAgentTransport: Send {
     ) -> Result<JsonValue, RdbcError>;
     async fn close(&mut self) -> Result<(), RdbcError>;
     fn is_unusable(&self) -> bool;
-    fn statement_context(&self) -> Option<(super::AgentRequestHandle, String)>;
 }
 
 #[async_trait::async_trait]
@@ -47,10 +45,6 @@ impl JdbcAgentTransport for JdbcAgentClient {
 
     fn is_unusable(&self) -> bool {
         JdbcAgentClient::is_unusable(self)
-    }
-
-    fn statement_context(&self) -> Option<(super::AgentRequestHandle, String)> {
-        Some(JdbcAgentClient::statement_context(self))
     }
 }
 
@@ -81,7 +75,7 @@ impl JdbcAgentConnector for NativeJdbcAgentConnector {
 #[allow(clippy::struct_excessive_bools)]
 pub struct JdbcAgentConnection {
     client: Option<Box<dyn JdbcAgentTransport>>,
-    capabilities: PhysicalConnectionCapabilities,
+    capabilities: druid_rdbc::extensions::ConnectionCapabilities,
     auto_commit: bool,
     read_only: bool,
     transaction_isolation: u8,
@@ -89,8 +83,6 @@ pub struct JdbcAgentConnection {
     schema: Option<String>,
     closed: bool,
     discarded: bool,
-    savepoint_sequence: u64,
-    savepoint_ids: HashMap<u64, String>,
     metadata: JdbcAgentDatabaseMetaData,
     driver_name: String,
     standard_executor: Option<Arc<dyn StandardExecutor>>,
@@ -145,34 +137,19 @@ impl JdbcAgentConnection {
             .unwrap_or("jdbc-agent")
             .to_owned();
         let metadata = JdbcAgentDatabaseMetaData::new(
-            url,
-            Some(driver_name.clone()),
-            session
-                .get("driverVersion")
-                .and_then(JsonValue::as_str)
-                .map(str::to_owned),
             session
                 .get("databaseProductName")
                 .and_then(JsonValue::as_str)
                 .map(str::to_owned),
-            session
-                .get("databaseProductVersion")
-                .and_then(JsonValue::as_str)
-                .map(str::to_owned),
-            supports_transactions,
         );
         Ok(Self {
             client: Some(client),
-            capabilities: PhysicalConnectionCapabilities {
+            capabilities: druid_rdbc::extensions::ConnectionCapabilities {
                 transactions: supports_transactions,
                 savepoints: capability("savepoints"),
-                auto_commit: capability("autoCommit"),
-                read_only: capability("readOnly"),
-                transaction_isolation: capability("transactionIsolation"),
-                holdability: false,
-                clear_warnings: false,
-                catalog: capability("catalog"),
-                schema: capability("schema"),
+                catalogs: capability("catalog"),
+                schemas: capability("schema"),
+                callable_statements: true,
             },
             auto_commit: session
                 .get("autoCommit")
@@ -197,8 +174,6 @@ impl JdbcAgentConnection {
                 .map(ToOwned::to_owned),
             closed: false,
             discarded: false,
-            savepoint_sequence: 0,
-            savepoint_ids: HashMap::new(),
             metadata,
             driver_name,
             standard_executor: None,
@@ -208,10 +183,6 @@ impl JdbcAgentConnection {
 
     pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
         self.runtime_trace = Some(runtime_trace);
-    }
-
-    fn client_core(&self) -> Result<&dyn JdbcAgentTransport, RdbcError> {
-        self.client.as_deref().ok_or(RdbcError::ConnectionDiscarded)
     }
 
     fn client_mut_core(&mut self) -> Result<&mut (dyn JdbcAgentTransport + '_), RdbcError> {
@@ -237,8 +208,6 @@ impl JdbcAgentConnection {
             schema: self.schema.clone(),
             closed: false,
             discarded: self.discarded,
-            savepoint_sequence: self.savepoint_sequence,
-            savepoint_ids: HashMap::new(),
             metadata: self.metadata.clone(),
             driver_name: self.driver_name.clone(),
             standard_executor: None,
@@ -254,34 +223,22 @@ impl JdbcAgentConnection {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         self.ensure_open()?;
         let results = self
-            .execute_request(sql, params, StatementGeneratedKeys::AutoGeneratedKeys(1))
+            .execute_request(
+                sql,
+                params,
+                druid_rdbc::statement::GeneratedKeys::ReturnGeneratedKeys,
+            )
             .await?;
         match results.into_iter().next() {
-            Some(StatementExecuteResult::Update(result)) => Ok(result),
-            Some(StatementExecuteResult::ResultSet(_)) => Err(Self::protocol_error(
+            Some(JdbcAgentExecutionResult::Update(result)) => Ok(result),
+            Some(JdbcAgentExecutionResult::Query) => Err(Self::protocol_error(
                 "exec received a result set instead of an update count",
             )),
             None => Err(Self::protocol_error("execute returned no result")),
         }
-    }
-
-    async fn execute_query_core(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.ensure_open()?;
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_query",
-                json!({"sql": sql, "params": Self::parameters(params)?}),
-            )
-            .await?;
-        self.collect_query_payload(payload).await
     }
 
     async fn close_connection_core(&mut self) -> Result<(), RdbcError> {
@@ -427,7 +384,7 @@ impl JdbcAgentConnection {
         }
     }
 
-    fn exec_result(payload: &JsonValue) -> Result<ExecResult, RdbcError> {
+    fn exec_result(payload: &JsonValue) -> Result<AdapterUpdateResult, RdbcError> {
         let rows_affected = payload
             .get("rowsAffected")
             .and_then(JsonValue::as_u64)
@@ -440,42 +397,30 @@ impl JdbcAgentConnection {
                     .ok_or_else(|| Self::protocol_error("lastInsertId is not a signed integer"))?,
             ),
         };
-        Ok(ExecResult {
+        Ok(AdapterUpdateResult {
             rows_affected,
             last_insert_id,
             row_count: None,
         })
     }
 
-    fn generated_keys(generated_keys: StatementGeneratedKeys) -> JsonValue {
+    fn generated_keys(generated_keys: druid_rdbc::statement::GeneratedKeys) -> JsonValue {
         match generated_keys {
-            StatementGeneratedKeys::None => json!({"mode": "none"}),
-            StatementGeneratedKeys::AutoGeneratedKeys(value) => {
-                json!({"mode": "auto", "value": value})
+            druid_rdbc::statement::GeneratedKeys::ReturnGeneratedKeys => {
+                json!({"mode": "auto", "value": 1})
             }
-            StatementGeneratedKeys::ColumnIndexes(value) => {
+            druid_rdbc::statement::GeneratedKeys::ColumnIndexes(value) => {
+                let value = value
+                    .into_iter()
+                    .map(druid_rdbc::result_set::ColumnIndex::get)
+                    .collect::<Vec<_>>();
                 json!({"mode": "column_indexes", "value": value})
             }
-            StatementGeneratedKeys::ColumnNames(value) => {
+            druid_rdbc::statement::GeneratedKeys::ColumnNames(value) => {
                 json!({"mode": "column_names", "value": value})
             }
+            _ => json!({"mode": "none"}),
         }
-    }
-
-    fn statement(
-        statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&JdbcAgentPreparedStatement, RdbcError> {
-        if statement.is_closed() {
-            return Err(RdbcError::ConnectionDiscarded);
-        }
-        statement
-            .as_any()
-            .downcast_ref::<JdbcAgentPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError(
-                    "prepared statement was not created by JdbcAgentConnection".to_owned(),
-                )
-            })
     }
 
     fn protocol_error(message: impl Into<String>) -> RdbcError {
@@ -490,33 +435,12 @@ impl JdbcAgentConnection {
         ))
     }
 
-    async fn create_savepoint(&mut self, name: Option<&str>) -> Result<Savepoint, RdbcError> {
-        self.ensure_open()?;
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        let payload = self
-            .client_mut_core()?
-            .request("set_savepoint", json!({"name": name}))
-            .await?;
-        let remote_id = payload
-            .get("savepointId")
-            .and_then(JsonValue::as_str)
-            .filter(|value| !value.is_empty())
-            .ok_or_else(|| Self::protocol_error("set_savepoint response lacks savepointId"))?
-            .to_owned();
-        let savepoint = Savepoint {
-            id: self.savepoint_sequence,
-            name: name.map(str::to_owned),
-        };
-        self.savepoint_ids.insert(savepoint.id, remote_id);
-        Ok(savepoint)
-    }
-
     async fn execute_request(
         &mut self,
         sql: &str,
         params: Vec<Value>,
-        generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<Vec<JdbcAgentExecutionResult>, RdbcError> {
         let payload = self
             .client_mut_core()?
             .request(
@@ -529,10 +453,11 @@ impl JdbcAgentConnection {
             )
             .await?;
         match payload.get("kind").and_then(JsonValue::as_str) {
-            Some("result_set") => Ok(vec![StatementExecuteResult::ResultSet(
-                self.collect_query_payload(payload).await?,
-            )]),
-            Some("update") => Ok(vec![StatementExecuteResult::Update(Self::exec_result(
+            Some("result_set") => {
+                let _ = self.collect_query_payload(payload).await?;
+                Ok(vec![JdbcAgentExecutionResult::Query])
+            }
+            Some("update") => Ok(vec![JdbcAgentExecutionResult::Update(Self::exec_result(
                 &payload,
             )?)]),
             Some(kind) => Err(Self::protocol_error(format!(
@@ -555,412 +480,6 @@ impl std::fmt::Debug for JdbcAgentConnection {
             .field("closed", &self.closed)
             .field("discarded", &self.discarded)
             .finish_non_exhaustive()
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnection for JdbcAgentConnection {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        self.execute_update_core(sql, params).await
-    }
-
-    async fn execute(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-        generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        self.ensure_open()?;
-        self.execute_request(sql, params, generated_keys).await
-    }
-
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, params).await
-    }
-
-    async fn fetch_result_set(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        self.ensure_open()?;
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_query",
-                json!({"sql": sql, "params": Self::parameters(params)?}),
-            )
-            .await?;
-        let labels = Self::column_labels(&payload)?;
-        let rows = self.collect_query_payload(payload).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        self.ensure_open()?;
-        let result = self
-            .client_mut_core()?
-            .request(
-                "prepare",
-                json!({
-                    "sql": key.sql(),
-                    "generatedKeys": Self::generated_keys(key.statement_generated_keys()),
-                }),
-            )
-            .await?;
-        let statement_id = result
-            .get("statementId")
-            .and_then(JsonValue::as_str)
-            .filter(|statement_id| !statement_id.is_empty())
-            .ok_or_else(|| Self::protocol_error("prepare response does not contain statementId"))?
-            .to_owned();
-        let (request_handle, session_id) = self
-            .client_core()?
-            .statement_context()
-            .ok_or_else(|| Self::protocol_error("transport has no physical statement context"))?;
-        Ok(Arc::new(JdbcAgentPreparedStatement::new(
-            key,
-            statement_id,
-            session_id,
-            request_handle,
-        )))
-    }
-
-    async fn exec_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
-        self.ensure_open()?;
-        let statement = Self::statement(statement)?;
-        let statement_id = statement.statement_id().to_owned();
-        let query_timeout_seconds = statement.query_timeout_seconds();
-        let generated_keys = statement.generated_keys();
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_prepared",
-                json!({
-                    "statementId": statement_id,
-                    "params": Self::parameters(params)?,
-                    "mode": "update",
-                    "queryTimeoutSeconds": query_timeout_seconds,
-                    "generatedKeys": Self::generated_keys(generated_keys),
-                }),
-            )
-            .await?;
-        Self::exec_result(&payload)
-    }
-
-    async fn exec_prepared_batch(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        parameter_sets: Vec<Vec<Value>>,
-    ) -> Result<Vec<i32>, RdbcError> {
-        self.ensure_open()?;
-        let statement = Self::statement(statement)?;
-        let parameter_sets = parameter_sets
-            .into_iter()
-            .map(Self::parameters)
-            .collect::<Result<Vec<_>, _>>()?;
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_prepared_batch",
-                json!({
-                    "statementId": statement.statement_id(),
-                    "parameterSets": parameter_sets,
-                    "queryTimeoutSeconds": statement.query_timeout_seconds(),
-                }),
-            )
-            .await?;
-        payload
-            .get("updateCounts")
-            .and_then(JsonValue::as_array)
-            .ok_or_else(|| {
-                Self::protocol_error("execute_prepared_batch response lacks updateCounts")
-            })?
-            .iter()
-            .map(|value| {
-                value
-                    .as_i64()
-                    .and_then(|value| i32::try_from(value).ok())
-                    .ok_or_else(|| {
-                        Self::protocol_error(
-                            "execute_prepared_batch update count is not a signed 32-bit integer",
-                        )
-                    })
-            })
-            .collect()
-    }
-
-    async fn execute_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-        generated_keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        self.ensure_open()?;
-        let statement = Self::statement(statement)?;
-        let statement_id = statement.statement_id().to_owned();
-        let query_timeout_seconds = statement.query_timeout_seconds();
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_prepared",
-                json!({
-                    "statementId": statement_id,
-                    "params": Self::parameters(params)?,
-                    "mode": "execute",
-                    "queryTimeoutSeconds": query_timeout_seconds,
-                    "generatedKeys": Self::generated_keys(generated_keys),
-                }),
-            )
-            .await?;
-        match payload.get("kind").and_then(JsonValue::as_str) {
-            Some("result_set") => Ok(vec![StatementExecuteResult::ResultSet(
-                self.collect_query_payload(payload).await?,
-            )]),
-            Some("update") => Ok(vec![StatementExecuteResult::Update(Self::exec_result(
-                &payload,
-            )?)]),
-            Some(kind) => Err(Self::protocol_error(format!(
-                "unsupported execute_prepared result kind '{kind}'"
-            ))),
-            None => Err(Self::protocol_error(
-                "execute_prepared response does not contain kind",
-            )),
-        }
-    }
-
-    async fn fetch_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.ensure_open()?;
-        let statement = Self::statement(statement)?;
-        let statement_id = statement.statement_id().to_owned();
-        let query_timeout_seconds = statement.query_timeout_seconds();
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_prepared",
-                json!({
-                    "statementId": statement_id,
-                    "params": Self::parameters(params)?,
-                    "mode": "query",
-                    "queryTimeoutSeconds": query_timeout_seconds,
-                }),
-            )
-            .await?;
-        self.collect_query_payload(payload).await
-    }
-
-    async fn fetch_prepared_result_set(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        self.ensure_open()?;
-        let statement = Self::statement(statement)?;
-        let payload = self
-            .client_mut_core()?
-            .request(
-                "execute_prepared",
-                json!({
-                    "statementId": statement.statement_id(),
-                    "params": Self::parameters(params)?,
-                    "mode": "query",
-                    "queryTimeoutSeconds": statement.query_timeout_seconds(),
-                }),
-            )
-            .await?;
-        let labels = Self::column_labels(&payload)?;
-        let rows = self.collect_query_payload(payload).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(rows, labels)))
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("begin", JsonValue::Null)
-            .await?;
-        self.auto_commit = false;
-        Ok(())
-    }
-
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("commit", JsonValue::Null)
-            .await?;
-        self.savepoint_ids.clear();
-        Ok(())
-    }
-
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("rollback", JsonValue::Null)
-            .await?;
-        self.savepoint_ids.clear();
-        Ok(())
-    }
-
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        let savepoint_id = self
-            .savepoint_ids
-            .get(&savepoint.id)
-            .ok_or_else(|| {
-                RdbcError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
-            })?
-            .clone();
-        self.client_mut_core()?
-            .request(
-                "rollback_to_savepoint",
-                json!({"savepointId": savepoint_id}),
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
-        self.create_savepoint(None).await
-    }
-
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
-        if name.is_empty() {
-            return Err(RdbcError::InvalidArgument(
-                "JDBC savepoint name must not be empty".to_owned(),
-            ));
-        }
-        self.create_savepoint(Some(name)).await
-    }
-
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        let savepoint_id = self.savepoint_ids.remove(&savepoint.id).ok_or_else(|| {
-            RdbcError::InvalidArgument(format!("unknown JDBC Agent savepoint {}", savepoint.id))
-        })?;
-        self.client_mut_core()?
-            .request("release_savepoint", json!({"savepointId": savepoint_id}))
-            .await?;
-        Ok(())
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("validate_connection", JsonValue::Null)
-            .await?;
-        Ok(())
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_connection_core().await
-    }
-
-    fn is_closed(&self) -> bool {
-        self.closed
-            || self
-                .client
-                .as_deref()
-                .is_none_or(JdbcAgentTransport::is_unusable)
-    }
-
-    fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        self.capabilities
-    }
-
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        self.ensure_open()?;
-        Ok(Box::new(self.metadata.clone()))
-    }
-
-    fn auto_commit(&self) -> bool {
-        self.auto_commit
-    }
-
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("set_auto_commit", json!({"value": auto_commit}))
-            .await?;
-        self.auto_commit = auto_commit;
-        Ok(())
-    }
-
-    fn read_only(&self) -> bool {
-        self.read_only
-    }
-
-    async fn set_read_only(&mut self, read_only: bool) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("set_read_only", json!({"value": read_only}))
-            .await?;
-        self.read_only = read_only;
-        Ok(())
-    }
-
-    fn transaction_isolation(&self) -> u8 {
-        self.transaction_isolation
-    }
-
-    async fn set_transaction_isolation(&mut self, level: u8) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("set_transaction_isolation", json!({"value": level}))
-            .await?;
-        self.transaction_isolation = level;
-        Ok(())
-    }
-
-    fn catalog(&self) -> Option<&str> {
-        self.catalog.as_deref()
-    }
-
-    async fn set_catalog(&mut self, catalog: &str) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("set_catalog", json!({"value": catalog}))
-            .await?;
-        self.catalog = Some(catalog.to_owned());
-        Ok(())
-    }
-
-    fn schema(&self) -> Option<&str> {
-        self.schema.as_deref()
-    }
-
-    async fn set_schema(&mut self, schema: &str) -> Result<(), RdbcError> {
-        self.ensure_open()?;
-        self.client_mut_core()?
-            .request("set_schema", json!({"value": schema}))
-            .await?;
-        self.schema = Some(schema.to_owned());
-        Ok(())
-    }
-
-    fn mark_discarded(&mut self) {
-        self.discarded = true;
-    }
-
-    fn is_discarded(&self) -> bool {
-        self.discarded
-            || self
-                .client
-                .as_deref()
-                .is_none_or(JdbcAgentTransport::is_unusable)
-    }
-
-    fn driver_name(&self) -> &str {
-        &self.driver_name
     }
 }
 
@@ -1056,5 +575,9 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
             .standard_executor
             .as_ref()
             .map_or(self.closed, |executor| executor.is_closed()))
+    }
+
+    fn capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities {
+        self.capabilities
     }
 }

@@ -2,12 +2,11 @@
 //! 来源文件：`core/src/main/java/com/alibaba/druid/filter/logging/LogFilter.java`。
 
 use super::{
-    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionEventContext,
+    AfterFilter, BatchExecContext, BeforeFilter, ConnectionCloseFilterChain, ConnectionEvent,
+    ConnectionEventContext, ConnectionOpenFilterChain, ConnectionOpenResult,
     DataSourceGetConnectionFilterChain, DataSourceReleaseConnectionFilterChain, DruidError,
-    DruidPooledConnection, ExecContext, ExecOperation, ExecResult,
-    PhysicalConnectionCloseFilterChain, PhysicalConnectionConnectFilterChain,
-    PhysicalConnectionConnectResult, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
-    StandardResultSetFilterChain, StatementEvent, StatementEventContext,
+    DruidPooledConnection, ExecContext, ExecOperation, ExecResult, ResultSetFilter,
+    ResultSetFilterContext, StandardResultSetFilterChain, StatementEvent, StatementEventContext,
 };
 use crate::sql::SqlFormatOption;
 use parking_lot::RwLock;
@@ -602,9 +601,9 @@ impl BeforeFilter for LogFilter {
 
     async fn connection_connect(
         &self,
-        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        chain: &mut ConnectionOpenFilterChain<'_>,
         properties: &mut HashMap<String, String>,
-    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+    ) -> Result<ConnectionOpenResult, DruidError> {
         let result = chain.connection_connect(properties).await?;
         if self.is_connection_connect_after_log_enabled() && self.is_connection_log_enabled() {
             let category = self.connection_category();
@@ -619,7 +618,7 @@ impl BeforeFilter for LogFilter {
 
     async fn connection_close(
         &self,
-        chain: &mut PhysicalConnectionCloseFilterChain<'_>,
+        chain: &mut ConnectionCloseFilterChain<'_>,
     ) -> Result<(), DruidError> {
         let connection_id = chain.context().connection_id;
         // Java LogFilter 先继续 FilterChain，只有驱动关闭成功才输出 closed。
@@ -945,18 +944,6 @@ impl ResultSetFilter for LogFilter {
             );
         }
         Ok(())
-    }
-
-    fn result_set_next(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<bool, DruidError> {
-        let more_rows = chain.result_set_next();
-        self.log_result_set_next_result(chain.context(), &more_rows);
-        more_rows
-    }
-
-    fn result_set_close(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<(), DruidError> {
-        let result = chain.result_set_close();
-        self.log_result_set_close_result(chain.context(), &result);
-        result
     }
 
     async fn standard_result_set_next(

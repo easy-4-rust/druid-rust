@@ -2,12 +2,10 @@
 //! 来源文件：`core/src/main/java/com/alibaba/druid/filter/FilterEventAdapter.java`。
 
 use super::{
-    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, DruidError, ExecContext,
-    ExecOperation, ExecResult, ExtendedFilter, PhysicalConnectionConnectFilterChain,
-    PhysicalConnectionConnectResult, ResultSetFilter, ResultSetFilterContext, StatementEvent,
-    Wrapper,
+    AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, ConnectionOpenFilterChain,
+    ConnectionOpenResult, DruidError, ExecContext, ExecOperation, ExecResult, ExtendedFilter,
+    ResultSetFilter, ResultSetFilterContext, StatementEvent, Wrapper,
 };
-use std::any::Any;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -245,9 +243,9 @@ where
 
     async fn connection_connect(
         &self,
-        chain: &mut PhysicalConnectionConnectFilterChain<'_>,
+        chain: &mut ConnectionOpenFilterChain<'_>,
         properties: &mut HashMap<String, String>,
-    ) -> Result<PhysicalConnectionConnectResult, DruidError> {
+    ) -> Result<ConnectionOpenResult, DruidError> {
         self.listener.connection_connect_before().await?;
         let result = chain.connection_connect(properties).await?;
         self.listener
@@ -394,7 +392,14 @@ impl<L> Wrapper for FilterEventAdapter<L>
 where
     L: FilterEventListener + 'static,
 {
-    fn as_any(&self) -> &dyn Any {
+    fn wrapper_view(&self) -> &dyn Wrapper {
         self
+    }
+
+    fn canonical_unwrap(
+        &self,
+        _target: std::any::TypeId,
+    ) -> Option<druid_rdbc::wrapper::StandardUnwrapped<'_>> {
+        None
     }
 }

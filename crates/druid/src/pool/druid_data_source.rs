@@ -4,7 +4,7 @@ use std::time::Duration;
 use parking_lot::RwLock;
 
 use crate::core::{
-    DruidError, DruidPooledConnection, PhysicalConnectionFactory, Pool, PoolState, RdbcError,
+    ConnectionFactory, DruidError, DruidPooledConnection, Pool, PoolState, RdbcError,
 };
 use crate::stats::{
     DataSourceIdentity, DataSourceMonitorable, DruidDataSourceStatManager,
@@ -309,7 +309,7 @@ impl DataSourceProxy for DruidDataSource {
         self.pool.db_type_name()
     }
 
-    fn raw_driver(&self) -> &dyn PhysicalConnectionFactory {
+    fn raw_driver(&self) -> &dyn ConnectionFactory {
         self.pool.raw_driver()
     }
 
@@ -384,7 +384,7 @@ impl DataSourceMonitorable for DruidDataSource {
             "ConnectCount": state.connect_count,
             "CloseCount": state.close_count,
             "ConnectErrorCount": state.connect_error_count,
-            "CreateErrorCount": state.physical_connect_error_count,
+            "CreateErrorCount": state.driver_connect_error_count,
             "RecycleCount": state.recycle_count,
             "RecycleErrorCount": state.recycle_error_count,
             "DiscardCount": state.discard_count,

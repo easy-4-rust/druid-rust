@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::ResultSetUpdate;
+pub use druid_rdbc::result_set::ResultSetUpdate;

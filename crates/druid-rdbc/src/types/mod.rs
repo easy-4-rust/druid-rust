@@ -31,7 +31,7 @@ pub use date::Date;
 pub use rdbc_calendar::RdbcCalendar;
 pub use rdbc_calendar::RdbcCalendarArgument;
 pub use rdbc_object::RdbcObject;
-pub use rdbc_opaque_object::PhysicalRdbcOpaqueObject;
+pub use rdbc_opaque_object::OpaqueObjectValue;
 pub use rdbc_opaque_object::RdbcOpaqueObject;
 pub use rdbc_parameter::RdbcParameter;
 pub use rdbc_parameter::RdbcParameterType;

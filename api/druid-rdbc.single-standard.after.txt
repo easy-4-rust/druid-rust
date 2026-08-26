@@ -1,0 +1,1388 @@
+pub mod druid_rdbc
+pub mod druid_rdbc::compat
+pub enum druid_rdbc::compat::SqlExceptionKind
+pub druid_rdbc::compat::SqlExceptionKind::Data
+pub druid_rdbc::compat::SqlExceptionKind::FeatureNotSupported
+pub druid_rdbc::compat::SqlExceptionKind::General
+pub druid_rdbc::compat::SqlExceptionKind::IntegrityConstraintViolation
+pub druid_rdbc::compat::SqlExceptionKind::InvalidAuthorization
+pub druid_rdbc::compat::SqlExceptionKind::NonTransient
+pub druid_rdbc::compat::SqlExceptionKind::NonTransientConnection
+pub druid_rdbc::compat::SqlExceptionKind::Recoverable
+pub druid_rdbc::compat::SqlExceptionKind::Syntax
+pub druid_rdbc::compat::SqlExceptionKind::Timeout
+pub druid_rdbc::compat::SqlExceptionKind::TransactionRollback
+pub druid_rdbc::compat::SqlExceptionKind::Transient
+pub druid_rdbc::compat::SqlExceptionKind::TransientConnection
+pub struct druid_rdbc::compat::BatchUpdateException
+pub druid_rdbc::compat::BatchUpdateException::exception: druid_rdbc::compat::SqlException
+pub druid_rdbc::compat::BatchUpdateException::update_counts: alloc::vec::Vec<i64>
+impl druid_rdbc::compat::BatchUpdateException
+pub fn druid_rdbc::compat::BatchUpdateException::large_update_counts(&self) -> &[i64]
+pub fn druid_rdbc::compat::BatchUpdateException::new(druid_rdbc::compat::SqlException, alloc::vec::Vec<i64>) -> Self
+pub fn druid_rdbc::compat::BatchUpdateException::update_counts(&self) -> alloc::vec::Vec<i32>
+pub struct druid_rdbc::compat::DataTruncation
+pub druid_rdbc::compat::DataTruncation::data_size: core::option::Option<usize>
+pub druid_rdbc::compat::DataTruncation::index: usize
+pub druid_rdbc::compat::DataTruncation::parameter: bool
+pub druid_rdbc::compat::DataTruncation::read: bool
+pub druid_rdbc::compat::DataTruncation::transfer_size: core::option::Option<usize>
+pub struct druid_rdbc::compat::SqlClientInfoException
+pub druid_rdbc::compat::SqlClientInfoException::exception: druid_rdbc::compat::SqlException
+pub druid_rdbc::compat::SqlClientInfoException::failed_properties: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub type druid_rdbc::compat::SqlDataException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlFeatureNotSupportedException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlIntegrityConstraintViolationException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlInvalidAuthorizationSpecException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlNonTransientConnectionException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlNonTransientException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlRecoverableException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlSyntaxErrorException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlTimeoutException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlTransactionRollbackException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlTransientConnectionException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlTransientException = druid_rdbc::error::SqlException
+pub type druid_rdbc::compat::SqlWarning = druid_rdbc::error::SqlWarning
+pub mod druid_rdbc::connection
+pub struct druid_rdbc::connection::Savepoint
+pub druid_rdbc::connection::Savepoint::id: u64
+pub druid_rdbc::connection::Savepoint::name: core::option::Option<alloc::string::String>
+impl druid_rdbc::connection::Savepoint
+pub fn druid_rdbc::connection::Savepoint::get_savepoint_id(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Savepoint::get_savepoint_name(&self) -> core::result::Result<&str, druid_rdbc::RdbcError>
+pub trait druid_rdbc::connection::Connection: druid_rdbc::wrapper::Wrapper + core::marker::Send + 'static
+pub fn druid_rdbc::connection::Connection::auto_commit(&self) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Connection::capabilities(&self) -> druid_rdbc::extensions::ConnectionCapabilities
+pub fn druid_rdbc::connection::Connection::catalog(&self) -> core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Connection::clear_warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::commit<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::create_statement<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::Statement>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::database_meta_data<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::metadata::DatabaseMetaData>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::is_closed(&self) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Connection::is_valid<'life0, 'async_trait>(&'life0 mut self, u32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::prepare_call<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::CallableStatement>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::connection::Connection::prepare_statement<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::StatementOptions) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::statement::PreparedStatement>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::connection::Connection::read_only(&self) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Connection::rollback<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::rollback_to<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 druid_rdbc::connection::Savepoint) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::connection::Connection::schema(&self) -> core::result::Result<core::option::Option<alloc::string::String>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Connection::set_auto_commit<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::set_catalog<'life0, 'life1, 'async_trait>(&'life0 mut self, core::option::Option<&'life1 str>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::connection::Connection::set_read_only<'life0, 'async_trait>(&'life0 mut self, bool) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::connection::Connection::set_schema<'life0, 'life1, 'async_trait>(&'life0 mut self, core::option::Option<&'life1 str>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::connection::Connection::warnings<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<druid_rdbc::error::SqlWarning>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub mod druid_rdbc::data_source
+pub trait druid_rdbc::data_source::CommonDataSource: core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::data_source::CommonDataSource::login_timeout(&self) -> core::option::Option<core::time::Duration>
+pub fn druid_rdbc::data_source::CommonDataSource::set_login_timeout(&mut self, core::time::Duration) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub trait druid_rdbc::data_source::ConnectionPoolDataSource: druid_rdbc::data_source::CommonDataSource
+pub fn druid_rdbc::data_source::ConnectionPoolDataSource::pooled_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::data_source::PooledConnection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::data_source::ConnectionPoolDataSource::pooled_connection_with_credentials<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 str, &'life2 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::data_source::PooledConnection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
+pub trait druid_rdbc::data_source::DataSource: druid_rdbc::data_source::CommonDataSource + druid_rdbc::wrapper::Wrapper + core::marker::Sync
+pub fn druid_rdbc::data_source::DataSource::connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::data_source::DataSource::connection_with_credentials<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 str, &'life2 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
+pub trait druid_rdbc::data_source::PooledConnection: core::marker::Send
+pub fn druid_rdbc::data_source::PooledConnection::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::data_source::PooledConnection::connection<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::data_source::XaConnection: druid_rdbc::data_source::PooledConnection
+pub fn druid_rdbc::data_source::XaConnection::xa_resource_name(&self) -> &str
+pub trait druid_rdbc::data_source::XaDataSource: druid_rdbc::data_source::CommonDataSource
+pub fn druid_rdbc::data_source::XaDataSource::xa_connection<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::data_source::XaConnection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::data_source::XaDataSource::xa_connection_with_credentials<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 str, &'life2 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::data_source::XaConnection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
+pub mod druid_rdbc::driver
+pub struct druid_rdbc::driver::DriverExtensionDescriptor
+impl druid_rdbc::driver::DriverExtensionDescriptor
+pub fn druid_rdbc::driver::DriverExtensionDescriptor::driver(&self) -> &alloc::sync::Arc<dyn druid_rdbc::driver::Driver>
+pub fn druid_rdbc::driver::DriverExtensionDescriptor::factory(&self) -> core::option::Option<&alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactory>>
+pub fn druid_rdbc::driver::DriverExtensionDescriptor::name(&self) -> &str
+pub fn druid_rdbc::driver::DriverExtensionDescriptor::new(impl core::convert::Into<alloc::string::String>, alloc::sync::Arc<dyn druid_rdbc::driver::Driver>, core::option::Option<alloc::sync::Arc<dyn druid_rdbc::driver::ConnectionFactory>>) -> Self
+impl core::fmt::Debug for druid_rdbc::driver::DriverExtensionDescriptor
+pub fn druid_rdbc::driver::DriverExtensionDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::driver::DriverPropertyInfo
+pub druid_rdbc::driver::DriverPropertyInfo::choices: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub druid_rdbc::driver::DriverPropertyInfo::name: alloc::string::String
+pub druid_rdbc::driver::DriverPropertyInfo::required: bool
+pub druid_rdbc::driver::DriverPropertyInfo::value: core::option::Option<alloc::string::String>
+pub struct druid_rdbc::driver::DriverRegistry
+impl druid_rdbc::driver::DriverRegistry
+pub async fn druid_rdbc::driver::DriverRegistry::connect(&self, &str, &druid_rdbc::driver::ConnectionProperties) -> core::result::Result<core::option::Option<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::driver::DriverRegistry::descriptors(&self) -> &[druid_rdbc::driver::DriverExtensionDescriptor]
+pub const fn druid_rdbc::driver::DriverRegistry::new() -> Self
+pub fn druid_rdbc::driver::DriverRegistry::register(&mut self, druid_rdbc::driver::DriverExtensionDescriptor)
+pub trait druid_rdbc::driver::ConnectionFactory: core::marker::Send + core::marker::Sync + 'static
+pub fn druid_rdbc::driver::ConnectionFactory::close<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut alloc::boxed::Box<dyn druid_rdbc::connection::Connection>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::driver::ConnectionFactory::connection_url(&self) -> core::option::Option<&str>
+pub fn druid_rdbc::driver::ConnectionFactory::create<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::driver::ConnectionFactory::create_with_properties<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::driver::ConnectionFactory::name(&self) -> &str
+pub fn druid_rdbc::driver::ConnectionFactory::user_name(&self) -> core::option::Option<&str>
+pub fn druid_rdbc::driver::ConnectionFactory::validate<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 mut alloc::boxed::Box<dyn druid_rdbc::connection::Connection>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub trait druid_rdbc::driver::Driver: core::marker::Send + core::marker::Sync + 'static
+pub fn druid_rdbc::driver::Driver::accepts_url(&self, &str) -> bool
+pub fn druid_rdbc::driver::Driver::connect<'life0, 'life1, 'life2, 'async_trait>(&'life0 self, &'life1 str, &'life2 druid_rdbc::driver::ConnectionProperties) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<alloc::boxed::Box<dyn druid_rdbc::connection::Connection>>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait, 'life2: 'async_trait
+pub fn druid_rdbc::driver::Driver::major_version(&self) -> u32
+pub fn druid_rdbc::driver::Driver::minor_version(&self) -> u32
+pub fn druid_rdbc::driver::Driver::property_info(&self, &str, &druid_rdbc::driver::ConnectionProperties) -> core::result::Result<alloc::vec::Vec<druid_rdbc::driver::DriverPropertyInfo>, druid_rdbc::RdbcError>
+pub type druid_rdbc::driver::ConnectionProperties = alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::string::String>
+pub mod druid_rdbc::error
+#[non_exhaustive] pub enum druid_rdbc::error::RdbcError
+pub druid_rdbc::error::RdbcError::AcquireTimeout
+pub druid_rdbc::error::RdbcError::BatchUpdateException
+pub druid_rdbc::error::RdbcError::BatchUpdateException::cause: alloc::boxed::Box<druid_rdbc::RdbcError>
+pub druid_rdbc::error::RdbcError::BatchUpdateException::update_counts: druid_rdbc::error::BatchUpdateCounts
+pub druid_rdbc::error::RdbcError::ConnectionDiscarded
+pub druid_rdbc::error::RdbcError::ConnectionLeaked
+pub druid_rdbc::error::RdbcError::ConnectionLeaked::held_for: core::time::Duration
+pub druid_rdbc::error::RdbcError::ConnectionLeaked::id: u64
+pub druid_rdbc::error::RdbcError::DataSourceClosed
+pub druid_rdbc::error::RdbcError::DataSourceClosed::close_time_millis: u64
+pub druid_rdbc::error::RdbcError::DataSourceDisabled
+pub druid_rdbc::error::RdbcError::DataSourceNotAvailable
+pub druid_rdbc::error::RdbcError::DataSourceNotAvailable::cause: core::option::Option<alloc::boxed::Box<druid_rdbc::RdbcError>>
+pub druid_rdbc::error::RdbcError::DataSourceNotFound(alloc::string::String)
+pub druid_rdbc::error::RdbcError::DriverError(alloc::string::String)
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::active_count: usize
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::cause: core::option::Option<alloc::boxed::Box<druid_rdbc::RdbcError>>
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::create_elapsed_millis: core::option::Option<u64>
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::create_error_count: u64
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::creating_count: usize
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::max_active: usize
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::running_sql: alloc::vec::Vec<(u64, alloc::string::String)>
+pub druid_rdbc::error::RdbcError::GetConnectionTimeout::wait_millis: u64
+pub druid_rdbc::error::RdbcError::InvalidArgument(alloc::string::String)
+pub druid_rdbc::error::RdbcError::LoginTimeout
+pub druid_rdbc::error::RdbcError::MaxWaitThreadCountExceeded
+pub druid_rdbc::error::RdbcError::MaxWaitThreadCountExceeded::current: usize
+pub druid_rdbc::error::RdbcError::MaxWaitThreadCountExceeded::max: usize
+pub druid_rdbc::error::RdbcError::NoDriverExtension
+pub druid_rdbc::error::RdbcError::NoDriverExtension::db_type: alloc::string::String
+pub druid_rdbc::error::RdbcError::Other(alloc::string::String)
+pub druid_rdbc::error::RdbcError::PoolClosed
+pub druid_rdbc::error::RdbcError::PoolExhausted
+pub druid_rdbc::error::RdbcError::ProductBoundary(druid_rdbc::error::ProductErrorBoundary)
+pub druid_rdbc::error::RdbcError::SqlException(alloc::boxed::Box<druid_rdbc::error::SqlException>)
+pub druid_rdbc::error::RdbcError::SqlParseError(alloc::string::String)
+pub druid_rdbc::error::RdbcError::UnsupportedOperation
+pub druid_rdbc::error::RdbcError::UnsupportedOperation::operation: &'static str
+pub druid_rdbc::error::RdbcError::ValidationFailed(alloc::string::String)
+pub druid_rdbc::error::RdbcError::WallViolation(alloc::string::String)
+impl druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::batch_update_counts(&self) -> core::option::Option<&druid_rdbc::error::BatchUpdateCounts>
+pub fn druid_rdbc::RdbcError::class_name(&self) -> &str
+pub fn druid_rdbc::RdbcError::feature_not_supported(&'static str) -> Self
+pub fn druid_rdbc::RdbcError::kind(&self) -> druid_rdbc::error::RdbcErrorKind
+pub fn druid_rdbc::RdbcError::rdbc_resource_closed(&'static str) -> Self
+pub fn druid_rdbc::RdbcError::sql_exception(&self) -> core::option::Option<&druid_rdbc::error::SqlException>
+impl core::convert::From<&str> for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::from(alloc::string::String) -> Self
+impl core::error::Error for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum druid_rdbc::error::RdbcErrorKind
+pub druid_rdbc::error::RdbcErrorKind::AcquireTimeout
+pub druid_rdbc::error::RdbcErrorKind::BatchUpdateException
+pub druid_rdbc::error::RdbcErrorKind::ConnectionDiscarded
+pub druid_rdbc::error::RdbcErrorKind::ConnectionLeaked
+pub druid_rdbc::error::RdbcErrorKind::DataSourceClosed
+pub druid_rdbc::error::RdbcErrorKind::DataSourceDisabled
+pub druid_rdbc::error::RdbcErrorKind::DataSourceNotAvailable
+pub druid_rdbc::error::RdbcErrorKind::DataSourceNotFound
+pub druid_rdbc::error::RdbcErrorKind::Driver
+pub druid_rdbc::error::RdbcErrorKind::GetConnectionTimeout
+pub druid_rdbc::error::RdbcErrorKind::InvalidArgument
+pub druid_rdbc::error::RdbcErrorKind::LoginTimeout
+pub druid_rdbc::error::RdbcErrorKind::MaxWaitThreadCountExceeded
+pub druid_rdbc::error::RdbcErrorKind::NoDriverExtension
+pub druid_rdbc::error::RdbcErrorKind::Other
+pub druid_rdbc::error::RdbcErrorKind::PoolClosed
+pub druid_rdbc::error::RdbcErrorKind::PoolExhausted
+pub druid_rdbc::error::RdbcErrorKind::ProductBoundary
+pub druid_rdbc::error::RdbcErrorKind::SqlException
+pub druid_rdbc::error::RdbcErrorKind::SqlFeatureNotSupported
+pub druid_rdbc::error::RdbcErrorKind::SqlParse
+pub druid_rdbc::error::RdbcErrorKind::UnsupportedOperation
+pub druid_rdbc::error::RdbcErrorKind::ValidationFailed
+pub druid_rdbc::error::RdbcErrorKind::WallViolation
+pub enum druid_rdbc::error::SqlExceptionCause
+pub druid_rdbc::error::SqlExceptionCause::ClassName(alloc::string::String)
+pub druid_rdbc::error::SqlExceptionCause::SocketTimeout
+pub enum druid_rdbc::error::SqlExceptionKind
+pub druid_rdbc::error::SqlExceptionKind::Data
+pub druid_rdbc::error::SqlExceptionKind::FeatureNotSupported
+pub druid_rdbc::error::SqlExceptionKind::General
+pub druid_rdbc::error::SqlExceptionKind::IntegrityConstraintViolation
+pub druid_rdbc::error::SqlExceptionKind::InvalidAuthorization
+pub druid_rdbc::error::SqlExceptionKind::NonTransient
+pub druid_rdbc::error::SqlExceptionKind::NonTransientConnection
+pub druid_rdbc::error::SqlExceptionKind::Recoverable
+pub druid_rdbc::error::SqlExceptionKind::Syntax
+pub druid_rdbc::error::SqlExceptionKind::Timeout
+pub druid_rdbc::error::SqlExceptionKind::TransactionRollback
+pub druid_rdbc::error::SqlExceptionKind::Transient
+pub druid_rdbc::error::SqlExceptionKind::TransientConnection
+pub struct druid_rdbc::error::BatchUpdateCounts
+impl druid_rdbc::error::BatchUpdateCounts
+pub fn druid_rdbc::error::BatchUpdateCounts::from_large(alloc::vec::Vec<i64>) -> Self
+pub fn druid_rdbc::error::BatchUpdateCounts::is_empty(&self) -> bool
+pub fn druid_rdbc::error::BatchUpdateCounts::jdbc_i32(&self) -> alloc::vec::Vec<i32>
+pub fn druid_rdbc::error::BatchUpdateCounts::large(&self) -> &[i64]
+pub fn druid_rdbc::error::BatchUpdateCounts::len(&self) -> usize
+pub fn druid_rdbc::error::BatchUpdateCounts::try_i32(&self) -> core::result::Result<alloc::vec::Vec<i32>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::error::BatchUpdateCounts::try_push_rows_affected(&mut self, u64) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl core::convert::From<alloc::vec::Vec<i32>> for druid_rdbc::error::BatchUpdateCounts
+pub fn druid_rdbc::error::BatchUpdateCounts::from(alloc::vec::Vec<i32>) -> Self
+impl core::convert::From<alloc::vec::Vec<i64>> for druid_rdbc::error::BatchUpdateCounts
+pub fn druid_rdbc::error::BatchUpdateCounts::from(alloc::vec::Vec<i64>) -> Self
+pub struct druid_rdbc::error::ProductErrorBoundary
+impl druid_rdbc::error::ProductErrorBoundary
+pub fn druid_rdbc::error::ProductErrorBoundary::class_name(&self) -> &str
+pub fn druid_rdbc::error::ProductErrorBoundary::message(&self) -> &str
+pub fn druid_rdbc::error::ProductErrorBoundary::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::option::Option<druid_rdbc::RdbcError>) -> Self
+pub fn druid_rdbc::error::ProductErrorBoundary::source_error(&self) -> core::option::Option<&druid_rdbc::RdbcError>
+pub struct druid_rdbc::error::SqlException
+impl druid_rdbc::error::SqlException
+pub fn druid_rdbc::error::SqlException::assignable_types(&self) -> &[alloc::string::String]
+pub fn druid_rdbc::error::SqlException::causes(&self) -> &[druid_rdbc::error::SqlExceptionCause]
+pub fn druid_rdbc::error::SqlException::class_name(&self) -> &str
+pub fn druid_rdbc::error::SqlException::driver(i32, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::error::SqlException::error_code(&self) -> i32
+pub fn druid_rdbc::error::SqlException::is_instance_of(&self, &str) -> bool
+pub fn druid_rdbc::error::SqlException::is_recoverable(&self) -> bool
+pub fn druid_rdbc::error::SqlException::kind(&self) -> druid_rdbc::compat::SqlExceptionKind
+pub fn druid_rdbc::error::SqlException::message(&self) -> core::option::Option<&str>
+pub fn druid_rdbc::error::SqlException::new(i32, core::option::Option<alloc::string::String>, core::option::Option<alloc::string::String>) -> Self
+pub fn druid_rdbc::error::SqlException::next_exception(&self) -> core::option::Option<&druid_rdbc::error::SqlException>
+pub fn druid_rdbc::error::SqlException::next_exceptions(&self) -> &[druid_rdbc::error::SqlException]
+pub fn druid_rdbc::error::SqlException::recoverable(self) -> Self
+pub fn druid_rdbc::error::SqlException::set_next_exception(&mut self, druid_rdbc::error::SqlException)
+pub fn druid_rdbc::error::SqlException::sql_state(&self) -> core::option::Option<&str>
+pub fn druid_rdbc::error::SqlException::with_assignable_type(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::error::SqlException::with_cause(self, druid_rdbc::error::SqlExceptionCause) -> Self
+pub fn druid_rdbc::error::SqlException::with_class_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn druid_rdbc::error::SqlException::with_sql_state(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::error::Error for druid_rdbc::error::SqlException
+impl core::fmt::Display for druid_rdbc::error::SqlException
+pub fn druid_rdbc::error::SqlException::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::error::SqlWarning
+impl druid_rdbc::error::SqlWarning
+pub fn druid_rdbc::error::SqlWarning::error_code(&self) -> i32
+pub fn druid_rdbc::error::SqlWarning::message(&self) -> &str
+pub fn druid_rdbc::error::SqlWarning::new(impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>, i32) -> Self
+pub fn druid_rdbc::error::SqlWarning::next_warning(&self) -> core::option::Option<&druid_rdbc::error::SqlWarning>
+pub fn druid_rdbc::error::SqlWarning::set_next_warning(&mut self, druid_rdbc::error::SqlWarning)
+pub fn druid_rdbc::error::SqlWarning::sql_state(&self) -> core::option::Option<&str>
+pub mod druid_rdbc::extensions
+pub struct druid_rdbc::extensions::ConnectionCapabilities
+pub druid_rdbc::extensions::ConnectionCapabilities::callable_statements: bool
+pub druid_rdbc::extensions::ConnectionCapabilities::catalogs: bool
+pub druid_rdbc::extensions::ConnectionCapabilities::savepoints: bool
+pub druid_rdbc::extensions::ConnectionCapabilities::schemas: bool
+pub druid_rdbc::extensions::ConnectionCapabilities::transactions: bool
+pub struct druid_rdbc::extensions::ExecResult
+pub druid_rdbc::extensions::ExecResult::last_insert_id: core::option::Option<i64>
+pub druid_rdbc::extensions::ExecResult::row_count: core::option::Option<u64>
+pub druid_rdbc::extensions::ExecResult::rows_affected: u64
+pub trait druid_rdbc::extensions::CharacterReader: core::fmt::Debug + core::marker::Send
+pub fn druid_rdbc::extensions::CharacterReader::close(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::extensions::CharacterReader::read_utf16(&mut self, &mut [u16]) -> core::result::Result<usize, druid_rdbc::RdbcError>
+pub trait druid_rdbc::extensions::CharacterWriter: core::fmt::Debug + core::marker::Send
+pub fn druid_rdbc::extensions::CharacterWriter::close(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::extensions::CharacterWriter::flush(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::extensions::CharacterWriter::write_utf16(&mut self, &[u16]) -> core::result::Result<usize, druid_rdbc::RdbcError>
+pub trait druid_rdbc::extensions::XmlResult: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub trait druid_rdbc::extensions::XmlSource: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub mod druid_rdbc::metadata
+#[non_exhaustive] pub enum druid_rdbc::metadata::ColumnNullability
+pub druid_rdbc::metadata::ColumnNullability::NoNulls
+pub druid_rdbc::metadata::ColumnNullability::Nullable
+pub druid_rdbc::metadata::ColumnNullability::Unknown
+#[non_exhaustive] pub enum druid_rdbc::metadata::ParameterMode
+pub druid_rdbc::metadata::ParameterMode::In
+pub druid_rdbc::metadata::ParameterMode::InOut
+pub druid_rdbc::metadata::ParameterMode::Out
+pub druid_rdbc::metadata::ParameterMode::Unknown
+#[non_exhaustive] pub enum druid_rdbc::metadata::ParameterNullability
+pub druid_rdbc::metadata::ParameterNullability::NoNulls
+pub druid_rdbc::metadata::ParameterNullability::Nullable
+pub druid_rdbc::metadata::ParameterNullability::Unknown
+#[non_exhaustive] pub enum druid_rdbc::metadata::ResultSetColumnType
+pub druid_rdbc::metadata::ResultSetColumnType::Jdbc(i32)
+pub druid_rdbc::metadata::ResultSetColumnType::Named(alloc::string::String)
+#[non_exhaustive] pub enum druid_rdbc::metadata::RowIdLifetime
+pub druid_rdbc::metadata::RowIdLifetime::Forever
+pub druid_rdbc::metadata::RowIdLifetime::Session
+pub druid_rdbc::metadata::RowIdLifetime::Transaction
+pub druid_rdbc::metadata::RowIdLifetime::Unsupported
+pub druid_rdbc::metadata::RowIdLifetime::ValidOther
+impl druid_rdbc::metadata::RowIdLifetime
+pub const fn druid_rdbc::metadata::RowIdLifetime::jdbc_name(self) -> &'static str
+impl core::convert::TryFrom<&str> for druid_rdbc::metadata::RowIdLifetime
+pub type druid_rdbc::metadata::RowIdLifetime::Error = druid_rdbc::RdbcError
+pub fn druid_rdbc::metadata::RowIdLifetime::try_from(&str) -> core::result::Result<Self, Self::Error>
+pub struct druid_rdbc::metadata::ColumnDescriptor
+impl druid_rdbc::metadata::ColumnDescriptor
+pub fn druid_rdbc::metadata::ColumnDescriptor::label(&self) -> &str
+pub fn druid_rdbc::metadata::ColumnDescriptor::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, druid_rdbc::metadata::ColumnNullability) -> Self
+pub const fn druid_rdbc::metadata::ColumnDescriptor::nullability(&self) -> druid_rdbc::metadata::ColumnNullability
+pub fn druid_rdbc::metadata::ColumnDescriptor::type_name(&self) -> &str
+pub struct druid_rdbc::metadata::ParameterDescriptor
+impl druid_rdbc::metadata::ParameterDescriptor
+pub const fn druid_rdbc::metadata::ParameterDescriptor::mode(&self) -> druid_rdbc::metadata::ParameterMode
+pub fn druid_rdbc::metadata::ParameterDescriptor::new(impl core::convert::Into<alloc::string::String>, druid_rdbc::metadata::ParameterMode, druid_rdbc::metadata::ParameterNullability) -> Self
+pub const fn druid_rdbc::metadata::ParameterDescriptor::nullability(&self) -> druid_rdbc::metadata::ParameterNullability
+pub fn druid_rdbc::metadata::ParameterDescriptor::type_name(&self) -> &str
+pub struct druid_rdbc::metadata::ResultSetMetaDataSnapshot
+impl druid_rdbc::metadata::ResultSetMetaDataSnapshot
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::columns(&self) -> &[druid_rdbc::metadata::ColumnDescriptor]
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::new(alloc::vec::Vec<druid_rdbc::metadata::ColumnDescriptor>) -> Self
+impl druid_rdbc::metadata::ResultSetMetaData for druid_rdbc::metadata::ResultSetMetaDataSnapshot
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::column(&self, druid_rdbc::result_set::ColumnIndex) -> core::result::Result<druid_rdbc::metadata::ColumnDescriptor, druid_rdbc::RdbcError>
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::column_count(&self) -> usize
+impl druid_rdbc::wrapper::Wrapper for druid_rdbc::metadata::ResultSetMetaDataSnapshot
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::is_wrapper_for(&self, core::option::Option<core::any::TypeId>) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::unwrap(&self, core::option::Option<core::any::TypeId>) -> core::result::Result<druid_rdbc::wrapper::StandardUnwrapped<'_>, druid_rdbc::RdbcError>
+pub struct druid_rdbc::metadata::TablesQuery
+pub druid_rdbc::metadata::TablesQuery::catalog: core::option::Option<alloc::string::String>
+pub druid_rdbc::metadata::TablesQuery::schema_pattern: core::option::Option<alloc::string::String>
+pub druid_rdbc::metadata::TablesQuery::table_name_pattern: core::option::Option<alloc::string::String>
+pub druid_rdbc::metadata::TablesQuery::table_types: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub trait druid_rdbc::metadata::DatabaseMetaData: druid_rdbc::wrapper::Wrapper + core::marker::Send + 'static
+pub fn druid_rdbc::metadata::DatabaseMetaData::database_product_name<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::metadata::DatabaseMetaData::tables<'life0, 'async_trait>(&'life0 mut self, druid_rdbc::metadata::TablesQuery) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::metadata::ParameterMetaData: druid_rdbc::wrapper::Wrapper + core::marker::Send + core::marker::Sync + 'static
+pub fn druid_rdbc::metadata::ParameterMetaData::parameter(&self, druid_rdbc::statement::ParameterIndex) -> core::result::Result<druid_rdbc::metadata::ParameterDescriptor, druid_rdbc::RdbcError>
+pub fn druid_rdbc::metadata::ParameterMetaData::parameter_count(&self) -> usize
+pub trait druid_rdbc::metadata::ResultSetMetaData: druid_rdbc::wrapper::Wrapper + core::marker::Send + core::marker::Sync + 'static
+pub fn druid_rdbc::metadata::ResultSetMetaData::column(&self, druid_rdbc::result_set::ColumnIndex) -> core::result::Result<druid_rdbc::metadata::ColumnDescriptor, druid_rdbc::RdbcError>
+pub fn druid_rdbc::metadata::ResultSetMetaData::column_count(&self) -> usize
+impl druid_rdbc::metadata::ResultSetMetaData for druid_rdbc::metadata::ResultSetMetaDataSnapshot
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::column(&self, druid_rdbc::result_set::ColumnIndex) -> core::result::Result<druid_rdbc::metadata::ColumnDescriptor, druid_rdbc::RdbcError>
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::column_count(&self) -> usize
+pub type druid_rdbc::metadata::ResultSetColumnMeta = druid_rdbc::metadata::ColumnDescriptor
+pub type druid_rdbc::metadata::ResultSetNullability = druid_rdbc::metadata::ColumnNullability
+pub mod druid_rdbc::resource
+pub enum druid_rdbc::resource::RdbcCharacterLength
+pub druid_rdbc::resource::RdbcCharacterLength::Int(i32)
+pub druid_rdbc::resource::RdbcCharacterLength::Long(i64)
+pub druid_rdbc::resource::RdbcCharacterLength::Unspecified
+pub enum druid_rdbc::resource::RdbcStreamLength
+pub druid_rdbc::resource::RdbcStreamLength::Int(i32)
+pub druid_rdbc::resource::RdbcStreamLength::Long(i64)
+pub druid_rdbc::resource::RdbcStreamLength::Unspecified
+pub enum druid_rdbc::resource::RdbcXmlRepresentationType
+pub druid_rdbc::resource::RdbcXmlRepresentationType::Custom(alloc::string::String)
+pub druid_rdbc::resource::RdbcXmlRepresentationType::Dom
+pub druid_rdbc::resource::RdbcXmlRepresentationType::Sax
+pub druid_rdbc::resource::RdbcXmlRepresentationType::Stax
+pub druid_rdbc::resource::RdbcXmlRepresentationType::Stream
+pub struct druid_rdbc::resource::RdbcArray
+impl druid_rdbc::resource::RdbcArray
+pub async fn druid_rdbc::resource::RdbcArray::base_type(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::base_type_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcArray::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub async fn druid_rdbc::resource::RdbcArray::free(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::get_array(&self) -> core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::get_base_type(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::get_base_type_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcArray::is_freed(&self) -> bool
+pub fn druid_rdbc::resource::RdbcArray::resource_id(&self) -> &str
+pub async fn druid_rdbc::resource::RdbcArray::result_set(&self) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::result_set_range(&self, i64, i32) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::result_set_range_with_type_map(&self, i64, i32, &druid_rdbc::types::RdbcTypeMap) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::result_set_with_type_map(&self, &druid_rdbc::types::RdbcTypeMap) -> core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::values(&self) -> core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::values_range(&self, i64, i32) -> core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::values_range_with_type_map(&self, i64, i32, &druid_rdbc::types::RdbcTypeMap) -> core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcArray::values_with_type_map(&self, &druid_rdbc::types::RdbcTypeMap) -> core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcArray
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcArray
+pub fn druid_rdbc::resource::RdbcArray::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcArray
+pub fn druid_rdbc::resource::RdbcArray::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcBlob
+impl druid_rdbc::resource::RdbcBlob
+pub fn druid_rdbc::resource::RdbcBlob::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub async fn druid_rdbc::resource::RdbcBlob::free(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::get_binary_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::get_binary_stream_range(&self, i64, i64) -> core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::get_bytes(&self, i64, i32) -> core::result::Result<alloc::vec::Vec<u8>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcBlob::is_freed(&self) -> bool
+pub async fn druid_rdbc::resource::RdbcBlob::length(&self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::position_blob(&self, &druid_rdbc::resource::RdbcBlob, i64) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::position_bytes(&self, &[u8], i64) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcBlob::resource_id(&self) -> &str
+pub async fn druid_rdbc::resource::RdbcBlob::set_binary_stream(&self, i64) -> core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::set_bytes(&self, i64, &[u8]) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::set_bytes_range(&self, i64, &[u8], i32, i32) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcBlob::truncate(&self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcBlob
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcBlob
+pub fn druid_rdbc::resource::RdbcBlob::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcBlob
+pub fn druid_rdbc::resource::RdbcBlob::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcClob
+impl druid_rdbc::resource::RdbcClob
+pub fn druid_rdbc::resource::RdbcClob::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub async fn druid_rdbc::resource::RdbcClob::free(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::get_ascii_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::get_character_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::get_character_stream_range(&self, i64, i64) -> core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::get_sub_string(&self, i64, i32) -> core::result::Result<druid_rdbc::types::RdbcString, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcClob::is_freed(&self) -> bool
+pub async fn druid_rdbc::resource::RdbcClob::length(&self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::position_clob(&self, &druid_rdbc::resource::RdbcClob, i64) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::position_string(&self, &druid_rdbc::types::RdbcString, i64) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcClob::resource_id(&self) -> &str
+pub async fn druid_rdbc::resource::RdbcClob::set_ascii_stream(&self, i64) -> core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::set_character_stream(&self, i64) -> core::result::Result<druid_rdbc::resource::RdbcWriter, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::set_string(&self, i64, &druid_rdbc::types::RdbcString) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::set_string_range(&self, i64, &druid_rdbc::types::RdbcString, i32, i32) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcClob::truncate(&self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcClob
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcClob
+pub fn druid_rdbc::resource::RdbcClob::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcClob
+pub fn druid_rdbc::resource::RdbcClob::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcInputStream
+impl druid_rdbc::resource::RdbcInputStream
+pub fn druid_rdbc::resource::RdbcInputStream::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcInputStream::from_bytes(impl core::convert::Into<alloc::vec::Vec<u8>>) -> Self
+pub fn druid_rdbc::resource::RdbcInputStream::is_closed(&self) -> bool
+pub fn druid_rdbc::resource::RdbcInputStream::new(impl alloc::io::read::Read + core::marker::Send + 'static) -> Self
+pub fn druid_rdbc::resource::RdbcInputStream::read(&self, &mut [u8]) -> core::result::Result<usize, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcInputStream::read_to_end(&self) -> core::result::Result<alloc::vec::Vec<u8>, druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcInputStream
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcInputStream
+pub fn druid_rdbc::resource::RdbcInputStream::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcInputStream
+pub fn druid_rdbc::resource::RdbcInputStream::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcNClob
+impl druid_rdbc::resource::RdbcNClob
+pub const fn druid_rdbc::resource::RdbcNClob::as_clob(&self) -> &druid_rdbc::resource::RdbcClob
+pub fn druid_rdbc::resource::RdbcNClob::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub async fn druid_rdbc::resource::RdbcNClob::free(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::get_ascii_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::get_character_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::get_character_stream_range(&self, i64, i64) -> core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::get_sub_string(&self, i64, i32) -> core::result::Result<druid_rdbc::types::RdbcString, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcNClob::is_freed(&self) -> bool
+pub async fn druid_rdbc::resource::RdbcNClob::length(&self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::position_clob(&self, &druid_rdbc::resource::RdbcClob, i64) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::position_string(&self, &druid_rdbc::types::RdbcString, i64) -> core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcNClob::resource_id(&self) -> &str
+pub async fn druid_rdbc::resource::RdbcNClob::set_ascii_stream(&self, i64) -> core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::set_character_stream(&self, i64) -> core::result::Result<druid_rdbc::resource::RdbcWriter, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::set_string(&self, i64, &druid_rdbc::types::RdbcString) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::set_string_range(&self, i64, &druid_rdbc::types::RdbcString, i32, i32) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcNClob::truncate(&self, i64) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcNClob
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcNClob
+pub fn druid_rdbc::resource::RdbcNClob::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcNClob
+pub fn druid_rdbc::resource::RdbcNClob::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcOutputStream
+impl druid_rdbc::resource::RdbcOutputStream
+pub fn druid_rdbc::resource::RdbcOutputStream::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcOutputStream::flush(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcOutputStream::is_closed(&self) -> bool
+pub fn druid_rdbc::resource::RdbcOutputStream::new(impl core::io::write::Write + core::marker::Send + 'static) -> Self
+pub fn druid_rdbc::resource::RdbcOutputStream::write(&self, &[u8]) -> core::result::Result<usize, druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcOutputStream
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcOutputStream
+pub fn druid_rdbc::resource::RdbcOutputStream::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcOutputStream
+pub fn druid_rdbc::resource::RdbcOutputStream::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcReader
+impl druid_rdbc::resource::RdbcReader
+pub fn druid_rdbc::resource::RdbcReader::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcReader::from_string(impl core::convert::AsRef<str>) -> Self
+pub fn druid_rdbc::resource::RdbcReader::from_utf16(alloc::vec::Vec<u16>) -> Self
+pub fn druid_rdbc::resource::RdbcReader::is_closed(&self) -> bool
+pub fn druid_rdbc::resource::RdbcReader::new(impl druid_rdbc::extensions::CharacterReader + 'static) -> Self
+pub fn druid_rdbc::resource::RdbcReader::read_to_end_utf16(&self) -> core::result::Result<alloc::vec::Vec<u16>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcReader::read_to_string(&self) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcReader::read_utf16(&self, &mut [u16]) -> core::result::Result<usize, druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcReader
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcReader
+pub fn druid_rdbc::resource::RdbcReader::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcReader
+pub fn druid_rdbc::resource::RdbcReader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcRef
+impl druid_rdbc::resource::RdbcRef
+pub async fn druid_rdbc::resource::RdbcRef::base_type_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcRef::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub async fn druid_rdbc::resource::RdbcRef::get_base_type_name(&self) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcRef::get_object(&self) -> core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcRef::get_object_with_type_map(&self, &druid_rdbc::types::RdbcTypeMap) -> core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcRef::object(&self) -> core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcRef::object_with_type_map(&self, &druid_rdbc::types::RdbcTypeMap) -> core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcRef::resource_id(&self) -> &str
+pub async fn druid_rdbc::resource::RdbcRef::set_object(&self, druid_rdbc::types::RdbcObject) -> core::result::Result<(), druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcRef
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcRef
+pub fn druid_rdbc::resource::RdbcRef::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcRef
+pub fn druid_rdbc::resource::RdbcRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcSqlXml
+impl druid_rdbc::resource::RdbcSqlXml
+pub async fn druid_rdbc::resource::RdbcSqlXml::binary_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcSqlXml::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub async fn druid_rdbc::resource::RdbcSqlXml::character_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::free(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::get_binary_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::get_character_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::get_string(&self) -> core::result::Result<druid_rdbc::types::RdbcString, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcSqlXml::is_freed(&self) -> bool
+pub fn druid_rdbc::resource::RdbcSqlXml::resource_id(&self) -> &str
+pub async fn druid_rdbc::resource::RdbcSqlXml::result(&self, &druid_rdbc::resource::RdbcXmlRepresentationType) -> core::result::Result<druid_rdbc::resource::RdbcXmlResult, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::set_binary_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::set_character_stream(&self) -> core::result::Result<druid_rdbc::resource::RdbcWriter, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::set_string(&self, &druid_rdbc::types::RdbcString) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::source(&self, &druid_rdbc::resource::RdbcXmlRepresentationType) -> core::result::Result<druid_rdbc::resource::RdbcXmlSource, druid_rdbc::RdbcError>
+pub async fn druid_rdbc::resource::RdbcSqlXml::string(&self) -> core::result::Result<druid_rdbc::types::RdbcString, druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcSqlXml
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcSqlXml
+pub fn druid_rdbc::resource::RdbcSqlXml::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcSqlXml
+pub fn druid_rdbc::resource::RdbcSqlXml::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcWriter
+impl druid_rdbc::resource::RdbcWriter
+pub fn druid_rdbc::resource::RdbcWriter::close(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcWriter::flush(&self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcWriter::is_closed(&self) -> bool
+pub fn druid_rdbc::resource::RdbcWriter::new(impl druid_rdbc::extensions::CharacterWriter + 'static) -> Self
+pub fn druid_rdbc::resource::RdbcWriter::write_str(&self, &str) -> core::result::Result<usize, druid_rdbc::RdbcError>
+pub fn druid_rdbc::resource::RdbcWriter::write_utf16(&self, &[u16]) -> core::result::Result<usize, druid_rdbc::RdbcError>
+impl core::cmp::Eq for druid_rdbc::resource::RdbcWriter
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcWriter
+pub fn druid_rdbc::resource::RdbcWriter::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcWriter
+pub fn druid_rdbc::resource::RdbcWriter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcXmlResult
+impl druid_rdbc::resource::RdbcXmlResult
+pub fn druid_rdbc::resource::RdbcXmlResult::new(alloc::sync::Arc<dyn druid_rdbc::extensions::XmlResult>) -> Self
+pub fn druid_rdbc::resource::RdbcXmlResult::value(&self) -> &dyn druid_rdbc::extensions::XmlResult
+impl core::cmp::Eq for druid_rdbc::resource::RdbcXmlResult
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcXmlResult
+pub fn druid_rdbc::resource::RdbcXmlResult::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcXmlResult
+pub fn druid_rdbc::resource::RdbcXmlResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::RdbcXmlSource
+impl druid_rdbc::resource::RdbcXmlSource
+pub fn druid_rdbc::resource::RdbcXmlSource::new(alloc::sync::Arc<dyn druid_rdbc::extensions::XmlSource>) -> Self
+pub fn druid_rdbc::resource::RdbcXmlSource::value(&self) -> &dyn druid_rdbc::extensions::XmlSource
+impl core::cmp::Eq for druid_rdbc::resource::RdbcXmlSource
+impl core::cmp::PartialEq for druid_rdbc::resource::RdbcXmlSource
+pub fn druid_rdbc::resource::RdbcXmlSource::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::resource::RdbcXmlSource
+pub fn druid_rdbc::resource::RdbcXmlSource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::resource::ResourceHandleFactory
+impl druid_rdbc::resource::ResourceHandleFactory
+pub fn druid_rdbc::resource::ResourceHandleFactory::array(alloc::sync::Arc<dyn druid_rdbc::resource::RdbcArrayAccess>) -> druid_rdbc::resource::RdbcArray
+pub fn druid_rdbc::resource::ResourceHandleFactory::blob(alloc::sync::Arc<dyn druid_rdbc::resource::RdbcBlobAccess>) -> druid_rdbc::resource::RdbcBlob
+pub fn druid_rdbc::resource::ResourceHandleFactory::clob(alloc::sync::Arc<dyn druid_rdbc::resource::RdbcClobAccess>) -> druid_rdbc::resource::RdbcClob
+pub fn druid_rdbc::resource::ResourceHandleFactory::n_clob(alloc::sync::Arc<dyn druid_rdbc::resource::RdbcNClobAccess>) -> druid_rdbc::resource::RdbcNClob
+pub fn druid_rdbc::resource::ResourceHandleFactory::reference(alloc::sync::Arc<dyn druid_rdbc::resource::RdbcRefAccess>) -> druid_rdbc::resource::RdbcRef
+pub fn druid_rdbc::resource::ResourceHandleFactory::sql_xml(alloc::sync::Arc<dyn druid_rdbc::resource::RdbcSqlXmlAccess>) -> druid_rdbc::resource::RdbcSqlXml
+pub struct druid_rdbc::resource::ResourceOperations(_)
+impl druid_rdbc::resource::ResourceOperations
+pub const druid_rdbc::resource::ResourceOperations::FREE: Self
+pub const druid_rdbc::resource::ResourceOperations::RANGE: Self
+pub const druid_rdbc::resource::ResourceOperations::READ: Self
+pub const druid_rdbc::resource::ResourceOperations::RESULT_SET: Self
+pub const druid_rdbc::resource::ResourceOperations::SEARCH: Self
+pub const druid_rdbc::resource::ResourceOperations::STREAM: Self
+pub const druid_rdbc::resource::ResourceOperations::TRUNCATE: Self
+pub const druid_rdbc::resource::ResourceOperations::TYPE_MAP: Self
+pub const druid_rdbc::resource::ResourceOperations::WRITE: Self
+impl druid_rdbc::resource::ResourceOperations
+pub const fn druid_rdbc::resource::ResourceOperations::all() -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::bits(&self) -> u16
+pub const fn druid_rdbc::resource::ResourceOperations::complement(self) -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::contains(&self, Self) -> bool
+pub const fn druid_rdbc::resource::ResourceOperations::difference(self, Self) -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::empty() -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::from_bits(u16) -> core::option::Option<Self>
+pub const fn druid_rdbc::resource::ResourceOperations::from_bits_retain(u16) -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::from_bits_truncate(u16) -> Self
+pub fn druid_rdbc::resource::ResourceOperations::from_name(&str) -> core::option::Option<Self>
+pub fn druid_rdbc::resource::ResourceOperations::insert(&mut self, Self)
+pub const fn druid_rdbc::resource::ResourceOperations::intersection(self, Self) -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::intersects(&self, Self) -> bool
+pub const fn druid_rdbc::resource::ResourceOperations::is_all(&self) -> bool
+pub const fn druid_rdbc::resource::ResourceOperations::is_empty(&self) -> bool
+pub fn druid_rdbc::resource::ResourceOperations::remove(&mut self, Self)
+pub fn druid_rdbc::resource::ResourceOperations::set(&mut self, Self, bool)
+pub const fn druid_rdbc::resource::ResourceOperations::symmetric_difference(self, Self) -> Self
+pub fn druid_rdbc::resource::ResourceOperations::toggle(&mut self, Self)
+pub const fn druid_rdbc::resource::ResourceOperations::union(self, Self) -> Self
+impl druid_rdbc::resource::ResourceOperations
+pub const fn druid_rdbc::resource::ResourceOperations::array() -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::blob() -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::clob() -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::reference() -> Self
+pub const fn druid_rdbc::resource::ResourceOperations::sql_xml() -> Self
+impl druid_rdbc::resource::ResourceOperations
+pub const fn druid_rdbc::resource::ResourceOperations::iter(&self) -> bitflags::iter::Iter<druid_rdbc::resource::ResourceOperations>
+pub const fn druid_rdbc::resource::ResourceOperations::iter_names(&self) -> bitflags::iter::IterNames<druid_rdbc::resource::ResourceOperations>
+impl bitflags::traits::Flags for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Bits = u16
+pub const druid_rdbc::resource::ResourceOperations::FLAGS: &'static [bitflags::traits::Flag<druid_rdbc::resource::ResourceOperations>]
+pub fn druid_rdbc::resource::ResourceOperations::all_named() -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bits(&self) -> u16
+pub fn druid_rdbc::resource::ResourceOperations::from_bits_retain(u16) -> druid_rdbc::resource::ResourceOperations
+impl bitflags::traits::PublicFlags for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Internal = InternalBitFlags
+pub type druid_rdbc::resource::ResourceOperations::Primitive = u16
+impl core::fmt::Binary for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::LowerHex for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Octal for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::UpperHex for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::iter::traits::collect::Extend<druid_rdbc::resource::ResourceOperations> for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::extend<T: core::iter::traits::collect::IntoIterator<Item = Self>>(&mut self, T)
+impl core::iter::traits::collect::FromIterator<druid_rdbc::resource::ResourceOperations> for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::from_iter<T: core::iter::traits::collect::IntoIterator<Item = Self>>(T) -> Self
+impl core::iter::traits::collect::IntoIterator for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::IntoIter = bitflags::iter::Iter<druid_rdbc::resource::ResourceOperations>
+pub type druid_rdbc::resource::ResourceOperations::Item = druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::into_iter(self) -> Self::IntoIter
+impl core::ops::arith::Sub for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Output = druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::sub(self, Self) -> Self
+impl core::ops::arith::SubAssign for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::sub_assign(&mut self, Self)
+impl core::ops::bit::BitAnd for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Output = druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bitand(self, Self) -> Self
+impl core::ops::bit::BitAndAssign for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bitand_assign(&mut self, Self)
+impl core::ops::bit::BitOr for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Output = druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bitor(self, druid_rdbc::resource::ResourceOperations) -> Self
+impl core::ops::bit::BitOrAssign for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bitor_assign(&mut self, Self)
+impl core::ops::bit::BitXor for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Output = druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bitxor(self, Self) -> Self
+impl core::ops::bit::BitXorAssign for druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::bitxor_assign(&mut self, Self)
+impl core::ops::bit::Not for druid_rdbc::resource::ResourceOperations
+pub type druid_rdbc::resource::ResourceOperations::Output = druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::ResourceOperations::not(self) -> Self
+pub trait druid_rdbc::resource::RdbcArrayAccess: druid_rdbc::resource::RdbcResourceAccess
+pub fn druid_rdbc::resource::RdbcArrayAccess::base_type<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::base_type_name<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::result_set<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::result_set_range<'life0, 'async_trait>(&'life0 self, i64, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::result_set_range_with_type_map<'life0, 'life1, 'async_trait>(&'life0 self, i64, i32, &'life1 druid_rdbc::types::RdbcTypeMap) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::result_set_with_type_map<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::types::RdbcTypeMap) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::values<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::values_range<'life0, 'async_trait>(&'life0 self, i64, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::values_range_with_type_map<'life0, 'life1, 'async_trait>(&'life0 self, i64, i32, &'life1 druid_rdbc::types::RdbcTypeMap) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcArrayAccess::values_with_type_map<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::types::RdbcTypeMap) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::types::RdbcObject>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub trait druid_rdbc::resource::RdbcBlobAccess: druid_rdbc::resource::RdbcResourceAccess
+pub fn druid_rdbc::resource::RdbcBlobAccess::get_binary_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::get_binary_stream_range<'life0, 'async_trait>(&'life0 self, i64, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::get_bytes<'life0, 'async_trait>(&'life0 self, i64, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<u8>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::length<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::position_blob<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::resource::RdbcBlob, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::position_bytes<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 [u8], i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::set_binary_stream<'life0, 'async_trait>(&'life0 self, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::set_bytes<'life0, 'life1, 'async_trait>(&'life0 self, i64, &'life1 [u8]) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::set_bytes_range<'life0, 'life1, 'async_trait>(&'life0 self, i64, &'life1 [u8], i32, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcBlobAccess::truncate<'life0, 'async_trait>(&'life0 self, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::resource::RdbcClobAccess: druid_rdbc::resource::RdbcResourceAccess
+pub fn druid_rdbc::resource::RdbcClobAccess::get_ascii_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::get_character_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::get_character_stream_range<'life0, 'async_trait>(&'life0 self, i64, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::get_sub_string<'life0, 'async_trait>(&'life0 self, i64, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::RdbcString, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::length<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::position_clob<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::resource::RdbcClob, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::position_string<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::types::RdbcString, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<core::option::Option<i64>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::set_ascii_stream<'life0, 'async_trait>(&'life0 self, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::set_character_stream<'life0, 'async_trait>(&'life0 self, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcWriter, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::set_string<'life0, 'life1, 'async_trait>(&'life0 self, i64, &'life1 druid_rdbc::types::RdbcString) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::set_string_range<'life0, 'life1, 'async_trait>(&'life0 self, i64, &'life1 druid_rdbc::types::RdbcString, i32, i32) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i32, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcClobAccess::truncate<'life0, 'async_trait>(&'life0 self, i64) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::resource::RdbcNClobAccess: druid_rdbc::resource::RdbcClobAccess
+pub trait druid_rdbc::resource::RdbcRefAccess: druid_rdbc::resource::RdbcResourceAccess
+pub fn druid_rdbc::resource::RdbcRefAccess::base_type_name<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::string::String, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcRefAccess::object<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcRefAccess::object_with_type_map<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::types::RdbcTypeMap) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::RdbcObject, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcRefAccess::set_object<'life0, 'async_trait>(&'life0 self, druid_rdbc::types::RdbcObject) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::resource::RdbcResourceAccess: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::resource::RdbcResourceAccess::capabilities(&self) -> druid_rdbc::resource::ResourceOperations
+pub fn druid_rdbc::resource::RdbcResourceAccess::free<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub trait druid_rdbc::resource::RdbcSqlXmlAccess: druid_rdbc::resource::RdbcResourceAccess
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::binary_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcInputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::character_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcReader, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::result<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::resource::RdbcXmlRepresentationType) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcXmlResult, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::set_binary_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcOutputStream, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::set_character_stream<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcWriter, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::set_string<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::types::RdbcString) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::source<'life0, 'life1, 'async_trait>(&'life0 self, &'life1 druid_rdbc::resource::RdbcXmlRepresentationType) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::resource::RdbcXmlSource, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Sync + 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::resource::RdbcSqlXmlAccess::string<'life0, 'async_trait>(&'life0 self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<druid_rdbc::types::RdbcString, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub type druid_rdbc::resource::Array = druid_rdbc::resource::RdbcArray
+pub type druid_rdbc::resource::Blob = druid_rdbc::resource::RdbcBlob
+pub type druid_rdbc::resource::Clob = druid_rdbc::resource::RdbcClob
+pub type druid_rdbc::resource::NClob = druid_rdbc::resource::RdbcNClob
+pub type druid_rdbc::resource::Ref = druid_rdbc::resource::RdbcRef
+pub type druid_rdbc::resource::SqlXml = druid_rdbc::resource::RdbcSqlXml
+pub mod druid_rdbc::result_set
+#[non_exhaustive] pub enum druid_rdbc::result_set::ResultSetUpdate
+pub druid_rdbc::result_set::ResultSetUpdate::Column
+pub druid_rdbc::result_set::ResultSetUpdate::Column::index: druid_rdbc::result_set::ColumnIndex
+pub druid_rdbc::result_set::ResultSetUpdate::Column::value: druid_rdbc::types::Value
+pub druid_rdbc::result_set::ResultSetUpdate::DeleteRow
+pub druid_rdbc::result_set::ResultSetUpdate::InsertRow
+pub struct druid_rdbc::result_set::ColumnIndex(_)
+impl druid_rdbc::result_set::ColumnIndex
+pub const fn druid_rdbc::result_set::ColumnIndex::get(self) -> usize
+pub fn druid_rdbc::result_set::ColumnIndex::new(usize) -> core::result::Result<Self, druid_rdbc::RdbcError>
+impl core::convert::TryFrom<i128> for druid_rdbc::result_set::ColumnIndex
+pub type druid_rdbc::result_set::ColumnIndex::Error = druid_rdbc::RdbcError
+pub fn druid_rdbc::result_set::ColumnIndex::try_from(i128) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<i64> for druid_rdbc::result_set::ColumnIndex
+pub type druid_rdbc::result_set::ColumnIndex::Error = druid_rdbc::RdbcError
+pub fn druid_rdbc::result_set::ColumnIndex::try_from(i64) -> core::result::Result<Self, Self::Error>
+pub trait druid_rdbc::result_set::ResultSet: druid_rdbc::wrapper::Wrapper + core::marker::Send + 'static
+pub fn druid_rdbc::result_set::ResultSet::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::result_set::ResultSet::is_closed(&self) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::result_set::ResultSet::meta_data(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::result_set::ResultSet::next<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<bool, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::result_set::ResultSet::value(&self, druid_rdbc::result_set::ColumnIndex) -> core::result::Result<druid_rdbc::types::Value, druid_rdbc::RdbcError>
+pub fn druid_rdbc::result_set::ResultSet::was_null(&self) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub mod druid_rdbc::statement
+pub enum druid_rdbc::statement::CallableInputParameter
+pub druid_rdbc::statement::CallableInputParameter::Value(druid_rdbc::statement::PreparedParameter)
+#[non_exhaustive] pub enum druid_rdbc::statement::CallableParameter
+pub druid_rdbc::statement::CallableParameter::In(druid_rdbc::statement::CallableInputParameter)
+pub druid_rdbc::statement::CallableParameter::InOut
+pub druid_rdbc::statement::CallableParameter::InOut::input: druid_rdbc::statement::CallableInputParameter
+pub druid_rdbc::statement::CallableParameter::InOut::output: druid_rdbc::statement::CallableOutParameter
+pub druid_rdbc::statement::CallableParameter::Out(druid_rdbc::statement::CallableOutParameter)
+pub enum druid_rdbc::statement::ExecutionResult
+pub druid_rdbc::statement::ExecutionResult::ResultSet(alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>)
+pub druid_rdbc::statement::ExecutionResult::UpdateCount(i64)
+impl core::fmt::Debug for druid_rdbc::statement::ExecutionResult
+pub fn druid_rdbc::statement::ExecutionResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum druid_rdbc::statement::GeneratedKeys
+pub druid_rdbc::statement::GeneratedKeys::ColumnIndexes(alloc::vec::Vec<druid_rdbc::result_set::ColumnIndex>)
+pub druid_rdbc::statement::GeneratedKeys::ColumnNames(alloc::vec::Vec<alloc::string::String>)
+pub druid_rdbc::statement::GeneratedKeys::None
+pub druid_rdbc::statement::GeneratedKeys::ReturnGeneratedKeys
+#[non_exhaustive] pub enum druid_rdbc::statement::PreparedTypeNameArgument
+pub druid_rdbc::statement::PreparedTypeNameArgument::Named(alloc::string::String)
+pub druid_rdbc::statement::PreparedTypeNameArgument::Omitted
+#[non_exhaustive] pub enum druid_rdbc::statement::ResultSetConcurrency
+pub druid_rdbc::statement::ResultSetConcurrency::ReadOnly
+pub druid_rdbc::statement::ResultSetConcurrency::Updatable
+#[non_exhaustive] pub enum druid_rdbc::statement::ResultSetHoldability
+pub druid_rdbc::statement::ResultSetHoldability::CloseAtCommit
+pub druid_rdbc::statement::ResultSetHoldability::HoldOverCommit
+#[non_exhaustive] pub enum druid_rdbc::statement::ResultSetType
+pub druid_rdbc::statement::ResultSetType::ForwardOnly
+pub druid_rdbc::statement::ResultSetType::ScrollInsensitive
+pub druid_rdbc::statement::ResultSetType::ScrollSensitive
+pub struct druid_rdbc::statement::CallableOutParameter
+pub druid_rdbc::statement::CallableOutParameter::index: druid_rdbc::statement::ParameterIndex
+pub druid_rdbc::statement::CallableOutParameter::type_name: alloc::string::String
+pub struct druid_rdbc::statement::ExecResult
+pub druid_rdbc::statement::ExecResult::last_insert_id: core::option::Option<i64>
+pub druid_rdbc::statement::ExecResult::row_count: core::option::Option<u64>
+pub druid_rdbc::statement::ExecResult::rows_affected: u64
+pub struct druid_rdbc::statement::ParameterIndex(_)
+impl druid_rdbc::statement::ParameterIndex
+pub const fn druid_rdbc::statement::ParameterIndex::get(self) -> usize
+pub fn druid_rdbc::statement::ParameterIndex::new(usize) -> core::result::Result<Self, druid_rdbc::RdbcError>
+impl core::convert::TryFrom<i128> for druid_rdbc::statement::ParameterIndex
+pub type druid_rdbc::statement::ParameterIndex::Error = druid_rdbc::RdbcError
+pub fn druid_rdbc::statement::ParameterIndex::try_from(i128) -> core::result::Result<Self, Self::Error>
+impl core::convert::TryFrom<i64> for druid_rdbc::statement::ParameterIndex
+pub type druid_rdbc::statement::ParameterIndex::Error = druid_rdbc::RdbcError
+pub fn druid_rdbc::statement::ParameterIndex::try_from(i64) -> core::result::Result<Self, Self::Error>
+pub struct druid_rdbc::statement::PreparedParameter
+pub druid_rdbc::statement::PreparedParameter::index: druid_rdbc::statement::ParameterIndex
+pub druid_rdbc::statement::PreparedParameter::value: druid_rdbc::types::Value
+pub struct druid_rdbc::statement::StatementOptions
+impl druid_rdbc::statement::StatementOptions
+pub const fn druid_rdbc::statement::StatementOptions::concurrency(self) -> druid_rdbc::statement::ResultSetConcurrency
+pub const fn druid_rdbc::statement::StatementOptions::holdability(self) -> druid_rdbc::statement::ResultSetHoldability
+pub const fn druid_rdbc::statement::StatementOptions::new(druid_rdbc::statement::ResultSetType, druid_rdbc::statement::ResultSetConcurrency, druid_rdbc::statement::ResultSetHoldability) -> Self
+pub const fn druid_rdbc::statement::StatementOptions::result_set_type(self) -> druid_rdbc::statement::ResultSetType
+pub trait druid_rdbc::statement::CallableStatement: druid_rdbc::statement::PreparedStatement
+pub fn druid_rdbc::statement::CallableStatement::out_value(&self, druid_rdbc::statement::ParameterIndex) -> core::result::Result<druid_rdbc::types::Value, druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::CallableStatement::register_out_parameter(&mut self, druid_rdbc::statement::CallableOutParameter) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub trait druid_rdbc::statement::PreparedStatement: druid_rdbc::statement::Statement
+pub fn druid_rdbc::statement::PreparedStatement::clear_parameters(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::PreparedStatement::execute_prepared<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::ExecutionResult>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Send + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::PreparedStatement::execute_prepared_query<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Send + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::PreparedStatement::execute_prepared_update<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: core::marker::Send + 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::PreparedStatement::parameter_meta_data(&self) -> core::result::Result<alloc::sync::Arc<dyn druid_rdbc::metadata::ParameterMetaData>, druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::PreparedStatement::set_parameter(&mut self, druid_rdbc::statement::PreparedParameter) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub trait druid_rdbc::statement::Statement: druid_rdbc::wrapper::Wrapper + core::marker::Send + 'static
+pub fn druid_rdbc::statement::Statement::add_batch(&mut self, alloc::string::String) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::clear_batch(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::clear_warnings(&mut self) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::close<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<(), druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::Statement::execute<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<druid_rdbc::statement::ExecutionResult>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::statement::Statement::execute_batch<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::vec::Vec<i64>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::Statement::execute_query<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::statement::Statement::execute_update<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, druid_rdbc::statement::GeneratedKeys) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<i64, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::statement::Statement::execute_values<'life0, 'life1, 'async_trait>(&'life0 mut self, &'life1 str, alloc::vec::Vec<druid_rdbc::types::Value>) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait, 'life1: 'async_trait
+pub fn druid_rdbc::statement::Statement::generated_keys<'life0, 'async_trait>(&'life0 mut self) -> core::pin::Pin<alloc::boxed::Box<(dyn core::future::future::Future<Output = core::result::Result<alloc::boxed::Box<dyn druid_rdbc::result_set::ResultSet>, druid_rdbc::RdbcError>> + core::marker::Send + 'async_trait)>> where Self: 'async_trait, 'life0: 'async_trait
+pub fn druid_rdbc::statement::Statement::is_closed(&self) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::query_timeout(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::set_query_timeout(&mut self, i32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::statement::Statement::warning_messages(&self) -> core::result::Result<alloc::vec::Vec<alloc::string::String>, druid_rdbc::RdbcError>
+pub type druid_rdbc::statement::PreparedInputParameter = druid_rdbc::statement::PreparedParameter
+pub type druid_rdbc::statement::StatementExecuteResult = druid_rdbc::statement::ExecutionResult
+pub mod druid_rdbc::types
+pub enum druid_rdbc::types::RdbcCalendarArgument
+pub druid_rdbc::types::RdbcCalendarArgument::Specified(core::option::Option<druid_rdbc::types::RdbcCalendar>)
+pub druid_rdbc::types::RdbcCalendarArgument::Unspecified
+impl druid_rdbc::types::RdbcCalendarArgument
+pub fn druid_rdbc::types::RdbcCalendarArgument::specified(core::option::Option<druid_rdbc::types::RdbcCalendar>) -> Self
+pub fn druid_rdbc::types::RdbcCalendarArgument::unspecified() -> Self
+pub enum druid_rdbc::types::RdbcObject
+pub druid_rdbc::types::RdbcObject::Array(druid_rdbc::resource::RdbcArray)
+pub druid_rdbc::types::RdbcObject::BigDecimal(bigdecimal::BigDecimal)
+pub druid_rdbc::types::RdbcObject::Blob(druid_rdbc::resource::RdbcBlob)
+pub druid_rdbc::types::RdbcObject::Boolean(bool)
+pub druid_rdbc::types::RdbcObject::Byte(i8)
+pub druid_rdbc::types::RdbcObject::Bytes(alloc::vec::Vec<u8>)
+pub druid_rdbc::types::RdbcObject::CharacterStream(druid_rdbc::resource::RdbcReader)
+pub druid_rdbc::types::RdbcObject::Clob(druid_rdbc::resource::RdbcClob)
+pub druid_rdbc::types::RdbcObject::Custom(druid_rdbc::types::RdbcOpaqueObject)
+pub druid_rdbc::types::RdbcObject::Date(chrono::naive::date::NaiveDate)
+pub druid_rdbc::types::RdbcObject::Double(f64)
+pub druid_rdbc::types::RdbcObject::Float(f32)
+pub druid_rdbc::types::RdbcObject::Integer(i32)
+pub druid_rdbc::types::RdbcObject::Long(i64)
+pub druid_rdbc::types::RdbcObject::NCharacterStream(druid_rdbc::resource::RdbcReader)
+pub druid_rdbc::types::RdbcObject::NClob(druid_rdbc::resource::RdbcNClob)
+pub druid_rdbc::types::RdbcObject::NString(alloc::string::String)
+pub druid_rdbc::types::RdbcObject::Ref(druid_rdbc::resource::RdbcRef)
+pub druid_rdbc::types::RdbcObject::RowId(druid_rdbc::types::RdbcRowId)
+pub druid_rdbc::types::RdbcObject::Scalar(druid_rdbc::types::Value)
+pub druid_rdbc::types::RdbcObject::Short(i16)
+pub druid_rdbc::types::RdbcObject::SqlXml(druid_rdbc::resource::RdbcSqlXml)
+pub druid_rdbc::types::RdbcObject::String(alloc::string::String)
+pub druid_rdbc::types::RdbcObject::Time(chrono::naive::time::NaiveTime)
+pub druid_rdbc::types::RdbcObject::Timestamp(chrono::naive::datetime::NaiveDateTime)
+pub druid_rdbc::types::RdbcObject::Url(druid_rdbc::types::RdbcUrl)
+impl druid_rdbc::types::RdbcObject
+pub fn druid_rdbc::types::RdbcObject::is_null(&self) -> bool
+impl core::convert::From<druid_rdbc::types::Value> for druid_rdbc::types::RdbcObject
+pub fn druid_rdbc::types::RdbcObject::from(druid_rdbc::types::Value) -> Self
+impl core::fmt::Display for druid_rdbc::types::RdbcObject
+pub fn druid_rdbc::types::RdbcObject::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum druid_rdbc::types::RdbcParameterValue
+pub druid_rdbc::types::RdbcParameterValue::InputStream(druid_rdbc::resource::RdbcInputStream)
+pub druid_rdbc::types::RdbcParameterValue::Object(druid_rdbc::types::RdbcObject)
+pub druid_rdbc::types::RdbcParameterValue::Reader(druid_rdbc::resource::RdbcReader)
+pub enum druid_rdbc::types::RdbcTargetType
+pub druid_rdbc::types::RdbcTargetType::Array
+pub druid_rdbc::types::RdbcTargetType::BigDecimal
+pub druid_rdbc::types::RdbcTargetType::Blob
+pub druid_rdbc::types::RdbcTargetType::Boolean
+pub druid_rdbc::types::RdbcTargetType::Byte
+pub druid_rdbc::types::RdbcTargetType::Bytes
+pub druid_rdbc::types::RdbcTargetType::Clob
+pub druid_rdbc::types::RdbcTargetType::Custom(alloc::string::String)
+pub druid_rdbc::types::RdbcTargetType::Date
+pub druid_rdbc::types::RdbcTargetType::Double
+pub druid_rdbc::types::RdbcTargetType::Float
+pub druid_rdbc::types::RdbcTargetType::Integer
+pub druid_rdbc::types::RdbcTargetType::Long
+pub druid_rdbc::types::RdbcTargetType::NClob
+pub druid_rdbc::types::RdbcTargetType::Ref
+pub druid_rdbc::types::RdbcTargetType::RowId
+pub druid_rdbc::types::RdbcTargetType::Short
+pub druid_rdbc::types::RdbcTargetType::SqlXml
+pub druid_rdbc::types::RdbcTargetType::String
+pub druid_rdbc::types::RdbcTargetType::Time
+pub druid_rdbc::types::RdbcTargetType::Timestamp
+pub druid_rdbc::types::RdbcTargetType::Url
+pub enum druid_rdbc::types::RdbcType
+pub druid_rdbc::types::RdbcType::Array
+pub druid_rdbc::types::RdbcType::BigInt
+pub druid_rdbc::types::RdbcType::Binary
+pub druid_rdbc::types::RdbcType::Bit
+pub druid_rdbc::types::RdbcType::Blob
+pub druid_rdbc::types::RdbcType::Boolean
+pub druid_rdbc::types::RdbcType::Char
+pub druid_rdbc::types::RdbcType::Clob
+pub druid_rdbc::types::RdbcType::DataLink
+pub druid_rdbc::types::RdbcType::Date
+pub druid_rdbc::types::RdbcType::Decimal
+pub druid_rdbc::types::RdbcType::Distinct
+pub druid_rdbc::types::RdbcType::Double
+pub druid_rdbc::types::RdbcType::Float
+pub druid_rdbc::types::RdbcType::Integer
+pub druid_rdbc::types::RdbcType::JavaObject
+pub druid_rdbc::types::RdbcType::LongNVarChar
+pub druid_rdbc::types::RdbcType::LongVarBinary
+pub druid_rdbc::types::RdbcType::LongVarChar
+pub druid_rdbc::types::RdbcType::NChar
+pub druid_rdbc::types::RdbcType::NClob
+pub druid_rdbc::types::RdbcType::NVarChar
+pub druid_rdbc::types::RdbcType::Null
+pub druid_rdbc::types::RdbcType::Numeric
+pub druid_rdbc::types::RdbcType::Other
+pub druid_rdbc::types::RdbcType::Real
+pub druid_rdbc::types::RdbcType::Ref
+pub druid_rdbc::types::RdbcType::RefCursor
+pub druid_rdbc::types::RdbcType::RowId
+pub druid_rdbc::types::RdbcType::SmallInt
+pub druid_rdbc::types::RdbcType::SqlXml
+pub druid_rdbc::types::RdbcType::Struct
+pub druid_rdbc::types::RdbcType::Time
+pub druid_rdbc::types::RdbcType::TimeWithTimezone
+pub druid_rdbc::types::RdbcType::Timestamp
+pub druid_rdbc::types::RdbcType::TimestampWithTimezone
+pub druid_rdbc::types::RdbcType::TinyInt
+pub druid_rdbc::types::RdbcType::VarBinary
+pub druid_rdbc::types::RdbcType::VarChar
+impl druid_rdbc::types::SqlType for druid_rdbc::types::RdbcType
+pub fn druid_rdbc::types::RdbcType::name(&self) -> &'static str
+pub fn druid_rdbc::types::RdbcType::vendor(&self) -> &'static str
+pub fn druid_rdbc::types::RdbcType::vendor_type_number(&self) -> i32
+pub enum druid_rdbc::types::Value
+pub druid_rdbc::types::Value::Bool(bool)
+pub druid_rdbc::types::Value::Bytes(alloc::vec::Vec<u8>)
+pub druid_rdbc::types::Value::Date(chrono::naive::date::NaiveDate)
+pub druid_rdbc::types::Value::Decimal(bigdecimal::BigDecimal)
+pub druid_rdbc::types::Value::Float(f64)
+pub druid_rdbc::types::Value::Int(i64)
+pub druid_rdbc::types::Value::Null
+pub druid_rdbc::types::Value::String(alloc::string::String)
+pub druid_rdbc::types::Value::Time(chrono::naive::time::NaiveTime)
+pub druid_rdbc::types::Value::Timestamp(chrono::naive::datetime::NaiveDateTime)
+impl core::convert::From<&str> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(alloc::string::String) -> Self
+impl core::convert::From<alloc::vec::Vec<u8>> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(alloc::vec::Vec<u8>) -> Self
+impl core::convert::From<bigdecimal::BigDecimal> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(bigdecimal::BigDecimal) -> Self
+impl core::convert::From<bool> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(bool) -> Self
+impl core::convert::From<chrono::naive::date::NaiveDate> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(chrono::naive::date::NaiveDate) -> Self
+impl core::convert::From<chrono::naive::datetime::NaiveDateTime> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(chrono::naive::datetime::NaiveDateTime) -> Self
+impl core::convert::From<chrono::naive::time::NaiveTime> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(chrono::naive::time::NaiveTime) -> Self
+impl core::convert::From<druid_rdbc::types::Date> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(druid_rdbc::types::Date) -> Self
+impl core::convert::From<druid_rdbc::types::Time> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(druid_rdbc::types::Time) -> Self
+impl core::convert::From<druid_rdbc::types::Timestamp> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(druid_rdbc::types::Timestamp) -> Self
+impl core::convert::From<druid_rdbc::types::Value> for druid_rdbc::types::RdbcObject
+pub fn druid_rdbc::types::RdbcObject::from(druid_rdbc::types::Value) -> Self
+impl core::convert::From<f64> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(f64) -> Self
+impl core::convert::From<i32> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(i32) -> Self
+impl core::convert::From<i64> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(i64) -> Self
+impl core::fmt::Display for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::types::Date(_)
+impl druid_rdbc::types::Date
+pub fn druid_rdbc::types::Date::from_local_date(chrono::naive::date::NaiveDate) -> Self
+pub fn druid_rdbc::types::Date::from_millis(i64) -> core::result::Result<Self, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::Date::millis(self) -> core::result::Result<i64, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::Date::to_local_date(self) -> chrono::naive::date::NaiveDate
+pub fn druid_rdbc::types::Date::value_of(&str) -> core::result::Result<Self, druid_rdbc::RdbcError>
+impl core::convert::From<druid_rdbc::types::Date> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(druid_rdbc::types::Date) -> Self
+impl core::fmt::Display for druid_rdbc::types::Date
+pub fn druid_rdbc::types::Date::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::types::RdbcCalendar
+impl druid_rdbc::types::RdbcCalendar
+pub fn druid_rdbc::types::RdbcCalendar::new(impl core::convert::Into<alloc::string::String>) -> core::result::Result<Self, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::RdbcCalendar::time_zone_id(&self) -> &str
+pub struct druid_rdbc::types::RdbcOpaqueObject
+impl druid_rdbc::types::RdbcOpaqueObject
+pub fn druid_rdbc::types::RdbcOpaqueObject::class_name(&self) -> &str
+pub fn druid_rdbc::types::RdbcOpaqueObject::downcast_ref<T: core::any::Any>(&self) -> core::option::Option<&T>
+pub fn druid_rdbc::types::RdbcOpaqueObject::new(alloc::sync::Arc<dyn druid_rdbc::types::OpaqueObjectValue>) -> Self
+pub fn druid_rdbc::types::RdbcOpaqueObject::value(&self) -> &dyn druid_rdbc::types::OpaqueObjectValue
+impl core::cmp::Eq for druid_rdbc::types::RdbcOpaqueObject
+impl core::cmp::PartialEq for druid_rdbc::types::RdbcOpaqueObject
+pub fn druid_rdbc::types::RdbcOpaqueObject::eq(&self, &Self) -> bool
+impl core::fmt::Debug for druid_rdbc::types::RdbcOpaqueObject
+pub fn druid_rdbc::types::RdbcOpaqueObject::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::types::RdbcParameterDate(_)
+impl druid_rdbc::types::RdbcParameterDate
+pub const fn druid_rdbc::types::RdbcParameterDate::new(core::option::Option<chrono::naive::date::NaiveDate>) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterDate
+pub fn druid_rdbc::types::RdbcParameterDate::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterDate::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterDate::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterDate::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterDecimal(_)
+impl druid_rdbc::types::RdbcParameterDecimal
+pub fn druid_rdbc::types::RdbcParameterDecimal::value_of(core::option::Option<bigdecimal::BigDecimal>) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterDecimal
+pub fn druid_rdbc::types::RdbcParameterDecimal::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterDecimal::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterDecimal::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterDecimal::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterImpl
+impl druid_rdbc::types::RdbcParameterImpl
+pub fn druid_rdbc::types::RdbcParameterImpl::new(i32, core::option::Option<druid_rdbc::types::RdbcParameterValue>, i64, core::option::Option<druid_rdbc::types::RdbcCalendar>, i32) -> Self
+pub const fn druid_rdbc::types::RdbcParameterImpl::scale_or_length(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterImpl::with_calendar(i32, core::option::Option<druid_rdbc::types::RdbcParameterValue>, core::option::Option<druid_rdbc::types::RdbcCalendar>) -> Self
+pub fn druid_rdbc::types::RdbcParameterImpl::with_length(i32, core::option::Option<druid_rdbc::types::RdbcParameterValue>, i64) -> Self
+pub fn druid_rdbc::types::RdbcParameterImpl::with_value(i32, core::option::Option<druid_rdbc::types::RdbcParameterValue>) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterImpl
+pub fn druid_rdbc::types::RdbcParameterImpl::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterImpl::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterImpl::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterImpl::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterInt(_)
+impl druid_rdbc::types::RdbcParameterInt
+pub const fn druid_rdbc::types::RdbcParameterInt::value_of(i32) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterInt
+pub fn druid_rdbc::types::RdbcParameterInt::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterInt::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterInt::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterInt::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterLong(_)
+impl druid_rdbc::types::RdbcParameterLong
+pub const fn druid_rdbc::types::RdbcParameterLong::value_of(i64) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterLong
+pub fn druid_rdbc::types::RdbcParameterLong::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterLong::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterLong::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterLong::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterNull(_)
+impl druid_rdbc::types::RdbcParameterNull
+pub const druid_rdbc::types::RdbcParameterNull::BIGINT: Self
+pub const druid_rdbc::types::RdbcParameterNull::BINARY: Self
+pub const druid_rdbc::types::RdbcParameterNull::CHAR: Self
+pub const druid_rdbc::types::RdbcParameterNull::DATE: Self
+pub const druid_rdbc::types::RdbcParameterNull::DECIMAL: Self
+pub const druid_rdbc::types::RdbcParameterNull::DOUBLE: Self
+pub const druid_rdbc::types::RdbcParameterNull::FLOAT: Self
+pub const druid_rdbc::types::RdbcParameterNull::INTEGER: Self
+pub const druid_rdbc::types::RdbcParameterNull::NULL: Self
+pub const druid_rdbc::types::RdbcParameterNull::NUMERIC: Self
+pub const druid_rdbc::types::RdbcParameterNull::NVARCHAR: Self
+pub const druid_rdbc::types::RdbcParameterNull::SMALLINT: Self
+pub const druid_rdbc::types::RdbcParameterNull::TIME: Self
+pub const druid_rdbc::types::RdbcParameterNull::TIMESTAMP: Self
+pub const druid_rdbc::types::RdbcParameterNull::TINYINT: Self
+pub const druid_rdbc::types::RdbcParameterNull::VARBINARY: Self
+pub const druid_rdbc::types::RdbcParameterNull::VARCHAR: Self
+pub const fn druid_rdbc::types::RdbcParameterNull::value_of(i32) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterNull
+pub fn druid_rdbc::types::RdbcParameterNull::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterNull::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterNull::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterNull::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterString(_)
+impl druid_rdbc::types::RdbcParameterString
+pub fn druid_rdbc::types::RdbcParameterString::empty() -> Self
+pub fn druid_rdbc::types::RdbcParameterString::new(core::option::Option<alloc::string::String>) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterString
+pub fn druid_rdbc::types::RdbcParameterString::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterString::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterString::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterString::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterTimestamp(_)
+impl druid_rdbc::types::RdbcParameterTimestamp
+pub const fn druid_rdbc::types::RdbcParameterTimestamp::new(core::option::Option<chrono::naive::datetime::NaiveDateTime>) -> Self
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterTimestamp
+pub fn druid_rdbc::types::RdbcParameterTimestamp::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterTimestamp::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterTimestamp::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterTimestamp::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub struct druid_rdbc::types::RdbcParameterType
+impl druid_rdbc::types::RdbcParameterType
+pub const druid_rdbc::types::RdbcParameterType::ASCII_INPUT_STREAM: i32
+pub const druid_rdbc::types::RdbcParameterType::BINARY_INPUT_STREAM: i32
+pub const druid_rdbc::types::RdbcParameterType::BYTES: i32
+pub const druid_rdbc::types::RdbcParameterType::CHARACTER_INPUT_STREAM: i32
+pub const druid_rdbc::types::RdbcParameterType::NCHARACTER_INPUT_STREAM: i32
+pub const druid_rdbc::types::RdbcParameterType::UNICODE_STREAM: i32
+pub const druid_rdbc::types::RdbcParameterType::URL: i32
+pub struct druid_rdbc::types::RdbcRowId
+impl druid_rdbc::types::RdbcRowId
+pub fn druid_rdbc::types::RdbcRowId::bytes(&self) -> &[u8]
+pub fn druid_rdbc::types::RdbcRowId::get_bytes(&self) -> alloc::vec::Vec<u8>
+pub fn druid_rdbc::types::RdbcRowId::new(impl core::convert::Into<alloc::vec::Vec<u8>>) -> Self
+pub struct druid_rdbc::types::RdbcString
+impl druid_rdbc::types::RdbcString
+pub fn druid_rdbc::types::RdbcString::as_utf16(&self) -> &[u16]
+pub fn druid_rdbc::types::RdbcString::from_rust_str(&str) -> Self
+pub fn druid_rdbc::types::RdbcString::from_utf16(impl core::convert::Into<alloc::vec::Vec<u16>>) -> Self
+pub fn druid_rdbc::types::RdbcString::is_empty(&self) -> bool
+pub fn druid_rdbc::types::RdbcString::len(&self) -> usize
+pub fn druid_rdbc::types::RdbcString::to_rust_string(&self) -> core::result::Result<alloc::string::String, druid_rdbc::RdbcError>
+impl core::convert::From<&str> for druid_rdbc::types::RdbcString
+pub fn druid_rdbc::types::RdbcString::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for druid_rdbc::types::RdbcString
+pub fn druid_rdbc::types::RdbcString::from(alloc::string::String) -> Self
+impl core::fmt::Debug for druid_rdbc::types::RdbcString
+pub fn druid_rdbc::types::RdbcString::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::types::RdbcTypeMap
+impl druid_rdbc::types::RdbcTypeMap
+pub fn druid_rdbc::types::RdbcTypeMap::from_mappings(std::collections::hash::map::HashMap<alloc::string::String, druid_rdbc::types::RdbcTargetType>) -> Self
+pub fn druid_rdbc::types::RdbcTypeMap::get(&self, &str) -> core::option::Option<&druid_rdbc::types::RdbcTargetType>
+pub fn druid_rdbc::types::RdbcTypeMap::insert(&mut self, impl core::convert::Into<alloc::string::String>, druid_rdbc::types::RdbcTargetType) -> core::option::Option<druid_rdbc::types::RdbcTargetType>
+pub fn druid_rdbc::types::RdbcTypeMap::is_empty(&self) -> bool
+pub fn druid_rdbc::types::RdbcTypeMap::len(&self) -> usize
+pub fn druid_rdbc::types::RdbcTypeMap::mappings(&self) -> &std::collections::hash::map::HashMap<alloc::string::String, druid_rdbc::types::RdbcTargetType>
+pub fn druid_rdbc::types::RdbcTypeMap::new() -> Self
+pub struct druid_rdbc::types::RdbcUrl
+impl druid_rdbc::types::RdbcUrl
+pub fn druid_rdbc::types::RdbcUrl::external_form(&self) -> &str
+pub fn druid_rdbc::types::RdbcUrl::new(impl core::convert::Into<alloc::string::String>) -> Self
+impl core::convert::From<&str> for druid_rdbc::types::RdbcUrl
+pub fn druid_rdbc::types::RdbcUrl::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for druid_rdbc::types::RdbcUrl
+pub fn druid_rdbc::types::RdbcUrl::from(alloc::string::String) -> Self
+pub struct druid_rdbc::types::Row
+pub druid_rdbc::types::Row::values: alloc::vec::Vec<druid_rdbc::types::Value>
+impl druid_rdbc::types::Row
+pub fn druid_rdbc::types::Row::get(&self, usize) -> core::option::Option<&druid_rdbc::types::Value>
+pub fn druid_rdbc::types::Row::is_empty(&self) -> bool
+pub fn druid_rdbc::types::Row::len(&self) -> usize
+pub fn druid_rdbc::types::Row::new(alloc::vec::Vec<druid_rdbc::types::Value>) -> Self
+pub struct druid_rdbc::types::Savepoint
+pub druid_rdbc::types::Savepoint::id: u64
+pub druid_rdbc::types::Savepoint::name: core::option::Option<alloc::string::String>
+impl druid_rdbc::connection::Savepoint
+pub fn druid_rdbc::connection::Savepoint::get_savepoint_id(&self) -> core::result::Result<i32, druid_rdbc::RdbcError>
+pub fn druid_rdbc::connection::Savepoint::get_savepoint_name(&self) -> core::result::Result<&str, druid_rdbc::RdbcError>
+pub struct druid_rdbc::types::Time(_)
+impl druid_rdbc::types::Time
+pub fn druid_rdbc::types::Time::from_local_time(chrono::naive::time::NaiveTime) -> Self
+pub fn druid_rdbc::types::Time::to_local_time(self) -> chrono::naive::time::NaiveTime
+pub fn druid_rdbc::types::Time::value_of(&str) -> core::result::Result<Self, druid_rdbc::RdbcError>
+impl core::convert::From<druid_rdbc::types::Time> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(druid_rdbc::types::Time) -> Self
+impl core::fmt::Display for druid_rdbc::types::Time
+pub fn druid_rdbc::types::Time::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::types::Timestamp(_)
+impl druid_rdbc::types::Timestamp
+pub fn druid_rdbc::types::Timestamp::from_local_date_time(chrono::naive::datetime::NaiveDateTime) -> Self
+pub fn druid_rdbc::types::Timestamp::from_millis(i64) -> core::result::Result<Self, druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::Timestamp::millis(self) -> i64
+pub fn druid_rdbc::types::Timestamp::nanos(self) -> u32
+pub fn druid_rdbc::types::Timestamp::set_nanos(&mut self, u32) -> core::result::Result<(), druid_rdbc::RdbcError>
+pub fn druid_rdbc::types::Timestamp::to_local_date_time(self) -> chrono::naive::datetime::NaiveDateTime
+pub fn druid_rdbc::types::Timestamp::value_of(&str) -> core::result::Result<Self, druid_rdbc::RdbcError>
+impl core::convert::From<druid_rdbc::types::Timestamp> for druid_rdbc::types::Value
+pub fn druid_rdbc::types::Value::from(druid_rdbc::types::Timestamp) -> Self
+impl core::fmt::Display for druid_rdbc::types::Timestamp
+pub fn druid_rdbc::types::Timestamp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct druid_rdbc::types::Types
+impl druid_rdbc::types::Types
+pub const druid_rdbc::types::Types::ARRAY: i32
+pub const druid_rdbc::types::Types::BIGINT: i32
+pub const druid_rdbc::types::Types::BINARY: i32
+pub const druid_rdbc::types::Types::BIT: i32
+pub const druid_rdbc::types::Types::BLOB: i32
+pub const druid_rdbc::types::Types::BOOLEAN: i32
+pub const druid_rdbc::types::Types::CHAR: i32
+pub const druid_rdbc::types::Types::CLOB: i32
+pub const druid_rdbc::types::Types::DATALINK: i32
+pub const druid_rdbc::types::Types::DATE: i32
+pub const druid_rdbc::types::Types::DECIMAL: i32
+pub const druid_rdbc::types::Types::DISTINCT: i32
+pub const druid_rdbc::types::Types::DOUBLE: i32
+pub const druid_rdbc::types::Types::FLOAT: i32
+pub const druid_rdbc::types::Types::INTEGER: i32
+pub const druid_rdbc::types::Types::JAVA_OBJECT: i32
+pub const druid_rdbc::types::Types::LONGNVARCHAR: i32
+pub const druid_rdbc::types::Types::LONGVARBINARY: i32
+pub const druid_rdbc::types::Types::LONGVARCHAR: i32
+pub const druid_rdbc::types::Types::NCHAR: i32
+pub const druid_rdbc::types::Types::NCLOB: i32
+pub const druid_rdbc::types::Types::NULL: i32
+pub const druid_rdbc::types::Types::NUMERIC: i32
+pub const druid_rdbc::types::Types::NVARCHAR: i32
+pub const druid_rdbc::types::Types::OTHER: i32
+pub const druid_rdbc::types::Types::REAL: i32
+pub const druid_rdbc::types::Types::REF: i32
+pub const druid_rdbc::types::Types::REF_CURSOR: i32
+pub const druid_rdbc::types::Types::ROWID: i32
+pub const druid_rdbc::types::Types::SMALLINT: i32
+pub const druid_rdbc::types::Types::SQLXML: i32
+pub const druid_rdbc::types::Types::STRUCT: i32
+pub const druid_rdbc::types::Types::TIME: i32
+pub const druid_rdbc::types::Types::TIMESTAMP: i32
+pub const druid_rdbc::types::Types::TIMESTAMP_WITH_TIMEZONE: i32
+pub const druid_rdbc::types::Types::TIME_WITH_TIMEZONE: i32
+pub const druid_rdbc::types::Types::TINYINT: i32
+pub const druid_rdbc::types::Types::VARBINARY: i32
+pub const druid_rdbc::types::Types::VARCHAR: i32
+pub const druid_rdbc::types::ASCII_INPUT_STREAM: i32
+pub const druid_rdbc::types::BINARY_INPUT_STREAM: i32
+pub const druid_rdbc::types::CHARACTER_INPUT_STREAM: i32
+pub const druid_rdbc::types::NCHARACTER_INPUT_STREAM: i32
+pub const druid_rdbc::types::URL: i32
+pub trait druid_rdbc::types::OpaqueObjectValue: core::fmt::Debug + core::marker::Send + core::marker::Sync
+pub fn druid_rdbc::types::OpaqueObjectValue::as_any(&self) -> &dyn core::any::Any
+pub fn druid_rdbc::types::OpaqueObjectValue::class_name(&self) -> &str
+pub trait druid_rdbc::types::RdbcParameter
+pub fn druid_rdbc::types::RdbcParameter::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameter::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameter::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameter::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterDate
+pub fn druid_rdbc::types::RdbcParameterDate::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterDate::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterDate::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterDate::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterDecimal
+pub fn druid_rdbc::types::RdbcParameterDecimal::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterDecimal::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterDecimal::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterDecimal::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterImpl
+pub fn druid_rdbc::types::RdbcParameterImpl::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterImpl::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterImpl::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterImpl::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterInt
+pub fn druid_rdbc::types::RdbcParameterInt::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterInt::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterInt::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterInt::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterLong
+pub fn druid_rdbc::types::RdbcParameterLong::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterLong::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterLong::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterLong::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterNull
+pub fn druid_rdbc::types::RdbcParameterNull::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterNull::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterNull::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterNull::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterString
+pub fn druid_rdbc::types::RdbcParameterString::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterString::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterString::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterString::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+impl druid_rdbc::types::RdbcParameter for druid_rdbc::types::RdbcParameterTimestamp
+pub fn druid_rdbc::types::RdbcParameterTimestamp::calendar(&self) -> core::option::Option<druid_rdbc::types::RdbcCalendar>
+pub fn druid_rdbc::types::RdbcParameterTimestamp::length(&self) -> i64
+pub fn druid_rdbc::types::RdbcParameterTimestamp::sql_type(&self) -> i32
+pub fn druid_rdbc::types::RdbcParameterTimestamp::value(&self) -> core::option::Option<druid_rdbc::types::RdbcParameterValue>
+pub trait druid_rdbc::types::SqlType
+pub fn druid_rdbc::types::SqlType::name(&self) -> &'static str
+pub fn druid_rdbc::types::SqlType::vendor(&self) -> &'static str
+pub fn druid_rdbc::types::SqlType::vendor_type_number(&self) -> i32
+impl druid_rdbc::types::SqlType for druid_rdbc::types::RdbcType
+pub fn druid_rdbc::types::RdbcType::name(&self) -> &'static str
+pub fn druid_rdbc::types::RdbcType::vendor(&self) -> &'static str
+pub fn druid_rdbc::types::RdbcType::vendor_type_number(&self) -> i32
+pub mod druid_rdbc::wrapper
+#[non_exhaustive] pub enum druid_rdbc::wrapper::StandardUnwrapped<'a>
+pub druid_rdbc::wrapper::StandardUnwrapped::CallableStatement(&'a dyn druid_rdbc::statement::CallableStatement)
+pub druid_rdbc::wrapper::StandardUnwrapped::CommonDataSource(&'a dyn druid_rdbc::data_source::CommonDataSource)
+pub druid_rdbc::wrapper::StandardUnwrapped::Connection(&'a dyn druid_rdbc::connection::Connection)
+pub druid_rdbc::wrapper::StandardUnwrapped::ConnectionFactory(&'a dyn druid_rdbc::driver::ConnectionFactory)
+pub druid_rdbc::wrapper::StandardUnwrapped::ConnectionPoolDataSource(&'a dyn druid_rdbc::data_source::ConnectionPoolDataSource)
+pub druid_rdbc::wrapper::StandardUnwrapped::DataSource(&'a dyn druid_rdbc::data_source::DataSource)
+pub druid_rdbc::wrapper::StandardUnwrapped::DatabaseMetaData(&'a dyn druid_rdbc::metadata::DatabaseMetaData)
+pub druid_rdbc::wrapper::StandardUnwrapped::Driver(&'a dyn druid_rdbc::driver::Driver)
+pub druid_rdbc::wrapper::StandardUnwrapped::ParameterMetaData(&'a dyn druid_rdbc::metadata::ParameterMetaData)
+pub druid_rdbc::wrapper::StandardUnwrapped::PooledConnection(&'a dyn druid_rdbc::data_source::PooledConnection)
+pub druid_rdbc::wrapper::StandardUnwrapped::PreparedStatement(&'a dyn druid_rdbc::statement::PreparedStatement)
+pub druid_rdbc::wrapper::StandardUnwrapped::ResultSet(&'a dyn druid_rdbc::result_set::ResultSet)
+pub druid_rdbc::wrapper::StandardUnwrapped::ResultSetMetaData(&'a dyn druid_rdbc::metadata::ResultSetMetaData)
+pub druid_rdbc::wrapper::StandardUnwrapped::Statement(&'a dyn druid_rdbc::statement::Statement)
+pub druid_rdbc::wrapper::StandardUnwrapped::Wrapper(&'a dyn druid_rdbc::wrapper::Wrapper)
+pub druid_rdbc::wrapper::StandardUnwrapped::XaConnection(&'a dyn druid_rdbc::data_source::XaConnection)
+pub druid_rdbc::wrapper::StandardUnwrapped::XaDataSource(&'a dyn druid_rdbc::data_source::XaDataSource)
+impl core::fmt::Debug for druid_rdbc::wrapper::StandardUnwrapped<'_>
+pub fn druid_rdbc::wrapper::StandardUnwrapped<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait druid_rdbc::wrapper::Wrapper: core::marker::Send
+pub fn druid_rdbc::wrapper::Wrapper::is_wrapper_for(&self, core::option::Option<core::any::TypeId>) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::wrapper::Wrapper::unwrap(&self, core::option::Option<core::any::TypeId>) -> core::result::Result<druid_rdbc::wrapper::StandardUnwrapped<'_>, druid_rdbc::RdbcError>
+impl druid_rdbc::wrapper::Wrapper for druid_rdbc::metadata::ResultSetMetaDataSnapshot
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::is_wrapper_for(&self, core::option::Option<core::any::TypeId>) -> core::result::Result<bool, druid_rdbc::RdbcError>
+pub fn druid_rdbc::metadata::ResultSetMetaDataSnapshot::unwrap(&self, core::option::Option<core::any::TypeId>) -> core::result::Result<druid_rdbc::wrapper::StandardUnwrapped<'_>, druid_rdbc::RdbcError>
+pub trait druid_rdbc::wrapper::WrapperExt: druid_rdbc::wrapper::Wrapper
+pub fn druid_rdbc::wrapper::WrapperExt::is_wrapper_for_type<T: core::any::Any>(&self) -> bool where Self: core::any::Any + core::marker::Sized
+pub fn druid_rdbc::wrapper::WrapperExt::unwrap_ref<T: core::any::Any>(&self) -> core::result::Result<&T, druid_rdbc::RdbcError> where Self: core::any::Any + core::marker::Sized
+impl<T> druid_rdbc::wrapper::WrapperExt for T where T: druid_rdbc::wrapper::Wrapper + ?core::marker::Sized
+pub fn T::is_wrapper_for_type<T: core::any::Any>(&self) -> bool where Self: core::any::Any + core::marker::Sized
+pub fn T::unwrap_ref<T: core::any::Any>(&self) -> core::result::Result<&T, druid_rdbc::RdbcError> where Self: core::any::Any + core::marker::Sized
+pub macro druid_rdbc::impl_standard_wrapper!
+#[non_exhaustive] pub enum druid_rdbc::RdbcError
+pub druid_rdbc::RdbcError::AcquireTimeout
+pub druid_rdbc::RdbcError::BatchUpdateException
+pub druid_rdbc::RdbcError::BatchUpdateException::cause: alloc::boxed::Box<druid_rdbc::RdbcError>
+pub druid_rdbc::RdbcError::BatchUpdateException::update_counts: druid_rdbc::error::BatchUpdateCounts
+pub druid_rdbc::RdbcError::ConnectionDiscarded
+pub druid_rdbc::RdbcError::ConnectionLeaked
+pub druid_rdbc::RdbcError::ConnectionLeaked::held_for: core::time::Duration
+pub druid_rdbc::RdbcError::ConnectionLeaked::id: u64
+pub druid_rdbc::RdbcError::DataSourceClosed
+pub druid_rdbc::RdbcError::DataSourceClosed::close_time_millis: u64
+pub druid_rdbc::RdbcError::DataSourceDisabled
+pub druid_rdbc::RdbcError::DataSourceNotAvailable
+pub druid_rdbc::RdbcError::DataSourceNotAvailable::cause: core::option::Option<alloc::boxed::Box<druid_rdbc::RdbcError>>
+pub druid_rdbc::RdbcError::DataSourceNotFound(alloc::string::String)
+pub druid_rdbc::RdbcError::DriverError(alloc::string::String)
+pub druid_rdbc::RdbcError::GetConnectionTimeout
+pub druid_rdbc::RdbcError::GetConnectionTimeout::active_count: usize
+pub druid_rdbc::RdbcError::GetConnectionTimeout::cause: core::option::Option<alloc::boxed::Box<druid_rdbc::RdbcError>>
+pub druid_rdbc::RdbcError::GetConnectionTimeout::create_elapsed_millis: core::option::Option<u64>
+pub druid_rdbc::RdbcError::GetConnectionTimeout::create_error_count: u64
+pub druid_rdbc::RdbcError::GetConnectionTimeout::creating_count: usize
+pub druid_rdbc::RdbcError::GetConnectionTimeout::max_active: usize
+pub druid_rdbc::RdbcError::GetConnectionTimeout::running_sql: alloc::vec::Vec<(u64, alloc::string::String)>
+pub druid_rdbc::RdbcError::GetConnectionTimeout::wait_millis: u64
+pub druid_rdbc::RdbcError::InvalidArgument(alloc::string::String)
+pub druid_rdbc::RdbcError::LoginTimeout
+pub druid_rdbc::RdbcError::MaxWaitThreadCountExceeded
+pub druid_rdbc::RdbcError::MaxWaitThreadCountExceeded::current: usize
+pub druid_rdbc::RdbcError::MaxWaitThreadCountExceeded::max: usize
+pub druid_rdbc::RdbcError::NoDriverExtension
+pub druid_rdbc::RdbcError::NoDriverExtension::db_type: alloc::string::String
+pub druid_rdbc::RdbcError::Other(alloc::string::String)
+pub druid_rdbc::RdbcError::PoolClosed
+pub druid_rdbc::RdbcError::PoolExhausted
+pub druid_rdbc::RdbcError::ProductBoundary(druid_rdbc::error::ProductErrorBoundary)
+pub druid_rdbc::RdbcError::SqlException(alloc::boxed::Box<druid_rdbc::error::SqlException>)
+pub druid_rdbc::RdbcError::SqlParseError(alloc::string::String)
+pub druid_rdbc::RdbcError::UnsupportedOperation
+pub druid_rdbc::RdbcError::UnsupportedOperation::operation: &'static str
+pub druid_rdbc::RdbcError::ValidationFailed(alloc::string::String)
+pub druid_rdbc::RdbcError::WallViolation(alloc::string::String)
+impl druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::batch_update_counts(&self) -> core::option::Option<&druid_rdbc::error::BatchUpdateCounts>
+pub fn druid_rdbc::RdbcError::class_name(&self) -> &str
+pub fn druid_rdbc::RdbcError::feature_not_supported(&'static str) -> Self
+pub fn druid_rdbc::RdbcError::kind(&self) -> druid_rdbc::error::RdbcErrorKind
+pub fn druid_rdbc::RdbcError::rdbc_resource_closed(&'static str) -> Self
+pub fn druid_rdbc::RdbcError::sql_exception(&self) -> core::option::Option<&druid_rdbc::error::SqlException>
+impl core::convert::From<&str> for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::from(alloc::string::String) -> Self
+impl core::error::Error for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Display for druid_rdbc::RdbcError
+pub fn druid_rdbc::RdbcError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

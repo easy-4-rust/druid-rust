@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::ResultSetNullability;
+pub use druid_rdbc::metadata::ResultSetNullability;

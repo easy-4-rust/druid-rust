@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::CallableInputParameter;
+pub use druid_rdbc::statement::CallableInputParameter;

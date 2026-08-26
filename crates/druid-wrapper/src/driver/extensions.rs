@@ -3,14 +3,14 @@
 //! Each `inventory::submit!` registers a `DriverExtensionDescriptor` that
 //! Core's `lookup_driver_extension` can resolve by database type.
 
+use druid::core::DriverExtensionDescriptor;
 use druid::core::{
     Db2ExceptionSorter, MySqlExceptionSorter, MySqlValidConnectionChecker,
     OceanBaseOracleExceptionSorter, OceanBaseValidConnectionChecker, OracleExceptionSorter,
     OracleValidConnectionChecker, PgExceptionSorter, PgValidConnectionChecker,
 };
-use druid::spi::driver_extension_descriptor::DriverExtensionDescriptor;
+use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::PhysicalConnectionFactory;
 use std::sync::Arc;
 
 use crate::toasty::ToastyConnectionFactory;
@@ -30,7 +30,7 @@ pub fn init() {
 // Factory helpers
 // ---------------------------------------------------------------------------
 
-fn toasty_factory(url: &str) -> Result<Arc<dyn PhysicalConnectionFactory>, RdbcError> {
+fn toasty_factory(url: &str) -> Result<Arc<dyn ConnectionFactory>, RdbcError> {
     // Block on the async ToastyConnectionFactory::new.
     // This is acceptable because inventory items are resolved lazily and
     // the factory is typically called once at pool initialization.

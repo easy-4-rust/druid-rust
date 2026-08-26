@@ -1,21 +1,14 @@
-use super::{
-    libsql_prepared_statement::LibSqlStatementExecutionError, LibSqlDatabaseMetaData,
-    LibSqlPreparedStatement,
-};
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
-use crate::standard_adapter_executor::{owned_executor, AdapterExecutionCore, StandardExecutor};
+use crate::standard_adapter_executor::{
+    owned_executor, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
+};
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
 use crate::standard_query_result::StandardQueryResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::error::{SqlException, SqlWarning};
-use druid_rdbc::spi::{
-    ExecResult, PhysicalConnection, PhysicalConnectionCapabilities, PhysicalDatabaseMetaData,
-    PhysicalPreparedStatement, PhysicalResultSet, PreparedStatementKey, RowSetResultSet,
-    StatementExecuteResult, StatementGeneratedKeys,
-};
-use druid_rdbc::types::{Row, Savepoint, Value};
+use druid_rdbc::error::SqlException;
+use druid_rdbc::types::{Row, Value};
 use std::sync::Arc;
 
 pub(super) struct LibSqlResult {
@@ -28,7 +21,6 @@ pub(super) struct LibSqlResult {
 #[async_trait::async_trait]
 pub(super) trait LibSqlTransport: Send + Sync {
     async fn request(&self, sql: &str, params: Vec<Value>) -> Result<LibSqlResult, RdbcError>;
-    async fn prepare(&self, sql: &str) -> Result<(), RdbcError>;
 }
 
 struct NativeLibSqlTransport {
@@ -85,14 +77,6 @@ impl LibSqlTransport for NativeLibSqlTransport {
                 .saturating_sub(before_changes),
             last_insert_id: Some(self.connection.last_insert_rowid()),
         })
-    }
-
-    async fn prepare(&self, sql: &str) -> Result<(), RdbcError> {
-        self.connection
-            .prepare(sql)
-            .await
-            .map(|_| ())
-            .map_err(LibSqlConnectionAdapter::driver_error)
     }
 }
 
@@ -177,21 +161,13 @@ impl LibSqlConnectionAdapter {
         &mut self,
         sql: &str,
         params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
+    ) -> Result<AdapterUpdateResult, RdbcError> {
         let result = self.request(sql, params).await?;
-        Ok(ExecResult {
+        Ok(AdapterUpdateResult {
             rows_affected: result.rows_affected,
             last_insert_id: result.last_insert_id,
             row_count: None,
         })
-    }
-
-    async fn execute_query_core(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        self.request(sql, params).await.map(|result| result.rows)
     }
 
     #[allow(
@@ -283,280 +259,6 @@ impl LibSqlConnectionAdapter {
         }
         error
     }
-
-    fn prepared(
-        statement: &dyn PhysicalPreparedStatement,
-    ) -> Result<&LibSqlPreparedStatement, RdbcError> {
-        statement
-            .as_any()
-            .downcast_ref::<LibSqlPreparedStatement>()
-            .ok_or_else(|| {
-                RdbcError::DriverError("prepared statement belongs to another driver".to_owned())
-            })
-    }
-
-    fn controlled<T>(
-        &mut self,
-        result: Result<T, LibSqlStatementExecutionError>,
-    ) -> Result<T, RdbcError> {
-        match result {
-            Ok(value) => Ok(value),
-            Err(LibSqlStatementExecutionError::Driver(error)) => Err(error),
-            Err(LibSqlStatementExecutionError::TimedOut) => {
-                self.discarded = true;
-                self.transport.take();
-                Err(RdbcError::SqlException(Box::new(
-                    SqlException::new(
-                        0,
-                        Some("HYT00".to_owned()),
-                        Some("libSQL query timed out".to_owned()),
-                    )
-                    .with_class_name("java.sql.SQLTimeoutException")
-                    .recoverable(),
-                )))
-            }
-            Err(LibSqlStatementExecutionError::Cancelled) => {
-                self.discarded = true;
-                self.transport.take();
-                Err(RdbcError::SqlException(Box::new(
-                    SqlException::new(
-                        0,
-                        Some("HY008".to_owned()),
-                        Some("libSQL query was cancelled".to_owned()),
-                    )
-                    .with_class_name("java.sql.SQLException")
-                    .recoverable(),
-                )))
-            }
-        }
-    }
-
-    fn savepoint_name(savepoint: &Savepoint) -> Result<String, RdbcError> {
-        let name = savepoint
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("druid_sp_{}", savepoint.id));
-        if name.is_empty()
-            || !name
-                .chars()
-                .all(|character| character.is_ascii_alphanumeric() || character == '_')
-        {
-            return Err(RdbcError::InvalidArgument(
-                "invalid libSQL savepoint name".to_owned(),
-            ));
-        }
-        Ok(name)
-    }
-}
-
-#[async_trait::async_trait]
-impl PhysicalConnection for LibSqlConnectionAdapter {
-    async fn exec(&mut self, sql: &str, params: Vec<Value>) -> Result<ExecResult, RdbcError> {
-        self.execute_update_core(sql, params).await
-    }
-
-    async fn execute(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-        _keys: StatementGeneratedKeys,
-    ) -> Result<Vec<StatementExecuteResult>, RdbcError> {
-        let result = self.request(sql, params).await?;
-        if result.labels.is_empty() {
-            Ok(vec![StatementExecuteResult::Update(ExecResult {
-                rows_affected: result.rows_affected,
-                last_insert_id: result.last_insert_id,
-                row_count: None,
-            })])
-        } else {
-            Ok(vec![StatementExecuteResult::ResultSet(result.rows)])
-        }
-    }
-
-    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
-        self.execute_query_core(sql, params).await
-    }
-
-    async fn fetch_result_set(
-        &mut self,
-        sql: &str,
-        params: Vec<Value>,
-    ) -> Result<Arc<dyn PhysicalResultSet>, RdbcError> {
-        let result = self.request(sql, params).await?;
-        Ok(Arc::new(RowSetResultSet::with_column_labels(
-            result.rows,
-            result.labels,
-        )))
-    }
-
-    async fn prepare_physical_statement(
-        &mut self,
-        key: &PreparedStatementKey,
-    ) -> Result<Arc<dyn PhysicalPreparedStatement>, RdbcError> {
-        self.transport()?.prepare(key.sql()).await?;
-        Ok(Arc::new(LibSqlPreparedStatement::new(key.sql())))
-    }
-
-    async fn exec_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<ExecResult, RdbcError> {
-        let statement = Self::prepared(statement)?;
-        let result = statement
-            .execute_with_controls(self.request(statement.sql(), params))
-            .await;
-        let result = self.controlled(result)?;
-        Ok(ExecResult {
-            rows_affected: result.rows_affected,
-            last_insert_id: result.last_insert_id,
-            row_count: None,
-        })
-    }
-
-    async fn fetch_prepared(
-        &mut self,
-        statement: &dyn PhysicalPreparedStatement,
-        params: Vec<Value>,
-    ) -> Result<Vec<Row>, RdbcError> {
-        let statement = Self::prepared(statement)?;
-        let result = statement
-            .execute_with_controls(self.request(statement.sql(), params))
-            .await;
-        self.controlled(result).map(|result| result.rows)
-    }
-
-    async fn begin(&mut self) -> Result<(), RdbcError> {
-        if !self.auto_commit {
-            return Err(RdbcError::DriverError(
-                "libSQL transaction is already active".to_owned(),
-            ));
-        }
-        self.exec("BEGIN", Vec::new()).await?;
-        self.auto_commit = false;
-        Ok(())
-    }
-    async fn commit(&mut self) -> Result<(), RdbcError> {
-        self.exec("COMMIT", Vec::new()).await?;
-        self.auto_commit = true;
-        Ok(())
-    }
-    async fn rollback(&mut self) -> Result<(), RdbcError> {
-        self.exec("ROLLBACK", Vec::new()).await?;
-        self.auto_commit = true;
-        Ok(())
-    }
-
-    async fn rollback_to(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        self.exec(
-            &format!("ROLLBACK TO SAVEPOINT {}", Self::savepoint_name(savepoint)?),
-            Vec::new(),
-        )
-        .await
-        .map(|_| ())
-    }
-
-    async fn set_savepoint(&mut self) -> Result<Savepoint, RdbcError> {
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        let savepoint = Savepoint {
-            id: self.savepoint_sequence,
-            name: None,
-        };
-        self.exec(
-            &format!("SAVEPOINT {}", Self::savepoint_name(&savepoint)?),
-            Vec::new(),
-        )
-        .await?;
-        Ok(savepoint)
-    }
-
-    async fn set_savepoint_named(&mut self, name: &str) -> Result<Savepoint, RdbcError> {
-        self.savepoint_sequence = self.savepoint_sequence.saturating_add(1);
-        let savepoint = Savepoint {
-            id: self.savepoint_sequence,
-            name: Some(name.to_owned()),
-        };
-        self.exec(
-            &format!("SAVEPOINT {}", Self::savepoint_name(&savepoint)?),
-            Vec::new(),
-        )
-        .await?;
-        Ok(savepoint)
-    }
-
-    async fn release_savepoint(&mut self, savepoint: &Savepoint) -> Result<(), RdbcError> {
-        self.exec(
-            &format!("RELEASE SAVEPOINT {}", Self::savepoint_name(savepoint)?),
-            Vec::new(),
-        )
-        .await
-        .map(|_| ())
-    }
-
-    async fn ping(&mut self) -> Result<(), RdbcError> {
-        let rows = self.fetch("SELECT 1", Vec::new()).await?;
-        if rows.is_empty() {
-            Err(RdbcError::ValidationFailed(
-                "libSQL validation returned no rows".to_owned(),
-            ))
-        } else {
-            Ok(())
-        }
-    }
-
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.close_connection_core().await
-    }
-    fn is_closed(&self) -> bool {
-        self.transport.is_none()
-    }
-    fn capabilities(&self) -> PhysicalConnectionCapabilities {
-        PhysicalConnectionCapabilities {
-            transactions: true,
-            savepoints: true,
-            auto_commit: true,
-            read_only: false,
-            transaction_isolation: false,
-            holdability: false,
-            clear_warnings: true,
-            catalog: false,
-            schema: false,
-        }
-    }
-    fn database_meta_data(&mut self) -> Result<Box<dyn PhysicalDatabaseMetaData + '_>, RdbcError> {
-        self.transport()?;
-        Ok(Box::new(LibSqlDatabaseMetaData::new(&self.url)))
-    }
-    fn auto_commit(&self) -> bool {
-        self.auto_commit
-    }
-    async fn set_auto_commit(&mut self, auto_commit: bool) -> Result<(), RdbcError> {
-        if auto_commit == self.auto_commit {
-            return Ok(());
-        }
-        if auto_commit {
-            self.commit().await
-        } else {
-            self.begin().await
-        }
-    }
-    async fn warnings(&mut self) -> Result<Option<SqlWarning>, RdbcError> {
-        self.transport()?;
-        Ok(None)
-    }
-    async fn clear_warnings(&mut self) -> Result<(), RdbcError> {
-        self.transport().map(|_| ())
-    }
-    fn mark_discarded(&mut self) {
-        self.discarded = true;
-        self.transport.take();
-    }
-    fn is_discarded(&self) -> bool {
-        self.discarded
-    }
-    fn driver_name(&self) -> &'static str {
-        "libsql-rs"
-    }
 }
 
 #[async_trait::async_trait]
@@ -637,5 +339,9 @@ impl druid_rdbc::connection::Connection for LibSqlConnectionAdapter {
             .standard_executor
             .as_ref()
             .map_or_else(|| self.transport.is_none(), |executor| executor.is_closed()))
+    }
+
+    async fn is_valid(&mut self, _timeout_seconds: u32) -> Result<bool, RdbcError> {
+        self.request("SELECT 1", Vec::new()).await.map(|_| true)
     }
 }

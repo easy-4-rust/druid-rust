@@ -1,8 +1,6 @@
 use std::time::Duration;
 
-use super::{
-    DruidError, PhysicalConnection, ValidConnectionChecker, ValidConnectionCheckerAdapter,
-};
+use super::{Connection, DruidError, ValidConnectionChecker, ValidConnectionCheckerAdapter};
 
 /// Microsoft SQL Server 连接校验器。
 ///
@@ -19,11 +17,11 @@ impl MsSqlValidConnectionChecker {
 impl ValidConnectionChecker for MsSqlValidConnectionChecker {
     async fn is_valid_connection(
         &self,
-        connection: &mut Box<dyn PhysicalConnection>,
+        connection: &mut Box<dyn Connection>,
         query: Option<&str>,
         validation_query_timeout: Duration,
     ) -> Result<bool, DruidError> {
-        if connection.is_closed() {
+        if connection.is_closed()? {
             return Ok(false);
         }
         ValidConnectionCheckerAdapter::exec_valid_query(

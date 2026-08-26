@@ -1,4 +1,4 @@
-//! Toasty 未池化物理连接工厂。
+//! Toasty 未池化 canonical 连接工厂。
 
 use super::ToastyConnectionAdapter;
 use crate::task4_runtime_trace::{
@@ -6,7 +6,6 @@ use crate::task4_runtime_trace::{
 };
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::error::SqlException;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::sync::Arc;
 use toasty::db::Connect;
 use toasty_core::{
@@ -15,9 +14,7 @@ use toasty_core::{
     Schema,
 };
 
-/// 使用 Toasty Driver SPI 创建未池化物理连接。
-///
-/// 对应 Java：`DruidDataSource#createPhysicalConnection`。工厂共享的是无状态
+/// 使用 Toasty Driver API 创建未池化连接。
 /// Toasty `Driver`，每次 `create` 直接调用 `Driver#connect`；不会创建或持有
 /// `toasty::Db`，所以 `DruidPool` 是唯一的连接池。
 #[derive(Clone)]
@@ -43,7 +40,7 @@ impl std::fmt::Debug for ToastyConnectionFactory {
 }
 
 impl ToastyConnectionFactory {
-    /// 解析 URL 并创建 Toasty 物理连接工厂。
+    /// 解析 URL 并创建 Toasty canonical 连接工厂。
     ///
     /// URL scheme 必须启用对应 feature。Druid 是 SQL 数据源，因此 `DynamoDB`
     /// 等非 SQL Toasty driver 会被明确拒绝。
@@ -56,7 +53,7 @@ impl ToastyConnectionFactory {
             // DynamoDB Driver 初始化会读取 AWS 环境；Druid SQL 边界在执行任何
             // 外部初始化前拒绝它，Toasty ORM 本身仍可独立使用该 driver。
             return Err(RdbcError::UnsupportedOperation {
-                operation: "toasty_non_sql_physical_connection",
+                operation: "toasty_non_sql_connection",
             });
         }
         let driver = Connect::new(&url)
@@ -76,7 +73,7 @@ impl ToastyConnectionFactory {
             .map_err(|error| Self::driver_error(&error))?;
         if !capability.sql {
             return Err(RdbcError::UnsupportedOperation {
-                operation: "toasty_non_sql_physical_connection",
+                operation: "toasty_non_sql_connection",
             });
         }
 
@@ -173,25 +170,11 @@ impl ToastyConnectionFactory {
 }
 
 #[async_trait::async_trait]
-impl PhysicalConnectionFactory for ToastyConnectionFactory {
+impl druid_rdbc::driver::ConnectionFactory for ToastyConnectionFactory {
     fn connection_url(&self) -> Option<&str> {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(self.create_adapter_core().await?))
-    }
-
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), RdbcError> {
-        connection.ping().await
-    }
-}
-
-#[async_trait::async_trait]
-impl druid_rdbc::driver::ConnectionFactory for ToastyConnectionFactory {
     async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
         Ok(Box::new(self.create_adapter_core().await?))
     }

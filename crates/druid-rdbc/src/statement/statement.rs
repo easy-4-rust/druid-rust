@@ -96,6 +96,10 @@ pub enum GeneratedKeys {
 pub struct ExecResult {
     /// 受影响行数。
     pub rows_affected: u64,
+    /// 最后插入的 ID；驱动未返回时保持 `None`。
+    pub last_insert_id: Option<i64>,
+    /// 查询返回行数；流式或非查询结果保持 `None`。
+    pub row_count: Option<u64>,
 }
 
 /// `Statement#execute` 的有序结果。

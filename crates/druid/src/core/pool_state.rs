@@ -29,7 +29,7 @@ pub struct PoolState {
     pub connect_count: u64,
     pub connect_error_count: u64,
     /// 物理连接创建、初始化或校验失败次数。
-    pub physical_connect_error_count: u64,
+    pub driver_connect_error_count: u64,
     /// Java `isFailContinuous()`。
     pub fail_continuous: bool,
     /// 最近一次进入连续创建失败状态的 epoch millis；未处于失败时为 0。

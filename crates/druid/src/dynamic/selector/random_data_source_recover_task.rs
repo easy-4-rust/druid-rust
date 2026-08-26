@@ -1,7 +1,6 @@
 //! 对应 Java 类：`com.alibaba.druid.pool.ha.selector.RandomDataSourceRecoverThread`。
 
 use super::random_data_source_selector::RandomDataSourceSelectorState;
-use crate::core::PhysicalConnection;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
@@ -41,7 +40,11 @@ impl RandomDataSourceRecoverTask {
                         ))
                         .await;
                     }
-                    PhysicalConnection::ping(&mut connection).await
+                    if druid_rdbc::connection::Connection::is_valid(&mut connection, 1).await? {
+                        Ok(())
+                    } else {
+                        Err(crate::core::DruidError::ConnectionDiscarded)
+                    }
                 }
                 .await;
                 if result.is_ok() {

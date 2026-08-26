@@ -226,6 +226,48 @@ impl SqlxConnectionActor {
         self.auto_commit.load(Ordering::Acquire)
     }
 
+    /// 验证 actor 独占的 raw SQLx 连接仍可用。
+    pub(crate) async fn ping(&self) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        let mut connection = self.connection.lock().await;
+        self.ensure_open_core()?;
+        connection.ping_raw_core().await
+    }
+
+    /// 切换 actor 独占连接的 auto-commit 状态。
+    pub(crate) async fn set_auto_commit(&self, enabled: bool) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        let mut connection = self.connection.lock().await;
+        self.ensure_open_core()?;
+        match (connection.standard_auto_commit_core(), enabled) {
+            (true, false) => connection.begin_raw_core().await?,
+            (false, true) => connection.commit_raw_core().await?,
+            _ => return Ok(()),
+        }
+        self.auto_commit.store(enabled, Ordering::Release);
+        Ok(())
+    }
+
+    /// 提交 actor 独占连接的当前 transaction。
+    pub(crate) async fn commit(&self) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        let mut connection = self.connection.lock().await;
+        self.ensure_open_core()?;
+        connection.commit_raw_core().await?;
+        self.auto_commit.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    /// 回滚 actor 独占连接的当前 transaction。
+    pub(crate) async fn rollback(&self) -> Result<(), RdbcError> {
+        self.ensure_open_core()?;
+        let mut connection = self.connection.lock().await;
+        self.ensure_open_core()?;
+        connection.rollback_raw_core().await?;
+        self.auto_commit.store(true, Ordering::Release);
+        Ok(())
+    }
+
     /// Exactly-once 关闭 raw connection；其他 handles 仍可观察 closed state。
     pub(crate) async fn close(&self) -> Result<(), RdbcError> {
         if self.closed.load(Ordering::Acquire) {

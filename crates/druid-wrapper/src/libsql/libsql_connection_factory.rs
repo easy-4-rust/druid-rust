@@ -4,11 +4,10 @@ use crate::task4_runtime_trace::{
     libsql_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
 };
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Turso/libSQL 原生远程未池化物理连接工厂。
+/// Turso/libSQL 原生远程未池化连接工厂。
 ///
 /// 每次 `create` 都构造独立的 libSQL `Database` 与 `Connection`，`DruidPool`
 /// 是唯一池化边界，不复用 libSQL 客户端池。
@@ -68,7 +67,7 @@ impl LibSqlConnectionFactory {
         if let Some(transport) = &self.transport {
             let mut connection =
                 LibSqlConnectionAdapter::from_transport(self.url.clone(), Arc::clone(transport));
-            connection.ping().await?;
+            druid_rdbc::connection::Connection::is_valid(&mut connection, 1).await?;
             if let Some(trace) = &self.runtime_trace {
                 connection.install_runtime_trace(trace.clone());
                 trace.task4_trace_connection_create();
@@ -82,7 +81,7 @@ impl LibSqlConnectionFactory {
             .cloned()
             .unwrap_or_default();
         let mut connection = LibSqlConnectionAdapter::connect(&self.url, token).await?;
-        connection.ping().await?;
+        druid_rdbc::connection::Connection::is_valid(&mut connection, 1).await?;
         if let Some(trace) = &self.runtime_trace {
             connection.install_runtime_trace(trace.clone());
             trace.task4_trace_connection_create();
@@ -102,25 +101,11 @@ impl LibSqlConnectionFactory {
 }
 
 #[async_trait::async_trait]
-impl PhysicalConnectionFactory for LibSqlConnectionFactory {
+impl druid_rdbc::driver::ConnectionFactory for LibSqlConnectionFactory {
     fn connection_url(&self) -> Option<&str> {
         Some(&self.url)
     }
 
-    async fn create(&self) -> Result<Box<dyn PhysicalConnection>, RdbcError> {
-        Ok(Box::new(self.create_adapter_core().await?))
-    }
-
-    async fn validate(
-        &self,
-        connection: &mut Box<dyn PhysicalConnection>,
-    ) -> Result<(), RdbcError> {
-        connection.ping().await
-    }
-}
-
-#[async_trait::async_trait]
-impl druid_rdbc::driver::ConnectionFactory for LibSqlConnectionFactory {
     async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
         Ok(Box::new(self.create_adapter_core().await?))
     }
@@ -162,10 +147,6 @@ mod tests {
                     last_insert_id: None,
                 })
             }
-        }
-
-        async fn prepare(&self, _sql: &str) -> Result<(), RdbcError> {
-            Ok(())
         }
     }
 

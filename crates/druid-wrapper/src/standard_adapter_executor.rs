@@ -8,7 +8,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-/// Concrete adapters expose one private driver core to Physical and canonical callers.
+/// Driver update outcome retained inside wrapper adapters.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct AdapterUpdateResult {
+    pub(crate) rows_affected: u64,
+    pub(crate) last_insert_id: Option<i64>,
+    pub(crate) row_count: Option<u64>,
+}
+
+/// Concrete adapters expose one private driver core to canonical callers.
 #[async_trait::async_trait]
 pub(crate) trait AdapterExecutionCore: Send + 'static {
     async fn standard_execute_update_core(

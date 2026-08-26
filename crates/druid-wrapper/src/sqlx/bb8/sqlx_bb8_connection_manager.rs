@@ -1,12 +1,11 @@
-//! `SQLx` 物理连接的 bb8 管理器。
+//! `SQLx` canonical 连接的 bb8 管理器。
 
 use crate::sqlx::SqlxConnectionFactory;
+use druid_rdbc::connection::Connection;
+use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
-use druid_rdbc::spi::{PhysicalConnection, PhysicalConnectionFactory};
 
-/// `SQLx` 物理连接的 bb8 管理器。
-///
-/// 对应 Java: `DruidDataSource#createPhysicalConnection` 与连接有效性检查。
+/// `SQLx` canonical 连接的 bb8 管理器。
 /// 管理器创建的是单个 `SqlxConnectionAdapter`，不创建 `DruidPool`。
 #[derive(Debug, Clone)]
 pub struct SqlxBb8ConnectionManager {
@@ -31,7 +30,7 @@ impl SqlxBb8ConnectionManager {
 
 #[async_trait::async_trait]
 impl bb8::ManageConnection for SqlxBb8ConnectionManager {
-    type Connection = Box<dyn PhysicalConnection>;
+    type Connection = Box<dyn Connection>;
     type Error = RdbcError;
 
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
@@ -43,6 +42,6 @@ impl bb8::ManageConnection for SqlxBb8ConnectionManager {
     }
 
     fn has_broken(&self, connection: &mut Self::Connection) -> bool {
-        connection.is_closed() || connection.is_discarded()
+        connection.is_closed().unwrap_or(true)
     }
 }

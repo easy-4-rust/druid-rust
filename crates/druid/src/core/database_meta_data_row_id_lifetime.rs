@@ -1,1 +1,1 @@
-pub use druid_rdbc::spi::DatabaseMetaDataRowIdLifetime;
+pub use druid_rdbc::metadata::RowIdLifetime;

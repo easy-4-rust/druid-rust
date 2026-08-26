@@ -60,7 +60,7 @@ pub trait CommonDataSource: Send + Sync {
     ///
     /// Corresponds to Java: `CommonDataSource#getParentLogger`.
     fn parent_logger(&self) -> &'static str {
-        "druid::rdbc"
+        "druid::sql"
     }
 
     /// Returns the parent logger name used by the implementation.

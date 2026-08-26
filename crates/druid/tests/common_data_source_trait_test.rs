@@ -37,8 +37,8 @@ fn common_datasource_set_log_writer_unsupported() {
 #[test]
 fn common_datasource_parent_logger() {
     let ds = MinimalDataSource;
-    assert_eq!(ds.parent_logger(), "druid::rdbc");
-    assert_eq!(ds.get_parent_logger(), "druid::rdbc");
+    assert_eq!(ds.parent_logger(), "druid::sql");
+    assert_eq!(ds.get_parent_logger(), "druid::sql");
 }
 
 // ── RdbcParameterString ────────────────────────────────────────

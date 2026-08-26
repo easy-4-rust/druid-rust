@@ -1,7 +1,7 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
 use druid::core::{RdbcBlob, RdbcError, RdbcInputStream, RdbcObject, RdbcOutputStream};
-use druid::spi::{RdbcBlobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations};
+use druid::core::{RdbcBlobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations};
 use std::io::{Error, Read, Write};
 use std::sync::{Arc, Mutex};
 

@@ -1,6 +1,4 @@
-use std::any::Any;
-
-use super::{RdbcType, Wrapper};
+use super::RdbcType;
 
 /// Mode of a `PreparedStatement` parameter.
 ///
@@ -187,8 +185,27 @@ impl ParameterMetaData {
     }
 }
 
-impl Wrapper for ParameterMetaData {
-    fn as_any(&self) -> &dyn Any {
-        self
+impl druid_rdbc::metadata::ParameterMetaData for ParameterMetaData {
+    fn parameter_count(&self) -> usize {
+        self.parameter_count()
+    }
+
+    fn parameter(
+        &self,
+        index: druid_rdbc::statement::ParameterIndex,
+    ) -> Result<druid_rdbc::metadata::ParameterDescriptor, druid_rdbc::error::RdbcError> {
+        let type_name = self.parameter_type_name(index.get()).ok_or_else(|| {
+            druid_rdbc::error::RdbcError::InvalidArgument(format!(
+                "parameter index {} exceeds metadata width",
+                index.get()
+            ))
+        })?;
+        Ok(druid_rdbc::metadata::ParameterDescriptor::new(
+            type_name,
+            druid_rdbc::metadata::ParameterMode::In,
+            druid_rdbc::metadata::ParameterNullability::Unknown,
+        ))
     }
 }
+
+druid_rdbc::impl_standard_wrapper!(ParameterMetaData => ParameterMetaData);

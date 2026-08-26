@@ -3,7 +3,7 @@
 use super::{StatFilter, StatsCollector};
 use crate::core::{
     AfterFilter, BatchExecContext, BeforeFilter, ConnectionEvent, DruidError, ExecContext,
-    ExecResult, ResultSetFilter, ResultSetFilterChain, ResultSetFilterContext,
+    ExecResult, ResultSetFilter, ResultSetFilterContext, StandardResultSetFilterChain,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -88,12 +88,17 @@ impl AfterFilter for MergeStatFilter {
     }
 }
 
+#[allow(private_interfaces)]
+#[async_trait::async_trait]
 impl ResultSetFilter for MergeStatFilter {
     fn result_set_open_after(&self, context: &ResultSetFilterContext) -> Result<(), DruidError> {
         self.stat_filter.result_set_open_after(context)
     }
 
-    fn result_set_close(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<(), DruidError> {
-        self.stat_filter.result_set_close(chain)
+    async fn standard_result_set_close(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<(), DruidError> {
+        self.stat_filter.standard_result_set_close(chain).await
     }
 }
