@@ -22,7 +22,7 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, OnceLock, Weak};
 
 struct StandardResultSetResource {
     result_set: tokio::sync::Mutex<Option<Box<dyn druid_rdbc::result_set::ResultSet>>>,
@@ -30,6 +30,7 @@ struct StandardResultSetResource {
     filter_chain: Option<Arc<FilterChain>>,
     filter_context: Arc<ResultSetFilterContext>,
     policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+    registration: OnceLock<super::standard_resource_registration::StandardResourceRegistration>,
 }
 
 impl StandardResultSetResource {
@@ -45,6 +46,7 @@ impl StandardResultSetResource {
             filter_chain,
             filter_context,
             policy,
+            registration: OnceLock::new(),
         })
     }
 
@@ -66,11 +68,13 @@ impl StandardResultSetResource {
 
     async fn close_core(&self) -> Result<(), RdbcError> {
         if self.closed.load(Ordering::Acquire) {
+            self.unregister_resource();
             return Ok(());
         }
         let mut result_set = self.result_set.lock().await;
         let Some(raw) = result_set.as_mut() else {
             self.closed.store(true, Ordering::Release);
+            self.unregister_resource();
             return Ok(());
         };
         let result = match &self.filter_chain {
@@ -84,7 +88,64 @@ impl StandardResultSetResource {
         result_set.take();
         self.closed.store(true, Ordering::Release);
         self.filter_context.increment_close_count();
+        self.unregister_resource();
         Ok(())
+    }
+
+    fn value_core(&self, column: druid_rdbc::result_set::ColumnIndex) -> Result<Value, RdbcError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let mut result_set = self
+            .result_set
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_owned()))?;
+        let raw = result_set.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
+        let result = match &self.filter_chain {
+            Some(filter_chain) => filter_chain
+                .standard_result_set_value(raw.as_mut(), &self.filter_context, column)
+                .map_err(RdbcError::from),
+            None => raw.value(column),
+        };
+        self.policy.classify(result, self.filter_context.sql())
+    }
+
+    fn meta_data_core(
+        &self,
+    ) -> Result<Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, RdbcError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let mut result_set = self
+            .result_set
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_owned()))?;
+        let raw = result_set.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
+        let result = match &self.filter_chain {
+            Some(filter_chain) => filter_chain
+                .standard_result_set_meta_data(raw.as_mut(), &self.filter_context)
+                .map_err(RdbcError::from),
+            None => raw.meta_data(),
+        };
+        self.policy.classify(result, self.filter_context.sql())
+    }
+
+    fn was_null_core(&self) -> Result<bool, RdbcError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        let mut result_set = self
+            .result_set
+            .try_lock()
+            .map_err(|_| RdbcError::Other("result set is busy".to_owned()))?;
+        let raw = result_set.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
+        let result = match &self.filter_chain {
+            Some(filter_chain) => filter_chain
+                .standard_result_set_was_null(raw.as_mut(), &self.filter_context)
+                .map_err(RdbcError::from),
+            None => raw.was_null(),
+        };
+        self.policy.classify(result, self.filter_context.sql())
     }
 }
 
@@ -96,6 +157,12 @@ impl StandardResourceHandle for StandardResultSetResource {
 
     fn is_resource_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
+    }
+
+    fn registration_slot(
+        &self,
+    ) -> &OnceLock<super::standard_resource_registration::StandardResourceRegistration> {
+        &self.registration
     }
 }
 
@@ -723,9 +790,9 @@ impl DruidPooledResultSet {
     }
 
     /// 包装 canonical standard ResultSet，并保留 Druid logical Statement 身份。
-    pub(crate) fn new_standard(
+    pub(crate) async fn new_standard(
         statement: Arc<DruidPooledStatementInner>,
-        standard: Box<dyn druid_rdbc::result_set::ResultSet>,
+        mut standard: Box<dyn druid_rdbc::result_set::ResultSet>,
     ) -> Result<Self, RdbcError> {
         let filter_chain = statement.filter_chain.clone();
         let policy = statement
@@ -748,18 +815,38 @@ impl DruidPooledResultSet {
             .standard_resources
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?;
+        let meta_data = match policy.classify(standard.meta_data(), filter_context.sql()) {
+            Ok(meta_data) => meta_data,
+            Err(error) => {
+                let _ = policy.classify(standard.close().await, filter_context.sql());
+                return Err(error);
+            }
+        };
+        let mut open_context = super::StandardResultSetOpenContext::new(&filter_context, meta_data);
+        if let Some(filter_chain) = &filter_chain {
+            let open_result = policy.classify(
+                filter_chain
+                    .standard_result_set_open_after_with_proxy(&mut open_context)
+                    .map_err(RdbcError::from),
+                filter_context.sql(),
+            );
+            if let Err(error) = open_result {
+                let _ = policy.classify(standard.close().await, filter_context.sql());
+                return Err(error);
+            }
+        }
+        let (logic_column_map, physical_column_map, hidden_columns) =
+            open_context.into_column_mappings();
+        let resource_generation = policy.resource_generation();
         let standard = StandardResultSetResource::new(
             standard,
             filter_chain.clone(),
             Arc::clone(&filter_context),
             policy,
         );
-        resources.register(Arc::clone(&standard));
-        if let Some(filter_chain) = &filter_chain {
-            filter_chain
-                .result_set_open_after(&filter_context)
-                .map_err(RdbcError::from)?;
-        }
+        resources
+            .register(resource_generation, Arc::clone(&standard))
+            .await?;
         Ok(Self {
             id: result_set_id,
             attributes: super::ProxyAttributes::default(),
@@ -772,14 +859,14 @@ impl DruidPooledResultSet {
             cursor_index: AtomicI32::new(0),
             filter_chain,
             filter_context,
-            logic_column_map: None,
-            physical_column_map: None,
-            hidden_columns: None,
+            logic_column_map,
+            physical_column_map,
+            hidden_columns,
         })
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_standard_metadata(
+    pub(crate) async fn new_standard_metadata(
         connection_id: u64,
         result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
         lease_active: Arc<AtomicBool>,
@@ -803,7 +890,7 @@ impl DruidPooledResultSet {
             Some(standard_resources),
             Some(standard_policy),
         );
-        Self::new_standard(statement.inner, standard)
+        Self::new_standard(statement.inner, standard).await
     }
 
     pub(crate) fn with_prepared_statement(
@@ -4486,15 +4573,21 @@ impl druid_rdbc::result_set::ResultSet for DruidPooledResultSet {
 
     fn value(&self, column: druid_rdbc::result_set::ColumnIndex) -> Result<Value, RdbcError> {
         self.ensure_standard_open()?;
+        let physical = self
+            .physical_column(
+                i32::try_from(column.get()).map_err(|_| {
+                    RdbcError::InvalidArgument("column index exceeds i32".to_owned())
+                })?,
+            )
+            .ok_or_else(|| RdbcError::InvalidArgument("column is hidden".to_owned()))?;
+        let physical = usize::try_from(physical)
+            .ok()
+            .and_then(|physical| druid_rdbc::result_set::ColumnIndex::new(physical).ok())
+            .ok_or_else(|| RdbcError::InvalidArgument("invalid physical column".to_owned()))?;
         self.standard
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .result_set
-            .try_lock()
-            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .value(column)
+            .value_core(physical)
     }
 
     fn meta_data(&self) -> Result<Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, RdbcError> {
@@ -4502,12 +4595,7 @@ impl druid_rdbc::result_set::ResultSet for DruidPooledResultSet {
         self.standard
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .result_set
-            .try_lock()
-            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .meta_data()
+            .meta_data_core()
     }
 
     fn was_null(&self) -> Result<bool, RdbcError> {
@@ -4515,12 +4603,7 @@ impl druid_rdbc::result_set::ResultSet for DruidPooledResultSet {
         self.standard
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .result_set
-            .try_lock()
-            .map_err(|_| RdbcError::Other("result set is busy".to_string()))?
-            .as_ref()
-            .ok_or(RdbcError::ConnectionDiscarded)?
-            .was_null()
+            .was_null_core()
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

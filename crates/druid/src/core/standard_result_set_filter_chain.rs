@@ -46,6 +46,38 @@ impl<'a> StandardResultSetFilterChain<'a> {
         }
     }
 
+    pub(crate) fn result_set_value(&mut self, column: ColumnIndex) -> Result<Value, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.standard_result_set_value(self, column)
+        } else {
+            self.standard.value(column).map_err(DruidError::from)
+        }
+    }
+
+    pub(crate) fn result_set_meta_data(
+        &mut self,
+    ) -> Result<Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.standard_result_set_meta_data(self)
+        } else {
+            self.standard.meta_data().map_err(DruidError::from)
+        }
+    }
+
+    pub(crate) fn result_set_was_null(&mut self) -> Result<bool, DruidError> {
+        if self.position < self.filters.len() {
+            let filter = Arc::clone(&self.filters[self.position]);
+            self.position += 1;
+            filter.standard_result_set_was_null(self)
+        } else {
+            self.standard.was_null().map_err(DruidError::from)
+        }
+    }
+
     pub(crate) fn context(&self) -> &ResultSetFilterContext {
         self.context
     }

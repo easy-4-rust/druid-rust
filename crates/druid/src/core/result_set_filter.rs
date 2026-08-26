@@ -3,6 +3,7 @@
 //! 对应 Java：`com.alibaba.druid.filter.Filter` 的 `resultSet_*` 方法族。
 
 use super::standard_result_set_filter_chain::StandardResultSetFilterChain;
+use super::standard_result_set_open_context::StandardResultSetOpenContext;
 use super::{
     DruidError, RdbcArray, RdbcBlob, RdbcCalendarArgument, RdbcClob, RdbcInputStream, RdbcNClob,
     RdbcObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml, RdbcTargetType, RdbcTypeMap, RdbcUrl,
@@ -368,6 +369,14 @@ pub trait ResultSetFilter: Send + Sync {
         self.result_set_open_after(context.filter_context())
     }
 
+    /// canonical standard ResultSet 的 proxy-aware open hook。
+    fn standard_result_set_open_after_with_proxy(
+        &self,
+        context: &mut StandardResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        self.result_set_open_after(context.filter_context())
+    }
+
     /// 包围 `ResultSet#next()`。
     ///
     /// 默认实现继续调用链；实现可以短路或改写返回值，与 Java Filter 一致。
@@ -416,6 +425,62 @@ pub trait ResultSetFilter: Send + Sync {
         Ok(())
     }
 
+    /// canonical `ResultSet#value` 调用 raw 前的观察/拒绝 hook。
+    fn standard_result_set_value_before(
+        &self,
+        _context: &ResultSetFilterContext,
+        _column: druid_rdbc::result_set::ColumnIndex,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical `ResultSet#value` 调用 raw 后的结果修改 hook。
+    fn standard_result_set_value_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _column: druid_rdbc::result_set::ColumnIndex,
+        _result: &mut Result<Value, DruidError>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical `ResultSet#meta_data` 调用 raw 前的观察/拒绝 hook。
+    fn standard_result_set_meta_data_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical `ResultSet#meta_data` 调用 raw 后的结果修改 hook。
+    fn standard_result_set_meta_data_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &mut Result<
+            std::sync::Arc<dyn druid_rdbc::metadata::ResultSetMetaData>,
+            DruidError,
+        >,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical `ResultSet#was_null` 调用 raw 前的观察/拒绝 hook。
+    fn standard_result_set_was_null_before(
+        &self,
+        _context: &ResultSetFilterContext,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical `ResultSet#was_null` 调用 raw 后的结果修改 hook。
+    fn standard_result_set_was_null_after(
+        &self,
+        _context: &ResultSetFilterContext,
+        _result: &mut Result<bool, DruidError>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
     /// 包围 canonical async `ResultSet#next()`，顺序与 Physical 链一致。
     async fn standard_result_set_next(
         &self,
@@ -435,6 +500,40 @@ pub trait ResultSetFilter: Send + Sync {
         self.standard_result_set_close_before(chain.context())?;
         let result = chain.result_set_close().await;
         self.standard_result_set_close_after(chain.context(), &result)?;
+        result
+    }
+
+    /// 包围 canonical `ResultSet#value`，保持注册顺序与可修改返回值。
+    fn standard_result_set_value(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+        column: druid_rdbc::result_set::ColumnIndex,
+    ) -> Result<Value, DruidError> {
+        self.standard_result_set_value_before(chain.context(), column)?;
+        let mut result = chain.result_set_value(column);
+        self.standard_result_set_value_after(chain.context(), column, &mut result)?;
+        result
+    }
+
+    /// 包围 canonical `ResultSet#meta_data`，保持注册顺序与可修改返回值。
+    fn standard_result_set_meta_data(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<std::sync::Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, DruidError> {
+        self.standard_result_set_meta_data_before(chain.context())?;
+        let mut result = chain.result_set_meta_data();
+        self.standard_result_set_meta_data_after(chain.context(), &mut result)?;
+        result
+    }
+
+    /// 包围 canonical `ResultSet#was_null`，保持注册顺序与可修改返回值。
+    fn standard_result_set_was_null(
+        &self,
+        chain: &mut StandardResultSetFilterChain<'_>,
+    ) -> Result<bool, DruidError> {
+        self.standard_result_set_was_null_before(chain.context())?;
+        let mut result = chain.result_set_was_null();
+        self.standard_result_set_was_null_after(chain.context(), &mut result)?;
         result
     }
 

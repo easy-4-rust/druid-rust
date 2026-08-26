@@ -29,6 +29,19 @@ from verify_rdbc_standardization_denominator import (
     render_adapter_rows,
     render_consumer_rows,
 )
+from verify_wrapper_standard_impls import (
+    CoverageFamilySpec,
+    CoverageRequirement,
+    DEFAULT_ADAPTERS as TASK4_ADAPTER_MANIFEST,
+    DEFAULT_RUNTIME_EVIDENCE as TASK4_RUNTIME_EVIDENCE_MANIFEST,
+    VerificationError as WrapperVerificationError,
+    evidence_specs,
+    execute_evidence,
+    function_line_ranges,
+    task_adapter_rows,
+    validate_coverage_manifest,
+    verify_coverage_manifest_bindings,
+)
 
 
 TASK5_BASE = "d1ccc8e3005a3a71638766ee701af99594fc43ed"
@@ -174,6 +187,74 @@ class VerificationSummary:
     concrete_objects: int
 
 
+@dataclass(frozen=True)
+class ExactCargoTestSpec:
+    """One exact Task 5 behavioral test bound to its real Rust definition."""
+
+    source_path: Path
+    test_target: str
+    test_id: str
+
+
+TASK5_REQUIRED_EXACT_TESTS = (
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_prepare_rewrite_cache_parameters_batch_events_and_timeout_match_raw",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_prepared_setter_failure_and_clear_keep_filter_snapshot_truthful",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_wall_prepare_and_metadata_rejection_prevent_raw_calls",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_result_set_open_initializes_wall_tenant_hidden_mapping",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_result_set_open_rejection_closes_unregistered_raw_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "canonical_result_set_value_metadata_was_null_filters_modify_and_reject_once",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+        "test:standard_filter_stat_semantics_test",
+        "fatal_standard_create_prepare_call_and_metadata_errors_force_discard",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::late_registration_after_close_is_rejected_and_closed",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::explicit_close_unregisters_strong_entries_during_long_lease",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/src/core/standard_resource_registry.rs"),
+        "lib",
+        "core::standard_resource_registry::tests::concurrent_close_all_waits_for_one_exact_drain",
+    ),
+    ExactCargoTestSpec(
+        Path("crates/druid/tests/standard_metadata_ownership_test.rs"),
+        "test:standard_metadata_ownership_test",
+        "late_metadata_result_registration_is_closed_before_next_lease",
+    ),
+)
+
+
 def fail(message: str) -> NoReturn:
     raise VerificationError(message)
 
@@ -213,7 +294,9 @@ def require_shared_execution_policy(
         )
 
 
-def run_cargo_gate(root: Path, label: str, command: list[str]) -> None:
+def run_cargo_gate(
+    root: Path, label: str, command: list[str]
+) -> subprocess.CompletedProcess[bytes]:
     """Run one exact offline Cargo evidence gate and preserve actionable failure output."""
 
     try:
@@ -231,6 +314,48 @@ def run_cargo_gate(root: Path, label: str, command: list[str]) -> None:
             -4000:
         ]
         fail(f"{label} failed: {detail}")
+    return result
+
+
+def require_exact_test_source(root: Path, spec: ExactCargoTestSpec) -> None:
+    """Reject comments, duplicate definitions, and missing exact-test identities."""
+
+    path = root / spec.source_path
+    if not path.is_file():
+        fail(f"Task 5 exact test source is missing: {spec.source_path}")
+    function_name = spec.test_id.rsplit("::", 1)[-1]
+    ranges = function_line_ranges(path.read_text(encoding="utf-8"), function_name)
+    if len(ranges) != 1:
+        fail(
+            "Task 5 exact test function is missing or ambiguous: "
+            f"{spec.source_path}:{function_name}:{ranges}"
+        )
+
+
+def run_exact_cargo_test(root: Path, label: str, spec: ExactCargoTestSpec) -> None:
+    """Run one exact test and reject Cargo's successful zero-test outcome."""
+
+    require_exact_test_source(root, spec)
+    command = [
+        "cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "druid",
+    ]
+    if spec.test_target == "lib":
+        command.append("--lib")
+    elif spec.test_target.startswith("test:"):
+        command.extend(["--test", spec.test_target.removeprefix("test:")])
+    else:
+        fail(f"Task 5 exact test target is invalid: {spec.test_target}")
+    command.extend([spec.test_id, "--", "--exact", "--nocapture"])
+    result = run_cargo_gate(root, label, command)
+    output = result.stdout + result.stderr
+    summary = b"test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured;"
+    if output.count(b"running 1 test") != 1 or output.count(summary) != 1:
+        fail(f"{label} did not execute exactly one passing test")
 
 
 def repository_root() -> Path:
@@ -677,23 +802,100 @@ def verify_task4_evidence_handoff(root: Path) -> None:
             "druid_standard_pool_admission_test",
         ],
     )
-    run_cargo_gate(
-        root,
-        "Task 4 RBDC exact runtime handoff",
-        [
-            "cargo",
-            "test",
-            "--offline",
-            "--locked",
-            "-p",
-            "druid-wrapper",
-            "--test",
-            "rbdc_connection_adapter_test",
-            "rbdc_standard_factory_emits_typed_runtime_trace",
-            "--",
-            "--exact",
-        ],
-    )
+    execute_task5_rbdc_compiler_coverage(root)
+
+
+def task5_task4_coverage_contract(root: Path) -> tuple[CoverageFamilySpec, ...]:
+    """Load frozen Task 4 coverage with exactly one approved Task 5 source transition."""
+
+    path = root / "docs/verification/rdbc-first/rdbc-adapter-coverage-regions.json"
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != TASK4_COVERAGE_MANIFEST_SHA256:
+        fail("Task 4 frozen compiler-coverage manifest changed during Task 5")
+    document = json.loads(raw)
+    family_specs: list[CoverageFamilySpec] = []
+    transitioned: list[tuple[str, str, str, str]] = []
+    for raw_family in document["families"]:
+        requirements: list[CoverageRequirement] = []
+        for raw_requirement in raw_family["requirements"]:
+            source_sha256 = raw_requirement["source_sha256"]
+            if (
+                raw_family["family"] == "RBDC"
+                and raw_requirement["requirement_id"] == "EXACT_TEST_IDENTITY"
+                and raw_requirement["source_path"]
+                == "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs"
+            ):
+                transitioned.append(
+                    (
+                        raw_family["family"],
+                        raw_requirement["requirement_id"],
+                        source_sha256,
+                        TASK5_RBDC_EVIDENCE_SOURCE_SHA256,
+                    )
+                )
+                source_sha256 = TASK5_RBDC_EVIDENCE_SOURCE_SHA256
+            requirements.append(
+                CoverageRequirement(
+                    requirement_id=raw_requirement["requirement_id"],
+                    requirement_kind=raw_requirement["requirement_kind"],
+                    source_path=Path(raw_requirement["source_path"]),
+                    source_sha256=source_sha256,
+                    source_function=raw_requirement["source_function"],
+                    compiler_function_name=raw_requirement["compiler_function_name"],
+                    anchor_id=raw_requirement["anchor_id"],
+                    minimum_count=raw_requirement["minimum_count"],
+                )
+            )
+        family_specs.append(
+            CoverageFamilySpec(
+                family=raw_family["family"],
+                test_target=raw_family["test_target"],
+                test_id=raw_family["test_id"],
+                profile=raw_family["profile"],
+                trace_version=raw_family["trace_version"],
+                trace_evidence_id=raw_family["trace_evidence_id"],
+                coverage_version=raw_family["coverage_version"],
+                requirements=tuple(requirements),
+            )
+        )
+    expected_transition = [
+        (
+            "RBDC",
+            "EXACT_TEST_IDENTITY",
+            "f5e8df13bed46fe23a274dea188cb02d0ff8827e3cb5ba8852e759a02b0edb1e",
+            TASK5_RBDC_EVIDENCE_SOURCE_SHA256,
+        )
+    ]
+    if transitioned != expected_transition:
+        fail(f"Task 4 coverage transition is not exact: {transitioned}")
+    result = tuple(family_specs)
+    try:
+        validate_coverage_manifest(root, result)
+    except WrapperVerificationError as error:
+        fail(f"Task 4 adjusted coverage contract is invalid: {error}")
+    return result
+
+
+def execute_task5_rbdc_compiler_coverage(root: Path) -> None:
+    """Run fresh RBDC coverage-v2 evidence for all fifteen exact obligations."""
+
+    try:
+        adapters = task_adapter_rows(
+            root / TASK4_ADAPTER_MANIFEST,
+            root / TASK4_RUNTIME_EVIDENCE_MANIFEST,
+        )
+        specs = evidence_specs(adapters)
+        coverage = task5_task4_coverage_contract(root)
+        verify_coverage_manifest_bindings(specs, coverage)
+        matching = [spec for spec in specs if spec.family == "RBDC"]
+        rbdc_families = [family for family in coverage if family.family == "RBDC"]
+        if len(matching) != 1 or len(rbdc_families) != 1:
+            fail("Task 4 RBDC runtime/coverage binding is not unique")
+        if len(rbdc_families[0].requirements) != 15:
+            fail("Task 4 RBDC compiler coverage denominator is not fifteen")
+        execute_evidence(root, matching[0], coverage)
+    except WrapperVerificationError as error:
+        fail(f"Task 4 current RBDC compiler coverage failed: {error}")
 
 
 def verify_task5_runtime_contracts(root: Path) -> None:
@@ -718,6 +920,12 @@ def verify_task5_runtime_contracts(root: Path) -> None:
                 "--test",
                 test_name,
             ],
+        )
+    for spec in TASK5_REQUIRED_EXACT_TESTS:
+        run_exact_cargo_test(
+            root,
+            f"Task 5 exact runtime {spec.test_id}",
+            spec,
         )
 
 

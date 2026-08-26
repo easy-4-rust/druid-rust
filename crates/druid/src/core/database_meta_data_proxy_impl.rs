@@ -182,24 +182,27 @@ impl druid_rdbc::metadata::DatabaseMetaData for DatabaseMetaDataProxyImpl<'stati
             .ok_or(RdbcError::ConnectionDiscarded)?
             .tables(query)
             .await?;
-        Ok(Box::new(DruidPooledResultSet::new_standard_metadata(
-            self.connection_id,
-            self.result_set_id_seed
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?
-                .clone(),
-            Arc::clone(&self.lease_active),
-            self.filter_chain.clone(),
-            self.stats_collector.clone(),
-            self.standard_resources
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?
-                .clone(),
-            self.standard_policy
-                .as_ref()
-                .ok_or(RdbcError::ConnectionDiscarded)?
-                .clone(),
-            raw,
-        )?))
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard_metadata(
+                self.connection_id,
+                self.result_set_id_seed
+                    .as_ref()
+                    .ok_or(RdbcError::ConnectionDiscarded)?
+                    .clone(),
+                Arc::clone(&self.lease_active),
+                self.filter_chain.clone(),
+                self.stats_collector.clone(),
+                self.standard_resources
+                    .as_ref()
+                    .ok_or(RdbcError::ConnectionDiscarded)?
+                    .clone(),
+                self.standard_policy
+                    .as_ref()
+                    .ok_or(RdbcError::ConnectionDiscarded)?
+                    .clone(),
+                raw,
+            )
+            .await?,
+        ))
     }
 }

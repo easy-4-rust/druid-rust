@@ -1,13 +1,17 @@
 mod standard_test_support;
 
-use druid::core::{DruidConnectionHolder, DruidPooledConnection};
+use druid::core::{
+    DruidConnectionHolder, DruidError, DruidPooledConnection, FilterChain, RdbcError,
+    ResultSetFilter, ResultSetFilterContext,
+};
 use druid_rdbc::connection::Connection;
 use druid_rdbc::metadata::TablesQuery;
 use druid_rdbc::result_set::ColumnIndex;
 use druid_rdbc::statement::{GeneratedKeys, ParameterIndex, Statement, StatementOptions};
 use druid_rdbc::types::Value;
 use standard_test_support::{TrackingConnection, TrackingState};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Barrier, Mutex};
 use std::time::Duration;
 
 #[tokio::test]
@@ -143,4 +147,96 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
             .type_name(),
         "BIGINT"
     );
+}
+
+struct LateRegistrationBarrier {
+    entered: Arc<Barrier>,
+    release: Arc<Barrier>,
+}
+
+impl ResultSetFilter for LateRegistrationBarrier {
+    fn result_set_open_after(&self, _context: &ResultSetFilterContext) -> Result<(), DruidError> {
+        self.entered.wait();
+        self.release.wait();
+        Ok(())
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn late_metadata_result_registration_is_closed_before_next_lease() {
+    let state = TrackingState::configured();
+    let holder = DruidConnectionHolder::with_standard_connection(
+        Box::new(TrackingConnection::new(Arc::clone(&state))),
+        62,
+        Duration::ZERO,
+        0,
+    )
+    .await
+    .expect("standard holder");
+    let returned = Arc::new(Mutex::new(None));
+    let returned_holder = Arc::clone(&returned);
+    let entered = Arc::new(Barrier::new(2));
+    let release = Arc::new(Barrier::new(2));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(LateRegistrationBarrier {
+        entered: Arc::clone(&entered),
+        release: Arc::clone(&release),
+    }));
+    let mut first = DruidPooledConnection::with_standard_holder(
+        holder,
+        "task5-late-metadata-first".to_owned(),
+        Some(Arc::new(filter_chain)),
+        false,
+        false,
+        Box::new(move |holder, _disposition| {
+            *returned_holder
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(holder);
+            false
+        }),
+    );
+    let mut metadata = Connection::database_meta_data(&mut first)
+        .await
+        .expect("metadata proxy");
+    let query = tokio::spawn(async move { metadata.tables(TablesQuery::default()).await });
+    // Raw metadata.tables 已返回 ResultSet，proxy-aware open hook 在 registry.register
+    // 之前阻塞，精确覆盖 snapshot-gap 竞态。
+    entered.wait();
+
+    Connection::close(&mut first)
+        .await
+        .expect("first lease seals registry");
+    let holder = returned
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take()
+        .expect("holder returned");
+    let mut second = DruidPooledConnection::with_standard_holder(
+        holder,
+        "task5-late-metadata-second".to_owned(),
+        None,
+        false,
+        false,
+        Box::new(|_holder, _disposition| false),
+    );
+    release.wait();
+    assert!(matches!(
+        query.await.expect("metadata query task"),
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+    assert_eq!(state.result_set_close_count.load(Ordering::Acquire), 1);
+
+    let mut second_statement =
+        Connection::create_statement(&mut second, StatementOptions::default())
+            .await
+            .expect("next lease remains usable");
+    assert_eq!(
+        second_statement
+            .execute_update("UPDATE next_lease", GeneratedKeys::None)
+            .await
+            .expect("next lease update"),
+        1
+    );
+    second_statement.close().await.expect("statement close");
+    Connection::close(&mut second).await.expect("second close");
 }

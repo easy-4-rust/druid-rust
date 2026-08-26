@@ -26,11 +26,12 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 struct StandardPreparedStatementResource {
     statement: tokio::sync::Mutex<Option<Box<dyn druid_rdbc::statement::PreparedStatement>>>,
     closed: AtomicBool,
+    registration: OnceLock<super::standard_resource_registration::StandardResourceRegistration>,
 }
 
 impl StandardPreparedStatementResource {
@@ -38,6 +39,7 @@ impl StandardPreparedStatementResource {
         Arc::new(Self {
             statement: tokio::sync::Mutex::new(Some(statement)),
             closed: AtomicBool::new(false),
+            registration: OnceLock::new(),
         })
     }
 }
@@ -46,21 +48,30 @@ impl StandardPreparedStatementResource {
 impl StandardResourceHandle for StandardPreparedStatementResource {
     async fn close_resource(&self) -> Result<(), RdbcError> {
         if self.closed.load(Ordering::Acquire) {
+            self.unregister_resource();
             return Ok(());
         }
         let mut statement = self.statement.lock().await;
         let Some(raw) = statement.as_mut() else {
             self.closed.store(true, Ordering::Release);
+            self.unregister_resource();
             return Ok(());
         };
         raw.close().await?;
         statement.take();
         self.closed.store(true, Ordering::Release);
+        self.unregister_resource();
         Ok(())
     }
 
     fn is_resource_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
+    }
+
+    fn registration_slot(
+        &self,
+    ) -> &OnceLock<super::standard_resource_registration::StandardResourceRegistration> {
+        &self.registration
     }
 }
 use std::time::Instant;
@@ -395,6 +406,24 @@ druid_rdbc::impl_standard_wrapper!(DruidPooledPreparedStatement => PreparedState
 
 #[async_trait::async_trait]
 impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        self.ensure_standard_open()?;
+        self.standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("prepared statement is busy".to_owned()))?
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .query_timeout()
+    }
+
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        self.ensure_standard_open()?;
+        self.configure_standard_query_timeout(seconds)
+    }
+
     async fn execute_query(
         &mut self,
         sql: &str,
@@ -436,10 +465,9 @@ impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
                 },
             )
             .await?;
-        Ok(Box::new(DruidPooledResultSet::new_standard(
-            Arc::clone(&self.statement_base.inner),
-            raw,
-        )?))
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard(Arc::clone(&self.statement_base.inner), raw).await?,
+        ))
     }
 
     async fn execute_update(
@@ -485,6 +513,65 @@ impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
             .await
     }
 
+    fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
+        self.ensure_standard_open()?;
+        let parameters = self.standard_parameter_snapshot()?;
+        self.standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("prepared statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .add_batch(sql)?;
+        self.push_standard_batch(parameters);
+        Ok(())
+    }
+
+    fn clear_batch(&mut self) -> Result<(), RdbcError> {
+        self.ensure_standard_open()?;
+        self.standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("prepared statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clear_batch()?;
+        self.clear_standard_batch();
+        Ok(())
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.ensure_standard_open()?;
+        let resource = Arc::clone(
+            self.standard_statement
+                .as_ref()
+                .ok_or(RdbcError::ConnectionDiscarded)?,
+        );
+        let policy = self.standard_policy()?;
+        let sql = self.standard_sql();
+        let parameter_sets = self.standard_batch_snapshot();
+        let result = policy
+            .execute_prepared_batch(&sql, &parameter_sets, self.id(), move || async move {
+                resource
+                    .statement
+                    .lock()
+                    .await
+                    .as_mut()
+                    .ok_or(RdbcError::ConnectionDiscarded)?
+                    .execute_batch()
+                    .await
+            })
+            .await;
+        if result.is_ok() {
+            self.clear_standard_batch();
+        }
+        result
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         if self.is_closed() {
             return Ok(());
@@ -520,6 +607,7 @@ impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
                     .take()
                     .ok_or(RdbcError::ConnectionDiscarded)?;
                 resource.closed.store(true, Ordering::Release);
+                resource.unregister_resource();
                 drop(statement_guard);
                 let removed = cache.lock().await.put(key.clone(), statement);
                 self.standard_key.take();
@@ -547,6 +635,7 @@ impl druid_rdbc::statement::Statement for DruidPooledPreparedStatement {
         if result.is_ok() {
             statement_guard.take();
             resource.closed.store(true, Ordering::Release);
+            resource.unregister_resource();
             self.standard_key.take();
             self.standard_cache.take();
             self.shared.finish();
@@ -601,6 +690,8 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
         parameter: druid_rdbc::statement::PreparedParameter,
     ) -> Result<(), RdbcError> {
         self.ensure_standard_open()?;
+        let parameter_index = parameter.index.get();
+        let snapshot = PreparedInputParameter::RustValue(parameter.value.clone());
         self.standard_statement
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
@@ -609,7 +700,8 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
             .map_err(|_| RdbcError::Other("prepared statement is busy".to_string()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .set_parameter(parameter)
+            .set_parameter(parameter)?;
+        self.record_standard_parameter(parameter_index, snapshot)
     }
 
     fn clear_parameters(&mut self) -> Result<(), RdbcError> {
@@ -622,7 +714,9 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
             .map_err(|_| RdbcError::Other("prepared statement is busy".to_string()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .clear_parameters()
+            .clear_parameters()?;
+        self.clear_standard_parameters();
+        Ok(())
     }
 
     async fn execute_prepared_query(
@@ -642,10 +736,11 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         let sql = self.shared.holder.key().sql().to_owned();
+        let parameters = self.standard_parameter_snapshot()?;
         let raw = policy
-            .execute(
+            .execute_prepared(
                 &sql,
-                Vec::new(),
+                parameters,
                 self.id(),
                 ExecOperation::Query,
                 move |_effective_sql| async move {
@@ -665,10 +760,9 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
                 },
             )
             .await?;
-        Ok(Box::new(DruidPooledResultSet::new_standard(
-            Arc::clone(&self.statement_base.inner),
-            raw,
-        )?))
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard(Arc::clone(&self.statement_base.inner), raw).await?,
+        ))
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
@@ -686,10 +780,11 @@ impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         let sql = self.shared.holder.key().sql().to_owned();
+        let parameters = self.standard_parameter_snapshot()?;
         policy
-            .execute(
+            .execute_prepared(
                 &sql,
-                Vec::new(),
+                parameters,
                 self.id(),
                 ExecOperation::Update,
                 move |_effective_sql| async move {
@@ -762,6 +857,80 @@ impl DruidPooledPreparedStatement {
         &self,
     ) -> Arc<super::druid_pooled_statement::DruidPooledStatementInner> {
         Arc::clone(&self.statement_base.inner)
+    }
+
+    pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
+        self.standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .statement
+            .try_lock()
+            .map_err(|_| RdbcError::Other("prepared statement is busy".to_owned()))?
+            .as_mut()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .set_query_timeout(seconds)
+    }
+
+    pub(crate) fn record_standard_parameter(
+        &self,
+        parameter_index: usize,
+        parameter: PreparedInputParameter,
+    ) -> Result<(), RdbcError> {
+        let index = parameter_index
+            .checked_sub(1)
+            .ok_or_else(|| RdbcError::InvalidArgument("parameter index is 1-based".to_owned()))?;
+        let mut state = self
+            .shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if state.parameters.len() <= index {
+            state.parameters.resize_with(index + 1, || None);
+        }
+        state.parameters[index] = Some(parameter);
+        Ok(())
+    }
+
+    pub(crate) fn clear_standard_parameters(&self) {
+        self.shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .parameters
+            .clear();
+    }
+
+    pub(crate) fn standard_parameter_snapshot(
+        &self,
+    ) -> Result<Vec<PreparedInputParameter>, RdbcError> {
+        self.bound_parameters_or_record_error()
+    }
+
+    pub(crate) fn push_standard_batch(&self, parameters: Vec<PreparedInputParameter>) {
+        self.shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .batch_parameter_sets
+            .push(parameters);
+    }
+
+    pub(crate) fn clear_standard_batch(&self) {
+        self.shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .batch_parameter_sets
+            .clear();
+    }
+
+    pub(crate) fn standard_batch_snapshot(&self) -> Vec<Vec<PreparedInputParameter>> {
+        self.shared
+            .state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .batch_parameter_sets
+            .clone()
     }
 
     /// 返回 holder statement trace 使用的共享内核。
@@ -875,7 +1044,7 @@ impl DruidPooledPreparedStatement {
 
     /// 包装 owned canonical PreparedStatement。
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new_standard(
+    pub(crate) async fn new_standard(
         statement: Box<dyn druid_rdbc::statement::PreparedStatement>,
         sql: &str,
         key: PreparedStatementKey,
@@ -889,7 +1058,8 @@ impl DruidPooledPreparedStatement {
         lease_active: Arc<AtomicBool>,
         filter_chain: Option<Arc<FilterChain>>,
         stats_collector: Option<Arc<StatsCollector>>,
-    ) -> Self {
+    ) -> Result<Self, RdbcError> {
+        let resource_generation = standard_policy.resource_generation();
         let mut result = Self::new_standard_shell(
             sql,
             connection_id,
@@ -903,11 +1073,13 @@ impl DruidPooledPreparedStatement {
             Some(standard_policy),
         );
         let statement = StandardPreparedStatementResource::new(statement);
-        standard_resources.register(Arc::clone(&statement));
+        standard_resources
+            .register(resource_generation, Arc::clone(&statement))
+            .await?;
         result.standard_statement = Some(statement);
         result.standard_key = Some(key);
         result.standard_cache = Some(cache);
-        result
+        Ok(result)
     }
 
     #[allow(clippy::too_many_arguments)]

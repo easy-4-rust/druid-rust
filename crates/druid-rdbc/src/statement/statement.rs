@@ -126,6 +126,20 @@ impl std::fmt::Debug for ExecutionResult {
 /// 实现不得借用创建它的 connection；query 返回唯一 owned [`ResultSet`]。
 #[async_trait::async_trait]
 pub trait Statement: Wrapper + Send + 'static {
+    /// 返回当前query timeout秒数。
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_query_timeout",
+        })
+    }
+
+    /// 设置query timeout秒数。
+    fn set_query_timeout(&mut self, _seconds: i32) -> Result<(), RdbcError> {
+        Err(RdbcError::UnsupportedOperation {
+            operation: "statement_set_query_timeout",
+        })
+    }
+
     /// 执行 query 并返回 owned result set。
     async fn execute_query(&mut self, _sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {
         Err(RdbcError::UnsupportedOperation {

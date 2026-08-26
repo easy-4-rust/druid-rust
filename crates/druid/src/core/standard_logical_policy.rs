@@ -4,7 +4,10 @@ use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
 use super::exception_sorter::ExceptionSorter;
 use super::fatal_error_handler::FatalErrorHandler;
 use super::filter::{ExecContext, ExecOperation};
-use super::{DruidError, ExecResult, FilterChain, RdbcError, Value};
+use super::{
+    BatchExecContext, BatchExecKind, DruidError, ExecResult, FilterChain, PreparedInputParameter,
+    RdbcError, Value,
+};
 use crate::stats::{RdbcStatementStat, StatsCollector};
 use parking_lot::{Mutex, RwLock};
 use std::future::Future;
@@ -24,6 +27,7 @@ pub(crate) struct StandardLogicalPolicy {
     fatal_error_handler: RwLock<Option<Arc<dyn FatalErrorHandler>>>,
     auto_commit: RwLock<Option<bool>>,
     transaction_started_at: Mutex<Option<Instant>>,
+    resource_generation: u64,
     discarded: AtomicBool,
 }
 
@@ -35,6 +39,7 @@ impl StandardLogicalPolicy {
         execution_running: Arc<AtomicBool>,
         filter_chain: Option<Arc<FilterChain>>,
         auto_commit: Option<bool>,
+        resource_generation: u64,
     ) -> Arc<Self> {
         Arc::new(Self {
             connection_id,
@@ -47,6 +52,7 @@ impl StandardLogicalPolicy {
             fatal_error_handler: RwLock::new(None),
             auto_commit: RwLock::new(auto_commit),
             transaction_started_at: Mutex::new(None),
+            resource_generation,
             discarded: AtomicBool::new(false),
         })
     }
@@ -65,6 +71,10 @@ impl StandardLogicalPolicy {
 
     pub(crate) fn is_discarded(&self) -> bool {
         self.discarded.load(Ordering::Acquire)
+    }
+
+    pub(crate) const fn resource_generation(&self) -> u64 {
+        self.resource_generation
     }
 
     pub(crate) fn set_auto_commit_state(&self, auto_commit: bool) {
@@ -112,6 +122,65 @@ impl StandardLogicalPolicy {
         Fut: Future<Output = Result<T, RdbcError>>,
         S: Fn(&T) -> ExecResult,
     {
+        self.execute_with_parameter_context(
+            sql,
+            params,
+            None,
+            statement_id,
+            operation,
+            raw,
+            summarize,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn execute_prepared<T, F, Fut, S>(
+        &self,
+        sql: &str,
+        prepared_parameters: Vec<PreparedInputParameter>,
+        statement_id: u64,
+        operation: ExecOperation,
+        raw: F,
+        summarize: S,
+    ) -> Result<T, RdbcError>
+    where
+        F: FnOnce(String) -> Fut,
+        Fut: Future<Output = Result<T, RdbcError>>,
+        S: Fn(&T) -> ExecResult,
+    {
+        let params = prepared_parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.execute_with_parameter_context(
+            sql,
+            params,
+            Some(prepared_parameters),
+            statement_id,
+            operation,
+            raw,
+            summarize,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn execute_with_parameter_context<T, F, Fut, S>(
+        &self,
+        sql: &str,
+        params: Vec<Value>,
+        prepared_parameters: Option<Vec<PreparedInputParameter>>,
+        statement_id: u64,
+        operation: ExecOperation,
+        raw: F,
+        summarize: S,
+    ) -> Result<T, RdbcError>
+    where
+        F: FnOnce(String) -> Fut,
+        Fut: Future<Output = Result<T, RdbcError>>,
+        S: Fn(&T) -> ExecResult,
+    {
         self.ensure_open()?;
         let _execution = StandardExecutionGuard::new(
             Arc::clone(&self.execution_running),
@@ -126,7 +195,7 @@ impl StandardLogicalPolicy {
             statement_id: Some(statement_id),
             sql: sql.to_owned(),
             params: &params,
-            prepared_parameters: None,
+            prepared_parameters: prepared_parameters.as_deref(),
             data_source: &self.data_source,
             start: started,
             fingerprint: None,
@@ -149,6 +218,69 @@ impl StandardLogicalPolicy {
         let result = self.classify(result, Some(&effective_sql));
         self.record_execution(&effective_sql, &result);
         self.classify(after.map_err(RdbcError::from), Some(&effective_sql))?;
+        result
+    }
+
+    pub(crate) async fn execute_prepared_batch<F, Fut>(
+        &self,
+        sql: &str,
+        prepared_parameter_sets: &[Vec<PreparedInputParameter>],
+        statement_id: u64,
+        raw: F,
+    ) -> Result<Vec<i64>, RdbcError>
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = Result<Vec<i64>, RdbcError>>,
+    {
+        self.ensure_open()?;
+        let parameter_sets = prepared_parameter_sets
+            .iter()
+            .map(|parameters| {
+                parameters
+                    .iter()
+                    .map(PreparedInputParameter::scalar_value)
+                    .collect::<Result<Vec<_>, _>>()
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let _execution = StandardExecutionGuard::new(
+            Arc::clone(&self.execution_running),
+            self.stats_collector
+                .read()
+                .as_ref()
+                .map(|collector| Arc::clone(collector.statement_stat())),
+        );
+        let mut context = BatchExecContext {
+            connection_id: self.connection_id,
+            statement_id: Some(statement_id),
+            sql,
+            statements: &[],
+            parameter_sets: &parameter_sets,
+            prepared_parameter_sets: Some(prepared_parameter_sets),
+            kind: BatchExecKind::PreparedStatement,
+            data_source: &self.data_source,
+            start: Instant::now(),
+            fingerprint: None,
+            in_transaction: *self.auto_commit.read() == Some(false),
+        };
+        let around = DruidExecutionFilterPolicy::execute_batch(
+            self.filter_chain.as_deref(),
+            &mut context,
+            raw,
+            |counts| {
+                counts
+                    .iter()
+                    .map(|count| i32::try_from(*count).unwrap_or(i32::MAX))
+                    .collect()
+            },
+        )
+        .await;
+        let (result, after) = match around {
+            Ok(outcome) => outcome,
+            Err(error) => return self.classify(Err(error.into()), Some(sql)),
+        };
+        let result = self.classify(result, Some(sql));
+        self.record_execution(sql, &result);
+        self.classify(after.map_err(RdbcError::from), Some(sql))?;
         result
     }
 

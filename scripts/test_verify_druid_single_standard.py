@@ -313,24 +313,100 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                     verify_task4_evidence_handoff(root)
 
     def test_task4_exact_rbdc_command_failure_is_not_bypassed(self) -> None:
-        success = verifier.subprocess.CompletedProcess([], 0, b"", b"")
-        failure = verifier.subprocess.CompletedProcess(
-            [], 1, b"", b"forced exact RBDC failure"
-        )
         with mock.patch.object(
-            verifier.subprocess,
-            "run",
-            side_effect=[success, success, failure],
-        ) as run:
+            verifier, "run_cargo_gate"
+        ) as cargo_gate, mock.patch.object(
+            verifier,
+            "execute_task5_rbdc_compiler_coverage",
+            side_effect=VerificationError("forced current RBDC coverage failure"),
+            create=True,
+        ) as coverage:
             with self.assertRaisesRegex(
-                VerificationError, "exact runtime handoff failed"
+                VerificationError, "current RBDC coverage failure"
             ):
                 verify_task4_evidence_handoff(repository_root())
-        self.assertEqual(run.call_count, 3)
-        self.assertIn(
-            "rbdc_standard_factory_emits_typed_runtime_trace",
-            run.call_args_list[-1].args[0],
+        self.assertEqual(cargo_gate.call_count, 2)
+        coverage.assert_called_once_with(repository_root())
+
+    def test_task4_handoff_executes_current_rbdc_compiler_coverage_v2(self) -> None:
+        with mock.patch.object(verifier, "run_cargo_gate"), mock.patch.object(
+            verifier, "execute_evidence", create=True
+        ) as execute:
+            verifier.execute_task5_rbdc_compiler_coverage(repository_root())
+        execute.assert_called_once()
+        evidence, coverage = execute.call_args.args[1:]
+        self.assertEqual(evidence.family, "RBDC")
+        rbdc = [family for family in coverage if family.family == "RBDC"]
+        self.assertEqual(len(rbdc), 1)
+        self.assertEqual(len(rbdc[0].requirements), 15)
+        transitioned = [
+            requirement
+            for requirement in rbdc[0].requirements
+            if requirement.source_path.as_posix()
+            == "crates/druid-wrapper/tests/rbdc_connection_adapter_test.rs"
+        ]
+        self.assertEqual(len(transitioned), 1)
+        self.assertEqual(
+            transitioned[0].source_sha256,
+            verifier.TASK5_RBDC_EVIDENCE_SOURCE_SHA256,
         )
+
+    def test_exact_runtime_contracts_bind_every_c3_and_registry_identity(self) -> None:
+        with mock.patch.object(verifier, "run_cargo_gate"), mock.patch.object(
+            verifier, "run_exact_cargo_test", create=True
+        ) as exact:
+            verify_task5_runtime_contracts(repository_root())
+        names = {call.args[2].test_id for call in exact.call_args_list}
+        self.assertEqual(
+            names,
+            {
+                "canonical_prepare_rewrite_cache_parameters_batch_events_and_timeout_match_raw",
+                "canonical_prepared_setter_failure_and_clear_keep_filter_snapshot_truthful",
+                "canonical_wall_prepare_and_metadata_rejection_prevent_raw_calls",
+                "canonical_result_set_open_initializes_wall_tenant_hidden_mapping",
+                "canonical_result_set_open_rejection_closes_unregistered_raw_once",
+                "canonical_result_set_value_metadata_was_null_filters_modify_and_reject_once",
+                "fatal_standard_create_prepare_call_and_metadata_errors_force_discard",
+                "core::standard_resource_registry::tests::late_registration_after_close_is_rejected_and_closed",
+                "core::standard_resource_registry::tests::explicit_close_unregisters_strong_entries_during_long_lease",
+                "core::standard_resource_registry::tests::concurrent_close_all_waits_for_one_exact_drain",
+                "late_metadata_result_registration_is_closed_before_next_lease",
+            },
+        )
+
+    def test_exact_runtime_source_rejects_name_in_comment_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "fake.rs"
+            source.write_text(
+                "// fn required_behavior() {}\n#[test]\nfn another_test() {}\n",
+                encoding="utf-8",
+            )
+            spec = verifier.ExactCargoTestSpec(
+                Path("fake.rs"), "lib", "required_behavior"
+            )
+            with self.assertRaisesRegex(VerificationError, "missing or ambiguous"):
+                verifier.require_exact_test_source(root, spec)
+
+    def test_exact_runtime_rejects_successful_zero_test_process(self) -> None:
+        spec = verifier.ExactCargoTestSpec(
+            Path("crates/druid/tests/standard_filter_stat_semantics_test.rs"),
+            "test:standard_filter_stat_semantics_test",
+            "canonical_prepare_rewrite_cache_parameters_batch_events_and_timeout_match_raw",
+        )
+        zero = verifier.subprocess.CompletedProcess(
+            [],
+            0,
+            b"running 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured\n",
+            b"",
+        )
+        with mock.patch.object(
+            verifier, "require_exact_test_source"
+        ), mock.patch.object(verifier, "run_cargo_gate", return_value=zero):
+            with self.assertRaisesRegex(
+                VerificationError, "did not execute exactly one"
+            ):
+                verifier.run_exact_cargo_test(repository_root(), "mutated exact", spec)
 
     def test_live_runtime_contract_failure_is_propagated(self) -> None:
         with mock.patch.object(

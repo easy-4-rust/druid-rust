@@ -278,6 +278,18 @@ async fn one_based_indexes_and_generated_keys_reject_invalid_values(
     assert!(matches!(generated_keys, GeneratedKeys::ColumnIndexes(_)));
 
     let mut statement = GeneratedKeysStatement;
+    assert!(matches!(
+        statement.query_timeout(),
+        Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
+            operation: "statement_query_timeout"
+        })
+    ));
+    assert!(matches!(
+        statement.set_query_timeout(5),
+        Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
+            operation: "statement_set_query_timeout"
+        })
+    ));
     let mut result_set = statement.generated_keys().await?;
     assert!(!result_set.next().await?);
     Ok(())

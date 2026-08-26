@@ -462,6 +462,23 @@ pub trait BeforeFilter: Send + Sync {
         chain.connection_get_meta_data()
     }
 
+    /// canonical standard `Connection#getMetaData()` 调用 raw 前的观察/拒绝 hook。
+    async fn standard_connection_get_meta_data_before(
+        &self,
+        _connection_id: u64,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
+    /// canonical standard `Connection#getMetaData()` 调用 raw 后的观察/error hook。
+    async fn standard_connection_get_meta_data_after(
+        &self,
+        _connection_id: u64,
+        _result: &Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        Ok(())
+    }
+
     /// 语句事件拦截（对应 Filter 的 statement_* / preparedStatement_* 系列 hook）。
     async fn on_statement_event(&self, _event: &StatementEvent) -> Result<(), DruidError> {
         Ok(()) // 默认放行

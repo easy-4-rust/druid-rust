@@ -232,19 +232,31 @@ impl WallFilter {
         }
     }
 
-    fn preprocess_result_set(
+    #[allow(clippy::type_complexity)]
+    fn result_set_column_mappings<FTable, FColumn>(
         &self,
-        context: &mut ResultSetOpenContext<'_>,
-    ) -> Result<(), DruidError> {
+        column_count: usize,
+        mut table_name: FTable,
+        mut column_name: FColumn,
+    ) -> Result<
+        (
+            Option<HashMap<i32, i32>>,
+            Option<HashMap<i32, i32>>,
+            Option<Vec<i32>>,
+            Vec<usize>,
+        ),
+        DruidError,
+    >
+    where
+        FTable: FnMut(usize) -> Result<String, DruidError>,
+        FColumn: FnMut(usize) -> Result<String, DruidError>,
+    {
         let config = self.provider.config();
         let tenant_call_back = config.tenant_call_back();
         let tenant_table_pattern = config.tenant_table_pattern.as_str();
         if tenant_call_back.is_none() && tenant_table_pattern.is_empty() {
-            return Ok(());
+            return Ok((None, None, None, Vec::new()));
         }
-
-        let meta_data = context.raw_result_set().meta_data()?;
-        let column_count = meta_data.column_count()?;
         let mut logic_column_map = HashMap::new();
         let mut physical_column_map = HashMap::new();
         let mut hidden_columns = Vec::new();
@@ -252,7 +264,7 @@ impl WallFilter {
         let mut logic_column = 1_i32;
 
         for physical_column in 1..=column_count {
-            let table_name = meta_data.table_name(physical_column)?;
+            let table_name = table_name(physical_column)?;
             let mut hidden_column = tenant_call_back
                 .as_ref()
                 .and_then(|call_back| call_back.hidden_column(&table_name));
@@ -274,7 +286,7 @@ impl WallFilter {
                 }
             }
 
-            let column_name = meta_data.column_name(physical_column)?;
+            let column_name = column_name(physical_column)?;
             let is_hidden = hidden_column
                 .as_deref()
                 .is_some_and(|hidden| hidden.eq_ignore_ascii_case(&column_name));
@@ -297,12 +309,86 @@ impl WallFilter {
             }
         }
 
-        if !hidden_columns.is_empty() {
-            context.set_logic_column_map(logic_column_map);
-            context.set_physical_column_map(physical_column_map);
-            context.set_hidden_columns(hidden_columns);
+        if hidden_columns.is_empty() {
+            Ok((None, None, None, tenant_columns))
+        } else {
+            Ok((
+                Some(logic_column_map),
+                Some(physical_column_map),
+                Some(hidden_columns),
+                tenant_columns,
+            ))
         }
-        context.set_tenant_columns(tenant_columns);
+    }
+
+    fn preprocess_result_set(
+        &self,
+        context: &mut ResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        let meta_data = context.raw_result_set().meta_data()?;
+        let column_count = meta_data.column_count()?;
+        let (logic, physical, hidden, tenant) = self.result_set_column_mappings(
+            column_count,
+            |column| meta_data.table_name(column).map_err(DruidError::from),
+            |column| meta_data.column_name(column).map_err(DruidError::from),
+        )?;
+        if let Some(logic) = logic {
+            context.set_logic_column_map(logic);
+        }
+        if let Some(physical) = physical {
+            context.set_physical_column_map(physical);
+        }
+        if let Some(hidden) = hidden {
+            context.set_hidden_columns(hidden);
+        }
+        context.set_tenant_columns(tenant);
+        Ok(())
+    }
+
+    fn preprocess_standard_result_set(
+        &self,
+        context: &mut crate::core::StandardResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        let column_count = context.meta_data().column_count();
+        let (logic, physical, hidden, tenant) = self.result_set_column_mappings(
+            column_count,
+            |_column| Ok(String::new()),
+            |column| {
+                let index = druid_rdbc::result_set::ColumnIndex::new(column)?;
+                context
+                    .meta_data()
+                    .column(index)
+                    .map(|descriptor| descriptor.label().to_owned())
+                    .map_err(DruidError::from)
+            },
+        )?;
+        if let Some(logic) = logic {
+            context.set_logic_column_map(logic);
+        }
+        if let Some(physical) = physical {
+            context.set_physical_column_map(physical);
+        }
+        if let Some(hidden) = hidden {
+            context.set_hidden_columns(hidden);
+        }
+        context.set_tenant_columns(tenant);
+        Ok(())
+    }
+
+    fn check_metadata_allowed(&self, connection_id: u64) -> Result<(), DruidError> {
+        if self.provider.config().do_privileged_allow && WallProvider::is_privileged() {
+            return Ok(());
+        }
+        if !self.provider.config().metadata_allow {
+            if self.log_violation.load(Ordering::Acquire) {
+                tracing::error!(connection_id, "not support method : Connection.getMetaData");
+            }
+            if self.throw_exception.load(Ordering::Acquire) {
+                return Err(DruidError::WallViolation(
+                    "not support method : Connection.getMetaData".to_owned(),
+                ));
+            }
+        }
         Ok(())
     }
 }
@@ -347,23 +433,15 @@ impl BeforeFilter for WallFilter {
         &self,
         chain: ConnectionDatabaseMetaDataFilterChain<'filters, 'connection>,
     ) -> Result<Box<dyn PhysicalDatabaseMetaData + 'connection>, DruidError> {
-        if self.provider.config().do_privileged_allow && WallProvider::is_privileged() {
-            return chain.connection_get_meta_data();
-        }
-        if !self.provider.config().metadata_allow {
-            if self.log_violation.load(Ordering::Acquire) {
-                tracing::error!(
-                    connection_id = chain.connection_id(),
-                    "not support method : Connection.getMetaData"
-                );
-            }
-            if self.throw_exception.load(Ordering::Acquire) {
-                return Err(DruidError::WallViolation(
-                    "not support method : Connection.getMetaData".to_owned(),
-                ));
-            }
-        }
+        self.check_metadata_allowed(chain.connection_id())?;
         chain.connection_get_meta_data()
+    }
+
+    async fn standard_connection_get_meta_data_before(
+        &self,
+        connection_id: u64,
+    ) -> Result<(), DruidError> {
+        self.check_metadata_allowed(connection_id)
     }
 
     async fn before_batch(&self, context: &mut BatchExecContext<'_>) -> Result<(), DruidError> {
@@ -459,6 +537,13 @@ impl ResultSetFilter for WallFilter {
         context: &mut ResultSetOpenContext<'_>,
     ) -> Result<(), DruidError> {
         self.preprocess_result_set(context)
+    }
+
+    fn standard_result_set_open_after_with_proxy(
+        &self,
+        context: &mut crate::core::StandardResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        self.preprocess_standard_result_set(context)
     }
 
     fn result_set_next(&self, chain: &mut ResultSetFilterChain<'_>) -> Result<bool, DruidError> {

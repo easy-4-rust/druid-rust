@@ -492,3 +492,128 @@ Task5 exact handoff PASS；当前 SQLx default与HTTP SQL all-features隔离 com
 没有已知未处置的 round1 production correctness finding，但只有独立 re-review可以确认
 3C+6I为 ADDRESSED。I4 的旧行为不可复现结论需要 reviewer接受；Task4旧 verifier stale仍按计划由
 Task5 exact handoff承接。Task 6在新的独立 REVIEW CLEAR 前继续阻塞。
+
+## 12. Fix round 1 independent re-review correction — FIX_REQUIRED
+
+独立 re-review 针对 `cf15451..314115b` 仍给出 **FIX_REQUIRED**。本节覆盖第 11 节
+“没有已知未处置 finding”的结论；历史文字继续保留，但不再代表当前状态。
+
+- C1、C2、I1、I2、I3、I4、I5：`ADDRESSED`，round 2 必须保持。
+- C3：`PARTIAL`。canonical create/prepare/call/metadata、prepared typed parameter snapshot、
+  ResultSet proxy-aware open 与 value/meta_data/was_null filter paths仍开放。
+- N1：新 Important。registry close snapshot未 seal admission，late ResultSet可在 drain 后注册；
+  显式关闭也不移除 strong entry，长 lease会累积历史 handle。
+- I6：`PARTIAL`。live verifier未绑定上述 C3/N1 residual，RBDC handoff只运行普通 exact test，
+  未执行当前 compiler coverage v2 的 15-function gate。
+
+当前状态改为 **FIX_ROUND_2_IN_PROGRESS**。本轮范围仅 C3、N1、I6；Task 6继续阻塞。
+必须保持 frozen `180/75/108`、logical 9、semantic `52/17/0`、Task4 frozen artifacts以及
+已 addressed round1 行为。
+
+## 13. Fix round 2/5 implementation report — pending independent re-review
+
+本轮从 `314115b` 开始，仅处置 Round 1 re-review 的 C3、N1、I6；C1/C2/I1-I5 的既有行为保持。
+没有创建 worktree/分支、没有 reset/amend/push，没有修改 Cargo topology、Task 4 frozen artifacts
+或 `druid-admin`。
+
+### 13.1 Fresh RED
+
+- C3 prepare/parameter：prepared batch 返回 `UnsupportedOperation(statement_add_batch)`；setter
+  失败后 Filter 参数快照为 `[]` 而不是已成功的 `Int(10)`；Wall prepare denial仍调用 raw；
+  tenant ResultSet callback为 `0` 而不是 `1`。
+- C3 configured setup自审追加RED：为canonical tracking raw实现query-timeout override时出现6个
+  `E0407`，暴露standard Statement没有该接口；此前`query_timeout=13`只写入Druid的Physical占位
+  statement，未触达root/prepared/cached/callable raw对象。
+- C3 ResultSet getter协议：新增 value/meta_data/was_null Filter override时出现 6 个 `E0407`，证明
+  canonical hook不存在；proxy-aware open拒绝后 raw ResultSet close count为 `0`，期望 `1`。
+- N1 registry三个确定性测试最初 `3/3 FAIL`：Closing/Closed后的 late register未关闭 raw、128 个
+  显式关闭资源的 `Weak` 仍可 upgrade、第二个 concurrent `close_all` 在 winner drain前返回。
+- I6 verifier自测最初 `23` 个中 `2 failure + 3 error`：缺少 exact-test runner、11 个 C3/N1
+  identity未执行、current RBDC compiler coverage入口未调用。
+
+### 13.2 C3 shared Filter/Wall/Stat/error policy GREEN
+
+- `DruidExecutionFilterPolicy` 现在由 Physical与canonical共同使用 prepare SQL链、statement
+  create/prepare/call after事件与计数、普通/Prepared batch around-chain。effective SQL同时进入 raw
+  prepare与 `PreparedStatementKey`；query timeout、structured error sorter与 fatal discard保持一致。
+- canonical `Statement`新增typed query-timeout getter/setter，默认明确返回Unsupported；Druid三类proxy
+  直接调用其真实canonical raw handle。configured测试证明root/prepared/cache-hit/callable四次setter
+  均收到`13`，getter也返回`13`，不再经过Physical占位对象。
+- Prepared/Callable参数槽、clear与batch snapshot只在 raw setter/clear/add成功后更新。执行 Filter
+  接收有序 typed `PreparedInputParameter`与scalar params；`prepared_parameters=Some(...)` 使 Wall在
+  执行期只复核、不重复 tenant rewrite，raw对象使用prepare边界的effective SQL。
+- canonical metadata进入同一 connection metadata permission/after/error链；Wall rejection在raw调用前
+  终止，raw create/prepare/call/metadata SQL错误均进入 sorter。
+- standard ResultSet使用proxy-aware open；Wall从immutable standard metadata生成hidden/tenant映射。
+  next/close/value/meta_data/was_null进入同一 `ResultSetFilter`注册顺序并分类错误。open/meta预处理失败时
+  注册前raw cursor异步关闭恰好一次，不遗失owner。
+- focused C3最终 `12/12 PASS`；旧Physical回归 `filter_adapter 2/2`、`stat_filter_context 4/4`、
+  `result_set_filter_semantics 28/28`、`pooled_statement_semantics 7/7` 全部PASS。
+
+### 13.3 N1 sealed generation registry GREEN
+
+- registry在一个Mutex下维护 `Open | Closing | Closed`、lease generation及id→Arc entries。
+  register在Open且generation匹配时先在同一临界区绑定generation/id token再入表；Closing/Closed或
+  generation不匹配时不暴露handle，在锁外立即async close并返回typed discarded error。
+- `close_all` 使用先创建并 `pin + enable` 的Notify future，再检查Closing；一个winner drain，其他
+  caller等待同一完成通知。失败close保留retry ownership；成功显式close按generation/id移除strong
+  entry，避免长lease历史积累。
+- metadata竞态测试的barrier位于raw ResultSet已经返回、proxy-aware open已进入、registry register尚未
+  发生的精确位置。旧lease close/seal后先reborrow holder，再释放barrier；late register关闭raw一次、
+  返回失败，next lease仍可执行，cursor不跨lease。
+- registry `3/3 PASS`，metadata ownership `2/2 PASS`，Druid lib在all-feature下 `55/55 PASS`。
+
+### 13.4 I6 exact runtime and Task 4 coverage handoff
+
+- Task5 live verifier除既有四个suite外，逐个运行并解析11个exact C3/N1 tests；真实Rust函数定义必须
+  唯一，Cargo即使exit 0但报告`running 0 tests`也失败。self-test最终 `23/23 PASS`，comment-only、
+  missing identity、zero-test与coverage runner failure mutation均fail closed。
+- handoff保留Task4 frozen coverage/runtime bytes，只把唯一批准RBDC test source tuple
+  `f5e8df...b1e -> b3fc87...f96c`装配成当前coverage contract；随后调用原Task4隔离runner和exact
+  validator，RBDC 15个compiler functions全部PASS。当前SQLx default与HTTP_SQL all-features也分别
+  `15/15 PASS`。
+- 旧Task4 verifier仍诚实为self `35/38`、live exit `1`，三个self error/live error全部且仅因上述
+  frozen RBDC source hash。没有一般化hash bypass，也未改写frozen artifact。
+
+### 13.5 Final inventories and hashes
+
+```text
+TASK5_CONSUMER_ROWS=363
+TASK5_CONSUMER_CLOSED=180
+TASK6_COMPATIBILITY_PENDING=75
+TASK7_RESOURCE_OPERATIONS_PENDING=108
+DRUID_STANDARD_IMPLS=6
+DRUID_INTERNAL_OBJECTS=13
+
+PHYSICAL_ROWS=73
+ADAPTER_ROWS=57
+CONSUMER_ROWS=3643
+CONSUMER_SHA256=2304c766d9855e7d254020bf343fda9709b222d666b25e103c491dcfa4ab4e97
+```
+
+`rdbc-production-consumers.tsv`按当前production source坐标重新emit，Task5 frozen identities/states与
+6 additions未变；checked SHA-256为
+`c73fa6db70caab834aa8d64a8a83b86475b1fb3d9cf7a82f36c417690a26ad13`。
+
+logical-live继续精确9行：`JAVA_SQL=52 / JAVAX_SQL=17 / UNKNOWN=0`；semantic/live hash为
+`5d99b573...cdbd9 / f2e1d929...d9ed84`。Task4 frozen coverage/runtime SHA-256仍为
+`f7b3d4b...07c9 / 106323e...a3ec`。
+
+### 13.6 Full gates and remaining boundary
+
+- Task5 self/live：`23/23 PASS`；live `363/180/75/108 + 6 impl + 13 object`。
+- semantic self/logical-live：`18/18 PASS + 52/17/0`；denominator `41/41 PASS + 73/57/3643`；
+  Task3 purity `103/103 PASS + STANDARD_FILES=29`。
+- focused：C3 `12/12`、metadata `2/2`、registry `3/3`、standard logical `18/18`、raw owner
+  `5/5`、recycle `12/12`、external/privacy `3/3`、admission `4/4`及既有Physical Filter/Stat均PASS。
+- `druid`、`druid-wrapper`、`druid-rdbc` all-target/all-feature tests全部PASS；workspace
+  all-target/all-feature check PASS。
+- 三crate scoped Clippy `-D warnings`、rustdoc `-D warnings`、doctest `0/0/1`、rustfmt、Black、
+  Python compile与diff-check全部PASS。
+
+一次在llvm-cov后并行启动四个共享target Cargo进程时出现缺失中间`.rmeta/.rlib`的环境性失败；改为
+顺序重建后所有相同测试与全量门禁通过，不作为代码GREEN证据。
+
+真实外部RBDC/HTTP/libSQL/JDBC Agent服务仍为`NOT_RUN`；deterministic local生产路径与compiler
+coverage不冒充外部部署证据。当前状态是 **FIX_ROUND_2_IMPLEMENTED_PENDING_REVIEW**；只有独立
+re-review可将C3/N1/I6判为ADDRESSED，Task 6继续阻塞。

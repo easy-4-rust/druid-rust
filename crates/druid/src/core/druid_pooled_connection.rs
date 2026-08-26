@@ -365,7 +365,7 @@ impl DruidPooledConnection {
     /// - `recycle_validator`：启用 `testOnReturn` 时的校验器。
     /// - `return_connection`：接收完整 holder 与最终回收处置。
     pub fn with_holder(
-        holder: DruidConnectionHolder,
+        mut holder: DruidConnectionHolder,
         data_source: String,
         filter_chain: Option<Arc<FilterChain>>,
         keep_underlying_transaction_isolation: bool,
@@ -376,7 +376,15 @@ impl DruidPooledConnection {
         let standard = holder.has_standard_connection();
         let lease_active = Arc::new(AtomicBool::new(true));
         let execution_running = Arc::new(AtomicBool::new(false));
-        let standard_policy = standard.then(|| {
+        let resource_generation = standard.then(|| {
+            if let Ok(generation) = holder.begin_standard_lease() {
+                generation
+            } else {
+                holder.mark_discarded();
+                holder.standard_resource_registry().current_generation()
+            }
+        });
+        let standard_policy = resource_generation.map(|resource_generation| {
             StandardLogicalPolicy::new(
                 id,
                 data_source.clone(),
@@ -384,6 +392,7 @@ impl DruidPooledConnection {
                 Arc::clone(&execution_running),
                 filter_chain.clone(),
                 holder.defaults().standard_auto_commit(),
+                resource_generation,
             )
         });
         let connected_time_millis = now_millis().saturating_sub(
@@ -1067,19 +1076,15 @@ impl DruidPooledConnection {
             self.classify_result(timeout_result)?;
         }
         let statement_id = self.next_statement_id();
-        if let Some(filter_chain) = &self.filter_chain {
-            let event_result = filter_chain
-                .after_statement_event_with_identity(
-                    self.id,
-                    statement_id,
-                    &super::StatementEvent::CreateStatement,
-                )
-                .await;
-            self.classify_result(event_result)?;
-        }
-        if let Some(stats) = self.stats_collector.as_ref() {
-            stats.statement_stat().increment_create_counter();
-        }
+        let event_result = DruidExecutionFilterPolicy::complete_statement_creation(
+            self.filter_chain.as_deref(),
+            self.stats_collector.as_ref(),
+            self.id,
+            statement_id,
+            &super::StatementEvent::CreateStatement,
+        )
+        .await;
+        self.classify_result(event_result)?;
         let statement = DruidPooledStatement::new(
             statement,
             self.id,
@@ -1333,19 +1338,15 @@ impl DruidPooledConnection {
     ) -> Result<DruidPooledPreparedStatement, RdbcError> {
         let statement = self.prepare_from_key(key, false).await?;
         let sql = statement.prepared_statement_holder().key().sql().to_owned();
-        if let Some(filter_chain) = &self.filter_chain {
-            let event_result = filter_chain
-                .after_statement_event_with_identity(
-                    self.id,
-                    statement.id(),
-                    &super::StatementEvent::PrepareStatement(sql),
-                )
-                .await;
-            self.classify_result(event_result)?;
-        }
-        if let Some(stats) = self.stats_collector.as_ref() {
-            stats.statement_stat().increment_prepare_counter();
-        }
+        let event_result = DruidExecutionFilterPolicy::complete_statement_creation(
+            self.filter_chain.as_deref(),
+            self.stats_collector.as_ref(),
+            self.id,
+            statement.id(),
+            &super::StatementEvent::PrepareStatement(sql),
+        )
+        .await;
+        self.classify_result(event_result)?;
         Ok(statement)
     }
 
@@ -1376,19 +1377,15 @@ impl DruidPooledConnection {
             });
         }
         let statement = DruidPooledCallableStatement::new(prepared_statement);
-        if let Some(filter_chain) = &self.filter_chain {
-            let event_result = filter_chain
-                .after_statement_event_with_identity(
-                    self.id,
-                    statement.id(),
-                    &super::StatementEvent::PrepareCall(sql),
-                )
-                .await;
-            self.classify_result(event_result)?;
-        }
-        if let Some(stats) = self.stats_collector.as_ref() {
-            stats.statement_stat().increment_prepare_call_count();
-        }
+        let event_result = DruidExecutionFilterPolicy::complete_statement_creation(
+            self.filter_chain.as_deref(),
+            self.stats_collector.as_ref(),
+            self.id,
+            statement.id(),
+            &super::StatementEvent::PrepareCall(sql),
+        )
+        .await;
+        self.classify_result(event_result)?;
         Ok(statement)
     }
 
@@ -1397,12 +1394,11 @@ impl DruidPooledConnection {
         key: PreparedStatementKey,
         callable: bool,
     ) -> Result<DruidPooledPreparedStatement, RdbcError> {
-        let key = if let Some(filter_chain) = &self.filter_chain {
-            let rewritten_sql = filter_chain.prepare_statement_sql(key.sql())?;
-            key.with_sql(rewritten_sql)
-        } else {
-            key
-        };
+        let rewritten_sql = DruidExecutionFilterPolicy::prepare_statement_sql(
+            self.filter_chain.as_deref(),
+            key.sql(),
+        )?;
+        let key = key.with_sql(rewritten_sql);
         let pooled = self
             .holder
             .as_ref()
@@ -2728,7 +2724,8 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::Statement>, RdbcError> {
-        let statement = self.standard_mut()?.create_statement(options).await?;
+        let result = self.standard_mut()?.create_statement(options).await;
+        let statement = self.classify_result(result)?;
         let resources = self
             .holder
             .as_ref()
@@ -2739,19 +2736,37 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
+        let resource_generation = policy.resource_generation();
+        let statement_id = self.next_statement_id();
         let statement = DruidPooledStatement::new_standard(
             statement,
             Arc::clone(&resources),
             policy,
             self.id,
-            self.next_statement_id(),
+            statement_id,
             Arc::clone(&self.result_set_id_seed),
             Arc::clone(&self.metadata_id_seed),
             Arc::clone(&self.lease_active),
             self.filter_chain.clone(),
             self.stats_collector.clone(),
         );
-        resources.register(Arc::clone(&statement.inner));
+        resources
+            .register(resource_generation, Arc::clone(&statement.inner))
+            .await?;
+        let query_timeout = self.effective_query_timeout();
+        if query_timeout > 0 {
+            let result = statement.configure_standard_query_timeout(query_timeout);
+            self.classify_result(result)?;
+        }
+        let event_result = DruidExecutionFilterPolicy::complete_statement_creation(
+            self.filter_chain.as_deref(),
+            self.stats_collector.as_ref(),
+            self.id,
+            statement_id,
+            &super::StatementEvent::CreateStatement,
+        )
+        .await;
+        self.classify_result(event_result)?;
         Ok(Box::new(statement))
     }
 
@@ -2760,8 +2775,10 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         sql: &str,
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        let effective_sql =
+            DruidExecutionFilterPolicy::prepare_statement_sql(self.filter_chain.as_deref(), sql)?;
         let key = PreparedStatementKey::standard(
-            sql,
+            &effective_sql,
             self.current_catalog(),
             PreparedStatementMethodType::M1,
             options,
@@ -2783,25 +2800,47 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
         let cached = cache.lock().await.take(&key);
-        let statement = match cached {
-            Some(statement) => statement,
-            None => self.standard_mut()?.prepare_statement(sql, options).await?,
+        let statement = if let Some(statement) = cached {
+            statement
+        } else {
+            let result = self
+                .standard_mut()?
+                .prepare_statement(&effective_sql, options)
+                .await;
+            self.classify_result_with_sql(result, Some(&effective_sql))?
         };
-        Ok(Box::new(DruidPooledPreparedStatement::new_standard(
+        let statement_id = self.next_statement_id();
+        let statement = DruidPooledPreparedStatement::new_standard(
             statement,
-            sql,
+            &effective_sql,
             key,
             cache,
             resources,
             policy,
             self.id,
-            self.next_statement_id(),
+            statement_id,
             Arc::clone(&self.result_set_id_seed),
             Arc::clone(&self.metadata_id_seed),
             Arc::clone(&self.lease_active),
             self.filter_chain.clone(),
             self.stats_collector.clone(),
-        )))
+        )
+        .await?;
+        let query_timeout = self.effective_query_timeout();
+        if query_timeout > 0 {
+            let result = statement.configure_standard_query_timeout(query_timeout);
+            self.classify_result_with_sql(result, Some(&effective_sql))?;
+        }
+        let event_result = DruidExecutionFilterPolicy::complete_statement_creation(
+            self.filter_chain.as_deref(),
+            self.stats_collector.as_ref(),
+            self.id,
+            statement_id,
+            &super::StatementEvent::PrepareStatement(effective_sql),
+        )
+        .await;
+        self.classify_result(event_result)?;
+        Ok(Box::new(statement))
     }
 
     async fn prepare_call(
@@ -2809,7 +2848,13 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         sql: &str,
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::CallableStatement>, RdbcError> {
-        let statement = self.standard_mut()?.prepare_call(sql, options).await?;
+        let effective_sql =
+            DruidExecutionFilterPolicy::prepare_statement_sql(self.filter_chain.as_deref(), sql)?;
+        let result = self
+            .standard_mut()?
+            .prepare_call(&effective_sql, options)
+            .await;
+        let statement = self.classify_result_with_sql(result, Some(&effective_sql))?;
         let resources = self
             .holder
             .as_ref()
@@ -2820,25 +2865,61 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
             .as_ref()
             .ok_or(RdbcError::ConnectionDiscarded)?
             .clone();
-        Ok(Box::new(DruidPooledCallableStatement::new_standard(
+        let statement_id = self.next_statement_id();
+        let statement = DruidPooledCallableStatement::new_standard(
             statement,
-            sql,
+            &effective_sql,
             resources,
             policy,
             self.id,
-            self.next_statement_id(),
+            statement_id,
             Arc::clone(&self.result_set_id_seed),
             Arc::clone(&self.metadata_id_seed),
             Arc::clone(&self.lease_active),
             self.filter_chain.clone(),
             self.stats_collector.clone(),
-        )))
+        )
+        .await?;
+        let query_timeout = self.effective_query_timeout();
+        if query_timeout > 0 {
+            let result = statement.configure_standard_query_timeout(query_timeout);
+            self.classify_result_with_sql(result, Some(&effective_sql))?;
+        }
+        let event_result = DruidExecutionFilterPolicy::complete_statement_creation(
+            self.filter_chain.as_deref(),
+            self.stats_collector.as_ref(),
+            self.id,
+            statement_id,
+            &super::StatementEvent::PrepareCall(effective_sql),
+        )
+        .await;
+        self.classify_result(event_result)?;
+        Ok(Box::new(statement))
     }
 
     async fn database_meta_data(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::metadata::DatabaseMetaData>, RdbcError> {
-        let raw = self.standard_mut()?.database_meta_data().await?;
+        let filter_chain = self.filter_chain.clone();
+        if let Some(filter_chain) = &filter_chain {
+            let result = filter_chain
+                .standard_connection_meta_data_before(self.id)
+                .await;
+            self.classify_result(result)?;
+        }
+        let raw_result = self.standard_mut()?.database_meta_data().await;
+        let filter_result = raw_result
+            .as_ref()
+            .map(|_| ())
+            .map_err(|error| DruidError::from(error.clone()));
+        let raw = self.classify_result(raw_result);
+        if let Some(filter_chain) = &filter_chain {
+            let after = filter_chain
+                .standard_connection_meta_data_after(self.id, &filter_result)
+                .await;
+            self.classify_result(after)?;
+        }
+        let raw = raw?;
         let resources = self
             .holder
             .as_ref()

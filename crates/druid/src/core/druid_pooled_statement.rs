@@ -19,7 +19,7 @@ use super::{ProxyAttributeValue, ProxyAttributes};
 use crate::stats::StatsCollector;
 use std::any::{Any, TypeId};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 pub(crate) struct DruidPooledStatementInner {
@@ -30,6 +30,8 @@ pub(crate) struct DruidPooledStatementInner {
         Option<tokio::sync::Mutex<Box<dyn druid_rdbc::statement::Statement>>>,
     pub(crate) standard_resources: Option<Arc<StandardResourceRegistry>>,
     pub(crate) standard_policy: Option<Arc<StandardLogicalPolicy>>,
+    standard_registration:
+        OnceLock<super::standard_resource_registration::StandardResourceRegistration>,
     pub(crate) result_set_id_seed: Arc<std::sync::atomic::AtomicU64>,
     pub(crate) metadata_id_seed: Arc<std::sync::atomic::AtomicU64>,
     attributes: ProxyAttributes,
@@ -103,6 +105,7 @@ impl DruidPooledStatement {
                 standard_statement: None,
                 standard_resources,
                 standard_policy,
+                standard_registration: OnceLock::new(),
                 result_set_id_seed,
                 metadata_id_seed,
                 attributes: ProxyAttributes::default(),
@@ -175,6 +178,16 @@ impl DruidPooledStatement {
     /// 返回该逻辑 Statement 的对象身份。
     pub(crate) fn statement_trace_identity(&self) -> usize {
         Arc::as_ptr(&self.inner) as usize
+    }
+
+    pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
+            .set_query_timeout(seconds)
     }
 
     /// 返回 Druid 数据源分配的 Statement proxy ID。
@@ -1193,6 +1206,7 @@ impl DruidPooledStatementInner {
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .closed
             {
+                self.unregister_resource();
                 return Ok(());
             }
         }
@@ -1206,6 +1220,7 @@ impl DruidPooledStatementInner {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .closed
         {
+            self.unregister_resource();
             return Ok(());
         }
         statement.close().await?;
@@ -1219,6 +1234,7 @@ impl DruidPooledStatementInner {
         if let Some(filter_chain) = &self.filter_chain {
             filter_chain.after_statement_close_with_identity(self.connection_id, self.id)?;
         }
+        self.unregister_resource();
         Ok(())
     }
 }
@@ -1234,6 +1250,12 @@ impl StandardResourceHandle for DruidPooledStatementInner {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .closed
+    }
+
+    fn registration_slot(
+        &self,
+    ) -> &OnceLock<super::standard_resource_registration::StandardResourceRegistration> {
+        &self.standard_registration
     }
 }
 
@@ -1267,6 +1289,22 @@ druid_rdbc::impl_standard_wrapper!(DruidPooledStatement => Statement);
 
 #[async_trait::async_trait]
 impl druid_rdbc::statement::Statement for DruidPooledStatement {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        self.ensure_standard_open()?;
+        self.inner
+            .standard_statement
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .try_lock()
+            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
+            .query_timeout()
+    }
+
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        self.ensure_standard_open()?;
+        self.configure_standard_query_timeout(seconds)
+    }
+
     async fn execute_query(
         &mut self,
         sql: &str,
@@ -1305,10 +1343,9 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
             )
             .await?;
         self.state_mut().last_execute_elapsed = Some(started.elapsed());
-        Ok(Box::new(DruidPooledResultSet::new_standard(
-            Arc::clone(&self.inner),
-            raw,
-        )?))
+        Ok(Box::new(
+            DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw).await?,
+        ))
     }
 
     async fn execute_update(
@@ -1407,7 +1444,7 @@ impl druid_rdbc::statement::Statement for DruidPooledStatement {
             wrapped.push(match result {
                 druid_rdbc::statement::ExecutionResult::ResultSet(raw) => {
                     druid_rdbc::statement::ExecutionResult::ResultSet(Box::new(
-                        DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw)?,
+                        DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw).await?,
                     ))
                 }
                 druid_rdbc::statement::ExecutionResult::UpdateCount(count) => {

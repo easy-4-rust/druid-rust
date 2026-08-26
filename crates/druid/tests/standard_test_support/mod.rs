@@ -28,8 +28,13 @@ pub struct TrackingState {
     pub prepared_close_attempt_count: AtomicUsize,
     pub prepared_clear_attempt_count: AtomicUsize,
     pub prepared_is_closed_attempt_count: AtomicUsize,
+    pub prepared_execution_parameters: Mutex<Vec<Vec<PreparedParameter>>>,
+    pub statement_query_timeouts: Mutex<Vec<i32>>,
     pub result_set_close_count: AtomicUsize,
     pub result_set_next_count: AtomicUsize,
+    pub result_set_value_count: AtomicUsize,
+    pub result_set_meta_data_count: AtomicUsize,
+    pub result_set_was_null_count: AtomicUsize,
     pub metadata_query_count: AtomicUsize,
     pub factory_create_count: AtomicUsize,
     pub is_valid_attempt_count: AtomicUsize,
@@ -39,6 +44,8 @@ pub struct TrackingState {
     pub schema: Mutex<Option<String>>,
     pub warnings: Mutex<Option<SqlWarning>>,
     pub fail_operation: Mutex<Option<&'static str>>,
+    pub query_started: Mutex<Option<Arc<tokio::sync::Notify>>>,
+    pub query_release: Mutex<Option<Arc<tokio::sync::Notify>>>,
 }
 
 impl TrackingState {
@@ -90,6 +97,35 @@ impl TrackingState {
             return Err(RdbcError::Other(format!("forced {operation} failure")));
         }
         Ok(())
+    }
+
+    fn check_sql_failure(&self, operation: &'static str) -> Result<(), RdbcError> {
+        if self.check_failure(operation).is_err() {
+            return Err(RdbcError::SqlException(Box::new(
+                SqlException::new(
+                    9002,
+                    Some("08006".to_owned()),
+                    Some(format!("forced {operation} SQL failure")),
+                )
+                .with_class_name("task5.FatalCreationException"),
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn install_query_barrier(
+        &self,
+        started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+    ) {
+        *self
+            .query_started
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(started);
+        *self
+            .query_release
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(release);
     }
 }
 
@@ -261,6 +297,7 @@ impl Connection for TrackingConnection {
         _options: StatementOptions,
     ) -> Result<Box<dyn Statement>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_sql_failure("create_statement")?;
         self.state.record("connection.create_statement");
         Ok(Box::new(TrackingStatement::new(Arc::clone(&self.state))))
     }
@@ -271,6 +308,7 @@ impl Connection for TrackingConnection {
         _options: StatementOptions,
     ) -> Result<Box<dyn PreparedStatement>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_sql_failure("prepare_statement")?;
         self.state.record(format!("connection.prepare:{sql}"));
         Ok(Box::new(TrackingPreparedStatement::new(
             Arc::clone(&self.state),
@@ -284,6 +322,7 @@ impl Connection for TrackingConnection {
         _options: StatementOptions,
     ) -> Result<Box<dyn CallableStatement>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_sql_failure("prepare_call")?;
         self.state.record(format!("connection.prepare_call:{sql}"));
         Ok(Box::new(TrackingCallableStatement::new(
             Arc::clone(&self.state),
@@ -293,6 +332,7 @@ impl Connection for TrackingConnection {
 
     async fn database_meta_data(&mut self) -> Result<Box<dyn DatabaseMetaData>, RdbcError> {
         self.ensure_open()?;
+        self.state.check_sql_failure("database_meta_data")?;
         self.state.record("connection.metadata");
         Ok(Box::new(TrackingDatabaseMetaData::new(Arc::clone(
             &self.state,
@@ -457,6 +497,7 @@ impl Connection for TrackingConnection {
 pub struct TrackingStatement {
     state: Arc<TrackingState>,
     closed: bool,
+    query_timeout: i32,
 }
 
 impl TrackingStatement {
@@ -464,6 +505,7 @@ impl TrackingStatement {
         Self {
             state,
             closed: false,
+            query_timeout: 0,
         }
     }
 }
@@ -472,8 +514,47 @@ druid_rdbc::impl_standard_wrapper!(TrackingStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for TrackingStatement {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        Ok(self.query_timeout)
+    }
+
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        self.query_timeout = seconds;
+        self.state
+            .statement_query_timeouts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(seconds);
+        Ok(())
+    }
+
     async fn execute_query(&mut self, sql: &str) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.state.record(format!("statement.query:{sql}"));
+        let started = self
+            .state
+            .query_started
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let release = self
+            .state
+            .query_release
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(started) = started {
+            started.notify_waiters();
+        }
+        if let Some(release) = release {
+            release.notified().await;
+        }
+        if sql.contains("tenant_projection") {
+            return Ok(Box::new(TrackingResultSet::rows_with_columns(
+                Arc::clone(&self.state),
+                vec![vec![Value::Int(11), Value::Int(7), Value::Int(33)]],
+                ["visible", "tenant_id", "after_hidden"],
+            )));
+        }
         Ok(Box::new(TrackingResultSet::rows(
             Arc::clone(&self.state),
             vec![vec![Value::Int(11)]],
@@ -541,7 +622,9 @@ pub struct TrackingPreparedStatement {
     state: Arc<TrackingState>,
     sql: String,
     parameters: Vec<PreparedParameter>,
+    batches: Vec<Vec<PreparedParameter>>,
     closed: bool,
+    query_timeout: i32,
 }
 
 impl TrackingPreparedStatement {
@@ -550,7 +633,9 @@ impl TrackingPreparedStatement {
             state,
             sql: sql.to_owned(),
             parameters: Vec::new(),
+            batches: Vec::new(),
             closed: false,
+            query_timeout: 0,
         }
     }
 }
@@ -559,6 +644,39 @@ druid_rdbc::impl_standard_wrapper!(TrackingPreparedStatement => PreparedStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingPreparedStatement {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        Ok(self.query_timeout)
+    }
+
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        self.query_timeout = seconds;
+        self.state
+            .statement_query_timeouts
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(seconds);
+        Ok(())
+    }
+
+    fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
+        self.state.record(format!("prepared.batch.add:{sql}"));
+        self.batches.push(self.parameters.clone());
+        Ok(())
+    }
+
+    fn clear_batch(&mut self) -> Result<(), RdbcError> {
+        self.state.record("prepared.batch.clear");
+        self.batches.clear();
+        Ok(())
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.state.record("prepared.batch.execute");
+        let count = self.batches.len();
+        self.batches.clear();
+        Ok(vec![1; count])
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         if !self.closed {
             self.state
@@ -586,9 +704,22 @@ impl Statement for TrackingPreparedStatement {
 #[async_trait::async_trait]
 impl PreparedStatement for TrackingPreparedStatement {
     fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
-        self.state
-            .record(format!("prepared.parameter:{}", parameter.index.get()));
-        self.parameters.push(parameter);
+        self.state.check_failure("prepared_set_parameter")?;
+        self.state.record(format!(
+            "prepared.parameter:{}:{:?}",
+            parameter.index.get(),
+            parameter.value
+        ));
+        if let Some(existing) = self
+            .parameters
+            .iter_mut()
+            .find(|existing| existing.index == parameter.index)
+        {
+            *existing = parameter;
+        } else {
+            self.parameters.push(parameter);
+            self.parameters.sort_by_key(|parameter| parameter.index);
+        }
         Ok(())
     }
 
@@ -598,11 +729,17 @@ impl PreparedStatement for TrackingPreparedStatement {
             .fetch_add(1, Ordering::AcqRel);
         self.state.check_failure("prepared_clear_parameters")?;
         self.parameters.clear();
+        self.state.record("prepared.clear_parameters");
         Ok(())
     }
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.state.record(format!("prepared.query:{}", self.sql));
+        self.state
+            .prepared_execution_parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(self.parameters.clone());
         Ok(Box::new(TrackingResultSet::rows(
             Arc::clone(&self.state),
             vec![vec![Value::Int(22)]],
@@ -611,6 +748,11 @@ impl PreparedStatement for TrackingPreparedStatement {
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
         self.state.record(format!("prepared.update:{}", self.sql));
+        self.state
+            .prepared_execution_parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(self.parameters.clone());
         Ok(1)
     }
 
@@ -637,6 +779,26 @@ druid_rdbc::impl_standard_wrapper!(TrackingCallableStatement => CallableStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingCallableStatement {
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        Statement::query_timeout(&self.prepared)
+    }
+
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        Statement::set_query_timeout(&mut self.prepared, seconds)
+    }
+
+    fn add_batch(&mut self, sql: String) -> Result<(), RdbcError> {
+        Statement::add_batch(&mut self.prepared, sql)
+    }
+
+    fn clear_batch(&mut self) -> Result<(), RdbcError> {
+        Statement::clear_batch(&mut self.prepared)
+    }
+
+    async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        Statement::execute_batch(&mut self.prepared).await
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         Statement::close(&mut self.prepared).await
     }
@@ -650,6 +812,10 @@ impl Statement for TrackingCallableStatement {
 impl PreparedStatement for TrackingCallableStatement {
     fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
         PreparedStatement::set_parameter(&mut self.prepared, parameter)
+    }
+
+    fn clear_parameters(&mut self) -> Result<(), RdbcError> {
+        PreparedStatement::clear_parameters(&mut self.prepared)
     }
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
@@ -682,23 +848,34 @@ pub struct TrackingResultSet {
     rows: VecDeque<Vec<Value>>,
     current: Option<Vec<Value>>,
     closed: bool,
-    was_null: bool,
+    was_null: AtomicBool,
     metadata: Arc<ResultSetMetaDataSnapshot>,
 }
 
 impl TrackingResultSet {
     fn rows(state: Arc<TrackingState>, rows: Vec<Vec<Value>>) -> Self {
+        Self::rows_with_columns(state, rows, ["value"])
+    }
+
+    fn rows_with_columns<const N: usize>(
+        state: Arc<TrackingState>,
+        rows: Vec<Vec<Value>>,
+        columns: [&str; N],
+    ) -> Self {
         Self {
             state,
             rows: rows.into(),
             current: None,
             closed: false,
-            was_null: false,
-            metadata: Arc::new(ResultSetMetaDataSnapshot::new(vec![ColumnDescriptor::new(
-                "value",
-                "BIGINT",
-                ColumnNullability::Nullable,
-            )])),
+            was_null: AtomicBool::new(false),
+            metadata: Arc::new(ResultSetMetaDataSnapshot::new(
+                columns
+                    .into_iter()
+                    .map(|label| {
+                        ColumnDescriptor::new(label, "BIGINT", ColumnNullability::Nullable)
+                    })
+                    .collect(),
+            )),
         }
     }
 }
@@ -713,24 +890,40 @@ impl ResultSet for TrackingResultSet {
             .fetch_add(1, Ordering::AcqRel);
         self.state.record("result_set.next");
         self.current = self.rows.pop_front();
-        self.was_null = false;
+        self.was_null.store(false, Ordering::Release);
         Ok(self.current.is_some())
     }
 
     fn value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
-        self.current
+        self.state
+            .result_set_value_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_sql_failure("result_set_value")?;
+        let value = self
+            .current
             .as_ref()
             .and_then(|row| row.get(column.get().saturating_sub(1)))
             .cloned()
-            .ok_or_else(|| RdbcError::InvalidArgument("no current row".to_string()))
+            .ok_or_else(|| RdbcError::InvalidArgument("no current row".to_string()))?;
+        self.was_null
+            .store(matches!(value, Value::Null), Ordering::Release);
+        Ok(value)
     }
 
     fn meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
+        self.state
+            .result_set_meta_data_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_sql_failure("result_set_meta_data")?;
         Ok(self.metadata.clone())
     }
 
     fn was_null(&self) -> Result<bool, RdbcError> {
-        Ok(self.was_null)
+        self.state
+            .result_set_was_null_count
+            .fetch_add(1, Ordering::AcqRel);
+        self.state.check_sql_failure("result_set_was_null")?;
+        Ok(self.was_null.load(Ordering::Acquire))
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {
@@ -772,6 +965,24 @@ impl DatabaseMetaData for TrackingDatabaseMetaData {
             .metadata_query_count
             .fetch_add(1, Ordering::AcqRel);
         self.state.record("metadata.tables");
+        let started = self
+            .state
+            .query_started
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        let release = self
+            .state
+            .query_release
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some(started) = started {
+            started.notify_waiters();
+        }
+        if let Some(release) = release {
+            release.notified().await;
+        }
         Ok(Box::new(TrackingResultSet::rows(
             Arc::clone(&self.state),
             vec![vec![Value::String("task5_table".to_string())]],

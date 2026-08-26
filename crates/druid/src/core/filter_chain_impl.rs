@@ -1485,6 +1485,16 @@ impl FilterChainImpl {
         Ok(())
     }
 
+    pub(crate) fn standard_result_set_open_after_with_proxy(
+        &self,
+        context: &mut super::StandardResultSetOpenContext<'_>,
+    ) -> Result<(), DruidError> {
+        for filter in self.result_set.iter().rev() {
+            filter.standard_result_set_open_after_with_proxy(context)?;
+        }
+        Ok(())
+    }
+
     /// 从位置 0 执行一次完整的 `ResultSet` next around-chain。
     pub fn result_set_next(
         &self,
@@ -1521,6 +1531,33 @@ impl FilterChainImpl {
         StandardResultSetFilterChain::new(&self.result_set, standard, context)
             .result_set_close()
             .await
+    }
+
+    pub(crate) fn standard_result_set_value(
+        &self,
+        standard: &mut dyn druid_rdbc::result_set::ResultSet,
+        context: &ResultSetFilterContext,
+        column: druid_rdbc::result_set::ColumnIndex,
+    ) -> Result<Value, DruidError> {
+        StandardResultSetFilterChain::new(&self.result_set, standard, context)
+            .result_set_value(column)
+    }
+
+    pub(crate) fn standard_result_set_meta_data(
+        &self,
+        standard: &mut dyn druid_rdbc::result_set::ResultSet,
+        context: &ResultSetFilterContext,
+    ) -> Result<std::sync::Arc<dyn druid_rdbc::metadata::ResultSetMetaData>, DruidError> {
+        StandardResultSetFilterChain::new(&self.result_set, standard, context)
+            .result_set_meta_data()
+    }
+
+    pub(crate) fn standard_result_set_was_null(
+        &self,
+        standard: &mut dyn druid_rdbc::result_set::ResultSet,
+        context: &ResultSetFilterContext,
+    ) -> Result<bool, DruidError> {
+        StandardResultSetFilterChain::new(&self.result_set, standard, context).result_set_was_null()
     }
 
     /// 从位置 0 执行一次 `ResultSet#getWarnings()` around-chain。
@@ -2289,6 +2326,40 @@ impl FilterChainImpl {
     ) -> Result<Box<dyn PhysicalDatabaseMetaData + 'connection>, DruidError> {
         ConnectionDatabaseMetaDataFilterChain::new(&self.before, physical, connection_id)
             .connection_get_meta_data()
+    }
+
+    pub(crate) async fn standard_connection_meta_data_before(
+        &self,
+        connection_id: u64,
+    ) -> Result<(), DruidError> {
+        for (index, filter) in self.before.iter().enumerate() {
+            if let Err(error) = filter
+                .standard_connection_get_meta_data_before(connection_id)
+                .await
+            {
+                let failure = Err(error.clone());
+                for completed in self.before[..index].iter().rev() {
+                    completed
+                        .standard_connection_get_meta_data_after(connection_id, &failure)
+                        .await?;
+                }
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn standard_connection_meta_data_after(
+        &self,
+        connection_id: u64,
+        result: &Result<(), DruidError>,
+    ) -> Result<(), DruidError> {
+        for filter in self.before.iter().rev() {
+            filter
+                .standard_connection_get_meta_data_after(connection_id, result)
+                .await?;
+        }
+        Ok(())
     }
 
     /// 从位置 0 执行一次 `Statement#getWarnings()` around-chain。

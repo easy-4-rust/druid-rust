@@ -13,7 +13,7 @@ use super::standard_resource_registry::StandardResourceRegistry;
 use super::StandardConnectionCompatibility;
 use super::{
     ConnectionDefaults, ConnectionEventListener, DruidError, PhysicalConnection,
-    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementPool,
+    PreparedStatementCacheStats, PreparedStatementHolder, PreparedStatementPool, RdbcError,
     StatementEventListener,
 };
 use parking_lot::RwLock;
@@ -500,6 +500,10 @@ impl DruidConnectionHolder {
 
     pub(crate) fn standard_resource_registry(&self) -> Arc<StandardResourceRegistry> {
         Arc::clone(&self.standard_resources)
+    }
+
+    pub(crate) fn begin_standard_lease(&self) -> Result<u64, RdbcError> {
+        self.standard_resources.open_next_generation()
     }
 
     pub(crate) fn has_open_standard_resources(&self) -> bool {
