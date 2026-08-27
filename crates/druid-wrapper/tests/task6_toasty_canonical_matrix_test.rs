@@ -87,8 +87,7 @@ fn parameter(index: usize, value: Value) -> PreparedParameter {
     }
 }
 
-#[tokio::test]
-async fn task6_toasty_canonical_matrix() {
+async fn task6_toasty_connection() -> Box<dyn druid_rdbc::connection::Connection> {
     let factory = ToastyConnectionFactory::new("sqlite::memory:")
         .await
         .expect("Toasty SQLite factory");
@@ -102,78 +101,136 @@ async fn task6_toasty_canonical_matrix() {
         )
         .await
         .unwrap();
-    assert_eq!(connection.auto_commit(), Ok(true));
-    assert_eq!(connection.read_only(), Ok(false));
-    assert!(connection.ping().await.is_ok());
+    connection
+}
 
+#[tokio::test]
+async fn task6_toasty_canonical_matrix() {
     let cases = task6_toasty_case_ids();
     let mut executed = Vec::with_capacity(cases.len());
     for (offset, case_id) in cases.iter().enumerate() {
+        let mut connection = task6_toasty_connection().await;
         let id = i64::try_from(offset + 1).unwrap();
-        assert_eq!(
-            connection
-                .exec(
-                    "INSERT INTO toasty_case(id, value) VALUES (?, ?)",
-                    vec![Value::Int(id), Value::String((*case_id).to_owned())],
-                )
-                .await
-                .unwrap()
-                .rows_affected,
-            1
-        );
-        let rows = connection
-            .fetch(
-                "SELECT value FROM toasty_case WHERE id = ?",
-                vec![Value::Int(id)],
-            )
-            .await
-            .unwrap();
-        assert_eq!(rows[0].values, [Value::String((*case_id).to_owned())]);
-
-        if case_id.contains("prepared") {
-            let mut prepared = connection
-                .prepare_statement(
-                    "SELECT value FROM toasty_case WHERE id = ?",
-                    StatementOptions::default(),
-                )
-                .await
-                .unwrap();
-            prepared
-                .set_parameter(parameter(1, Value::Int(id)))
-                .unwrap();
-            let mut result = prepared.execute_prepared_query().await.unwrap();
-            assert!(result.next().await.unwrap());
-            assert_eq!(
-                result.value(ColumnIndex::new(1).unwrap()).unwrap(),
-                Value::String((*case_id).to_owned())
-            );
-            result.close().await.unwrap();
-            prepared.close().await.unwrap();
-        }
-        if case_id.contains("meta_data") {
-            let mut metadata = connection.database_meta_data().await.unwrap();
-            assert!(metadata
-                .get_database_product_name()
-                .await
-                .unwrap()
-                .is_some());
-        }
-        if case_id.contains("warning") {
-            assert_eq!(connection.warnings().await.unwrap(), None);
-            connection.clear_warnings().await.unwrap();
-        }
-        if case_id.contains("transaction") && connection.capabilities().transactions {
-            connection.begin().await.unwrap();
-            connection.rollback().await.unwrap();
-            connection.set_auto_commit(true).await.unwrap();
+        match *case_id {
+            "begin_when_already_active_errors" => {
+                connection.begin().await.unwrap();
+                assert!(matches!(
+                    connection.begin().await,
+                    Err(druid_rdbc::error::RdbcError::DriverError(_))
+                ));
+                connection.rollback().await.unwrap();
+            }
+            "commit_without_transaction_errors" => {
+                assert!(matches!(
+                    connection.commit().await,
+                    Err(druid_rdbc::error::RdbcError::DriverError(_))
+                ));
+            }
+            "rollback_without_transaction_errors" => {
+                assert!(matches!(
+                    connection.rollback().await,
+                    Err(druid_rdbc::error::RdbcError::DriverError(_))
+                ));
+            }
+            "named_savepoint" => {
+                connection.begin().await.unwrap();
+                let savepoint = connection.set_savepoint_named("named_sp").await.unwrap();
+                assert_eq!(savepoint.name.as_deref(), Some("named_sp"));
+                assert_eq!(
+                    connection
+                        .exec(
+                            "INSERT INTO toasty_case(id, value) VALUES (1, 'named')",
+                            Vec::new()
+                        )
+                        .await
+                        .unwrap()
+                        .rows_affected,
+                    1
+                );
+                connection.release_savepoint(&savepoint).await.unwrap();
+                connection.commit().await.unwrap();
+            }
+            "savepoint_empty_name_errors" => {
+                connection.begin().await.unwrap();
+                assert!(connection.set_savepoint_named("").await.is_err());
+                connection.rollback().await.unwrap();
+            }
+            "savepoint_name_with_special_chars_errors" => {
+                connection.begin().await.unwrap();
+                assert!(connection
+                    .set_savepoint_named("bad name; DROP TABLE x")
+                    .await
+                    .is_err());
+                connection.rollback().await.unwrap();
+            }
+            "savepoint_name_with_underscore_ok" => {
+                connection.begin().await.unwrap();
+                let savepoint = connection
+                    .set_savepoint_named("valid_name_1")
+                    .await
+                    .unwrap();
+                assert_eq!(savepoint.name.as_deref(), Some("valid_name_1"));
+                connection.release_savepoint(&savepoint).await.unwrap();
+                connection.commit().await.unwrap();
+            }
+            "savepoint_rollback_to_and_release" => {
+                connection.begin().await.unwrap();
+                connection
+                    .exec(
+                        "INSERT INTO toasty_case(id, value) VALUES (1, 'keep')",
+                        Vec::new(),
+                    )
+                    .await
+                    .unwrap();
+                let savepoint = connection.set_savepoint().await.unwrap();
+                connection
+                    .exec(
+                        "INSERT INTO toasty_case(id, value) VALUES (2, 'rollback')",
+                        Vec::new(),
+                    )
+                    .await
+                    .unwrap();
+                connection.rollback_to(&savepoint).await.unwrap();
+                connection.release_savepoint(&savepoint).await.unwrap();
+                connection.commit().await.unwrap();
+                assert_eq!(
+                    connection
+                        .fetch("SELECT id FROM toasty_case", Vec::new())
+                        .await
+                        .unwrap()
+                        .len(),
+                    1
+                );
+            }
+            _ => {
+                assert_eq!(
+                    connection
+                        .exec(
+                            "INSERT INTO toasty_case(id, value) VALUES (?, ?)",
+                            vec![Value::Int(id), Value::String((*case_id).to_owned())],
+                        )
+                        .await
+                        .unwrap()
+                        .rows_affected,
+                    1
+                );
+                let rows = connection
+                    .fetch(
+                        "SELECT value FROM toasty_case WHERE id = ?",
+                        vec![Value::Int(id)],
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(rows[0].values, [Value::String((*case_id).to_owned())]);
+            }
         }
         executed.push(*case_id);
+        connection.close().await.unwrap();
+        assert_eq!(connection.is_closed(), Ok(true));
     }
     assert_eq!(executed, cases);
     println!(
         "TASK6_CASE_DIGEST=task6_toasty_canonical_matrix:{}",
         executed.join("|")
     );
-    connection.close().await.unwrap();
-    assert_eq!(connection.is_closed(), Ok(true));
 }

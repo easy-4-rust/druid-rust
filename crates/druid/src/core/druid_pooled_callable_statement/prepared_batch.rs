@@ -8,13 +8,15 @@ impl DruidPooledCallableStatement {
     pub(super) fn add_prepared_batch_core(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
         let parameters = self.parameter_snapshot()?;
-        self.resource
+        let result = self
+            .resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .add_prepared_batch()?;
+            .add_prepared_batch();
+        self.classify_statement_mutation(result)?;
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -28,13 +30,15 @@ impl DruidPooledCallableStatement {
         mut parameters: Vec<(ParameterIndex, PreparedInputParameter)>,
     ) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        self.resource
+        let result = self
+            .resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .add_input_parameter_batch(parameters.clone())?;
+            .add_input_parameter_batch(parameters.clone());
+        self.classify_statement_mutation(result)?;
         parameters.sort_by_key(|(index, _)| index.get());
         let values = parameters
             .into_iter()
@@ -61,13 +65,15 @@ impl DruidPooledCallableStatement {
         parameters: Vec<PreparedParameter>,
     ) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        self.resource
+        let result = self
+            .resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .add_parameter_batch(parameters.clone())?;
+            .add_parameter_batch(parameters.clone());
+        self.classify_statement_mutation(result)?;
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -83,13 +89,15 @@ impl DruidPooledCallableStatement {
 
     pub(super) fn clear_prepared_batch_core(&mut self) -> Result<(), RdbcError> {
         self.ensure_open()?;
-        self.resource
+        let result = self
+            .resource
             .statement
             .try_lock()
             .map_err(|_| RdbcError::Other("callable statement is busy".to_owned()))?
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)?
-            .clear_prepared_batch()?;
+            .clear_prepared_batch();
+        self.classify_statement_mutation(result)?;
         self.state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)

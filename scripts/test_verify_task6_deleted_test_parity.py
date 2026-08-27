@@ -16,6 +16,7 @@ from verify_task6_deleted_test_parity import (
     LEDGER_HEADER,
     PURE_IDENTITY,
     BaseTest,
+    CurrentTest,
     LedgerRow,
     VerificationError,
     executed_functions,
@@ -23,6 +24,7 @@ from verify_task6_deleted_test_parity import (
     identity_only,
     missing_target_functions,
     missing_parameterized_case_digests,
+    parameterized_case_body,
     parse_ledger,
     parse_test_functions,
     current_tests,
@@ -221,6 +223,35 @@ class DeletedTestParityVerifierTest(unittest.TestCase):
         self.assertEqual(
             [], missing_parameterized_case_digests(expected, complete)
         )
+
+    def test_parameterized_case_requires_one_explicit_match_arm(self) -> None:
+        generic = CurrentTest(
+            "crates/druid/tests/canonical_parity_test.rs",
+            "matrix",
+            '{ let cases = ["named_savepoint"]; for case_id in cases { assert!(case_id.len() > 0); } }',
+            "",
+        )
+        with self.assertRaisesRegex(VerificationError, "explicit case arm"):
+            parameterized_case_body(generic, "named_savepoint")
+
+        explicit = CurrentTest(
+            "crates/druid/tests/canonical_parity_test.rs",
+            "matrix",
+            '{ match case_id { "named_savepoint" => { assert!(Connection::begin(&mut connection).await.is_ok()); }, _ => unreachable!(), } }',
+            "",
+        )
+        body = parameterized_case_body(explicit, "named_savepoint")
+        self.assertIn("Connection::begin", body)
+
+    def test_parameterized_case_rejects_tautological_result_masking(self) -> None:
+        target = CurrentTest(
+            "crates/druid/tests/canonical_parity_test.rs",
+            "matrix",
+            '{ match case_id { "update" => { let result = update(); assert!(result.is_err() || result.is_ok()); }, _ => unreachable!(), } }',
+            "",
+        )
+        with self.assertRaisesRegex(VerificationError, "tautological"):
+            parameterized_case_body(target, "update")
     def test_literal_include_closure_is_expanded_and_cannot_escape(self) -> None:
         target = self.root / "crates/druid/tests/canonical_parity_test.rs"
         part = self.root / "crates/druid/tests/generated/part.rs"

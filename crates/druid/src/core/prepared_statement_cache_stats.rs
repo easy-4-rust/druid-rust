@@ -51,6 +51,15 @@ impl PreparedStatementCacheStats {
             .fetch_add(1, Ordering::Relaxed);
     }
 
+    /// 记录一个缓存条目被借出并进入逻辑语句使用期。
+    ///
+    /// 当前缓存数量只统计可复用的空闲条目；in-use 语句不占 Java LRU 的
+    /// `cachedPreparedStatementCount`。
+    pub(crate) fn record_cache_checkout(&self) {
+        self.cached_prepared_statement_count
+            .fetch_sub(1, Ordering::Relaxed);
+    }
+
     /// 记录缓存语句被实际关闭并删除。
     ///
     /// Java `closePreapredStatement` 无条件递减当前缓存数；因此首次创建后尚未
@@ -59,6 +68,15 @@ impl PreparedStatementCacheStats {
     pub fn record_cache_delete(&self) {
         self.cached_prepared_statement_count
             .fetch_sub(1, Ordering::Relaxed);
+        self.cached_prepared_statement_delete_count
+            .fetch_add(1, Ordering::Relaxed);
+        self.record_close();
+    }
+
+    /// 记录一个已借出的缓存条目失效并关闭。
+    ///
+    /// 借出时当前缓存数已递减，因此这里只更新删除和关闭累计量，避免重复递减。
+    pub(crate) fn record_checked_out_cache_delete(&self) {
         self.cached_prepared_statement_delete_count
             .fetch_add(1, Ordering::Relaxed);
         self.record_close();

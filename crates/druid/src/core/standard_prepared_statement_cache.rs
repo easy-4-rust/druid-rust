@@ -4,6 +4,11 @@ use super::prepared_statement_key::PreparedStatementKey;
 use druid_rdbc::statement::PreparedStatement;
 use std::collections::{HashMap, VecDeque};
 
+type ClearedPreparedStatements = (
+    Vec<Box<dyn PreparedStatement>>,
+    Vec<Box<dyn PreparedStatement>>,
+);
+
 /// 单 raw connection 的 access-order standard PreparedStatement cache。
 pub(crate) struct StandardPreparedStatementCache {
     entries: HashMap<PreparedStatementKey, Box<dyn PreparedStatement>>,
@@ -57,15 +62,15 @@ impl StandardPreparedStatementCache {
         removed
     }
 
-    pub(crate) fn clear(&mut self) -> Vec<Box<dyn PreparedStatement>> {
+    pub(crate) fn clear(&mut self) -> ClearedPreparedStatements {
         self.access_order.clear();
-        let mut statements = self
+        let statements = self
             .entries
             .drain()
             .map(|(_, statement)| statement)
             .collect::<Vec<_>>();
-        statements.append(&mut self.pending_close);
-        statements
+        let pending_close = std::mem::take(&mut self.pending_close);
+        (statements, pending_close)
     }
 
     pub(crate) fn retain_failed_close(&mut self, mut statements: Vec<Box<dyn PreparedStatement>>) {

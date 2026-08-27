@@ -288,16 +288,37 @@ impl DruidConnectionHolder {
             .await
             .map_err(DruidError::from)
             .err();
-        let cached = self.statement_pool.lock().await.clear();
-        for mut statement in cached {
-            if let Err(error) = statement.close().await {
-                first_error.get_or_insert_with(|| error.into());
-            }
+        if let Err(error) = self.clear_standard_statement_pool().await {
+            first_error.get_or_insert_with(|| error.into());
         }
         if let Some(mut connection) = self.connection.take() {
             if let Err(error) = connection.close().await {
                 first_error.get_or_insert_with(|| error.into());
             }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
+    /// Invalidates every idle cached PreparedStatement and closes each handle once.
+    pub(crate) async fn clear_standard_statement_pool(&mut self) -> Result<(), RdbcError> {
+        let (cached, pending_close) = self.statement_pool.lock().await.clear();
+        let mut first_error = None;
+        let mut failed = Vec::new();
+        for mut statement in cached {
+            if let Err(error) = statement.close().await {
+                first_error.get_or_insert(error);
+                failed.push(statement);
+            }
+            self.prepared_statement_stats.record_cache_delete();
+        }
+        for mut statement in pending_close {
+            if let Err(error) = statement.close().await {
+                first_error.get_or_insert(error);
+                failed.push(statement);
+            }
+        }
+        if !failed.is_empty() {
+            self.statement_pool.lock().await.retain_failed_close(failed);
         }
         first_error.map_or(Ok(()), Err)
     }

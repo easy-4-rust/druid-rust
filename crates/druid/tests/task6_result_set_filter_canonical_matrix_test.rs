@@ -5,9 +5,11 @@ use druid::core::{DruidError, FilterChain, ResultSetFilter, ResultSetFilterConte
 use druid::pool::DruidPool;
 use druid_rdbc::connection::Connection;
 use druid_rdbc::metadata::ResultSetMetaData;
-use druid_rdbc::result_set::{ColumnIndex, ResultSetExt, ResultSetUpdate};
-use druid_rdbc::statement::StatementOptions;
-use druid_rdbc::types::Value;
+use druid_rdbc::result_set::{ColumnIndex, ResultSet, ResultSetExt, ResultSetUpdate};
+use druid_rdbc::statement::{Statement, StatementOptions};
+use druid_rdbc::types::{
+    RdbcCharacterLength, RdbcInputStream, RdbcObject, RdbcReader, RdbcStreamLength, Value,
+};
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -130,6 +132,40 @@ impl ResultSetFilter for ResultSetProbe {
     }
 }
 
+async fn task6_assert_result_set_updates_are_unsupported(
+    connection: &mut druid::core::DruidPooledConnection,
+    updates: Vec<ResultSetUpdate>,
+) {
+    let mut statement = Connection::create_statement(connection, StatementOptions::default())
+        .await
+        .unwrap();
+    let mut result_set = Statement::execute_query(
+        &mut *statement,
+        "SELECT 7 AS id, 'value' AS label, NULL AS absent",
+    )
+    .await
+    .unwrap();
+    assert!(ResultSet::next(&mut *result_set).await.unwrap());
+    let label = ColumnIndex::new(2).unwrap();
+    for update in updates {
+        assert_eq!(
+            ResultSet::update_value(&mut *result_set, label, update.clone()),
+            Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
+                operation: "result_set_update_value"
+            })
+        );
+        assert_eq!(
+            ResultSet::update_value_by_label(&mut *result_set, "label", update),
+            Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
+                operation: "result_set_find_column"
+            })
+        );
+    }
+    ResultSet::close(&mut *result_set).await.unwrap();
+    assert!(ResultSet::is_closed(&*result_set).unwrap());
+    Statement::close(&mut *statement).await.unwrap();
+}
+
 #[tokio::test]
 async fn task6_result_set_filter_canonical_matrix() {
     let probe = Arc::new(ResultSetProbe::default());
@@ -153,6 +189,85 @@ async fn task6_result_set_filter_canonical_matrix() {
     let mut executed = Vec::with_capacity(cases.len());
 
     for case_id in cases {
+        match *case_id {
+            "pooled_result_set_routes_n_string_updates_and_preserves_sqlite_capability_errors"
+            | "result_set_n_string_update_filter_defaults_preserve_both_overloads" => {
+                task6_assert_result_set_updates_are_unsupported(
+                    &mut connection,
+                    vec![ResultSetUpdate::NString(Some("updated".to_owned()))],
+                )
+                .await;
+                executed.push(*case_id);
+                continue;
+            }
+            "pooled_result_set_routes_object_updates_and_preserves_sqlite_capability_errors"
+            | "result_set_object_update_filter_defaults_preserve_all_four_overloads" => {
+                task6_assert_result_set_updates_are_unsupported(
+                    &mut connection,
+                    vec![
+                        ResultSetUpdate::Object(RdbcObject::Integer(9)),
+                        ResultSetUpdate::ObjectWithScaleOrLength {
+                            value: RdbcObject::String("object".to_owned()),
+                            scale_or_length: 2,
+                        },
+                    ],
+                )
+                .await;
+                executed.push(*case_id);
+                continue;
+            }
+            "pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors"
+            | "result_set_scalar_update_filter_defaults_delegate_all_java_overloads" => {
+                task6_assert_result_set_updates_are_unsupported(
+                    &mut connection,
+                    vec![
+                        ResultSetUpdate::Null,
+                        ResultSetUpdate::Boolean(true),
+                        ResultSetUpdate::Byte(1),
+                        ResultSetUpdate::Short(2),
+                        ResultSetUpdate::Int(3),
+                        ResultSetUpdate::Long(4),
+                        ResultSetUpdate::Float(5.0),
+                        ResultSetUpdate::Double(6.0),
+                        ResultSetUpdate::String(Some("scalar".to_owned())),
+                        ResultSetUpdate::Bytes(Some(vec![1, 2, 3])),
+                    ],
+                )
+                .await;
+                executed.push(*case_id);
+                continue;
+            }
+            "pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability_errors"
+            | "result_set_stream_update_filter_defaults_preserve_all_twenty_two_overloads"
+            | "result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads"
+            | "pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capability_errors" => {
+                task6_assert_result_set_updates_are_unsupported(
+                    &mut connection,
+                    vec![
+                        ResultSetUpdate::AsciiStream {
+                            stream: Some(RdbcInputStream::from_bytes(vec![1, 2])),
+                            length: RdbcStreamLength::Long(2),
+                        },
+                        ResultSetUpdate::BinaryStream {
+                            stream: Some(RdbcInputStream::from_bytes(vec![3, 4])),
+                            length: RdbcStreamLength::Int(2),
+                        },
+                        ResultSetUpdate::CharacterStream {
+                            reader: Some(RdbcReader::from_string("chars")),
+                            length: RdbcCharacterLength::Long(5),
+                        },
+                        ResultSetUpdate::NCharacterStream {
+                            reader: Some(RdbcReader::from_string("national")),
+                            length: RdbcCharacterLength::Unspecified,
+                        },
+                    ],
+                )
+                .await;
+                executed.push(*case_id);
+                continue;
+            }
+            _ => {}
+        }
         let mut statement =
             Connection::create_statement(&mut connection, StatementOptions::default())
                 .await
@@ -198,9 +313,12 @@ async fn task6_result_set_filter_canonical_matrix() {
         if case_id.contains("update") || case_id.contains("row_mutation") {
             let update = result_set
                 .update_value(label, ResultSetUpdate::NString(Some("updated".to_owned())));
-            assert!(
-                update.is_err() || update.is_ok(),
-                "typed update must execute"
+            assert_eq!(
+                update,
+                Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
+                    operation: "result_set_update_value"
+                }),
+                "SQLite read-only ResultSet must reject typed update for case {case_id}"
             );
         }
         if case_id.contains("navigation") {

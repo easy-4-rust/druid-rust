@@ -753,6 +753,14 @@ impl DruidPooledConnection {
             .and_then(|connection| connection.catalog().ok().flatten())
     }
 
+    async fn invalidate_prepared_statement_cache(&mut self) -> Result<(), RdbcError> {
+        let result = match self.holder.as_mut() {
+            Some(holder) => holder.clear_standard_statement_pool().await,
+            None => Err(RdbcError::ConnectionDiscarded),
+        };
+        self.classify_result(result)
+    }
+
     fn recycle_once(&mut self, disposition: ConnectionRecycleDisposition) -> bool {
         if self.recycled {
             return false;
@@ -1119,6 +1127,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         let statement_id = self.next_statement_id();
         let statement = DruidPooledStatement::new_standard(
             statement,
+            options,
             Arc::clone(&resources),
             policy,
             self.id,
@@ -1192,6 +1201,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         };
         let cache_hit = cached.is_some();
         let statement = if let Some(statement) = cached {
+            cache_stats.record_cache_checkout();
             cache_stats.record_hit();
             statement
         } else {
@@ -1210,6 +1220,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         let statement = DruidPooledPreparedStatement::new_standard(
             statement,
             &effective_sql,
+            options,
             key,
             cache,
             cache_stats,
@@ -1270,6 +1281,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         let statement = DruidPooledCallableStatement::new_standard(
             statement,
             &effective_sql,
+            options,
             resources,
             &admission,
             policy,
@@ -1421,6 +1433,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         let event = ConnectionEvent::SetReadOnly(read_only);
         let started_at = Instant::now();
         self.before_connection_event(&event).await?;
+        self.invalidate_prepared_statement_cache().await?;
         let result = self.standard_mut()?.set_read_only(read_only).await;
         self.classify_result(result)?;
         self.after_connection_event(&event, started_at).await
@@ -1436,6 +1449,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
         level: druid_rdbc::connection::TransactionIsolation,
     ) -> Result<(), RdbcError> {
+        self.invalidate_prepared_statement_cache().await?;
         let result = self.standard_mut()?.set_transaction_isolation(level).await;
         self.classify_result(result)
     }
@@ -1448,6 +1462,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
         holdability: druid_rdbc::statement::ResultSetHoldability,
     ) -> Result<(), RdbcError> {
+        self.invalidate_prepared_statement_cache().await?;
         let result = self.standard_mut()?.set_holdability(holdability).await;
         self.classify_result(result)
     }
@@ -1482,6 +1497,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         &mut self,
         type_map: druid_rdbc::types::RdbcTypeMap,
     ) -> Result<(), RdbcError> {
+        self.invalidate_prepared_statement_cache().await?;
         let result = self.standard_mut()?.set_type_map(type_map).await;
         self.classify_result(result)
     }
@@ -1494,6 +1510,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         let event = ConnectionEvent::SetCatalog(catalog.unwrap_or_default().to_string());
         let started_at = Instant::now();
         self.before_connection_event(&event).await?;
+        self.invalidate_prepared_statement_cache().await?;
         let result = self.standard_mut()?.set_catalog(catalog).await;
         self.classify_result(result)?;
         self.after_connection_event(&event, started_at).await
@@ -1511,6 +1528,7 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         if let Some(holder) = self.holder.as_ref() {
             holder.remember_initial_schema(initial_schema);
         }
+        self.invalidate_prepared_statement_cache().await?;
         let result = self.standard_mut()?.set_schema(schema).await;
         self.classify_result(result)?;
         self.after_connection_event(&event, started_at).await

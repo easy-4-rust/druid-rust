@@ -196,30 +196,40 @@ def derive(repository_root: Path) -> tuple[verifier.MethodRow, ...]:
                 mapping = "IDENTITY" if disposition == "MERGED_EXACT" else conversion(source_object)
             override_text = verifier._paths_text(overrides.get(method.name, set()))
             call_text = verifier._paths_text(calls.get(method.name, set()))
+            target_entry = f"{namespace}::{target_trait}::{target_method}"
+            target_definition = verifier.parse_target_method(
+                (repository_root / target_path).read_text(encoding="utf-8"),
+                target_trait,
+                target_method,
+            )
             row = verifier.MethodRow(
-                verifier.TASK6_SOURCE_BASE,
-                source_object,
-                source_path,
-                method.name,
-                method.signature,
-                method.signature_sha256,
-                method.default_kind,
-                override_text,
-                call_text,
-                disposition,
-                f"{namespace}::{target_trait}::{target_method}",
-                target_path,
-                f"{target_trait}::{target_method}",
-                mapping,
-                "-",
-                "UNBOUND",
-                "BASE direct method mapped to the single canonical standard tree",
+                source_base=verifier.TASK6_SOURCE_BASE,
+                source_object=source_object,
+                source_trait_path=source_path,
+                method=method.name,
+                source_signature=method.signature,
+                source_signature_sha256=method.signature_sha256,
+                base_default_kind=method.default_kind,
+                base_override_paths=override_text,
+                base_call_paths=call_text,
+                disposition=disposition,
+                target_entry=target_entry,
+                target_path=target_path,
+                target_symbol=f"{target_trait}::{target_method}",
+                conversion=mapping,
+                approval_ref="-",
+                behavior_evidence="UNBOUND",
+                notes="BASE direct method mapped to the single canonical standard tree",
+                target_trait=target_trait,
+                target_signature=target_definition.signature,
+                target_signature_sha256=target_definition.signature_sha256,
+                target_ufcs=target_entry,
             )
             rows.append(
                 replace(
                     row,
                     behavior_evidence=verifier.select_behavior_evidence(
-                        row, method_call_index
+                        row, method_call_index, repository_root
                     ),
                 )
             )

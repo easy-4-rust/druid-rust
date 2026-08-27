@@ -7,14 +7,14 @@ use super::standard_logical_policy::StandardLogicalPolicy;
 use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
 use super::standard_resource_registry::StandardResourceRegistry;
-use super::statement_state_delegates::delegate_statement_state_methods;
 use super::{
     DruidPooledResultSet, FilterChain, ProxyAttributeValue, ProxyAttributes, RdbcError,
     StatementExecuteType,
 };
 use crate::stats::StatsCollector;
 use druid_rdbc::statement::{
-    CurrentResultDisposition, ExecResult, ExecutionResult, GeneratedKeys, Statement,
+    CurrentResultDisposition, ExecResult, ExecutionResult, FetchDirection, GeneratedKeys,
+    Statement, StatementOptions,
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -40,6 +40,16 @@ pub(crate) struct DruidPooledStatementInner {
 }
 
 struct DruidPooledStatementState {
+    options: StatementOptions,
+    max_field_size: i32,
+    max_rows: i64,
+    escape_processing: bool,
+    query_timeout: i32,
+    cursor_name: Option<String>,
+    fetch_direction: FetchDirection,
+    fetch_size: i32,
+    poolable: bool,
+    close_on_completion: bool,
     closed: bool,
     last_sql: Option<String>,
     last_execute_type: Option<StatementExecuteType>,
@@ -73,6 +83,7 @@ impl DruidPooledStatement {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_standard(
         statement: Box<dyn Statement>,
+        options: StatementOptions,
         resources: Arc<StandardResourceRegistry>,
         policy: Arc<StandardLogicalPolicy>,
         connection_id: u64,
@@ -98,6 +109,16 @@ impl DruidPooledStatement {
                 filter_chain,
                 stats_collector,
                 state: Mutex::new(DruidPooledStatementState {
+                    options,
+                    max_field_size: 0,
+                    max_rows: 0,
+                    escape_processing: true,
+                    query_timeout: 0,
+                    cursor_name: None,
+                    fetch_direction: FetchDirection::Unknown,
+                    fetch_size: 0,
+                    poolable: false,
+                    close_on_completion: false,
                     closed: false,
                     last_sql: None,
                     last_execute_type: None,
@@ -126,11 +147,57 @@ impl DruidPooledStatement {
     }
 
     pub(crate) fn configure_standard_query_timeout(&self, seconds: i32) -> Result<(), RdbcError> {
+        Self::validate_non_negative(i64::from(seconds), "query timeout")?;
+        self.apply_statement_state_mutation(
+            "statement_set_query_timeout",
+            |statement| statement.set_query_timeout(seconds),
+            |state| state.query_timeout = seconds,
+        )
+    }
+
+    fn classify_statement_mutation<T>(&self, result: Result<T, RdbcError>) -> Result<T, RdbcError> {
         self.inner
-            .statement
-            .try_lock()
-            .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?
-            .set_query_timeout(seconds)
+            .policy
+            .classify(result, self.last_sql().as_deref())
+    }
+
+    fn validate_non_negative(value: i64, name: &str) -> Result<(), RdbcError> {
+        if value < 0 {
+            Err(RdbcError::InvalidArgument(format!(
+                "{name} must be non-negative"
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn apply_statement_state_mutation<Driver, Update>(
+        &self,
+        unsupported_operation: &'static str,
+        driver: Driver,
+        update: Update,
+    ) -> Result<(), RdbcError>
+    where
+        Driver: FnOnce(&mut dyn Statement) -> Result<(), RdbcError>,
+        Update: FnOnce(&mut DruidPooledStatementState),
+    {
+        self.ensure_open()?;
+        let result = {
+            let mut statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            driver(statement.as_mut())
+        };
+        match result {
+            Ok(()) => {}
+            Err(RdbcError::UnsupportedOperation { operation })
+                if operation == unsupported_operation => {}
+            Err(error) => self.classify_statement_mutation(Err(error))?,
+        }
+        update(&mut self.state_mut());
+        Ok(())
     }
 
     /// Returns the Druid statement identifier.
@@ -422,7 +489,46 @@ druid_rdbc::impl_standard_wrapper!(DruidPooledStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for DruidPooledStatement {
-    delegate_statement_state_methods!(inner.statement, "statement is busy");
+    fn options(&self) -> Result<StatementOptions, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().options)
+    }
+
+    fn max_field_size(&self) -> Result<i32, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().max_field_size)
+    }
+
+    fn set_max_field_size(&mut self, max: i32) -> Result<(), RdbcError> {
+        Self::validate_non_negative(i64::from(max), "max field size")?;
+        self.apply_statement_state_mutation(
+            "statement_set_max_field_size",
+            |statement| statement.set_max_field_size(max),
+            |state| state.max_field_size = max,
+        )
+    }
+
+    fn max_rows(&self) -> Result<i64, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().max_rows)
+    }
+
+    fn set_max_rows(&mut self, max: i64) -> Result<(), RdbcError> {
+        Self::validate_non_negative(max, "max rows")?;
+        self.apply_statement_state_mutation(
+            "statement_set_max_rows",
+            |statement| statement.set_max_rows(max),
+            |state| state.max_rows = max,
+        )
+    }
+
+    fn set_escape_processing(&mut self, enabled: bool) -> Result<(), RdbcError> {
+        self.apply_statement_state_mutation(
+            "statement_set_escape_processing",
+            |statement| statement.set_escape_processing(enabled),
+            |state| state.escape_processing = enabled,
+        )
+    }
 
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         self.ensure_open()?;
@@ -436,6 +542,72 @@ impl Statement for DruidPooledStatement {
     fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
         self.ensure_open()?;
         self.configure_standard_query_timeout(seconds)
+    }
+
+    fn cancel(&mut self) -> Result<(), RdbcError> {
+        self.apply_statement_state_mutation("statement_cancel", Statement::cancel, |_| {})
+    }
+
+    fn set_cursor_name(&mut self, name: &str) -> Result<(), RdbcError> {
+        let cursor_name = name.to_owned();
+        self.apply_statement_state_mutation(
+            "statement_set_cursor_name",
+            |statement| statement.set_cursor_name(name),
+            |state| state.cursor_name = Some(cursor_name),
+        )
+    }
+
+    fn set_fetch_direction(&mut self, direction: FetchDirection) -> Result<(), RdbcError> {
+        self.apply_statement_state_mutation(
+            "statement_set_fetch_direction",
+            |statement| statement.set_fetch_direction(direction),
+            |state| state.fetch_direction = direction,
+        )
+    }
+
+    fn fetch_direction(&self) -> Result<FetchDirection, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().fetch_direction)
+    }
+
+    fn set_fetch_size(&mut self, rows: i32) -> Result<(), RdbcError> {
+        Self::validate_non_negative(i64::from(rows), "fetch size")?;
+        self.apply_statement_state_mutation(
+            "statement_set_fetch_size",
+            |statement| statement.set_fetch_size(rows),
+            |state| state.fetch_size = rows,
+        )
+    }
+
+    fn fetch_size(&self) -> Result<i32, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().fetch_size)
+    }
+
+    fn set_poolable(&mut self, poolable: bool) -> Result<(), RdbcError> {
+        self.apply_statement_state_mutation(
+            "statement_set_poolable",
+            |statement| statement.set_poolable(poolable),
+            |state| state.poolable = poolable,
+        )
+    }
+
+    fn is_poolable(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().poolable)
+    }
+
+    fn close_on_completion(&mut self) -> Result<(), RdbcError> {
+        self.apply_statement_state_mutation(
+            "statement_close_on_completion",
+            Statement::close_on_completion,
+            |state| state.close_on_completion = true,
+        )
+    }
+
+    fn is_close_on_completion(&self) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        Ok(self.state().close_on_completion)
     }
 
     async fn execute_query(

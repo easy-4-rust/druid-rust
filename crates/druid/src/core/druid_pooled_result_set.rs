@@ -423,6 +423,7 @@ impl DruidPooledResultSet {
     ) -> Result<Self, RdbcError> {
         let statement = DruidPooledStatement::new_standard(
             Box::new(MetadataStatement),
+            druid_rdbc::statement::StatementOptions::default(),
             resources,
             policy,
             connection_id,

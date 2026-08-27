@@ -211,6 +211,7 @@ class CurrentTest:
     function: str
     body: str
     observation_body: str
+    helper_bodies: tuple[tuple[str, str], ...] = ()
 
     @property
     def identity(self) -> str:
@@ -620,6 +621,7 @@ def current_tests(root: Path, source_paths: Iterable[str]) -> dict[str, CurrentT
                 function,
                 test.body,
                 observation_body or test.body,
+                tuple(sorted(helper_bodies.items())),
             )
             result[current.identity] = current
     return result
@@ -717,6 +719,69 @@ def disposition_case_id(row: LedgerRow) -> str | None:
             f"invalid parameterized case id for {row.base_identity}: {row.disposition}"
         )
     return encoded
+
+
+def parameterized_case_body(target: CurrentTest, case_id: str) -> str:
+    """Return one explicit literal match arm plus its reachable Task 6 helpers."""
+
+    pattern = re.compile(rf'"{re.escape(case_id)}"\s*=>\s*\{{')
+    matches = list(pattern.finditer(target.body))
+    if len(matches) != 1:
+        fail(
+            f"parameterized case requires one explicit case arm: "
+            f"{target.identity}::{case_id}"
+        )
+    opening = matches[0].end() - 1
+    masked = mask_non_code(target.body)
+    closing = matching_brace(masked, opening)
+    arm = target.body[opening : closing + 1]
+    code = mask_non_code(arm)
+    if re.search(
+        r"\.is_err\s*\(\s*\)\s*\|\|\s*[A-Za-z_][A-Za-z0-9_]*\.is_ok\s*\(\s*\)|"
+        r"\.is_ok\s*\(\s*\)\s*\|\|\s*[A-Za-z_][A-Za-z0-9_]*\.is_err\s*\(\s*\)",
+        code,
+    ):
+        fail(f"parameterized case contains tautological result masking: {case_id}")
+
+    helpers = dict(target.helper_bodies)
+    visited: set[str] = set()
+    ordered = [arm]
+
+    def visit(body: str) -> None:
+        calls = {
+            match.group(1)
+            for match in re.finditer(
+                r"\b(task6_[A-Za-z0-9_]+)\s*\(", mask_non_code(body)
+            )
+        }
+        for name in sorted(calls):
+            if name in visited or name not in helpers:
+                continue
+            visited.add(name)
+            helper = helpers[name]
+            ordered.append(helper)
+            visit(helper)
+
+    visit(arm)
+    return "\n".join(ordered)
+
+
+def verify_parameterized_observation_floor(base: BaseTest, body: str) -> None:
+    """Reject explicit cases that weaken BASE assertion kinds or execute no calls."""
+
+    target_assertions, target_calls = observations(body)
+    base_assertions = parse_counted_names(base.key_assertions)
+    actual_assertions = parse_counted_names(target_assertions)
+    for name, count in base_assertions.items():
+        if actual_assertions[name] < count:
+            fail(
+                f"parameterized case weakens BASE assertion floor: {base.identity}: "
+                f"{name} base={count} target={actual_assertions[name]}"
+            )
+    if target_calls == "-":
+        fail(
+            f"parameterized case has no executable call: {base.identity}"
+        )
 
 
 def verify_observation_floor(base: BaseTest, target: CurrentTest) -> None:
@@ -831,15 +896,10 @@ def verify_ledger(
             verify_observation_floor(base_by_identity[row.base_identity], target)
             exact_targets.append(target_identity)
         else:
-            target_assertions, target_calls = observations(target.observation_body)
-            if target_assertions == "-" or target_calls == "-":
-                fail(
-                    f"parameterized target lacks executable observations: {target_identity}"
-                )
-            if case_id not in target.observation_body:
-                fail(
-                    f"parameterized target does not contain case id {case_id}: {target_identity}"
-                )
+            case_body = parameterized_case_body(target, case_id)
+            verify_parameterized_observation_floor(
+                base_by_identity[row.base_identity], case_body
+            )
             parameterized_targets.append((target_identity, case_id))
 
     exact_duplicates = sorted(

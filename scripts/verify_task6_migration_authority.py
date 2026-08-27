@@ -62,6 +62,36 @@ METHOD_COUNTS = {
     "ConnectionExt": 19,
 }
 TEST_HANDOFF = "task6-deleted-test-migration.tsv#exact-denominator=1283"
+TASK7_SCOPE_HEADING = "### Task 7 bounded pull-forward denominator"
+TASK7_EARLY_COMPONENTS = {
+    "BUFFERED_ROW_SET": (
+        "druid_rdbc::extensions::BufferedRowSet",
+        "crates/druid-rdbc/src/extensions/buffered_row_set.rs",
+    ),
+    "RESULT_SET_EXT": (
+        "druid_rdbc::result_set::ResultSetExt",
+        "crates/druid-rdbc/src/result_set/result_set_ext.rs",
+    ),
+    "VALUE_LEVEL_RESOURCE_HANDLES": (
+        "druid_rdbc::types::resource_handle aliases",
+        "crates/druid-rdbc/src/types/resource_handle.rs",
+    ),
+}
+TASK7_PENDING_COMPONENTS = (
+    "RESOURCE_OPERATIONS_AND_FACTORY",
+    "RESOURCE_TRAIT_LIFECYCLE",
+    "RDBC_RESULT_SET_FORWARDING",
+    "CAPABILITY_TRUTHFULNESS",
+    "DRUID_OWNER_RELEASE_EXACTLY_ONCE",
+    "DRUID_CANCELLATION_HARDENING",
+    "SQLX_BUFFERED_RENAME",
+    "ASYNC_RESULT_SET_STREAMING",
+)
+TASK7_PENDING_AUTHORITY_PATHS = {
+    "druid_rdbc::resource::RdbcResourceCapabilities",
+    "druid_rdbc::resource::RdbcResourceFactory",
+    "druid_rdbc::spi::RdbcResultSet",
+}
 
 
 class VerificationError(RuntimeError):
@@ -134,6 +164,36 @@ def verify_authority_schema(rows: tuple[dict[str, str], ...]) -> None:
             fail(f"non-method identity has an unexpected handoff: {old_path}")
         if not row["evidence"]:
             fail(f"migration evidence is missing: {old_path}")
+
+    indexed = {row["old_path"]: row for row in rows}
+    for old_path in sorted(TASK7_PENDING_AUTHORITY_PATHS):
+        row = indexed.get(old_path)
+        if row is None or row["state"] != "TASK7_PENDING":
+            fail(f"bounded Task 7 authority row is not pending: {old_path}")
+
+
+def verify_task7_scope_boundary(root: Path) -> None:
+    """Bind the approved early subset and the unreduced Task 7 remainder to the plan."""
+
+    plan_path = root / "docs/superpowers/plans/2026-08-24-rdbc-single-standard-unification.md"
+    plan = plan_path.read_text(encoding="utf-8")
+    if plan.count(TASK7_SCOPE_HEADING) != 1:
+        fail("Task 7 bounded pull-forward denominator is missing or duplicated")
+    section = plan.split(TASK7_SCOPE_HEADING, 1)[1].split("### Task 8:", 1)[0]
+    for component, (public_identity, source_path) in TASK7_EARLY_COMPONENTS.items():
+        expected = f"| `{component}` | `COMPLETED_EARLY_TASK6` | `{public_identity}` | `{source_path}` |"
+        if section.count(expected) != 1:
+            fail(f"Task 7 early component is missing or duplicated: {component}")
+        if not (root / source_path).is_file():
+            fail(f"Task 7 early component source is missing: {source_path}")
+    for component in TASK7_PENDING_COMPONENTS:
+        expected = f"| `{component}` | `TASK7_PENDING` |"
+        if section.count(expected) != 1:
+            fail(f"Task 7 pending component is missing or duplicated: {component}")
+    if "Task 7 remaining denominator: **8**" not in section:
+        fail("Task 7 remaining denominator is not exact")
+    if "sequencing change; it does not reduce Task 7 requirements" not in section:
+        fail("Task 7 pull-forward is not recorded as sequencing-only")
 
 
 def verify_standardization(
@@ -319,6 +379,7 @@ def verify_repository(root: Path) -> tuple[int, int, int, str]:
     verify_authority_schema(rows)
     physical_rows = read_tsv(root / PHYSICAL)
     verify_standardization(rows, physical_rows)
+    verify_task7_scope_boundary(root)
     api = (root / API_SNAPSHOT).read_text(encoding="utf-8")
     verify_closed_targets(root, rows, public_api_items(api))
     verify_handoff_ledgers(root, rows)

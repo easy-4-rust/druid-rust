@@ -1,215 +1,555 @@
 #!/usr/bin/env python3
-"""Render the executable fallback matrix for Task 6 methods with no BASE direct test."""
+"""Render checked receiver-exact Task 6 fallback method behavior tests."""
 
 from __future__ import annotations
 
+import argparse
+import subprocess
 from collections import defaultdict
 from pathlib import Path
+from typing import Iterable, Sequence
 
-import render_task6_method_matrix as matrix
 import verify_task6_method_parity as verifier
 
 
-METADATA_ARGS = {
-    "deletes_are_detected": "1003",
-    "get_attributes": "None, None, None, None",
-    "get_best_row_identifier": "None, None, None, 0, false",
-    "get_column_privileges": "None, None, None, None",
-    "get_function_columns": "None, None, None, None",
-    "get_procedure_columns": "None, None, None, None",
-    "get_pseudo_columns": "None, None, None, None",
-    "get_schemas_with_pattern": "None, None",
-    "get_super_tables": "None, None, None",
-    "get_super_types": "None, None, None",
-    "get_table_privileges": "None, None, None",
-    "get_ud_ts": "None, None, None, None",
-    "get_version_columns": "None, None, None",
-    "inserts_are_detected": "1003",
-    "others_deletes_are_visible": "1003",
-    "others_inserts_are_visible": "1003",
-    "others_updates_are_visible": "1003",
-    "own_deletes_are_visible": "1003",
-    "own_inserts_are_visible": "1003",
-    "own_updates_are_visible": "1003",
-    "supports_result_set_holdability": "2",
-    "updates_are_detected": "1003",
+GENERATED_DIRECTORY = Path(
+    "crates/druid-rdbc/tests/task6_method_behavior_generated"
+)
+ROOT_TEST = Path(verifier.FALLBACK_EVIDENCE_PATH)
+
+STRICT_TYPES = {
+    "Connection": "StrictConnection",
+    "Statement": "StrictStatement",
+    "PreparedStatement": "StrictPreparedStatement",
+    "CallableStatement": "StrictCallableStatement",
+    "ResultSet": "StrictResultSet",
+    "ResultSetExt": "StrictResultSet",
+    "DatabaseMetaDataInfoExt": "StrictDatabaseMetaData",
+    "DatabaseMetaDataLimitsExt": "StrictDatabaseMetaData",
+    "DatabaseMetaDataQueryExt": "StrictDatabaseMetaData",
+    "DatabaseMetaDataSqlCapabilitiesExt": "StrictDatabaseMetaData",
+    "ResultSetMetaData": "StrictResultSetMetaData",
+}
+
+ARGUMENTS = {
+    "&CallableParameter": "&CallableParameter::by_index(1).unwrap()",
+    "&RdbcCalendarArgument": "&RdbcCalendarArgument::Unspecified",
+    "&RdbcTargetType": "&RdbcTargetType::Integer",
+    "&Savepoint": "&Savepoint { id: 1, name: None }",
+    "&mut dyn PreparedStatement": "&mut prepared",
+    "&str": '"task6"',
+    "CallableInputParameter": "CallableInputParameter::Int(1)",
+    "CallableOutParameter": "CallableOutParameter::new(4)",
+    "CallableParameter": "CallableParameter::by_index(1).unwrap()",
+    "ColumnIndex": "ColumnIndex::new(1).unwrap()",
+    "CurrentResultDisposition": "CurrentResultDisposition::Default",
+    "Duration": "Duration::from_millis(1)",
+    "FetchDirection": "FetchDirection::Forward",
+    "GeneratedKeys": "GeneratedKeys::None",
+    "Option<&RdbcInputStream>": "None",
+    "Option<&RdbcReader>": "None",
+    "Option<&RdbcTypeMap>": "None",
+    "Option<&[String]>": "None",
+    "Option<&[i32]>": "None",
+    "Option<&str>": "Some(\"task6\")",
+    "Option<RdbcArray>": "None",
+    "Option<RdbcBlob>": "None",
+    "Option<RdbcClob>": "None",
+    "Option<RdbcNClob>": "None",
+    "Option<RdbcRef>": "None",
+    "Option<RdbcRowId>": "None",
+    "Option<RdbcSqlXml>": "None",
+    "PreparedParameter": "prepared_parameter()",
+    "RdbcCharacterLength": "RdbcCharacterLength::Unspecified",
+    "RdbcStreamLength": "RdbcStreamLength::Unspecified",
+    "RdbcTypeMap": "RdbcTypeMap::new()",
+    "ResultSetHoldability": "ResultSetHoldability::CloseAtCommit",
+    "ResultSetUpdate": "ResultSetUpdate::Null",
+    "StatementOptions": "StatementOptions::default()",
+    "String": '"task6".to_owned()',
+    "TransactionIsolation": "TransactionIsolation::READ_COMMITTED",
+    "Vec<(String,Vec<Value>)>": 'vec![("SELECT 1".to_owned(), vec![])]',
+    "Vec<PreparedParameter>": "vec![prepared_parameter()]",
+    "Vec<Value>": "vec![Value::Int(1)]",
+    "Vec<Vec<PreparedInputParameter>>": (
+        "vec![vec![PreparedInputParameter::RustValue(Value::Int(1))]]"
+    ),
+    "Vec<Vec<Value>>": "vec![vec![Value::Int(1)]]",
+    "bool": "true",
+    "i32": "1",
+}
+
+GROUP_FILES = {
+    "Connection": "connection.inc.rs",
+    "Statement": "statement.inc.rs",
+    "PreparedStatement": "prepared_statement.inc.rs",
+    "CallableStatement": "callable_statement.inc.rs",
+    "DatabaseMetaDataInfoExt": "database_meta_data_info.inc.rs",
+    "DatabaseMetaDataLimitsExt": "database_meta_data_limits.inc.rs",
+    "DatabaseMetaDataQueryExt": "database_meta_data_query.inc.rs",
+    "DatabaseMetaDataSqlCapabilitiesExt": (
+        "database_meta_data_sql_capabilities.inc.rs"
+    ),
+    "ResultSet": "result_set.inc.rs",
+    "ResultSetMetaData": "result_set_meta_data.inc.rs",
 }
 
 
-def fallback_rows(root: Path) -> tuple[verifier.MethodRow, ...]:
-    return tuple(
-        row
-        for row in matrix.derive(root)
-        if verifier.parse_behavior_selector(row.behavior_evidence).source_path
-        == verifier.FALLBACK_EVIDENCE_PATH
+def _rustfmt(source: str) -> bytes:
+    """Canonicalize generated Rust through the workspace formatter toolchain."""
+
+    result = subprocess.run(
+        ["rustfmt", "--edition", "2024", "--emit", "stdout"],
+        input=source,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
     )
+    if result.returncode != 0:
+        raise verifier.VerificationError(
+            f"rustfmt rejected generated method behavior source: {result.stderr}"
+        )
+    return result.stdout.encode("utf-8")
 
 
-def call_expression(row: verifier.MethodRow) -> tuple[str, bool]:
-    owner, method = row.target_symbol.rsplit("::", 1)
-    if owner.startswith("DatabaseMetaData"):
-        arguments = METADATA_ARGS.get(method, "")
-        return f"metadata.{method}({arguments})", True
-    if owner == "CallableStatement":
-        if method == "set_named_parameter":
-            return (
-                'callable.set_named_parameter("value", CallableInputParameter::Int(1))',
-                False,
+def _split_top_level(value: str) -> tuple[str, ...]:
+    result: list[str] = []
+    start = 0
+    round_depth = square_depth = angle_depth = 0
+    for index, token in enumerate(value):
+        if token == "(":
+            round_depth += 1
+        elif token == ")":
+            round_depth -= 1
+        elif token == "[":
+            square_depth += 1
+        elif token == "]":
+            square_depth -= 1
+        elif token == "<":
+            angle_depth += 1
+        elif token == ">" and angle_depth:
+            angle_depth -= 1
+        elif token == "," and not (round_depth or square_depth or angle_depth):
+            result.append(value[start:index])
+            start = index + 1
+    if value[start:]:
+        result.append(value[start:])
+    return tuple(part for part in result if part)
+
+
+def _signature_parameters(signature: str) -> tuple[str, tuple[str, ...], bool]:
+    opening = signature.find("(")
+    if opening < 0:
+        raise verifier.VerificationError(f"target signature has no parameters: {signature}")
+    depth = 1
+    closing = opening + 1
+    while closing < len(signature) and depth:
+        if signature[closing] == "(":
+            depth += 1
+        elif signature[closing] == ")":
+            depth -= 1
+        closing += 1
+    if depth:
+        raise verifier.VerificationError(f"target signature is unbalanced: {signature}")
+    parts = _split_top_level(signature[opening + 1 : closing - 1])
+    if not parts or parts[0] not in {"&self", "&mut self", "self"}:
+        raise verifier.VerificationError(
+            f"target method has no supported receiver: {signature}"
+        )
+    parameter_types: list[str] = []
+    for parameter in parts[1:]:
+        if ":" not in parameter:
+            raise verifier.VerificationError(
+                f"target parameter has no type: {parameter} @ {signature}"
             )
-        if method == "out_parameter_as":
-            return "callable.out_parameter_as(&parameter, &RdbcTargetType::Integer)", False
-        if method == "out_parameter_with_type_map":
-            return "callable.out_parameter_with_type_map(&parameter, None)", False
-        return f"callable.{method}(&parameter)", False
-    if owner == "PreparedStatement":
-        if method == "set_parameter":
-            return "prepared.set_parameter(prepared_parameter())", False
-        if method == "add_parameter_batch":
-            return "prepared.add_parameter_batch(vec![prepared_parameter()])", False
-        return f"prepared.{method}()", method.startswith("execute_")
-    if owner == "Statement":
-        if method == "get_more_results":
-            return "statement.get_more_results(CurrentResultDisposition::Default)", True
-        return f"statement.{method}()", method in {"get_generated_keys", "get_result_set"}
-    if owner == "ResultSet":
-        if method == "update_value":
-            return "result_set.update_value(column, ResultSetUpdate::Null)", False
-        if method == "update_value_by_label":
-            return 'result_set.update_value_by_label("value", ResultSetUpdate::Null)', False
-        if method == "value_by_label":
-            return 'result_set.value_by_label("value")', False
-    raise RuntimeError(
-        f"no fallback call renderer for {row.source_object}::{row.method} -> {row.target_symbol}"
+        parameter_types.append(parameter.split(":", 1)[1])
+    return parts[0], tuple(parameter_types), signature.startswith("async fn ")
+
+
+def _call_arguments(parameter_types: Iterable[str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    setup: list[str] = []
+    arguments: list[str] = []
+    for parameter_type in parameter_types:
+        if parameter_type == "&mut dyn PreparedStatement" and not setup:
+            setup.append(
+                "    let mut prepared = StrictPreparedStatement::new(expected);"
+            )
+        try:
+            arguments.append(ARGUMENTS[parameter_type])
+        except KeyError as error:
+            raise verifier.VerificationError(
+                f"no strict fallback argument for target type: {parameter_type}"
+            ) from error
+    return tuple(setup), tuple(arguments)
+
+
+def render_behavior_case(row: verifier.MethodRow) -> str:
+    """Render one independent receiver-exact fallback case."""
+
+    try:
+        strict_type = STRICT_TYPES[row.target_trait]
+    except KeyError as error:
+        raise verifier.VerificationError(
+            f"no strict fallback receiver for {row.target_trait}"
+        ) from error
+    receiver, parameter_types, asynchronous = _signature_parameters(
+        row.target_signature
+    )
+    setup, arguments = _call_arguments(parameter_types)
+    mutable = receiver == "&mut self"
+    receiver_expression = "&mut target" if mutable else "&target"
+    arguments_text = ", ".join((receiver_expression, *arguments))
+    target_method = row.target_symbol.rsplit("::", 1)[-1]
+    call = f"{row.target_trait}::{target_method}({arguments_text})"
+    if asynchronous:
+        call += ".await"
+    attribute = "#[tokio::test]" if asynchronous else "#[test]"
+    qualifier = "async " if asynchronous else ""
+    mutability = "mut " if mutable else ""
+    case_function = verifier.fallback_selector(row).function
+    lines = [
+        attribute,
+        f"{qualifier}fn {case_function}() {{",
+        f'    let expected = "{row.target_ufcs}";',
+        f"    let {mutability}target = {strict_type}::new(expected);",
+        *setup,
+        f"    let actual = {call};",
+    ]
+    if row.target_trait == "Connection" and target_method == "capabilities":
+        lines.append("    assert_eq!(actual, ConnectionCapabilities::default());")
+    elif row.target_trait == "ResultSetMetaData" and target_method == "column_count":
+        lines.append("    assert_eq!(actual, 7);")
+    else:
+        lines.append(f'    assert_trace(actual, "{row.target_ufcs}");')
+    lines.extend(("}", ""))
+    return "\n".join(lines)
+
+
+def _method_lookup(
+    repository_root: Path,
+) -> dict[tuple[str, str], verifier.ParsedMethod]:
+    lookup: dict[tuple[str, str], verifier.ParsedMethod] = {}
+    target_specs = (
+        ("crates/druid-rdbc/src/connection/connection.rs", "Connection"),
+        ("crates/druid-rdbc/src/statement/statement.rs", "Statement"),
+        (
+            "crates/druid-rdbc/src/statement/prepared_statement.rs",
+            "PreparedStatement",
+        ),
+        (
+            "crates/druid-rdbc/src/statement/callable_statement.rs",
+            "CallableStatement",
+        ),
+        ("crates/druid-rdbc/src/result_set/result_set.rs", "ResultSet"),
+        (
+            "crates/druid-rdbc/src/metadata/result_set_meta_data.rs",
+            "ResultSetMetaData",
+        ),
+    )
+    for path, trait in target_specs:
+        source = (repository_root / path).read_text(encoding="utf-8")
+        for method in verifier.parse_direct_trait_methods(source, trait):
+            lookup[(trait, method.name)] = method
+    return lookup
+
+
+def _render_trace_impl(
+    trait: str,
+    strict_type: str,
+    method_names: Iterable[str],
+    method_lookup: dict[tuple[str, str], verifier.ParsedMethod],
+) -> str:
+    methods: list[str] = []
+    for method_name in sorted(set(method_names)):
+        method = method_lookup[(trait, method_name)]
+        if trait == "Connection" and method_name == "capabilities":
+            body = "ConnectionCapabilities::default()"
+        elif trait == "ResultSetMetaData" and method_name == "column_count":
+            body = "7"
+        else:
+            body = "self.trace.fail()"
+        methods.append(f"    {method.signature} {{ {body} }}")
+    async_attribute = (
+        "#[async_trait::async_trait]\n" if trait != "ResultSetMetaData" else ""
+    )
+    return (
+        f"{async_attribute}#[allow(unused_variables)]\n"
+        f"impl {trait} for {strict_type} {{\n"
+        + "\n".join(methods)
+        + "\n}\n\n"
     )
 
 
-def render(root: Path) -> str:
-    rows = fallback_rows(root)
-    cases = "\n".join(
-        f'        "{verifier.fallback_case_id(row)}",' for row in rows
-    )
-    grouped_arms: dict[tuple[str, str, str], list[str]] = defaultdict(list)
-    for row in rows:
-        expression, asynchronous = call_expression(row)
-        if asynchronous:
-            expression += ".await"
-        helper = "assert_metadata_error" if row.source_object == "PhysicalDatabaseMetaData" else "assert_fail_closed"
-        expected = (
-            f', "{row.target_symbol.rsplit("::", 1)[-1]}"'
-            if helper == "assert_metadata_error"
-            else ""
-        )
-        grouped_arms[(helper, expression, expected)].append(
-            verifier.fallback_case_id(row)
-        )
-    arms = []
-    for (helper, expression, expected), case_ids in grouped_arms.items():
-        patterns = " | ".join(f'"{case_id}"' for case_id in case_ids)
-        arms.append(f"        {patterns} => {helper}({expression}{expected}),")
-    match_arms = "\n".join(arms)
-    return f'''//! Executable method evidence for BASE methods without a direct BASE behavior test.
+def _common_support() -> str:
+    return r'''// @generated by scripts/render_task6_method_default_evidence.py
+use druid_rdbc::connection::{Connection, TransactionIsolation};
+use druid_rdbc::error::{RdbcError, SqlWarning};
+use druid_rdbc::extensions::ConnectionCapabilities;
+use druid_rdbc::metadata::{
+    ColumnDescriptor, ColumnNullability, DatabaseMetaData, DatabaseMetaDataInfoExt,
+    DatabaseMetaDataLimitsExt, DatabaseMetaDataQueryExt, DatabaseMetaDataRequest,
+    DatabaseMetaDataSqlCapabilitiesExt, ResultSetColumnType, ResultSetMetaData, RowIdLifetime,
+};
+use druid_rdbc::result_set::{ColumnIndex, ResultSet, ResultSetExt, ResultSetUpdate};
+use druid_rdbc::statement::{
+    CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
+    CurrentResultDisposition, ExecResult, ExecutionResult, FetchDirection, GeneratedKeys,
+    ParameterIndex, PreparedInputParameter, PreparedParameter, PreparedStatement,
+    ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement, StatementOptions,
+};
+use druid_rdbc::types::{
+    RdbcArray, RdbcBigDecimal as BigDecimal, RdbcBlob, RdbcCalendarArgument,
+    RdbcCharacterLength, RdbcClob, RdbcNClob,
+    RdbcNaiveDate as NaiveDate, RdbcNaiveDateTime as NaiveDateTime,
+    RdbcNaiveTime as NaiveTime, RdbcObject, RdbcReader, RdbcRef, RdbcRowId,
+    RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row, Savepoint,
+    Value,
+};
+use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
+use std::any::TypeId;
+use std::sync::Arc;
+use std::time::Duration;
 
-use druid_rdbc::error::RdbcError;
-use druid_rdbc::metadata::{{
-    DatabaseMetaData, DatabaseMetaDataInfoExt, DatabaseMetaDataLimitsExt,
-    DatabaseMetaDataQueryExt, DatabaseMetaDataSqlCapabilitiesExt,
-}};
-use druid_rdbc::result_set::{{ColumnIndex, ResultSet, ResultSetUpdate}};
-use druid_rdbc::statement::{{
-    CallableInputParameter, CallableParameter, CallableStatement, CurrentResultDisposition,
-    ParameterIndex, PreparedParameter, PreparedStatement, Statement,
-}};
-use druid_rdbc::types::{{RdbcTargetType, Value}};
+#[derive(Clone, Copy)]
+struct TraceExpectation {
+    expected: &'static str,
+}
 
-struct DefaultMetadata;
-druid_rdbc::impl_standard_wrapper!(DefaultMetadata => DatabaseMetaData);
-#[async_trait::async_trait]
-impl DatabaseMetaData for DefaultMetadata {{}}
+impl TraceExpectation {
+    const fn new(expected: &'static str) -> Self {
+        Self { expected }
+    }
 
-struct DefaultStatement;
-druid_rdbc::impl_standard_wrapper!(DefaultStatement => Statement);
-#[async_trait::async_trait]
-impl Statement for DefaultStatement {{}}
+    fn fail<T>(&self) -> Result<T, RdbcError> {
+        Err(RdbcError::Other(self.expected.to_owned()))
+    }
+}
 
-struct DefaultPrepared;
-druid_rdbc::impl_standard_wrapper!(DefaultPrepared => PreparedStatement);
-#[async_trait::async_trait]
-impl Statement for DefaultPrepared {{}}
-#[async_trait::async_trait]
-impl PreparedStatement for DefaultPrepared {{}}
+fn assert_trace<T>(actual: Result<T, RdbcError>, expected: &'static str) {
+    match actual {
+        Err(RdbcError::Other(actual)) => assert_eq!(actual, expected),
+        Err(other) => panic!("expected exact trace {expected}, got {other:?}"),
+        Ok(_) => panic!("expected exact trace {expected}, got success"),
+    }
+}
 
-struct DefaultCallable;
-druid_rdbc::impl_standard_wrapper!(DefaultCallable => CallableStatement);
-#[async_trait::async_trait]
-impl Statement for DefaultCallable {{}}
-#[async_trait::async_trait]
-impl PreparedStatement for DefaultCallable {{}}
-#[async_trait::async_trait]
-impl CallableStatement for DefaultCallable {{}}
-
-struct DefaultResultSet;
-druid_rdbc::impl_standard_wrapper!(DefaultResultSet => ResultSet);
-#[async_trait::async_trait]
-impl ResultSet for DefaultResultSet {{
-    async fn next(&mut self) -> Result<bool, RdbcError> {{
-        Ok(false)
-    }}
-}}
-
-fn prepared_parameter() -> PreparedParameter {{
-    PreparedParameter {{
+fn prepared_parameter() -> PreparedParameter {
+    PreparedParameter {
         index: ParameterIndex::new(1).unwrap(),
         value: Value::Int(1),
-    }}
-}}
+    }
+}
 
-fn assert_fail_closed<T>(result: Result<T, RdbcError>) {{
-    assert!(result.is_err(), "canonical default must fail closed");
-}}
+macro_rules! strict_type {
+    ($name:ident) => {
+        struct $name {
+            trace: TraceExpectation,
+        }
 
-fn assert_metadata_error<T>(result: Result<T, RdbcError>, operation: &'static str) {{
-    assert!(matches!(
-        result,
-        Err(RdbcError::UnsupportedOperation {{ operation: actual }}) if actual == operation
-    ));
-}}
+        impl $name {
+            const fn new(expected: &'static str) -> Self {
+                Self {
+                    trace: TraceExpectation::new(expected),
+                }
+            }
+        }
 
-fn task6_method_default_evidence_case_ids() -> &'static [&'static str] {{
-    &[
-{cases}
-    ]
-}}
+        impl Wrapper for $name {
+            fn wrapper_view(&self) -> &dyn Wrapper {
+                self
+            }
 
-async fn exercise(case_id: &str) {{
-    let mut metadata = DefaultMetadata;
-    let mut statement = DefaultStatement;
-    let mut prepared = DefaultPrepared;
-    let mut callable = DefaultCallable;
-    let mut result_set = DefaultResultSet;
-    let parameter = CallableParameter::by_index(1).unwrap();
-    let column = ColumnIndex::new(1).unwrap();
-    match case_id {{
-{match_arms}
-        unknown => panic!("unbound Task 6 method evidence case: {{unknown}}"),
-    }}
-}}
+            fn canonical_unwrap(&self, _target: TypeId) -> Option<StandardUnwrapped<'_>> {
+                None
+            }
 
-#[tokio::test]
-async fn task6_method_default_evidence_matrix() {{
-    let cases = task6_method_default_evidence_case_ids();
-    let mut executed = Vec::with_capacity(cases.len());
-    for case_id in cases {{
-        exercise(case_id).await;
-        executed.push(*case_id);
-    }}
-    assert_eq!(executed, cases);
-    println!(
-        "TASK6_CASE_DIGEST=task6_method_default_evidence_matrix:{{}}",
-        executed.join("|")
-    );
-}}
+            fn unwrap(&self, _target: Option<TypeId>) -> Result<StandardUnwrapped<'_>, RdbcError> {
+                self.trace.fail()
+            }
+        }
+    };
+}
+
+strict_type!(StrictConnection);
+strict_type!(StrictStatement);
+strict_type!(StrictPreparedStatement);
+strict_type!(StrictCallableStatement);
+strict_type!(StrictResultSet);
+strict_type!(StrictDatabaseMetaData);
+strict_type!(StrictResultSetMetaData);
+
+#[async_trait::async_trait]
+impl Statement for StrictPreparedStatement {}
+#[async_trait::async_trait]
+impl Statement for StrictCallableStatement {}
+#[async_trait::async_trait]
+impl PreparedStatement for StrictCallableStatement {}
+
+#[async_trait::async_trait]
+impl DatabaseMetaData for StrictDatabaseMetaData {
+    async fn metadata_boolean(
+        &mut self,
+        _request: DatabaseMetaDataRequest,
+    ) -> Result<bool, RdbcError> {
+        self.trace.fail()
+    }
+
+    async fn metadata_string(
+        &mut self,
+        _request: DatabaseMetaDataRequest,
+    ) -> Result<Option<String>, RdbcError> {
+        self.trace.fail()
+    }
+
+    async fn metadata_integer(
+        &mut self,
+        _request: DatabaseMetaDataRequest,
+    ) -> Result<i32, RdbcError> {
+        self.trace.fail()
+    }
+
+    async fn metadata_result_set(
+        &mut self,
+        _request: DatabaseMetaDataRequest,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.trace.fail()
+    }
+
+    async fn metadata_row_id_lifetime(
+        &mut self,
+        _request: DatabaseMetaDataRequest,
+    ) -> Result<RowIdLifetime, RdbcError> {
+        self.trace.fail()
+    }
+}
 '''
 
 
+def _root_test(include_files: Sequence[str]) -> str:
+    includes = "\n".join(
+        f'include!("task6_method_behavior_generated/{name}");'
+        for name in include_files
+    )
+    return f'''//! Checked generated receiver-exact evidence for Task 6 canonical methods.
+#![allow(clippy::too_many_lines)]
+
+{includes}
+'''
+
+
+def _render_group(
+    trait: str,
+    rows: Sequence[verifier.MethodRow],
+    method_lookup: dict[tuple[str, str], verifier.ParsedMethod],
+) -> str:
+    support = ""
+    if trait in {
+        "Connection",
+        "Statement",
+        "PreparedStatement",
+        "CallableStatement",
+        "ResultSet",
+    }:
+        support = _render_trace_impl(
+            trait,
+            STRICT_TYPES[trait],
+            (row.target_symbol.rsplit("::", 1)[-1] for row in rows),
+            method_lookup,
+        )
+    elif trait == "ResultSetMetaData":
+        required = {row.target_symbol.rsplit("::", 1)[-1] for row in rows}
+        required.update({"column", "column_count"})
+        support = _render_trace_impl(
+            trait,
+            STRICT_TYPES[trait],
+            required,
+            method_lookup,
+        )
+    cases = "\n".join(render_behavior_case(row) for row in rows)
+    return f"// @generated receiver-exact group: {trait}\n{support}{cases}"
+
+
+def render_files(
+    repository_root: Path, rows: Sequence[verifier.MethodRow]
+) -> dict[Path, bytes]:
+    fallback = [
+        row
+        for row in rows
+        if verifier.parse_behavior_selector(row.behavior_evidence).source_path
+        == verifier.FALLBACK_EVIDENCE_PATH
+    ]
+    grouped: dict[str, list[verifier.MethodRow]] = defaultdict(list)
+    for row in fallback:
+        grouped[row.target_trait].append(row)
+    method_lookup = _method_lookup(repository_root)
+    files: dict[Path, bytes] = {
+        GENERATED_DIRECTORY / "common.inc.rs": _rustfmt(_common_support())
+    }
+    include_files = ["common.inc.rs"]
+    for trait, filename in GROUP_FILES.items():
+        trait_rows = sorted(grouped.get(trait, ()))
+        files[GENERATED_DIRECTORY / filename] = _rustfmt(
+            _render_group(trait, trait_rows, method_lookup)
+        )
+        include_files.append(filename)
+
+    result_set_ext_rows = sorted(grouped.get("ResultSetExt", ()))
+    midpoint = (len(result_set_ext_rows) + 1) // 2
+    for part, part_rows in enumerate(
+        (result_set_ext_rows[:midpoint], result_set_ext_rows[midpoint:]), start=1
+    ):
+        filename = f"result_set_ext_part_{part:02}.inc.rs"
+        files[GENERATED_DIRECTORY / filename] = _rustfmt(
+            _render_group("ResultSetExt", part_rows, method_lookup)
+        )
+        include_files.append(filename)
+    files[ROOT_TEST] = _rustfmt(_root_test(include_files))
+    return files
+
+
+def _load_rows(repository_root: Path, matrix: Path) -> tuple[verifier.MethodRow, ...]:
+    path = matrix if matrix.is_absolute() else repository_root / matrix
+    return verifier.parse_rows(path.read_bytes())
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--repository-root",
+        type=Path,
+        default=Path(__file__).resolve().parent.parent,
+    )
+    parser.add_argument("--matrix", type=Path, default=verifier.DEFAULT_MATRIX)
+    parser.add_argument("--write", action="store_true")
+    parser.add_argument("--check", action="store_true")
+    arguments = parser.parse_args()
+    root = arguments.repository_root.resolve()
+    files = render_files(root, _load_rows(root, arguments.matrix))
+    if arguments.write:
+        for relative, payload in files.items():
+            target = root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload)
+        return 0
+    if arguments.check:
+        drift = [
+            str(relative)
+            for relative, payload in files.items()
+            if not (root / relative).is_file()
+            or (root / relative).read_bytes() != payload
+        ]
+        if drift:
+            raise verifier.VerificationError(
+                f"generated method behavior matrix drift: {drift}"
+            )
+        print(f"PASS generated method behavior matrix: files={len(files)}")
+        return 0
+    for relative, payload in sorted(files.items()):
+        print(f"// FILE: {relative}")
+        print(payload.decode("utf-8"), end="")
+    return 0
+
+
 if __name__ == "__main__":
-    print(render(Path(__file__).resolve().parent.parent), end="")
+    raise SystemExit(main())

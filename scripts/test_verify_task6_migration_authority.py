@@ -9,14 +9,75 @@ from pathlib import Path
 
 from verify_task6_migration_authority import (
     STANDARDIZATION_ONLY_TASK7,
+    TASK7_EARLY_COMPONENTS,
+    TASK7_PENDING_AUTHORITY_PATHS,
+    TASK7_PENDING_COMPONENTS,
     VerificationError,
     module_declares_exact_target,
     verify_authority_schema,
     verify_standardization,
+    verify_task7_scope_boundary,
 )
 
 
 class Task6MigrationAuthorityTest(unittest.TestCase):
+    def test_bounded_task7_rows_cannot_be_falsely_closed(self) -> None:
+        rows = []
+        pending = sorted(TASK7_PENDING_AUTHORITY_PATHS)
+        for index in range(79):
+            old_path = pending[index] if index < len(pending) else f"rust::Legacy{index}"
+            rows.append(
+                {
+                    "old_path": old_path,
+                    "disposition": "DELETED",
+                    "target_path": "-",
+                    "target_task": "P04_TASK_7_SEMANTIC_HARDENING"
+                    if index < len(pending)
+                    else "P04_TASK_6_REMOVE_PHYSICAL",
+                    "state": "TASK7_PENDING"
+                    if index < len(pending)
+                    else "TASK6_CLOSED",
+                    "source_file": "old.rs",
+                    "normalized_signature": f"struct Legacy{index}",
+                    "method_handoff": "NOT_APPLICABLE",
+                    "test_handoff": "task6-deleted-test-migration.tsv#exact-denominator=1283",
+                    "evidence": "bounded scope",
+                }
+            )
+        rows[0]["state"] = "TASK6_CLOSED"
+        with self.assertRaisesRegex(VerificationError, "not pending"):
+            verify_authority_schema(tuple(rows))
+
+    def test_task7_scope_requires_exact_early_and_pending_denominators(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            plan = root / "docs/superpowers/plans/2026-08-24-rdbc-single-standard-unification.md"
+            plan.parent.mkdir(parents=True)
+            for _, source_path in TASK7_EARLY_COMPONENTS.values():
+                source = root / source_path
+                source.parent.mkdir(parents=True, exist_ok=True)
+                source.write_text("// live\n", encoding="utf-8")
+            early_rows = "\n".join(
+                f"| `{component}` | `COMPLETED_EARLY_TASK6` | `{identity}` | `{source}` |"
+                for component, (identity, source) in TASK7_EARLY_COMPONENTS.items()
+            )
+            pending_rows = "\n".join(
+                f"| `{component}` | `TASK7_PENDING` | retained | retained |"
+                for component in TASK7_PENDING_COMPONENTS
+            )
+            plan.write_text(
+                "### Task 7 bounded pull-forward denominator\n"
+                + early_rows
+                + "\n"
+                + pending_rows
+                + "\nTask 7 remaining denominator: **7**\n"
+                + "This is a sequencing change; it does not reduce Task 7 requirements.\n"
+                + "### Task 8:\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(VerificationError, "denominator is not exact"):
+                verify_task7_scope_boundary(root)
+
     def test_exact_module_target_does_not_accept_same_leaf_elsewhere(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

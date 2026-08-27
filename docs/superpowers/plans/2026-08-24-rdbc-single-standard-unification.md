@@ -601,8 +601,12 @@ git commit -m "refactor(rdbc): remove physical compatibility surface"
 **Files:**
 - Modify: standard resource trait files named by semantic inventory。
 - Modify: `crates/druid-rdbc/src/result_set/result_set.rs`
-- Create: `crates/druid-rdbc/src/extensions/result_set_ext.rs`
-- Create: `crates/druid-rdbc/src/extensions/buffered_row_set.rs`
+- Completed early in Task 6 for required behavior preservation:
+  `crates/druid-rdbc/src/result_set/result_set_ext.rs`
+- Completed early in Task 6 for required behavior preservation:
+  `crates/druid-rdbc/src/extensions/buffered_row_set.rs`
+- Completed early in Task 6 for value-level ResultSet/RowSet descriptors only:
+  `crates/druid-rdbc/src/types/resource_handle.rs`
 - Modify: `crates/druid-rdbc/src/extensions/connection_capabilities.rs`
 - Modify: Druid internal resource owner/release files from Task 5。
 - Modify: wrapper resource/result-set implementations from Task 4。
@@ -616,6 +620,30 @@ git commit -m "refactor(rdbc): remove physical compatibility surface"
 **Interfaces:**
 - Produces: one standard resource contract；one standard ResultSet；optional Stream adapter only；
   truthful capability；cancel-safe exactly-once Druid owner cleanup。
+
+### Task 7 bounded pull-forward denominator
+
+The owner-approved Task 6 fix round pulls forward only the three production components needed to
+preserve the retired ResultSet/RowSet behavior. This is a sequencing change; it does not reduce Task 7 requirements.
+The value-level handle aliases do not close `ResourceOperations`, `ResourceHandleFactory`, free/
+lifecycle semantics or owner cleanup.
+
+| component | state | exact identity | source or remaining obligation |
+| --- | --- | --- | --- |
+| `BUFFERED_ROW_SET` | `COMPLETED_EARLY_TASK6` | `druid_rdbc::extensions::BufferedRowSet` | `crates/druid-rdbc/src/extensions/buffered_row_set.rs` |
+| `RESULT_SET_EXT` | `COMPLETED_EARLY_TASK6` | `druid_rdbc::result_set::ResultSetExt` | `crates/druid-rdbc/src/result_set/result_set_ext.rs` |
+| `VALUE_LEVEL_RESOURCE_HANDLES` | `COMPLETED_EARLY_TASK6` | `druid_rdbc::types::resource_handle aliases` | `crates/druid-rdbc/src/types/resource_handle.rs` |
+| `RESOURCE_OPERATIONS_AND_FACTORY` | `TASK7_PENDING` | `ResourceOperations` + `ResourceHandleFactory` | standard operations/factory behavior |
+| `RESOURCE_TRAIT_LIFECYCLE` | `TASK7_PENDING` | standard resource traits | 1-based access, free-after-use and SQLXML state |
+| `RDBC_RESULT_SET_FORWARDING` | `TASK7_PENDING` | retired `RdbcResultSet` handoff | distinct forwarding identity, not RowSetResultSet |
+| `CAPABILITY_TRUTHFULNESS` | `TASK7_PENDING` | `ConnectionCapabilities` | capability=true behavior evidence |
+| `DRUID_OWNER_RELEASE_EXACTLY_ONCE` | `TASK7_PENDING` | Druid resource owner/release | driver release and owner notification exactly once |
+| `DRUID_CANCELLATION_HARDENING` | `TASK7_PENDING` | Druid supervised release | caller cancellation safety |
+| `SQLX_BUFFERED_RENAME` | `TASK7_PENDING` | `SqlxStreamingResultSet` rename | truthful eager/buffered naming |
+| `ASYNC_RESULT_SET_STREAMING` | `TASK7_PENDING` | `SqlxAsyncResultSet` | bounded first-row consumption and Stream adapter |
+
+Task 7 remaining denominator: **8**. The three completed-early rows are excluded from Task 7
+implementation work, but remain part of Task 6 behavior-preservation evidence.
 
 - [ ] **Step 1: Write RED shared tests**
 

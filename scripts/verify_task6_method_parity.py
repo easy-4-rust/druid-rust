@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import functools
 import hashlib
 import io
 import re
@@ -29,7 +30,13 @@ DEFAULT_METHOD_CALL_INDEX = Path(
 FALLBACK_EVIDENCE_PATH = (
     "crates/druid-rdbc/tests/task6_method_default_evidence_test.rs"
 )
-FALLBACK_EVIDENCE_FUNCTION = "task6_method_default_evidence_matrix"
+INTERNALIZED_EVIDENCE_PATH = (
+    "crates/druid-wrapper/tests/task6_internalized_method_behavior_test.rs"
+)
+FALLBACK_EVIDENCE_PATHS = frozenset(
+    {FALLBACK_EVIDENCE_PATH, INTERNALIZED_EVIDENCE_PATH}
+)
+FALLBACK_EVIDENCE_FUNCTION_PREFIX = "task6_method_behavior_"
 TRAIT_SPECS: dict[str, str] = {
     "ConnectionExt": "crates/druid/src/core/connection_ext.rs",
     "PhysicalConnection": "crates/druid-rdbc/src/spi/physical_connection.rs",
@@ -65,6 +72,10 @@ METHOD_HEADER = (
     "approval_ref",
     "behavior_evidence",
     "notes",
+    "target_trait",
+    "target_signature",
+    "target_signature_sha256",
+    "target_ufcs",
 )
 METHOD_CALL_INDEX_HEADER = (
     "base_identity",
@@ -74,57 +85,6 @@ METHOD_CALL_INDEX_HEADER = (
     "disposition",
     "behavioral_theme",
 )
-FAMILY_TEST_HINTS: dict[str, tuple[str, ...]] = {
-    "ConnectionExt": ("connection", "mock_driver", "coverage_boost_ext", "differential_tests"),
-    "PhysicalConnection": (
-        "connection",
-        "mock_driver",
-        "toasty",
-        "sqlx",
-        "pool",
-        "differential_tests",
-        "lease",
-    ),
-    "PhysicalStatement": ("statement", "mock_driver"),
-    "PhysicalPreparedStatement": ("prepared_statement", "prepared_input", "mock_driver"),
-    "PhysicalCallableStatement": ("callable_statement", "callable_out"),
-    "PhysicalResultSet": ("result_set", "resultset", "sqlite_wrapper"),
-    "PhysicalDatabaseMetaData": ("database_meta_data",),
-    "PhysicalResultSetMetaData": ("result_set", "resultset", "meta_data"),
-}
-PREFERRED_EVIDENCE_TARGETS = (
-    "task6_buffered_result_set_canonical_matrix_test.rs",
-    "task6_standard_database_meta_data_differential_test_parity.rs",
-    "task6_prepared_statement_canonical_matrix_test.rs",
-    "task6_callable_canonical_matrix_test.rs",
-    "task6_sqlx_canonical_matrix_test.rs",
-    "task6_toasty_canonical_matrix_test.rs",
-    "task6_result_set_filter_canonical_matrix_test.rs",
-    "task6_recycle_canonical_matrix_test.rs",
-    "task6_mock_driver_parity.rs",
-)
-METHOD_EVIDENCE_OVERRIDES = {
-    (
-        "PhysicalResultSet",
-        "big_decimal",
-    ): "crates/druid-wrapper/tests/task6_sqlite_wrapper_semantics_test_parity.rs#task6_sqlite_wrapper_semantics_test_direct_sqlx_wrapper_preserves_sqlite_temporal_and_decimal_getter_semantics",
-    (
-        "PhysicalResultSet",
-        "binary_stream",
-    ): "crates/druid/tests/task6_result_set_filter_canonical_matrix_test.rs#task6_result_set_filter_canonical_matrix::pooled_result_set_routes_resource_getters_and_real_sqlite_streams",
-    (
-        "PhysicalResultSet",
-        "meta_data",
-    ): "crates/druid/tests/task6_result_set_filter_canonical_matrix_test.rs#task6_result_set_filter_canonical_matrix::pooled_result_set_routes_metadata_platform_handle_through_filter",
-    (
-        "PhysicalResultSet",
-        "next",
-    ): "crates/druid/tests/task6_result_set_filter_canonical_matrix_test.rs#task6_result_set_filter_canonical_matrix::real_sqlite_result_sets_flow_through_stat_filter_and_statement_cascade",
-    (
-        "PhysicalResultSet",
-        "previous",
-    ): "crates/druid/tests/task6_result_set_filter_canonical_matrix_test.rs#task6_result_set_filter_canonical_matrix::pooled_result_set_routes_navigation_properties_and_real_sqlite_state",
-}
 INTEGRATION_EVIDENCE_SELECTOR = re.compile(
     r"^(crates/[a-z0-9_-]+/tests/[a-zA-Z0-9_./-]+\.rs)"
     r"#([A-Za-z_][A-Za-z0-9_]*)(?:::([A-Za-z0-9_]+))?$"
@@ -133,6 +93,9 @@ UNIT_EVIDENCE_SELECTOR = re.compile(
     r"^(crates/[a-z0-9_-]+/src/[a-z0-9_./-]+\.rs)"
     r"#((?:[A-Za-z_][A-Za-z0-9_]*::)+[A-Za-z_][A-Za-z0-9_]*)$"
 )
+_METHOD_CALL_LOOKUP_CACHE: dict[
+    int, tuple[Sequence[MethodCallEvidence], dict[str, tuple[BehaviorSelector, ...]]]
+] = {}
 
 
 class VerificationError(RuntimeError):
@@ -170,6 +133,10 @@ class MethodRow:
     approval_ref: str
     behavior_evidence: str
     notes: str
+    target_trait: str
+    target_signature: str
+    target_signature_sha256: str
+    target_ufcs: str
 
 
 @dataclass(frozen=True, order=True)
@@ -201,6 +168,27 @@ def sha256(payload: bytes) -> str:
     """返回 lowercase SHA-256。"""
 
     return hashlib.sha256(payload).hexdigest()
+
+
+@functools.lru_cache(maxsize=1_024)
+def _read_utf8(path: Path) -> str:
+    """在单次 verifier/render 进程内缓存 immutable checkout source。"""
+
+    return path.read_text(encoding="utf-8")
+
+
+@functools.lru_cache(maxsize=1_024)
+def _compiled_rust_source(path: Path) -> str:
+    """展开 literal `include!("...")`，得到该 test target 的编译源码。"""
+
+    source = _read_utf8(path)
+    expanded = [source]
+    for include_path in re.findall(r'\binclude!\s*\(\s*"([^"]+)"\s*\)', source):
+        target = (path.parent / include_path).resolve()
+        if not target.is_file():
+            raise VerificationError(f"Rust include path does not exist: {target}")
+        expanded.append(_compiled_rust_source(target))
+    return "\n".join(expanded)
 
 
 def _mask_rust(source: str) -> str:
@@ -486,6 +474,92 @@ def _target_symbol_exists(source: str, target_symbol: str) -> bool:
     return re.search(rf"\b{re.escape(symbol)}\b", masked[opening + 1 : closing]) is not None
 
 
+def _parse_free_function(source: str, function_name: str) -> ParsedMethod:
+    """解析模块级命名函数的精确签名。"""
+
+    masked = _mask_rust(source)
+    matches = list(
+        re.finditer(rf"\bfn\s+{re.escape(function_name)}\s*\(", masked)
+    )
+    if len(matches) != 1:
+        raise VerificationError(
+            f"target free function is missing or ambiguous: {function_name}"
+        )
+    match = matches[0]
+    signature_start = match.start()
+    prefix = masked[max(0, signature_start - 24) : signature_start]
+    async_match = re.search(r"\basync\s+$", prefix)
+    if async_match is not None:
+        signature_start = max(0, signature_start - 24) + async_match.start()
+    cursor = match.end()
+    paren = 1
+    bracket = angle = 0
+    while cursor < len(masked):
+        token = masked[cursor]
+        if token == "(":
+            paren += 1
+        elif token == ")":
+            paren -= 1
+        elif token == "[":
+            bracket += 1
+        elif token == "]":
+            bracket -= 1
+        elif token == "<":
+            angle += 1
+        elif token == ">" and angle > 0:
+            angle -= 1
+        elif token == "{" and paren == 0 and bracket == 0 and angle == 0:
+            break
+        cursor += 1
+    if cursor >= len(masked):
+        raise VerificationError(f"target free function is unterminated: {function_name}")
+    signature = _normalize_signature(source[signature_start:cursor])
+    return ParsedMethod(
+        function_name,
+        signature,
+        sha256(signature.encode("utf-8")),
+        "INHERENT",
+    )
+
+
+def parse_target_method(
+    source: str, target_trait: str, target_method: str
+) -> ParsedMethod:
+    """从 canonical trait/type/module 中解析精确 target method。"""
+
+    try:
+        methods = parse_direct_trait_methods(source, target_trait)
+    except VerificationError:
+        methods = ()
+    matches = [method for method in methods if method.name == target_method]
+    if len(matches) == 1:
+        return matches[0]
+
+    masked = _mask_rust(source)
+    impl_pattern = re.compile(
+        rf"\bimpl\b[^{{;]*\b{re.escape(target_trait)}\b[^{{;]*{{",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    inherent_matches: list[ParsedMethod] = []
+    for implementation in impl_pattern.finditer(masked):
+        opening = masked.find("{", implementation.start(), implementation.end())
+        if opening < 0:
+            continue
+        closing = _matching_brace(masked, opening)
+        inherent_matches.extend(
+            method
+            for method in _methods_in_body(source, opening, closing)
+            if method.name == target_method
+        )
+    if len(inherent_matches) == 1:
+        return inherent_matches[0]
+    if target_trait[:1].islower():
+        return _parse_free_function(source, target_method)
+    raise VerificationError(
+        f"target method is missing or ambiguous: {target_trait}::{target_method}"
+    )
+
+
 def parse_rows(payload: bytes) -> tuple[MethodRow, ...]:
     """读取严格 UTF-8/LF TSV。"""
 
@@ -565,6 +639,7 @@ def parse_method_call_index(payload: bytes) -> tuple[MethodCallEvidence, ...]:
     return tuple(rows)
 
 
+@functools.lru_cache(maxsize=32_768)
 def parse_behavior_selector(value: str) -> BehaviorSelector:
     """解析严格的 `path#test[::case]` selector。"""
 
@@ -599,14 +674,18 @@ def _snake_case(value: str) -> str:
 def fallback_case_id(row: MethodRow) -> str:
     """为无 BASE direct test 的 method row 创建唯一 stable case id。"""
 
-    return f"{_snake_case(row.source_object)}__{row.method}"
+    return f"{_snake_case(row.source_object)}_{row.method}"
 
 
 def fallback_selector(row: MethodRow) -> BehaviorSelector:
+    source_path = (
+        INTERNALIZED_EVIDENCE_PATH
+        if row.disposition == "INTERNALIZED"
+        else FALLBACK_EVIDENCE_PATH
+    )
     return BehaviorSelector(
-        FALLBACK_EVIDENCE_PATH,
-        FALLBACK_EVIDENCE_FUNCTION,
-        fallback_case_id(row),
+        source_path,
+        f"{FALLBACK_EVIDENCE_FUNCTION_PREFIX}{fallback_case_id(row)}",
     )
 
 
@@ -615,55 +694,67 @@ def _method_names(row: MethodRow) -> set[str]:
 
 
 def _relevant_method_call(row: MethodRow, evidence: MethodCallEvidence) -> bool:
-    base_path = evidence.base_identity.split("#", 1)[0].lower()
-    hints = FAMILY_TEST_HINTS.get(
-        row.source_object, (_snake_case(row.source_object),)
-    )
-    return evidence.method_call in _method_names(row) and any(
-        hint in base_path for hint in hints
-    )
+    """只做 reverse-index method identity 连接；禁止 filename/family hints。"""
+
+    return evidence.method_call in _method_names(row)
+
+
+def _method_call_selector_lookup(
+    method_call_index: Sequence[MethodCallEvidence],
+) -> dict[str, tuple[BehaviorSelector, ...]]:
+    cache_key = id(method_call_index)
+    cached = _METHOD_CALL_LOOKUP_CACHE.get(cache_key)
+    if cached is not None and cached[0] is method_call_index:
+        return cached[1]
+    grouped: dict[str, set[BehaviorSelector]] = defaultdict(set)
+    for evidence in method_call_index:
+        grouped[evidence.method_call].add(
+            parse_behavior_selector(evidence.replacement_selector)
+        )
+    lookup = {method: tuple(sorted(selectors)) for method, selectors in grouped.items()}
+    _METHOD_CALL_LOOKUP_CACHE[cache_key] = (method_call_index, lookup)
+    return lookup
 
 
 def behavior_candidates(
-    row: MethodRow, method_call_index: Sequence[MethodCallEvidence]
+    row: MethodRow,
+    method_call_index: Sequence[MethodCallEvidence],
+    repository_root: Path | None = None,
 ) -> tuple[BehaviorSelector, ...]:
-    """返回由 C2 BASE direct calls 推导出的 path-qualified selectors。"""
+    """返回 C2 reverse-index 中 receiver-exact 且断言可观察的 selectors。"""
 
-    return tuple(
-        sorted(
-            {
-                parse_behavior_selector(evidence.replacement_selector)
-                for evidence in method_call_index
-                if _relevant_method_call(row, evidence)
-            }
-        )
+    lookup = _method_call_selector_lookup(method_call_index)
+    selectors = sorted(
+        {
+            selector
+            for method_name in _method_names(row)
+            for selector in lookup.get(method_name, ())
+        }
     )
-
-
-def _evidence_score(selector: BehaviorSelector) -> tuple[int, int, str]:
-    for rank, name in enumerate(PREFERRED_EVIDENCE_TARGETS):
-        if selector.source_path.endswith(name):
-            return (0, rank, selector.render())
-    return (1, 0, selector.render())
+    if repository_root is None:
+        return tuple(selectors)
+    valid: list[BehaviorSelector] = []
+    for selector in selectors:
+        try:
+            _verify_selector_source(repository_root, selector)
+            _verify_selector_contract(repository_root, selector, row)
+        except VerificationError:
+            continue
+        valid.append(selector)
+    return tuple(valid)
 
 
 def select_behavior_evidence(
-    row: MethodRow, method_call_index: Sequence[MethodCallEvidence]
+    row: MethodRow,
+    method_call_index: Sequence[MethodCallEvidence],
+    repository_root: Path,
 ) -> str:
     """优先绑定 C2 exact selector；无 BASE direct call 时绑定唯一 fallback case。"""
 
-    candidates = behavior_candidates(row, method_call_index)
+    candidates = behavior_candidates(row, method_call_index, repository_root)
     if not candidates:
         return fallback_selector(row).render()
-    override = METHOD_EVIDENCE_OVERRIDES.get((row.source_object, row.method))
-    if override is not None:
-        parsed = parse_behavior_selector(override)
-        if parsed not in candidates:
-            raise VerificationError(
-                f"method evidence override is not C2-derived: {row.source_object}::{row.method}"
-            )
-        return parsed.render()
-    return min(candidates, key=_evidence_score).render()
+    return min(candidates).render()
 
 
 def _test_function_exists(source: str, function: str) -> bool:
@@ -676,11 +767,202 @@ def _test_function_exists(source: str, function: str) -> bool:
     return False
 
 
+@functools.lru_cache(maxsize=4_096)
+def _test_function_body(source: str, function: str) -> str:
+    """返回命名 test function 的完整源码 body，拒绝同名歧义。"""
+
+    masked = _mask_rust(source)
+    leaf = function.rsplit("::", 1)[-1]
+    matches = list(
+        re.finditer(
+            rf"\b(?:async\s+)?fn\s+{re.escape(leaf)}"
+            rf"(?:\s*<[^>{{}}]*>)?\s*\(",
+            masked,
+        )
+    )
+    if len(matches) != 1:
+        raise VerificationError(
+            f"behavior evidence test function is missing or ambiguous: {function}"
+        )
+    opening = masked.find("{", matches[0].end())
+    if opening < 0:
+        raise VerificationError(f"behavior evidence test has no body: {function}")
+    closing = _matching_brace(masked, opening)
+    return source[matches[0].start() : closing + 1]
+
+
+def _reachable_task6_helper_bodies(source: str, body: str) -> tuple[str, ...]:
+    """解析 case arm/测试直接到达的唯一 `task6_*` helper bodies。"""
+
+    pending = list(
+        dict.fromkeys(
+            re.findall(r"\b(task6_[A-Za-z_][A-Za-z0-9_]*)\s*\(", _mask_rust(body))
+        )
+    )
+    visited: set[str] = set()
+    helpers: list[str] = []
+    while pending:
+        helper = pending.pop(0)
+        if helper in visited:
+            continue
+        visited.add(helper)
+        helper_body = _test_function_body(source, helper)
+        helpers.append(helper_body)
+        pending.extend(
+            name
+            for name in re.findall(
+                r"\b(task6_[A-Za-z_][A-Za-z0-9_]*)\s*\(",
+                _mask_rust(helper_body),
+            )
+            if name not in visited
+        )
+    return tuple(helpers)
+
+
+@functools.lru_cache(maxsize=4_096)
+def _selector_evidence_body(source: str, selector: BehaviorSelector) -> str:
+    """返回 test 或精确 case arm 加唯一 reachable helper 的源码。"""
+
+    function_body = _test_function_body(source, selector.function)
+    if selector.case_id is None:
+        selected = function_body
+    else:
+        arm_pattern = re.compile(
+            rf'"{re.escape(selector.case_id)}"\s*=>\s*{{'
+        )
+        matches = list(arm_pattern.finditer(source))
+        if len(matches) != 1:
+            raise VerificationError(
+                "behavior evidence case must have exactly one literal match arm: "
+                f"{selector.render()}"
+            )
+        opening = source.find("{", matches[0].start(), matches[0].end())
+        closing = _matching_brace(_mask_rust(source), opening)
+        selected = source[matches[0].start() : closing + 1]
+        if selected not in function_body:
+            raise VerificationError(
+                f"behavior evidence case arm is outside claimed test: {selector.render()}"
+            )
+    helpers = _reachable_task6_helper_bodies(source, selected)
+    return "\n".join((selected, *helpers))
+
+
+def _has_non_tautological_assertion(body: str, row: MethodRow) -> bool:
+    """证明 exact UFCS result participates in a strong observable assertion。"""
+
+    masked = _mask_rust(body)
+    if re.search(
+        r"\.is_ok\s*\(\s*\)\s*\|\|\s*[^;]+\.is_err\s*\(\s*\)"
+        r"|\.is_err\s*\(\s*\)\s*\|\|\s*[^;]+\.is_ok\s*\(\s*\)",
+        masked,
+        flags=re.DOTALL,
+    ):
+        return False
+    if re.search(r"(?:Ok|Err)\s*\(\s*_\s*\)", masked):
+        return False
+    if re.search(r"assert!\s*\([^;]*\.is_(?:ok|err)\s*\(\s*\)\s*\)", masked):
+        return False
+    typed_trace = re.search(
+        rf"\btask6_assert_typed_operation_trace\s*\(\s*"
+        rf'"{re.escape(row.target_ufcs)}"\s*,\s*'
+        rf"([A-Za-z_][A-Za-z0-9_]*)\s*,\s*"
+        rf"([A-Za-z_][A-Za-z0-9_]*)\s*[,)]",
+        body,
+        flags=re.DOTALL,
+    )
+    if typed_trace is not None:
+        if typed_trace.group(1) == typed_trace.group(2):
+            return False
+        return re.search(
+            r"fn\s+task6_assert_typed_operation_trace\b[\s\S]*?"
+            r"assert_eq!\s*\(\s*actual\s*,\s*expected\s*\)",
+            body,
+        ) is not None
+
+    target_method = row.target_symbol.rsplit("::", 1)[-1]
+    ufcs_pattern = re.compile(
+        rf"\b{re.escape(row.target_trait)}\s*::\s*"
+        rf"{re.escape(target_method)}\s*\("
+    )
+    call = ufcs_pattern.search(masked)
+    if call is None:
+        return False
+    statement_start = max(
+        masked.rfind(";", 0, call.start()),
+        masked.rfind("{", 0, call.start()),
+    ) + 1
+    statement_end = masked.find(";", call.end())
+    if statement_end < 0:
+        statement_end = len(masked)
+    statement = masked[statement_start : statement_end + 1]
+    if re.search(r"\blet\s+_\s*=", statement):
+        return False
+    if re.search(r"\.(?:unwrap|expect)\s*\(", statement) and "->Result<()," in row.target_signature:
+        return True
+
+    direct_assertions = (
+        re.compile(r"assert_(?:eq|ne)!\s*\([^;]*", flags=re.DOTALL),
+        re.compile(r"assert!\s*\(\s*matches!\s*\([^;]*", flags=re.DOTALL),
+    )
+    for assertion in direct_assertions:
+        for match in assertion.finditer(masked):
+            end = masked.find(";", match.start())
+            if end < 0:
+                end = len(masked)
+            if match.start() <= call.start() <= end:
+                return True
+
+    assignment = re.search(
+        r"\blet\s+(?:mut\s+)?([A-Za-z_][A-Za-z0-9_]*)"
+        r"(?:\s*:\s*[^=]+)?\s*=\s*$",
+        masked[statement_start : call.start()],
+    )
+    if assignment is None:
+        return False
+    variable = assignment.group(1)
+    tail = masked[statement_end + 1 :]
+    return re.search(
+        rf"(?:assert_(?:eq|ne)!|assert!\s*\(\s*matches!|assert_trace\s*\()"
+        rf"[^;]*\b{re.escape(variable)}\b",
+        tail,
+        flags=re.DOTALL,
+    ) is not None
+
+
+def _verify_selector_contract(
+    repository_root: Path, selector: BehaviorSelector, row: MethodRow
+) -> None:
+    """证明 exact receiver/method call 与非 tautological observable assertion。"""
+
+    source = _compiled_rust_source(repository_root / selector.source_path)
+    body = _selector_evidence_body(source, selector)
+    method = row.target_symbol.rsplit("::", 1)[-1]
+    exact_ufcs = re.compile(
+        rf"\b{re.escape(row.target_trait)}\s*::\s*{re.escape(method)}\s*\("
+    )
+    typed_trace = re.search(
+        rf"\btask6_assert_typed_operation_trace\s*\(\s*"
+        rf'"{re.escape(row.target_ufcs)}"\s*,',
+        body,
+        flags=re.DOTALL,
+    )
+    if exact_ufcs.search(_mask_rust(body)) is None and typed_trace is None:
+        raise VerificationError(
+            "behavior evidence canonical receiver mismatch: "
+            f"expected {row.target_trait}::{method} in {selector.render()}"
+        )
+    if not _has_non_tautological_assertion(body, row):
+        raise VerificationError(
+            "behavior evidence has no non-tautological observable assertion for "
+            f"{row.target_trait}::{method}: {selector.render()}"
+        )
+
+
 def _verify_selector_source(repository_root: Path, selector: BehaviorSelector) -> None:
     target = repository_root / selector.source_path
     if not target.is_file():
         raise VerificationError(f"behavior evidence path does not exist: {selector.source_path}")
-    source = target.read_text(encoding="utf-8")
+    source = _compiled_rust_source(target)
     function = selector.function.rsplit("::", 1)[-1]
     if "/src/" in selector.source_path:
         crate_relative = selector.source_path.split("/src/", 1)[1].removesuffix(".rs")
@@ -774,7 +1056,39 @@ def verify_rows(
             raise VerificationError(f"unknown method disposition: {row.disposition}")
 
         selectors = parse_behavior_evidence(row.behavior_evidence)
-        candidates = set(behavior_candidates(row, method_call_index))
+        for selector in selectors:
+            _verify_selector_source(repository_root, selector)
+        if row.disposition == "APPROVED_BREAK":
+            if method.default_kind != "DEFAULT_UNSUPPORTED":
+                raise VerificationError(
+                    "APPROVED_BREAK requires a BASE default-unsupported method"
+                )
+            if expected_overrides != "-" or expected_calls != "-":
+                raise VerificationError(
+                    "APPROVED_BREAK cannot hide BASE overrides or calls"
+                )
+            if row.approval_ref == "-" or any(
+                value != "-"
+                for value in (
+                    row.target_entry,
+                    row.target_path,
+                    row.target_symbol,
+                    row.target_trait,
+                    row.target_signature,
+                    row.target_signature_sha256,
+                    row.target_ufcs,
+                )
+            ):
+                raise VerificationError(
+                    "APPROVED_BREAK requires ruling and '-' target fields"
+                )
+            executed_evidence.extend(selectors)
+            continue
+        for selector in selectors:
+            _verify_selector_contract(repository_root, selector, row)
+        candidates = set(
+            behavior_candidates(row, method_call_index, repository_root)
+        )
         fallback = fallback_selector(row)
         if candidates:
             unexpected = [selector for selector in selectors if selector not in candidates]
@@ -789,21 +1103,9 @@ def verify_rows(
                 f"its unique fallback case {fallback.render()}"
             )
         for selector in selectors:
-            _verify_selector_source(repository_root, selector)
             executed_evidence.append(selector)
-            if selector.source_path == FALLBACK_EVIDENCE_PATH:
+            if selector.source_path in FALLBACK_EVIDENCE_PATHS:
                 fallback_bindings[selector].append((row.source_object, row.method))
-
-        if row.disposition == "APPROVED_BREAK":
-            if method.default_kind != "DEFAULT_UNSUPPORTED":
-                raise VerificationError("APPROVED_BREAK requires a BASE default-unsupported method")
-            if expected_overrides != "-" or expected_calls != "-":
-                raise VerificationError("APPROVED_BREAK cannot hide BASE overrides or calls")
-            if row.approval_ref == "-" or any(
-                value != "-" for value in (row.target_entry, row.target_path, row.target_symbol)
-            ):
-                raise VerificationError("APPROVED_BREAK requires ruling and '-' target fields")
-            continue
 
         if row.target_entry == "-" or row.target_path == "-" or row.target_symbol == "-":
             raise VerificationError(f"{row.disposition} requires a concrete target")
@@ -816,6 +1118,29 @@ def verify_rows(
         if not _target_symbol_exists(target_source, row.target_symbol):
             raise VerificationError(
                 f"target symbol does not exist at claimed path: {row.target_symbol} @ {row.target_path}"
+            )
+        target_trait, target_method_name = row.target_symbol.rsplit("::", 1)
+        if row.target_trait != target_trait:
+            raise VerificationError(
+                f"{row.source_object}::{row.method} target trait drift: "
+                f"expected {target_trait}, got {row.target_trait}"
+            )
+        if row.target_ufcs != row.target_entry or not row.target_ufcs.endswith(
+            f"::{row.target_trait}::{target_method_name}"
+        ):
+            raise VerificationError(
+                f"{row.source_object}::{row.method} target UFCS drift: {row.target_ufcs}"
+            )
+        target_method = parse_target_method(
+            target_source, row.target_trait, target_method_name
+        )
+        if row.target_signature != target_method.signature:
+            raise VerificationError(
+                f"{row.source_object}::{row.method} target signature drift"
+            )
+        if row.target_signature_sha256 != target_method.signature_sha256:
+            raise VerificationError(
+                f"{row.source_object}::{row.method} target signature hash drift"
             )
 
     duplicate_fallbacks = {
@@ -914,6 +1239,10 @@ def execute_behavior_evidence(
             )
 
     for (package, target), expected in sorted(expected_by_target.items()):
+        is_fallback_target = any(
+            _target_package(path) == (package, target)
+            for path in FALLBACK_EVIDENCE_PATHS
+        )
         command = [
             "cargo",
             "test",
@@ -967,7 +1296,7 @@ def execute_behavior_evidence(
                 for case_id in expected_cases
                 if case_id not in actual_cases
             )
-            if target == FALLBACK_EVIDENCE_PATH.rsplit("/", 1)[-1].removesuffix(".rs"):
+            if is_fallback_target:
                 if tuple(expected_cases) != actual_cases:
                     missing_cases.extend(
                         f"{function}::{case_id}" for case_id in expected_cases
@@ -1050,28 +1379,55 @@ def verify_c2_source_evidence(
         )
 
 
+def verify_generated_behavior_matrix(
+    repository_root: Path,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> None:
+    """调用 checked renderer，拒绝 fallback source 与 479-row matrix 漂移。"""
+
+    command = [
+        sys.executable,
+        "scripts/render_task6_method_default_evidence.py",
+        "--check",
+    ]
+    try:
+        result = runner(
+            command,
+            cwd=repository_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=1_800,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise VerificationError(
+            f"generated method behavior matrix NOT_RUN/ERROR: {error}"
+        ) from error
+    output = result.stdout + "\n" + result.stderr
+    if result.returncode != 0:
+        raise VerificationError(
+            f"generated method behavior matrix check failed: {output[-20_000:]}"
+        )
+    if "PASS generated method behavior matrix: files=14" not in output:
+        raise VerificationError(
+            "generated method behavior renderer did not attest all 14 checked files"
+        )
+
+
 def execute_all_behavior_evidence(
     repository_root: Path, selectors: Sequence[BehaviorSelector]
 ) -> tuple[int, int, int]:
-    """消费 C2 runtime proof，并直接执行 C1 fallback matrix。"""
+    """消费 C2 runtime proof，然后直接执行全部唯一 C1 evidence targets。"""
 
     c2_selectors = tuple(
         selector
         for selector in selectors
-        if selector.source_path != FALLBACK_EVIDENCE_PATH
-    )
-    fallback_selectors = tuple(
-        selector
-        for selector in selectors
-        if selector.source_path == FALLBACK_EVIDENCE_PATH
+        if selector.source_path not in FALLBACK_EVIDENCE_PATHS
     )
     if c2_selectors:
         verify_c2_runtime_evidence(repository_root)
-    if fallback_selectors:
-        execute_behavior_evidence(repository_root, fallback_selectors)
-    targets = {selector.source_path for selector in selectors}
-    functions = {(selector.source_path, selector.function) for selector in selectors}
-    return len(targets), len(functions), len(set(selectors))
+    return execute_behavior_evidence(repository_root, selectors)
 
 
 def _summary(
@@ -1085,10 +1441,14 @@ def _summary(
     disposition_text = ",".join(f"{key}={dispositions[key]}" for key in sorted(dispositions))
     object_text = ",".join(f"{key}={objects[key]}" for key in sorted(objects))
     fallback_count = sum(
-        selector.source_path == FALLBACK_EVIDENCE_PATH for selector in selectors
+        selector.source_path in FALLBACK_EVIDENCE_PATHS for selector in selectors
     )
     fallback_rows = sum(
-        row.behavior_evidence.startswith(f"{FALLBACK_EVIDENCE_PATH}#") for row in rows
+        any(
+            row.behavior_evidence.startswith(f"{path}#")
+            for path in FALLBACK_EVIDENCE_PATHS
+        )
+        for row in rows
     )
     evidence_payload = "".join(
         f"{row.source_object}::{row.method}@{row.source_signature_sha256}\t"
@@ -1158,6 +1518,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         trait_specs=TRAIT_SPECS,
         method_call_index=method_call_index,
     )
+    verify_generated_behavior_matrix(root)
     execution = (
         None
         if arguments.no_execute
