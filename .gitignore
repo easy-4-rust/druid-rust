@@ -109,3 +109,8 @@ crates/druid-wrapper/src/bin/*
 /.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-task7-full-druid-rdbc-wrapper-source-candidate17.zip
 /.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-task7-full-druid-rdbc-wrapper-source-candidate18.zip
 /.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-task7-full-druid-rdbc-wrapper-source-candidate19.zip
+
+### Reviewable verification source; archives remain local ###
+/.superpowers/sdd/**/*.zip
+!/docs/verification/rdbc-first/preflight404/**/*.json
+!/docs/verification/rdbc-first/preflight404/**/*.log

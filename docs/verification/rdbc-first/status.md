@@ -898,3 +898,9 @@ Task6 SQLx补充错误优先级：真实目标19734终态exit0/7PASS0FAIL，原S
 
 
 2026-10-09 原wrapper预编译403终态：原offline/locked/all-features/lib/show-output命令exit0，18PASS/0FAIL/0ignored，1563秒，日志SHA 8126a1766e7f00d5a9d309b8724c220318fcc30da1545518603d354bd97b0943，1278冻结输入变化0。linker warning保留；原319 C2超时失败仍保留，不宣称根因已解决或完整C1/C2通过。同一session56719继续全workspace/all-features及strict/doc/fmt/完整C1-C2，正式E源码未集成，18顶层OPEN。
+
+
+2026-10-09 当前403集成前检查404：旧393检查器针对新1278输入实际拒绝分母不匹配；独立新检查器绑定原403执行器SHA、319终态来源、新六条精确命令与1258集成路径，保留完整C1/C2、479/442/executed=yes、逐日志SHA和原文件保护。原21项、身份扩展23项与新29项共73测试PASS/exit0。1257正式原文件hash及1278候选冻结输入逐项不变，新helper正式路径未占用；当前状态{'DIFFERENT': 71, 'IDENTICAL': 1087, 'MISSING_IN_E': 100}。五个402变更路径需按当前desired SHA集成；原383静态审阅不得冒充更新后的行为认证。真实403预览仍REFUSED：verification still running。仅外部检查器/保护清单更新，未集成/退休正式源码，不认证LLVM/API或发布；18顶层OPEN。zip404 SHA 2405aba91bf1061a3c9921cef3655d91019f8eb52942e852559d7916537d4974全部条目及E镜像核验。
+
+
+2026-10-09 验证材料源码公开调整：404 检查器、测试及证据已逐条 SHA 核验后展开为 docs/verification/rdbc-first/preflight404/ 普通文件。原 ZIP 留本地，后续 SDD ZIP 不再新增到 Git；历史已跟踪归档保留引用与提交历史。该目录是工具/证据快照，不是正式候选集成或18任务完成。

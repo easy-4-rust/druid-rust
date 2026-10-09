@@ -2,3 +2,6 @@
 *.tsv text eol=lf
 /api/*.txt text eol=lf
 /docs/verification/**/*.json text eol=lf
+
+# Preserve archived evidence byte hashes while publishing plain files.
+/docs/verification/rdbc-first/preflight404/** -text whitespace=cr-at-eol

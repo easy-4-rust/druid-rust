@@ -1,0 +1,16 @@
+{
+  "integration_preflight387.py": "7e03da3badc2d151b5bfdeb06a603387b5ee7fc8d11d1af3358db4b98c77a629",
+  "integration_preflight393.py": "3121bc59be99f7d9beb6b4ee1aa2fe49b814289439c16ca583f9db55d04294b0",
+  "integration_preflight404.py": "35627135938733391a1265eb85de7181ff57598aa0a11b635edc933c31f4b437",
+  "test_integration_preflight388.py": "fceec1247838ae90c8c41d51a5c6402ba063af369432ce4d5a2667f934a3c2bc",
+  "test_integration_command_identity394.py": "81942e9ad799ea1d91d2a01782cee0ff4f4be1b6db967b3202dd2e2582c3a619",
+  "test_integration_preflight404.py": "5d024574d35f3cfd47498038172a577c4bcb8a4f79cb688811c68aff42dbaa40",
+  "prepare_integration_preflight404.py": "1f636bc5d17f55193883886a2ca7226cf1072b31b77ee51a8dcb7721bb59c8e2",
+  "record_preflight404.py": "d4b4b350f9db2bbfe97385341c630b622c0d7f6ab0137f7ff4dad4c50ad8d69d",
+  "archive_preflight404.py": "a650cf4cd50a651413bef8da01a0af956f4510708d1e8fe649f0e709fd73550d",
+  "verify_candidate403.py": "bbe85794078ecd135397cda94b27c2106c0278775285def74a6fa27f2b97ce72",
+  "evidence/live-refusal.json": "1c92c39704dcd5ece88c46e631425856549635ff818635a59ee5e243aa691467",
+  "evidence/snapshot.json": "df133320e675943aa70f37f82f5d2e5fc30577e661963d917d48c83b2f4af82d",
+  "evidence/summary.json": "c7bae31b254c1b37eff00ba0fcf75af1b2c144b7e274d9f606291f278ef039a4",
+  "evidence/tests.log": "3077389d07af0d0d965b75a6a882f12cf3fe675cdf5fe24ff5c86590e681c1d5"
+}

@@ -1,0 +1,28 @@
+{
+  "scope": "PREFLIGHT_TOOL_AND_PREIMAGE_ONLY_NOT_PRODUCT_COMPLETION",
+  "tests_command": [
+    "C:/Espressif/tools/python/python.exe",
+    "-B",
+    "-X",
+    "utf8",
+    "-m",
+    "unittest",
+    "test_integration_preflight388.PreflightTests",
+    "test_integration_command_identity394.CommandIdentityTests",
+    "test_integration_preflight404.Candidate403Tests"
+  ],
+  "tests_exit_code": 0,
+  "tests_log_sha256": "3077389d07af0d0d965b75a6a882f12cf3fe675cdf5fe24ff5c86590e681c1d5",
+  "snapshot_sha256": "df133320e675943aa70f37f82f5d2e5fc30577e661963d917d48c83b2f4af82d",
+  "live_refusal": {
+    "state": "REFUSED",
+    "reason": "verification still running",
+    "production_applied": false
+  },
+  "candidate_frozen_inputs_unchanged": 1278,
+  "formal_preimages_unchanged": 1257,
+  "new_helper_formal_path_unoccupied": true,
+  "production_applied": false,
+  "checker_sha256": "35627135938733391a1265eb85de7181ff57598aa0a11b635edc933c31f4b437",
+  "runner403_sha256": "bbe85794078ecd135397cda94b27c2106c0278775285def74a6fa27f2b97ce72"
+}
