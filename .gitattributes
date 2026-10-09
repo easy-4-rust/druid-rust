@@ -5,3 +5,5 @@
 
 # Preserve archived evidence byte hashes while publishing plain files.
 /docs/verification/rdbc-first/preflight404/** -text whitespace=cr-at-eol
+/docs/verification/rdbc-first/workspace405/** -text whitespace=cr-at-eol
+/docs/verification/rdbc-first/workspace405/*.log -text whitespace=cr-at-eol,-blank-at-eof

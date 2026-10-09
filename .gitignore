@@ -114,3 +114,5 @@ crates/druid-wrapper/src/bin/*
 /.superpowers/sdd/**/*.zip
 !/docs/verification/rdbc-first/preflight404/**/*.json
 !/docs/verification/rdbc-first/preflight404/**/*.log
+!/docs/verification/rdbc-first/workspace405/**/*.json
+!/docs/verification/rdbc-first/workspace405/**/*.log

@@ -1,0 +1,37 @@
+{
+  "scope": "CURRENT403_COMPLETE_WORKSPACE_TEST_ONLY_NOT_ALL_GATES",
+  "observed_at": "2026-10-09T13:15:02.026168+00:00",
+  "command": {
+    "name": "workspace-complete",
+    "command": [
+      "C:\\Users\\hnxyh\\.rustup\\toolchains\\1.97.1-x86_64-pc-windows-msvc\\bin\\cargo.exe",
+      "test",
+      "--workspace",
+      "--all-features",
+      "--locked",
+      "--offline",
+      "-j1",
+      "--no-fail-fast"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 15263.234000000026,
+    "log": "F:\\codex_build_cache\\druid_rust\\task6_e_disk_full_evidence_20261008\\task7-candidate-verification403\\workspace-complete.log",
+    "sha256": "7805a88c67bbadba895f9d8622a492149e64a3ddc123df7763094a7bf8e1e233",
+    "passed": 4198,
+    "failed": 0,
+    "ignored": 0,
+    "changed_inputs": []
+  },
+  "result_blocks": 287,
+  "frozen_inputs_unchanged": 1278,
+  "full_runner_terminal": false,
+  "observed_running_command": "workspace-strict",
+  "product_candidate_integrated": false,
+  "top_level_tasks_remaining": 18,
+  "file_sha256": {
+    "workspace-complete.log": "7805a88c67bbadba895f9d8622a492149e64a3ddc123df7763094a7bf8e1e233",
+    "frozen-inputs.json": "cbaee21faa4de9216160802006daa63d0ba3795cdbdc65bad4c5d3782d031d21",
+    "verify_candidate403.py": "bbe85794078ecd135397cda94b27c2106c0278775285def74a6fa27f2b97ce72",
+    "record_workspace405.py": "9ee988d7a75861ff36f6367f38dec893127f9a1e23dc8ed6c5e0dddb8818e4c0"
+  }
+}

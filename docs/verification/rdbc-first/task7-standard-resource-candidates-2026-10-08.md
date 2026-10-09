@@ -841,3 +841,6 @@ Cell Sync及旧两Access导入负向编译实际E0277/E0432。三个完整单源
 
 
 2026-10-09 验证材料源码公开调整：404 检查器、测试及证据已逐条 SHA 核验后展开为 docs/verification/rdbc-first/preflight404/ 普通文件。原 ZIP 留本地，后续 SDD ZIP 不再新增到 Git；历史已跟踪归档保留引用与提交历史。该目录是工具/证据快照，不是正式候选集成或18任务完成。
+
+
+2026-10-09 修改后403完整Workspace终态405：原workspace/all-features/locked/offline/-j1/no-fail-fast实际exit0，4198PASS/0FAIL/0ignored，日志SHA 7805a88c67bbadba895f9d8622a492149e64a3ddc123df7763094a7bf8e1e233；日志重新统计与原结果一致，1278冻结输入逐项不变。本轮来源包含402候选修复，不能与旧319混用。证据及执行源码以普通文件保存在docs/verification/rdbc-first/workspace405/，不新增ZIP/PDB/编译产物。同一session56719继续严格Clippy及doc/fmt/完整C1-C2；这些后续门禁尚未取得整轮终态。正式E业务候选未集成，LLVM/API/SemVer/MSRV/feature/实库全矩阵及18顶层任务仍OPEN。
