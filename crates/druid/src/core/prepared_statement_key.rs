@@ -33,22 +33,11 @@ impl PreparedStatementKey {
         if sql.is_empty() {
             return Err(RdbcError::InvalidArgument("sql is empty".to_string()));
         }
-        let result_set_type = match options.result_set_type() {
-            druid_rdbc::statement::ResultSetType::ForwardOnly => 1003,
-            druid_rdbc::statement::ResultSetType::ScrollInsensitive => 1004,
-            druid_rdbc::statement::ResultSetType::ScrollSensitive => 1005,
-            _ => 0,
-        };
-        let result_set_concurrency = match options.concurrency() {
-            druid_rdbc::statement::ResultSetConcurrency::ReadOnly => 1007,
-            druid_rdbc::statement::ResultSetConcurrency::Updatable => 1008,
-            _ => 0,
-        };
-        let result_set_holdability = match options.holdability() {
-            druid_rdbc::statement::ResultSetHoldability::CloseAtCommit => 2,
-            druid_rdbc::statement::ResultSetHoldability::HoldOverCommit => 1,
-            _ => 0,
-        };
+        // 游标类型和并发模式都参与缓存身份，保留标准及驱动原数字。
+        let result_set_type = options.result_set_type().rdbc_code();
+        let result_set_concurrency = options.concurrency().rdbc_code();
+        // 原始整数是 prepare 重载身份的一部分，未知值也不能被合并为0。
+        let result_set_holdability = options.holdability().rdbc_code();
         let (auto_generated_keys, column_indexes, column_names) = match generated_keys {
             GeneratedKeys::None => (0, None, None),
             GeneratedKeys::ReturnGeneratedKeys => (1, None, None),
@@ -261,3 +250,6 @@ impl PreparedStatementKey {
         }
     }
 }
+
+#[cfg(test)]
+mod holdability_tests;

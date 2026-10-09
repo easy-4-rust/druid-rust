@@ -7,7 +7,9 @@ use druid_rdbc::metadata::{
     DatabaseMetaDataLimitsExt, DatabaseMetaDataQueryExt, DatabaseMetaDataRequest,
     DatabaseMetaDataSqlCapabilitiesExt, ResultSetColumnType, ResultSetMetaData, RowIdLifetime,
 };
-use druid_rdbc::result_set::{ColumnIndex, ResultSet, ResultSetExt, ResultSetUpdate};
+use druid_rdbc::result_set::{
+    ColumnIndex, ResultSet, ResultSetExt, ResultSetStreamKind, ResultSetUpdate,
+};
 use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
     CurrentResultDisposition, ExecResult, ExecutionResult, FetchDirection, GeneratedKeys,
@@ -16,16 +18,17 @@ use druid_rdbc::statement::{
 };
 use druid_rdbc::types::{
     RdbcArray, RdbcBigDecimal as BigDecimal, RdbcBlob, RdbcCalendarArgument, RdbcCharacterLength,
-    RdbcClob, RdbcNClob, RdbcNaiveDate as NaiveDate, RdbcNaiveDateTime as NaiveDateTime,
-    RdbcNaiveTime as NaiveTime, RdbcObject, RdbcReader, RdbcRef, RdbcRowId, RdbcSqlXml,
-    RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row, Savepoint, Value,
+    RdbcClob, RdbcInputStream, RdbcNClob, RdbcNaiveDate as NaiveDate,
+    RdbcNaiveDateTime as NaiveDateTime, RdbcNaiveTime as NaiveTime, RdbcObject, RdbcReader,
+    RdbcRef, RdbcRowId, RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row,
+    Savepoint, Value,
 };
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
 use std::any::TypeId;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct TraceExpectation {
     expected: &'static str,
 }
@@ -57,6 +60,7 @@ fn prepared_parameter() -> PreparedParameter {
 
 macro_rules! strict_type {
     ($name:ident) => {
+        #[derive(Debug)]
         struct $name {
             trace: TraceExpectation,
         }

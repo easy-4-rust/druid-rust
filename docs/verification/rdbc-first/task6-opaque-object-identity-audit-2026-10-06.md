@@ -1,0 +1,28 @@
+# Task6 厂商对象完整身份案例核查
+
+## 当前证据与下一步
+
+上一轮完整19标量重载准确恢复，RDBC471/0、Druid150/0、新sourcefloor1232/51及下一完整C2缺口均已取得终态。当前同一fullworkspace15535确认仍LIVE，cargo68796及其rustc子进程正在编译，日志task6-scalar-overloads-workspace.log。不得更改其Rust输入或用旧3709/2替代新结果。
+
+CodeGraph原源码显示druid_rdbc::types::RdbcOpaqueObject已经实现class_name、downcast_ref、value、Debug和Arc::ptr_eq身份相等；RdbcObject已有原10种typed标量/自定义对象显示及SQL NULL判定。本案例当前是完整原合同验收映射缺失，尚无产品行为失败证明，不为获得RED而删改现有正确生产实现。
+
+固定BASE完整rdbc_object_and_opaque_object_preserve_type_identity_and_display_contract，body SHA 6626a85ec364324a1e218f5a451d87eff417a7ae287dbca425470daef79959d7，原assert4/assert_eq5/assert_ne1全部保留。完整控制包括class_name、正确/错误具体类型读取、底层访问器类名、Debug包含类名、clone同引用等于、新对象同值不同引用不等于、10种精确显示和非NULL、最终SQL NULL。
+
+PUBLIC_API allowlist明确将druid::core::rdbc_opaque_object::RdbcOpaqueObject::physical批准重命名为druid_rdbc::types::RdbcOpaqueObject::value，原底层访问器观察应通过value原样保留；不增加Physical/第二driver树/宽泛异常白名单，不删断言。
+
+草稿.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/drafts/opaque_object_identity_test.rs从固定BASE直接提取完整body，仅将批准的physical调用改为value；复用现有VendorObjectProbe。草稿尚未接入或运行，不算完成，不改变账本、源分母及其原字段。
+
+当前同一全仓终态后接入完整测试，按实际运行证据决定是否需要生产修复，再做准确映射与相关回归。完整Task6 FIX_REQUIRED/C1/C2/API/SemVer/features/MSRV/最终审查及Task7八组件/Task8/P05–P07全部18任务保留。
+
+## 编译期间独立完整控制的实际结果
+
+当前fullworkspace15535仍LIVE，未修改任何Cargo编译输入。为取得本案例真实行为证据，独立标准消费者从同一完整原草稿生成测试入口，直接引用现有VendorObjectProbe文件与当前RDBC已编译库：F:/codex_build_cache/druid_rust/task6_strong_read_20261006/debug/deps/libdruid_rdbc-85c04db4ca3ea2b6.rlib，库最后写入2026-10-06 14:00:30（本次全仓命令14:00:16之后）。只在.superpowers drafts生成独立消费者源及测试产物，不运行第二个Cargo、不修改现有测试或生产源码。
+
+独立编译与运行均实际exit0，完整原opaque身份/10种typed显示/NULL控制1PASS0FAIL0ignored。日志task6-opaque-standalone-compile.log和task6-opaque-standalone-runtime.log；消费者opaque_object_identity_standalone.rs。此证据支持当前标准实现已经满足完整原控制，下一步接入正式Druid lib目标复验，无需为了构造RED破坏正确生产实现。
+
+这项独立控制不替代正式Cargo目标、完整C2或全仓验收，不加入官方全仓计数、不改变账本、1283 BASE或当前51缺口。正式目标实际复验及准确映射仍待同一fullworkspace15535终态。
+
+
+## 正式恢复与准确绑定后续
+
+两个完整案例已进入正式lib测试；1309终态exit0/lib93+FilterStat21+matrix6=120PASS/0FAIL。随后准确绑定两条原账本行，固定1283原字段不变，旧矩阵移除两个对应ID；29175绑定后矩阵6/6PASS。全1283审计40618终态1234PASS/49FAIL，登记1097exact/186parameterized。完整C2会话5925exit1推进到result_set_errors_typed_getters_and_old_lease_are_observable。详见task6-object-warning-restoration-2026-10-06.md。全仓15535此前已终态3710/2，本轮无新全仓通过声明。Task6及完整18任务仍未闭环。

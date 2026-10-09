@@ -1,0 +1,20 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    factory.set_initial_state(ConnectionState {
+        auto_commit: false,
+        ..ConnectionState::default()
+    });
+    let pool = build_pool(factory.clone(), |builder| {
+        builder.db_type_name("odps").default_auto_commit(true)
+    })
+    .await;
+
+    let connection = pool.get().await.expect("ODPS connection must open");
+    assert!(!connection.auto_commit());
+    assert!(!factory
+        .state(0)
+        .lock()
+        .expect("tracking state poisoned")
+        .events
+        .contains(&"set_auto_commit"));
+}

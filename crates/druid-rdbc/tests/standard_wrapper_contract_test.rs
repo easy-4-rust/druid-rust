@@ -6,6 +6,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const RUNTIME_FIXTURE: &str = include_str!("fixtures/wrapper_runtime.rs");
 const WRONG_VARIANT_FIXTURE: &str = include_str!("fixtures/wrapper_wrong_variant.rs");
 const DYN_DOWNCAST_FIXTURE: &str = include_str!("fixtures/wrapper_dyn_downcast.rs");
+const MUT_ALIAS_FIXTURE: &str = include_str!("fixtures/wrapper_mut_alias.rs");
+const MUT_ESCAPE_FIXTURE: &str = include_str!("fixtures/wrapper_mut_escape.rs");
 
 fn run_external_fixture(name: &str, source: &str, cargo_command: &str) -> Output {
     let unique = SystemTime::now()
@@ -48,6 +50,31 @@ tokio = {{ version = "1", features = ["macros", "rt"] }}
         .expect("external cargo command must execute");
     fs::remove_dir_all(&root).expect("external fixture directory must be removed");
     output
+}
+
+#[test]
+fn mutable_wrapper_views_cannot_alias_the_same_owner() {
+    let output = run_external_fixture("wrapper-mut-alias", MUT_ALIAS_FIXTURE, "check");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "mutable views unexpectedly alias");
+    assert!(
+        stderr.contains("error[E0499]"),
+        "expected exclusive borrow rejection: {stderr}"
+    );
+}
+
+#[test]
+fn mutable_wrapper_view_cannot_outlive_its_owner() {
+    let output = run_external_fixture("wrapper-mut-escape", MUT_ESCAPE_FIXTURE, "check");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "mutable view unexpectedly outlives its owner"
+    );
+    assert!(
+        stderr.contains("error[E0515]"),
+        "expected escaping borrow rejection: {stderr}"
+    );
 }
 
 #[test]

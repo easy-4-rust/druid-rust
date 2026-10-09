@@ -1,0 +1,18 @@
+# RowSet 后续完整合同预检
+
+本预检不新增正式通过案例，不修改账本，源观察保持1235/48。
+
+固定BASE row_set_result_set_preserves_labels_navigation_and_validation包含全部前后导航、负absolute、relative、before/after位置、原1001/1004/1007/1属性代码、缺列、index0、direction999、fetch_size-1及真实关闭后的next/metadata错误Other(result set is closed)。当前BufferedRowSet.ensure_open返回ConnectionDiscarded，属于待实际完整运行证明的源码差异，不能直接改原错误期望。
+
+固定BASE row_set_default_getters_cover_null_label_conversion_and_stream_contracts包含14列真实标量工厂、三个完整helpers：成功转换及按标签入口、非法UTF8/非数字/宽度越界错误、二进制及字符流NULL/非NULL转换；结尾还包含共享RdbcResultSet身份clone、不同后端不等、原底层指针、Debug及真实关闭。没有转发身份就不能把标量helpers通过当整例迁移完成；这与Task7 RDBC_RESULT_SET_FORWARDING待完成组件相关，任何顺序调整需记录而不能删减要求。
+
+CodeGraph当前BufferedRowSet没有string_value override；唯一标准ResultSet::read_object(String)调用string_value，其默认仅接受String/Null。原RowSetResultSet默认string对Bool/Int/Float/Decimal/Date/Time/Timestamp及合法Bytes转换成功，invalidUTF8返回DriverError。因此可能存在转换前置失败；这是源码推断，尚非正式运行RED。当前不修改运行中的全仓源码，也不提前绑定缩减案例。
+
+当前全仓85349真实LIVE，Cargo48428的rustc子进程持续变更；元数据枚举恢复草案待此回归终态后接入正式Cargo失败验证。完整18任务继续开放。
+
+
+## 独立实际运行证据
+
+使用当前已编译canonical RDBC产物libdruid_rdbc-85c04db4ca3ea2b6.rlib，由同一stable1.99 rustc --test编译独立预检，命令终态exit101/0PASS1FAIL。真实BufferedRowSet.next及NULL String读取通过；Bool true列的String读取实际DriverError(ResultSet expected String column value, got true)，原成功转换要求Some(true字符串)。日志task6-row-set-string-preflight.log；草案row_set_string_preflight.rs。使用实际实现，未复制生产转换代码；仅缓冲next用安全Wake/单次poll推进，不涉及异步数据库调用。
+
+本结果把前述String转换源码推断提升为真实局部失败证据；不证明后续14列/helpers、共享转发身份或完整原案例已经执行，不增加正式测试或账本通过分母。修复仍应由完整原案例约束，不能只让此短预检通过就绑定迁移。

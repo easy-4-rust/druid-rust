@@ -1,0 +1,32 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    factory.set_initial_state(ConnectionState {
+        auto_commit: false,
+        ..ConnectionState::default()
+    });
+    let pool = build_pool(factory.clone(), |builder| {
+        builder
+            .default_auto_commit(true)
+            .default_read_only(true)
+            .default_transaction_isolation(8)
+            .default_catalog("tenant_catalog")
+    })
+    .await;
+
+    let connection = pool.get().await.expect("initialized connection must open");
+    assert!(connection.auto_commit());
+    assert!(connection.read_only());
+    assert_eq!(connection.transaction_isolation(), 8);
+    let state = factory.state(0);
+    let state = state.lock().expect("tracking state poisoned");
+    assert_eq!(
+        state.events,
+        vec![
+            "set_auto_commit",
+            "set_read_only",
+            "set_transaction_isolation",
+            "set_catalog"
+        ]
+    );
+    assert_eq!(state.catalog.as_deref(), Some("tenant_catalog"));
+}

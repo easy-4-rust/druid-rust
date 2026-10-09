@@ -1,0 +1,40 @@
+# Task6 稀疏默认属性完整合同恢复（2026-10-06）
+
+固定 BASE5afe8609b177544ff7d18461aa84f69efe8ee90e，案例 sparse_result_set_property_defaults_report_exact_capabilities，bodySHA ef39cee737f247494ff796bf936516d476425a373b42b8b0b07d169bafb3d650。正式目标 crates/druid/tests/task6_complete_sparse_default_contract_test.rs#task6_sparse_result_set_property_defaults_report_exact_capabilities 保留原31调用；仅将1-based下标与1000方向转换为标准强类型，并使用实际默认SparseDefaultResultSet而非覆盖能力的fixture。
+
+前置完整workspace26074终态exit101：246blocks/3726PASS/2FAIL/0ignored含2doctests，只有Callable两个案例actualprepared5/expected6失败，日志task6-sparse-default-navigation-workspace.log。终态后才修改Rust输入。
+
+实际定向RED64780 exit101：1PASS3FAIL，日志task6-sparse-property-defaults-red.log。完整31案例首先失败于ASCII错误；独立补充测试观察16个不同默认差异（4stream/Reader、type/concurrency、3row flags、7row mutations）；native Buffered控制暴露关闭后row_inserted/deleted仍成功。未修改原观察或通过fixture返回伪造默认。
+
+生产ResultSet默认恢复精确UnsupportedOperation：字节流按Ascii/Unicode/Binary分派，Reader按character/n_character分派，不提前读取value；类型/并发/行状态及七个变更恢复原操作错误。具体驱动自身SQL0A000覆盖保持独立语义。BufferedRowSet已有stream/Reader覆盖保留，并新增row_inserted/deleted实际状态检查与false返回，关闭后精确Other(result set is closed)，对应固定BASE同名实际覆盖。既有规格补充原行为约束，没有第二标准端口。
+
+复测28561当前LIVE，日志task6-sparse-property-defaults-green.log；尚不称GREEN、不绑定账本。当前1283迁移分母、1102exact/181parameterized、最近源码floor1239PASS44FAIL不变。相关完整RDBC/Druid/Wrapper回归、C2、API/SemVer/MSRV/features及完整18顶层任务仍待完成。全workspace3726/2是本次属性生产修复前证据，不用于代表修复后全仓结果。
+
+
+复测28561已终态exit0：4PASS0FAIL0ignored，完整31原属性调用、16独立差异、原10导航及真实Buffered状态控制全部通过。GREEN日志task6-sparse-property-defaults-green.log。仍需扩大相关回归和正式源码floor核对；账本尚未绑定，不能据此关闭Task6。
+
+
+扩大完整RDBC包回归同一23242已启动（task6-sparse-property-defaults-rdbc-regression.log），--locked --offline --no-fail-fast -j1 串行测试；当前未终态。复测4/0仅定向范围。标准纯度48/final及diff检查已通过；新鲜完整workspace3726/2属于属性生产修复前。运行期间保持Rust/Cargo输入稳定，暂不绑定31项完整案例或改变1239/44计数。
+
+
+扩大RDBC23242终态exit101，五个失败均为生成探针stream/Reader重载：先前依赖default -> value返回trace。完整原属性默认恢复后这种间接trace失效。已修改生成器为StrictResultSet显式覆盖真实input_stream/reader入口，逐项断言ColumnIndex1、Ascii/Unicode/Binary枚举和character/n_character标志再返回原精确trace，未改变生产默认或放宽assert_trace。生成14文件check通过。新完整RDBC同一72869仍待终态，日志task6-sparse-property-defaults-rdbc-corrected.log；运行期间不修改Rust输入。
+
+RDBC72869已终态exit0，16blocks/471PASS0FAIL0ignored含1doctest，替代前述LIVE。前一23242保留466PASS5FAIL证据。继续Druid/Wrapper相关回归后再核对原完整案例源码floor并绑定；18任务仍开放。
+
+
+原完整31案例独立源观察检查通过（FULL31_BASE_SOURCE_FLOOR=PASS），固定BASE bodySHA ef39cee737f247494ff796bf936516d476425a373b42b8b0b07d169bafb3d650一致。Druid8目标/Wrapper2目标相关回归同一41862仍LIVE，日志task6-sparse-property-defaults-consumer-regression.log。不在运行期间移除Rust case列表或绑定迁移；最近1239/44、1102/181暂不变。完整18任务仍开放。
+
+
+Consumer41862终态exit101：lib94/0、FilterStat21/0、Buffered矩阵4/2后停止，Wrapper尚未执行。两个失败来自真实SQLite原row_updated/inserted/deleted false合同。固定BASE differential原案例明确要求三个false，旧查询RowSetResultSet提供此能力；当前SQLx具体结果继承canonical成功默认而缺显式覆盖。恢复默认拒绝后必须补齐具体只读SQLx能力：三个状态先ensure_open再false，保留关闭后的该驱动ConnectionDiscarded，不修改BASE SQLite断言或接口默认。新扩大回归待执行；此处119PASS2FAIL不能代表全部consumer。
+
+
+修复SQLx真实只读行状态后的相关复测同一72147 LIVE，日志task6-sparse-property-defaults-consumer-corrected.log；命令范围保持Druid8目标后Wrapper2目标。不改变正在运行的Rust输入，不将前一119/2或RDBC471/0当作本复测完整结果。原31源floor已通过，但迁移绑定仍等待consumer终态。
+
+
+72147终态仍119PASS2FAIL，失败位置相同。CodeGraph重新精确定位 task6_sqlite_connection 后确认是ToastyConnectionFactory，经StandardAdapterStatement/Prepared构造StandardAdapterResultSet。此前把该失败归SQLx不准确，新增SQLx三覆盖已逐块撤回（其他用户更改保留），并将三个真实缓冲只读行状态覆盖放在实际StandardAdapterResultSet，ensure_open_core保留该适配器关闭与租约失效错误。原SQLite完整断言不改。此前SQLx归因说明已被本段更正，不作为真实调用链证据。
+
+
+实际Toasty缓冲能力修复后的完整consumer复测同一1297 LIVE，日志task6-sparse-property-defaults-toasty-consumer.log。前置RDBC471/0仍仅证明RDBC范围；当前31迁移绑定等待此consumer终态。运行期间保持源码不变，完整18任务和最近44源缺口暂不关闭。
+
+
+原31项属性完整迁移验收（2026-10-06）：Consumer1297终态exit0/10blocks/150PASS0FAIL0ignored（Druid145/Wrapper5）；连同完整RDBC471/0，共621/0。正式精确绑定一个案例，移除旧矩阵占位ID，全部1283账本前7字段一致；完整源码审计1240PASS43FAIL，1103exact/180parameterized。自测15、纯度48/final、权威79/pending25/Physical73及原SHA、生成14、diff通过。新case绑定不关闭Task6；C1/C2/API/SemVer/MSRV/features/fullreview及18顶层任务仍开放。

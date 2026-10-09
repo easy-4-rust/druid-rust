@@ -1,0 +1,28 @@
+use super::PreparedStatementKey;
+use crate::core::PreparedStatementMethodType;
+use druid_rdbc::statement::{GeneratedKeys, ResultSetHoldability, StatementOptions};
+
+/// 缓存键保留每个真实驱动 holdability 原值，不能把不同值合并成0。
+#[test]
+fn holdability_cache_keys_preserve_driver_numeric_identity() {
+    let codes = [i32::MIN, -1, 0, 3, 9, i32::MAX];
+    let mut keys = Vec::new();
+    for code in codes {
+        let options = StatementOptions::new(
+            Default::default(),
+            Default::default(),
+            ResultSetHoldability::DriverValue(code),
+        );
+        let key = PreparedStatementKey::standard(
+            "select 1",
+            Some("catalog_a".to_owned()),
+            PreparedStatementMethodType::M3,
+            options,
+            GeneratedKeys::None,
+        )
+        .unwrap();
+        assert_eq!(key.result_set_holdability(), code);
+        assert!(keys.iter().all(|other| other != &key));
+        keys.push(key);
+    }
+}

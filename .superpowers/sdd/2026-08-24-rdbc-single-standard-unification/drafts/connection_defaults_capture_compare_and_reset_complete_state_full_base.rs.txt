@@ -1,0 +1,53 @@
+{
+    let drop_count = Arc::new(AtomicUsize::new(0));
+    let mut connection = connection_lease(drop_count.clone());
+    let defaults = ConnectionDefaults::capture(&connection);
+
+    assert!(defaults.auto_commit());
+    assert!(!defaults.read_only());
+    assert_eq!(defaults.transaction_isolation(), 2);
+    assert_eq!(defaults.holdability(), 0);
+    assert!(!defaults.needs_reset(&connection, false));
+
+    connection
+        .set_read_only(true)
+        .await
+        .expect("read only must change");
+    connection
+        .set_holdability(1)
+        .await
+        .expect("holdability must change");
+    connection
+        .set_transaction_isolation(8)
+        .await
+        .expect("isolation must change");
+    connection
+        .set_auto_commit(false)
+        .await
+        .expect("auto commit must change");
+
+    assert!(defaults.needs_reset(&connection, false));
+    defaults
+        .reset(&mut connection, false)
+        .await
+        .expect("all supported connection state must reset");
+    assert!(!defaults.needs_reset(&connection, false));
+    assert!(connection.auto_commit());
+    assert!(!connection.read_only());
+    assert_eq!(connection.transaction_isolation(), 2);
+    assert_eq!(connection.holdability(), 0);
+
+    connection
+        .set_transaction_isolation(8)
+        .await
+        .expect("isolation must change again");
+    assert!(!defaults.needs_reset(&connection, true));
+    defaults
+        .reset(&mut connection, true)
+        .await
+        .expect("isolation preservation must skip reset");
+    assert_eq!(connection.transaction_isolation(), 8);
+
+    drop(connection);
+    assert_eq!(drop_count.load(Ordering::Relaxed), 1);
+}

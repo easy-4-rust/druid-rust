@@ -1,0 +1,11 @@
+# 完整SQLite值、游标和身份合同恢复
+
+
+完整六列ResultSet正式恢复（2026-10-06）：label真实RED32531为ref_by_label->ref；修复八资源列名身份后83221真实RED为update_ref->update_value；具体缓冲更新恢复七资源家族与三LOB流家族，标量保持原generic拒绝，不消费资源。完整91706终态exit0/1PASS0FAIL，全部42精确拒绝/实际Statement42/五流/六列metadata/NULL/identity/两行navigation/fetchpeak2通过。正式1283 sourcefloor1243PASS40FAIL，1106exact177parameterized，前7冻结字段/反向调用索引PASS；C2 --no-execute仍FAIL首败statement_close_closes_traced_result_set_and_records_fetched_peak。Wrapper63863六目标52/0，新增八资源NULL/定位/缺失/关闭优先控制另9/0含旧8，不能累计为61。15自测/48final纯度/79authority pending25 physical73/生成14/diffPASS。准备CRLF与GBK错误已修正，验证器逻辑不变；两个错误目标名Cargo命令未运行测试，保留日志，不计失败产品测试。Druid五目标正确名称复测已启动task6-sqlite-values-druid-regression-corrected.log，未获终态；尚无本轮完整workspace证据。完整18任务/Task6FIX_REQUIRED及Task7八义务/API/SemVer/MSRV/features/最终审查保持开放。
+
+
+完整六列消费者最终验证：Druid42436终态exit1/114PASS1FAIL，Filter旧generic占位previous.is_err与真实native缓冲能力冲突；固定BASE完整navigation案例SHA301d0fb905da3e730bea3256f592f2d448334e6dd8585110465e7e6b6c6bb888明确native last/previous/row成功。因此聚合控制恢复首行previous=false/row0/before-first=true/next恢复，不移除旧case、不冒充原完整Filter合同。修正后Druid五目标终态exit0/115PASS0FAIL（lib96+keys2+Buffered7+Callable9+Filter1），Wrapper六目标52/0加新控制1与旧8重叠，当前两包已验证168例，不重复计入完整case单跑。五文件格式、纯度48final、derived79、diff通过。全workspace locked/offline/no-fail-fast -j1/test-threads1新鲜复测已启动task6-sqlite-values-workspace-final.log，尚LIVE无终态；所有Rust/Cargo输入冻结。正式sourcefloor1243/40、1106/177、18任务及Task6FIX_REQUIRED保持；下一完整statement-close峰值原SHA5d6ac630d84c9fd11a06b7286886635faab78ce6071b0812e7757dd635423abd仅非Cargo原文准备，未映射/运行/绑定。
+
+同一完整workspace8243已通过工具handle和实际cargo74648及子rustc/link核实LIVE；日志task6-sqlite-values-workspace-final.log处于编译阶段，无运行总计。保持输入冻结、不重启。此为verified wait，不能把局部168/0或前次全仓编译失败当本轮终态。
+
+完整workspace8243现已终态：工具exit1；249结果块、3733PASS17FAIL0ignored（含2doctest）。16FAIL集中Filter补充helper第87行把实际name标签认作缺失；另1FAIL Toasty runtime trace将原生select ?标签?期望为column_1。所有失败已按名记录，不以局部168/0替代全仓。后续补充标签控制已应用；原Statement-close完整合同仅加入测试，首次E0277 Debug观察器编译错误已移除无关derive，当前正在独立取得实际runtime RED，尚无生产修复、台账绑定或Task6完成声明。18顶层任务保持开放。

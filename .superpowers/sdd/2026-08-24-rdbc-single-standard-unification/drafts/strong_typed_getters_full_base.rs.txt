@@ -1,0 +1,133 @@
+{
+    let mut connection = sqlite_pooled_connection().await;
+    let statement = connection.create_statement().await.unwrap();
+    let decimal = BigDecimal::from_str("1234567890.45").unwrap();
+    let date = NaiveDate::from_ymd_opt(2026, 7, 29).unwrap();
+    let time = NaiveTime::from_hms_nano_opt(13, 14, 15, 123_456_789).unwrap();
+    let timestamp = NaiveDateTime::new(date, time);
+    let physical: Arc<dyn PhysicalResultSet> = Arc::new(RowSetResultSet::with_column_labels(
+        vec![Row::new(vec![
+            Value::Decimal(decimal.clone()),
+            Value::Date(date),
+            Value::Time(time),
+            Value::Timestamp(timestamp),
+            Value::Null,
+        ])],
+        vec![
+            "amount".to_string(),
+            "event_date".to_string(),
+            "event_time".to_string(),
+            "event_at".to_string(),
+            "optional_amount".to_string(),
+        ],
+    ));
+    let mut result_set = statement.wrap_result_set(physical).unwrap();
+    assert!(result_set.next(&mut connection).unwrap());
+
+    let meta_data = result_set.meta_data(&mut connection).unwrap();
+    assert_eq!(
+        meta_data.column_type(1).unwrap(),
+        ResultSetColumnType::Decimal
+    );
+    assert_eq!(meta_data.column_type(2).unwrap(), ResultSetColumnType::Date);
+    assert_eq!(meta_data.column_type(3).unwrap(), ResultSetColumnType::Time);
+    assert_eq!(
+        meta_data.column_type(4).unwrap(),
+        ResultSetColumnType::Timestamp
+    );
+
+    assert_eq!(
+        result_set.big_decimal(&mut connection, 1).unwrap(),
+        Some(decimal.clone())
+    );
+    assert_eq!(
+        result_set
+            .big_decimal_by_label(&mut connection, "amount")
+            .unwrap(),
+        Some(decimal.clone())
+    );
+    assert_eq!(
+        result_set
+            .big_decimal_with_scale(&mut connection, 1, 2)
+            .unwrap(),
+        Some(decimal.clone())
+    );
+    assert_eq!(
+        result_set
+            .big_decimal_by_label_with_scale(&mut connection, "amount", 2)
+            .unwrap(),
+        Some(decimal)
+    );
+
+    let shanghai = RdbcCalendar::new("Asia/Shanghai").unwrap();
+    assert_eq!(result_set.date(&mut connection, 2).unwrap(), Some(date));
+    assert_eq!(
+        result_set
+            .date_by_label(&mut connection, "event_date")
+            .unwrap(),
+        Some(date)
+    );
+    assert_eq!(
+        result_set
+            .date_with_calendar(&mut connection, 2, Some(shanghai.clone()))
+            .unwrap(),
+        Some(date)
+    );
+    assert_eq!(
+        result_set
+            .date_by_label_with_calendar(&mut connection, "event_date", None)
+            .unwrap(),
+        Some(date)
+    );
+
+    assert_eq!(result_set.time(&mut connection, 3).unwrap(), Some(time));
+    assert_eq!(
+        result_set
+            .time_by_label(&mut connection, "event_time")
+            .unwrap(),
+        Some(time)
+    );
+    assert_eq!(
+        result_set
+            .time_with_calendar(&mut connection, 3, None)
+            .unwrap(),
+        Some(time)
+    );
+    assert_eq!(
+        result_set
+            .time_by_label_with_calendar(&mut connection, "event_time", Some(shanghai.clone()))
+            .unwrap(),
+        Some(time)
+    );
+
+    assert_eq!(
+        result_set.timestamp(&mut connection, 4).unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(
+        result_set
+            .timestamp_by_label(&mut connection, "event_at")
+            .unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(
+        result_set
+            .timestamp_with_calendar(&mut connection, 4, Some(shanghai))
+            .unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(
+        result_set
+            .timestamp_by_label_with_calendar(&mut connection, "event_at", None)
+            .unwrap(),
+        Some(timestamp)
+    );
+
+    assert_eq!(
+        result_set
+            .big_decimal_by_label(&mut connection, "optional_amount")
+            .unwrap(),
+        None
+    );
+    assert!(result_set.was_null(&mut connection).unwrap());
+}

@@ -677,10 +677,10 @@ def require_pending_admission_policy(
             "druid_pooled_connection.rs",
             "Connection",
             "DruidPooledConnection",
-            "prepare_statement",
+            "prepare_statement_with_generated_keys",
             (
                 "begin_admission",
-                "prepare_statement(&effective_sql,options).await",
+                "prepare_statement_with_generated_keys(&effective_sql,options,generated_keys).await",
                 "DruidPooledPreparedStatement::new_standard",
             ),
         ),
@@ -815,6 +815,19 @@ def require_pending_admission_policy(
         if body is None:
             fail(f"Task 5 pre-raw admission method is missing: {label}:{method}")
         _require_ordered_markers(body, markers, f"{label}:{type_name}::{method}")
+
+    # 普通重载只有这一条转发路径；禁止额外原生调用、错误请求和不可达伪证据。
+    connection_blocks = _impl_blocks(
+        producer_sources["druid_pooled_connection.rs"], "Connection", "DruidPooledConnection"
+    )
+    tokens, _, opening, closing = connection_blocks[0]
+    delegate = _method_bodies(tokens, opening, closing).get("prepare_statement")
+    expected_delegate = (
+        "self.prepare_statement_with_generated_keys("
+        "sql,options,druid_rdbc::statement::GeneratedKeys::None,).await"
+    )
+    if delegate != expected_delegate:
+        fail("Task 6 pre-raw admission prepared overload delegation is not exact")
 
     for label in (
         "druid_pooled_prepared_statement.rs",

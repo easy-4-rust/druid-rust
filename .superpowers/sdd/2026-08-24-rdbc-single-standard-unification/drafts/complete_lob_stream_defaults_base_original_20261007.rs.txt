@@ -1,0 +1,97 @@
+{
+    let physical_log = Arc::new(Mutex::new(Vec::new()));
+    let physical = PhysicalResultSetProbe::new(Arc::clone(&physical_log), false);
+    let context = ResultSetFilterContext::new();
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let blob = RdbcInputStream::from_bytes([1, 2, 3]);
+    let clob = RdbcReader::from_string("甲乙");
+    let n_clob = RdbcReader::from_string("丙丁");
+
+    // SOURCE_PARITY / V2_MIRRORED：Java Filter/FilterChainImpl 的 Blob、
+    // Clob、NClob × index/label × unspecified/long 12 个重载逐一穿透。
+    filter_chain
+        .result_set_update_blob_stream(&physical, &context, 1, Some(blob.clone()))
+        .unwrap();
+    filter_chain
+        .result_set_update_blob_stream_by_label(&physical, &context, "blob", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_blob_stream_with_length(&physical, &context, 2, Some(blob.clone()), -7)
+        .unwrap();
+    filter_chain
+        .result_set_update_blob_stream_by_label_with_length(
+            &physical,
+            &context,
+            "blob_long",
+            None,
+            i64::MAX,
+        )
+        .unwrap();
+    filter_chain
+        .result_set_update_clob_reader(&physical, &context, 3, Some(clob.clone()))
+        .unwrap();
+    filter_chain
+        .result_set_update_clob_reader_by_label(&physical, &context, "clob", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_clob_reader_with_length(&physical, &context, 4, Some(clob.clone()), -11)
+        .unwrap();
+    filter_chain
+        .result_set_update_clob_reader_by_label_with_length(
+            &physical,
+            &context,
+            "clob_long",
+            None,
+            13,
+        )
+        .unwrap();
+    filter_chain
+        .result_set_update_n_clob_reader(&physical, &context, 5, Some(n_clob.clone()))
+        .unwrap();
+    filter_chain
+        .result_set_update_n_clob_reader_by_label(&physical, &context, "n_clob", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_n_clob_reader_with_length(
+            &physical,
+            &context,
+            6,
+            Some(n_clob.clone()),
+            -17,
+        )
+        .unwrap();
+    filter_chain
+        .result_set_update_n_clob_reader_by_label_with_length(
+            &physical,
+            &context,
+            "n_clob_long",
+            None,
+            19,
+        )
+        .unwrap();
+
+    assert_eq!(
+        calls(&physical_log),
+        [
+            "physical:update_blob_stream:1:true:Unspecified",
+            "physical:update_blob_stream_by_label:blob:false:Unspecified",
+            "physical:update_blob_stream:2:true:Long(-7)",
+            "physical:update_blob_stream_by_label:blob_long:false:Long(9223372036854775807)",
+            "physical:update_clob_reader:3:true:Unspecified",
+            "physical:update_clob_reader_by_label:clob:false:Unspecified",
+            "physical:update_clob_reader:4:true:Long(-11)",
+            "physical:update_clob_reader_by_label:clob_long:false:Long(13)",
+            "physical:update_n_clob_reader:5:true:Unspecified",
+            "physical:update_n_clob_reader_by_label:n_clob:false:Unspecified",
+            "physical:update_n_clob_reader:6:true:Long(-17)",
+            "physical:update_n_clob_reader_by_label:n_clob_long:false:Long(19)",
+        ]
+    );
+
+    // RUST_OBLIGATION / V1_RUST_LOCAL：默认 Filter 只克隆共享句柄，不预读、
+    // 不关闭，也不校正负长度或超大 long。
+    assert_eq!(blob.read_to_end().unwrap(), [1, 2, 3]);
+    assert_eq!(clob.read_to_string().unwrap(), "甲乙");
+    assert_eq!(n_clob.read_to_string().unwrap(), "丙丁");
+}

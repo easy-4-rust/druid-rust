@@ -75,6 +75,11 @@ druid_rdbc::impl_standard_wrapper!(SqlxStreamingResultSet => ResultSet);
 
 #[async_trait::async_trait]
 impl ResultSet for SqlxStreamingResultSet {
+    fn known_row_count(&self) -> Option<u64> {
+        self.ensure_open().ok()?;
+        u64::try_from(self.rows.len()).ok()
+    }
+
     async fn next(&mut self) -> Result<bool, RdbcError> {
         let present = self.navigate(ResultSetNavigation::Next).await?;
         if present {

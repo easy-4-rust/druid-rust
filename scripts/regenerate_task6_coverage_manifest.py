@@ -191,11 +191,39 @@ def fresh_report(
         return report, hashlib.sha256(raw).hexdigest()
 
 
+def snapshot_build_inputs(root: Path) -> dict[str, str]:
+    """冻结源码、依赖及编译配置，排除生成缓存和证据草稿。"""
+
+    result: dict[str, str] = {}
+    excluded = {".git", ".codegraph", ".superpowers", "target", "node_modules"}
+    names = {"Cargo.toml", "Cargo.lock", "rust-toolchain", "rust-toolchain.toml"}
+    for directory, children, files in os.walk(root):
+        children[:] = sorted(child for child in children if child not in excluded)
+        for name in sorted(files):
+            path = Path(directory) / name
+            relative = path.relative_to(root).as_posix()
+            if (path.suffix in {".rs", ".proto", ".sql"} or name in names
+                    or relative in {".cargo/config", ".cargo/config.toml"}):
+                result[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+    return result
+
+
+def require_unchanged_build_inputs(root: Path, snapshot: dict[str, str]) -> None:
+    """新增、删除或修改构建输入均拒绝，不能为旧报告绑定新hash。"""
+
+    current = snapshot_build_inputs(root)
+    changed = sorted(path for path in set(snapshot) | set(current)
+                     if snapshot.get(path) != current.get(path))
+    if changed:
+        verifier.fail(f"coverage regeneration build inputs changed: {changed}")
+
+
 def build_manifest(
     root: Path,
 ) -> tuple[dict[str, object], dict[str, dict[str, object]], dict[str, str]]:
     """Run all families before constructing one in-memory canonical manifest."""
 
+    input_snapshot = snapshot_build_inputs(root)
     adapters = verifier.task_adapter_rows(
         root / verifier.DEFAULT_ADAPTERS,
         root / verifier.DEFAULT_RUNTIME_EVIDENCE,
@@ -224,7 +252,9 @@ def build_manifest(
     reports: dict[str, dict[str, object]] = {}
     report_hashes: dict[str, str] = {}
     for spec in specs:
+        require_unchanged_build_inputs(root, input_snapshot)
         report, report_hash = fresh_report(root, spec)
+        require_unchanged_build_inputs(root, input_snapshot)
         reports[spec.family] = report
         report_hashes[spec.family] = report_hash
     families: list[dict[str, object]] = []
@@ -244,9 +274,7 @@ def build_manifest(
                     "requirement_id": requirement_id,
                     "requirement_kind": kind,
                     "source_path": source_path.as_posix(),
-                    "source_sha256": hashlib.sha256(
-                        (root / source_path).read_bytes()
-                    ).hexdigest(),
+                    "source_sha256": input_snapshot[source_path.as_posix()],
                     "source_function": source_function,
                     "compiler_function_name": exact_compiler_name(
                         root,
@@ -275,6 +303,7 @@ def build_manifest(
         "schema_version": verifier.COVERAGE_VERSION,
         "families": families,
     }
+    require_unchanged_build_inputs(root, input_snapshot)
     return document, reports, report_hashes
 
 
@@ -329,6 +358,7 @@ def main() -> int:
     arguments = parser.parse_args()
     root = arguments.root.resolve()
     try:
+        input_snapshot = snapshot_build_inputs(root)
         document, reports, report_hashes = build_manifest(root)
         specs = family_specs(document)
         verifier.validate_coverage_manifest(root, specs)
@@ -352,6 +382,7 @@ def main() -> int:
         payload = (
             json.dumps(document, ensure_ascii=False, indent=2).encode("utf-8") + b"\n"
         )
+        require_unchanged_build_inputs(root, input_snapshot)
         if arguments.write:
             (root / verifier.DEFAULT_COVERAGE_MANIFEST).write_bytes(payload)
     except (OSError, UnicodeError, verifier.VerificationError) as error:

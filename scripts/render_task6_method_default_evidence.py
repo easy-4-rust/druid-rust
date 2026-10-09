@@ -17,6 +17,10 @@ GENERATED_DIRECTORY = Path(
 )
 ROOT_TEST = Path(verifier.FALLBACK_EVIDENCE_PATH)
 
+# 主证据改绑到 C2 的真实租约合同后，仍保留已存在的独立默认执行控制。
+# 这是补充测试身份，不改变方法账本的主证据或 C2 来源要求。
+SUPPLEMENTAL_DEFAULT_CONTROLS = frozenset({("PhysicalConnection", "execute")})
+
 STRICT_TYPES = {
     "Connection": "StrictConnection",
     "Statement": "StrictStatement",
@@ -267,6 +271,26 @@ def _render_trace_impl(
             body = "ConnectionCapabilities::default()"
         elif trait == "ResultSetMetaData" and method_name == "column_count":
             body = "7"
+        elif trait == "ResultSet" and method_name == "input_stream":
+            # 显式流入口证明真实种类转发，不依赖通用value读取冒充重载。
+            body = r'''assert_eq!(_column, ColumnIndex::new(1).unwrap());
+                let expected_kind = match self.trace.expected {
+                    "druid_rdbc::result_set::ResultSetExt::ascii_stream" => ResultSetStreamKind::Ascii,
+                    "druid_rdbc::result_set::ResultSetExt::unicode_stream" => ResultSetStreamKind::Unicode,
+                    "druid_rdbc::result_set::ResultSetExt::binary_stream" => ResultSetStreamKind::Binary,
+                    unexpected => panic!("unexpected stream probe: {unexpected}"),
+                };
+                assert_eq!(kind, expected_kind);
+                self.trace.fail()'''
+        elif trait == "ResultSet" and method_name == "reader":
+            body = r'''assert_eq!(_column, ColumnIndex::new(1).unwrap());
+                let expected_national = match self.trace.expected {
+                    "druid_rdbc::result_set::ResultSetExt::character_stream" => false,
+                    "druid_rdbc::result_set::ResultSetExt::n_character_stream" => true,
+                    unexpected => panic!("unexpected reader probe: {unexpected}"),
+                };
+                assert_eq!(national, expected_national);
+                self.trace.fail()'''
         else:
             body = "self.trace.fail()"
         methods.append(f"    {method.signature} {{ {body} }}")
@@ -291,7 +315,7 @@ use druid_rdbc::metadata::{
     DatabaseMetaDataLimitsExt, DatabaseMetaDataQueryExt, DatabaseMetaDataRequest,
     DatabaseMetaDataSqlCapabilitiesExt, ResultSetColumnType, ResultSetMetaData, RowIdLifetime,
 };
-use druid_rdbc::result_set::{ColumnIndex, ResultSet, ResultSetExt, ResultSetUpdate};
+use druid_rdbc::result_set::{ColumnIndex, ResultSet, ResultSetExt, ResultSetStreamKind, ResultSetUpdate};
 use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
     CurrentResultDisposition, ExecResult, ExecutionResult, FetchDirection, GeneratedKeys,
@@ -302,7 +326,7 @@ use druid_rdbc::types::{
     RdbcArray, RdbcBigDecimal as BigDecimal, RdbcBlob, RdbcCalendarArgument,
     RdbcCharacterLength, RdbcClob, RdbcNClob,
     RdbcNaiveDate as NaiveDate, RdbcNaiveDateTime as NaiveDateTime,
-    RdbcNaiveTime as NaiveTime, RdbcObject, RdbcReader, RdbcRef, RdbcRowId,
+    RdbcNaiveTime as NaiveTime, RdbcInputStream, RdbcObject, RdbcReader, RdbcRef, RdbcRowId,
     RdbcSqlXml, RdbcStreamLength, RdbcTargetType, RdbcTypeMap, RdbcUrl, Row, Savepoint,
     Value,
 };
@@ -311,7 +335,7 @@ use std::any::TypeId;
 use std::sync::Arc;
 use std::time::Duration;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct TraceExpectation {
     expected: &'static str,
 }
@@ -343,6 +367,7 @@ fn prepared_parameter() -> PreparedParameter {
 
 macro_rules! strict_type {
     ($name:ident) => {
+        #[derive(Debug)]
         struct $name {
             trace: TraceExpectation,
         }
@@ -451,10 +476,18 @@ def _render_group(
         "CallableStatement",
         "ResultSet",
     }:
+        required = {row.target_symbol.rsplit("::", 1)[-1] for row in rows}
+        if trait == "ResultSet":
+            # 列名扩展现在委托 canonical hook；严格探针须覆盖实际叶入口，
+            # 不再依赖 find_column 失败来冒充对象重载调用证据。
+            required.update({
+                "object_with_type_map_by_label", "object_as_by_label",
+                "input_stream", "reader",
+            })
         support = _render_trace_impl(
             trait,
             STRICT_TYPES[trait],
-            (row.target_symbol.rsplit("::", 1)[-1] for row in rows),
+            required,
             method_lookup,
         )
     elif trait == "ResultSetMetaData":
@@ -478,6 +511,10 @@ def render_files(
         for row in rows
         if verifier.parse_behavior_selector(row.behavior_evidence).source_path
         == verifier.FALLBACK_EVIDENCE_PATH
+        or (
+            (row.source_object, row.method) in SUPPLEMENTAL_DEFAULT_CONTROLS
+            and row.base_default_kind == "DEFAULT_UNSUPPORTED"
+        )
     ]
     grouped: dict[str, list[verifier.MethodRow]] = defaultdict(list)
     for row in fallback:

@@ -16,34 +16,8 @@ use std::sync::Arc;
 
 fn task6_result_set_filter_case_ids() -> &'static [&'static str] {
     &[
-        "pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overloads",
-        "pooled_result_set_preserves_distinct_n_string_filter_overloads",
-        "pooled_result_set_routes_all_object_overloads_and_preserves_argument_identity",
-        "pooled_result_set_routes_all_scalar_getters_through_java_filter_overloads",
-        "pooled_result_set_routes_dynamic_statement_identity_through_filter",
-        "pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capability_errors",
-        "pooled_result_set_routes_metadata_platform_handle_through_filter",
-        "pooled_result_set_routes_n_string_updates_and_preserves_sqlite_capability_errors",
-        "pooled_result_set_routes_navigation_properties_and_real_sqlite_state",
-        "pooled_result_set_routes_object_updates_and_preserves_sqlite_capability_errors",
-        "pooled_result_set_routes_resource_getters_and_real_sqlite_streams",
-        "pooled_result_set_routes_resource_updates_and_preserves_sqlite_capability_errors",
-        "pooled_result_set_routes_row_mutations_and_preserves_sqlite_capability_errors",
-        "pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors",
-        "pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability_errors",
-        "real_sqlite_result_sets_flow_through_stat_filter_and_statement_cascade",
-        "result_set_filter_chain_preserves_java_order_short_circuit_and_error_unwind",
-        "result_set_filter_defaults_delegate_and_context_defaults_are_observable",
-        "result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads",
         "result_set_n_string_update_filter_defaults_preserve_both_overloads",
-        "result_set_navigation_filter_defaults_delegate_every_physical_method",
         "result_set_object_update_filter_defaults_preserve_all_four_overloads",
-        "result_set_resource_filter_defaults_preserve_all_physical_overload_identities",
-        "result_set_resource_update_filter_defaults_preserve_all_fourteen_overloads",
-        "result_set_row_mutation_filter_defaults_delegate_every_physical_method",
-        "result_set_scalar_update_filter_defaults_delegate_all_java_overloads",
-        "result_set_stream_update_filter_defaults_preserve_all_twenty_two_overloads",
-        "stat_filter_commits_close_statistics_before_downstream_close_error",
     ]
 }
 
@@ -157,7 +131,7 @@ async fn task6_assert_result_set_updates_are_unsupported(
         assert_eq!(
             ResultSet::update_value_by_label(&mut *result_set, "label", update),
             Err(druid_rdbc::error::RdbcError::UnsupportedOperation {
-                operation: "result_set_find_column"
+                operation: "result_set_update_value_by_label"
             })
         );
     }
@@ -216,8 +190,7 @@ async fn task6_result_set_filter_canonical_matrix() {
                 executed.push(*case_id);
                 continue;
             }
-            "pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors"
-            | "result_set_scalar_update_filter_defaults_delegate_all_java_overloads" => {
+            "pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors" => {
                 task6_assert_result_set_updates_are_unsupported(
                     &mut connection,
                     vec![
@@ -239,8 +212,7 @@ async fn task6_result_set_filter_canonical_matrix() {
             }
             "pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability_errors"
             | "result_set_stream_update_filter_defaults_preserve_all_twenty_two_overloads"
-            | "result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads"
-            | "pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capability_errors" => {
+            | "result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads" => {
                 task6_assert_result_set_updates_are_unsupported(
                     &mut connection,
                     vec![
@@ -322,7 +294,11 @@ async fn task6_result_set_filter_canonical_matrix() {
             );
         }
         if case_id.contains("navigation") {
-            assert!(result_set.previous().await.is_err());
+            // 固定BASE真实Toasty缓冲结果支持导航；首行向前移到首行前，再恢复定位。
+            assert!(!result_set.previous().await.expect("previous before first"));
+            assert_eq!(result_set.row().expect("before-first row"), 0);
+            assert!(result_set.is_before_first().expect("before first"));
+            assert!(result_set.next().await.expect("restore first row"));
         }
         assert_eq!(result_set.value(absent).expect("null"), Value::Null);
         assert!(result_set.was_null().expect("was_null"));

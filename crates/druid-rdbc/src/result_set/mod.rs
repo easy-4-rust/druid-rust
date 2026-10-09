@@ -6,8 +6,14 @@
 )]
 mod result_set;
 mod result_set_ext;
+mod result_set_read;
 mod result_set_update;
 
-pub use result_set::{ColumnIndex, ResultSet, ResultSetNavigation, ResultSetStreamKind};
+pub(crate) use result_set::default_read_object;
+
+pub use result_set::{
+    default_object_as, ColumnIndex, ResultSet, ResultSetNavigation, ResultSetStreamKind,
+};
 pub use result_set_ext::ResultSetExt;
+pub use result_set_read::ResultSetRead;
 pub use result_set_update::ResultSetUpdate;

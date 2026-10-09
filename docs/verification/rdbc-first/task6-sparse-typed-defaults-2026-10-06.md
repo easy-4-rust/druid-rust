@@ -1,0 +1,15 @@
+# Task6 稀疏类型化默认完整合同迁移（2026-10-06）
+
+固定BASE5afe8609b177544ff7d18461aa84f69efe8ee90e，案例sparse_result_set_typed_defaults_preserve_error_priority，bodySHA a85595bd2424f201019469fc74e7618ac34b0199af59b70f7f69190f51eb133c。正式目标 crates/druid/tests/task6_complete_sparse_default_contract_test.rs#task6_sparse_result_set_typed_defaults_preserve_error_priority。
+
+原12次精确能力错误完整保留：decimal下标无scale与原标签amount/Some2，date/time/timestamp下标及原标签/Unspecified calendar，两种nullable type map None入口，Custom(vendor.Type)下标及列名。辅助函数只将旧Option scale映射big_decimal/big_decimal_with_scale等唯一标准入口；不会实现第二驱动或替换真实默认。实际SparseDefaultResultSet无可选getter覆盖。
+
+首次正式运行64630终态exit0：Buffered矩阵6/0及完整Sparse测试5/0合计11PASS0FAIL0ignored，日志task6-sparse-typed-defaults-initial.log。其中typed完整案例本身1/0，证明已存在生产行为的迁移；本案例没有生产修改，不宣称新runtime RED或制造RED。原完整12源码观察检查FULL12_TYPED_BASE_SOURCE_FLOOR=PASS，BASE哈希一致。
+
+精确绑定一行，移除旧Buffered列表同一占位名称并更新方法reverse index，全部1283前7基线字段保持。完整源码审计与自测/authority/purity/generated/C2同一68504待终态；暂不以预期计数替代实际输出。最新相关RDBC471/Druid145/Wrapper5=621/0是前一属性修复的执行范围；新绑定后完整workspace尚需新鲜验证。Task6 FIX_REQUIRED与完整18顶层任务保持。
+
+
+68504完整审计已终态：1241PASS42FAIL，固定1283前7字段一致，1104exact/179parameterized；自测15、标准纯度48/final、authority79/pending25/Physical73及原SHA、生成14、diff通过。完整C2 --no-execute exit1下一 sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor 缺显式完整分支。前述LIVE已替代。新typed案例首次正式1/0，不改变生产行为，不虚构RED。Task6 FIX_REQUIRED及18任务保留。
+
+
+新鲜完整workspace同一61393 LIVE（2026-10-06），日志task6-sparse-default-contracts-workspace.log；--workspace --locked --offline --no-fail-fast -j1串行测试。包含真实稀疏property默认、native Buffered行状态、生成真实typed stream/reader探针、Toasty StandardAdapterResultSet行状态及完整typed12迁移/两个占位ID移除。五文件格式check通过。前一3726/2不代表当前源码，本回归终态前不修改Rust/Cargo输入。下一完整C2缺口SQLite scalar/stream update case；18任务保持。

@@ -153,10 +153,7 @@ impl StandardLogicalPolicy {
         Fut: Future<Output = Result<T, RdbcError>>,
         S: Fn(&T) -> ExecResult,
     {
-        let params = prepared_parameters
-            .iter()
-            .map(PreparedInputParameter::scalar_value)
-            .collect::<Result<Vec<_>, RdbcError>>()?;
+        let params = Self::filter_parameter_values(&prepared_parameters)?;
         self.execute_with_parameter_context(
             sql,
             params,
@@ -264,12 +261,7 @@ impl StandardLogicalPolicy {
         self.ensure_open()?;
         let parameter_sets = prepared_parameter_sets
             .iter()
-            .map(|parameters| {
-                parameters
-                    .iter()
-                    .map(PreparedInputParameter::scalar_value)
-                    .collect::<Result<Vec<_>, RdbcError>>()
-            })
+            .map(|parameters| Self::filter_parameter_values(parameters))
             .collect::<Result<Vec<_>, RdbcError>>()?;
         self.execute_batch_counts(
             sql,
@@ -281,6 +273,24 @@ impl StandardLogicalPolicy {
             raw,
         )
         .await
+    }
+
+    /// 保留 BASE 的完整描述符 Filter 合同：含原生资源时无标量视图。
+    /// 资源只交给 adapter 读取，Filter 仍收到完整 prepared_parameters。
+    fn filter_parameter_values(
+        parameters: &[PreparedInputParameter],
+    ) -> Result<Vec<Value>, RdbcError> {
+        match parameters
+            .iter()
+            .map(PreparedInputParameter::scalar_value)
+            .collect()
+        {
+            Ok(values) => Ok(values),
+            Err(RdbcError::UnsupportedOperation {
+                operation: "prepared_parameter_requires_native_adapter",
+            }) => Ok(Vec::new()),
+            Err(error) => Err(error),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -65,7 +65,7 @@ def write_fixture(root: Path) -> tuple[Path, Path]:
     semantic = root / "semantic.tsv"
     semantic.write_text(
         SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n",
-        encoding="utf-8",
+        encoding="utf-8", newline="",
     )
     objects = []
     for fqcn in fqcns:
@@ -121,7 +121,7 @@ def write_fixture(root: Path) -> tuple[Path, Path]:
             sort_keys=True,
         )
         + "\n",
-        encoding="utf-8",
+        encoding="utf-8", newline="",
     )
     return semantic, oracle
 
@@ -150,14 +150,14 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
 
         self.semantic.write_text(
             SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n",
-            encoding="utf-8",
+            encoding="utf-8", newline="",
         )
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
         payload["semantic_sha256"] = hashlib.sha256(
             self.semantic.read_bytes()
         ).hexdigest()
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
 
     def write_rows_preserve_oracle(self, rows: list[list[str]]) -> None:
@@ -165,7 +165,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
 
         self.semantic.write_text(
             SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n",
-            encoding="utf-8",
+            encoding="utf-8", newline="",
         )
 
     def assert_rejected(self) -> None:
@@ -178,6 +178,13 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
                 self.oracle,
                 expected_source_manifest_sha256=self.source_manifest_sha256,
             )
+
+    def test_fixture_writes_canonical_lf_bytes_on_every_platform(self) -> None:
+        """Windows 夹具也必须写入 LF，避免正向控制在无关格式门禁失败。"""
+
+        for path in (self.semantic, self.oracle):
+            with self.subTest(path=path.name):
+                self.assertNotIn(b"\r", path.read_bytes())
 
     def test_accepts_complete_source_bound_planned_inventory(self) -> None:
         """A complete source-bound 52 + 17 planned inventory is the positive control."""
@@ -332,6 +339,162 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
                 require_logical_evidence=False,
             )
 
+    def final_state_policy(self, rows: list[list[str]]) -> None:
+        """调用真实最终状态策略；它不是 compiler/runtime 的替代证据。"""
+        import verify_jdbc42_semantic_inventory as verifier
+
+        policy = getattr(verifier, "verify_final_state_policy", None)
+        self.assertTrue(callable(policy), "final semantic state policy is missing")
+        policy(rows)
+
+    def completed_state_rows(self) -> list[list[str]]:
+        """仅构造状态策略正向控制，不宣称这些合成类型已编译。"""
+        rows = self.rows()
+        for row in rows:
+            row[5] = "druid_rdbc::fixture::" + row[2]
+            row[6] = "DECLARED"
+            row[12:18] = ["-", "NOT_APPLICABLE", "-", "NOT_APPLICABLE", "V0_STATIC", "NOT_APPLICABLE"]
+        return rows
+
+    def test_final_state_policy_accepts_complete_declared_static_states(self) -> None:
+        """纯值状态可以 DECLARED，但最终来源与编译证据仍由后续门禁验证。"""
+        self.final_state_policy(self.completed_state_rows())
+
+    def test_final_state_policy_rejects_each_planned_column(self) -> None:
+        """每一计划态列独立暴露失败，避免被别列或 digest 错误遮蔽。"""
+        for index, value in [(6, "PLANNED_TARGET"), (13, "PLANNED"), (15, "PLANNED"), (17, "PLANNED")]:
+            with self.subTest(column=index):
+                rows = self.completed_state_rows()
+                rows[0][index] = value
+                with self.assertRaisesRegex(VerificationError, "planned"):
+                    self.final_state_policy(rows)
+
+    def test_final_state_policy_rejects_unknown_missing_unresolved_any_field(self) -> None:
+        """最终十九字段不能保留未知、缺失或未解析占位。"""
+        for value in ["UNKNOWN", "MISSING", "unresolved", "PLANNED_FUTURE", "PLANNED_V2"]:
+            with self.subTest(value=value):
+                rows = self.completed_state_rows()
+                rows[0][18] = value
+                with self.assertRaisesRegex(VerificationError, "unresolved|planned"):
+                    self.final_state_policy(rows)
+
+    def test_final_state_policy_rejects_empty_canonical_and_invalid_target_state(self) -> None:
+        for index, value in [(5, ""), (5, " "), (5, "-"), (6, "NOT_APPLICABLE")]:
+            with self.subTest(column=index, value=value):
+                rows = self.completed_state_rows()
+                rows[0][index] = value
+                with self.assertRaisesRegex(VerificationError, "canonical|target"):
+                    self.final_state_policy(rows)
+
+    def test_final_state_policy_rejects_fake_live_and_not_applicable_paths(self) -> None:
+        for path_index, state_index in [(12, 13), (14, 15)]:
+            for state, path in [("LIVE", "-"), ("LIVE", "outside/fake.rs::Fake"), ("NOT_APPLICABLE", "crates/fake.rs::Fake")]:
+                with self.subTest(state=state, path=path, column=state_index):
+                    rows = self.completed_state_rows()
+                    rows[0][path_index], rows[0][state_index] = path, state
+                    with self.assertRaisesRegex(VerificationError, "implementation"):
+                        self.final_state_policy(rows)
+
+    def test_final_state_policy_rejects_live_without_live_evidence(self) -> None:
+        for variant in ["adapter", "logical", "capability"]:
+            with self.subTest(variant=variant):
+                rows = self.completed_state_rows()
+                if variant == "adapter":
+                    rows[0][12:14] = ["crates/druid-wrapper/src/live.rs::Live", "LIVE"]
+                elif variant == "logical":
+                    rows[0][14:16] = ["crates/druid/src/core/live.rs::Live", "LIVE"]
+                rows[0][17] = "LIVE"
+                with self.assertRaisesRegex(VerificationError, "evidence"):
+                    self.final_state_policy(rows)
+
+    def test_final_state_policy_accepts_live_states_without_certifying_paths(self) -> None:
+        rows = self.completed_state_rows()
+        rows[0][12:18] = ["crates/druid-wrapper/src/live.rs::Live", "LIVE", "crates/druid/src/core/live.rs::Live", "LIVE", "V1_LIVE", "LIVE"]
+        self.final_state_policy(rows)
+
+    def test_final_state_policy_accepts_existing_matrix_evidence_reference(self) -> None:
+        """保留已接受矩阵引用的状态语法；真实矩阵证据须另行核验。"""
+        rows = self.completed_state_rows()
+        rows[0][12:18] = ["crates/druid-wrapper::standard_adapter_matrix", "LIVE", "-", "NOT_APPLICABLE", "V1_LIVE", "LIVE"]
+        self.final_state_policy(rows)
+
+    def test_final_state_policy_rejects_unknown_evidence_and_capability(self) -> None:
+        for index, value in [(16, "V9_FAKE"), (17, "DISABLED"), (13, "SKIPPED"), (15, "SKIPPED")]:
+            with self.subTest(column=index):
+                rows = self.completed_state_rows()
+                rows[0][index] = value
+                with self.assertRaisesRegex(VerificationError, "state|evidence"):
+                    self.final_state_policy(rows)
+
+    def real_source_bound_inputs(self):
+        """使用真实且已校验的 source oracle，保持冻结文件只读。"""
+        import verify_jdbc42_semantic_inventory as verifier
+
+        root = SCRIPTS.parent
+        records, hashes = verifier.load_oracle(root / verifier.DEFAULT_ORACLE, verifier.SOURCE_MANIFEST_SHA256)
+        rows = verifier.parse_semantic_payload((root / verifier.DEFAULT_SEMANTIC).read_bytes())
+        return rows, records, hashes
+
+    def final_source_binding(self, rows, records, hashes):
+        import verify_jdbc42_semantic_inventory as verifier
+
+        binding = getattr(verifier, "verify_final_source_binding", None)
+        self.assertTrue(callable(binding), "final source binding is missing")
+        return binding(rows, records, hashes)
+
+    def test_final_source_binding_reconstructs_accepted_frozen_mapping(self) -> None:
+        """恢复 Task3 接受的 DriverRegistry 映射，而非覆盖冻结摘要。"""
+        rows, records, hashes = self.real_source_bound_inputs()
+        self.assertIn(self.final_source_binding(rows, records, hashes), hashes)
+
+    def test_final_source_binding_allows_evidence_progress_without_rewriting_oracle(self) -> None:
+        """状态晋升不改变 Java 来源身份；状态与真实证据由其他组件核验。"""
+        rows, records, hashes = self.real_source_bound_inputs()
+        expected = self.final_source_binding(rows, records, hashes)
+        rows[0][6] = "LIVE"
+        rows[0][12:18] = ["crates/druid-wrapper/src/live.rs::Live", "LIVE", "crates/druid/src/core/live.rs::Live", "LIVE", "V1_LIVE", "LIVE"]
+        self.assertEqual(expected, self.final_source_binding(rows, records, hashes))
+
+    def test_final_source_binding_rejects_each_source_identity_drift(self) -> None:
+        for index in [0, 1, 2, 7, 8]:
+            with self.subTest(column=index):
+                rows, records, hashes = self.real_source_bound_inputs()
+                rows[0][index] += "_FORGED"
+                with self.assertRaisesRegex(VerificationError, "source|coverage"):
+                    self.final_source_binding(rows, records, hashes)
+
+    def test_final_source_binding_rejects_missing_extra_and_duplicate_objects(self) -> None:
+        for variant in ["missing", "extra", "duplicate"]:
+            with self.subTest(variant=variant):
+                rows, records, hashes = self.real_source_bound_inputs()
+                if variant == "missing":
+                    rows.pop()
+                elif variant == "extra":
+                    row = rows[-1].copy()
+                    row[0], row[1] = "java:javax.sql.Fake#TYPE", "javax.sql.Fake"
+                    rows.append(row)
+                else:
+                    rows[-1] = rows[0].copy()
+                with self.assertRaisesRegex(VerificationError, "source|coverage|duplicate"):
+                    self.final_source_binding(rows, records, hashes)
+
+    def test_final_source_binding_rejects_frozen_semantic_digest_drift(self) -> None:
+        rows, records, _ = self.real_source_bound_inputs()
+        with self.assertRaisesRegex(VerificationError, "frozen.*digest"):
+            self.final_source_binding(rows, records, {"0" * 64})
+
+    def test_final_source_binding_rejects_modified_oracle_declaration(self) -> None:
+        rows, records, hashes = self.real_source_bound_inputs()
+        records[rows[0][1]]["normalized_signature"] += "_FORGED"
+        with self.assertRaisesRegex(VerificationError, "frozen.*digest"):
+            self.final_source_binding(rows, records, hashes)
+
+    def test_final_source_binding_rejects_malformed_field_count(self) -> None:
+        rows, records, hashes = self.real_source_bound_inputs()
+        rows[0].pop()
+        with self.assertRaisesRegex(VerificationError, "19 fields"):
+            self.final_source_binding(rows, records, hashes)
+
     def test_rejects_unknown_phase_fail_closed(self) -> None:
         """No unimplemented future phase may silently reuse logical validation."""
 
@@ -400,7 +563,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
         payload["archive_sha256"] = "0" * 64
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
@@ -410,7 +573,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
         payload["source_manifest_sha256"] = "0" * 64
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
@@ -421,13 +584,13 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
         payload = json.loads(original)
         payload["extra"] = "not part of the oracle schema"
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
         self.oracle.write_text(
             original.replace("{\n", '{\n  "archive_size": 94004963,\n', 1),
-            encoding="utf-8",
+            encoding="utf-8", newline="",
         )
         self.assert_rejected()
 
@@ -436,7 +599,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
 
         payload = json.loads(self.oracle.read_text(encoding="utf-8"))
         self.oracle.write_text(
-            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
@@ -450,7 +613,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             self.semantic.read_bytes()
         ).hexdigest()
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
@@ -461,7 +624,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             self.semantic.read_bytes()
         ).hexdigest()
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
@@ -472,7 +635,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             self.semantic.read_bytes()
         ).hexdigest()
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 
@@ -487,7 +650,7 @@ class Jdbc42SemanticInventoryVerifierTest(unittest.TestCase):
             self.semantic.read_bytes()
         ).hexdigest()
         self.oracle.write_text(
-            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8", newline=""
         )
         self.assert_rejected()
 

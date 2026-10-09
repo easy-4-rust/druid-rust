@@ -7,6 +7,10 @@ use druid_rdbc::types::Row;
 pub(crate) struct StandardQueryResult {
     pub(crate) rows: Vec<Row>,
     pub(crate) columns: Vec<ColumnDescriptor>,
+    /// 驱动实际提供的标签；合成元数据占位名不参与列查找。
+    pub(crate) column_labels: Vec<String>,
+    /// 与查询在同一驱动执行范围内取得的完整生成键；普通查询为空。
+    pub(crate) generated_keys: Vec<i64>,
 }
 
 impl StandardQueryResult {
@@ -24,7 +28,12 @@ impl StandardQueryResult {
                 )
             })
             .collect();
-        Self { rows, columns }
+        Self {
+            rows,
+            columns,
+            column_labels: labels,
+            generated_keys: Vec::new(),
+        }
     }
 
     pub(crate) fn rows_only(rows: Vec<Row>) -> Self {

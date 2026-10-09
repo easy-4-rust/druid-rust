@@ -9,8 +9,8 @@ use druid_rdbc::metadata::{
 };
 use druid_rdbc::result_set::{ColumnIndex, ResultSet};
 use druid_rdbc::statement::{
-    CallableOutParameter, CallableParameter, CallableStatement, GeneratedKeys, ParameterIndex,
-    PreparedParameter, PreparedStatement, Statement, StatementOptions,
+    CallableOutParameter, CallableParameter, CallableStatement, ExecutionResult, GeneratedKeys,
+    ParameterIndex, PreparedParameter, PreparedStatement, Statement, StatementOptions,
 };
 use druid_rdbc::types::Value;
 use std::collections::VecDeque;
@@ -33,6 +33,12 @@ pub struct TrackingState {
     pub prepared_clear_attempt_count: AtomicUsize,
     pub prepared_is_closed_attempt_count: AtomicUsize,
     pub prepared_execution_parameters: Mutex<Vec<Vec<PreparedParameter>>>,
+    pub prepared_input_bindings: Mutex<
+        Vec<(
+            ParameterIndex,
+            druid_rdbc::statement::PreparedInputParameter,
+        )>,
+    >,
     pub statement_query_timeouts: Mutex<Vec<i32>>,
     pub result_set_close_count: AtomicUsize,
     pub result_set_close_attempt_count: AtomicUsize,
@@ -711,6 +717,20 @@ impl TrackingPreparedStatement {
     }
 
     fn generic_results(&self) -> Vec<druid_rdbc::statement::ExecutionResult> {
+        // 保留 BASE PreparedConnection 的混合结果合同，不以三个查询游标代替。
+        if self.sql == "MULTI" {
+            return vec![
+                ExecutionResult::ResultSet(Box::new(TrackingResultSet::rows(
+                    Arc::clone(&self.state),
+                    vec![vec![Value::Int(10)]],
+                ))),
+                ExecutionResult::UpdateCount(2),
+                ExecutionResult::ResultSet(Box::new(TrackingResultSet::rows(
+                    Arc::clone(&self.state),
+                    vec![vec![Value::Int(20)]],
+                ))),
+            ];
+        }
         let count = if self.sql.contains("multi_result") {
             3
         } else {
@@ -732,6 +752,14 @@ druid_rdbc::impl_standard_wrapper!(TrackingPreparedStatement => PreparedStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingPreparedStatement {
+    async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.state.record("prepared.generated_keys");
+        Ok(Box::new(TrackingResultSet::rows(
+            Arc::clone(&self.state),
+            vec![vec![Value::Int(99)]],
+        )))
+    }
+
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         Ok(self.query_timeout)
     }
@@ -791,6 +819,29 @@ impl Statement for TrackingPreparedStatement {
 
 #[async_trait::async_trait]
 impl PreparedStatement for TrackingPreparedStatement {
+    fn set_input_parameter(
+        &mut self,
+        index: ParameterIndex,
+        input: druid_rdbc::statement::PreparedInputParameter,
+    ) -> Result<(), RdbcError> {
+        // 记录型 driver 与 BASE 参数槽 fixture 一样保留富描述符，不读取资源。
+        match input.scalar_value() {
+            Ok(value) => self.set_parameter(PreparedParameter { index, value })?,
+            Err(RdbcError::UnsupportedOperation { .. }) => {
+                self.state.check_failure("prepared_set_parameter")?;
+            }
+            Err(error) => return Err(error),
+        }
+        let mut bindings = self.state.prepared_input_bindings.lock().unwrap();
+        if let Some(existing) = bindings.iter_mut().find(|(bound, _)| *bound == index) {
+            *existing = (index, input);
+        } else {
+            bindings.push((index, input));
+            bindings.sort_by_key(|(bound, _)| *bound);
+        }
+        Ok(())
+    }
+
     fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
         self.state.check_failure("prepared_set_parameter")?;
         self.state.record(format!(
@@ -817,6 +868,7 @@ impl PreparedStatement for TrackingPreparedStatement {
             .fetch_add(1, Ordering::AcqRel);
         self.state.check_failure("prepared_clear_parameters")?;
         self.parameters.clear();
+        self.state.prepared_input_bindings.lock().unwrap().clear();
         self.state.record("prepared.clear_parameters");
         Ok(())
     }
@@ -881,6 +933,10 @@ druid_rdbc::impl_standard_wrapper!(TrackingCallableStatement => CallableStatemen
 
 #[async_trait::async_trait]
 impl Statement for TrackingCallableStatement {
+    async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Statement::generated_keys(&mut self.prepared).await
+    }
+
     fn query_timeout(&self) -> Result<i32, RdbcError> {
         Statement::query_timeout(&self.prepared)
     }

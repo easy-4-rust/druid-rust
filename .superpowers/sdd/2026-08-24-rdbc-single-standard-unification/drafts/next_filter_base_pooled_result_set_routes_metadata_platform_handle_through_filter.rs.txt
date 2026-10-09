@@ -1,0 +1,82 @@
+#[tokio::test]
+async fn pooled_result_set_routes_metadata_platform_handle_through_filter() {
+    let physical_log = Arc::new(Mutex::new(Vec::new()));
+    let physical_probe = PhysicalResultSetProbe::new(Arc::clone(&physical_log), false);
+    let context = ResultSetFilterContext::new();
+    let mut pass_chain = FilterChain::new();
+    pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    assert_eq!(
+        pass_chain
+            .result_set_get_meta_data(&physical_probe, &context)
+            .unwrap()
+            .column_count()
+            .unwrap(),
+        0
+    );
+    assert_eq!(calls(&physical_log), ["physical:meta_data"]);
+
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let fail = Arc::new(AtomicBool::new(false));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(MetadataShortCircuitFilter {
+        calls: Arc::clone(&call_log),
+        fail: Arc::clone(&fail),
+    }));
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite 工厂必须创建成功");
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        82,
+        "sqlite-metadata-filter".to_string(),
+        Some(Arc::new(filter_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1")
+        .await
+        .unwrap();
+    assert_eq!(
+        result_set
+            .meta_data(&mut connection)
+            .unwrap()
+            .column_count()
+            .unwrap(),
+        0
+    );
+    fail.store(true, Ordering::Release);
+    assert_eq!(
+        result_set.meta_data(&mut connection).map(|_| ()),
+        Err(RdbcError::DriverError(
+            "filtered metadata failure".to_string()
+        ))
+    );
+    assert_eq!(statement.exception_count(), 1);
+    assert_eq!(
+        calls(&call_log),
+        ["result_set_get_meta_data", "result_set_get_meta_data"]
+    );
+    result_set.close_with_connection(&mut connection).unwrap();
+
+    // VALUE_ADD / V5_HOST：真实 Toasty SQLite metadata 经默认 Filter 返回平台句柄。
+    let mut pass_chain = FilterChain::new();
+    pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        83,
+        "sqlite-metadata-pass-through".to_string(),
+        Some(Arc::new(pass_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1, 'two'")
+        .await
+        .unwrap();
+    let metadata = result_set.meta_data(&mut connection).unwrap();
+    assert_eq!(metadata.column_count().unwrap(), 2);
+    result_set.close_with_connection(&mut connection).unwrap();
+}

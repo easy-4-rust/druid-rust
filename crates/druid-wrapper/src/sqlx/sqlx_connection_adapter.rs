@@ -1317,8 +1317,18 @@ impl SqlxConnectionAdapter {
                     .execute(connection)
                     .await
                     .map_err(Self::driver_error)?;
+                // 驱动在每次操作后都报告连接级 rowid；只有本次非零 INSERT 才能发布它。
+                let inserts_rows = matches!(
+                    sqlparser::parser::Parser::parse_sql(
+                        &sqlparser::dialect::SQLiteDialect {},
+                        sql
+                    )
+                    .as_deref(),
+                    Ok([sqlparser::ast::Statement::Insert(_)])
+                );
                 let last_insert_id =
-                    (result.last_insert_rowid() != 0).then_some(result.last_insert_rowid());
+                    (inserts_rows && result.rows_affected() > 0 && result.last_insert_rowid() != 0)
+                        .then_some(result.last_insert_rowid());
                 Ok(AdapterUpdateResult {
                     rows_affected: result.rows_affected(),
                     last_insert_id,
@@ -1378,18 +1388,46 @@ impl druid_rdbc::connection::Connection for SqlxConnectionAdapter {
         sql: &str,
         options: druid_rdbc::statement::StatementOptions,
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        self.prepare_statement_with_generated_keys(
+            sql,
+            options,
+            druid_rdbc::statement::GeneratedKeys::None,
+        )
+        .await
+    }
+
+    /// SQLite auto 准备将请求存入 owned statement；未验证的模式在建句柄前拒绝。
+    async fn prepare_statement_with_generated_keys(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        match &generated_keys {
+            druid_rdbc::statement::GeneratedKeys::None => {}
+            druid_rdbc::statement::GeneratedKeys::ReturnGeneratedKeys
+                if self.standard_backend_key_core() == "sqlite" => {}
+            _ => {
+                return Err(RdbcError::UnsupportedOperation {
+                    operation: "connection_prepare_statement_generated_keys",
+                })
+            }
+        }
         let actor = self.standard_actor_core()?;
         let parameter_count = actor.parameter_count(sql).await?;
         let result_set_meta_data = druid_rdbc::metadata::ResultSetMetaDataSnapshot::new(
             actor.describe_columns(sql).await?,
         );
-        Ok(Box::new(SqlxPreparedStatement::owned_prepared_statement(
-            sql.to_owned(),
-            actor,
-            options,
-            parameter_count,
-            result_set_meta_data,
-        )))
+        Ok(Box::new(
+            SqlxPreparedStatement::owned_prepared_statement(
+                sql.to_owned(),
+                actor,
+                options,
+                parameter_count,
+                result_set_meta_data,
+            )
+            .with_generated_keys_request(generated_keys),
+        ))
     }
 
     async fn database_meta_data(

@@ -159,7 +159,7 @@ TRACE_RECORD_CALLSITE_COUNTS = {
     (
         "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
         "task4_trace_parameter_set",
-    ): 1,
+    ): 2,
     (
         "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
         "task4_trace_prepared_query",
@@ -205,7 +205,7 @@ TRACE_RECORD_CALLSITE_COUNTS = {
     (
         "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
         "task4_trace_parameter_set",
-    ): 1,
+    ): 2,
     (
         "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
         "task4_trace_prepared_query",
@@ -252,6 +252,14 @@ TRACE_RECORD_CALLSITE_COUNTS = {
     },
 }
 TRACE_BRANCH_CALLSITE_COUNTS = {
+    **{
+        (relative, function, "task4_trace_parameter_set"): 1
+        for relative in (
+            "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
+            "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
+        )
+        for function in ("set_input_parameter", "set_parameter")
+    },
     (
         "crates/druid-wrapper/src/standard_adapter_statement.rs",
         "execute_update",

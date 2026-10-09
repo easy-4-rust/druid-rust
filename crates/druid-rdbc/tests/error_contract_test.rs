@@ -3,7 +3,9 @@ use std::error::Error;
 
 use druid_rdbc::compat::{DataTruncation, SqlClientInfoException};
 use druid_rdbc::error::{
-    BatchUpdateCounts, RdbcError, RdbcErrorKind, SqlException, SqlExceptionCause, SqlWarning,
+    BatchUpdateCounts, BatchUpdateException, DataTruncation as CanonicalDataTruncation, RdbcError,
+    RdbcErrorKind, SqlClientInfoException as CanonicalSqlClientInfoException, SqlException,
+    SqlExceptionCause, SqlWarning,
 };
 use druid_rdbc::statement::Statement;
 
@@ -205,4 +207,70 @@ async fn canonical_batch_path_preserves_large_failure_counts_and_java_success_vi
         .add_batch("large".to_owned())
         .expect("single batch item must be accepted");
     assert_eq!(successful.execute_batch().await, Ok(vec![large]));
+}
+
+#[test]
+fn canonical_batch_exception_retains_compat_identity_and_large_counts() {
+    let counts = vec![i64::MIN, i64::MAX, i64::from(i32::MAX) + 7, -2, -3];
+    let mut exception = SqlException::new(
+        1205,
+        Some("40001".to_owned()),
+        Some("batch failed".to_owned()),
+    );
+    exception.set_next_exception(SqlException::driver(1213, "retry transaction"));
+    let canonical = BatchUpdateException::new(exception.clone(), counts.clone());
+    // 兼容路径必须直接持有同一标准对象，不能通过复制 DTO 隐藏身份差异。
+    let compatibility: druid_rdbc::compat::BatchUpdateException = canonical;
+    assert_eq!(compatibility.exception, exception);
+    assert_eq!(compatibility.large_update_counts(), counts);
+    assert_eq!(
+        compatibility.update_counts(),
+        vec![0, -1, i32::MIN + 6, -2, -3]
+    );
+    assert_eq!(
+        std::any::TypeId::of::<BatchUpdateException>(),
+        std::any::TypeId::of::<druid_rdbc::compat::BatchUpdateException>()
+    );
+}
+
+#[test]
+fn canonical_truncation_retains_read_write_and_unknown_sizes() {
+    for read in [false, true] {
+        let canonical = CanonicalDataTruncation {
+            index: 3,
+            parameter: !read,
+            read,
+            data_size: None,
+            transfer_size: Some(32),
+        };
+        let compatibility: DataTruncation = canonical.clone();
+        assert_eq!(compatibility, canonical);
+        assert_eq!(compatibility.index, 3);
+        assert_eq!(compatibility.parameter, !read);
+        assert_eq!(compatibility.read, read);
+        assert_eq!(compatibility.data_size, None);
+        assert_eq!(compatibility.transfer_size, Some(32));
+    }
+}
+
+#[test]
+fn canonical_client_info_exception_retains_case_sensitive_property_payload() {
+    let failures = HashMap::from([
+        ("User".to_owned(), "REASON_VALUE_INVALID".to_owned()),
+        ("user".to_owned(), "REASON_UNKNOWN_PROPERTY".to_owned()),
+        ("vendor".to_owned(), "vendor:private-failure".to_owned()),
+    ]);
+    let exception = SqlException::new(
+        7,
+        Some("01S00".to_owned()),
+        Some("client info rejected".to_owned()),
+    );
+    let canonical = CanonicalSqlClientInfoException {
+        exception: exception.clone(),
+        failed_properties: failures.clone(),
+    };
+    let compatibility: SqlClientInfoException = canonical;
+    assert_eq!(compatibility.exception, exception);
+    assert_eq!(compatibility.failed_properties, failures);
+    assert_eq!(compatibility.failed_properties.len(), 3);
 }

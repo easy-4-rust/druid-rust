@@ -68,6 +68,8 @@ pub struct PoolInner {
     pub(crate) idle: parking_lot::Mutex<VecDeque<DruidConnectionHolder>>,
     pub(crate) notify: Notify,
     pub(crate) active_count: AtomicUsize,
+    /// 已同步完成丢弃计数、但仍由逻辑租约持有的连接数量。
+    pending_owner_discards: AtomicUsize,
     pub(crate) active_peak: AtomicUsize,
     pub(crate) active_peak_time_millis: AtomicU64,
     pub(crate) wait_count: AtomicUsize,
@@ -129,6 +131,7 @@ impl PoolInner {
             idle: parking_lot::Mutex::new(VecDeque::new()),
             notify: Notify::new(),
             active_count: AtomicUsize::new(0),
+            pending_owner_discards: AtomicUsize::new(0),
             active_peak: AtomicUsize::new(0),
             active_peak_time_millis: AtomicU64::new(0),
             wait_count: AtomicUsize::new(0),
@@ -960,12 +963,24 @@ impl PoolInner {
             }
         }
 
-        if let Some(default_catalog) = self.config.default_catalog.as_deref() {
-            if !default_catalog.is_empty()
-                && connection
-                    .catalog()
-                    .is_ok_and(|value| value.as_deref() != Some(default_catalog))
+        // 对应 Java initConnection：隔离级别位于 readOnly 与 catalog 之间。
+        // 原始 JDBC 数字通过标准类型保留，不能在 SPI 合并时遗漏配置应用。
+        if let Some(default_transaction_isolation) = self.config.default_transaction_isolation {
+            let isolation = druid_rdbc::connection::TransactionIsolation::from_jdbc(i32::from(
+                default_transaction_isolation,
+            ));
+            if connection
+                .transaction_isolation()
+                .is_ok_and(|current| current != isolation)
             {
+                connection.set_transaction_isolation(isolation).await?;
+            }
+        }
+
+        if let Some(default_catalog) = self.config.default_catalog.as_deref() {
+            // 显式配置 catalog 必须调用 setter；驱动可能支持 setter 而不支持 getter。
+            // 保留 Java 非空 catalog 的初始化合同及驱动 setter 的原始错误。
+            if !default_catalog.is_empty() {
                 connection.set_catalog(Some(default_catalog)).await?;
             }
         }
@@ -1103,7 +1118,7 @@ impl PoolInner {
     /// 归还连接到空闲队列。
     pub fn return_connection(
         &self,
-        holder: DruidConnectionHolder,
+        mut holder: DruidConnectionHolder,
         disposition: ConnectionRecycleDisposition,
     ) -> bool {
         // 所有 return 分支结束后再决定是否关闭 worker，保证最后一条
@@ -1156,6 +1171,7 @@ impl PoolInner {
             return self.discard_recycled_holder(holder);
         }
 
+        let mut return_completion = None;
         let returned = {
             let mut queue = self.idle.lock();
             // Java Druid 的 maxIdle 已 deprecated，真实 idle 容量由 maxActive
@@ -1163,6 +1179,8 @@ impl PoolInner {
             if queue.len() >= self.config.max_open {
                 Err(holder)
             } else {
+                // 锁内完成复用决定并移除本次通知，后续租约不会继承旧等待者。
+                return_completion = holder.take_return_completion();
                 queue.push_back(holder);
                 Ok(queue.len())
             }
@@ -1175,6 +1193,10 @@ impl PoolInner {
             Ok(pooling_count) => {
                 self.record_pooling_count(pooling_count);
                 self.notify.notify_one();
+                if let Some(completion) = return_completion {
+                    // 完成通知在所有归还统计之后发出，跨线程等待者看到完整结果。
+                    let _ = completion.send(());
+                }
                 false
             }
         }
@@ -1182,6 +1204,9 @@ impl PoolInner {
 
     /// Records one fatal discard before the holder can be transferred by its logical owner.
     pub(crate) fn signal_owner_discard(&self, disposition: &ConnectionRecycleDisposition) {
+        // 先保留关闭 worker 的存活义务，再减少 active，避免 shutdown 将
+        // “计数已释放”误认为底层 holder 已经完成转交。
+        self.pending_owner_discards.fetch_add(1, Ordering::AcqRel);
         let was_active = self
             .active_count
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
@@ -1189,6 +1214,7 @@ impl PoolInner {
             })
             .is_ok();
         if !was_active {
+            self.pending_owner_discards.fetch_sub(1, Ordering::AcqRel);
             return;
         }
         self.close_count.fetch_add(1, Ordering::Relaxed);
@@ -1216,6 +1242,8 @@ impl PoolInner {
                 drop(error.0);
             }
         }
+        // 真正的关闭命令已入队后，才允许最后一个租约触发 worker 退出。
+        self.pending_owner_discards.fetch_sub(1, Ordering::AcqRel);
         false
     }
 
@@ -1273,12 +1301,18 @@ impl PoolInner {
 
     /// 当池已关闭且最后一个活跃租约已归还时请求关闭 worker。
     pub(crate) fn request_close_worker_shutdown_if_idle(&self) {
-        if !self.closed.load(Ordering::Acquire) || self.active_count.load(Ordering::Acquire) != 0 {
+        if !self.closed.load(Ordering::Acquire) || !self.close_worker_is_idle() {
             return;
         }
         if let Some(sender) = self.close_sender.read().clone() {
             let _ = sender.send(None);
         }
+    }
+
+    /// 返回关闭 worker 是否已无待归还租约；结果用于决定能否发送退出命令。
+    pub(crate) fn close_worker_is_idle(&self) -> bool {
+        self.active_count.load(Ordering::Acquire) == 0
+            && self.pending_owner_discards.load(Ordering::Acquire) == 0
     }
 
     fn record_destroy(&self) {

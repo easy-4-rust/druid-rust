@@ -1,0 +1,81 @@
+struct ObjectUpdateShortCircuitFilter {
+    calls: Arc<Mutex<Vec<String>>>,
+    expected_custom: RdbcOpaqueObject,
+}
+
+impl ObjectUpdateShortCircuitFilter {
+    fn record(&self, call: String) {
+        self.calls
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(call);
+    }
+}
+
+impl ResultSetFilter for ObjectUpdateShortCircuitFilter {
+    fn result_set_update_object(
+        &self,
+        _chain: &mut ResultSetFilterChain<'_>,
+        column_index: usize,
+        value: RdbcObject,
+    ) -> Result<(), DruidError> {
+        assert_eq!(value, RdbcObject::Custom(self.expected_custom.clone()));
+        let RdbcObject::Custom(custom) = &value else {
+            panic!("updateObject 必须保留 vendor custom 对象分支");
+        };
+        let vendor = custom
+            .downcast_ref::<FilterVendorObjectProbe>()
+            .expect("必须保留具体 vendor 对象");
+        assert_eq!(vendor.id, 99);
+        self.record(format!(
+            "result_set_update_object:{column_index}:custom:{}:{}",
+            custom.class_name(),
+            vendor.id
+        ));
+        Ok(())
+    }
+
+    fn result_set_update_object_by_label(
+        &self,
+        _chain: &mut ResultSetFilterChain<'_>,
+        column_label: &str,
+        value: RdbcObject,
+    ) -> Result<(), DruidError> {
+        self.record(format!(
+            "result_set_update_object_by_label:{column_label}:{value:?}"
+        ));
+        if column_label == "fail" {
+            Err(DruidError::DriverError(
+                "filtered updateObject failure".to_string(),
+            ))
+        } else {
+            Ok(())
+        }
+    }
+
+    fn result_set_update_object_with_scale_or_length(
+        &self,
+        _chain: &mut ResultSetFilterChain<'_>,
+        column_index: usize,
+        value: RdbcObject,
+        scale_or_length: i32,
+    ) -> Result<(), DruidError> {
+        self.record(format!(
+            "result_set_update_object_with_scale_or_length:{column_index}:{value:?}:{scale_or_length}"
+        ));
+        Ok(())
+    }
+
+    fn result_set_update_object_by_label_with_scale_or_length(
+        &self,
+        _chain: &mut ResultSetFilterChain<'_>,
+        column_label: &str,
+        value: RdbcObject,
+        scale_or_length: i32,
+    ) -> Result<(), DruidError> {
+        self.record(format!(
+            "result_set_update_object_by_label_with_scale_or_length:{column_label}:{value:?}:{scale_or_length}"
+        ));
+        Ok(())
+    }
+}

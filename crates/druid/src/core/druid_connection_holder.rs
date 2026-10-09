@@ -42,6 +42,8 @@ enum ConnectionOwnerPolicy {
 /// Owns exactly one canonical driver connection and its pool lifecycle state.
 pub struct DruidConnectionHolder {
     connection: Option<Box<dyn Connection>>,
+    /// 原生逻辑关闭的完成通知，随 holder 转移到空闲队列或关闭 worker。
+    return_completion: Option<tokio::sync::oneshot::Sender<()>>,
     owner: ConnectionOwnerPolicy,
     /// Driver connection identifier.
     pub id: u64,
@@ -199,6 +201,7 @@ impl DruidConnectionHolder {
         let now = Instant::now();
         Self {
             connection,
+            return_completion: None,
             owner,
             id,
             created_at: now,
@@ -280,6 +283,28 @@ impl DruidConnectionHolder {
         self.resources.has_open_resources()
     }
 
+    /// 建立本次原生归还的完成通知；返回取消安全的等待端。
+    /// 通知端随 holder 所有权转移，等待端取消不会撤销驱动关闭。
+    pub(crate) fn begin_return_completion(&mut self) -> tokio::sync::oneshot::Receiver<()> {
+        debug_assert!(self.return_completion.is_none());
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        self.return_completion = Some(sender);
+        receiver
+    }
+
+    /// 完成本次归还通知；只能在成功入队或物理关闭尝试结束后调用。
+    pub(crate) fn complete_return(&mut self) {
+        if let Some(completion) = self.take_return_completion() {
+            // 逻辑等待者可能已取消并 Drop；worker 仍完成独立持有的关闭。
+            let _ = completion.send(());
+        }
+    }
+
+    /// 移交本次通知端，供池在空闲队列和统计全部更新后确认完成。
+    pub(crate) fn take_return_completion(&mut self) -> Option<tokio::sync::oneshot::Sender<()>> {
+        self.return_completion.take()
+    }
+
     /// Closes resources, cached statements, and the raw connection exactly once.
     pub async fn close_standard_connection(&mut self) -> Result<(), DruidError> {
         let mut first_error = self
@@ -296,6 +321,8 @@ impl DruidConnectionHolder {
                 first_error.get_or_insert_with(|| error.into());
             }
         }
+        // 即使驱动关闭返回错误，Java recycle 仍在真实关闭尝试结束后返回。
+        self.complete_return();
         first_error.map_or(Ok(()), Err)
     }
 
@@ -377,7 +404,7 @@ impl DruidConnectionHolder {
     }
 
     /// Restores the captured connection state and listener scopes.
-    pub async fn reset(&mut self, _keep_transaction_isolation: bool) -> Result<(), DruidError> {
+    pub async fn reset(&mut self, keep_transaction_isolation: bool) -> Result<(), DruidError> {
         let defaults = self.defaults.clone();
         let reset_schema = !self.should_restore_schema_on_recycle();
         defaults
@@ -385,6 +412,7 @@ impl DruidConnectionHolder {
                 self.standard_connection_mut()
                     .ok_or(DruidError::ConnectionDiscarded)?,
                 reset_schema,
+                keep_transaction_isolation,
             )
             .await?;
         self.clear_connection_event_listeners();

@@ -1,0 +1,19 @@
+# 完整连接状态合同恢复（2026-10-06）
+
+## 固定原案例
+
+BASE5afe8609b177544ff7d18461aa84f69efe8ee90e；physical_connection_lease_test#connection_defaults_capture_compare_and_reset_complete_state，body SHA0c7b4fe299716a981abf140005d6347f6e50299f54e23334f9e991557d826c71。8assert/6assert_eq全部保留，原holdability0->1->0、isolation2->8->2->8、keep隔离级别选项及真实lease Drop1完整映射。映射运行位置为core::connection_defaults::complete_state_tests::task6_connection_defaults_capture_compare_and_reset_complete_state；夹具保存实际可变状态，不伪造defaults/reset结果。
+
+## RED/GREEN
+
+接口RED17701 exit101/21错误：缺DriverValue、keep参数及signed快照；缓存夹具私有类型import错误单独修正，不算行为RED。补最小接口后33874真实完整Druid lib runtime RED99PASS6FAIL：原完整案例隔离值8vs2；复位顺序缺hold/isolation；状态错误被忽略；signed-1被硬编码2；setter错误未调用；cache key原MIN被统一0。
+
+生产capture读取实际holdability/isolation并记录各自支持状态；UnsupportedOperation/SqlFeatureNotSupported只跳过对应状态，真实错误传播。compare/reset支持keep选项，复位顺序read_only->holdability->isolation(除keep)->auto_commit，保留catalog/schema政策。Holder和logical recycle传递keep配置；Drop脏状态检查采用同一keep政策。Prepared cache key沿既有rdbc_code无损区分原值。
+
+完整Druid lib80234新鲜终态exit0/105PASS0FAIL，包含完整原案例、5组边界控制及缓存键控制。前述6个失败全部转GREEN，原99个PASS保留。七个草稿最初SHA核对通过，接入后fixture import修正另记；原8/6 floor与BASE SHA由未改动验证器重新核对。
+
+## API 与剩余门禁
+
+ResultSetHoldability添加DriverValue(i32)，默认CloseAtCommit/已知1、2不变，不推断能力。ConnectionDefaults public transaction_isolation返回u8->i32为显式pre-release breaking correction，见规格§13及ledger ruling；没有手改API快照，也不声明外部消费者/SemVer/allowlist通过。真实数字描述符的RDBC集成控制已接入但尚未取得运行终态。
+
+标准纯度48final、authority79/pending25/physical73、生成14及diff检查PASS。修复后完整workspace39202已启动task6-connection-state-workspace-final.log，Rust/Cargo输入冻结，尚未取得终态。完整源码映射与反向索引仅在draft候选中准备；正式sourcefloor1245/38未变。Task6仍FIX_REQUIRED，Task7八义务及Task8/P05–P07共18顶层任务继续开放。不得把局部GREEN或候选绑定计为发布完成。

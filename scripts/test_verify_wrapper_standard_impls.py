@@ -938,6 +938,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             "crates/druid-wrapper/src/standard_adapter_statement.rs",
             "crates/druid-wrapper/src/standard_adapter_prepared_statement.rs",
             "crates/druid-wrapper/src/toasty/toasty_connection_adapter.rs",
+            "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
         )
 
         def seed() -> None:
@@ -976,6 +977,29 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                     VerificationError, "multiplicity|mutually exclusive"
                 ):
                     verifier.verify_trace_branch_callsites(self.root)
+
+    def test_parameter_trace_is_pinned_to_both_successful_setter_paths(self) -> None:
+        """两个合法绑定入口各记录一次；相同文件总数不能掩盖跨方法搬移。"""
+
+        repository_source = Path(__file__).resolve().parents[1] / "crates/druid-wrapper/src"
+        temporary_source = self.root / "crates/druid-wrapper/src"
+        shutil.copytree(repository_source, temporary_source, dirs_exist_ok=True)
+        verify_trace_record_callsites(self.root)
+        for relative, receiver in (
+            ("standard_adapter_prepared_statement.rs", "executor"),
+            ("sqlx/sqlx_prepared_statement.rs", "actor"),
+        ):
+            path = temporary_source / relative
+            original = path.read_text(encoding="utf-8")
+            call = f"{receiver}.task4_trace_parameter_set();"
+            self.assertEqual(original.count(call), 2)
+            # 删除第一个入口的事件，再在第二个入口重复记录；文件总数仍为二。
+            moved = original.replace(call, "", 1).replace(call, call + "\n" + call, 1)
+            path.write_text(moved, encoding="utf-8")
+            with self.subTest(relative=relative):
+                with self.assertRaisesRegex(VerificationError, "branch callsite multiplicity"):
+                    verify_trace_record_callsites(self.root)
+            path.write_text(original, encoding="utf-8")
 
     def test_cargo_command_binds_exact_target_test_and_profile(self) -> None:
         spec = EvidenceSpec(

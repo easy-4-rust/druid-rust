@@ -1,0 +1,24 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    let pool = build_pool(factory.clone(), |builder| builder).await;
+    let mut connection = pool.get().await.expect("connection must open");
+    connection.begin().await.expect("transaction must begin");
+    connection
+        .set_read_only(true)
+        .await
+        .expect("read-only must change");
+    let state = factory.state(0);
+    state
+        .lock()
+        .expect("tracking state poisoned")
+        .events
+        .clear();
+
+    connection.close().await.expect("connection must recycle");
+
+    assert_eq!(
+        state.lock().expect("tracking state poisoned").events,
+        vec!["set_read_only", "set_auto_commit", "clear_warnings"]
+    );
+    assert_eq!(pool.state().idle_count, 1);
+}

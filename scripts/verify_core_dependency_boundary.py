@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Verify that druid-core's dependency graph contains no forbidden packages.
+"""Verify that the current druid core's default dependency graph is clean.
 
 Uses `cargo tree -e normal` which excludes dev-dependencies, giving an
-accurate picture of what druid-core actually ships to downstream consumers.
+accurate picture of what druid ships by default to downstream consumers.
+Optional feature matrices are verified separately; this is not an all-features gate.
 
 Exit 0 on success, 1 if any forbidden dependency is found.
 """
@@ -10,6 +11,7 @@ Exit 0 on success, 1 if any forbidden dependency is found.
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 FORBIDDEN = {
     "toasty",
@@ -36,7 +38,8 @@ TREE_LINE_RE = re.compile(r"[├└│\u2500\u2502 ]+ (\S+) v\S+")
 
 def main() -> int:
     result = subprocess.run(
-        ["cargo", "tree", "-p", "druid-core", "-e", "normal", "--depth", "999"],
+        ["cargo", "tree", "--locked", "-p", "druid", "-e", "normal", "--depth", "999"],
+        cwd=Path(__file__).resolve().parent.parent,
         capture_output=True,
         text=True,
     )
@@ -44,10 +47,15 @@ def main() -> int:
         print(f"ERROR: cargo tree failed:\n{result.stderr}", file=sys.stderr)
         return 1
 
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    if not lines or re.match(r"^druid v\S+(?:\s|$)", lines[0]) is None:
+        print("ERROR: cargo tree did not return the druid root package", file=sys.stderr)
+        return 1
+
     violations: list[str] = []
     seen: set[str] = set()
 
-    for line in result.stdout.splitlines():
+    for line in lines:
         match = TREE_LINE_RE.search(line)
         if not match:
             continue
@@ -61,12 +69,12 @@ def main() -> int:
 
     if violations:
         print(
-            f"\nFAIL: druid-core depends on forbidden packages: {sorted(set(violations))}",
+            f"\nFAIL: druid depends on forbidden packages: {sorted(set(violations))}",
             file=sys.stderr,
         )
         return 1
 
-    print("\nPASS: druid-core dependency graph is clean.")
+    print("\nPASS: druid default normal-dependency graph is clean.")
     return 0
 
 

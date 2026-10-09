@@ -133,6 +133,83 @@ impl SqlxConnectionActor {
         Box::new(SqlxStreamingResultSet::values(rows, columns).with_actor_lease(Arc::clone(self)))
     }
 
+    /// 为 SQLite INSERT RETURNING 在同一连接锁中保留结果行及真实生成键。
+    /// 纯查询或未插入任何行时返回空键集，不能泄露该连接的前次插入键。
+    pub(crate) async fn execute_query_with_generated_key(
+        self: &Arc<SqlxConnectionActor>,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<(Box<dyn ResultSet>, Vec<i64>), RdbcError> {
+        self.ensure_open_core()?;
+        let plan = crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse(sql)?;
+        let mut connection = self.connection.lock().await;
+        if let Some(plan) = plan {
+            let (properties, _) = connection
+                .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
+                .await?;
+            if properties.is_empty() {
+                // 表已删除时执行原语句，让驱动保留真实 SQL 异常类别与消息。
+                let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
+                return Ok((self.result_set_core(rows, columns), Vec::new()));
+            }
+            let (table_columns, _) = connection
+                .fetch_rows_with_labels(&plan.columns_sql(&properties)?, Vec::new())
+                .await?;
+            let (indexes, _) = connection
+                .fetch_rows_with_labels(&plan.indexes_sql(&properties)?, Vec::new())
+                .await?;
+            let sql = plan.sql(&properties, &table_columns, &indexes);
+            let (mut rows, mut columns) = connection.fetch_rows_with_labels(&sql, values).await?;
+            let keys =
+                crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::extract(&mut rows)?;
+            columns.pop();
+            Ok((self.result_set_core(rows, columns), keys))
+        } else {
+            let (rows, columns) = connection.fetch_rows_with_labels(sql, values).await?;
+            Ok((self.result_set_core(rows, columns), Vec::new()))
+        }
+    }
+
+    /// 执行 update，并保留 generated-key/row-count driver outcome。
+    /// 参数为SQL及值；在单个连接锁内返回真实更新数与完整当前键集合。
+    pub(crate) async fn execute_update_keys(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<(i64, Vec<i64>), RdbcError> {
+        self.ensure_open_core()?;
+        let mut connection = self.connection.lock().await;
+        if self.backend_key == "sqlite" {
+            if let Some(plan) =
+                crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse_update(sql)?
+            {
+                let (properties, _) = connection
+                    .fetch_rows_with_labels(&plan.table_properties_sql(), Vec::new())
+                    .await?;
+                if !properties.is_empty() {
+                    let (columns, _) = connection
+                        .fetch_rows_with_labels(&plan.columns_sql(&properties)?, Vec::new())
+                        .await?;
+                    let (indexes, _) = connection
+                        .fetch_rows_with_labels(&plan.indexes_sql(&properties)?, Vec::new())
+                        .await?;
+                    let (rows, _) = connection
+                        .fetch_rows_with_labels(&plan.sql(&properties, &columns, &indexes), values)
+                        .await?;
+                    let (changes, _) = connection
+                        .fetch_rows_with_labels("SELECT changes()", Vec::new())
+                        .await?;
+                    return crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::update_outcome(rows, &changes);
+                }
+            }
+        }
+        let result = connection.execute_update_core(sql, values).await?;
+        let count = i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".into())
+        })?;
+        Ok((count, result.last_insert_id.into_iter().collect()))
+    }
+
     /// 执行 update，并保留 generated-key/row-count driver outcome。
     pub(crate) async fn execute_update_result(
         &self,

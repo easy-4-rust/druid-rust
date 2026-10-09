@@ -427,6 +427,53 @@ crates/druid/src/core/a.rs\tTYPE\tA@token=1\tdruid_rdbc::spi::A\tdruid::core::a\
                 producer_sources,
             )
 
+    def test_prepared_overloads_share_exact_pre_raw_admission_path(self) -> None:
+        """普通入口原样转发 None，生成键入口必须先许可再取得并注册原生对象。"""
+
+        core = repository_root() / "crates/druid/src/core"
+        registry = (core / "standard_resource_registry.rs").read_text(encoding="utf-8")
+        admission = (core / "standard_resource_admission.rs").read_text(encoding="utf-8")
+        producers = {
+            name: (core / name).read_text(encoding="utf-8")
+            for name in (
+                "druid_pooled_connection.rs", "druid_pooled_statement.rs",
+                "druid_pooled_prepared_statement.rs", "druid_pooled_callable_statement.rs",
+                "database_meta_data_proxy_impl.rs", "druid_pooled_result_set.rs",
+            )
+        }
+        verifier.require_pending_admission_policy(registry, admission, producers)
+        source = producers["druid_pooled_connection.rs"]
+        delegate = """self.prepare_statement_with_generated_keys(
+            sql,
+            options,
+            druid_rdbc::statement::GeneratedKeys::None,
+        )
+        .await"""
+        self.assertEqual(source.count(delegate), 1)
+        permit = "let admission = resources.begin_admission(policy.resource_generation())?;"
+        raw = ".prepare_statement_with_generated_keys(&effective_sql, options, generated_keys)"
+        self.assertEqual(source.count(raw), 1)
+        changed_order = source.replace(permit, "", 1).replace(
+            "        let statement_id = self.next_statement_id();\n        let statement = DruidPooledPreparedStatement::new_standard(",
+            "        " + permit + "\n        let statement_id = self.next_statement_id();\n        let statement = DruidPooledPreparedStatement::new_standard(",
+            1,
+        )
+        self.assertEqual(changed_order.count(permit), source.count(permit))
+        mutants = {
+            "raw-before-permit": changed_order,
+            "wrong-request": source.replace(delegate, delegate.replace("GeneratedKeys::None", "GeneratedKeys::ReturnGeneratedKeys"), 1),
+            "wrong-sql": source.replace(delegate, delegate.replace("sql,", "other_sql,", 1), 1),
+            "raw-bypass": source.replace(delegate, "self.standard_mut()?.prepare_statement(sql, options).await", 1),
+            "unreachable-delegate": source.replace(delegate, "return self.standard_mut()?.prepare_statement(sql, options).await;\n" + delegate, 1),
+            "missing-overload": source.replace("async fn prepare_statement_with_generated_keys(", "async fn unrelated_prepare(", 1),
+        }
+        for label, candidate in mutants.items():
+            with self.subTest(label=label):
+                with self.assertRaisesRegex(VerificationError, "pre-raw admission"):
+                    verifier.require_pending_admission_policy(
+                        registry, admission, {**producers, "druid_pooled_connection.rs": candidate}
+                    )
+
     def test_residual_method_delegation_rejects_direct_raw_fallback(self) -> None:
         source = """
             impl druid_rdbc::statement::PreparedStatement for DruidPooledPreparedStatement {

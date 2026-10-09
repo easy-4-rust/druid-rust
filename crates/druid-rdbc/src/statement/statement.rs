@@ -14,6 +14,8 @@ pub enum ResultSetType {
     ScrollInsensitive,
     /// Scroll-sensitive cursor。
     ScrollSensitive,
+    /// 无损保存驱动或过滤器报告的原整数，不据此推断游标能力。
+    DriverValue(i32),
 }
 
 /// ResultSet concurrency descriptor。
@@ -25,6 +27,8 @@ pub enum ResultSetConcurrency {
     ReadOnly,
     /// Updatable cursor。
     Updatable,
+    /// 无损保存驱动或过滤器报告的原整数，不据此声明可更新能力。
+    DriverValue(i32),
 }
 
 /// ResultSet transaction-boundary holdability descriptor。
@@ -36,6 +40,9 @@ pub enum ResultSetHoldability {
     CloseAtCommit,
     /// Commit 后保留 cursor。
     HoldOverCommit,
+    /// 无损保存驱动返回的整数状态；不推断其游标能力。
+    /// 对应 Java: java.sql.Connection#getHoldability。
+    DriverValue(i32),
 }
 
 /// JDBC cursor fetch direction。
@@ -49,6 +56,76 @@ pub enum FetchDirection {
     Forward,
     /// 反向读取。
     Reverse,
+    /// 无损保存已类型化的驱动或过滤器整数；整数输入的 TryFrom 校验不变。
+    DriverValue(i32),
+}
+
+impl ResultSetType {
+    /// 返回结果集类型的 JDBC 整数代码；无参数，返回对应 TYPE 常量。
+    /// 对应 Java: java.sql.ResultSet#TYPE_FORWARD_ONLY/TYPE_SCROLL_INSENSITIVE/TYPE_SCROLL_SENSITIVE。
+    pub const fn rdbc_code(self) -> i32 {
+        match self {
+            Self::ForwardOnly => 1003,
+            Self::ScrollInsensitive => 1004,
+            Self::ScrollSensitive => 1005,
+            Self::DriverValue(code) => code,
+        }
+    }
+}
+
+impl ResultSetConcurrency {
+    /// 返回并发模式的 JDBC 整数代码；无参数，返回只读或可更新常量。
+    /// 对应 Java: java.sql.ResultSet#CONCUR_READ_ONLY/CONCUR_UPDATABLE。
+    pub const fn rdbc_code(self) -> i32 {
+        match self {
+            Self::ReadOnly => 1007,
+            Self::Updatable => 1008,
+            Self::DriverValue(code) => code,
+        }
+    }
+}
+
+impl ResultSetHoldability {
+    /// 返回提交后的游标保留代码；无参数，返回 HOLD 或 CLOSE 常量。
+    /// 对应 Java: java.sql.ResultSet#HOLD_CURSORS_OVER_COMMIT/CLOSE_CURSORS_AT_COMMIT。
+    pub const fn rdbc_code(self) -> i32 {
+        match self {
+            Self::HoldOverCommit => 1,
+            Self::CloseAtCommit => 2,
+            Self::DriverValue(code) => code,
+        }
+    }
+}
+
+impl FetchDirection {
+    /// 返回提取方向的 JDBC 整数代码；无参数，返回 FETCH 常量。
+    /// 对应 Java: java.sql.ResultSet#FETCH_FORWARD/FETCH_REVERSE/FETCH_UNKNOWN。
+    pub const fn rdbc_code(self) -> i32 {
+        match self {
+            Self::Forward => 1000,
+            Self::Reverse => 1001,
+            Self::Unknown => 1002,
+            Self::DriverValue(code) => code,
+        }
+    }
+}
+
+impl TryFrom<i32> for FetchDirection {
+    type Error = RdbcError;
+
+    /// 校验整数方向并转换为标准描述符；参数 direction 仅接受 1000/1001/1002。
+    /// 返回对应方向，其他输入返回参数错误且不修改结果集状态。
+    /// 对应 Java: java.sql.ResultSet#setFetchDirection(int)。
+    fn try_from(direction: i32) -> Result<Self, Self::Error> {
+        match direction {
+            1000 => Ok(Self::Forward),
+            1001 => Ok(Self::Reverse),
+            1002 => Ok(Self::Unknown),
+            _ => Err(RdbcError::InvalidArgument(format!(
+                "invalid fetch direction: {direction}"
+            ))),
+        }
+    }
 }
 
 /// 推进到下一个 statement result 前如何处置当前 ResultSet。
@@ -64,6 +141,23 @@ pub enum CurrentResultDisposition {
     KeepCurrent,
     /// 关闭所有先前 ResultSet。
     CloseAll,
+}
+
+impl TryFrom<i32> for CurrentResultDisposition {
+    type Error = RdbcError;
+
+    /// 将 JDBC 整数处置常量转换为标准处置。对应 Java：Statement#getMoreResults(int)。
+    /// 参数 current 仅接受 1/2/3；返回对应处置，其他值返回参数错误且无资源副作用。
+    fn try_from(current: i32) -> Result<Self, Self::Error> {
+        match current {
+            1 => Ok(Self::CloseCurrent),
+            2 => Ok(Self::KeepCurrent),
+            3 => Ok(Self::CloseAll),
+            _ => Err(RdbcError::InvalidArgument(format!(
+                "invalid JDBC current result disposition: {current}"
+            ))),
+        }
+    }
 }
 
 /// `Connection#createStatement` 的 typed options。
@@ -343,6 +437,14 @@ pub trait Statement: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "statement_get_more_results",
         })
+    }
+
+    /// 按 Java 整数处置推进结果。对应 Java：Statement#getMoreResults(int)。
+    /// 参数 current 为 JDBC 处置常量；返回下个结果是否为游标，非法值返回参数错误。
+    async fn get_more_results_current(&mut self, current: i32) -> Result<bool, RdbcError> {
+        // 先完成整数边界校验，再交给同一 typed 实现，失败不能影响当前游标。
+        let disposition = CurrentResultDisposition::try_from(current)?;
+        self.get_more_results(disposition).await
     }
 
     /// 关闭 statement handle。

@@ -3,10 +3,11 @@ use crate::metadata::{
     ColumnDescriptor, ColumnNullability, ResultSetMetaData, ResultSetMetaDataSnapshot,
 };
 use crate::result_set::{
-    ColumnIndex, ResultSet, ResultSetNavigation, ResultSetStreamKind, ResultSetUpdate,
+    default_object_as, default_read_object, ColumnIndex, ResultSet, ResultSetNavigation,
+    ResultSetRead, ResultSetStreamKind, ResultSetUpdate,
 };
 use crate::statement::{FetchDirection, ResultSetConcurrency, ResultSetHoldability, ResultSetType};
-use crate::types::{RdbcInputStream, RdbcReader, Row, Value};
+use crate::types::{RdbcInputStream, RdbcObject, RdbcReader, RdbcTargetType, Row, Value};
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -72,11 +73,30 @@ impl BufferedRowSet {
                 closed: false,
                 cursor: -1,
                 was_null: false,
-                fetch_direction: FetchDirection::Unknown,
+                fetch_direction: FetchDirection::Forward,
                 fetch_size: 0,
                 warnings: None,
                 row_updated: false,
             }),
+        }
+    }
+
+    // 所有缓冲标量转换只读取一次当前列，复用已有 typed object 转换规则。
+    fn converted_scalar(
+        &self,
+        column: ColumnIndex,
+        target: &RdbcTargetType,
+    ) -> Result<Value, RdbcError> {
+        match default_object_as(self, column, target)? {
+            RdbcObject::Scalar(value) => Ok(value),
+            RdbcObject::String(value) => Ok(Value::String(value)),
+            RdbcObject::Boolean(value) => Ok(Value::Bool(value)),
+            RdbcObject::Long(value) => Ok(Value::Int(value)),
+            RdbcObject::Double(value) => Ok(Value::Float(value)),
+            RdbcObject::Bytes(value) => Ok(Value::Bytes(value)),
+            other => Err(RdbcError::DriverError(format!(
+                "buffered scalar conversion returned unexpected object: {other}"
+            ))),
         }
     }
 
@@ -88,7 +108,7 @@ impl BufferedRowSet {
 
     fn ensure_open(state: &BufferedRowSetState) -> Result<(), RdbcError> {
         if state.closed {
-            Err(RdbcError::ConnectionDiscarded)
+            Err(RdbcError::Other("result set is closed".to_owned()))
         } else {
             Ok(())
         }
@@ -119,6 +139,13 @@ crate::impl_standard_wrapper!(BufferedRowSet => ResultSet);
 
 #[async_trait::async_trait]
 impl ResultSet for BufferedRowSet {
+    /// 返回已缓冲的完整行数；关闭后返回 None，读取不推进游标。
+    /// 对应标准扩展: ResultSet#known_row_count。
+    fn known_row_count(&self) -> Option<u64> {
+        Self::ensure_open(&self.state()).ok()?;
+        u64::try_from(self.rows.len()).ok()
+    }
+
     async fn next(&mut self) -> Result<bool, RdbcError> {
         self.navigate(ResultSetNavigation::Next).await
     }
@@ -175,6 +202,36 @@ impl ResultSet for BufferedRowSet {
         Ok(value)
     }
 
+    /// 按列读取缓冲结果的字符串表示，SQL NULL 保持 NULL，非法 UTF-8 返回驱动错误。
+    /// 参数为 1-based 列下标；返回转换后的字符串值。
+    /// 对应 Java: java.sql.ResultSet#getString；原 RowSetResultSet 标量合同。
+    fn string_value(&self, column: ColumnIndex) -> Result<Value, RdbcError> {
+        self.converted_scalar(column, &RdbcTargetType::String)
+    }
+
+    /// 按原读取描述符转换缓冲标量，保留 NULL、整数范围和单次读取语义。
+    /// 参数为 1-based 列和 getter 请求；返回标量或默认日期、资源读取结果。
+    /// 对应 Java: java.sql.ResultSet#getLong/getDouble/getBytes 等。
+    fn read_object(
+        &self,
+        column: ColumnIndex,
+        request: &ResultSetRead,
+    ) -> Result<RdbcObject, RdbcError> {
+        let target = match request {
+            ResultSetRead::Boolean => RdbcTargetType::Boolean,
+            ResultSetRead::Long
+            | ResultSetRead::Int
+            | ResultSetRead::Short
+            | ResultSetRead::Byte => RdbcTargetType::Long,
+            ResultSetRead::Double | ResultSetRead::Float => RdbcTargetType::Double,
+            ResultSetRead::Bytes => RdbcTargetType::Bytes,
+            // String 通过 string_value；其余请求沿用唯一标准默认分派。
+            _ => return default_read_object(self, column, request),
+        };
+        self.converted_scalar(column, &target)
+            .map(RdbcObject::Scalar)
+    }
+
     fn find_column(&self, column_label: &str) -> Result<ColumnIndex, RdbcError> {
         let state = self.state();
         Self::ensure_open(&state)?;
@@ -193,6 +250,8 @@ impl ResultSet for BufferedRowSet {
         self.value(column).map(|value| match value {
             Value::Null => None,
             Value::Bytes(value) => Some(RdbcInputStream::from_bytes(value)),
+            // SQL 字符串保持原始内容，不能使用附带 SQL 引号的 Value 展示格式。
+            Value::String(value) => Some(RdbcInputStream::from_bytes(value.into_bytes())),
             other => Some(RdbcInputStream::from_bytes(other.to_string().into_bytes())),
         })
     }
@@ -204,6 +263,7 @@ impl ResultSet for BufferedRowSet {
     ) -> Result<Option<RdbcReader>, RdbcError> {
         match self.value(column)? {
             Value::Null => Ok(None),
+            Value::String(value) => Ok(Some(RdbcReader::from_string(value))),
             Value::Bytes(value) => String::from_utf8(value)
                 .map(RdbcReader::from_string)
                 .map(Some)
@@ -239,6 +299,19 @@ impl ResultSet for BufferedRowSet {
         })?;
         *target = value;
         Ok(())
+    }
+
+    /// 按列名更新缓冲行，先验证游标和列，再保留缓冲驱动的更新错误。
+    /// 参数为原列名及更新描述符；不支持的资源更新返回含 0A000 的 SQL 异常。
+    /// 对应 Java: java.sql.ResultSet#updateBlob/updateClob/updateNClob。
+    fn update_value_by_label(
+        &mut self,
+        column_label: &str,
+        update: ResultSetUpdate,
+    ) -> Result<(), RdbcError> {
+        // 缓冲驱动有实际更新能力，不能使用只读默认入口提前拒绝 LOB 流。
+        let column = self.find_column(column_label)?;
+        self.update_value(column, update)
     }
 
     fn meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
@@ -343,6 +416,22 @@ impl ResultSet for BufferedRowSet {
         Ok(state.row_updated)
     }
 
+    /// 返回缓冲行是否为插入行；关闭后保留原错误。
+    /// 对应 Java: RowSetResultSet#rowInserted。
+    fn row_inserted(&self) -> Result<bool, RdbcError> {
+        let state = self.state();
+        Self::ensure_open(&state)?;
+        Ok(false)
+    }
+
+    /// 返回缓冲行是否已删除；关闭后保留原错误。
+    /// 对应 Java: RowSetResultSet#rowDeleted。
+    fn row_deleted(&self) -> Result<bool, RdbcError> {
+        let state = self.state();
+        Self::ensure_open(&state)?;
+        Ok(false)
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
         self.state().closed = true;
         Ok(())
@@ -381,7 +470,6 @@ fn first_column_type_name(rows: &[Row], offset: usize) -> &'static str {
 
 fn scalar_update(update: ResultSetUpdate) -> Result<Value, RdbcError> {
     match update {
-        ResultSetUpdate::Null => Ok(Value::Null),
         ResultSetUpdate::Boolean(value) => Ok(Value::Bool(value)),
         ResultSetUpdate::Byte(value) => Ok(Value::Int(i64::from(value))),
         ResultSetUpdate::Short(value) => Ok(Value::Int(i64::from(value))),
@@ -398,7 +486,25 @@ fn scalar_update(update: ResultSetUpdate) -> Result<Value, RdbcError> {
         ResultSetUpdate::Time(value) => Ok(value.map_or(Value::Null, Value::Time)),
         ResultSetUpdate::Timestamp(value) => Ok(value.map_or(Value::Null, Value::Timestamp)),
         ResultSetUpdate::Object(crate::types::RdbcObject::Scalar(value)) => Ok(value),
+        ResultSetUpdate::Null
+        | ResultSetUpdate::Ref(None)
+        | ResultSetUpdate::Blob(None)
+        | ResultSetUpdate::Clob(None)
+        | ResultSetUpdate::Array(None)
+        | ResultSetUpdate::RowId(None)
+        | ResultSetUpdate::NClob(None)
+        | ResultSetUpdate::SqlXml(None) => Ok(Value::Null),
         ResultSetUpdate::Object(_)
+        | ResultSetUpdate::Ref(Some(_))
+        | ResultSetUpdate::Blob(Some(_))
+        | ResultSetUpdate::Clob(Some(_))
+        | ResultSetUpdate::Array(Some(_))
+        | ResultSetUpdate::RowId(Some(_))
+        | ResultSetUpdate::NClob(Some(_))
+        | ResultSetUpdate::SqlXml(Some(_))
+        | ResultSetUpdate::BlobStream { .. }
+        | ResultSetUpdate::ClobReader { .. }
+        | ResultSetUpdate::NClobReader { .. }
         | ResultSetUpdate::ObjectWithScaleOrLength { .. }
         | ResultSetUpdate::AsciiStream { .. }
         | ResultSetUpdate::BinaryStream { .. }

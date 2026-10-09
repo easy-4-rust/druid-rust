@@ -3,89 +3,170 @@
     reason = "java.sql.Types 保持一对象一文件，并位于 types domain facade"
 )]
 
-/// Integer constants identifying generic RDBC SQL types.
+//! JDBC 4.2 SQL 类型编号的唯一常量入口。
+//! 对应 Java: `java.sql.Types`；参数绑定、输出注册和元数据共享这些编号。
+
+/// SQL `BIT` 类型编号。对应 Java: `Types#BIT`。
+pub const BIT: i32 = -7;
+/// SQL `TINYINT` 类型编号。对应 Java: `Types#TINYINT`。
+pub const TINYINT: i32 = -6;
+/// SQL `SMALLINT` 类型编号。对应 Java: `Types#SMALLINT`。
+pub const SMALLINT: i32 = 5;
+/// SQL `INTEGER` 类型编号。对应 Java: `Types#INTEGER`。
+pub const INTEGER: i32 = 4;
+/// SQL `BIGINT` 类型编号。对应 Java: `Types#BIGINT`。
+pub const BIGINT: i32 = -5;
+/// SQL `FLOAT` 类型编号。对应 Java: `Types#FLOAT`。
+pub const FLOAT: i32 = 6;
+/// SQL `REAL` 类型编号。对应 Java: `Types#REAL`。
+pub const REAL: i32 = 7;
+/// SQL `DOUBLE` 类型编号。对应 Java: `Types#DOUBLE`。
+pub const DOUBLE: i32 = 8;
+/// SQL `NUMERIC` 类型编号。对应 Java: `Types#NUMERIC`。
+pub const NUMERIC: i32 = 2;
+/// SQL `DECIMAL` 类型编号。对应 Java: `Types#DECIMAL`。
+pub const DECIMAL: i32 = 3;
+/// SQL `CHAR` 类型编号。对应 Java: `Types#CHAR`。
+pub const CHAR: i32 = 1;
+/// SQL `VARCHAR` 类型编号。对应 Java: `Types#VARCHAR`。
+pub const VARCHAR: i32 = 12;
+/// SQL `LONGVARCHAR` 类型编号。对应 Java: `Types#LONGVARCHAR`。
+pub const LONGVARCHAR: i32 = -1;
+/// SQL `DATE` 类型编号。对应 Java: `Types#DATE`。
+pub const DATE: i32 = 91;
+/// SQL `TIME` 类型编号。对应 Java: `Types#TIME`。
+pub const TIME: i32 = 92;
+/// SQL `TIMESTAMP` 类型编号。对应 Java: `Types#TIMESTAMP`。
+pub const TIMESTAMP: i32 = 93;
+/// SQL `BINARY` 类型编号。对应 Java: `Types#BINARY`。
+pub const BINARY: i32 = -2;
+/// SQL `VARBINARY` 类型编号。对应 Java: `Types#VARBINARY`。
+pub const VARBINARY: i32 = -3;
+/// SQL `LONGVARBINARY` 类型编号。对应 Java: `Types#LONGVARBINARY`。
+pub const LONGVARBINARY: i32 = -4;
+/// SQL `NULL` 类型编号。对应 Java: `Types#NULL`。
+pub const NULL: i32 = 0;
+/// SQL `OTHER` 类型编号。对应 Java: `Types#OTHER`。
+pub const OTHER: i32 = 1111;
+/// SQL `JAVA_OBJECT` 类型编号。对应 Java: `Types#JAVA_OBJECT`。
+pub const JAVA_OBJECT: i32 = 2000;
+/// SQL `DISTINCT` 类型编号。对应 Java: `Types#DISTINCT`。
+pub const DISTINCT: i32 = 2001;
+/// SQL `STRUCT` 类型编号。对应 Java: `Types#STRUCT`。
+pub const STRUCT: i32 = 2002;
+/// SQL `ARRAY` 类型编号。对应 Java: `Types#ARRAY`。
+pub const ARRAY: i32 = 2003;
+/// SQL `BLOB` 类型编号。对应 Java: `Types#BLOB`。
+pub const BLOB: i32 = 2004;
+/// SQL `CLOB` 类型编号。对应 Java: `Types#CLOB`。
+pub const CLOB: i32 = 2005;
+/// SQL `REF` 类型编号。对应 Java: `Types#REF`。
+pub const REF: i32 = 2006;
+/// SQL `DATALINK` 类型编号。对应 Java: `Types#DATALINK`。
+pub const DATALINK: i32 = 70;
+/// SQL `BOOLEAN` 类型编号。对应 Java: `Types#BOOLEAN`。
+pub const BOOLEAN: i32 = 16;
+/// SQL `ROWID` 类型编号。对应 Java: `Types#ROWID`。
+pub const ROWID: i32 = -8;
+/// SQL `NCHAR` 类型编号。对应 Java: `Types#NCHAR`。
+pub const NCHAR: i32 = -15;
+/// SQL `NVARCHAR` 类型编号。对应 Java: `Types#NVARCHAR`。
+pub const NVARCHAR: i32 = -9;
+/// SQL `LONGNVARCHAR` 类型编号。对应 Java: `Types#LONGNVARCHAR`。
+pub const LONGNVARCHAR: i32 = -16;
+/// SQL `NCLOB` 类型编号。对应 Java: `Types#NCLOB`。
+pub const NCLOB: i32 = 2011;
+/// SQL `SQLXML` 类型编号。对应 Java: `Types#SQLXML`。
+pub const SQLXML: i32 = 2009;
+/// SQL `REF_CURSOR` 类型编号。对应 Java: `Types#REF_CURSOR`。
+pub const REF_CURSOR: i32 = 2012;
+/// SQL `TIME_WITH_TIMEZONE` 类型编号。对应 Java: `Types#TIME_WITH_TIMEZONE`。
+pub const TIME_WITH_TIMEZONE: i32 = 2013;
+/// SQL `TIMESTAMP_WITH_TIMEZONE` 类型编号。对应 Java: `Types#TIMESTAMP_WITH_TIMEZONE`。
+pub const TIMESTAMP_WITH_TIMEZONE: i32 = 2014;
+
+/// SQL 类型编号的兼容命名空间。对应 Java: `java.sql.Types`。
 ///
-/// Corresponds to Java: `java.sql.Types`. Numbers retain the Java 8 values used for parameter
-/// registration, binding, and metadata. Vendor-specific types use `OTHER` or a vendor number.
+/// 所有关联常量委托本模块的同名标准常量，保留现有 Types::常量 调用。
 pub struct Types;
 
 impl Types {
-    /// SQL `BIT`。
-    pub const BIT: i32 = -7;
-    /// SQL `TINYINT`。
-    pub const TINYINT: i32 = -6;
-    /// SQL `SMALLINT`。
-    pub const SMALLINT: i32 = 5;
-    /// SQL `INTEGER`。
-    pub const INTEGER: i32 = 4;
-    /// SQL `BIGINT`。
-    pub const BIGINT: i32 = -5;
-    /// SQL `FLOAT`。
-    pub const FLOAT: i32 = 6;
-    /// SQL `REAL`。
-    pub const REAL: i32 = 7;
-    /// SQL `DOUBLE`。
-    pub const DOUBLE: i32 = 8;
-    /// SQL `NUMERIC`。
-    pub const NUMERIC: i32 = 2;
-    /// SQL `DECIMAL`。
-    pub const DECIMAL: i32 = 3;
-    /// SQL fixed-length character `CHAR`.
-    pub const CHAR: i32 = 1;
-    /// SQL variable-length character `VARCHAR`.
-    pub const VARCHAR: i32 = 12;
-    /// SQL long variable-length character `LONGVARCHAR`.
-    pub const LONGVARCHAR: i32 = -1;
-    /// SQL date `DATE`.
-    pub const DATE: i32 = 91;
-    /// SQL time `TIME`.
-    pub const TIME: i32 = 92;
-    /// SQL timestamp `TIMESTAMP`.
-    pub const TIMESTAMP: i32 = 93;
-    /// SQL fixed-length binary `BINARY`.
-    pub const BINARY: i32 = -2;
-    /// SQL variable-length binary `VARBINARY`.
-    pub const VARBINARY: i32 = -3;
-    /// SQL long variable-length binary `LONGVARBINARY`.
-    pub const LONGVARBINARY: i32 = -4;
-    /// SQL `NULL` type.
-    pub const NULL: i32 = 0;
-    /// SQL type recognized by the driver but outside standard mappings.
-    pub const OTHER: i32 = 1111;
-    /// Java/Rust object-mapped type.
-    pub const JAVA_OBJECT: i32 = 2000;
-    /// SQL user-defined `DISTINCT` type.
-    pub const DISTINCT: i32 = 2001;
-    /// SQL structured `STRUCT` type.
-    pub const STRUCT: i32 = 2002;
-    /// SQL `ARRAY`。
-    pub const ARRAY: i32 = 2003;
-    /// SQL binary large object `BLOB`.
-    pub const BLOB: i32 = 2004;
-    /// SQL character large object `CLOB`.
-    pub const CLOB: i32 = 2005;
-    /// SQL structured-type reference `REF`.
-    pub const REF: i32 = 2006;
-    /// SQL external data link `DATALINK`.
-    pub const DATALINK: i32 = 70;
-    /// SQL `BOOLEAN`。
-    pub const BOOLEAN: i32 = 16;
-    /// SQL row identifier `ROWID`.
-    pub const ROWID: i32 = -8;
-    /// SQL national-character fixed-length `NCHAR`.
-    pub const NCHAR: i32 = -15;
-    /// SQL national-character variable-length `NVARCHAR`.
-    pub const NVARCHAR: i32 = -9;
-    /// SQL national-character long variable-length `LONGNVARCHAR`.
-    pub const LONGNVARCHAR: i32 = -16;
-    /// SQL national-character large object `NCLOB`.
-    pub const NCLOB: i32 = 2011;
-    /// SQL XML value.
-    pub const SQLXML: i32 = 2009;
-    /// RDBC 4.2 SQL `REF CURSOR`。
-    pub const REF_CURSOR: i32 = 2012;
-    /// RDBC 4.2 SQL `TIME` with time zone.
-    pub const TIME_WITH_TIMEZONE: i32 = 2013;
-    /// RDBC 4.2 SQL `TIMESTAMP` with time zone.
-    pub const TIMESTAMP_WITH_TIMEZONE: i32 = 2014;
+    /// SQL `BIT` 类型编号。对应 Java: `Types#BIT`。
+    pub const BIT: i32 = self::BIT;
+    /// SQL `TINYINT` 类型编号。对应 Java: `Types#TINYINT`。
+    pub const TINYINT: i32 = self::TINYINT;
+    /// SQL `SMALLINT` 类型编号。对应 Java: `Types#SMALLINT`。
+    pub const SMALLINT: i32 = self::SMALLINT;
+    /// SQL `INTEGER` 类型编号。对应 Java: `Types#INTEGER`。
+    pub const INTEGER: i32 = self::INTEGER;
+    /// SQL `BIGINT` 类型编号。对应 Java: `Types#BIGINT`。
+    pub const BIGINT: i32 = self::BIGINT;
+    /// SQL `FLOAT` 类型编号。对应 Java: `Types#FLOAT`。
+    pub const FLOAT: i32 = self::FLOAT;
+    /// SQL `REAL` 类型编号。对应 Java: `Types#REAL`。
+    pub const REAL: i32 = self::REAL;
+    /// SQL `DOUBLE` 类型编号。对应 Java: `Types#DOUBLE`。
+    pub const DOUBLE: i32 = self::DOUBLE;
+    /// SQL `NUMERIC` 类型编号。对应 Java: `Types#NUMERIC`。
+    pub const NUMERIC: i32 = self::NUMERIC;
+    /// SQL `DECIMAL` 类型编号。对应 Java: `Types#DECIMAL`。
+    pub const DECIMAL: i32 = self::DECIMAL;
+    /// SQL `CHAR` 类型编号。对应 Java: `Types#CHAR`。
+    pub const CHAR: i32 = self::CHAR;
+    /// SQL `VARCHAR` 类型编号。对应 Java: `Types#VARCHAR`。
+    pub const VARCHAR: i32 = self::VARCHAR;
+    /// SQL `LONGVARCHAR` 类型编号。对应 Java: `Types#LONGVARCHAR`。
+    pub const LONGVARCHAR: i32 = self::LONGVARCHAR;
+    /// SQL `DATE` 类型编号。对应 Java: `Types#DATE`。
+    pub const DATE: i32 = self::DATE;
+    /// SQL `TIME` 类型编号。对应 Java: `Types#TIME`。
+    pub const TIME: i32 = self::TIME;
+    /// SQL `TIMESTAMP` 类型编号。对应 Java: `Types#TIMESTAMP`。
+    pub const TIMESTAMP: i32 = self::TIMESTAMP;
+    /// SQL `BINARY` 类型编号。对应 Java: `Types#BINARY`。
+    pub const BINARY: i32 = self::BINARY;
+    /// SQL `VARBINARY` 类型编号。对应 Java: `Types#VARBINARY`。
+    pub const VARBINARY: i32 = self::VARBINARY;
+    /// SQL `LONGVARBINARY` 类型编号。对应 Java: `Types#LONGVARBINARY`。
+    pub const LONGVARBINARY: i32 = self::LONGVARBINARY;
+    /// SQL `NULL` 类型编号。对应 Java: `Types#NULL`。
+    pub const NULL: i32 = self::NULL;
+    /// SQL `OTHER` 类型编号。对应 Java: `Types#OTHER`。
+    pub const OTHER: i32 = self::OTHER;
+    /// SQL `JAVA_OBJECT` 类型编号。对应 Java: `Types#JAVA_OBJECT`。
+    pub const JAVA_OBJECT: i32 = self::JAVA_OBJECT;
+    /// SQL `DISTINCT` 类型编号。对应 Java: `Types#DISTINCT`。
+    pub const DISTINCT: i32 = self::DISTINCT;
+    /// SQL `STRUCT` 类型编号。对应 Java: `Types#STRUCT`。
+    pub const STRUCT: i32 = self::STRUCT;
+    /// SQL `ARRAY` 类型编号。对应 Java: `Types#ARRAY`。
+    pub const ARRAY: i32 = self::ARRAY;
+    /// SQL `BLOB` 类型编号。对应 Java: `Types#BLOB`。
+    pub const BLOB: i32 = self::BLOB;
+    /// SQL `CLOB` 类型编号。对应 Java: `Types#CLOB`。
+    pub const CLOB: i32 = self::CLOB;
+    /// SQL `REF` 类型编号。对应 Java: `Types#REF`。
+    pub const REF: i32 = self::REF;
+    /// SQL `DATALINK` 类型编号。对应 Java: `Types#DATALINK`。
+    pub const DATALINK: i32 = self::DATALINK;
+    /// SQL `BOOLEAN` 类型编号。对应 Java: `Types#BOOLEAN`。
+    pub const BOOLEAN: i32 = self::BOOLEAN;
+    /// SQL `ROWID` 类型编号。对应 Java: `Types#ROWID`。
+    pub const ROWID: i32 = self::ROWID;
+    /// SQL `NCHAR` 类型编号。对应 Java: `Types#NCHAR`。
+    pub const NCHAR: i32 = self::NCHAR;
+    /// SQL `NVARCHAR` 类型编号。对应 Java: `Types#NVARCHAR`。
+    pub const NVARCHAR: i32 = self::NVARCHAR;
+    /// SQL `LONGNVARCHAR` 类型编号。对应 Java: `Types#LONGNVARCHAR`。
+    pub const LONGNVARCHAR: i32 = self::LONGNVARCHAR;
+    /// SQL `NCLOB` 类型编号。对应 Java: `Types#NCLOB`。
+    pub const NCLOB: i32 = self::NCLOB;
+    /// SQL `SQLXML` 类型编号。对应 Java: `Types#SQLXML`。
+    pub const SQLXML: i32 = self::SQLXML;
+    /// SQL `REF_CURSOR` 类型编号。对应 Java: `Types#REF_CURSOR`。
+    pub const REF_CURSOR: i32 = self::REF_CURSOR;
+    /// SQL `TIME_WITH_TIMEZONE` 类型编号。对应 Java: `Types#TIME_WITH_TIMEZONE`。
+    pub const TIME_WITH_TIMEZONE: i32 = self::TIME_WITH_TIMEZONE;
+    /// SQL `TIMESTAMP_WITH_TIMEZONE` 类型编号。对应 Java: `Types#TIMESTAMP_WITH_TIMEZONE`。
+    pub const TIMESTAMP_WITH_TIMEZONE: i32 = self::TIMESTAMP_WITH_TIMEZONE;
 }

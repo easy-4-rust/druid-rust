@@ -1,0 +1,28 @@
+# Task6 完整资源更新 Filter 合同恢复（2026-10-07）
+
+原完整案例pooled_result_set_routes_resource_updates_and_preserves_sqlite_capability_errors已经恢复并正式EXACT绑定。Task6仍FIX_REQUIRED，全部18顶层任务仍OPEN。
+
+## 完整合同
+
+固定BASE为5afe8609b177544ff7d18461aa84f69efe8ee90e，原body SHA为0628b01328d2ef02ef5f1b5e743162b4fd5efb445b40a2217012d78739d25642。原5个assert_eq、1个assert以及宏的14次准确能力错误断言保留。七资源Ref/Blob/Clob/Array/RowId/NClob/SQLXML的index/label十四事件完整有序，RowId为4/5/6，其余NULL保留各自资源family。
+
+Filter标签fail准确返回filtered resource update failure，实际原创建Statement异常计数1。相同真实Toasty SQLite工厂、ID91/92、数据源名及SELECT 1 AS value保留。默认Filter保留十四种原UnsupportedOperation名称，实际创建Statement异常14，ResultSet仍开放并执行明确关闭。
+
+一个独立fixture对象文件按既有标准更新hook路由；标签错误语义完整保留七family。没有新增公共API、改动生产路由、增加兼容层或stub。
+
+## 实际验证与证据
+
+- 初始3084 exit101：测试迁移编译失败，四处旧借用RowId与拥有型标准参数不符，关闭状态结果需要解包；没有执行测试，不作为产品运行RED。修正仅克隆同一RowId值与解包标准结果，原断言观察不变。
+- 94676完整Druid lib默认1.97.1终态exit0：135PASS/0FAIL/0ignored，完整新合同实际执行。日志SHA2993b809a6327766263df60d4df58eab81e9104e0f8e31cea890edd7804020f5；1064输入SHA终态一致。
+- 正式绑定后2505完整FilterStat21及ResultSet矩阵1终态exit0：22PASS/0FAIL/0ignored；1064绑定后输入SHA一致，日志SHA99176a2fabad56e01aef7aff51f9d4e11ada18f0c4b0df2412158f9574a1f321。
+- 自测17、final purity48、authority79/pending25/physical73及固定SHA7210995f5b1e9ac4b50ec56693cc4a5f95905b0aee923f4048a3d2819d7620c3、派生文档79、两文件rustfmt与git diff检查PASS。
+- 34489完整源码观察底线审计1270PASS/13FAIL，全部1283前七字段固定，1133EXACT/150PARAMETERIZED。该统计不是运行覆盖率或项目完成率。
+- 14736完整C2 no-execute终态exit1，下一完整行操作合同缺明确案例。整个C2仍FAIL，未弱化验证器。
+
+summary、固定原文、日志及其SHA均保存于.superpowers/sdd/2026-08-24-rdbc-single-standard-unification。较早RDBC474/Wrapper7属于资源读取轮次，此轮未重新运行、不重复累计；此轮没有新完整workspace通过证据。
+
+## 剩余工作
+
+下一行操作原文和manifest已保存：body SHA8430b3a96e48afd00ae048e82dbf0a60c1a010242b63714b724d2b937aab3301，原6eq/1assert，状态NOT_COMPILED/NOT_RUN/NOT_BOUND。不能计入完成。
+
+Task6剩余13源码合同；Task7八义务及Task8/P05/P06/P07、API/compiler/SemVer/MSRV/features/全仓/最终审查继续OPEN。原全仓3795PASS/11FAIL、独立Admin49PASS/11FAIL和系统Public Block诊断保留，授权后的因果对照尚缺。没有修改系统规则、创建分支、stage、commit、push、安装或发布。

@@ -1,0 +1,21 @@
+# Task6 完整 Object 更新 Filter 合同准备（2026-10-07）
+
+状态：SOURCE_ONLY_PREPARATION_NOT_COMPILED_NOT_RUN_NOT_BOUND。完整18顶层任务仍开放，Task6继续FIX_REQUIRED。本报告不能作为原案例运行通过或正式迁移完成证明。
+
+固定基线案例为 `result_set_filter_semantics_test.rs#pooled_result_set_routes_object_updates_and_preserves_sqlite_capability_errors`。原文body SHA为73bd4a04194e187161104512e3f0b2d3b92b7f992b450e0517dc0f2a8b90d944；正式原始分母解析后与保存的原文一致。候选主测试保留8个assert_eq和1个assert，原夹具及候选均保留2个对象身份断言。正式verify_observation_floor源码审计实际通过，未改验证器规则。
+
+候选保留index15 Custom对象Arc身份、具体类型downcast/id99/class_name、label object_value SQL NULL、index16 Integer7/scale-3、label scaled_object Bytes9/scale99，以及完整四项有序事件。保留精确filtered updateObject failure及原创建Statement异常1；第二个相同真实SQLite工厂/default Filter链保留四种UnsupportedOperation index/label合同、实际异常4、结果集仍开放与显式清理。
+
+原文和原夹具manifest SHA复核通过；原文、原夹具、候选主测试和两个单对象候选夹具的SHA保存于 `.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/drafts/complete_object_update_source_audit_20261007.json`。候选Rust草稿格式检查已通过，但未接入Cargo源码。
+
+准备脚本 `apply_complete_object_update_contract_20261007.py` 的Python语法检查实际通过，未执行。它要求导航全workspace默认1.97.1真实通过终态summary、日志SHA、全部1023冻结输入一致、无仍运行的workspace回归、草稿SHA一致和无同名目标覆盖，才可添加完整主测试及两个独立对象夹具。它不修改生产路由或正式台账；接入后仍必须实际运行完整合同，不能把现有实现自然通过伪称TDD运行RED。
+
+当前全workspace原session23625/cargo60376实际仍LIVE，已完成19m49s编译并进入原测试执行；未重启、未修改构建输入。源码审计时1023冻结输入全部未变。当前没有新鲜全仓终态，不写全仓PASS。下一步继续同句柄等待终态，再按真实证据接入和运行候选。
+
+正式台账1130EXACT/153PARAMETERIZED、源码观察1267PASS/16FAIL暂不变。Task7八义务、Task8/P05/P06/P07、API/compiler/SemVer/MSRV/features/最终审查及18顶层任务全部保持开放。
+
+## 后续实际接入
+
+上述准备态是历史证据。原23625全仓终态为3795/11/exit101，独立77706两个完整Admin目标终态49/11/exit101，失败名称完全一致；1023输入在两次终态全部未变。新鲜诊断确认相关可执行文件已有Public inbound Block规则，监听存在但TCP连接超时；系统调整授权待定。完整失败报告task6-navigation-workspace-network-failures-2026-10-07.md。
+
+本地接入保护脚本明确允许继续独立合同实施，仅接受上述逐名限定、独立复现且SHA一致的网络RED基线，不豁免任何最终网络/全仓/发布门禁。脚本实际执行并接入完整Object更新测试及两单对象夹具，未修改生产路由或正式台账；三个文件格式检查实际通过。默认1.97.1完整Druid lib74226已启动，正在编译wrapper依赖；1025输入SHA冻结，当前NOT_BOUND且没有运行通过结果。等待同一句柄终态再判断需要的修复或正式绑定，不能伪造运行RED。

@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+use super::SqlExceptionKind;
+
 /// SQL 异常 cause 的运行时类型。
 ///
 /// Java sorter 会检查 cause 是否为 `SocketTimeoutException`，或按类名识别
@@ -12,24 +14,6 @@ pub enum SqlExceptionCause {
     SocketTimeout,
     /// 其他 cause 的 Java/驱动运行时类名。
     ClassName(String),
-}
-
-/// RDBC 标准异常分类。
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SqlExceptionKind {
-    Transient,
-    TransientConnection,
-    NonTransient,
-    NonTransientConnection,
-    Recoverable,
-    Data,
-    IntegrityConstraintViolation,
-    InvalidAuthorization,
-    Syntax,
-    TransactionRollback,
-    FeatureNotSupported,
-    Timeout,
-    General,
 }
 
 /// 不依赖具体驱动 crate 的 SQL 异常描述。
@@ -182,15 +166,30 @@ impl SqlException {
     #[must_use]
     pub fn kind(&self) -> SqlExceptionKind {
         match self.class_name.as_str() {
-            "java.sql.SQLTimeoutException" => SqlExceptionKind::Timeout,
-            "java.sql.SQLFeatureNotSupportedException" => SqlExceptionKind::FeatureNotSupported,
+            "java.sql.SQLTransientException" => SqlExceptionKind::Transient,
+            "java.sql.SQLTransientConnectionException" => SqlExceptionKind::TransientConnection,
+            "java.sql.SQLNonTransientException" => SqlExceptionKind::NonTransient,
+            "java.sql.SQLNonTransientConnectionException" => {
+                SqlExceptionKind::NonTransientConnection
+            }
             "java.sql.SQLRecoverableException" => SqlExceptionKind::Recoverable,
+            "java.sql.SQLDataException" => SqlExceptionKind::Data,
+            "java.sql.SQLIntegrityConstraintViolationException" => {
+                SqlExceptionKind::IntegrityConstraintViolation
+            }
+            "java.sql.SQLInvalidAuthorizationSpecException" => {
+                SqlExceptionKind::InvalidAuthorizationSpec
+            }
+            "java.sql.SQLSyntaxErrorException" => SqlExceptionKind::Syntax,
+            "java.sql.SQLTransactionRollbackException" => SqlExceptionKind::TransactionRollback,
+            "java.sql.SQLFeatureNotSupportedException" => SqlExceptionKind::FeatureNotSupported,
+            "java.sql.SQLTimeoutException" => SqlExceptionKind::Timeout,
             _ if self.recoverable => SqlExceptionKind::Recoverable,
             _ => match self.sql_state.as_deref().and_then(|state| state.get(0..2)) {
                 Some("08") => SqlExceptionKind::NonTransientConnection,
                 Some("22") => SqlExceptionKind::Data,
                 Some("23") => SqlExceptionKind::IntegrityConstraintViolation,
-                Some("28") => SqlExceptionKind::InvalidAuthorization,
+                Some("28") => SqlExceptionKind::InvalidAuthorizationSpec,
                 Some("40") => SqlExceptionKind::TransactionRollback,
                 Some("42") => SqlExceptionKind::Syntax,
                 Some("0A") => SqlExceptionKind::FeatureNotSupported,

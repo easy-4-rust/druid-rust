@@ -453,6 +453,8 @@ def macro_invocation_sites(unit: SourceUnit) -> tuple[MacroInvocationSite, ...]:
             cursor < len(tokens)
             and cursor not in excluded
             and tokens[cursor].text == "!"
+            and cursor + 1 < len(tokens)
+            and tokens[cursor + 1].text in DELIMITER_PAIRS
         ):
             root_token = tokens[start + int(absolute)]
             if len(path) == 1 and root_token.text in RUST_2021_STRICT_RESERVED_KEYWORDS:

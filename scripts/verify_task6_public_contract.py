@@ -22,7 +22,8 @@ from render_task6_public_contract_allowlist import (
 from verify_task6_migration_authority import module_declares_exact_target
 
 
-TOOLCHAIN = "nightly-2026-08-07-aarch64-apple-darwin"
+# 与 RDBC API 门禁使用同一 nightly 日期，由 rustup 选择当前主机。
+TOOLCHAIN = "nightly-2026-08-07"
 MANIFESTS = {
     "druid": Path("crates/druid/Cargo.toml"),
     "druid-wrapper": Path("crates/druid-wrapper/Cargo.toml"),

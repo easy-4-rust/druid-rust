@@ -10,7 +10,7 @@ use druid_rdbc::error::RdbcError;
 use druid_rdbc::metadata::{DatabaseMetaData, ParameterMetaData, ResultSetMetaData};
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{CallableStatement, PreparedStatement, Statement, StatementOptions};
-use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper, WrapperExt};
+use druid_rdbc::wrapper::{StandardUnwrapped, StandardUnwrappedMut, Wrapper, WrapperExt};
 use std::any::TypeId;
 use std::marker::PhantomData;
 
@@ -19,6 +19,7 @@ struct StatementObject;
 struct PreparedStatementObject;
 struct CallableStatementObject;
 struct DatabaseMetaDataObject;
+#[derive(Debug)]
 struct ResultSetMetaDataObject;
 struct ParameterMetaDataObject;
 struct CommonDataSourceObject;
@@ -187,7 +188,7 @@ impl ConnectionFactory for ConnectionFactoryObject {
 
 macro_rules! assert_exact_identity {
     ($value:expr, $trait_object:ty, $variant:ident) => {{
-        let value = $value;
+        let mut value = $value;
         let expected: &$trait_object = &value;
         match value.unwrap(Some(TypeId::of::<$trait_object>()))? {
             StandardUnwrapped::$variant(actual) => {
@@ -208,12 +209,26 @@ macro_rules! assert_exact_identity {
             }
             other => panic!("unexpected Wrapper identity: {other:?}"),
         }
+        let expected = &value as *const _ as *const ();
+        let wrapper: &mut dyn Wrapper = &mut value;
+        match wrapper.unwrap_mut(Some(TypeId::of::<$trait_object>()))? {
+            StandardUnwrappedMut::$variant(actual) => {
+                assert_eq!(actual as *mut _ as *const (), expected)
+            }
+            other => panic!("unexpected mutable canonical variant: {other:?}"),
+        }
+        match wrapper.unwrap_mut(Some(TypeId::of::<dyn Wrapper>()))? {
+            StandardUnwrappedMut::Wrapper(actual) => {
+                assert_eq!(actual as *mut _ as *const (), expected)
+            }
+            other => panic!("unexpected mutable Wrapper identity: {other:?}"),
+        }
     }};
 }
 
 macro_rules! assert_inherited_identity {
     ($value:expr, $trait_object:ty, $variant:ident) => {{
-        let value = &$value;
+        let value = &mut $value;
         let expected: &$trait_object = value;
         let target = TypeId::of::<$trait_object>();
         assert!(value.is_wrapper_for(Some(target))?);
@@ -225,6 +240,14 @@ macro_rules! assert_inherited_identity {
                 );
             }
             other => panic!("unexpected inherited variant: {other:?}"),
+        }
+        let expected = value as *mut _ as *const ();
+        let wrapper: &mut dyn Wrapper = value;
+        match wrapper.unwrap_mut(Some(target))? {
+            StandardUnwrappedMut::$variant(actual) => {
+                assert_eq!(actual as *mut _ as *const (), expected)
+            }
+            other => panic!("unexpected mutable inherited variant: {other:?}"),
         }
     }};
 }
@@ -289,27 +312,56 @@ async fn main() -> Result<(), RdbcError> {
     );
     assert_exact_identity!(WrapperObject, dyn Wrapper, Wrapper);
 
-    let callable = CallableStatementObject;
+    // 独立消费者通过类型擦除的标准入口识别后端；返回仍是标准视图。
+    let metadata = ResultSetMetaDataObject;
+    let erased: &dyn ResultSetMetaData = &metadata;
+    let concrete_target = Some(TypeId::of::<ResultSetMetaDataObject>());
+    assert!(erased.is_wrapper_for(concrete_target)?);
+    match erased.unwrap(concrete_target)? {
+        StandardUnwrapped::ResultSetMetaData(raw) => {
+            assert!(std::ptr::eq(
+                raw as *const dyn ResultSetMetaData as *const (),
+                &metadata as *const ResultSetMetaDataObject as *const (),
+            ));
+        }
+        _ => panic!("metadata concrete target must return a standard metadata view"),
+    }
+    assert!(format!("{erased:?}").contains("ResultSetMetaDataObject"));
+    assert!(!erased.is_wrapper_for(Some(TypeId::of::<u8>()))?);
+    let mut metadata = ResultSetMetaDataObject;
+    let expected_address = &metadata as *const ResultSetMetaDataObject as *const ();
+    match metadata.unwrap_mut(concrete_target)? {
+        StandardUnwrappedMut::ResultSetMetaData(raw) => {
+            assert!(std::ptr::eq(
+                raw as *mut dyn ResultSetMetaData as *const (),
+                expected_address
+            ));
+            assert_eq!(raw.column_count(), 0);
+        }
+        _ => panic!("metadata concrete target must retain its unique standard view"),
+    }
+
+    let mut callable = CallableStatementObject;
     assert_inherited_identity!(callable, dyn PreparedStatement, PreparedStatement);
     assert_inherited_identity!(callable, dyn Statement, Statement);
 
-    let prepared = PreparedStatementObject;
+    let mut prepared = PreparedStatementObject;
     assert_inherited_identity!(prepared, dyn Statement, Statement);
 
-    let data_source = DataSourceObject;
+    let mut data_source = DataSourceObject;
     assert_inherited_identity!(data_source, dyn CommonDataSource, CommonDataSource);
 
-    let pooled_data_source = ConnectionPoolDataSourceObject;
+    let mut pooled_data_source = ConnectionPoolDataSourceObject;
     assert_inherited_identity!(pooled_data_source, dyn CommonDataSource, CommonDataSource);
 
-    let xa_data_source = XaDataSourceObject;
+    let mut xa_data_source = XaDataSourceObject;
     assert_inherited_identity!(xa_data_source, dyn CommonDataSource, CommonDataSource);
 
-    let xa_connection = XaConnectionObject;
+    let mut xa_connection = XaConnectionObject;
     assert_inherited_identity!(xa_connection, dyn PooledConnection, PooledConnection);
 
     struct UnknownTarget;
-    let wrapper = WrapperObject;
+    let mut wrapper = WrapperObject;
     let unknown = Some(TypeId::of::<UnknownTarget>());
     assert!(!wrapper.is_wrapper_for(unknown)?);
     match wrapper.unwrap(unknown) {
@@ -325,6 +377,14 @@ async fn main() -> Result<(), RdbcError> {
     match wrapper.unwrap(None) {
         Err(RdbcError::InvalidArgument(message)) => assert!(message.contains("target")),
         other => panic!("unexpected null unwrap result: {other:?}"),
+    }
+    match wrapper.unwrap_mut(None) {
+        Err(RdbcError::InvalidArgument(message)) => assert!(message.contains("target")),
+        other => panic!("unexpected null mutable unwrap result: {other:?}"),
+    }
+    match wrapper.unwrap_mut(unknown) {
+        Err(RdbcError::SqlException(exception)) => assert_eq!(exception.sql_state(), Some("0A000")),
+        other => panic!("unexpected unknown mutable unwrap result: {other:?}"),
     }
     assert!(wrapper.is_wrapper_for_type::<WrapperObject>());
     let concrete = wrapper.unwrap_ref::<WrapperObject>()?;

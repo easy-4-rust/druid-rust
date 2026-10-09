@@ -1,0 +1,108 @@
+{
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let physical = PhysicalResultSetProbe::new(Arc::clone(&call_log), false);
+    let context = ResultSetFilterContext::new();
+    let mut chain = FilterChain::new();
+    chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+
+    macro_rules! assert_resource_pair {
+        ($index:ident, $label:ident, $position:expr, $name:literal) => {
+            assert!(chain
+                .$index(&physical, &context, $position)
+                .unwrap()
+                .is_none());
+            assert!(chain.$label(&physical, &context, $name).unwrap().is_none());
+        };
+    }
+
+    assert_resource_pair!(result_set_get_ref, result_set_get_ref_by_label, 1, "ref");
+    assert_resource_pair!(result_set_get_blob, result_set_get_blob_by_label, 2, "blob");
+    assert_resource_pair!(result_set_get_clob, result_set_get_clob_by_label, 3, "clob");
+    assert_resource_pair!(
+        result_set_get_array,
+        result_set_get_array_by_label,
+        4,
+        "array"
+    );
+    assert_resource_pair!(result_set_get_url, result_set_get_url_by_label, 5, "url");
+    assert_resource_pair!(
+        result_set_get_row_id,
+        result_set_get_row_id_by_label,
+        6,
+        "row_id"
+    );
+    assert_resource_pair!(
+        result_set_get_n_clob,
+        result_set_get_n_clob_by_label,
+        7,
+        "n_clob"
+    );
+    assert_resource_pair!(
+        result_set_get_sql_xml,
+        result_set_get_sql_xml_by_label,
+        8,
+        "sql_xml"
+    );
+    assert_resource_pair!(
+        result_set_get_ascii_stream,
+        result_set_get_ascii_stream_by_label,
+        9,
+        "ascii"
+    );
+    assert_resource_pair!(
+        result_set_get_unicode_stream,
+        result_set_get_unicode_stream_by_label,
+        10,
+        "unicode"
+    );
+    assert_resource_pair!(
+        result_set_get_binary_stream,
+        result_set_get_binary_stream_by_label,
+        11,
+        "binary"
+    );
+    assert_resource_pair!(
+        result_set_get_character_stream,
+        result_set_get_character_stream_by_label,
+        12,
+        "character"
+    );
+    assert_resource_pair!(
+        result_set_get_n_character_stream,
+        result_set_get_n_character_stream_by_label,
+        13,
+        "n_character"
+    );
+
+    assert_eq!(
+        calls(&call_log),
+        [
+            "physical:reference:1",
+            "physical:reference_by_label:ref",
+            "physical:blob:2",
+            "physical:blob_by_label:blob",
+            "physical:clob:3",
+            "physical:clob_by_label:clob",
+            "physical:array:4",
+            "physical:array_by_label:array",
+            "physical:url:5",
+            "physical:url_by_label:url",
+            "physical:row_id:6",
+            "physical:row_id_by_label:row_id",
+            "physical:n_clob:7",
+            "physical:n_clob_by_label:n_clob",
+            "physical:sql_xml:8",
+            "physical:sql_xml_by_label:sql_xml",
+            "physical:ascii_stream:9",
+            "physical:ascii_stream_by_label:ascii",
+            "physical:unicode_stream:10",
+            "physical:unicode_stream_by_label:unicode",
+            "physical:binary_stream:11",
+            "physical:binary_stream_by_label:binary",
+            "physical:character_stream:12",
+            "physical:character_stream_by_label:character",
+            "physical:n_character_stream:13",
+            "physical:n_character_stream_by_label:n_character",
+        ]
+    );
+}

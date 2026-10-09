@@ -94,3 +94,6 @@ pub(crate) fn take_poisoned(connection: &dyn Connection) -> bool {
     controls.remove(&key);
     true
 }
+
+#[cfg(test)]
+mod lease_complete_tests;

@@ -1,0 +1,63 @@
+use druid_rdbc::error::RdbcError;
+use druid_rdbc::metadata::{ResultSetMetaData, ResultSetMetaDataSnapshot};
+use druid_rdbc::resource::{RdbcInputStream, RdbcReader};
+use druid_rdbc::result_set::{ColumnIndex, ResultSet, ResultSetRead, ResultSetStreamKind};
+use druid_rdbc::types::{RdbcObject, Value};
+use std::sync::{Arc, Mutex};
+
+/// 分别观察原生资源、字节流、Reader的下标和标签入口，不提前消费游标。
+/// 对应 Java: java.sql.ResultSet#getXxx 的十三种资源家族。
+pub(super) struct ResourceReadProbe {
+    pub(super) calls: Arc<Mutex<Vec<String>>>,
+    pub(super) stream: RdbcInputStream,
+    pub(super) reader: RdbcReader,
+    pub(super) closed: bool,
+}
+impl ResourceReadProbe {
+    fn record(&self, family: &str, column: Option<ColumnIndex>, label: Option<&str>) -> Result<(), RdbcError> {
+        let target = label.map(|label| format!("label:{label}")).unwrap_or_else(|| format!("index:{}", column.unwrap().get()));
+        self.calls.lock().unwrap().push(format!("raw:{family}:{target}"));
+        if label == Some("fail") { return Err(RdbcError::DriverError("native resource failure".to_owned())); }
+        Ok(())
+    }
+}
+druid_rdbc::impl_standard_wrapper!(ResourceReadProbe => ResultSet);
+#[async_trait::async_trait]
+impl ResultSet for ResourceReadProbe {
+    async fn next(&mut self) -> Result<bool, RdbcError> {
+        Err(RdbcError::UnsupportedOperation { operation: "resource_probe_next" })
+    }
+    fn find_column(&self, label: &str) -> Result<ColumnIndex, RdbcError> {
+        self.calls.lock().unwrap().push(format!("raw:find:{label}"));
+        ColumnIndex::new(3)
+    }
+    fn read_object(&self, column: ColumnIndex, request: &ResultSetRead) -> Result<RdbcObject, RdbcError> {
+        self.record(&format!("resource:{request:?}"), Some(column), None)?;
+        Ok(RdbcObject::Scalar(Value::Null))
+    }
+    fn read_object_by_label(&self, label: &str, request: &ResultSetRead) -> Result<RdbcObject, RdbcError> {
+        self.record(&format!("resource:{request:?}"), None, Some(label))?;
+        Ok(RdbcObject::Scalar(Value::Null))
+    }
+    fn input_stream(&self, column: ColumnIndex, kind: ResultSetStreamKind) -> Result<Option<RdbcInputStream>, RdbcError> {
+        self.record(&format!("stream:{kind:?}"), Some(column), None)?;
+        Ok(Some(self.stream.clone()))
+    }
+    fn input_stream_by_label(&self, label: &str, kind: ResultSetStreamKind) -> Result<Option<RdbcInputStream>, RdbcError> {
+        self.record(&format!("stream:{kind:?}"), None, Some(label))?;
+        Ok(Some(self.stream.clone()))
+    }
+    fn reader(&self, column: ColumnIndex, national: bool) -> Result<Option<RdbcReader>, RdbcError> {
+        self.record(&format!("reader:{national}"), Some(column), None)?;
+        Ok(Some(self.reader.clone()))
+    }
+    fn reader_by_label(&self, label: &str, national: bool) -> Result<Option<RdbcReader>, RdbcError> {
+        self.record(&format!("reader:{national}"), None, Some(label))?;
+        Ok(Some(self.reader.clone()))
+    }
+    fn meta_data(&self) -> Result<Arc<dyn ResultSetMetaData>, RdbcError> {
+        Ok(Arc::new(ResultSetMetaDataSnapshot::new(Vec::new())))
+    }
+    async fn close(&mut self) -> Result<(), RdbcError> { self.closed = true; Ok(()) }
+    fn is_closed(&self) -> Result<bool, RdbcError> { Ok(self.closed) }
+}

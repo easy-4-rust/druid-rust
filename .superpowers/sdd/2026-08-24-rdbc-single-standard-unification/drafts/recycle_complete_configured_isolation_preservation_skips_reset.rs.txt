@@ -1,0 +1,29 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    let pool = build_pool(factory.clone(), |builder| {
+        builder.keep_connection_underlying_transaction_isolation(true)
+    })
+    .await;
+    let mut connection = pool.get().await.expect("connection must open");
+    let first_id = connection.id();
+    connection
+        .set_transaction_isolation(8)
+        .await
+        .expect("isolation must change");
+    let state = factory.state(0);
+    state
+        .lock()
+        .expect("tracking state poisoned")
+        .events
+        .clear();
+
+    connection.close().await.expect("connection must recycle");
+    assert_eq!(
+        state.lock().expect("tracking state poisoned").events,
+        vec!["clear_warnings"]
+    );
+
+    let connection = pool.get().await.expect("same connection must be reused");
+    assert_eq!(connection.id(), first_id);
+    assert_eq!(connection.transaction_isolation(), 8);
+}

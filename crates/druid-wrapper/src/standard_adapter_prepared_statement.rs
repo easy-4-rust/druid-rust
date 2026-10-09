@@ -17,13 +17,22 @@ use druid_rdbc::statement::{
 use druid_rdbc::types::{Row, Value};
 use std::sync::Arc;
 
+#[cfg(test)]
+mod cancellation_tests;
+
+#[cfg(test)]
+mod generated_keys_cancellation_tests;
+
 pub(crate) struct StandardAdapterPreparedStatement {
     sql: String,
     executor: Option<Arc<dyn StandardExecutor>>,
     parameters: PreparedParameterState,
     parameter_count: Option<usize>,
+    eager_resource_binding: bool,
     state: StandardStatementState,
-    parameter_batch: Vec<Vec<Value>>,
+    /// 当前成功执行的完整生成键；批量执行按命令顺序发布。
+    generated_keys: Vec<i64>,
+    parameter_batch: Vec<Vec<druid_rdbc::statement::PreparedInputParameter>>,
 }
 
 impl StandardAdapterPreparedStatement {
@@ -39,9 +48,17 @@ impl StandardAdapterPreparedStatement {
             executor: Some(executor),
             parameters: PreparedParameterState::new(),
             parameter_count,
+            eager_resource_binding: false,
             state: StandardStatementState::new(options),
+            generated_keys: Vec::new(),
             parameter_batch: Vec::new(),
         }
+    }
+
+    /// SQLite Toasty 保留同步 setter 资源读取语义；异步 LOB 仍交给执行边界。
+    pub(crate) fn with_eager_resource_binding(mut self, enabled: bool) -> Self {
+        self.eager_resource_binding = enabled;
+        self
     }
 
     fn executor_core(&self) -> Result<&Arc<dyn StandardExecutor>, RdbcError> {
@@ -53,10 +70,16 @@ impl StandardAdapterPreparedStatement {
         Ok(executor)
     }
 
-    fn values_core(&self) -> Result<Vec<druid_rdbc::types::Value>, RdbcError> {
+    /// 新执行尝试先失效旧结果，参数错误、驱动失败或取消不得暴露上一轮键。
+    fn reset_execution_results(&mut self) {
+        self.generated_keys.clear();
+        self.state.last_update_count = None;
+    }
+
+    async fn values_core(&self) -> Result<Vec<druid_rdbc::types::Value>, RdbcError> {
         match self.parameter_count {
-            Some(count) => self.parameters.values(count),
-            None => self.parameters.values_contiguous(),
+            Some(count) => self.parameters.values(count).await,
+            None => self.parameters.values_contiguous().await,
         }
     }
 
@@ -111,6 +134,7 @@ impl Statement for StandardAdapterPreparedStatement {
     }
 
     async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.reset_execution_results();
         let executor = Arc::clone(self.executor_core()?);
         let mut counts = Vec::with_capacity(self.state.statement_batch.len());
         for sql in &self.state.statement_batch {
@@ -130,10 +154,10 @@ impl Statement for StandardAdapterPreparedStatement {
     async fn generated_keys(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
         let rows = self
-            .state
-            .last_generated_key
-            .map(|value| vec![Row::new(vec![Value::Int(value)])])
-            .unwrap_or_default();
+            .generated_keys
+            .iter()
+            .map(|value| Row::new(vec![Value::Int(*value)]))
+            .collect();
         Ok(Box::new(StandardAdapterResultSet::new(
             crate::standard_query_result::StandardQueryResult::with_labels(
                 rows,
@@ -171,6 +195,36 @@ impl Statement for StandardAdapterPreparedStatement {
 
 #[async_trait::async_trait]
 impl PreparedStatement for StandardAdapterPreparedStatement {
+    fn set_input_parameter(
+        &mut self,
+        index: druid_rdbc::statement::ParameterIndex,
+        parameter: druid_rdbc::statement::PreparedInputParameter,
+    ) -> Result<(), RdbcError> {
+        let executor = Arc::clone(self.executor_core()?);
+        let parameter = if self.eager_resource_binding
+            && matches!(
+                parameter,
+                druid_rdbc::statement::PreparedInputParameter::AsciiStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::UnicodeStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::BinaryStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::BlobStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::CharacterStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::NCharacterStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::ClobReader { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::NClobReader { .. }
+            ) {
+            // 底层槽存储一次读取后的值，重复执行及批次快照不能再消费调用方资源。
+            let value = crate::prepared_parameter_materializer::PreparedParameterMaterializer::materialize_immediate(&parameter)?
+                .ok_or_else(|| RdbcError::Other("synchronous stream binding requires a value".to_owned()))?;
+            druid_rdbc::statement::PreparedInputParameter::RustValue(value)
+        } else {
+            parameter
+        };
+        self.parameters.set_input(index, parameter)?;
+        executor.task4_trace_parameter_set();
+        Ok(())
+    }
+
     fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
         let executor = Arc::clone(self.executor_core()?);
         self.parameters.set_standard(parameter)?;
@@ -186,14 +240,48 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
 
     fn add_prepared_batch(&mut self) -> Result<(), RdbcError> {
         self.executor_core()?;
-        self.parameter_batch.push(self.values_core()?);
+        let inputs = match self.parameter_count {
+            Some(count) => self.parameters.inputs(count)?,
+            None => self.parameters.inputs_contiguous()?,
+        };
+        self.parameter_batch.push(inputs);
         Ok(())
     }
 
     fn add_parameter_batch(&mut self, parameters: Vec<PreparedParameter>) -> Result<(), RdbcError> {
         self.executor_core()?;
         let values = self.parameter_values(parameters)?;
-        self.parameter_batch.push(values);
+        self.parameter_batch.push(
+            values
+                .into_iter()
+                .map(druid_rdbc::statement::PreparedInputParameter::RustValue)
+                .collect(),
+        );
+        Ok(())
+    }
+
+    fn add_input_parameter_batch(
+        &mut self,
+        mut parameters: Vec<(
+            druid_rdbc::statement::ParameterIndex,
+            druid_rdbc::statement::PreparedInputParameter,
+        )>,
+    ) -> Result<(), RdbcError> {
+        self.executor_core()?;
+        parameters.sort_by_key(|(index, _)| index.get());
+        let expected = self.parameter_count.unwrap_or(parameters.len());
+        if parameters.len() != expected
+            || parameters
+                .iter()
+                .enumerate()
+                .any(|(offset, (index, _))| index.get() != offset + 1)
+        {
+            return Err(RdbcError::InvalidArgument(
+                "prepared batch indexes must match contiguous prepared width".to_owned(),
+            ));
+        }
+        self.parameter_batch
+            .push(parameters.into_iter().map(|(_, input)| input).collect());
         Ok(())
     }
 
@@ -204,52 +292,66 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
     }
 
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.reset_execution_results();
         let executor = Arc::clone(self.executor_core()?);
         let result = executor
-            .execute_query(&self.sql, self.values_core()?)
+            .execute_query(&self.sql, self.values_core().await?)
             .await?;
         executor.task4_trace_prepared_query();
+        self.generated_keys = result.generated_keys.clone();
         Ok(Box::new(StandardAdapterResultSet::new(result, executor)))
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
+        self.reset_execution_results();
         let executor = Arc::clone(self.executor_core()?);
-        let result = executor
-            .execute_update_result(&self.sql, self.values_core()?)
+        let (count, keys) = executor
+            .execute_update_keys(&self.sql, self.values_core().await?)
             .await?;
-        self.state.last_generated_key = result.last_insert_id;
-        i64::try_from(result.rows_affected)
-            .map_err(|_| RdbcError::InvalidArgument("rows affected exceeds canonical i64".into()))
+        self.generated_keys = keys;
+        self.state.last_update_count = Some(count);
+        Ok(count)
     }
 
     async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.reset_execution_results();
         let executor = Arc::clone(self.executor_core()?);
-        let values = self.values_core()?;
+        let values = self.values_core().await?;
         if executor.statement_returns_rows(&self.sql).await? {
             let result = executor.execute_query(&self.sql, values).await?;
             executor.task4_trace_prepared_query();
+            self.generated_keys = result.generated_keys.clone();
             self.state.last_update_count = None;
             Ok(vec![ExecutionResult::ResultSet(Box::new(
                 StandardAdapterResultSet::new(result, executor),
             ))])
         } else {
-            let result = executor.execute_update_result(&self.sql, values).await?;
-            let count = i64::try_from(result.rows_affected).map_err(|_| {
-                RdbcError::InvalidArgument("rows affected exceeds canonical i64".into())
-            })?;
-            self.state.last_generated_key = result.last_insert_id;
+            let (count, keys) = executor.execute_update_keys(&self.sql, values).await?;
+            self.generated_keys = keys;
             self.state.last_update_count = Some(count);
             Ok(vec![ExecutionResult::UpdateCount(count)])
         }
     }
 
     async fn execute_prepared_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.reset_execution_results();
         let executor = Arc::clone(self.executor_core()?);
-        let mut counts = Vec::with_capacity(self.parameter_batch.len());
-        for values in &self.parameter_batch {
-            match executor.execute_update(&self.sql, values.clone()).await {
-                Ok(count) => counts.push(count),
+        // 与 BASE take_batches 一致：一次执行尝试消费队列，失败或取消不重放已读资源。
+        let parameter_sets = std::mem::take(&mut self.parameter_batch);
+        let mut counts = Vec::with_capacity(parameter_sets.len());
+        let mut keys = Vec::with_capacity(parameter_sets.len());
+        for inputs in &parameter_sets {
+            let execution = async {
+                let values = PreparedParameterState::materialize(inputs).await?;
+                executor.execute_update_keys(&self.sql, values).await
+            };
+            match execution.await {
+                Ok((count, key)) => {
+                    counts.push(count);
+                    keys.extend(key);
+                }
                 Err(cause) => {
+                    self.reset_execution_results();
                     return Err(RdbcError::BatchUpdateException {
                         update_counts: counts.into(),
                         cause: Box::new(cause),
@@ -257,7 +359,8 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
                 }
             }
         }
-        self.parameter_batch.clear();
+        // 中途失败或取消时仅丢弃局部结果；完成整批后才对调用方发布。
+        self.generated_keys = keys;
         Ok(counts)
     }
 

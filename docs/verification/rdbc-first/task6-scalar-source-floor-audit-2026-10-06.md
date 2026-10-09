@@ -1,0 +1,7 @@
+# Task6 完整标量恢复后的源观察核查
+
+现有未放宽的验证函数审计固定1283 BASE案例与1283账本行，所有前7字段重新核对：1232源观察检查PASS、51FAIL；登记1095exact、188parameterized。完整标量案例已在真实19调用/错误/实际Statement1及RDBC471/0、Druid150/0回归后准确绑定。检查数量不是行为等价或整体完成率。
+
+完整C2会话77497终态exit1，下一原案例rdbc_object_and_opaque_object_preserve_type_identity_and_display_contract缺明确执行分支。当前51源观察缺口为ResultSet13、Lease2、Recycle12、ResultSetFilter24。实际审计会话51886终态exit0，JSON task6-scalar-source-floor-audit-2026-10-06.json逐项保留原因。
+
+全仓新回归会话15535运行中，日志task6-scalar-overloads-workspace.log。上一个3709/2结果早于标量修改；当前不得称全仓通过。Task6 FIX_REQUIRED和Task7八组件/Task8/P05–P07全部18顶层任务仍未闭环。

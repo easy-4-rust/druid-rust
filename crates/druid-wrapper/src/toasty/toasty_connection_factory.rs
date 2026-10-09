@@ -20,6 +20,8 @@ use toasty_core::{
 #[derive(Clone)]
 pub struct ToastyConnectionFactory {
     driver: Arc<dyn Driver>,
+    #[cfg(feature = "sqlite")]
+    sqlite_driver: Option<Arc<toasty_driver_sqlite::Sqlite>>,
     schema: Arc<Schema>,
     connect_context: ConnectContext,
     url: String,
@@ -56,6 +58,16 @@ impl ToastyConnectionFactory {
                 operation: "toasty_non_sql_connection",
             });
         }
+        #[cfg(feature = "sqlite")]
+        if url
+            .split_once(':')
+            .is_some_and(|(scheme, _)| scheme.eq_ignore_ascii_case("sqlite"))
+        {
+            return Self::from_driver(
+                toasty_driver_sqlite::Sqlite::new(url)
+                    .map_err(|error| Self::driver_error(&error))?,
+            );
+        }
         let driver = Connect::new(&url)
             .await
             .map_err(|error| Self::driver_error(&error))?;
@@ -91,8 +103,17 @@ impl ToastyConnectionFactory {
             (driver_name.eq_ignore_ascii_case("sqlite") && url == "sqlite::memory:").then_some(1)
         });
 
+        // 仅识别真实 SQLite 类型，保留配置好的原实例；自定义驱动仍走官方路径。
+        let driver = Arc::new(driver);
+        #[cfg(feature = "sqlite")]
+        let sqlite_driver = {
+            let erased: Arc<dyn std::any::Any + Send + Sync> = driver.clone();
+            erased.downcast::<toasty_driver_sqlite::Sqlite>().ok()
+        };
         Ok(Self {
-            driver: Arc::new(driver),
+            driver,
+            #[cfg(feature = "sqlite")]
+            sqlite_driver,
             schema: Arc::new(schema),
             connect_context: ConnectContext::default(),
             url,
@@ -147,6 +168,23 @@ impl ToastyConnectionFactory {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_factory_create();
         }
+        #[cfg(feature = "sqlite")]
+        let (connection, query_metadata): (Box<dyn toasty_core::Connection>, _) =
+            if let Some(driver) = &self.sqlite_driver {
+                let (connection, metadata) = driver
+                    .connect_with_query_metadata(&self.connect_context)
+                    .map_err(|error| Self::driver_error(&error))?;
+                (Box::new(connection), Some(metadata))
+            } else {
+                (
+                    self.driver
+                        .connect(&self.connect_context)
+                        .await
+                        .map_err(|error| Self::driver_error(&error))?,
+                    None,
+                )
+            };
+        #[cfg(not(feature = "sqlite"))]
         let connection = self
             .driver
             .connect(&self.connect_context)
@@ -161,6 +199,8 @@ impl ToastyConnectionFactory {
             self.driver.capability(),
             self.url.clone(),
         );
+        #[cfg(feature = "sqlite")]
+        connection.install_query_metadata(query_metadata);
         if let Some(trace) = &self.runtime_trace {
             connection.install_runtime_trace(trace.clone());
             trace.task4_trace_connection_create();

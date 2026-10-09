@@ -1,0 +1,344 @@
+// 固定BASE完整原文，非Cargo输入；尚未映射/编译/运行/绑定。
+// SHA f43cd3a8cb862965ba9e57a82d6fe91a3a253f3cb4475db44f2676766c579297
+#[tokio::test]
+async fn task6_sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity() {
+    let mut connection = sqlite_pooled_connection().await;
+    let mut statement = connection.create_statement().await.unwrap();
+    statement
+        .execute_update(
+            &mut connection,
+            "CREATE TABLE result_event (
+                id INTEGER PRIMARY KEY,
+                enabled INTEGER NOT NULL,
+                score REAL NOT NULL,
+                label TEXT NOT NULL,
+                payload BLOB NOT NULL,
+                optional_label TEXT
+            )",
+        )
+        .await
+        .unwrap();
+    statement
+        .execute_update(
+            &mut connection,
+            "INSERT INTO result_event VALUES
+                (1, 1, 1.5, 'first', X'0102', NULL),
+                (2, 0, 2.5, 'second', X'0304', 'present')",
+        )
+        .await
+        .unwrap();
+
+    let mut result_set = statement
+        .execute_query_result_set(
+            &mut connection,
+            "SELECT id, enabled, score, label, payload, optional_label
+             FROM result_event ORDER BY id",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(statement.fetch_row_peak(), -1);
+    assert!(std::ptr::eq(
+        statement.statement(),
+        result_set.poolable_statement().statement()
+    ));
+    assert!(std::ptr::eq(
+        statement.statement(),
+        result_set.statement().statement()
+    ));
+    assert!(
+        result_set.prepared_statement().is_none(),
+        "普通 Statement 结果集不能伪装成 PreparedStatement"
+    );
+    assert!(
+        result_set.callable_statement().is_none(),
+        "普通 Statement 结果集不能伪装成 CallableStatement"
+    );
+    assert!(result_set.is_wrapper_for_type::<DruidPooledResultSet>());
+    assert!(result_set.is_wrapper_for_type::<dyn PhysicalResultSet>());
+    assert!(result_set.as_any().is::<DruidPooledResultSet>());
+    assert!(result_set.unwrap_ref::<DruidPooledResultSet>().is_some());
+    assert!(result_set
+        .unwrap(Some(TypeId::of::<dyn PhysicalResultSet>()))
+        .and_then(|value| value.result_set())
+        .is_some());
+    assert!(!result_set.is_wrapper_for(None));
+    assert!(result_set.unwrap(None).is_none());
+    assert!(format!("{result_set:?}").contains("DruidPooledResultSet"));
+
+    assert!(result_set.is_before_first(&mut connection).unwrap());
+    assert_eq!(result_set.row(&mut connection).unwrap(), 0);
+    assert_eq!(result_set.warnings(&mut connection).unwrap(), None);
+    result_set.clear_warnings(&mut connection).unwrap();
+    assert_eq!(result_set.cursor_name(&mut connection).unwrap(), None);
+    let meta_data = result_set.meta_data(&mut connection).unwrap();
+    assert_eq!(meta_data.column_count().unwrap(), 6);
+    assert_eq!(
+        meta_data.column_type(1).unwrap(),
+        ResultSetColumnType::Integer
+    );
+    assert_eq!(
+        meta_data.column_type(3).unwrap(),
+        ResultSetColumnType::Float
+    );
+    assert_eq!(meta_data.column_type(4).unwrap(), ResultSetColumnType::Text);
+    assert_eq!(
+        meta_data.column_type(5).unwrap(),
+        ResultSetColumnType::Binary
+    );
+    assert!(meta_data.is_nullable(6).unwrap());
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(result_set.row(&mut connection).unwrap(), 1);
+    assert_eq!(result_set.long(&mut connection, 1).unwrap(), 1);
+    assert_eq!(result_set.int(&mut connection, 1).unwrap(), 1);
+    assert_eq!(result_set.short(&mut connection, 1).unwrap(), 1);
+    assert_eq!(result_set.byte(&mut connection, 1).unwrap(), 1);
+    assert!(result_set.boolean(&mut connection, 2).unwrap());
+    assert_eq!(result_set.double(&mut connection, 3).unwrap(), 1.5);
+    assert_eq!(result_set.float(&mut connection, 3).unwrap(), 1.5);
+    assert_eq!(
+        result_set.string(&mut connection, 4).unwrap(),
+        Some("first".to_string())
+    );
+    assert_eq!(
+        result_set.bytes(&mut connection, 5).unwrap(),
+        Some(vec![1, 2])
+    );
+    macro_rules! assert_sqlite_resource_unsupported {
+        ($expression:expr, $operation:literal) => {
+            assert!(matches!(
+                $expression,
+                Err(RdbcError::UnsupportedOperation {
+                    operation: $operation
+                })
+            ));
+        };
+    }
+    assert_sqlite_resource_unsupported!(result_set.reference(&mut connection, 1), "result_set_ref");
+    assert_sqlite_resource_unsupported!(
+        result_set.reference_by_label(&mut connection, "id"),
+        "result_set_ref_by_label"
+    );
+    assert_sqlite_resource_unsupported!(result_set.blob(&mut connection, 5), "result_set_blob");
+    assert_sqlite_resource_unsupported!(
+        result_set.blob_by_label(&mut connection, "payload"),
+        "result_set_blob_by_label"
+    );
+    assert_sqlite_resource_unsupported!(result_set.clob(&mut connection, 4), "result_set_clob");
+    assert_sqlite_resource_unsupported!(
+        result_set.clob_by_label(&mut connection, "label"),
+        "result_set_clob_by_label"
+    );
+    assert_sqlite_resource_unsupported!(result_set.array(&mut connection, 1), "result_set_array");
+    assert_sqlite_resource_unsupported!(
+        result_set.array_by_label(&mut connection, "id"),
+        "result_set_array_by_label"
+    );
+    assert_sqlite_resource_unsupported!(result_set.url(&mut connection, 4), "result_set_url");
+    assert_sqlite_resource_unsupported!(
+        result_set.url_by_label(&mut connection, "label"),
+        "result_set_url_by_label"
+    );
+    assert_sqlite_resource_unsupported!(result_set.row_id(&mut connection, 1), "result_set_row_id");
+    assert_sqlite_resource_unsupported!(
+        result_set.row_id_by_label(&mut connection, "id"),
+        "result_set_row_id_by_label"
+    );
+    assert_sqlite_resource_unsupported!(result_set.n_clob(&mut connection, 4), "result_set_n_clob");
+    assert_sqlite_resource_unsupported!(
+        result_set.n_clob_by_label(&mut connection, "label"),
+        "result_set_n_clob_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.sql_xml(&mut connection, 4),
+        "result_set_sql_xml"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.sql_xml_by_label(&mut connection, "label"),
+        "result_set_sql_xml_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_reference(&mut connection, 1, None),
+        "result_set_update_ref"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_reference_by_label(&mut connection, "id", None),
+        "result_set_update_ref_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_blob(&mut connection, 5, None),
+        "result_set_update_blob"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_blob_by_label(&mut connection, "payload", None),
+        "result_set_update_blob_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_clob(&mut connection, 4, None),
+        "result_set_update_clob"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_clob_by_label(&mut connection, "label", None),
+        "result_set_update_clob_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_array(&mut connection, 1, None),
+        "result_set_update_array"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_array_by_label(&mut connection, "id", None),
+        "result_set_update_array_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_row_id(&mut connection, 1, None),
+        "result_set_update_row_id"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_row_id_by_label(&mut connection, "id", None),
+        "result_set_update_row_id_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_n_clob(&mut connection, 4, None),
+        "result_set_update_n_clob"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_n_clob_by_label(&mut connection, "label", None),
+        "result_set_update_n_clob_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_sql_xml(&mut connection, 4, None),
+        "result_set_update_sql_xml"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_sql_xml_by_label(&mut connection, "label", None),
+        "result_set_update_sql_xml_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_blob_stream(&mut connection, 5, None),
+        "result_set_update_blob_stream"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_blob_stream_by_label(&mut connection, "payload", None),
+        "result_set_update_blob_stream_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_blob_stream_with_length(&mut connection, 5, None, 1),
+        "result_set_update_blob_stream"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_blob_stream_by_label_with_length(&mut connection, "payload", None, 1),
+        "result_set_update_blob_stream_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_clob_reader(&mut connection, 4, None),
+        "result_set_update_clob_reader"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_clob_reader_by_label(&mut connection, "label", None),
+        "result_set_update_clob_reader_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_clob_reader_with_length(&mut connection, 4, None, 1),
+        "result_set_update_clob_reader"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_clob_reader_by_label_with_length(&mut connection, "label", None, 1),
+        "result_set_update_clob_reader_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_n_clob_reader(&mut connection, 4, None),
+        "result_set_update_n_clob_reader"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_n_clob_reader_by_label(&mut connection, "label", None),
+        "result_set_update_n_clob_reader_by_label"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_n_clob_reader_with_length(&mut connection, 4, None, 1),
+        "result_set_update_n_clob_reader"
+    );
+    assert_sqlite_resource_unsupported!(
+        result_set.update_n_clob_reader_by_label_with_length(&mut connection, "label", None, 1),
+        "result_set_update_n_clob_reader_by_label"
+    );
+    assert_eq!(statement.exception_count(), 42);
+    assert_eq!(
+        result_set
+            .binary_stream(&mut connection, 5)
+            .unwrap()
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
+        vec![1, 2]
+    );
+    assert_eq!(
+        result_set
+            .ascii_stream(&mut connection, 4)
+            .unwrap()
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
+        b"first"
+    );
+    assert_eq!(
+        result_set
+            .unicode_stream(&mut connection, 4)
+            .unwrap()
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
+        b"first"
+    );
+    assert_eq!(
+        result_set
+            .character_stream(&mut connection, 4)
+            .unwrap()
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "first"
+    );
+    assert_eq!(
+        result_set
+            .n_character_stream(&mut connection, 4)
+            .unwrap()
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "first"
+    );
+    assert_eq!(
+        result_set.n_string(&mut connection, 4).unwrap(),
+        Some("first".to_string())
+    );
+    assert_eq!(result_set.object(&mut connection, 6).unwrap(), Value::Null);
+    assert!(result_set.was_null(&mut connection).unwrap());
+    assert!(result_set.is_first(&mut connection).unwrap());
+    assert!(!result_set.row_updated(&mut connection).unwrap());
+    assert!(!result_set.row_inserted(&mut connection).unwrap());
+    assert!(!result_set.row_deleted(&mut connection).unwrap());
+
+    for operation in [
+        result_set.insert_row(&mut connection),
+        result_set.update_row(&mut connection),
+        result_set.delete_row(&mut connection),
+        result_set.refresh_row(&mut connection),
+        result_set.cancel_row_updates(&mut connection),
+        result_set.move_to_insert_row(&mut connection),
+        result_set.move_to_current_row(&mut connection),
+    ] {
+        assert!(matches!(
+            operation,
+            Err(RdbcError::UnsupportedOperation { .. })
+        ));
+    }
+
+    assert!(result_set.next(&mut connection).unwrap());
+    assert!(result_set.is_last(&mut connection).unwrap());
+    assert_eq!(result_set.fetch_row_count(), 2);
+    assert!(result_set.previous(&mut connection).unwrap());
+    assert_eq!(result_set.fetch_row_count(), 2);
+    result_set.close_with_connection(&mut connection).unwrap();
+    assert!(result_set.is_closed());
+    assert_eq!(statement.fetch_row_peak(), 2);
+}

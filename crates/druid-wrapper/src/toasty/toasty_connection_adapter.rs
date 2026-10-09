@@ -58,6 +58,8 @@ fn read_only_session_sql(driver_name: &str, read_only: bool) -> Option<&'static 
 /// `toasty::Db` 或 Toasty Pool；DruidPool 独占池化、回收和统计职责。
 pub struct ToastyConnectionAdapter {
     connection: Option<Box<dyn ToastyConnection>>,
+    #[cfg(feature = "sqlite")]
+    query_metadata: Option<toasty_driver_sqlite::SqliteQueryMetadata>,
     schema: Arc<Schema>,
     url: String,
     driver_name: &'static str,
@@ -93,6 +95,8 @@ impl ToastyConnectionAdapter {
     ) -> Self {
         Self {
             connection: Some(connection),
+            #[cfg(feature = "sqlite")]
+            query_metadata: None,
             schema,
             url,
             driver_name: capability.driver_name,
@@ -104,6 +108,59 @@ impl ToastyConnectionAdapter {
             standard_executor: None,
             runtime_trace: None,
         }
+    }
+
+    #[cfg(feature = "sqlite")]
+    pub(crate) fn install_query_metadata(
+        &mut self,
+        metadata: Option<toasty_driver_sqlite::SqliteQueryMetadata>,
+    ) {
+        self.query_metadata = metadata;
+    }
+
+    // 在同一 executor 锁内消费刚执行的列快照，不执行额外 SQL。
+    fn query_result(&self, rows: Vec<Row>, hidden_key: bool) -> StandardQueryResult {
+        #[cfg(feature = "sqlite")]
+        if let Some(mut columns) = self
+            .query_metadata
+            .as_ref()
+            .and_then(toasty_driver_sqlite::SqliteQueryMetadata::take_columns)
+        {
+            if hidden_key {
+                columns.pop();
+            }
+            let labels = columns
+                .iter()
+                .map(|column| column.label().to_owned())
+                .collect();
+            let mut result = StandardQueryResult::with_labels(rows, labels);
+            result.columns = columns
+                .iter()
+                .enumerate()
+                .map(|(index, column)| {
+                    // 实际返回 SQL NULL 足以证明该结果列可空；非空样本和空结果
+                    // 不能证明 NOT NULL，仍保留驱动未提供约束时的 Unknown。
+                    let nullable = if result
+                        .rows
+                        .iter()
+                        .any(|row| matches!(row.values.get(index), Some(Value::Null)))
+                    {
+                        druid_rdbc::metadata::ColumnNullability::Nullable
+                    } else {
+                        druid_rdbc::metadata::ColumnNullability::Unknown
+                    };
+                    druid_rdbc::metadata::ColumnDescriptor::new(
+                        column.label(),
+                        column.declared_type().unwrap_or("UNKNOWN"),
+                        nullable,
+                    )
+                })
+                .collect();
+            return result;
+        }
+        #[cfg(not(feature = "sqlite"))]
+        let _ = hidden_key;
+        StandardQueryResult::rows_only(rows)
     }
 
     pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
@@ -118,6 +175,8 @@ impl ToastyConnectionAdapter {
         let runtime_trace = self.runtime_trace.take();
         let shell = Self {
             connection: None,
+            #[cfg(feature = "sqlite")]
+            query_metadata: None,
             schema: Arc::clone(&self.schema),
             url: self.url.clone(),
             driver_name: self.driver_name,
@@ -148,7 +207,17 @@ impl ToastyConnectionAdapter {
                 "Toasty statement returned rows instead of an update count".to_string(),
             ));
         };
-        let last_insert_id = self.sqlite_last_insert_id().await?;
+        // SQLite 的 last_insert_rowid 属于连接，UPDATE/DELETE/零行 INSERT 不产生新键。
+        let inserts_rows = matches!(
+            sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::SQLiteDialect {}, sql)
+                .as_deref(),
+            Ok([sqlparser::ast::Statement::Insert(_)])
+        );
+        let last_insert_id = if rows_affected > 0 && inserts_rows {
+            self.sqlite_last_insert_id().await?
+        } else {
+            None
+        };
         Ok(AdapterUpdateResult {
             rows_affected,
             last_insert_id,
@@ -433,6 +502,42 @@ impl ToastyConnectionAdapter {
 
 #[async_trait::async_trait]
 impl AdapterExecutionCore for ToastyConnectionAdapter {
+    async fn standard_execute_update_keys_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<(i64, Vec<i64>), RdbcError> {
+        if self.is_sqlite() {
+            if let Some(plan) =
+                crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse_update(sql)?
+            {
+                let properties = self
+                    .execute_query_core(&plan.table_properties_sql(), Vec::new())
+                    .await?;
+                if !properties.is_empty() {
+                    let columns = self
+                        .execute_query_core(&plan.columns_sql(&properties)?, Vec::new())
+                        .await?;
+                    let indexes = self
+                        .execute_query_core(&plan.indexes_sql(&properties)?, Vec::new())
+                        .await?;
+                    let rows = self
+                        .execute_query_core(&plan.sql(&properties, &columns, &indexes), values)
+                        .await?;
+                    // 同一 owned executor 锁内读取真实更新数，不能用返回行数推测触发器语义。
+                    let changes = self
+                        .execute_query_core("SELECT changes()", Vec::new())
+                        .await?;
+                    return crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::update_outcome(rows, &changes);
+                }
+            }
+        }
+        let result = self.execute_update_core(sql, values).await?;
+        let count = i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".into())
+        })?;
+        Ok((count, result.last_insert_id.into_iter().collect()))
+    }
     async fn standard_execute_update_core(
         &mut self,
         sql: &str,
@@ -449,9 +554,52 @@ impl AdapterExecutionCore for ToastyConnectionAdapter {
         sql: &str,
         values: Vec<Value>,
     ) -> Result<StandardQueryResult, RdbcError> {
-        self.execute_query_core(sql, values)
-            .await
-            .map(StandardQueryResult::rows_only)
+        let plan = if self.is_sqlite() {
+            crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::parse(sql)?
+        } else {
+            None
+        };
+        // 元数据读取与实际 RETURNING 仍位于同一 OwnedAdapterExecutor 连接锁范围。
+        if let Some(plan) = plan {
+            let properties = self
+                .execute_query_core(&plan.table_properties_sql(), Vec::new())
+                .await?;
+            if properties.is_empty() {
+                // 元数据未找到表时由原语句报告驱动错误，避免改变错误处置语义。
+                let rows = self.execute_query_core(sql, values).await?;
+                return Ok(self.query_result(rows, false));
+            }
+            let columns = self
+                .execute_query_core(&plan.columns_sql(&properties)?, Vec::new())
+                .await?;
+            let indexes = self
+                .execute_query_core(&plan.indexes_sql(&properties)?, Vec::new())
+                .await?;
+            let sql = plan.sql(&properties, &columns, &indexes);
+            let mut rows = self.execute_query_core(&sql, values).await?;
+            let keys =
+                crate::sqlite_returning_key_plan::SqliteReturningKeyPlan::extract(&mut rows)?;
+            let mut result = self.query_result(rows, true);
+            result.generated_keys = keys;
+            Ok(result)
+        } else {
+            let rows = self.execute_query_core(sql, values).await?;
+            Ok(self.query_result(rows, false))
+        }
+    }
+
+    async fn standard_statement_returns_rows_core(&mut self, sql: &str) -> Result<bool, RdbcError> {
+        if self.is_sqlite() {
+            if let Ok([sqlparser::ast::Statement::Insert(insert)]) =
+                sqlparser::parser::Parser::parse_sql(&sqlparser::dialect::SQLiteDialect {}, sql)
+                    .as_deref()
+            {
+                return Ok(insert.returning.is_some());
+            }
+        }
+        Ok(crate::standard_adapter_executor::statement_returns_rows(
+            sql,
+        ))
     }
 
     async fn standard_execute_update_result_core(
@@ -693,12 +841,42 @@ impl druid_rdbc::connection::Connection for ToastyConnectionAdapter {
     ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
         let executor = self.standard_executor_core()?;
         let parameter_count = executor.parameter_count(sql).await?;
-        Ok(Box::new(StandardAdapterPreparedStatement::new(
-            sql.to_owned(),
-            executor,
-            parameter_count,
-            options,
-        )))
+        Ok(Box::new(
+            StandardAdapterPreparedStatement::new(
+                sql.to_owned(),
+                executor,
+                parameter_count,
+                options,
+            )
+            .with_eager_resource_binding(self.is_sqlite()),
+        ))
+    }
+
+    /// SQLite 的自动生成键沿用同一连接中的 last_insert_rowid 执行路径。
+    /// 按列选择仍需真实投影实现，不能将其静默转换为自动生成键。
+    async fn prepare_statement_with_generated_keys(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<Box<dyn druid_rdbc::statement::PreparedStatement>, RdbcError> {
+        match generated_keys {
+            druid_rdbc::statement::GeneratedKeys::None => {
+                self.prepare_statement(sql, options).await
+            }
+            druid_rdbc::statement::GeneratedKeys::ReturnGeneratedKeys
+            | druid_rdbc::statement::GeneratedKeys::ColumnIndexes(_)
+            | druid_rdbc::statement::GeneratedKeys::ColumnNames(_)
+                if self.is_sqlite() =>
+            {
+                // 对应 BASE execute_prepared：SQLite prepared 的列请求返回单 rowid。
+                // 普通 Statement 的列选择仍明确不支持，不混淆两个重载合同。
+                self.prepare_statement(sql, options).await
+            }
+            _ => Err(RdbcError::UnsupportedOperation {
+                operation: "connection_prepare_statement_generated_keys",
+            }),
+        }
     }
 
     async fn database_meta_data(

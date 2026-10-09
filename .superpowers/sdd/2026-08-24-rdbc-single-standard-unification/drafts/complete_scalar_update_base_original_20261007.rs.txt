@@ -1,0 +1,172 @@
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors() {
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(ScalarUpdateShortCircuitFilter {
+        calls: Arc::clone(&call_log),
+    }));
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite 工厂必须创建成功");
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        87,
+        "sqlite-scalar-update-short-circuit".to_string(),
+        Some(Arc::new(filter_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1 AS value")
+        .await
+        .unwrap();
+    let date = NaiveDate::from_ymd_opt(2026, 7, 29).unwrap();
+    let time = NaiveTime::from_hms_opt(10, 11, 12).unwrap();
+
+    macro_rules! invoke_pair {
+        ($index:ident, $label:ident, $index_value:expr, $label_value:expr) => {
+            result_set.$index(&mut connection, 1, $index_value).unwrap();
+            result_set
+                .$label(&mut connection, "value", $label_value)
+                .unwrap();
+        };
+    }
+
+    // SOURCE_PARITY / V2_MIRRORED：真实池化结果集上的 28 个调用全部被
+    // 各自的 Filter 方法短路，证明没有退化成单一通用 update 回调。
+    result_set.update_null(&mut connection, 1).unwrap();
+    result_set
+        .update_null_by_label(&mut connection, "value")
+        .unwrap();
+    invoke_pair!(update_boolean, update_boolean_by_label, true, false);
+    invoke_pair!(update_byte, update_byte_by_label, -8, 8);
+    invoke_pair!(update_short, update_short_by_label, -16, 16);
+    invoke_pair!(update_int, update_int_by_label, -32, 32);
+    invoke_pair!(update_long, update_long_by_label, -64, 64);
+    invoke_pair!(update_float, update_float_by_label, 1.25, -1.25);
+    invoke_pair!(update_double, update_double_by_label, 2.5, -2.5);
+    invoke_pair!(
+        update_big_decimal,
+        update_big_decimal_by_label,
+        Some(BigDecimal::from_str("12.340").unwrap()),
+        None
+    );
+    invoke_pair!(
+        update_string,
+        update_string_by_label,
+        Some("index".to_string()),
+        None
+    );
+    invoke_pair!(
+        update_bytes,
+        update_bytes_by_label,
+        Some(vec![0, 255]),
+        None
+    );
+    invoke_pair!(update_date, update_date_by_label, Some(date), None);
+    invoke_pair!(update_time, update_time_by_label, Some(time), None);
+    invoke_pair!(
+        update_timestamp,
+        update_timestamp_by_label,
+        Some(date.and_time(time)),
+        None
+    );
+    assert_eq!(calls(&call_log).len(), 28);
+
+    // RUST_OBLIGATION / V1_RUST_LOCAL：Filter 错误归属原 Statement，
+    // 且失败的标签重载不触达只读 SQLite RowSet。
+    assert_eq!(
+        result_set.update_timestamp_by_label(&mut connection, "fail", None),
+        Err(RdbcError::DriverError(
+            "filtered scalar update failure".to_string()
+        ))
+    );
+    assert_eq!(statement.exception_count(), 1);
+    result_set.close_with_connection(&mut connection).unwrap();
+
+    // VALUE_ADD / V5_HOST：默认 Filter 对真实 Toasty SQLite 的 28 个
+    // 调用保持物理只读能力错误，并区分下标与标签终端。
+    let mut pass_chain = FilterChain::new();
+    pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        88,
+        "sqlite-scalar-update-pass-through".to_string(),
+        Some(Arc::new(pass_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1 AS value")
+        .await
+        .unwrap();
+
+    macro_rules! assert_index_error {
+        ($method:ident $(, $value:expr)?) => {
+            assert_eq!(
+                result_set.$method(&mut connection, 1 $(, $value)?),
+                Err(RdbcError::UnsupportedOperation {
+                    operation: "result_set_update_value",
+                })
+            );
+        };
+    }
+    macro_rules! assert_label_error {
+        ($method:ident $(, $value:expr)?) => {
+            assert_eq!(
+                result_set.$method(&mut connection, "value" $(, $value)?),
+                Err(RdbcError::UnsupportedOperation {
+                    operation: "result_set_update_value_by_label",
+                })
+            );
+        };
+    }
+    macro_rules! assert_pair_error {
+        ($index:ident, $label:ident, $index_value:expr, $label_value:expr) => {
+            assert_index_error!($index, $index_value);
+            assert_label_error!($label, $label_value);
+        };
+    }
+
+    assert_index_error!(update_null);
+    assert_label_error!(update_null_by_label);
+    assert_pair_error!(update_boolean, update_boolean_by_label, true, false);
+    assert_pair_error!(update_byte, update_byte_by_label, -8, 8);
+    assert_pair_error!(update_short, update_short_by_label, -16, 16);
+    assert_pair_error!(update_int, update_int_by_label, -32, 32);
+    assert_pair_error!(update_long, update_long_by_label, -64, 64);
+    assert_pair_error!(update_float, update_float_by_label, 1.25, -1.25);
+    assert_pair_error!(update_double, update_double_by_label, 2.5, -2.5);
+    assert_pair_error!(
+        update_big_decimal,
+        update_big_decimal_by_label,
+        Some(BigDecimal::from(1)),
+        None
+    );
+    assert_pair_error!(
+        update_string,
+        update_string_by_label,
+        Some("index".to_string()),
+        None
+    );
+    assert_pair_error!(
+        update_bytes,
+        update_bytes_by_label,
+        Some(vec![0, 255]),
+        None
+    );
+    assert_pair_error!(update_date, update_date_by_label, Some(date), None);
+    assert_pair_error!(update_time, update_time_by_label, Some(time), None);
+    assert_pair_error!(
+        update_timestamp,
+        update_timestamp_by_label,
+        Some(date.and_time(time)),
+        None
+    );
+    assert_eq!(statement.exception_count(), 28);
+    assert!(!result_set.is_closed());
+    result_set.close_with_connection(&mut connection).unwrap();
+}

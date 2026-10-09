@@ -44,6 +44,21 @@ impl ResultSet for StrictResultSet {
     fn holdability(&self) -> Result<ResultSetHoldability, RdbcError> {
         self.trace.fail()
     }
+    fn input_stream(
+        &self,
+        _column: ColumnIndex,
+        kind: ResultSetStreamKind,
+    ) -> Result<Option<RdbcInputStream>, RdbcError> {
+        assert_eq!(_column, ColumnIndex::new(1).unwrap());
+        let expected_kind = match self.trace.expected {
+            "druid_rdbc::result_set::ResultSetExt::ascii_stream" => ResultSetStreamKind::Ascii,
+            "druid_rdbc::result_set::ResultSetExt::unicode_stream" => ResultSetStreamKind::Unicode,
+            "druid_rdbc::result_set::ResultSetExt::binary_stream" => ResultSetStreamKind::Binary,
+            unexpected => panic!("unexpected stream probe: {unexpected}"),
+        };
+        assert_eq!(kind, expected_kind);
+        self.trace.fail()
+    }
     fn insert_row(&mut self) -> Result<(), RdbcError> {
         self.trace.fail()
     }
@@ -79,8 +94,15 @@ impl ResultSet for StrictResultSet {
     }
     fn object_as(
         &self,
-        _column: ColumnIndex,
-        _target_type: &RdbcTargetType,
+        column: ColumnIndex,
+        target_type: &RdbcTargetType,
+    ) -> Result<RdbcObject, RdbcError> {
+        self.trace.fail()
+    }
+    fn object_as_by_label(
+        &self,
+        label: &str,
+        target_type: &RdbcTargetType,
     ) -> Result<RdbcObject, RdbcError> {
         self.trace.fail()
     }
@@ -91,7 +113,28 @@ impl ResultSet for StrictResultSet {
     ) -> Result<RdbcObject, RdbcError> {
         self.trace.fail()
     }
+    fn object_with_type_map_by_label(
+        &self,
+        _label: &str,
+        _type_map: Option<&RdbcTypeMap>,
+    ) -> Result<RdbcObject, RdbcError> {
+        self.trace.fail()
+    }
     async fn previous(&mut self) -> Result<bool, RdbcError> {
+        self.trace.fail()
+    }
+    fn reader(
+        &self,
+        _column: ColumnIndex,
+        national: bool,
+    ) -> Result<Option<RdbcReader>, RdbcError> {
+        assert_eq!(_column, ColumnIndex::new(1).unwrap());
+        let expected_national = match self.trace.expected {
+            "druid_rdbc::result_set::ResultSetExt::character_stream" => false,
+            "druid_rdbc::result_set::ResultSetExt::n_character_stream" => true,
+            unexpected => panic!("unexpected reader probe: {unexpected}"),
+        };
+        assert_eq!(national, expected_national);
         self.trace.fail()
     }
     fn refresh_row(&mut self) -> Result<(), RdbcError> {
@@ -127,13 +170,13 @@ impl ResultSet for StrictResultSet {
     fn update_value(
         &mut self,
         _column: ColumnIndex,
-        _update: ResultSetUpdate,
+        update: ResultSetUpdate,
     ) -> Result<(), RdbcError> {
         self.trace.fail()
     }
     fn update_value_by_label(
         &mut self,
-        column_label: &str,
+        _column_label: &str,
         update: ResultSetUpdate,
     ) -> Result<(), RdbcError> {
         self.trace.fail()

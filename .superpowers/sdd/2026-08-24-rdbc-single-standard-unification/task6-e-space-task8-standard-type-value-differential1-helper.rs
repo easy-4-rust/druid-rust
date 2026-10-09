@@ -1,0 +1,47 @@
+use druid_rdbc::types::{RdbcType, SqlType};
+fn main() {
+    let types = [
+        RdbcType::Bit,
+        RdbcType::TinyInt,
+        RdbcType::SmallInt,
+        RdbcType::Integer,
+        RdbcType::BigInt,
+        RdbcType::Float,
+        RdbcType::Real,
+        RdbcType::Double,
+        RdbcType::Numeric,
+        RdbcType::Decimal,
+        RdbcType::Char,
+        RdbcType::VarChar,
+        RdbcType::LongVarChar,
+        RdbcType::Date,
+        RdbcType::Time,
+        RdbcType::Timestamp,
+        RdbcType::Binary,
+        RdbcType::VarBinary,
+        RdbcType::LongVarBinary,
+        RdbcType::Null,
+        RdbcType::Other,
+        RdbcType::JavaObject,
+        RdbcType::Distinct,
+        RdbcType::Struct,
+        RdbcType::Array,
+        RdbcType::Blob,
+        RdbcType::Clob,
+        RdbcType::Ref,
+        RdbcType::DataLink,
+        RdbcType::Boolean,
+        RdbcType::RowId,
+        RdbcType::NChar,
+        RdbcType::NVarChar,
+        RdbcType::LongNVarChar,
+        RdbcType::NClob,
+        RdbcType::SqlXml,
+        RdbcType::RefCursor,
+        RdbcType::TimeWithTimezone,
+        RdbcType::TimestampWithTimezone,
+    ];
+    for value in types {
+        println!("TYPE\t{}\t{}\t{}", value.name(), value.vendor(), value.vendor_type_number());
+    }
+}

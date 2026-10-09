@@ -17,6 +17,11 @@
 //! let driver = Sqlite::open("path/to/db.sqlite3");
 //! ```
 
+mod sqlite_query_column;
+mod sqlite_query_metadata;
+pub use sqlite_query_column::SqliteQueryColumn;
+pub use sqlite_query_metadata::SqliteQueryMetadata;
+
 mod value;
 pub(crate) use value::Value;
 
@@ -104,6 +109,21 @@ impl Sqlite {
         }
     }
 
+    /// 使用原驱动配置与连接上下文创建连接及其独立列快照。
+    /// 参数为官方连接上下文，返回同一真实连接及非执行型观察器。
+    pub fn connect_with_query_metadata(
+        &self,
+        cx: &ConnectContext,
+    ) -> Result<(Connection, SqliteQueryMetadata)> {
+        let mut connection = match self {
+            Self::File(path) => Connection::open(path)?,
+            Self::InMemory => Connection::in_memory()?,
+        };
+        connection.query_log = cx.query_log;
+        let metadata = connection.query_metadata.clone();
+        Ok((connection, metadata))
+    }
+
     /// Create an in-memory SQLite database
     pub fn in_memory() -> Self {
         Self::InMemory
@@ -132,11 +152,7 @@ impl Driver for Sqlite {
         &self,
         cx: &ConnectContext,
     ) -> toasty_core::Result<Box<dyn toasty_core::Connection>> {
-        let mut connection = match self {
-            Sqlite::File(path) => Connection::open(path)?,
-            Sqlite::InMemory => Connection::in_memory()?,
-        };
-        connection.query_log = cx.query_log;
+        let (connection, _) = self.connect_with_query_metadata(cx)?;
         Ok(Box::new(connection))
     }
 
@@ -178,6 +194,7 @@ impl Driver for Sqlite {
 pub struct Connection {
     connection: RusqliteConnection,
     query_log: QueryLogConfig,
+    query_metadata: SqliteQueryMetadata,
 }
 
 impl Connection {
@@ -189,6 +206,7 @@ impl Connection {
         Ok(Self {
             connection,
             query_log: QueryLogConfig::default(),
+            query_metadata: SqliteQueryMetadata::default(),
         })
     }
 
@@ -199,6 +217,7 @@ impl Connection {
         let sqlite = Self {
             connection,
             query_log: QueryLogConfig::default(),
+            query_metadata: SqliteQueryMetadata::default(),
         };
         Ok(sqlite)
     }
@@ -227,6 +246,8 @@ impl Connection {
         ret: SqlReturn,
         log: &mut QueryLog<'_>,
     ) -> Result<ExecResponse> {
+        // 清除前一执行的快照，失败也不能向下一查询泄漏旧列。
+        self.query_metadata.clear();
         let mut stmt = self
             .connection
             .prepare_cached(sql_str)
@@ -236,6 +257,19 @@ impl Connection {
             .into_iter()
             .map(|tv| Value::from(tv.value))
             .collect::<Vec<_>>();
+
+        // 直接读取本次原生 prepare 的列信息，保留空结果和重复标签。
+        self.query_metadata.replace_columns(
+            stmt.columns()
+                .iter()
+                .map(|column| {
+                    SqliteQueryColumn::new(
+                        column.name().to_owned(),
+                        column.decl_type().map(str::to_owned),
+                    )
+                })
+                .collect(),
+        );
 
         let declared_types = stmt
             .columns()
@@ -283,12 +317,8 @@ impl Connection {
                             .map(|index| {
                                 let declared_type =
                                     declared_types.get(index).and_then(Option::as_deref);
-                                Value::from_sql_infer(
-                                    row,
-                                    index,
-                                    declared_type,
-                                )
-                                .map(Value::into_inner)
+                                Value::from_sql_infer(row, index, declared_type)
+                                    .map(Value::into_inner)
                             })
                             .collect::<rusqlite::Result<Vec<_>>>()
                             .map_err(toasty_core::Error::driver_operation_failed)?,
@@ -366,9 +396,9 @@ impl toasty_core::driver::Connection for Connection {
         let ret = match &sql {
             sql::Statement::Query(stmt) => match &stmt.body {
                 stmt::ExprSet::Select(_) => SqlReturn::Types(ret_tys.ok_or_else(|| {
-                    toasty_core::Error::driver_operation_failed(
-                        SqliteDriverContractError("SQLite SELECT is missing return types"),
-                    )
+                    toasty_core::Error::driver_operation_failed(SqliteDriverContractError(
+                        "SQLite SELECT is missing return types",
+                    ))
                 })?),
                 _ => {
                     return Err(toasty_core::Error::unsupported_feature(
@@ -379,11 +409,9 @@ impl toasty_core::driver::Connection for Connection {
             sql::Statement::Insert(stmt) => {
                 if stmt.returning.is_some() {
                     SqlReturn::Types(ret_tys.ok_or_else(|| {
-                        toasty_core::Error::driver_operation_failed(
-                            SqliteDriverContractError(
-                                "SQLite INSERT RETURNING is missing return types",
-                            ),
-                        )
+                        toasty_core::Error::driver_operation_failed(SqliteDriverContractError(
+                            "SQLite INSERT RETURNING is missing return types",
+                        ))
                     })?)
                 } else {
                     SqlReturn::Count
@@ -392,11 +420,9 @@ impl toasty_core::driver::Connection for Connection {
             sql::Statement::Delete(stmt) => {
                 if stmt.returning.is_some() {
                     SqlReturn::Types(ret_tys.ok_or_else(|| {
-                        toasty_core::Error::driver_operation_failed(
-                            SqliteDriverContractError(
-                                "SQLite DELETE RETURNING is missing return types",
-                            ),
-                        )
+                        toasty_core::Error::driver_operation_failed(SqliteDriverContractError(
+                            "SQLite DELETE RETURNING is missing return types",
+                        ))
                     })?)
                 } else {
                     SqlReturn::Count
@@ -410,11 +436,9 @@ impl toasty_core::driver::Connection for Connection {
                 }
                 if stmt.returning.is_some() {
                     SqlReturn::Types(ret_tys.ok_or_else(|| {
-                        toasty_core::Error::driver_operation_failed(
-                            SqliteDriverContractError(
-                                "SQLite UPDATE RETURNING is missing return types",
-                            ),
-                        )
+                        toasty_core::Error::driver_operation_failed(SqliteDriverContractError(
+                            "SQLite UPDATE RETURNING is missing return types",
+                        ))
                     })?)
                 } else {
                     SqlReturn::Count

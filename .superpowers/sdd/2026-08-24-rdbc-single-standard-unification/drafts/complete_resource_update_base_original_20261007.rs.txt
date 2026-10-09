@@ -1,0 +1,178 @@
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn pooled_result_set_routes_resource_updates_and_preserves_sqlite_capability_errors() {
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(ResourceUpdateShortCircuitFilter {
+        calls: Arc::clone(&call_log),
+    }));
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite 工厂必须创建成功");
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        91,
+        "sqlite-resource-update-short-circuit".to_string(),
+        Some(Arc::new(filter_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1 AS value")
+        .await
+        .unwrap();
+    let row_id = RdbcRowId::new([4, 5, 6]);
+
+    result_set
+        .update_reference(&mut connection, 1, None)
+        .unwrap();
+    result_set
+        .update_reference_by_label(&mut connection, "ref", None)
+        .unwrap();
+    result_set.update_blob(&mut connection, 2, None).unwrap();
+    result_set
+        .update_blob_by_label(&mut connection, "blob", None)
+        .unwrap();
+    result_set.update_clob(&mut connection, 3, None).unwrap();
+    result_set
+        .update_clob_by_label(&mut connection, "clob", None)
+        .unwrap();
+    result_set.update_array(&mut connection, 4, None).unwrap();
+    result_set
+        .update_array_by_label(&mut connection, "array", None)
+        .unwrap();
+    result_set
+        .update_row_id(&mut connection, 5, Some(&row_id))
+        .unwrap();
+    result_set
+        .update_row_id_by_label(&mut connection, "row_id", Some(&row_id))
+        .unwrap();
+    result_set.update_n_clob(&mut connection, 6, None).unwrap();
+    result_set
+        .update_n_clob_by_label(&mut connection, "n_clob", None)
+        .unwrap();
+    result_set.update_sql_xml(&mut connection, 7, None).unwrap();
+    result_set
+        .update_sql_xml_by_label(&mut connection, "sql_xml", None)
+        .unwrap();
+    assert_eq!(
+        calls(&call_log),
+        [
+            "result_set_update_reference:1:None",
+            "result_set_update_reference_by_label:ref:None",
+            "result_set_update_blob:2:None",
+            "result_set_update_blob_by_label:blob:None",
+            "result_set_update_clob:3:None",
+            "result_set_update_clob_by_label:clob:None",
+            "result_set_update_array:4:None",
+            "result_set_update_array_by_label:array:None",
+            "result_set_update_row_id:5:Some(RdbcRowId { bytes: [4, 5, 6] })",
+            "result_set_update_row_id_by_label:row_id:Some(RdbcRowId { bytes: [4, 5, 6] })",
+            "result_set_update_n_clob:6:None",
+            "result_set_update_n_clob_by_label:n_clob:None",
+            "result_set_update_sql_xml:7:None",
+            "result_set_update_sql_xml_by_label:sql_xml:None",
+        ]
+    );
+
+    // RUST_OBLIGATION / V1_RUST_LOCAL：Filter 错误只在原 Statement 分类一次，
+    // 且不会触达只读 RowSet。
+    assert_eq!(
+        result_set.update_sql_xml_by_label(&mut connection, "fail", None),
+        Err(RdbcError::DriverError(
+            "filtered resource update failure".to_string()
+        ))
+    );
+    assert_eq!(statement.exception_count(), 1);
+    result_set.close_with_connection(&mut connection).unwrap();
+
+    let mut pass_chain = FilterChain::new();
+    pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        92,
+        "sqlite-resource-update-pass-through".to_string(),
+        Some(Arc::new(pass_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1 AS value")
+        .await
+        .unwrap();
+
+    macro_rules! assert_resource_unsupported {
+        ($expression:expr, $operation:literal) => {
+            assert_eq!(
+                $expression,
+                Err(RdbcError::UnsupportedOperation {
+                    operation: $operation,
+                })
+            );
+        };
+    }
+
+    // VALUE_ADD / V5_HOST：默认 Filter 保留真实 Toasty SQLite 的 14 个精确
+    // capability error，而不是统一成通用 update 错误。
+    assert_resource_unsupported!(
+        result_set.update_reference(&mut connection, 1, None),
+        "result_set_update_ref"
+    );
+    assert_resource_unsupported!(
+        result_set.update_reference_by_label(&mut connection, "ref", None),
+        "result_set_update_ref_by_label"
+    );
+    assert_resource_unsupported!(
+        result_set.update_blob(&mut connection, 2, None),
+        "result_set_update_blob"
+    );
+    assert_resource_unsupported!(
+        result_set.update_blob_by_label(&mut connection, "blob", None),
+        "result_set_update_blob_by_label"
+    );
+    assert_resource_unsupported!(
+        result_set.update_clob(&mut connection, 3, None),
+        "result_set_update_clob"
+    );
+    assert_resource_unsupported!(
+        result_set.update_clob_by_label(&mut connection, "clob", None),
+        "result_set_update_clob_by_label"
+    );
+    assert_resource_unsupported!(
+        result_set.update_array(&mut connection, 4, None),
+        "result_set_update_array"
+    );
+    assert_resource_unsupported!(
+        result_set.update_array_by_label(&mut connection, "array", None),
+        "result_set_update_array_by_label"
+    );
+    assert_resource_unsupported!(
+        result_set.update_row_id(&mut connection, 5, Some(&row_id)),
+        "result_set_update_row_id"
+    );
+    assert_resource_unsupported!(
+        result_set.update_row_id_by_label(&mut connection, "row_id", Some(&row_id)),
+        "result_set_update_row_id_by_label"
+    );
+    assert_resource_unsupported!(
+        result_set.update_n_clob(&mut connection, 6, None),
+        "result_set_update_n_clob"
+    );
+    assert_resource_unsupported!(
+        result_set.update_n_clob_by_label(&mut connection, "n_clob", None),
+        "result_set_update_n_clob_by_label"
+    );
+    assert_resource_unsupported!(
+        result_set.update_sql_xml(&mut connection, 7, None),
+        "result_set_update_sql_xml"
+    );
+    assert_resource_unsupported!(
+        result_set.update_sql_xml_by_label(&mut connection, "sql_xml", None),
+        "result_set_update_sql_xml_by_label"
+    );
+    assert_eq!(statement.exception_count(), 14);
+    assert!(!result_set.is_closed());
+    result_set.close_with_connection(&mut connection).unwrap();
+}

@@ -1,12 +1,19 @@
 //! Canonical callable selector/descriptor and inheritance matrix.
 
+mod callable_overload_support;
+#[path = "callable_admission_support/ordinary_prepared_call_projection.rs"]
+mod ordinary_prepared_call_projection;
+#[path = "callable_admission_support/ordinary_prepared_call_projection_control_test.rs"]
+mod ordinary_prepared_call_projection_control_test;
+mod standard_test_support;
+
+use druid_rdbc::connection::Connection;
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
-    ParameterIndex, PreparedParameter, PreparedStatement, Statement,
+    ParameterIndex, PreparedStatement, Statement,
 };
 use druid_rdbc::types::{RdbcObject, Value};
-use std::collections::HashMap;
 
 fn task6_callable_case_ids() -> &'static [&'static str] {
     &[
@@ -17,121 +24,2399 @@ fn task6_callable_case_ids() -> &'static [&'static str] {
     ]
 }
 
-#[derive(Default)]
-struct CallableProbe {
-    out: HashMap<CallableParameter, CallableOutParameter>,
-    named: HashMap<String, CallableInputParameter>,
-    prepared: Vec<PreparedParameter>,
-    closed: bool,
-}
-
-druid_rdbc::impl_standard_wrapper!(CallableProbe => CallableStatement);
-
-#[async_trait::async_trait]
-impl Statement for CallableProbe {
-    async fn close(&mut self) -> Result<(), RdbcError> {
-        self.closed = true;
-        Ok(())
-    }
-
-    fn is_closed(&self) -> Result<bool, RdbcError> {
-        Ok(self.closed)
-    }
-}
-
-#[async_trait::async_trait]
-impl PreparedStatement for CallableProbe {
-    fn set_parameter(&mut self, parameter: PreparedParameter) -> Result<(), RdbcError> {
-        self.prepared.push(parameter);
-        Ok(())
-    }
-}
-
-#[async_trait::async_trait]
-impl CallableStatement for CallableProbe {
-    fn register_out_parameter(
-        &mut self,
-        parameter: CallableParameter,
-        out_parameter: CallableOutParameter,
-    ) -> Result<(), RdbcError> {
-        self.out.insert(parameter, out_parameter);
-        Ok(())
-    }
-
-    fn set_named_parameter(
-        &mut self,
-        parameter_name: &str,
-        parameter: CallableInputParameter,
-    ) -> Result<(), RdbcError> {
-        self.named.insert(parameter_name.to_owned(), parameter);
-        Ok(())
-    }
-
-    fn out_value(&self, index: ParameterIndex) -> Result<Value, RdbcError> {
-        Ok(Value::Int(i64::try_from(index.get()).unwrap()))
-    }
-}
-
 #[tokio::test]
 async fn task6_callable_canonical_matrix() {
     let cases = task6_callable_case_ids();
     let mut executed = Vec::with_capacity(cases.len());
-    for (offset, case_id) in cases.iter().enumerate() {
-        let mut callable = CallableProbe::default();
-        let index = ParameterIndex::new(offset + 1).unwrap();
-        callable
-            .register_out_parameter(
-                CallableParameter::Index(index),
-                CallableOutParameter::with_scale(3, 2),
-            )
-            .unwrap();
-        callable
-            .register_out_parameter(
-                CallableParameter::by_name(format!("name-{offset}")).unwrap(),
-                CallableOutParameter::with_type_name(2002, "schema.kind"),
-            )
-            .unwrap();
-        callable
-            .set_named_parameter(
-                "text",
-                CallableInputParameter::String(Some((*case_id).to_owned())),
-            )
-            .unwrap();
-        callable
-            .set_named_parameter(
-                "typed-null",
-                CallableInputParameter::Null {
-                    sql_type: 2002,
-                    type_name: Some("schema.kind".to_owned()),
-                },
-            )
-            .unwrap();
-        callable
-            .set_parameter(PreparedParameter {
-                index,
-                value: Value::String((*case_id).to_owned()),
-            })
-            .unwrap();
-        assert_eq!(callable.out.len(), 2);
-        assert_eq!(callable.named.len(), 2);
-        assert_eq!(callable.prepared.len(), 1);
-        assert_eq!(
-            callable.out_value(index),
-            Ok(Value::Int(i64::try_from(index.get()).unwrap()))
-        );
-        assert_eq!(
-            callable.out_parameter(&CallableParameter::Index(index)),
-            Ok(RdbcObject::from(Value::Int(
-                i64::try_from(index.get()).unwrap()
-            )))
-        );
-        callable.close().await.unwrap();
-        assert_eq!(callable.is_closed(), Ok(true));
-        executed.push(*case_id);
+    for case_id in cases {
+        match *case_id {
+            "callable_errors_invalidate_cache_and_non_callable_handles_are_rejected" => {
+                task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rejected()
+                    .await;
+                executed.push(*case_id);
+            }
+            "callable_generic_execute_preserves_inherited_ordered_results" => {
+                task6_callable_generic_execute_preserves_inherited_ordered_results().await;
+                executed.push(*case_id);
+            }
+            "callable_result_set_keeps_the_same_dynamic_statement_identity" => {
+                task6_callable_result_set_keeps_the_same_dynamic_statement_identity().await;
+                executed.push(*case_id);
+            }
+            "prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle" => {
+                task6_prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle().await;
+                executed.push(*case_id);
+            }
+            _ => panic!("unknown Callable BASE case: {case_id}"),
+        }
     }
     assert_eq!(executed, cases);
     println!(
         "TASK6_CASE_DIGEST=task6_callable_canonical_matrix:{}",
         executed.join("|")
     );
+}
+
+/// 原始记录型 Callable driver 的标准接口投影，OUT 1=7、OUT 4=300。
+struct ErrorCallable {
+    closed: bool,
+    ordered_results: bool,
+    query_results: bool,
+    timeout: i32,
+}
+druid_rdbc::impl_standard_wrapper!(ErrorCallable => CallableStatement);
+#[async_trait::async_trait]
+impl Statement for ErrorCallable {
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        self.closed = true;
+        Ok(())
+    }
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.closed)
+    }
+    fn query_timeout(&self) -> Result<i32, RdbcError> {
+        Ok(self.timeout)
+    }
+    fn set_query_timeout(&mut self, seconds: i32) -> Result<(), RdbcError> {
+        self.timeout = seconds;
+        Ok(())
+    }
+}
+#[async_trait::async_trait]
+impl PreparedStatement for ErrorCallable {
+    async fn execute_prepared_query(
+        &mut self,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        if self.closed {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        if !self.query_results {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "prepared_statement_execute_query",
+            });
+        }
+        // 对应 BASE query Callable：创建者持有一行值 1 的原始游标。
+        Ok(Box::new(druid_rdbc::extensions::BufferedRowSet::new(vec![
+            druid_rdbc::types::Row::new(vec![Value::Int(1)]),
+        ])))
+    }
+
+    async fn execute_prepared(
+        &mut self,
+    ) -> Result<Vec<druid_rdbc::statement::ExecutionResult>, RdbcError> {
+        use druid_rdbc::extensions::BufferedRowSet;
+        use druid_rdbc::statement::ExecutionResult;
+        use druid_rdbc::types::Row;
+        if self.closed {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        if !self.ordered_results {
+            return Err(RdbcError::UnsupportedOperation {
+                operation: "prepared_statement_execute",
+            });
+        }
+        // 对应 BASE TestCallableStatement：保持 10 / update 2 / 20 的原始顺序。
+        Ok(vec![
+            ExecutionResult::ResultSet(Box::new(BufferedRowSet::new(vec![Row::new(vec![
+                Value::Int(10),
+            ])]))),
+            ExecutionResult::UpdateCount(2),
+            ExecutionResult::ResultSet(Box::new(BufferedRowSet::new(vec![Row::new(vec![
+                Value::Int(20),
+            ])]))),
+        ])
+    }
+}
+#[async_trait::async_trait]
+impl CallableStatement for ErrorCallable {
+    fn register_out_parameter(
+        &mut self,
+        _parameter: CallableParameter,
+        _out: CallableOutParameter,
+    ) -> Result<(), RdbcError> {
+        Ok(())
+    }
+    fn set_named_parameter(
+        &mut self,
+        _name: &str,
+        _parameter: CallableInputParameter,
+    ) -> Result<(), RdbcError> {
+        Ok(())
+    }
+    fn out_parameter(&self, parameter: &CallableParameter) -> Result<RdbcObject, RdbcError> {
+        match parameter {
+            CallableParameter::Index(index) if index.get() == 1 => {
+                Ok(RdbcObject::from(Value::Int(7)))
+            }
+            CallableParameter::Index(index) if index.get() == 4 => {
+                Ok(RdbcObject::from(Value::Int(300)))
+            }
+            _ => Err(RdbcError::DriverError(format!(
+                "OUT parameter {parameter:?} is unavailable"
+            ))),
+        }
+    }
+    fn out_parameter_with_type_map(
+        &self,
+        p: &CallableParameter,
+        _map: Option<&druid_rdbc::types::RdbcTypeMap>,
+    ) -> Result<RdbcObject, RdbcError> {
+        self.out_parameter(p)
+    }
+    fn out_parameter_as(
+        &self,
+        p: &CallableParameter,
+        _target: &druid_rdbc::types::RdbcTargetType,
+    ) -> Result<RdbcObject, RdbcError> {
+        self.out_parameter(p)
+    }
+}
+struct ErrorCallableConnection {
+    ordinary_prepared_state: std::sync::Arc<standard_test_support::TrackingState>,
+    prepares: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    closed: bool,
+}
+druid_rdbc::impl_standard_wrapper!(ErrorCallableConnection => Connection);
+#[async_trait::async_trait]
+impl druid_rdbc::connection::Connection for ErrorCallableConnection {
+    async fn create_statement(
+        &mut self,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn Statement>, RdbcError> {
+        let mut validation = standard_test_support::TrackingConnection::new(
+            standard_test_support::TrackingState::configured(),
+        );
+        validation.create_statement(options).await
+    }
+    async fn prepare_call(
+        &mut self,
+        sql: &str,
+        options: druid_rdbc::statement::StatementOptions,
+    ) -> Result<Box<dyn CallableStatement>, RdbcError> {
+        self.prepares
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        match sql {
+            "unsupported" => Err(RdbcError::UnsupportedOperation {
+                operation: "test_prepare_call",
+            }),
+            "ordinary-handle" => {
+                // 保留原普通 Prepared 的真实创建；静态返回投影不声明动态 Callable 角色。
+                let mut ordinary_connection = standard_test_support::TrackingConnection::new(
+                    std::sync::Arc::clone(&self.ordinary_prepared_state),
+                );
+                let raw = ordinary_connection.prepare_statement(sql, options).await?;
+                Ok(Box::new(
+                    ordinary_prepared_call_projection::OrdinaryPreparedCallProjection::new(raw),
+                ))
+            }
+            _ => Ok(Box::new(ErrorCallable {
+                closed: false,
+                ordered_results: sql == "{call multi()}",
+                query_results: sql == "{call query()}",
+                timeout: 0,
+            })),
+        }
+    }
+    async fn ping(&mut self) -> Result<(), RdbcError> {
+        Ok(())
+    }
+    async fn is_valid(&mut self, _seconds: u32) -> Result<bool, RdbcError> {
+        Ok(!self.closed)
+    }
+    async fn close(&mut self) -> Result<(), RdbcError> {
+        self.closed = true;
+        Ok(())
+    }
+    fn is_closed(&self) -> Result<bool, RdbcError> {
+        Ok(self.closed)
+    }
+    fn driver_name(&self) -> Result<String, RdbcError> {
+        Ok("callable-test".into())
+    }
+}
+struct ErrorCallableFactory {
+    ordinary_prepared_state: std::sync::Arc<standard_test_support::TrackingState>,
+    prepares: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+#[async_trait::async_trait]
+impl druid_rdbc::driver::ConnectionFactory for ErrorCallableFactory {
+    async fn create(&self) -> Result<Box<dyn druid_rdbc::connection::Connection>, RdbcError> {
+        Ok(Box::new(ErrorCallableConnection {
+            ordinary_prepared_state: std::sync::Arc::clone(&self.ordinary_prepared_state),
+            prepares: std::sync::Arc::clone(&self.prepares),
+            closed: false,
+        }))
+    }
+}
+async fn callable_error_pool() -> (
+    druid::pool::DruidPool,
+    std::sync::Arc<std::sync::atomic::AtomicU64>,
+) {
+    let (pool, prepares, _) = callable_error_pool_with_ordinary_state().await;
+    (pool, prepares)
+}
+
+async fn callable_error_pool_with_ordinary_state() -> (
+    druid::pool::DruidPool,
+    std::sync::Arc<std::sync::atomic::AtomicU64>,
+    std::sync::Arc<standard_test_support::TrackingState>,
+) {
+    let prepares = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let ordinary_prepared_state = standard_test_support::TrackingState::configured();
+    let pool = druid::pool::DruidPool::builder()
+        .name("callable")
+        .db_type_name("mysql")
+        .factory(std::sync::Arc::new(ErrorCallableFactory {
+            ordinary_prepared_state: std::sync::Arc::clone(&ordinary_prepared_state),
+            prepares: std::sync::Arc::clone(&prepares),
+        }))
+        .max_open(1)
+        .max_idle(1)
+        .pool_prepared_statements(true)
+        .max_pool_prepared_statements_per_connection(8)
+        .build()
+        .await
+        .unwrap();
+    (pool, prepares, ordinary_prepared_state)
+}
+
+/// 完整恢复 BASE 的 Callable 错误、缓存和拒绝合同。
+async fn task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rejected() {
+    let (pool, prepare_count) = callable_error_pool().await;
+    let mut connection = pool.get().await.unwrap();
+
+    let mut invalid_index = connection
+        .prepare_call(
+            "invalid-index",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(
+            |selector| invalid_index.register_out_parameter(selector, CallableOutParameter::new(4))
+        )
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.blob_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.clob_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.n_clob_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.character_stream_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.n_character_stream_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.n_string_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.url_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.ref_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.array_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.row_id_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.sql_xml_out_parameter(&selector))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index.out_parameter_with_type_map(&selector, None))
+        .is_err());
+    assert!(invalid_index
+        .index_parameter(0)
+        .and_then(|selector| invalid_index
+            .out_parameter_as(&selector, &druid_rdbc::types::RdbcTargetType::String))
+        .is_err());
+    invalid_index.close().await.unwrap();
+
+    let mut invalid_name = connection
+        .prepare_call(
+            "invalid-name",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::String(Some("value".to_string()))
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter("", CallableInputParameter::Blob(None))
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter("", CallableInputParameter::Url(None))
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter("", CallableInputParameter::RowId(None))
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter("", CallableInputParameter::SqlXml(None))
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::AsciiStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Unspecified
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::AsciiStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Int(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::AsciiStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Long(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::BinaryStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Unspecified
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::BinaryStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Int(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::BinaryStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Long(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter("", CallableInputParameter::Clob(None))
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::ClobReader {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Unspecified
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::ClobReader {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Long(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter("", CallableInputParameter::NClob(None))
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::NClobReader {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Unspecified
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::NClobReader {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Long(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::CharacterStream {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Unspecified
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::CharacterStream {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Int(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::CharacterStream {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Long(1)
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::NCharacterStream {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Unspecified
+            }
+        )
+        .is_err());
+    assert!(invalid_name
+        .set_named_parameter(
+            "",
+            CallableInputParameter::NCharacterStream {
+                reader: None,
+                length: druid_rdbc::types::RdbcCharacterLength::Long(1)
+            }
+        )
+        .is_err());
+    invalid_name.close().await.unwrap();
+
+    let mut unavailable = connection
+        .prepare_call(
+            "missing-out",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert!(unavailable
+        .out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .blob_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .clob_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .n_clob_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .character_stream_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .n_character_stream_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .n_string_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .url_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .ref_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .array_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .row_id_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .sql_xml_out_parameter(&CallableParameter::Name("missing".into()))
+        .is_err());
+    assert!(unavailable
+        .out_parameter_with_type_map(&CallableParameter::Name("missing".into()), None)
+        .is_err());
+    assert!(unavailable
+        .out_parameter_as(
+            &CallableParameter::Name("missing".into()),
+            &druid_rdbc::types::RdbcTargetType::String
+        )
+        .is_err());
+    unavailable.close().await.unwrap();
+
+    let mut wrong_type = connection
+        .prepare_call(
+            "wrong-type",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert!(wrong_type
+        .string_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .blob_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .clob_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .n_clob_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .character_stream_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .n_character_stream_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .n_string_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .url_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .ref_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .array_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .row_id_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    assert!(wrong_type
+        .sql_xml_out_parameter(&CallableParameter::by_index(1).unwrap())
+        .is_err());
+    wrong_type.close().await.unwrap();
+
+    let mut byte_overflow = connection
+        .prepare_call(
+            "byte-overflow",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert!(byte_overflow
+        .byte_out_parameter(&CallableParameter::by_index(4).unwrap())
+        .is_err());
+    byte_overflow.close().await.unwrap();
+
+    let wrong_handle = connection
+        .prepare_call(
+            "ordinary-handle",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await;
+    assert!(matches!(
+        wrong_handle,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_prepare_call"
+        })
+    ));
+    assert!(matches!(
+        connection
+            .prepare_call(
+                "unsupported",
+                druid_rdbc::statement::StatementOptions::default()
+            )
+            .await,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "test_prepare_call"
+        })
+    ));
+    assert_eq!(prepare_count.load(std::sync::atomic::Ordering::Relaxed), 7);
+
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 6);
+    assert_eq!(state.cached_prepared_statement_delete_count, 6);
+    assert_eq!(state.closed_prepared_statement_count, 6);
+
+    connection.close().await.unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn callable_errors_preserve_full_base_cache_and_parameter_contract() {
+    task6_callable_errors_invalidate_cache_and_non_callable_handles_are_rejected().await;
+}
+
+#[tokio::test]
+async fn pooled_callable_rejects_empty_named_scalar_and_resource_before_driver() {
+    let (pool, _) = callable_error_pool().await;
+    let mut connection = pool.get().await.unwrap();
+    let mut callable = connection
+        .prepare_call(
+            "empty-name",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        callable.set_named_parameter("", CallableInputParameter::String(Some("value".into()))),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    assert!(matches!(
+        callable.set_named_parameter("", CallableInputParameter::Blob(None)),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    assert!(matches!(
+        callable.set_named_parameter(
+            "",
+            CallableInputParameter::AsciiStream {
+                stream: None,
+                length: druid_rdbc::types::RdbcStreamLength::Int(1)
+            }
+        ),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    callable.close().await.unwrap();
+    connection.close().await.unwrap();
+    pool.close().await;
+}
+
+/// 恢复 BASE 的三个有序结果及 Callable 创建者；None 对应 JDBC 无更新结果的 -1。
+async fn task6_callable_generic_execute_preserves_inherited_ordered_results() {
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::statement::{CurrentResultDisposition, ExecutionResult, StatementOptions};
+    use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
+    use std::any::TypeId;
+
+    let (pool, _) = callable_error_pool().await;
+    let mut connection = pool.get().await.unwrap();
+    let mut callable = connection
+        .prepare_call("{call multi()}", StatementOptions::default())
+        .await
+        .unwrap();
+    let results = callable.execute_prepared().await.unwrap();
+    assert_eq!(results.len(), 3);
+    assert!(matches!(&results[0], ExecutionResult::ResultSet(_)));
+    assert!(matches!(&results[1], ExecutionResult::UpdateCount(2)));
+    assert!(matches!(&results[2], ExecutionResult::ResultSet(_)));
+    assert_eq!(callable.get_update_count().unwrap(), None);
+    let mut first = callable.get_result_set().await.unwrap().unwrap();
+    let mut first_owner = first.get_statement().unwrap().unwrap();
+    let first_callable =
+        Wrapper::unwrap(&*first_owner, Some(TypeId::of::<dyn CallableStatement>())).unwrap();
+    assert!(matches!(
+        &first_callable,
+        StandardUnwrapped::CallableStatement(_)
+    ));
+    if let StandardUnwrapped::CallableStatement(owner) = first_callable {
+        assert_eq!(owner.sql().unwrap(), callable.sql().unwrap());
+    }
+    // 操作共享逻辑属性，证明返回的创建者关联原始 Callable，而非独立替身。
+    first_owner.set_query_timeout(17).unwrap();
+    assert_eq!(callable.query_timeout().unwrap(), 17);
+    assert!(first.next().await.unwrap());
+    assert_eq!(
+        first.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(10)
+    );
+
+    assert!(!callable
+        .get_more_results(CurrentResultDisposition::Default)
+        .await
+        .unwrap());
+    assert!(first.is_closed().unwrap());
+    assert_eq!(callable.get_update_count().unwrap(), Some(2));
+    assert!(callable.get_more_results_current(1).await.unwrap());
+    let mut second = callable.get_result_set().await.unwrap().unwrap();
+    let second_owner = second.get_statement().unwrap().unwrap();
+    assert!(
+        Wrapper::is_wrapper_for(&*second_owner, Some(TypeId::of::<dyn CallableStatement>()))
+            .unwrap()
+    );
+    assert_eq!(second_owner.query_timeout().unwrap(), 17);
+    assert!(second.next().await.unwrap());
+    assert_eq!(
+        second.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(20)
+    );
+    callable.close().await.unwrap();
+    assert!(second.is_closed().unwrap());
+    assert!(first_owner.is_closed().unwrap());
+    assert!(second_owner.is_closed().unwrap());
+    connection.close().await.unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn callable_ordered_results_preserve_full_base_contract() {
+    task6_callable_generic_execute_preserves_inherited_ordered_results().await;
+}
+
+/// 完整迁移 BASE 动态 Callable 创建者、继承视图和结果集持有生命周期。
+async fn task6_callable_result_set_keeps_the_same_dynamic_statement_identity() {
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::statement::StatementOptions;
+    use druid_rdbc::wrapper::{StandardUnwrapped, StandardUnwrappedMut, Wrapper};
+    use std::any::TypeId;
+    struct UnsupportedUnwrapType;
+
+    let (pool, prepares) = callable_error_pool().await;
+    let mut connection = pool.get().await.unwrap();
+    let mut callable = connection
+        .prepare_call("{call query()}", StatementOptions::default())
+        .await
+        .unwrap();
+    let mut result_set = callable.execute_prepared_query().await.unwrap();
+    let mut identity = result_set.get_statement().unwrap().unwrap();
+    assert!(!identity.is_closed().unwrap());
+    assert!(
+        Wrapper::is_wrapper_for(&*identity, Some(TypeId::of::<dyn CallableStatement>())).unwrap()
+    );
+    assert!(
+        Wrapper::is_wrapper_for(&*identity, Some(TypeId::of::<dyn PreparedStatement>())).unwrap()
+    );
+    assert!(Wrapper::is_wrapper_for(&*identity, Some(TypeId::of::<dyn Statement>())).unwrap());
+    assert!(Wrapper::is_wrapper_for(&*identity, Some(TypeId::of::<dyn Wrapper>())).unwrap());
+    assert!(!Wrapper::is_wrapper_for(&*identity, Some(TypeId::of::<dyn Connection>())).unwrap());
+    let StandardUnwrapped::CallableStatement(leaf) =
+        Wrapper::unwrap(&*identity, Some(TypeId::of::<dyn CallableStatement>())).unwrap()
+    else {
+        panic!("创建者必须保留 Callable 叶接口")
+    };
+    assert!(std::ptr::addr_eq(
+        std::ptr::from_ref::<dyn Statement>(&*identity),
+        std::ptr::from_ref::<dyn CallableStatement>(leaf)
+    ));
+    assert_eq!(leaf.sql().unwrap(), callable.sql().unwrap());
+    let StandardUnwrapped::PreparedStatement(parent) =
+        Wrapper::unwrap(&*identity, Some(TypeId::of::<dyn PreparedStatement>())).unwrap()
+    else {
+        panic!("创建者必须保留 Prepared 父接口")
+    };
+    assert!(std::ptr::addr_eq(
+        std::ptr::from_ref::<dyn Statement>(&*identity),
+        std::ptr::from_ref::<dyn PreparedStatement>(parent)
+    ));
+    assert!(matches!(
+        Wrapper::is_wrapper_for(&*identity, None),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    assert!(matches!(
+        Wrapper::unwrap(&*identity, None),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    assert!(
+        !Wrapper::is_wrapper_for(&*identity, Some(TypeId::of::<UnsupportedUnwrapType>())).unwrap()
+    );
+    assert!(Wrapper::unwrap(&*identity, Some(TypeId::of::<UnsupportedUnwrapType>())).is_err());
+    // 原私有句柄身份通过双向共享属性及关闭行为迁移，不重开 Physical 公共对象。
+    identity.set_query_timeout(13).unwrap();
+    assert_eq!(callable.query_timeout().unwrap(), 13);
+    callable.set_query_timeout(19).unwrap();
+    assert_eq!(identity.query_timeout().unwrap(), 19);
+    let statement_object = result_set.get_statement().unwrap().unwrap();
+    assert!(Wrapper::is_wrapper_for(
+        &*statement_object,
+        Some(TypeId::of::<dyn CallableStatement>())
+    )
+    .unwrap());
+    assert_eq!(statement_object.query_timeout().unwrap(), 19);
+    assert!(!statement_object.is_closed().unwrap());
+    drop(callable);
+    assert!(!identity.is_closed().unwrap());
+    assert!(!statement_object.is_closed().unwrap());
+    assert!(result_set.next().await.unwrap());
+    assert_eq!(
+        result_set.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(1)
+    );
+    let StandardUnwrappedMut::CallableStatement(owner) =
+        Wrapper::unwrap_mut(&mut *identity, Some(TypeId::of::<dyn CallableStatement>())).unwrap()
+    else {
+        panic!("必须能独占操作同一 Callable")
+    };
+    owner.close().await.unwrap();
+    owner.close().await.unwrap();
+    assert!(identity.is_closed().unwrap());
+    assert!(statement_object.is_closed().unwrap());
+    assert!(result_set.is_closed().unwrap());
+    assert!(result_set
+        .get_statement()
+        .unwrap()
+        .unwrap()
+        .is_closed()
+        .unwrap());
+    assert_eq!(prepares.load(std::sync::atomic::Ordering::Relaxed), 1);
+    connection.close().await.unwrap();
+    assert!(result_set.get_statement().is_err());
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn callable_dynamic_owner_preserves_full_base_contract() {
+    task6_callable_result_set_keeps_the_same_dynamic_statement_identity().await;
+}
+
+/// BASE 完整重载、资源、OUT 和实际缓存观测；调用形式身份仍单独记录缺口。
+async fn task6_prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle() {
+    use bigdecimal::BigDecimal;
+    use callable_overload_support::{test_blob, test_clob, test_n_clob};
+    use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+    use druid_rdbc::resource::{
+        RdbcCharacterLength, RdbcInputStream, RdbcReader, RdbcStreamLength,
+    };
+    use druid_rdbc::result_set::ColumnIndex;
+    use druid_rdbc::statement::{
+        ResultSetConcurrency, ResultSetHoldability, ResultSetType, StatementOptions,
+    };
+    use druid_rdbc::types::{
+        RdbcCalendar as CallableCalendar, RdbcCalendarArgument as CallableCalendarArgument,
+        RdbcTargetType, RdbcTypeMap,
+    };
+    use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
+    use std::any::TypeId;
+    use std::str::FromStr;
+    use std::sync::atomic::Ordering;
+    struct UnsupportedUnwrapType;
+    let (pool, prepare_count, prepared_options, raw_states) =
+        callable_overload_support::callable_overload_pool().await;
+    let mut connection = pool.get().await.unwrap();
+
+    let mut callable = connection
+        .prepare_call("{call demo(?, ?)}", StatementOptions::default())
+        .await
+        .unwrap();
+    let decimal = BigDecimal::from_str("123.4500").expect("valid decimal");
+    let date = NaiveDate::from_ymd_opt(2026, 7, 28).expect("valid date");
+    let time =
+        NaiveTime::from_hms_nano_opt(19, 30, 45, 123_456_789).expect("valid nanosecond time");
+    let timestamp = NaiveDateTime::new(date, time);
+    let shanghai = CallableCalendar::new("Asia/Shanghai").unwrap();
+    let utc = CallableCalendar::new("UTC").unwrap();
+    let input_blob = test_blob(b"input-blob".to_vec());
+    let input_stream = RdbcInputStream::from_bytes(b"stream-content".to_vec());
+    let input_clob = test_clob("input-clob");
+    let input_n_clob = test_n_clob("输入国家字符");
+    let clob_reader = RdbcReader::from_string("clob-reader");
+    let n_clob_reader = RdbcReader::from_string("nclob-reader");
+    let character_reader = RdbcReader::from_string("character-reader");
+    let character_reader_long = RdbcReader::from_string("character-reader-long");
+    let n_character_reader = RdbcReader::from_string("国家字符-reader");
+    let ascii_stream = RdbcInputStream::from_bytes(b"ascii-stream".to_vec());
+    let ascii_stream_long = RdbcInputStream::from_bytes(b"ascii-stream-long".to_vec());
+    let binary_stream = RdbcInputStream::from_bytes(vec![0, 1, 2]);
+    let binary_stream_long = RdbcInputStream::from_bytes(vec![3, 4, 5]);
+    callable
+        .register_out_parameter(
+            CallableParameter::by_index(1).unwrap(),
+            CallableOutParameter::new(4),
+        )
+        .unwrap();
+    callable
+        .register_out_parameter(
+            CallableParameter::by_index(2).unwrap(),
+            CallableOutParameter::with_scale(3, 2),
+        )
+        .unwrap();
+    callable
+        .register_out_parameter(
+            CallableParameter::by_index(3).unwrap(),
+            CallableOutParameter::with_type_name(2002, "schema.kind"),
+        )
+        .unwrap();
+    callable
+        .register_out_parameter(
+            CallableParameter::by_name("name").unwrap(),
+            CallableOutParameter::new(12),
+        )
+        .unwrap();
+    callable
+        .register_out_parameter(
+            CallableParameter::by_name("count").unwrap(),
+            CallableOutParameter::with_scale(3, 0),
+        )
+        .unwrap();
+    callable
+        .register_out_parameter(
+            CallableParameter::by_name("flag").unwrap(),
+            CallableOutParameter::with_type_name(16, "boolean"),
+        )
+        .unwrap();
+
+    callable
+        .set_named_parameter("nullable", CallableInputParameter::null(4))
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "typed_null",
+            CallableInputParameter::null_with_type_name(2002, "schema.kind"),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter("in_bool", CallableInputParameter::Boolean(true))
+        .unwrap();
+    callable
+        .set_named_parameter("in_byte", CallableInputParameter::Byte(8))
+        .unwrap();
+    callable
+        .set_named_parameter("in_short", CallableInputParameter::Short(16))
+        .unwrap();
+    callable
+        .set_named_parameter("in_int", CallableInputParameter::Int(1))
+        .unwrap();
+    callable
+        .set_named_parameter("in_long", CallableInputParameter::Long(2))
+        .unwrap();
+    callable
+        .set_named_parameter("in_float", CallableInputParameter::Float(1.25))
+        .unwrap();
+    callable
+        .set_named_parameter("in_double", CallableInputParameter::Double(2.5))
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_string",
+            CallableInputParameter::String(Some("value".to_string())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter("in_string_null", CallableInputParameter::String(None))
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_nstring",
+            CallableInputParameter::NString(Some("字符".to_string())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter("in_nstring_null", CallableInputParameter::NString(None))
+        .unwrap();
+    callable
+        .set_named_parameter("in_bytes", CallableInputParameter::Bytes(Some(vec![8, 9])))
+        .unwrap();
+    callable
+        .set_named_parameter("in_bytes_null", CallableInputParameter::Bytes(None))
+        .unwrap();
+    callable
+        .set_named_parameter("in_url", CallableInputParameter::Url(None))
+        .unwrap();
+    callable
+        .set_named_parameter("in_row_id", CallableInputParameter::RowId(None))
+        .unwrap();
+    callable
+        .set_named_parameter("in_sql_xml", CallableInputParameter::SqlXml(None))
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_ascii_stream",
+            CallableInputParameter::AsciiStream {
+                stream: Some(ascii_stream.clone()),
+                length: RdbcStreamLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_ascii_stream_int",
+            CallableInputParameter::AsciiStream {
+                stream: None,
+                length: RdbcStreamLength::Int(-7),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_ascii_stream_long",
+            CallableInputParameter::AsciiStream {
+                stream: Some(ascii_stream_long.clone()),
+                length: RdbcStreamLength::Long(-8),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_binary_stream",
+            CallableInputParameter::BinaryStream {
+                stream: Some(binary_stream.clone()),
+                length: RdbcStreamLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_binary_stream_int",
+            CallableInputParameter::BinaryStream {
+                stream: None,
+                length: RdbcStreamLength::Int(-9),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_binary_stream_long",
+            CallableInputParameter::BinaryStream {
+                stream: Some(binary_stream_long.clone()),
+                length: RdbcStreamLength::Long(-10),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_blob",
+            CallableInputParameter::Blob(Some(input_blob.clone())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter("in_blob_null", CallableInputParameter::Blob(None))
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_blob_stream",
+            CallableInputParameter::BlobStream {
+                stream: Some(input_stream.clone()),
+                length: RdbcStreamLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_blob_stream_length",
+            CallableInputParameter::BlobStream {
+                stream: None,
+                length: RdbcStreamLength::Long(-1),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_clob",
+            CallableInputParameter::Clob(Some(input_clob.clone())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_clob_reader",
+            CallableInputParameter::ClobReader {
+                reader: Some(clob_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_clob_reader_length",
+            CallableInputParameter::ClobReader {
+                reader: None,
+                length: RdbcCharacterLength::Long(-2),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_n_clob",
+            CallableInputParameter::NClob(Some(input_n_clob.clone())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_n_clob_reader",
+            CallableInputParameter::NClobReader {
+                reader: Some(n_clob_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_n_clob_reader_length",
+            CallableInputParameter::NClobReader {
+                reader: None,
+                length: RdbcCharacterLength::Long(-3),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_character_stream",
+            CallableInputParameter::CharacterStream {
+                reader: Some(character_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_character_stream_int",
+            CallableInputParameter::CharacterStream {
+                reader: None,
+                length: RdbcCharacterLength::Int(-4),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_character_stream_long",
+            CallableInputParameter::CharacterStream {
+                reader: Some(character_reader_long.clone()),
+                length: RdbcCharacterLength::Long(-5),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_n_character_stream",
+            CallableInputParameter::NCharacterStream {
+                reader: Some(n_character_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_n_character_stream_long",
+            CallableInputParameter::NCharacterStream {
+                reader: None,
+                length: RdbcCharacterLength::Long(-6),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_object",
+            CallableInputParameter::object(Value::String("object".to_string())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_typed_object",
+            CallableInputParameter::object_with_sql_type(Value::Int(11), 4),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_scaled_object",
+            CallableInputParameter::object_with_sql_type_and_scale(Value::Float(3.5), 3, 2),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_decimal",
+            CallableInputParameter::BigDecimal(Some(decimal.clone())),
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_date",
+            CallableInputParameter::Date {
+                value: Some(date),
+                calendar: CallableCalendarArgument::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_date_cal",
+            CallableInputParameter::Date {
+                value: None,
+                calendar: CallableCalendarArgument::Specified(Some(shanghai.clone())),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_time",
+            CallableInputParameter::Time {
+                value: Some(time),
+                calendar: CallableCalendarArgument::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_time_cal",
+            CallableInputParameter::Time {
+                value: Some(time),
+                calendar: CallableCalendarArgument::Specified(None),
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_timestamp",
+            CallableInputParameter::Timestamp {
+                value: Some(timestamp),
+                calendar: CallableCalendarArgument::Unspecified,
+            },
+        )
+        .unwrap();
+    callable
+        .set_named_parameter(
+            "in_timestamp_cal",
+            CallableInputParameter::Timestamp {
+                value: Some(timestamp),
+                calendar: CallableCalendarArgument::Specified(Some(utc.clone())),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(
+        callable
+            .byte_out_parameter(&CallableParameter::by_index(1).unwrap())
+            .unwrap(),
+        7
+    );
+    assert_eq!(
+        callable
+            .short_out_parameter(&CallableParameter::by_index(1).unwrap())
+            .unwrap(),
+        7
+    );
+    assert_eq!(
+        callable
+            .int_out_parameter(&CallableParameter::by_index(1).unwrap())
+            .unwrap(),
+        7
+    );
+    assert_eq!(
+        callable
+            .long_out_parameter(&CallableParameter::by_index(1).unwrap())
+            .unwrap(),
+        7
+    );
+    assert_eq!(
+        callable
+            .out_parameter(&CallableParameter::by_index(2).unwrap())
+            .unwrap(),
+        RdbcObject::from(Value::Null)
+    );
+    assert!(callable.was_null().unwrap());
+    assert_eq!(
+        callable
+            .string_out_parameter(&CallableParameter::by_name("name").unwrap())
+            .unwrap()
+            .as_deref(),
+        Some("druid")
+    );
+    assert!(callable
+        .boolean_out_parameter(&CallableParameter::by_name("flag").unwrap())
+        .unwrap());
+    assert_eq!(
+        callable
+            .int_out_parameter(&CallableParameter::by_name("count").unwrap())
+            .unwrap(),
+        9
+    );
+    assert_eq!(
+        callable
+            .float_out_parameter(&CallableParameter::by_name("ratio").unwrap())
+            .unwrap(),
+        1.5
+    );
+    assert_eq!(
+        callable
+            .double_out_parameter(&CallableParameter::by_name("ratio").unwrap())
+            .unwrap(),
+        1.5
+    );
+    assert_eq!(
+        callable
+            .bytes_out_parameter(&CallableParameter::by_name("bytes").unwrap())
+            .unwrap(),
+        Some(vec![1, 2, 3])
+    );
+    let output_blob = callable
+        .blob_out_parameter(&CallableParameter::by_index(9).unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(output_blob.length().await.unwrap(), 13);
+    assert_eq!(
+        output_blob
+            .get_binary_stream()
+            .await
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
+        b"callable-blob"
+    );
+    assert_eq!(
+        callable
+            .blob_out_parameter(&CallableParameter::by_name("blob").unwrap())
+            .unwrap()
+            .unwrap(),
+        output_blob
+    );
+    assert_eq!(
+        callable
+            .blob_out_parameter(&CallableParameter::by_index(2).unwrap())
+            .unwrap(),
+        None
+    );
+    let output_clob = callable
+        .clob_out_parameter(&CallableParameter::by_index(10).unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        output_clob
+            .get_character_stream()
+            .await
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "callable-clob"
+    );
+    assert_eq!(
+        callable
+            .clob_out_parameter(&CallableParameter::by_name("clob").unwrap())
+            .unwrap()
+            .unwrap(),
+        output_clob
+    );
+    assert_eq!(
+        callable
+            .clob_out_parameter(&CallableParameter::by_index(2).unwrap())
+            .unwrap(),
+        None
+    );
+    let output_n_clob = callable
+        .n_clob_out_parameter(&CallableParameter::by_index(11).unwrap())
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        output_n_clob
+            .get_character_stream()
+            .await
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "国家字符"
+    );
+    assert_eq!(
+        callable
+            .n_clob_out_parameter(&CallableParameter::by_name("n_clob").unwrap())
+            .unwrap()
+            .unwrap(),
+        output_n_clob
+    );
+    assert_eq!(
+        callable
+            .n_clob_out_parameter(&CallableParameter::by_index(2).unwrap())
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        callable
+            .character_stream_out_parameter(&CallableParameter::by_index(12).unwrap())
+            .unwrap()
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "reader-index"
+    );
+    assert_eq!(
+        callable
+            .character_stream_out_parameter(
+                &CallableParameter::by_name("character_stream").unwrap()
+            )
+            .unwrap()
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "reader-name"
+    );
+    assert!(callable
+        .character_stream_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        callable
+            .n_character_stream_out_parameter(&CallableParameter::by_index(13).unwrap())
+            .unwrap()
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "国字-index"
+    );
+    assert_eq!(
+        callable
+            .n_character_stream_out_parameter(
+                &CallableParameter::by_name("n_character_stream").unwrap()
+            )
+            .unwrap()
+            .unwrap()
+            .read_to_string()
+            .unwrap(),
+        "国字-name"
+    );
+    assert!(callable
+        .n_character_stream_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        callable
+            .n_string_out_parameter(&CallableParameter::by_index(14).unwrap())
+            .unwrap()
+            .as_deref(),
+        Some("国字-string-index")
+    );
+    assert_eq!(
+        callable
+            .n_string_out_parameter(&CallableParameter::by_name("n_string").unwrap())
+            .unwrap()
+            .as_deref(),
+        Some("国字-string-name")
+    );
+    assert!(callable
+        .n_string_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert_eq!(
+        callable
+            .url_out_parameter(&CallableParameter::by_index(15).unwrap())
+            .unwrap()
+            .unwrap()
+            .external_form(),
+        "https://example.test/callable"
+    );
+    assert_eq!(
+        callable
+            .url_out_parameter(&CallableParameter::by_name("url").unwrap())
+            .unwrap()
+            .unwrap()
+            .external_form(),
+        "https://example.test/callable"
+    );
+    assert_eq!(
+        callable
+            .ref_out_parameter(&CallableParameter::by_index(16).unwrap())
+            .unwrap()
+            .unwrap()
+            .base_type_name()
+            .await
+            .unwrap(),
+        "schema.kind"
+    );
+    assert_eq!(
+        callable
+            .ref_out_parameter(&CallableParameter::by_name("ref").unwrap())
+            .unwrap()
+            .unwrap()
+            .object()
+            .await
+            .unwrap(),
+        RdbcObject::from(Value::String("ref-value".to_string()))
+    );
+    assert_eq!(
+        callable
+            .array_out_parameter(&CallableParameter::by_index(17).unwrap())
+            .unwrap()
+            .unwrap()
+            .base_type()
+            .await
+            .unwrap(),
+        4
+    );
+    assert_eq!(
+        callable
+            .array_out_parameter(&CallableParameter::by_name("array").unwrap())
+            .unwrap()
+            .unwrap()
+            .values()
+            .await
+            .unwrap(),
+        vec![RdbcObject::from(Value::Int(1))]
+    );
+    assert_eq!(
+        callable
+            .row_id_out_parameter(&CallableParameter::by_index(18).unwrap())
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        &[1, 2, 3]
+    );
+    assert_eq!(
+        callable
+            .row_id_out_parameter(&CallableParameter::by_name("row_id").unwrap())
+            .unwrap()
+            .unwrap()
+            .bytes(),
+        &[1, 2, 3]
+    );
+    assert_eq!(
+        callable
+            .sql_xml_out_parameter(&CallableParameter::by_index(19).unwrap())
+            .unwrap()
+            .unwrap()
+            .string()
+            .await
+            .unwrap()
+            .to_rust_string()
+            .unwrap(),
+        "<x/>"
+    );
+    assert_eq!(
+        callable
+            .sql_xml_out_parameter(&CallableParameter::by_name("sql_xml").unwrap())
+            .unwrap()
+            .unwrap()
+            .binary_stream()
+            .await
+            .unwrap()
+            .read_to_end()
+            .unwrap(),
+        b"<x/>"
+    );
+    assert!(callable
+        .url_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert!(callable
+        .ref_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert!(callable
+        .array_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert!(callable
+        .row_id_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+    assert!(callable
+        .sql_xml_out_parameter(&CallableParameter::by_index(2).unwrap())
+        .unwrap()
+        .is_none());
+
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert("schema.kind", RdbcTargetType::String);
+    assert_eq!(
+        callable
+            .out_parameter_with_type_map(&CallableParameter::by_index(1).unwrap(), Some(&type_map))
+            .unwrap(),
+        RdbcObject::from(Value::Int(7))
+    );
+    assert_eq!(
+        callable
+            .out_parameter_with_type_map(&CallableParameter::by_name("name").unwrap(), None)
+            .unwrap(),
+        RdbcObject::from(Value::String("druid".to_string()))
+    );
+    assert_eq!(
+        callable
+            .out_parameter_as(
+                &CallableParameter::by_index(1).unwrap(),
+                &RdbcTargetType::Integer
+            )
+            .unwrap(),
+        RdbcObject::from(Value::Int(7))
+    );
+    assert_eq!(
+        callable
+            .out_parameter_as(
+                &CallableParameter::by_name("name").unwrap(),
+                &RdbcTargetType::String
+            )
+            .unwrap(),
+        RdbcObject::from(Value::String("druid".to_string()))
+    );
+    assert!(matches!(
+        Wrapper::is_wrapper_for(&*callable, None),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    assert!(matches!(
+        Wrapper::unwrap(&*callable, None),
+        Err(RdbcError::InvalidArgument(_))
+    ));
+    assert!(
+        Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<dyn CallableStatement>())).unwrap()
+    );
+    assert!(
+        Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<dyn PreparedStatement>())).unwrap()
+    );
+    assert!(Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<dyn Statement>())).unwrap());
+    assert!(Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<dyn Wrapper>())).unwrap());
+    assert!(!Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<dyn Connection>())).unwrap());
+    assert!(
+        !Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<UnsupportedUnwrapType>())).unwrap()
+    );
+    assert!(Wrapper::unwrap(&*callable, Some(TypeId::of::<UnsupportedUnwrapType>())).is_err());
+    let callable_interface =
+        Wrapper::unwrap(&*callable, Some(TypeId::of::<dyn CallableStatement>())).unwrap();
+    assert!(matches!(
+        &callable_interface,
+        StandardUnwrapped::CallableStatement(_)
+    ));
+    assert!(!matches!(
+        &callable_interface,
+        StandardUnwrapped::PreparedStatement(_)
+    ));
+    assert!(!matches!(
+        &callable_interface,
+        StandardUnwrapped::Connection(_)
+    ));
+    if let StandardUnwrapped::CallableStatement(view) = callable_interface {
+        assert!(std::ptr::addr_eq(
+            std::ptr::from_ref::<dyn CallableStatement>(&*callable),
+            std::ptr::from_ref::<dyn CallableStatement>(view)
+        ));
+        assert_eq!(view.sql().unwrap(), "{call demo(?, ?)}");
+    }
+    let prepared_interface =
+        Wrapper::unwrap(&*callable, Some(TypeId::of::<dyn PreparedStatement>())).unwrap();
+    assert!(matches!(
+        &prepared_interface,
+        StandardUnwrapped::PreparedStatement(_)
+    ));
+    assert!(!matches!(
+        &prepared_interface,
+        StandardUnwrapped::CallableStatement(_)
+    ));
+    assert!(!matches!(
+        &prepared_interface,
+        StandardUnwrapped::Connection(_)
+    ));
+    if let StandardUnwrapped::PreparedStatement(view) = prepared_interface {
+        assert!(std::ptr::addr_eq(
+            std::ptr::from_ref::<dyn CallableStatement>(&*callable),
+            std::ptr::from_ref::<dyn PreparedStatement>(view)
+        ));
+        assert_eq!(view.sql().unwrap(), "{call demo(?, ?)}");
+    }
+    assert_eq!(
+        callable
+            .big_decimal_out_parameter(&CallableParameter::by_index(5).unwrap())
+            .unwrap(),
+        Some(decimal.clone())
+    );
+    assert_eq!(
+        callable
+            .big_decimal_out_parameter_with_scale(&CallableParameter::by_index(5).unwrap(), 2)
+            .unwrap(),
+        Some(BigDecimal::from_str("123.45").unwrap())
+    );
+    assert_eq!(
+        callable
+            .big_decimal_out_parameter(&CallableParameter::by_name("decimal").unwrap())
+            .unwrap(),
+        Some(decimal)
+    );
+    assert_eq!(
+        callable
+            .date_out_parameter(
+                &CallableParameter::by_index(6).unwrap(),
+                &CallableCalendarArgument::Unspecified
+            )
+            .unwrap(),
+        Some(date)
+    );
+    assert_eq!(
+        callable
+            .date_out_parameter(
+                &CallableParameter::by_index(6).unwrap(),
+                &CallableCalendarArgument::Specified(None)
+            )
+            .unwrap(),
+        Some(date)
+    );
+    assert_eq!(
+        callable
+            .date_out_parameter(
+                &CallableParameter::by_name("date").unwrap(),
+                &CallableCalendarArgument::Unspecified
+            )
+            .unwrap(),
+        Some(date)
+    );
+    assert_eq!(
+        callable
+            .date_out_parameter(
+                &CallableParameter::by_name("date").unwrap(),
+                &CallableCalendarArgument::Specified(Some(shanghai.clone()))
+            )
+            .unwrap(),
+        Some(date)
+    );
+    assert_eq!(
+        callable
+            .time_out_parameter(
+                &CallableParameter::by_index(7).unwrap(),
+                &CallableCalendarArgument::Unspecified
+            )
+            .unwrap(),
+        Some(time)
+    );
+    assert_eq!(
+        callable
+            .time_out_parameter(
+                &CallableParameter::by_index(7).unwrap(),
+                &CallableCalendarArgument::Specified(Some(utc.clone()))
+            )
+            .unwrap(),
+        Some(time)
+    );
+    assert_eq!(
+        callable
+            .time_out_parameter(
+                &CallableParameter::by_name("time").unwrap(),
+                &CallableCalendarArgument::Unspecified
+            )
+            .unwrap(),
+        Some(time)
+    );
+    assert_eq!(
+        callable
+            .time_out_parameter(
+                &CallableParameter::by_name("time").unwrap(),
+                &CallableCalendarArgument::Specified(None)
+            )
+            .unwrap(),
+        Some(time)
+    );
+    assert_eq!(
+        callable
+            .timestamp_out_parameter(
+                &CallableParameter::by_index(8).unwrap(),
+                &CallableCalendarArgument::Unspecified
+            )
+            .unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(
+        callable
+            .timestamp_out_parameter(
+                &CallableParameter::by_index(8).unwrap(),
+                &CallableCalendarArgument::Specified(Some(shanghai.clone()))
+            )
+            .unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(
+        callable
+            .timestamp_out_parameter(
+                &CallableParameter::by_name("timestamp").unwrap(),
+                &CallableCalendarArgument::Unspecified
+            )
+            .unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(
+        callable
+            .timestamp_out_parameter(
+                &CallableParameter::by_name("timestamp").unwrap(),
+                &CallableCalendarArgument::Specified(None)
+            )
+            .unwrap(),
+        Some(timestamp)
+    );
+    assert_eq!(callable.execute_prepared_update().await.unwrap(), 1);
+    let mut fetched = callable.execute_prepared_query().await.unwrap();
+    assert_eq!(fetched.known_row_count(), Some(1));
+    assert!(fetched.next().await.unwrap());
+    assert_eq!(
+        fetched.value(ColumnIndex::new(1).unwrap()).unwrap(),
+        Value::Int(1)
+    );
+    assert!(!fetched.next().await.unwrap());
+
+    let physical = raw_states
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)[0]
+        .clone();
+    {
+        let registrations = physical
+            .registrations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(registrations.len(), 6);
+        assert_eq!(
+            registrations
+                .get(&CallableParameter::Index(ParameterIndex::new(2).unwrap()))
+                .unwrap()
+                .scale(),
+            Some(2)
+        );
+        assert_eq!(
+            registrations
+                .get(&CallableParameter::Index(ParameterIndex::new(3).unwrap()))
+                .unwrap()
+                .type_name(),
+            Some("schema.kind")
+        );
+    }
+    let stored_stream = {
+        let named_parameters = physical
+            .named_parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(named_parameters.len(), 49);
+        assert_eq!(
+            named_parameters.get("nullable"),
+            Some(&CallableInputParameter::Null {
+                sql_type: 4,
+                type_name: None,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("typed_null"),
+            Some(&CallableInputParameter::Null {
+                sql_type: 2002,
+                type_name: Some("schema.kind".to_string()),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_byte"),
+            Some(&CallableInputParameter::Byte(8))
+        );
+        assert_eq!(
+            named_parameters.get("in_short"),
+            Some(&CallableInputParameter::Short(16))
+        );
+        assert_eq!(
+            named_parameters.get("in_float"),
+            Some(&CallableInputParameter::Float(1.25))
+        );
+        assert_eq!(
+            named_parameters.get("in_url"),
+            Some(&CallableInputParameter::Url(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_row_id"),
+            Some(&CallableInputParameter::RowId(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_sql_xml"),
+            Some(&CallableInputParameter::SqlXml(None))
+        );
+        assert!(matches!(
+            named_parameters.get("in_ascii_stream"),
+            Some(CallableInputParameter::AsciiStream {
+                stream: Some(_),
+                length: RdbcStreamLength::Unspecified,
+            })
+        ));
+        assert_eq!(
+            named_parameters.get("in_ascii_stream_int"),
+            Some(&CallableInputParameter::AsciiStream {
+                stream: None,
+                length: RdbcStreamLength::Int(-7),
+            })
+        );
+        assert!(matches!(
+            named_parameters.get("in_ascii_stream_long"),
+            Some(CallableInputParameter::AsciiStream {
+                stream: Some(_),
+                length: RdbcStreamLength::Long(-8),
+            })
+        ));
+        assert!(matches!(
+            named_parameters.get("in_binary_stream"),
+            Some(CallableInputParameter::BinaryStream {
+                stream: Some(_),
+                length: RdbcStreamLength::Unspecified,
+            })
+        ));
+        assert_eq!(
+            named_parameters.get("in_binary_stream_int"),
+            Some(&CallableInputParameter::BinaryStream {
+                stream: None,
+                length: RdbcStreamLength::Int(-9),
+            })
+        );
+        assert!(matches!(
+            named_parameters.get("in_binary_stream_long"),
+            Some(CallableInputParameter::BinaryStream {
+                stream: Some(_),
+                length: RdbcStreamLength::Long(-10),
+            })
+        ));
+        assert_eq!(
+            named_parameters.get("in_string"),
+            Some(&CallableInputParameter::String(Some("value".to_string())))
+        );
+        assert_eq!(
+            named_parameters.get("in_string_null"),
+            Some(&CallableInputParameter::String(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_nstring"),
+            Some(&CallableInputParameter::NString(Some("字符".to_string())))
+        );
+        assert_eq!(
+            named_parameters.get("in_nstring_null"),
+            Some(&CallableInputParameter::NString(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_bytes"),
+            Some(&CallableInputParameter::Bytes(Some(vec![8, 9])))
+        );
+        assert_eq!(
+            named_parameters.get("in_bytes_null"),
+            Some(&CallableInputParameter::Bytes(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_typed_object"),
+            Some(&CallableInputParameter::Object {
+                value: Value::Int(11),
+                target_sql_type: Some(4),
+                scale: None,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_scaled_object"),
+            Some(&CallableInputParameter::Object {
+                value: Value::Float(3.5),
+                target_sql_type: Some(3),
+                scale: Some(2),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_decimal"),
+            Some(&CallableInputParameter::BigDecimal(Some(
+                BigDecimal::from_str("123.4500").unwrap()
+            )))
+        );
+        assert_eq!(
+            named_parameters.get("in_blob"),
+            Some(&CallableInputParameter::Blob(Some(input_blob)))
+        );
+        assert_eq!(
+            named_parameters.get("in_blob_null"),
+            Some(&CallableInputParameter::Blob(None))
+        );
+        assert_eq!(
+            named_parameters.get("in_blob_stream"),
+            Some(&CallableInputParameter::BlobStream {
+                stream: Some(input_stream.clone()),
+                length: RdbcStreamLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_blob_stream_length"),
+            Some(&CallableInputParameter::BlobStream {
+                stream: None,
+                length: RdbcStreamLength::Long(-1),
+            })
+        );
+        let stored_stream = match named_parameters.get("in_blob_stream").unwrap() {
+            CallableInputParameter::BlobStream {
+                stream: Some(stream),
+                ..
+            } => stream.clone(),
+            other => panic!("expected BlobStream, got {other:?}"),
+        };
+        assert_eq!(
+            named_parameters.get("in_clob"),
+            Some(&CallableInputParameter::Clob(Some(input_clob)))
+        );
+        assert_eq!(
+            named_parameters.get("in_clob_reader"),
+            Some(&CallableInputParameter::ClobReader {
+                reader: Some(clob_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_clob_reader_length"),
+            Some(&CallableInputParameter::ClobReader {
+                reader: None,
+                length: RdbcCharacterLength::Long(-2),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_clob"),
+            Some(&CallableInputParameter::NClob(Some(input_n_clob)))
+        );
+        assert_eq!(
+            named_parameters.get("in_n_clob_reader"),
+            Some(&CallableInputParameter::NClobReader {
+                reader: Some(n_clob_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_clob_reader_length"),
+            Some(&CallableInputParameter::NClobReader {
+                reader: None,
+                length: RdbcCharacterLength::Long(-3),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_character_stream"),
+            Some(&CallableInputParameter::CharacterStream {
+                reader: Some(character_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_character_stream_int"),
+            Some(&CallableInputParameter::CharacterStream {
+                reader: None,
+                length: RdbcCharacterLength::Int(-4),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_character_stream_long"),
+            Some(&CallableInputParameter::CharacterStream {
+                reader: Some(character_reader_long.clone()),
+                length: RdbcCharacterLength::Long(-5),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_character_stream"),
+            Some(&CallableInputParameter::NCharacterStream {
+                reader: Some(n_character_reader.clone()),
+                length: RdbcCharacterLength::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_n_character_stream_long"),
+            Some(&CallableInputParameter::NCharacterStream {
+                reader: None,
+                length: RdbcCharacterLength::Long(-6),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_date"),
+            Some(&CallableInputParameter::Date {
+                value: Some(date),
+                calendar: CallableCalendarArgument::Unspecified,
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_date_cal"),
+            Some(&CallableInputParameter::Date {
+                value: None,
+                calendar: CallableCalendarArgument::Specified(Some(shanghai.clone())),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_time_cal"),
+            Some(&CallableInputParameter::Time {
+                value: Some(time),
+                calendar: CallableCalendarArgument::Specified(None),
+            })
+        );
+        assert_eq!(
+            named_parameters.get("in_timestamp_cal"),
+            Some(&CallableInputParameter::Timestamp {
+                value: Some(timestamp),
+                calendar: CallableCalendarArgument::Specified(Some(utc)),
+            })
+        );
+        stored_stream
+    };
+    assert_eq!(
+        stored_stream.read_to_end().unwrap(),
+        b"stream-content",
+        "池化 setter 不得提前消费输入流"
+    );
+    assert_eq!(
+        ascii_stream.read_to_end().unwrap(),
+        b"ascii-stream",
+        "ASCII setter 不得提前消费输入流"
+    );
+    assert_eq!(
+        ascii_stream_long.read_to_end().unwrap(),
+        b"ascii-stream-long"
+    );
+    assert_eq!(binary_stream.read_to_end().unwrap(), vec![0, 1, 2]);
+    assert_eq!(binary_stream_long.read_to_end().unwrap(), vec![3, 4, 5]);
+    assert_eq!(
+        clob_reader.read_to_string().unwrap(),
+        "clob-reader",
+        "Clob setter 不得提前消费 Reader"
+    );
+    assert_eq!(
+        n_clob_reader.read_to_string().unwrap(),
+        "nclob-reader",
+        "NClob setter 不得提前消费 Reader"
+    );
+    assert_eq!(
+        character_reader.read_to_string().unwrap(),
+        "character-reader",
+        "CharacterStream setter 不得提前消费 Reader"
+    );
+    assert_eq!(
+        character_reader_long.read_to_string().unwrap(),
+        "character-reader-long"
+    );
+    assert_eq!(
+        n_character_reader.read_to_string().unwrap(),
+        "国家字符-reader"
+    );
+    {
+        let calendar_reads = physical
+            .calendar_reads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(calendar_reads.len(), 12);
+        assert_eq!(
+            calendar_reads[0],
+            (
+                CallableParameter::Index(ParameterIndex::new(6).unwrap()),
+                CallableCalendarArgument::Unspecified
+            )
+        );
+        assert_eq!(
+            calendar_reads[1],
+            (
+                CallableParameter::Index(ParameterIndex::new(6).unwrap()),
+                CallableCalendarArgument::Specified(None)
+            )
+        );
+        assert_eq!(
+            calendar_reads[3],
+            (
+                CallableParameter::Name("date".to_string()),
+                CallableCalendarArgument::Specified(Some(shanghai))
+            )
+        );
+    }
+    {
+        let type_map_reads = physical
+            .type_map_reads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(type_map_reads.len(), 2);
+        assert_eq!(
+            type_map_reads[0].0,
+            CallableParameter::Index(ParameterIndex::new(1).unwrap())
+        );
+        assert_eq!(type_map_reads[0].1.as_ref(), Some(&type_map));
+        assert_eq!(
+            type_map_reads[1],
+            (CallableParameter::Name("name".to_string()), None)
+        );
+    }
+    {
+        let typed_reads = physical
+            .typed_reads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(
+            typed_reads.as_slice(),
+            &[
+                (
+                    CallableParameter::Index(ParameterIndex::new(1).unwrap()),
+                    RdbcTargetType::Integer
+                ),
+                (
+                    CallableParameter::Name("name".to_string()),
+                    RdbcTargetType::String,
+                ),
+            ]
+        );
+    }
+    callable.close().await.unwrap();
+    assert!(
+        Wrapper::is_wrapper_for(&*callable, Some(TypeId::of::<dyn CallableStatement>())).unwrap()
+    );
+    assert!(matches!(
+        Wrapper::unwrap(&*callable, Some(TypeId::of::<dyn CallableStatement>())).unwrap(),
+        StandardUnwrapped::CallableStatement(_)
+    ));
+    drop(callable);
+
+    let mut cached = connection
+        .prepare_call("{call demo(?, ?)}", StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(prepare_count.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        raw_states
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)[0]
+            .named_parameters
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len(),
+        0
+    );
+    cached.close().await.unwrap();
+
+    let mut held = connection
+        .prepare_call(
+            "{call demo()}",
+            StatementOptions::new(
+                ResultSetType::ScrollInsensitive,
+                ResultSetConcurrency::ReadOnly,
+                ResultSetHoldability::HoldOverCommit,
+            ),
+        )
+        .await
+        .unwrap();
+    held.close().await.unwrap();
+
+    let mut result_set = connection
+        .prepare_call(
+            "{call demo()}",
+            StatementOptions::new(
+                ResultSetType::ForwardOnly,
+                ResultSetConcurrency::Updatable,
+                ResultSetHoldability::CloseAtCommit,
+            ),
+        )
+        .await
+        .unwrap();
+    result_set.close().await.unwrap();
+
+    {
+        let observed = prepared_options
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(observed.len(), 3);
+        assert_eq!(connection.catalog().unwrap(), None);
+        assert_eq!(observed[0].0, "{call demo(?, ?)}");
+        assert_eq!(observed[0].1, StatementOptions::default());
+        assert_eq!(observed[0].1.result_set_type(), ResultSetType::ForwardOnly);
+        assert_eq!(observed[0].1.concurrency(), ResultSetConcurrency::ReadOnly);
+        assert_eq!(
+            observed[0].1.holdability(),
+            ResultSetHoldability::CloseAtCommit
+        );
+        assert_eq!(observed[1].0, "{call demo()}");
+        assert_eq!(
+            observed[1].1.result_set_type(),
+            ResultSetType::ScrollInsensitive
+        );
+        assert_eq!(observed[1].1.concurrency(), ResultSetConcurrency::ReadOnly);
+        assert_eq!(
+            observed[1].1.holdability(),
+            ResultSetHoldability::HoldOverCommit
+        );
+        assert_eq!(observed[2].0, "{call demo()}");
+        assert_eq!(observed[2].1.result_set_type(), ResultSetType::ForwardOnly);
+        assert_eq!(observed[2].1.concurrency(), ResultSetConcurrency::Updatable);
+        assert_eq!(
+            observed[2].1.holdability(),
+            ResultSetHoldability::CloseAtCommit
+        );
+        assert_ne!(observed[1].1, observed[2].1);
+        // 原 Precall1/2/3 调用形式由 typed options 合并；这里仅证明真实 raw 入参与分区。
+        // 原 Precall3/无 holdability 重载身份仍需独立迁移裁决，不伪造生产缓存键证据。
+    }
+
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 3);
+    assert_eq!(state.cached_prepared_statement_count, 3);
+    assert_eq!(state.cached_prepared_statement_hit_count, 1);
+    assert_eq!(state.cached_prepared_statement_miss_count, 3);
+    assert_eq!(state.cached_prepared_statement_access_count, 4);
+
+    connection.close().await.unwrap();
+    pool.close().await;
+}
+
+#[tokio::test]
+async fn callable_overloads_preserve_base_delegation_and_cache_contract() {
+    task6_prepare_call_overloads_preserve_keys_delegation_and_cache_lifecycle().await;
+}
+
+/// 原普通句柄必须经过真实池化准入拒绝并恰好关闭一次。
+/// 对应 Java: DruidPooledConnection#prepareCall 的非 Callable 后端清理。
+#[tokio::test]
+async fn pooled_callable_admission_rejects_real_ordinary_backend_and_closes_once() {
+    use std::sync::atomic::Ordering;
+    let (pool, prepares, ordinary) = callable_error_pool_with_ordinary_state().await;
+    let mut connection = pool.get().await.unwrap();
+    let result = connection
+        .prepare_call(
+            "ordinary-handle",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await;
+    let rejected = matches!(
+        &result,
+        Err(RdbcError::UnsupportedOperation {
+            operation: "connection_prepare_call"
+        })
+    );
+    // RED 阶段若误接受仍先释放实际返回句柄，避免失败控制留下占用资源。
+    if let Ok(mut accepted) = result {
+        accepted.close().await.unwrap();
+    }
+    assert!(rejected, "普通 Prepared 后端不得成为池化 Callable");
+    assert_eq!(prepares.load(Ordering::Acquire), 1);
+    assert_eq!(
+        ordinary
+            .prepared_close_attempt_count
+            .load(Ordering::Acquire),
+        1
+    );
+    assert_eq!(ordinary.prepared_close_count.load(Ordering::Acquire), 1);
+    let state = pool.state();
+    assert_eq!(state.prepared_statement_count, 1);
+    assert_eq!(state.cached_prepared_statement_delete_count, 1);
+    assert_eq!(state.closed_prepared_statement_count, 1);
+    connection.close().await.unwrap();
+    connection.close().await.unwrap();
+    pool.close().await;
+    assert_eq!(
+        ordinary
+            .prepared_close_attempt_count
+            .load(Ordering::Acquire),
+        1
+    );
+    assert_eq!(ordinary.prepared_close_count.load(Ordering::Acquire), 1);
+}
+
+/// 索引校验在当前语句内记录原错误，不能由外部构造失败代替缓存失效。
+/// 对应 Java: DruidPooledCallableStatement#index_parameter / record_result。
+#[tokio::test]
+async fn callable_index_validation_preserves_owner_error_and_cache_disposition() {
+    use std::sync::atomic::Ordering;
+    assert!(CallableParameter::by_index(0).is_err());
+    let (pool, prepares) = callable_error_pool().await;
+    let mut callable_connection = pool.get().await.unwrap();
+    let mut callable = callable_connection
+        .prepare_call(
+            "invalid-index",
+            druid_rdbc::statement::StatementOptions::default(),
+        )
+        .await
+        .unwrap();
+    let valid = callable.index_parameter(1).unwrap();
+    assert_eq!(valid, CallableParameter::by_index(1).unwrap());
+    assert_eq!(
+        callable.out_parameter(&valid).unwrap(),
+        RdbcObject::from(Value::Int(7))
+    );
+    assert!(
+        matches!(callable.index_parameter(0), Err(RdbcError::InvalidArgument(message)) if message == "parameter index is 1-based")
+    );
+    callable.close().await.unwrap();
+    assert!(matches!(
+        callable.index_parameter(0),
+        Err(RdbcError::ConnectionDiscarded)
+    ));
+    let state = pool.state();
+    assert_eq!(prepares.load(Ordering::Acquire), 1);
+    assert_eq!(state.prepared_statement_count, 1);
+    assert_eq!(state.cached_prepared_statement_delete_count, 1);
+    assert_eq!(state.closed_prepared_statement_count, 1);
+    callable_connection.close().await.unwrap();
+    pool.close().await;
 }

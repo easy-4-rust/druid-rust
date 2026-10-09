@@ -1,0 +1,163 @@
+mod resource_filter_support;
+use druid::core::{FilterChain, RdbcError};
+use druid::pool::DruidPoolBuilder;
+use druid_rdbc::connection::Connection;
+use druid_rdbc::resource::{RdbcInputStream, RdbcReader};
+use druid_rdbc::result_set::{ColumnIndex, ResultSetExt, ResultSetRead};
+use druid_rdbc::statement::StatementOptions;
+use druid_wrapper::toasty::ToastyConnectionFactory;
+use resource_filter_support::OrderedResourceFilter;
+use std::sync::{Arc, Mutex};
+
+/// 外部消费者仅用公开Filter契约，通过真实DruidPool验证默认流、短路、错误与关闭。
+#[tokio::test]
+async fn external_resource_filters_preserve_shared_streams_short_circuit_and_errors() {
+    for mode in [0, 1, 2] {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let mut filters = FilterChain::new();
+        let stream = RdbcInputStream::from_bytes([9, 8]);
+        let reader = RdbcReader::from_string("外部");
+        for name in ["A", "B", "C"] {
+            filters.add_result_set(Arc::new(OrderedResourceFilter {
+                name,
+                mode: if name == "B" { mode } else { 0 },
+                calls: Arc::clone(&log),
+                stream: stream.clone(),
+                reader: reader.clone(),
+            }));
+        }
+        let factory = ToastyConnectionFactory::new("sqlite::memory:")
+            .await
+            .unwrap();
+        let pool = DruidPoolBuilder::new()
+            .factory(Arc::new(factory))
+            .filter_chain(Arc::new(filters))
+            .build()
+            .await
+            .unwrap();
+        let mut connection = pool.get().await.unwrap();
+        let mut statement = connection
+            .create_statement(StatementOptions::default())
+            .await
+            .unwrap();
+        let mut rows = statement
+            .execute_query("SELECT X'010203' AS payload, '你好' AS text_value")
+            .await
+            .unwrap();
+        if mode == 0 {
+            assert!(rows.next().await.unwrap());
+        }
+        let status = if mode == 2 { "error" } else { "ok" };
+        let expected: Vec<String> = if mode == 0 {
+            vec!["A:before", "B:before", "C:before", "C:ok", "B:ok", "A:ok"]
+        } else {
+            vec![
+                "A:before",
+                "B:before",
+                if mode == 2 { "B:error" } else { "B:ok" },
+                if mode == 2 { "A:error" } else { "A:ok" },
+            ]
+        }
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+        assert_eq!(expected.last().unwrap(), &format!("A:{status}"));
+        if mode != 0 {
+            for request in [
+                ResultSetRead::Ref,
+                ResultSetRead::Blob,
+                ResultSetRead::Clob,
+                ResultSetRead::Array,
+                ResultSetRead::Url,
+                ResultSetRead::RowId,
+                ResultSetRead::NClob,
+                ResultSetRead::SqlXml,
+            ] {
+                log.lock().unwrap().clear();
+                let result = rows.read_object_by_label("virtual", &request);
+                if mode == 2 {
+                    assert_eq!(
+                        result,
+                        Err(RdbcError::DriverError(
+                            "ordered resource failure".to_owned()
+                        ))
+                    );
+                } else {
+                    assert!(result.unwrap().is_null());
+                }
+                assert_eq!(*log.lock().unwrap(), expected);
+            }
+        }
+        log.lock().unwrap().clear();
+        let indexed = rows.binary_stream(ColumnIndex::new(1).unwrap());
+        assert_eq!(*log.lock().unwrap(), expected);
+        log.lock().unwrap().clear();
+        let labeled = rows.binary_stream_by_label(if mode == 0 { "payload" } else { "virtual" });
+        assert_eq!(*log.lock().unwrap(), expected);
+        if mode == 2 {
+            assert_eq!(
+                indexed,
+                Err(RdbcError::DriverError(
+                    "ordered resource failure".to_owned()
+                ))
+            );
+            assert_eq!(
+                labeled,
+                Err(RdbcError::DriverError(
+                    "ordered resource failure".to_owned()
+                ))
+            );
+        } else if mode == 1 {
+            let mut first = [0_u8; 1];
+            assert_eq!(indexed.unwrap().unwrap().read(&mut first).unwrap(), 1);
+            assert_eq!(first, [9]);
+            assert_eq!(labeled.unwrap().unwrap().read_to_end().unwrap(), [8]);
+        } else {
+            assert_eq!(indexed.unwrap().unwrap().read_to_end().unwrap(), [1, 2, 3]);
+            assert_eq!(labeled.unwrap().unwrap().read_to_end().unwrap(), [1, 2, 3]);
+        }
+        log.lock().unwrap().clear();
+        let indexed = rows.n_character_stream(ColumnIndex::new(2).unwrap());
+        assert_eq!(*log.lock().unwrap(), expected);
+        log.lock().unwrap().clear();
+        let labeled =
+            rows.n_character_stream_by_label(if mode == 0 { "text_value" } else { "virtual" });
+        assert_eq!(*log.lock().unwrap(), expected);
+        if mode == 2 {
+            assert_eq!(
+                indexed,
+                Err(RdbcError::DriverError(
+                    "ordered resource failure".to_owned()
+                ))
+            );
+            assert_eq!(
+                labeled,
+                Err(RdbcError::DriverError(
+                    "ordered resource failure".to_owned()
+                ))
+            );
+        } else if mode == 1 {
+            let mut first = [0_u16; 1];
+            assert_eq!(indexed.unwrap().unwrap().read_utf16(&mut first).unwrap(), 1);
+            assert_eq!(first[0], '外' as u16);
+            assert_eq!(labeled.unwrap().unwrap().read_to_string().unwrap(), "部");
+        } else {
+            assert_eq!(indexed.unwrap().unwrap().read_to_string().unwrap(), "你好");
+            assert_eq!(labeled.unwrap().unwrap().read_to_string().unwrap(), "你好");
+        }
+        rows.close().await.unwrap();
+        log.lock().unwrap().clear();
+        assert_eq!(
+            rows.binary_stream_by_label("virtual"),
+            Err(RdbcError::ConnectionDiscarded)
+        );
+        assert_eq!(
+            rows.n_character_stream_by_label("virtual"),
+            Err(RdbcError::ConnectionDiscarded)
+        );
+        assert!(log.lock().unwrap().is_empty());
+        statement.close().await.unwrap();
+        connection.close().await.unwrap();
+        pool.close().await;
+    }
+}

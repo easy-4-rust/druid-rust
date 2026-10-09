@@ -3,21 +3,23 @@
 //! 外部池与直连 `RDBC` 连接的共同可观察合同。
 
 use druid::core::{
-    DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties, Connection,
-    RdbcError, SqlException, Value,
+    DruidPooledConnection, ExceptionSorter, ExceptionSorterProperties, RdbcError, SqlException,
+    Value,
 };
+use druid_rdbc::connection::Connection;
+use druid_rdbc::statement::{ParameterIndex, PreparedParameter, StatementOptions};
 use std::future::Future;
 use std::sync::Arc;
 
-/// 编译期要求 wrapper adapter 同时暴露 transitional Physical 与 canonical standard。
+/// 编译期要求 wrapper adapter 与 factory 使用唯一 canonical standard。
 #[allow(
     dead_code,
     reason = "shared common module is compiled by pool tests that do not own raw adapters"
 )]
 pub fn assert_parallel_standard_contract<C, F>()
 where
-    C: druid::core::Connection + druid_rdbc::connection::Connection,
-    F: druid::core::ConnectionFactory + druid_rdbc::driver::ConnectionFactory,
+    C: druid_rdbc::connection::Connection,
+    F: druid_rdbc::driver::ConnectionFactory,
 {
 }
 
@@ -52,18 +54,20 @@ where
         )
         .await?;
     let mut prepared = connection
-        .prepare_statement("insert into item(name) values (?)")
+        .prepare_statement(
+            "insert into item(name) values (?)",
+            StatementOptions::default(),
+        )
         .await?;
-    let result = prepared
-        .exec(&mut connection, vec![Value::String("alpha".to_owned())])
-        .await?;
-    assert_eq!(result.rows_affected, 1);
+    prepared.set_parameter(PreparedParameter {
+        index: ParameterIndex::new(1)?,
+        value: Value::String("alpha".to_owned()),
+    })?;
+    let result = prepared.execute_prepared_update().await?;
+    assert_eq!(result, 1);
 
-    let mut metadata = connection.get_meta_data()?;
-    assert_eq!(
-        metadata.get_database_product_name().await?.as_deref(),
-        Some("SQLite")
-    );
+    let mut metadata = connection.database_meta_data().await?;
+    assert_eq!(metadata.database_product_name().await?, "SQLite");
     drop(metadata);
 
     connection.close().await?;
@@ -101,10 +105,7 @@ where
     connection
         .exec(
             "insert into fatal_error_marker(id, value) values (?, ?)",
-            vec![
-                Value::Int(1),
-                Value::String("driver_lease_only".to_owned()),
-            ],
+            vec![Value::Int(1), Value::String("driver_lease_only".to_owned())],
         )
         .await?;
     let error = connection
@@ -113,15 +114,15 @@ where
         .expect_err("invalid SQL must fail");
     assert!(error.sql_exception().is_some());
     assert!(
-        connection.connection_holder().is_none(),
-        "fatal SQLite database errors must discard the current lease immediately"
+        connection.is_closed()?,
+        "fatal SQLite database errors must invalidate the current lease immediately"
     );
 
     connection.close().await?;
     connection.close().await?;
 
     let mut reacquired = acquire().await?;
-    assert!(reacquired.auto_commit());
+    assert!(reacquired.auto_commit()?);
     let markers = reacquired
         .fetch(
             "select name from sqlite_master where type = 'table' and name = 'fatal_error_marker'",
@@ -163,7 +164,7 @@ where
     connection.close().await?;
 
     let mut reacquired = acquire().await?;
-    assert!(reacquired.auto_commit());
+    assert!(reacquired.auto_commit()?);
     let rows = reacquired
         .fetch("select id from dirty_close_item", vec![])
         .await?;
@@ -200,7 +201,7 @@ where
 
     let mut reacquired = acquire().await?;
     assert_ne!(reacquired.id(), dropped_lease_id);
-    assert!(reacquired.auto_commit());
+    assert!(reacquired.auto_commit()?);
     let tables = reacquired
         .fetch(
             "select name from sqlite_master where type = 'table' and name = 'dirty_drop_item'",

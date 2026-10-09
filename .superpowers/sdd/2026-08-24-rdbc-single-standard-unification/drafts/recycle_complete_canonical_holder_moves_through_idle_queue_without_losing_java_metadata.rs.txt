@@ -1,0 +1,24 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    let pool = build_pool(factory, |builder| builder).await;
+
+    let mut first = pool.get().await.unwrap();
+    let first_id = first.id();
+    {
+        let first_holder = first.connection_holder().unwrap();
+        assert_eq!(first_holder.connection_id(), first_id);
+        assert_eq!(first_holder.use_count(), 1);
+        assert_eq!(first_holder.user_password_version(), 0);
+    }
+    first.exec("SELECT 1", Vec::new()).await.unwrap();
+    assert!(first.connection_holder().unwrap().last_exec_idle_duration() < Duration::from_secs(1));
+    first.close().await.unwrap();
+
+    let second = pool.get().await.unwrap();
+    let second_holder = second.connection_holder().unwrap();
+    assert_eq!(second.id(), first_id);
+    assert_eq!(second_holder.connection_id(), first_id);
+    assert_eq!(second_holder.use_count(), 2);
+    assert!(second_holder.idle_duration() < Duration::from_secs(1));
+    drop(second);
+}

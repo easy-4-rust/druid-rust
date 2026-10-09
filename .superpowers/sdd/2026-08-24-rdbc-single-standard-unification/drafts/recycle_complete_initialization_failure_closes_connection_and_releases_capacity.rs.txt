@@ -1,0 +1,34 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    factory.set_initial_state(ConnectionState {
+        fail_operation: Some("set_read_only"),
+        ..ConnectionState::default()
+    });
+    let pool = build_pool(factory.clone(), |builder| {
+        builder
+            .default_read_only(true)
+            .initial_size(1)
+            .init_exception_throw(true)
+    })
+    .await;
+
+    let error = pool
+        .init()
+        .await
+        .expect_err("default initialization must fail");
+    assert!(matches!(error, DruidError::Rdbc(RdbcError::DriverError(_))));
+    let pool_state = pool.state();
+    assert_eq!(pool_state.create_count, 1);
+    // init 失败属于物理创建阶段，不是一次公共 get 的逻辑获取失败。
+    assert_eq!(pool_state.connect_error_count, 0);
+    assert_eq!(pool_state.destroy_count, 0);
+    assert_eq!(pool_state.active_count, 0);
+    assert_eq!(pool_state.idle_count, 0);
+    assert!(
+        factory
+            .state(0)
+            .lock()
+            .expect("tracking state poisoned")
+            .closed
+    );
+}

@@ -8,6 +8,7 @@ mod prepared_parameter_materializer;
 mod prepared_parameter_meta_data_snapshot;
 mod prepared_parameter_state;
 mod proxool_config_key;
+mod sqlite_returning_key_plan;
 mod standard_adapter_database_meta_data;
 mod standard_adapter_executor;
 mod standard_adapter_prepared_statement;

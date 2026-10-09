@@ -32,6 +32,18 @@ DEFAULT_METHOD_CALL_INDEX = Path(
 )
 TEST_ROOTS = ("crates/druid/tests/", "crates/druid-wrapper/tests/")
 LIB_TEST_TARGETS = {
+    "crates/druid/src/pool/druid_pool/lifetime_tests.rs": {
+        "task6_pool_deep_branch_coverage_test_borrow_skips_lifetime_expired_idle": "pool::druid_pool::lifetime_tests::task6_pool_deep_branch_coverage_test_borrow_skips_lifetime_expired_idle",
+    },
+    "crates/druid/src/core/connection_defaults/complete_state_tests.rs": {
+        "task6_connection_defaults_capture_compare_and_reset_complete_state": "core::connection_defaults::complete_state_tests::task6_connection_defaults_capture_compare_and_reset_complete_state",
+    },
+    "crates/druid-wrapper/src/sqlx/external_pool_connection_control/lease_complete_tests.rs": {
+        "task6_lease_delegates_complete_spi": "sqlx::external_pool_connection_control::lease_complete_tests::task6_lease_delegates_complete_spi",
+    },
+    "crates/druid/src/core/druid_pooled_connection/result_set_error_lease_tests.rs": {
+        "task6_result_set_errors_typed_getters_and_old_lease_are_observable": "core::druid_pooled_connection::result_set_error_lease_tests::task6_result_set_errors_typed_getters_and_old_lease_are_observable",
+    },
     "crates/druid/src/core/result_set_meta_data_proxy.rs": {
         "result_set_meta_data_proxy_attributes": (
             "core::result_set_meta_data_proxy::tests::"
@@ -41,7 +53,73 @@ LIB_TEST_TARGETS = {
             "core::result_set_meta_data_proxy::tests::"
             "result_set_meta_data_proxy_put_and_clear"
         )
-    }
+    },
+    "crates/druid/src/core/result_set_meta_data_proxy/metadata_identity_tests.rs": {
+        "task6_metadata_preserves_getter_error_and_wrapper_identity": (
+            "core::result_set_meta_data_proxy::metadata_identity_tests::"
+            "task6_metadata_preserves_getter_error_and_wrapper_identity"
+        )
+    },
+    "crates/druid/src/core/druid_pooled_result_set/diagnostic_tests.rs": {
+        name: f"core::druid_pooled_result_set::diagnostic_tests::{name}"
+        for name in (
+            "task6_close_count_zero_before_close",
+            "task6_cursor_index_starts_at_zero",
+            "task6_fetch_row_count_increments_with_next",
+            "task6_construct_elapsed_returns_duration",
+            "task6_result_set_id_is_nonzero",
+            "task6_result_set_attributes_empty_initially",
+            "task6_raw_result_set_returns_standard_driver_cursor",
+            "task6_hidden_columns_none_by_default",
+            "task6_physical_column_identity_without_map",
+            "task6_set_logic_column_map_and_reverse",
+            "task6_meta_data_proxy_returns_proxy_with_attributes",
+            "task6_read_string_length_increments_on_string_get",
+            "task6_sql_returns_some",
+            "task6_stream_reader_counts_zero_initially",
+            "task6_all_scalar_and_stream_update_overloads_preserve_raw_spi_argument_identity",
+            "task6_all_strong_getter_overloads_preserve_raw_spi_argument_identity",
+            "task6_sqlite_typed_get_object_converts_all_standard_scalar_targets",
+            "task6_labeled_result_set_preserves_all_scalar_and_stream_overloads",
+            "task6_map_get_object_overloads_preserve_index_label_and_nullable_map_identity",
+            "task6_typed_get_object_overloads_preserve_raw_target_type_identity",
+            "task6_strong_typed_getter_conversion_errors_follow_statement_check_exception_path",
+            "task6_pooled_result_set_routes_lob_stream_updates_and_preserves_sqlite_capability_errors",
+            "task6_result_set_scalar_update_filter_defaults_delegate_all_java_overloads",
+            "task6_pooled_result_set_classifies_every_sparse_capability_at_the_java_call_site",
+            "task6_pooled_scalar_getters_delegate_exact_overloads_and_classify_errors",
+            "task6_rdbc_object_and_opaque_object_preserve_type_identity_and_display_contract",
+            "task6_sql_warning_and_result_set_metadata_preserve_structured_fields",
+            "task6_sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor",
+            "task6_sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity",
+            "task6_statement_close_closes_traced_result_set_and_records_fetched_peak",
+            "task6_strong_typed_getters_preserve_all_decimal_temporal_and_calendar_overloads",
+            "task6_pooled_result_set_preserves_decimal_temporal_and_calendar_filter_overloads",
+            "task6_pooled_result_set_preserves_distinct_n_string_filter_overloads",
+            "task6_pooled_result_set_routes_all_object_overloads_and_preserves_argument_identity",
+            "task6_pooled_result_set_routes_all_scalar_getters_through_java_filter_overloads",
+            "task6_pooled_result_set_routes_dynamic_statement_identity_through_filter",
+            "task6_pooled_result_set_routes_metadata_platform_handle_through_filter",
+            "task6_pooled_result_set_routes_n_string_updates_and_preserves_sqlite_capability_errors",
+            "task6_pooled_result_set_routes_navigation_properties_and_real_sqlite_state",
+            "task6_pooled_result_set_routes_object_updates_and_preserves_sqlite_capability_errors",
+            "task6_pooled_result_set_routes_resource_getters_and_real_sqlite_streams",
+            "task6_pooled_result_set_routes_resource_updates_and_preserves_sqlite_capability_errors",
+            "task6_pooled_result_set_routes_row_mutations_and_preserves_sqlite_capability_errors",
+            "task6_pooled_result_set_routes_scalar_updates_and_preserves_sqlite_capability_errors",
+            "task6_pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability_errors",
+            "task6_real_sqlite_result_sets_flow_through_stat_filter_and_statement_cascade",
+            "task6_result_set_filter_chain_preserves_java_order_short_circuit_and_error_unwind",
+            "task6_result_set_filter_defaults_delegate_and_context_defaults_are_observable",
+            "task6_result_set_lob_stream_update_filter_defaults_preserve_all_twelve_overloads",
+            "task6_result_set_navigation_filter_defaults_delegate_every_physical_method",
+            "task6_result_set_resource_filter_defaults_preserve_all_physical_overload_identities",
+            "task6_result_set_resource_update_filter_defaults_preserve_all_fourteen_overloads",
+            "task6_result_set_row_mutation_filter_defaults_delegate_every_physical_method",
+            "task6_result_set_stream_update_filter_defaults_preserve_all_twenty_two_overloads",
+            "task6_stat_filter_commits_close_statistics_before_downstream_close_error",
+        )
+    },
 }
 LEDGER_HEADER = (
     "base_source_path",
@@ -235,6 +313,7 @@ def run_git(root: Path, arguments: list[str]) -> str:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
@@ -1003,7 +1082,12 @@ def target_package(source_path: str) -> tuple[str, str]:
                 )
             return package, relative.removesuffix(".rs")
     if source_path in LIB_TEST_TARGETS:
-        return "druid", "__lib__"
+        for prefix, package in (
+            ("crates/druid/src/", "druid"),
+            ("crates/druid-wrapper/src/", "druid-wrapper"),
+        ):
+            if source_path.startswith(prefix):
+                return package, "__lib__"
     fail(f"unknown target test package: {source_path}")
 
 
@@ -1108,7 +1192,8 @@ def execute_targets(
             command.append("--lib")
         else:
             command.extend(["--test", target])
-        command.extend(["--", "--nocapture"])
+        # 展示成功测试的 stdout，同时保持精确 libtest 成功行完整，供函数与案例双重验收。
+        command.extend(["--", "--show-output"])
         try:
             result = subprocess.run(
                 command,

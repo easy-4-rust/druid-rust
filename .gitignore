@@ -91,8 +91,21 @@ Cargo.lock
 **/target/
 **/*.rs.bk
 !xtask/Cargo.lock
+!crates/druid-wrapper/src/bin/
+crates/druid-wrapper/src/bin/*
+!crates/druid-wrapper/src/bin/druid_driver.rs
 .idea/
 .vscode/
 *.swp
 *.swo
 *.pyc
+
+### Local SDD compilation artifacts (retain locally) ###
+/.superpowers/sdd/**/*.pdb
+/.superpowers/sdd/**/*.exe
+/.superpowers/sdd/**/*.lib
+/.superpowers/sdd/**/*.exp
+/.superpowers/sdd/**/*.obj
+/.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-task7-full-druid-rdbc-wrapper-source-candidate17.zip
+/.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-task7-full-druid-rdbc-wrapper-source-candidate18.zip
+/.superpowers/sdd/2026-08-24-rdbc-single-standard-unification/task6-e-space-task7-full-druid-rdbc-wrapper-source-candidate19.zip

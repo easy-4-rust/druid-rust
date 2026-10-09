@@ -226,7 +226,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -235,7 +236,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Int(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -244,7 +246,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -253,7 +256,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -262,7 +266,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Int(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -271,7 +276,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -280,7 +286,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: 100,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -289,7 +296,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -298,7 +306,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Int(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -307,7 +316,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -316,7 +326,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -325,7 +336,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -334,7 +346,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -343,7 +356,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -352,7 +366,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -361,7 +376,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcCharacterLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -370,7 +386,8 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Unspecified,
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
     assert!(prepared
         .set_input_parameter(
             index(2),
@@ -379,9 +396,33 @@ async fn task6_pooled_prepared_statement_coverage_test_ps_parameter_binding_all_
                 length: RdbcStreamLength::Long(100),
             }
         )
-        .is_err());
+        .is_ok());
+    assert_eq!(prepared.execute_prepared_update().await.unwrap(), 1);
+    // 对应 BASE 的 nullable 流绑定：每种描述符均须成功执行，并真实存储 SQL NULL。
     prepared.clear_parameters().unwrap();
     prepared.close().await.unwrap();
+    let mut query = prepare_statement(
+        &mut connection,
+        "SELECT id, name, val FROM ps_cov ORDER BY id",
+    )
+    .await;
+    let mut rows = query.execute_prepared_query().await.unwrap();
+    let mut row_count = 0;
+    while rows.next().await.unwrap() {
+        row_count += 1;
+        assert_eq!(rows.int(ColumnIndex::new(1).unwrap()).unwrap(), row_count);
+        assert_eq!(
+            rows.value(ColumnIndex::new(2).unwrap()).unwrap(),
+            Value::Null
+        );
+        assert_eq!(
+            rows.value(ColumnIndex::new(3).unwrap()).unwrap(),
+            Value::Float(1.5)
+        );
+    }
+    assert_eq!(row_count, 18);
+    rows.close().await.unwrap();
+    query.close().await.unwrap();
 }
 
 #[tokio::test]

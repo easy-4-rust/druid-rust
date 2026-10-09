@@ -54,6 +54,7 @@ x509-cert.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true
+toasty.workspace = true
 druid-wrapper = { version = "0.0.0-design", path = "../druid-wrapper" }
 
 [lints]

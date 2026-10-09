@@ -1,0 +1,35 @@
+# Task6 完整行操作 Filter 合同恢复（2026-10-07）
+
+原pooled_result_set_routes_row_mutations_and_preserves_sqlite_capability_errors完整恢复并EXACT绑定。Task6继续FIX_REQUIRED，全部18顶层任务继续OPEN。
+
+## 完整原合同与实际缺陷
+
+固定BASE 5afe8609b177544ff7d18461aa84f69efe8ee90e，body SHA8430b3a96e48afd00ae048e82dbf0a60c1a010242b63714b724d2b937aab3301。原6个assert_eq、1个assert及宏七次能力错误断言全部保留。七个短路事件insert/update/delete/refresh/cancel/moveToInsert/moveToCurrent顺序不变，刷新切换精确filtered refreshRow failure，实际创建Statement异常1且最后事件refresh_row。
+
+同一真实Toasty SQLite工厂、ID85/86、数据源名、SELECT 1 AS value保留。默认Filter返回七个原UnsupportedOperation操作名，实际语句异常7、游标仍开放及明确关闭全部验证。
+
+80409完整Druid lib真实runtime RED：135PASS/1FAIL，insert_row直接绕过Filter，触达原生result_set_insert_row能力拒绝。日志SHA61bffaf56ec2c4bc0548adee7b0d8b5dbf3263f4c0096dfcca15c01ab901ae03。不是编译失败或夹具失败替代。
+
+## 架构修复
+
+新增单对象ResultSetRowOperation描述符及ResultSetFilter默认惰性hook；FilterChainImpl沿同一注册顺序递归委托，末端仍是唯一标准ResultSet的对应七方法。Pooled七行操作复用一个私有filtered_row_operation，保持现有资源锁、旧租约/关闭检查及access_core错误分类，随后结果集与原创建语句仅计错一次。没有第二套驱动接口或公开raw所有权。
+
+规格先于路由实现补充本完整合同；公开默认hook与描述符按既有第13节pre-release correction追踪。API/compiler/SemVer/MSRV/features/外部完整矩阵仍OPEN，不以局部测试关闭这些门禁。
+
+## 验证
+
+1801默认1.97.1完整Druid lib137PASS/0FAIL与新增外部消费者1PASS/0FAIL。原完整主测试与独立关闭/旧租约控制实际执行；后者七方法均在回调前拒绝且异常0。外部真实SQLite池验证全部七方法的ABC委托、B短路不进入C、B精确错误反向退出、各原生能力拒绝及原数据1/游标位置不被短路修改；实际关闭和回收后旧视图无回调。1069构建输入SHA终态不变。日志SHAe148cf074eafbcf197e0735bd0255ace393fd006dc3491b3de800f08b71b3784。
+
+正式绑定后77199八个完整受影响Druid消费者目标29PASS/0FAIL/0ignored，1069绑定后输入SHA不变。范围为FilterStat、ResultSet矩阵及行操作、资源、导航属性、Metadata、Statement、强类型读取外部消费者。137lib与29消费者分开报告，较早external1不重复累计。
+
+自测17、final purity48、authority79/pending25/physical73及固定SHA7210995f5b1e9ac4b50ec56693cc4a5f95905b0aee923f4048a3d2819d7620c3、派生文档79、十文件格式和diff检查PASS。原有非相关unused import/dead_code警告保留，不宣称全仓无警告。
+
+70597完整原观察源码审计1271PASS/12FAIL；全部1283前七冻结字段逐项不变，1134EXACT/149PARAMETERIZED。只退役该原行操作矩阵占位并窄注册真实lib入口，验证器规则未降低。
+
+69690完整C2 --no-execute exit1：下一标量更新case断言底线原6eq/目标2eq，整体仍FAIL。终态summary、日志SHA、固定原文及审计文件均保存于.superpowers/sdd/2026-08-24-rdbc-single-standard-unification。
+
+## 剩余范围
+
+下一完整标量更新原文已保存，body SHA668699380f3bc0a8808f2a6980e38270b8502aab27ebb0e4274ae982fb11d184、原6eq/1assert，NOT_COMPILED/NOT_RUN/NOT_BOUND，不计入完成。
+
+Task6剩余12源码合同，Task7八义务、Task8/P05/P06/P07及全部18顶层任务仍开放。未取得当前源码全仓PASS，原3795PASS/11FAIL、独立Admin49PASS/11FAIL及Public Block诊断保留，未修改系统规则或绕过验收。没有stage/commit/push/分支/安装/发布。

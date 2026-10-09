@@ -1,0 +1,363 @@
+#[test]
+fn result_set_filter_defaults_delegate_and_context_defaults_are_observable() {
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let physical = PhysicalResultSetProbe::new(call_log, false);
+    let context = ResultSetFilterContext::default();
+    let mut chain = FilterChain::new();
+    chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+
+    assert_eq!(context.elapsed(), None);
+    assert_eq!(context.fetch_row_count(), 0);
+    assert_eq!(context.close_count(), 0);
+    chain.result_set_open_after(&context).unwrap();
+    assert!(chain.result_set_next(&physical, &context).unwrap());
+    assert_eq!(
+        chain.result_set_get_string(&physical, &context, 1).unwrap(),
+        Some("index-string".to_string())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_string_by_label(&physical, &context, "string")
+            .unwrap(),
+        Some("label-string".to_string())
+    );
+    assert!(chain
+        .result_set_get_boolean(&physical, &context, 2)
+        .unwrap());
+    assert!(!chain
+        .result_set_get_boolean_by_label(&physical, &context, "boolean")
+        .unwrap());
+    assert_eq!(
+        chain.result_set_get_byte(&physical, &context, 3).unwrap(),
+        8
+    );
+    assert_eq!(
+        chain
+            .result_set_get_byte_by_label(&physical, &context, "byte")
+            .unwrap(),
+        9
+    );
+    assert_eq!(
+        chain.result_set_get_short(&physical, &context, 4).unwrap(),
+        16
+    );
+    assert_eq!(
+        chain
+            .result_set_get_short_by_label(&physical, &context, "short")
+            .unwrap(),
+        17
+    );
+    assert_eq!(
+        chain.result_set_get_int(&physical, &context, 5).unwrap(),
+        32
+    );
+    assert_eq!(
+        chain
+            .result_set_get_int_by_label(&physical, &context, "int")
+            .unwrap(),
+        33
+    );
+    assert_eq!(
+        chain.result_set_get_long(&physical, &context, 6).unwrap(),
+        64
+    );
+    assert_eq!(
+        chain
+            .result_set_get_long_by_label(&physical, &context, "long")
+            .unwrap(),
+        65
+    );
+    assert_eq!(
+        chain.result_set_get_float(&physical, &context, 7).unwrap(),
+        1.25
+    );
+    assert_eq!(
+        chain
+            .result_set_get_float_by_label(&physical, &context, "float")
+            .unwrap(),
+        2.25
+    );
+    assert_eq!(
+        chain.result_set_get_double(&physical, &context, 8).unwrap(),
+        3.5
+    );
+    assert_eq!(
+        chain
+            .result_set_get_double_by_label(&physical, &context, "double")
+            .unwrap(),
+        4.5
+    );
+    assert_eq!(
+        chain.result_set_get_bytes(&physical, &context, 9).unwrap(),
+        Some(vec![1, 2])
+    );
+    assert_eq!(
+        chain
+            .result_set_get_bytes_by_label(&physical, &context, "bytes")
+            .unwrap(),
+        Some(vec![3, 4])
+    );
+    assert_eq!(
+        chain
+            .result_set_get_big_decimal(&physical, &context, 10)
+            .unwrap(),
+        Some(BigDecimal::from_str("12.340").unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_big_decimal_by_label(&physical, &context, "decimal")
+            .unwrap(),
+        Some(BigDecimal::from_str("56.780").unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_big_decimal_with_scale(&physical, &context, 11, 2)
+            .unwrap(),
+        Some(BigDecimal::from_str("12.340").unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_big_decimal_by_label_with_scale(
+                &physical,
+                &context,
+                "decimal_scale",
+                3,
+            )
+            .unwrap(),
+        Some(BigDecimal::from_str("56.780").unwrap())
+    );
+    let null_calendar = RdbcCalendarArgument::specified(None);
+    let shanghai_calendar =
+        RdbcCalendarArgument::specified(Some(RdbcCalendar::new("Asia/Shanghai").unwrap()));
+    assert_eq!(
+        chain.result_set_get_date(&physical, &context, 12).unwrap(),
+        Some(NaiveDate::from_ymd_opt(2025, 1, 2).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_date_by_label(&physical, &context, "date")
+            .unwrap(),
+        Some(NaiveDate::from_ymd_opt(2025, 2, 3).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_date_with_calendar(&physical, &context, 13, &null_calendar)
+            .unwrap(),
+        Some(NaiveDate::from_ymd_opt(2025, 1, 2).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_date_by_label_with_calendar(
+                &physical,
+                &context,
+                "date_calendar",
+                &shanghai_calendar,
+            )
+            .unwrap(),
+        Some(NaiveDate::from_ymd_opt(2025, 2, 3).unwrap())
+    );
+    assert_eq!(
+        chain.result_set_get_time(&physical, &context, 14).unwrap(),
+        Some(NaiveTime::from_hms_opt(3, 4, 5).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_time_by_label(&physical, &context, "time")
+            .unwrap(),
+        Some(NaiveTime::from_hms_opt(6, 7, 8).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_time_with_calendar(&physical, &context, 15, &null_calendar)
+            .unwrap(),
+        Some(NaiveTime::from_hms_opt(3, 4, 5).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_time_by_label_with_calendar(
+                &physical,
+                &context,
+                "time_calendar",
+                &shanghai_calendar,
+            )
+            .unwrap(),
+        Some(NaiveTime::from_hms_opt(6, 7, 8).unwrap())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_timestamp(&physical, &context, 16)
+            .unwrap(),
+        Some(
+            NaiveDate::from_ymd_opt(2025, 1, 2)
+                .unwrap()
+                .and_hms_opt(3, 4, 5)
+                .unwrap()
+        )
+    );
+    assert_eq!(
+        chain
+            .result_set_get_timestamp_by_label(&physical, &context, "timestamp")
+            .unwrap(),
+        Some(
+            NaiveDate::from_ymd_opt(2025, 2, 3)
+                .unwrap()
+                .and_hms_opt(6, 7, 8)
+                .unwrap()
+        )
+    );
+    assert_eq!(
+        chain
+            .result_set_get_timestamp_with_calendar(&physical, &context, 17, &null_calendar,)
+            .unwrap(),
+        Some(
+            NaiveDate::from_ymd_opt(2025, 1, 2)
+                .unwrap()
+                .and_hms_opt(3, 4, 5)
+                .unwrap()
+        )
+    );
+    assert_eq!(
+        chain
+            .result_set_get_timestamp_by_label_with_calendar(
+                &physical,
+                &context,
+                "timestamp_calendar",
+                &shanghai_calendar,
+            )
+            .unwrap(),
+        Some(
+            NaiveDate::from_ymd_opt(2025, 2, 3)
+                .unwrap()
+                .and_hms_opt(6, 7, 8)
+                .unwrap()
+        )
+    );
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert(
+        "example.address",
+        RdbcTargetType::Custom("example.Address".to_string()),
+    );
+    assert_eq!(
+        chain
+            .result_set_get_object(&physical, &context, 18)
+            .unwrap(),
+        Value::Int(18)
+    );
+    assert_eq!(
+        chain
+            .result_set_get_object_by_label(&physical, &context, "object")
+            .unwrap(),
+        Value::String("object".to_string())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_object_with_type_map(&physical, &context, 19, None)
+            .unwrap(),
+        RdbcObject::String("index-map:19:null".to_string())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_object_by_label_with_type_map(
+                &physical,
+                &context,
+                "mapped",
+                Some(&type_map),
+            )
+            .unwrap(),
+        RdbcObject::String(
+            "label-map:mapped:example.address=Custom(\"example.Address\")".to_string()
+        )
+    );
+    assert_eq!(
+        chain
+            .result_set_get_object_typed(
+                &physical,
+                &context,
+                20,
+                &RdbcTargetType::Custom("example.Typed".to_string()),
+            )
+            .unwrap(),
+        RdbcObject::String("index-typed:20:Custom(\"example.Typed\")".to_string())
+    );
+    assert_eq!(
+        chain
+            .result_set_get_object_typed_by_label(
+                &physical,
+                &context,
+                "typed",
+                &RdbcTargetType::String,
+            )
+            .unwrap(),
+        RdbcObject::String("label-typed:typed:String".to_string())
+    );
+    assert_eq!(
+        chain.result_set_warnings(&physical, &context),
+        Err(DruidError::Rdbc(RdbcError::UnsupportedOperation {
+            operation: "result_set_warnings"
+        }))
+    );
+    assert_eq!(
+        chain.result_set_clear_warnings(&physical, &context),
+        Err(DruidError::Rdbc(RdbcError::UnsupportedOperation {
+            operation: "result_set_clear_warnings"
+        }))
+    );
+    chain.result_set_close(&physical, &context).unwrap();
+    context.increment_close_count();
+    assert_eq!(context.close_count(), 1);
+    assert_eq!(
+        calls(&physical.calls)[1..19],
+        [
+            "physical:string:1",
+            "physical:string_by_label:string",
+            "physical:boolean:2",
+            "physical:boolean_by_label:boolean",
+            "physical:byte:3",
+            "physical:byte_by_label:byte",
+            "physical:short:4",
+            "physical:short_by_label:short",
+            "physical:int:5",
+            "physical:int_by_label:int",
+            "physical:long:6",
+            "physical:long_by_label:long",
+            "physical:float:7",
+            "physical:float_by_label:float",
+            "physical:double:8",
+            "physical:double_by_label:double",
+            "physical:bytes:9",
+            "physical:bytes_by_label:bytes",
+        ]
+    );
+    assert_eq!(
+        calls(&physical.calls)[19..35],
+        [
+            "physical:big_decimal:10:None",
+            "physical:big_decimal_by_label:decimal:None",
+            "physical:big_decimal:11:Some(2)",
+            "physical:big_decimal_by_label:decimal_scale:Some(3)",
+            "physical:date:12:unspecified",
+            "physical:date_by_label:date:unspecified",
+            "physical:date:13:specified:null",
+            "physical:date_by_label:date_calendar:specified:Asia/Shanghai",
+            "physical:time:14:unspecified",
+            "physical:time_by_label:time:unspecified",
+            "physical:time:15:specified:null",
+            "physical:time_by_label:time_calendar:specified:Asia/Shanghai",
+            "physical:timestamp:16:unspecified",
+            "physical:timestamp_by_label:timestamp:unspecified",
+            "physical:timestamp:17:specified:null",
+            "physical:timestamp_by_label:timestamp_calendar:specified:Asia/Shanghai",
+        ]
+    );
+    assert_eq!(
+        calls(&physical.calls)[35..41],
+        [
+            "physical:value:18",
+            "physical:value_by_label:object",
+            "physical:object_with_type_map:19:null",
+            "physical:object_by_label_with_type_map:mapped:example.address=Custom(\"example.Address\")",
+            "physical:object_as:20:Custom(\"example.Typed\")",
+            "physical:object_by_label_as:typed:String",
+        ]
+    );
+}

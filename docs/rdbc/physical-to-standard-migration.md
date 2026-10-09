@@ -62,7 +62,7 @@ or its behavioral evidence exists yet.
 | `druid_rdbc::spi::PreparedStatementKey` | `INTERNALIZED` | `druid::core::prepared_statement_key::PreparedStatementKey` | `P04_TASK_5_DRUID_INTERNALIZATION` | `TASK6_CLOSED` | `Druid cache key internalized` |
 | `druid_rdbc::spi::PreparedStatementMethodType` | `INTERNALIZED` | `druid::core::prepared_statement_method_type::PreparedStatementMethodType` | `P04_TASK_5_DRUID_INTERNALIZATION` | `TASK6_CLOSED` | `Druid cache overload discriminator internalized` |
 | `druid_rdbc::spi::PreparedTypeNameArgument` | `MERGED_STANDARD` | `druid_rdbc::statement::PreparedTypeNameArgument` | `P04_TASK_3_STANDARD_TRAITS` | `TASK6_CLOSED` | `canonical type-name argument` |
-| `druid_rdbc::spi::RdbcResultSet` | `CONCRETE_MOVED` | `druid_rdbc::extensions::BufferedRowSet` | `P04_TASK_7_SEMANTIC_HARDENING` | `TASK7_PENDING` | `Buffered target exists, but the separate forwarding-identity handoff remains Task 7 pending` |
+| `druid_rdbc::spi::RdbcResultSet` | `CONCRETE_MOVED` | `druid_rdbc::extensions::BufferedRowSet` | `P04_TASK_7_SEMANTIC_HARDENING` | `TASK7_PENDING` | `Frozen handoff target retained while Task 7 pending; distinct forwarding implemented at druid_rdbc::extensions::SharedResultSet with complete BASE tests; final mapping/API/SemVer certification remains pending` |
 | `druid_rdbc::spi::ResultSetColumnMeta` | `MERGED_STANDARD` | `druid_rdbc::metadata::ResultSetColumnMeta` | `P04_TASK_3_STANDARD_TRAITS` | `TASK6_CLOSED` | `canonical column snapshot` |
 | `druid_rdbc::spi::ResultSetColumnType` | `MERGED_STANDARD` | `druid_rdbc::metadata::ResultSetColumnType` | `P04_TASK_3_STANDARD_TRAITS` | `TASK6_CLOSED` | `canonical column type` |
 | `druid_rdbc::spi::ResultSetMetaData` | `MERGED_STANDARD` | `druid_rdbc::metadata::ResultSetMetaDataSnapshot` | `P04_TASK_3_STANDARD_TRAITS` | `TASK6_CLOSED` | `canonical metadata snapshot` |
@@ -124,8 +124,8 @@ behavioral support module links the eight executed bb8/deadpool C3 cases directl
 | `crates/druid/tests/driver_trait_test.rs` | `13` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/driver_trait_test.rs;count=13` | `driver_adapter+filter_sorter_stat` |
 | `crates/druid/tests/druid_connection_holder_test.rs` | `6` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/druid_connection_holder_test.rs;count=6` | `driver_adapter+filter_sorter_stat+pool_lifecycle+transaction_recycle` |
 | `crates/druid/tests/druid_pooled_connection_differential_test.rs` | `80` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/druid_pooled_connection_differential_test.rs;count=80` | `driver_adapter+filter_sorter_stat+metadata+pool_lifecycle+result_set+transaction_recycle+value_conversion+warning_error+wrapper_identity` |
-| `crates/druid/tests/druid_pooled_result_set_differential_test.rs` | `47` | `MERGED_PARAMETERIZED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/druid_pooled_result_set_differential_test.rs;count=47` | `callable+filter_sorter_stat+metadata+pool_lifecycle+result_set+value_conversion+warning_error` |
-| `crates/druid/tests/druid_pooled_result_set_semantics_test.rs` | `26` | `MERGED_PARAMETERIZED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/druid_pooled_result_set_semantics_test.rs;count=26` | `driver_adapter+filter_sorter_stat+metadata+pool_lifecycle+result_set+transaction_recycle+value_conversion+warning_error+wrapper_identity` |
+| `crates/druid/tests/druid_pooled_result_set_differential_test.rs` | `47` | `MIGRATED_MIXED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/druid_pooled_result_set_differential_test.rs;count=47` | `callable+filter_sorter_stat+metadata+pool_lifecycle+result_set+value_conversion+warning_error` |
+| `crates/druid/tests/druid_pooled_result_set_semantics_test.rs` | `26` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/druid_pooled_result_set_semantics_test.rs;count=26` | `driver_adapter+filter_sorter_stat+metadata+pool_lifecycle+result_set+transaction_recycle+value_conversion+warning_error+wrapper_identity` |
 | `crates/druid/tests/dynamic_coverage.rs` | `13` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/dynamic_coverage.rs;count=13` | `pool_lifecycle+rdbc_behavior` |
 | `crates/druid/tests/dynamic_test.rs` | `10` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/dynamic_test.rs;count=10` | `pool_lifecycle+rdbc_behavior+transaction_recycle` |
 | `crates/druid/tests/filter_adapter_semantics_test.rs` | `2` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/filter_adapter_semantics_test.rs;count=2` | `driver_adapter+filter_sorter_stat+wrapper_identity` |
@@ -139,7 +139,7 @@ behavioral support module links the eight executed bb8/deadpool C3 cases directl
 | `crates/druid/tests/parameter_meta_data_proxy_test.rs` | `11` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/parameter_meta_data_proxy_test.rs;count=11` | `metadata+result_set+value_conversion` |
 | `crates/druid/tests/physical_callable_statement_test.rs` | `2` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/physical_callable_statement_test.rs;count=2` | `callable+filter_sorter_stat+value_conversion` |
 | `crates/druid/tests/physical_connection_contract.rs` | `5` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/physical_connection_contract.rs;count=5` | `filter_sorter_stat+rdbc_behavior+transaction_recycle` |
-| `crates/druid/tests/physical_connection_lease_test.rs` | `2` | `MERGED_PARAMETERIZED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/physical_connection_lease_test.rs;count=2` | `filter_sorter_stat+transaction_recycle` |
+| `crates/druid/tests/physical_connection_lease_test.rs` | `2` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/physical_connection_lease_test.rs;count=2` | `filter_sorter_stat+transaction_recycle` |
 | `crates/druid/tests/physical_database_meta_data_differential_test.rs` | `67` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/physical_database_meta_data_differential_test.rs;count=67` | `batch+callable+driver_adapter+filter_sorter_stat+metadata+pool_lifecycle+result_set+transaction_recycle+value_conversion` |
 | `crates/druid/tests/pool_coverage.rs` | `37` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/pool_coverage.rs;count=37` | `driver_adapter+filter_sorter_stat+pool_lifecycle+transaction_recycle+warning_error` |
 | `crates/druid/tests/pool_maintenance_differential_test.rs` | `10` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/pool_maintenance_differential_test.rs;count=10` | `pool_lifecycle+transaction_recycle+value_conversion+warning_error` |
@@ -154,8 +154,8 @@ behavioral support module links the eight executed bb8/deadpool C3 cases directl
 | `crates/druid/tests/rdbc_extended_types_test.rs` | `2` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/rdbc_extended_types_test.rs;count=2` | `value_conversion` |
 | `crates/druid/tests/rdbc_external_consumer_test.rs` | `3` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/rdbc_external_consumer_test.rs;count=3` | `rdbc_behavior+value_conversion+warning_error` |
 | `crates/druid/tests/rdbc_standard_test.rs` | `8` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/rdbc_standard_test.rs;count=8` | `driver_adapter+filter_sorter_stat+rdbc_behavior+value_conversion+warning_error` |
-| `crates/druid/tests/recycle_semantics_test.rs` | `12` | `MERGED_PARAMETERIZED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/recycle_semantics_test.rs;count=12` | `filter_sorter_stat+metadata+pool_lifecycle+transaction_recycle+value_conversion` |
-| `crates/druid/tests/result_set_filter_semantics_test.rs` | `28` | `MERGED_PARAMETERIZED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/result_set_filter_semantics_test.rs;count=28` | `filter_sorter_stat+metadata+pool_lifecycle+result_set+value_conversion+warning_error` |
+| `crates/druid/tests/recycle_semantics_test.rs` | `12` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/recycle_semantics_test.rs;count=12` | `filter_sorter_stat+metadata+pool_lifecycle+transaction_recycle+value_conversion` |
+| `crates/druid/tests/result_set_filter_semantics_test.rs` | `28` | `MIGRATED_MIXED` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/result_set_filter_semantics_test.rs;count=28` | `filter_sorter_stat+metadata+pool_lifecycle+result_set+value_conversion+warning_error` |
 | `crates/druid/tests/sql_permission_driver_property_test.rs` | `9` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/sql_permission_driver_property_test.rs;count=9` | `driver_adapter+value_conversion` |
 | `crates/druid/tests/sql_warning_semantics_test.rs` | `6` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/sql_warning_semantics_test.rs;count=6` | `filter_sorter_stat+result_set+warning_error` |
 | `crates/druid/tests/sqlite_core_semantics_test.rs` | `1` | `MIGRATED_EXACT` | `task6-deleted-test-migration.tsv#base_source_path=crates/druid/tests/sqlite_core_semantics_test.rs;count=1` | `pool_lifecycle+transaction_recycle` |
@@ -205,3 +205,25 @@ the final seven-family manifest regeneration.
 ## Dependency cutover
 
 `druid-rdbc` removed direct `jiff`, `num-bigint`, `parking_lot`, `serde_json` and `thiserror` dependencies. `tokio` remains with the `sync` feature because canonical Task 7 resource state uses synchronization; `bitflags` remains for canonical resource operation flags. Default and all-feature forward/inverse Cargo trees and the dependency-boundary verifier pass. A transitive `parking_lot` under Tokio is not a direct `druid-rdbc` dependency.
+
+## 标准常量与授权异常分类迁移（2026-10-08）
+
+JDBC编号的标准模块入口为 `druid_rdbc::types::types`，例如 `types::INTEGER`；原有 `druid_rdbc::types::Types::INTEGER` 以及 `druid::sql::Types::INTEGER` 仍指向同一编号。全部39个常量已按固定Java源码与实际Java反射结果核对。
+
+授权异常的规范枚举项为 `InvalidAuthorizationSpec`。旧variant专用导入在当前产物上实际返回E0432：
+
+```rust
+pub use druid_rdbc::error::SqlExceptionKind::InvalidAuthorization;
+```
+
+改用规范枚举项导入：
+
+```rust
+pub use druid_rdbc::error::SqlExceptionKind::InvalidAuthorizationSpec;
+```
+
+限定值访问 `SqlExceptionKind::InvalidAuthorization` 保留为同值关联常量，Debug仍展示历史名称；这不保留上述旧variant专用导入。该公开形态变化须进入最终breaking allowlist和真实SemVer验证，目前尚未完成发布认证。
+
+具体标准SQL异常先按记录的标准类名确定kind，随后使用recoverable标志和SQLState作为fallback。12个具体标准类的空SQLState与冲突SQLState已取得24条Java/Rust同输入一致证据；不能扩大为任意vendor子类继承认证。
+
+[本轮实现与验证边界](../verification/rdbc-first/task8-constant-exception-contract-recovery-2026-10-08.md)。

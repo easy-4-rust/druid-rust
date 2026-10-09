@@ -1,0 +1,224 @@
+// 非Cargo输入；固定BASE原完整案例，尚未映射/运行/绑定。
+// SHA 8f33bdc25cc124a51ffef0ce5a42ba463c3d5f25d5020b3ca69457598b962a1e
+#[tokio::test]
+async fn task6_sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor() {
+    let mut connection = sqlite_pooled_connection().await;
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(
+            &mut connection,
+            "SELECT 1 AS id, 'first' AS label UNION ALL SELECT 2, 'second'",
+        )
+        .await
+        .unwrap();
+    assert!(result_set.next(&mut connection).unwrap());
+    let input = RdbcInputStream::from_bytes([1, 2, 3]);
+    let reader = RdbcReader::from_string("严格 SQLite");
+
+    macro_rules! assert_update_unsupported {
+        ($expression:expr, $operation:literal) => {
+            assert!(matches!(
+                $expression,
+                Err(RdbcError::UnsupportedOperation {
+                    operation: $operation
+                })
+            ));
+        };
+    }
+    macro_rules! assert_pair_unsupported {
+        ($index_method:ident, $label_method:ident, $value:expr) => {
+            assert_update_unsupported!(
+                result_set.$index_method(&mut connection, 1, $value),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$label_method(&mut connection, "id", $value),
+                "result_set_update_value_by_label"
+            );
+        };
+    }
+
+    assert_update_unsupported!(
+        result_set.update_null(&mut connection, 1),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_null_by_label(&mut connection, "id"),
+        "result_set_update_value_by_label"
+    );
+    assert_pair_unsupported!(update_boolean, update_boolean_by_label, true);
+    assert_pair_unsupported!(update_byte, update_byte_by_label, 1);
+    assert_pair_unsupported!(update_short, update_short_by_label, 2);
+    assert_pair_unsupported!(update_int, update_int_by_label, 3);
+    assert_pair_unsupported!(update_long, update_long_by_label, 4);
+    assert_pair_unsupported!(update_float, update_float_by_label, 5.0);
+    assert_pair_unsupported!(update_double, update_double_by_label, 6.0);
+    assert_pair_unsupported!(
+        update_big_decimal,
+        update_big_decimal_by_label,
+        None::<BigDecimal>
+    );
+    assert_pair_unsupported!(update_string, update_string_by_label, None::<String>);
+    assert_pair_unsupported!(update_bytes, update_bytes_by_label, None::<Vec<u8>>);
+    assert_pair_unsupported!(update_date, update_date_by_label, None::<NaiveDate>);
+    assert_pair_unsupported!(update_time, update_time_by_label, None::<NaiveTime>);
+    assert_pair_unsupported!(
+        update_timestamp,
+        update_timestamp_by_label,
+        None::<NaiveDateTime>
+    );
+    assert_update_unsupported!(
+        result_set.update_object(&mut connection, 1, Value::Null.into()),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_object_by_label(&mut connection, "id", Value::Null.into()),
+        "result_set_update_value_by_label"
+    );
+    assert_update_unsupported!(
+        result_set.update_object_with_scale_or_length(&mut connection, 1, Value::Null.into(), -1),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_object_by_label_with_scale_or_length(
+            &mut connection,
+            "id",
+            Value::Null.into(),
+            -1,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_pair_unsupported!(update_n_string, update_n_string_by_label, None::<String>);
+
+    macro_rules! assert_stream_family_unsupported {
+        (
+            $plain_index:ident, $plain_label:ident,
+            $int_index:ident, $int_label:ident,
+            $long_index:ident, $long_label:ident
+        ) => {
+            assert_update_unsupported!(
+                result_set.$plain_index(&mut connection, 1, Some(&input)),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$plain_label(&mut connection, "id", Some(&input)),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.$int_index(&mut connection, 1, Some(&input), -1),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$int_label(&mut connection, "id", Some(&input), -1),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.$long_index(&mut connection, 1, Some(&input), -1),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$long_label(&mut connection, "id", Some(&input), -1),
+                "result_set_update_value_by_label"
+            );
+        };
+    }
+    assert_stream_family_unsupported!(
+        update_ascii_stream,
+        update_ascii_stream_by_label,
+        update_ascii_stream_with_int_length,
+        update_ascii_stream_by_label_with_int_length,
+        update_ascii_stream_with_length,
+        update_ascii_stream_by_label_with_length
+    );
+    assert_stream_family_unsupported!(
+        update_binary_stream,
+        update_binary_stream_by_label,
+        update_binary_stream_with_int_length,
+        update_binary_stream_by_label_with_int_length,
+        update_binary_stream_with_length,
+        update_binary_stream_by_label_with_length
+    );
+
+    macro_rules! assert_reader_family_unsupported {
+        (
+            $plain_index:ident, $plain_label:ident,
+            $int_index:ident, $int_label:ident,
+            $long_index:ident, $long_label:ident
+        ) => {
+            assert_update_unsupported!(
+                result_set.$plain_index(&mut connection, 1, Some(&reader)),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$plain_label(&mut connection, "id", Some(&reader)),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.$int_index(&mut connection, 1, Some(&reader), -1),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$int_label(&mut connection, "id", Some(&reader), -1),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.$long_index(&mut connection, 1, Some(&reader), -1),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.$long_label(&mut connection, "id", Some(&reader), -1),
+                "result_set_update_value_by_label"
+            );
+        };
+    }
+    assert_reader_family_unsupported!(
+        update_character_stream,
+        update_character_stream_by_label,
+        update_character_stream_with_int_length,
+        update_character_stream_by_label_with_int_length,
+        update_character_stream_with_length,
+        update_character_stream_by_label_with_length
+    );
+    assert_update_unsupported!(
+        result_set.update_n_character_stream(&mut connection, 1, Some(&reader)),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_n_character_stream_by_label(&mut connection, "id", Some(&reader)),
+        "result_set_update_value_by_label"
+    );
+    assert_update_unsupported!(
+        result_set.update_n_character_stream_with_length(&mut connection, 1, Some(&reader), -1),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_n_character_stream_by_label_with_length(
+            &mut connection,
+            "id",
+            Some(&reader),
+            -1,
+        ),
+        "result_set_update_value_by_label"
+    );
+
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert("APP.USER_TYPE", RdbcTargetType::Custom("User".to_string()));
+    assert_update_unsupported!(
+        result_set.object_with_type_map(&mut connection, 1, Some(&type_map)),
+        "result_set_get_object_with_type_map"
+    );
+    assert_update_unsupported!(
+        result_set.object_by_label_with_type_map(&mut connection, "id", None),
+        "result_set_get_object_by_label_with_type_map"
+    );
+
+    assert_eq!(statement.exception_count(), 58);
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(result_set.int(&mut connection, 1).unwrap(), 2);
+    assert_eq!(
+        result_set.string(&mut connection, 2).unwrap(),
+        Some("second".to_string())
+    );
+    assert!(!input.is_closed());
+    assert!(!reader.is_closed());
+}

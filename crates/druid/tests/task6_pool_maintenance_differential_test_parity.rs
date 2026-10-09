@@ -78,6 +78,7 @@ struct DifferentialFactory {
     validate_count: Arc<AtomicU64>,
     validation_succeeds: Arc<AtomicBool>,
     closed_count: Arc<AtomicU64>,
+    create_gate: std::sync::Mutex<Option<Arc<tokio::sync::Semaphore>>>,
 }
 
 impl DifferentialFactory {
@@ -87,13 +88,30 @@ impl DifferentialFactory {
             validate_count: Arc::new(AtomicU64::new(0)),
             validation_succeeds: Arc::new(AtomicBool::new(true)),
             closed_count: Arc::new(AtomicU64::new(0)),
+            create_gate: std::sync::Mutex::new(None),
         }
+    }
+
+    /// 控制真实建连的顺序，隔离 fatal 状态断言与后台成功校验的竞态。
+    fn set_create_gate(&self, gate: Arc<tokio::sync::Semaphore>) {
+        *self.create_gate.lock().expect("create gate poisoned") = Some(gate);
     }
 }
 
 #[async_trait::async_trait]
 impl ConnectionFactory for DifferentialFactory {
     async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
+        let gate = self
+            .create_gate
+            .lock()
+            .expect("create gate poisoned")
+            .clone();
+        if let Some(gate) = gate {
+            gate.acquire()
+                .await
+                .expect("create gate remains open")
+                .forget();
+        }
         self.create_count.fetch_add(1, Ordering::Relaxed);
         Ok(Box::new(MaintenanceConnection {
             closed_count: self.closed_count.clone(),
@@ -487,6 +505,8 @@ async fn task6_pool_maintenance_differential_test_successful_validation_clears_o
 #[tokio::test]
 async fn task6_pool_maintenance_differential_test_failing_validation_keeps_on_fatal_error() {
     let factory = Arc::new(DifferentialFactory::new());
+    let create_gate = Arc::new(tokio::sync::Semaphore::new(1));
+    factory.set_create_gate(Arc::clone(&create_gate));
     let validation_succeeds = Arc::new(AtomicBool::new(true));
     let checker: Arc<dyn ValidConnectionChecker> = Arc::new(FatalSortingChecker {
         validation_succeeds: Arc::clone(&validation_succeeds),
@@ -495,7 +515,7 @@ async fn task6_pool_maintenance_differential_test_failing_validation_keeps_on_fa
     let pool = DruidPool::builder()
         .name("fatal-keep")
         .driver_name("maintenance-diff")
-        .factory(factory)
+        .factory(factory.clone())
         .max_open(4)
         .max_idle(4)
         .test_on_borrow(true)
@@ -517,6 +537,8 @@ async fn task6_pool_maintenance_differential_test_failing_validation_keeps_on_fa
     assert!(pool.is_on_fatal_error());
     // fatal 置位后再翻验证为失败。
     validation_succeeds.store(false, Ordering::Relaxed);
+    // Fatal 会触发真实后台补池；先保留原置位观察，再允许失败校验发生。
+    create_gate.add_permits(1);
 
     // 验证失败期间再借出：超时返回（不 crash），onFatalError 保持。
     let second = pool.get_timeout(Duration::from_millis(100)).await;
@@ -528,11 +550,15 @@ async fn task6_pool_maintenance_differential_test_failing_validation_keeps_on_fa
         pool.is_on_fatal_error(),
         "failing validation must keep onFatalError"
     );
+    assert_eq!(factory.create_count.load(Ordering::Relaxed), 2);
+    assert_eq!(factory.closed_count.load(Ordering::Relaxed), 2);
 }
 
 #[tokio::test]
 async fn task6_pool_maintenance_differential_test_on_fatal_error_max_active_gates_onset() {
     let factory = Arc::new(DifferentialFactory::new());
+    let create_gate = Arc::new(tokio::sync::Semaphore::new(3));
+    factory.set_create_gate(Arc::clone(&create_gate));
     let pool = DruidPool::builder()
         .name("fatal-max-active")
         .driver_name("maintenance-diff")
@@ -571,6 +597,15 @@ async fn task6_pool_maintenance_differential_test_on_fatal_error_max_active_gate
         pool.is_on_fatal_error(),
         "increment above onFatalErrorMaxActive sets onFatalError"
     );
+    // 原第三次置位断言后才开放补池；成功验证应按 Java 合同清除 fatal。
+    // 后台 creator 与直接借用可各占一次建连，两个路径均有独立容量预算。
+    create_gate.add_permits(2);
+    let mut recovered = pool.get_timeout(Duration::from_secs(1)).await.unwrap();
+    assert!(
+        !pool.is_on_fatal_error(),
+        "successful refill validation clears fatal"
+    );
+    recovered.close().await.unwrap();
 }
 
 #[tokio::test]

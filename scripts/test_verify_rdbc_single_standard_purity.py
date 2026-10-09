@@ -1562,6 +1562,19 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         )
         verify_tree(self.root, phase="transitional")
 
+    def test_accepts_inequality_without_macro_misclassification(self) -> None:
+        """A compilable != comparison is punctuation, not a value! invocation."""
+
+        rust_source = (
+            "pub fn different(value: i32) -> bool {\n"
+            "    value != 0\n"
+            "}\n"
+        )
+        self.assert_rustc(rust_source, succeeds=True)
+        source = self.root / "connection/contract.rs"
+        source.write_text(rust_source + "pub trait Contract: Send {}\n", encoding="utf-8")
+        verify_tree(self.root, phase="transitional")
+
     def test_accepts_boolean_negation_without_macro_misclassification(self) -> None:
         """Rust keyword plus unary ! is not a named macro invocation."""
 

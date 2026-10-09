@@ -1,15 +1,4 @@
-/// Places where a database pseudo-column or hidden column may be used.
-///
-/// Corresponds to Java: `java.sql.PseudoColumnUsage`, returned by
-/// `DatabaseMetaData#getPseudoColumns`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum PseudoColumnUsage {
-    /// The column may appear only in a select list.
-    SelectListOnly,
-    /// The column may appear only in a `WHERE` clause.
-    WhereClauseOnly,
-    /// The column has no usage restriction.
-    NoUsageRestrictions,
-    /// The driver cannot determine the usage restriction.
-    UsageUnknown,
-}
+//! 伪列使用限制的历史路径；唯一标准定义归属于 RDBC metadata。
+//! 对应 Java: `java.sql.PseudoColumnUsage`。
+
+pub use druid_rdbc::metadata::PseudoColumnUsage;

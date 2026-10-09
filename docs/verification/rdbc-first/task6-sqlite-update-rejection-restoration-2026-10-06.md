@@ -1,0 +1,44 @@
+# Task6 SQLite 完整更新拒绝及真实缓冲流恢复（2026-10-06）
+
+## 原合同与范围
+
+固定BASE5afe8609b177544ff7d18461aa84f69efe8ee90e，案例sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor，bodySHA8f33bdc25cc124a51ffef0ce5a42ba463c3d5f25d5020b3ca69457598b962a1e。正式私有测试已接入diagnostic_tests.rs，真实Toasty/DruidPooledStatement/StandardResourceRegistry生产装配，保留原58次更新/类型映射拒绝、准确重载错误名、actual creatingStatement.exception_count58、第二行int2/stringsecond与调用者stream/reader未关闭。新增清理仅位于原观察之后。未绑定账本、未删旧case ID。
+
+## 实际运行RED
+
+首次完整案例1119已终态exit101/0PASS1FAIL/94filtered：第一下标NULL拒绝通过，第二标签id的精确result_set_update_value_by_label断言失败；后续原58统计与游标观察尚未执行，不宣称已通过。日志task6-sqlite-update-rejection-red.log。
+
+此前完整workspace61393终态exit101/246blocks/3729PASS3FAIL0ignored含2doctests：两个Callable5vs6及Filter矩阵实际Toasty binary_stream(label)拒绝。另新增真实Toasty流控制99053已终态exit101/0PASS2FAIL：原payload二进制读取不支持；未定位流请求返回Unsupported而不是实际驱动定位错误。日志task6-toasty-buffered-stream-red.log。控制覆盖五个流家族下标/标签、NULL、实际bytes/string、未知label、非法UTF-8和关闭优先，失败尚未执行到后续观察，不计全覆盖通过。
+
+## 最小生产恢复
+
+ResultSet::update_value_by_label默认直接返回原标签Unsupported，保留特殊资源重载名称，不再find_column/转index；有实际更新能力的BufferedRowSet继续自身find_column和update_value，不被改为只读。更正update默认文档的SQL0A000误述，驱动可自行报告SQL能力错误。
+
+实际Toasty使用的StandardAdapterResultSet明确实现input_stream/reader，通过自身value保持定位/关闭/租约优先、SQL NULL、原字符串内容、bytes和严格UTF-8。只恢复具体缓冲能力，不改稀疏标准默认，不改SQLx假流式命名或声称完成Task7真实流式消费。
+
+完整58复测74732已启动，日志task6-sqlite-update-rejection-green.log，尚待终态。运行期间不改Rust/Cargo输入。当前1283正式floor1241/42、1104exact/179parameterized、Task6 FIX_REQUIRED和完整18顶层任务保持；RDBC/Druid/Wrapper相关回归、C1/C2/API/SemVer/MSRV/features/审查及Task7–8/P05–P07仍未完成。
+
+
+正式完整58案例独立源码floor检查通过：重新从固定BASE提取并验证原SHA，直接检查正式函数完整body（不依赖fixture helper增加密度），原/target均assert5、assert_eq3、matches1，调用密度未减少。标准纯度48/final和diff检查exit0。当前复测74732仍LIVE，未把静态检查当作runtime通过，不绑定账本或减少42缺口。
+
+
+完整58复测74732已终态exit101/0PASS1FAIL：全部精确UnsupportedOperation检查实际通过，原实际creatingStatement.exception_count失败actual57/expected58，后续第二行和资源未关闭尚未执行，不称GREEN。保留最终58断言，额外对每次原调用观察实际statement计数前后恰好+1，用于定位遗漏的真实错误归属，不是假计数或改变分母。接下来仅运行完整原案例定位，再决定最小生产修正；账本不绑定。
+
+逐次诊断68464已终态exit101/0PASS1FAIL：准确定位到实际object_with_type_map(ColumnIndex1, Some(APP.USER_TYPE -> Custom(User)))失败后未增加所属Statement异常计数（actual56/expected57）。CodeGraph核对实际生产入口：下标类型映射直接返回access_core结果；同文件标签类型映射和object_as已有失败记账。因此仅为下标入口保存原结果、在Err时调用一次statement.record_exception，再返回原结果；不重复fatal分类、不合成计数、不降低原58断言。完整案例复测84636启动，日志task6-sqlite-update-rejection-accounting-green.log；终态前不绑定账本，也不称GREEN。完整18顶层任务继续开放。
+
+84636已终态exit0/1PASS0FAIL，完整原58次准确拒绝、每次Statement异常恰好+1、最终58、第二行id2/second及原调用者流/Reader未关闭全部执行通过。重新检查正式完整body源码floor通过（原assert5/assert_eq3/matches1，现assert5/assert_eq4/matches1；BASE SHA不变）；第一次临时检查误将BaseTest传入verify_observation_floor而报AttributeError，已改为CurrentTest原body并取得实际PASS，没有修改验证器。
+
+真实Toasty流补充复测终态exit101/1PASS1FAIL：定位/非法UTF8/关闭优先控制通过；原payload按下标读取通过，但按标签payload失败InvalidArgument(unknown column: payload)。CodeGraph核对Toasty standard_execute_query_core仍通过rows_only丢失标签；上游toasty-core0.9 ExecResponse没有列标签字段，不能用合成column_N冒充驱动元数据或删减标签断言。该补充缺口继续开放，完整58尚未绑定账本。
+
+Filter矩阵复测22568终态exit101/0PASS1FAIL，实际标签更新Unsupported(result_set_update_value_by_label)与旧占位unknown column预期不同。固定BASE的完整NString Filter原案例SHA32ec6b363548982e8a6c02e26048bd3f55a9e4314f75a2d4f3d3f003558dec32证实pass-through应精确标签Unsupported。因此仅恢复该精确预期；复测exit0/1PASS0FAIL，日志task6-filter-label-regression-green.log。这个聚合矩阵PASS不关闭仍缺完整原行为的24个Filter迁移项。全RDBC回归已启动，日志task6-update-rejection-rdbc-regression.log；终态前保持Rust/Cargo输入稳定。1241/42与完整18顶层任务保持。
+
+标签边界补充只读核对：ToastyConnectionFactory通过官方Driver::connect取得Box<dyn toasty_core::driver::Connection>，标准执行锁内执行RawSql；上游Connection没有downcast或列元数据观察入口，ExecResponse仅values/分页cursor。已vendored SQLite driver在prepare_cached后实际拥有stmt.columns()，但当前响应未传出这些信息。不能改用另一个SQLite连接、复执行原SQL、把分页cursor塞入元数据、猜测SELECT标签或把补充测试改为index来通过。真实元数据传递仍需在同一原生连接执行范围内解决，并覆盖无行结果、重复/大小写标签、prepared参数、RETURNING和并发隔离；本轮未扩展第三方协议或安装新依赖。
+
+相关新鲜回归终态：RDBC93595 exit0/16blocks/471PASS0FAIL0ignored（含1doctest）；Druid完整lib exit0/95PASS0FAIL（其中包含完整58，不能再单独累加该case）；Filter矩阵独立1/0。因此三个互不重叠执行范围合计567PASS0FAIL。真实Toasty流补充仍1PASS1FAIL，不能合并为全通过；正式账本1241/42和Task6 FIX_REQUIRED保持。已启动新鲜完整workspace --locked --offline --no-fail-fast -j1串行回归，日志task6-update-rejection-workspace.log；等待真实终态，不用567局部通过替代完整workspace或C1/C2最终验收。
+
+全仓4342/cargo40564核实仍LIVE，当前继续编译Admin/Metrics及集成测试；没有修改Rust/Cargo输入或重启。新鲜只读C2 --no-execute13972已终态exit1，仍首败SQLite58案例缺显式分支。固定BASE该案例SHA8f33bdc...及正式完整私有案例源码观察核对PASS。已准备非Cargo绑定草稿：一个ledger行改精确目标、38条反向调用记录、仅删除旧case占位ID、注册真实lib测试完整名称；不改变验证逻辑或原前7字段。草稿matrix rustfmt --check通过，manifest sqlite_update_58_binding_manifest.json记录当前输入SHA。候选verify_ledger已实际越过58并首败下一完整sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity。全1283候选源观察核对77353仍LIVE，候选结果不作为正式1241/42变更。首轮准备脚本跨动态模块dataclass对象比较导致断言失败，已改为字段比较；生产验证器未改。正式18任务/账本/编译源不变。
+
+候选58绑定核对77353已终态exit0：全部1283原前7字段一致，候选sourcefloor1242PASS41FAIL、1105exact/178parameterized；候选完整ledger首败六列表sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity缺显式分支。首轮动态dataclass比较准备错误已纠正，正式验证逻辑未修改。此为非Cargo候选审计，不更新正式1241/42、1104/179；所有输入SHA与草稿manifest已保存。全仓同一4342/cargo40564仍核实LIVE，等待其终态才应用测试列表及正式绑定。下一案例完整SQL/值/身份/元数据/导航/42精确拒绝/实际峰值义务已复核。18任务继续开放，无发布或Task6完成声明。
+
+
+58次拒绝正式绑定收尾（2026-10-06）：12327已终态exit0，lib95/0+Buffered7/0+Callable9/0=111/0，包含移动后真实后端控制，不与旧163/0重复累计。全部1283正式source观察复核1242PASS41FAIL、1105exact/178parameterized；原前7冻结字段和反向调用账本核对PASS，报告task6-sqlite-update-58-formal-source-floor.json。正式C2只读仍exit1，首败完整六列sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity缺唯一显式分支。最新全仓4342为编译exit101/E0433，零运行结果，替代历史LIVE；两个辅助文件字节不变移入子目录后定向控制通过，仍需新鲜全仓复测。当前18顶层任务及完整C1/C2/API/MSRV/features/审查继续开放。下一完整六列测试已接入实际原查询资源，尚待RED。测试专用访问器仅cfg(test)，不增加公共API或第二驱动执行入口。

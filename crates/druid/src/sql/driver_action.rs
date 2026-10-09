@@ -1,8 +1,3 @@
-/// Cleanup callback invoked after a driver is deregistered from `DriverManager`.
-///
-/// Corresponds to Java: `java.sql.DriverAction`. Only the registering manager invokes it after
-/// successful deregistration so the driver can release resources.
-pub trait DriverAction: Send + Sync {
-    /// Notifies the implementation that its driver has been deregistered.
-    fn deregister(&self);
-}
+//! 驱动注销回调的历史兼容路径。对应 Java: java.sql.DriverAction。
+
+pub use druid_rdbc::driver::DriverAction;

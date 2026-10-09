@@ -183,12 +183,53 @@ async fn failed_prepared_execution_never_returns_handle_to_cache() {
     statement.close().await.expect("logical close");
 
     let state = pool.state();
-    assert_eq!(state.cached_prepared_statement_count, 0);
+    // 首次失败语句尚未入缓存，Java closePreapredStatement 仍无条件递减。
+    assert_eq!(state.cached_prepared_statement_count, -1);
     assert_eq!(state.cached_prepared_statement_delete_count, 1);
     assert_eq!(state.closed_prepared_statement_count, 1);
     assert_eq!(tracking.prepared_close_count.load(Ordering::Acquire), 1);
 
     connection.close().await.expect("connection close");
+    pool.close().await;
+    assert_eq!(tracking.prepared_close_count.load(Ordering::Acquire), 1);
+}
+
+#[tokio::test]
+async fn failed_checked_out_prepared_statement_does_not_decrement_cache_twice() {
+    let tracking = TrackingState::configured();
+    let pool = DruidPool::builder()
+        .factory(Arc::new(TrackingFactory::new(Arc::clone(&tracking))))
+        .max_open(1)
+        .max_idle(1)
+        .pool_prepared_statements(true)
+        .max_pool_prepared_statements_per_connection(3)
+        .build()
+        .await
+        .unwrap();
+    let mut connection = pool.get().await.unwrap();
+    let mut seed = connection
+        .prepare_statement("SELECT failure", StatementOptions::default())
+        .await
+        .unwrap();
+    seed.close().await.unwrap();
+    assert_eq!(pool.state().cached_prepared_statement_count, 1);
+    let mut statement = connection
+        .prepare_statement("SELECT failure", StatementOptions::default())
+        .await
+        .unwrap();
+    assert_eq!(pool.state().cached_prepared_statement_count, 0);
+    tracking.fail_next("prepared_execute_generic");
+    assert!(matches!(
+        statement.execute_prepared().await,
+        Err(RdbcError::SqlException(_))
+    ));
+    statement.close().await.unwrap();
+    statement.close().await.unwrap();
+    assert_eq!(pool.state().cached_prepared_statement_count, 0);
+    assert_eq!(pool.state().cached_prepared_statement_delete_count, 1);
+    assert_eq!(pool.state().closed_prepared_statement_count, 1);
+    assert_eq!(tracking.prepared_close_count.load(Ordering::Acquire), 1);
+    connection.close().await.unwrap();
     pool.close().await;
     assert_eq!(tracking.prepared_close_count.load(Ordering::Acquire), 1);
 }

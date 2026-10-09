@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -197,6 +198,100 @@ def canonical_semantic_payload(rows: list[list[str]]) -> bytes:
     return (
         SEMANTIC_HEADER + "\n" + "\n".join("\t".join(row) for row in rows) + "\n"
     ).encode("utf-8")
+
+
+def verify_final_state_policy(rows: list[list[str]]) -> None:
+    """检查最终状态自洽性；来源、公开类型及运行证据仍须独立验证。"""
+
+    fields = SEMANTIC_HEADER.split("\t")
+    for line_number, row in enumerate(rows, start=2):
+        if len(row) != len(fields):
+            fail(f"final semantic row {line_number} must have 19 fields")
+        for field, value in zip(fields, row):
+            if not value.strip():
+                fail(f"final semantic row {line_number} has empty {field}")
+            if re.search(r"\b(?:PLANNED(?:_[A-Z0-9_]+)?|MISSING|UNKNOWN|UNRESOLVED)\b", value, re.IGNORECASE):
+                fail(f"final semantic row {line_number} has planned/unresolved {field}: {value}")
+        if row[5] == "-":
+            fail(f"final semantic row {line_number} has no canonical target")
+        if row[6] not in {"DECLARED", "LIVE"}:
+            fail(f"final semantic row {line_number} has invalid target state {row[6]}")
+        for path_index, state_index, prefix in [
+            (12, 13, "crates/druid-wrapper/"),
+            (14, 15, "crates/druid/"),
+        ]:
+            path, state = row[path_index], row[state_index]
+            if state not in {"NOT_APPLICABLE", "LIVE"}:
+                fail(f"final semantic row {line_number} has invalid implementation state {state}")
+            if state == "NOT_APPLICABLE" and path != "-":
+                fail(f"final semantic row {line_number} has a non-applicable implementation path")
+            matrix_reference = path_index == 12 and path == "crates/druid-wrapper::standard_adapter_matrix"
+            if state == "LIVE" and not matrix_reference and (not path.startswith(prefix) or "::" not in path):
+                fail(f"final semantic row {line_number} has invalid LIVE implementation path")
+        if row[16] not in {"V0_STATIC", "V1_LIVE"}:
+            fail(f"final semantic row {line_number} has invalid evidence level {row[16]}")
+        if row[17] not in {"NOT_APPLICABLE", "LIVE"}:
+            fail(f"final semantic row {line_number} has invalid capability state {row[17]}")
+        live = row[13] == "LIVE" or row[15] == "LIVE" or row[17] == "LIVE"
+        if live and row[16] != "V1_LIVE":
+            fail(f"final semantic row {line_number} lacks LIVE evidence")
+        if (row[13] == "LIVE" or row[15] == "LIVE") and row[17] != "LIVE":
+            fail(f"final semantic row {line_number} lacks LIVE capability evidence")
+
+
+def verify_final_source_binding(
+    rows: list[list[str]],
+    records: dict[str, dict[str, object]],
+    expected_semantic_hashes: set[str],
+) -> str:
+    """绑定 Java 来源与冻结映射；不将状态晋升视为 Rust 实现证据。"""
+
+    from generate_jdbc42_semantic_inventory import (
+        GenerationError,
+        JavaRecord,
+        render_semantic,
+    )
+
+    # 从已校验 oracle 的声明重建 Task2，并保留 Task3 已接受的路径与声明态。
+    # 这里不能用当前 final 行的状态或 Rust 映射来生成期望摘要。
+    try:
+        source_records = [JavaRecord(**records[fqcn]) for fqcn in sorted(records)]
+        baseline = parse_semantic_payload(render_semantic(source_records))
+    except (GenerationError, TypeError, ValueError) as error:
+        fail(f"cannot reconstruct frozen semantic source mapping: {error}")
+    for row in baseline:
+        if row[1] in TASK3_STANDARD_ENTRIES:
+            row[5] = TASK3_STANDARD_ENTRIES[row[1]]
+            row[6] = "DECLARED"
+    digest = hashlib.sha256(canonical_semantic_payload(baseline)).hexdigest()
+    if digest not in expected_semantic_hashes:
+        fail("reconstructed frozen semantic mapping digest does not match oracle")
+    counts = {
+        package: sum(fqcn.startswith(package + ".") for fqcn in records)
+        for package in ("java.sql", "javax.sql")
+    }
+    if counts != {"java.sql": 52, "javax.sql": 17}:
+        fail("final semantic source coverage must remain java.sql 52 + javax.sql 17")
+    by_fqcn = {row[1]: row for row in baseline}
+    seen: set[str] = set()
+    # Rust 形态、canonical entry 和实现证据另由最终 Rust/运行证据门禁核验。
+    # 本组件只比较不可晋升的 Java 身份、成员、签名与声明类别。
+    for line_number, row in enumerate(rows, start=2):
+        if len(row) != 19:
+            fail(f"final semantic row {line_number} must have 19 fields")
+        fqcn = row[1]
+        if fqcn in seen:
+            fail(f"final semantic source coverage duplicates {fqcn}")
+        seen.add(fqcn)
+        expected = by_fqcn.get(fqcn)
+        if expected is None:
+            fail(f"final semantic source coverage has extra object {fqcn}")
+        for index in (0, 1, 2, 7, 8):
+            if row[index] != expected[index]:
+                fail(f"final semantic row {line_number} has source declaration drift at field {index}")
+    if seen != set(records):
+        fail(f"final semantic source coverage missing objects: {sorted(set(records) - seen)}")
+    return digest
 
 
 def normalized_phase_digest(

@@ -1,0 +1,325 @@
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn pooled_result_set_routes_stream_updates_and_preserves_sqlite_capability_errors() {
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(StreamUpdateShortCircuitFilter {
+        calls: Arc::clone(&call_log),
+    }));
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite 工厂必须创建成功");
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        95,
+        "sqlite-stream-update-short-circuit".to_string(),
+        Some(Arc::new(filter_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT X'010203' AS value")
+        .await
+        .unwrap();
+    let ascii = RdbcInputStream::from_bytes([1, 2, 3]);
+    let binary = RdbcInputStream::from_bytes([4, 5, 6]);
+    let character = RdbcReader::from_string("甲乙");
+    let n_character = RdbcReader::from_string("丙丁");
+
+    result_set
+        .update_ascii_stream(&mut connection, 1, Some(&ascii))
+        .unwrap();
+    result_set
+        .update_ascii_stream_by_label(&mut connection, "ascii", None)
+        .unwrap();
+    result_set
+        .update_ascii_stream_with_int_length(&mut connection, 2, Some(&ascii), -7)
+        .unwrap();
+    result_set
+        .update_ascii_stream_by_label_with_int_length(&mut connection, "ascii_int", None, i32::MAX)
+        .unwrap();
+    result_set
+        .update_ascii_stream_with_length(&mut connection, 3, Some(&ascii), -11)
+        .unwrap();
+    result_set
+        .update_ascii_stream_by_label_with_length(&mut connection, "ascii_long", None, i64::MAX)
+        .unwrap();
+    result_set
+        .update_binary_stream(&mut connection, 4, Some(&binary))
+        .unwrap();
+    result_set
+        .update_binary_stream_by_label(&mut connection, "binary", None)
+        .unwrap();
+    result_set
+        .update_binary_stream_with_int_length(&mut connection, 5, Some(&binary), i32::MIN)
+        .unwrap();
+    result_set
+        .update_binary_stream_by_label_with_int_length(&mut connection, "binary_int", None, 13)
+        .unwrap();
+    result_set
+        .update_binary_stream_with_length(&mut connection, 6, Some(&binary), -17)
+        .unwrap();
+    result_set
+        .update_binary_stream_by_label_with_length(&mut connection, "binary_long", None, 19)
+        .unwrap();
+    result_set
+        .update_character_stream(&mut connection, 7, Some(&character))
+        .unwrap();
+    result_set
+        .update_character_stream_by_label(&mut connection, "character", None)
+        .unwrap();
+    result_set
+        .update_character_stream_with_int_length(&mut connection, 8, Some(&character), -23)
+        .unwrap();
+    result_set
+        .update_character_stream_by_label_with_int_length(
+            &mut connection,
+            "character_int",
+            None,
+            29,
+        )
+        .unwrap();
+    result_set
+        .update_character_stream_with_length(&mut connection, 9, Some(&character), -31)
+        .unwrap();
+    result_set
+        .update_character_stream_by_label_with_length(&mut connection, "character_long", None, 37)
+        .unwrap();
+    result_set
+        .update_n_character_stream(&mut connection, 10, Some(&n_character))
+        .unwrap();
+    result_set
+        .update_n_character_stream_by_label(&mut connection, "n_character", None)
+        .unwrap();
+    result_set
+        .update_n_character_stream_with_length(&mut connection, 11, Some(&n_character), -41)
+        .unwrap();
+    result_set
+        .update_n_character_stream_by_label_with_length(
+            &mut connection,
+            "n_character_long",
+            None,
+            43,
+        )
+        .unwrap();
+
+    assert_eq!(
+        calls(&call_log),
+        [
+            "result_set_update_ascii_stream:1:some",
+            "result_set_update_ascii_stream_by_label:ascii:none",
+            "result_set_update_ascii_stream_with_int_length:2:some:-7",
+            "result_set_update_ascii_stream_by_label_with_int_length:ascii_int:none:2147483647",
+            "result_set_update_ascii_stream_with_length:3:some:-11",
+            "result_set_update_ascii_stream_by_label_with_length:ascii_long:none:9223372036854775807",
+            "result_set_update_binary_stream:4:some",
+            "result_set_update_binary_stream_by_label:binary:none",
+            "result_set_update_binary_stream_with_int_length:5:some:-2147483648",
+            "result_set_update_binary_stream_by_label_with_int_length:binary_int:none:13",
+            "result_set_update_binary_stream_with_length:6:some:-17",
+            "result_set_update_binary_stream_by_label_with_length:binary_long:none:19",
+            "result_set_update_character_stream:7:some",
+            "result_set_update_character_stream_by_label:character:none",
+            "result_set_update_character_stream_with_int_length:8:some:-23",
+            "result_set_update_character_stream_by_label_with_int_length:character_int:none:29",
+            "result_set_update_character_stream_with_length:9:some:-31",
+            "result_set_update_character_stream_by_label_with_length:character_long:none:37",
+            "result_set_update_n_character_stream:10:some",
+            "result_set_update_n_character_stream_by_label:n_character:none",
+            "result_set_update_n_character_stream_with_length:11:some:-41",
+            "result_set_update_n_character_stream_by_label_with_length:n_character_long:none:43",
+        ]
+    );
+    assert_eq!(ascii.read_to_end().unwrap(), [2, 3]);
+    assert_eq!(binary.read_to_end().unwrap(), [5, 6]);
+    assert_eq!(character.read_to_string().unwrap(), "乙");
+    assert_eq!(n_character.read_to_string().unwrap(), "丁");
+
+    // RUST_OBLIGATION / V1_RUST_LOCAL：Filter 错误只在原 Statement 分类一次，
+    // 短路后不触达真实只读 RowSet。
+    assert_eq!(
+        result_set.update_n_character_stream_by_label_with_length(
+            &mut connection,
+            "fail",
+            None,
+            -47,
+        ),
+        Err(RdbcError::DriverError(
+            "filtered stream update failure".to_string()
+        ))
+    );
+    assert_eq!(statement.exception_count(), 1);
+    result_set.close_with_connection(&mut connection).unwrap();
+
+    let mut pass_chain = FilterChain::new();
+    pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        96,
+        "sqlite-stream-update-pass-through".to_string(),
+        Some(Arc::new(pass_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT X'010203' AS value")
+        .await
+        .unwrap();
+
+    macro_rules! assert_stream_unsupported {
+        ($expression:expr, $operation:literal) => {
+            assert_eq!(
+                $expression,
+                Err(RdbcError::UnsupportedOperation {
+                    operation: $operation,
+                })
+            );
+        };
+    }
+
+    // VALUE_ADD / V5_HOST：真实 Toasty SQLite RowSet 对 22 个精确 Filter
+    // 入口保持 generic update capability error，且每次失败只计数一次。
+    assert_stream_unsupported!(
+        result_set.update_ascii_stream(&mut connection, 1, Some(&ascii)),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_ascii_stream_by_label(&mut connection, "ascii", None),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_ascii_stream_with_int_length(&mut connection, 2, Some(&ascii), -7),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_ascii_stream_by_label_with_int_length(
+            &mut connection,
+            "ascii_int",
+            None,
+            i32::MAX,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_ascii_stream_with_length(&mut connection, 3, Some(&ascii), -11),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_ascii_stream_by_label_with_length(
+            &mut connection,
+            "ascii_long",
+            None,
+            i64::MAX,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_binary_stream(&mut connection, 4, Some(&binary)),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_binary_stream_by_label(&mut connection, "binary", None),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_binary_stream_with_int_length(
+            &mut connection,
+            5,
+            Some(&binary),
+            i32::MIN,
+        ),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_binary_stream_by_label_with_int_length(
+            &mut connection,
+            "binary_int",
+            None,
+            13,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_binary_stream_with_length(&mut connection, 6, Some(&binary), -17),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_binary_stream_by_label_with_length(
+            &mut connection,
+            "binary_long",
+            None,
+            19,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_character_stream(&mut connection, 7, Some(&character)),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_character_stream_by_label(&mut connection, "character", None),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_character_stream_with_int_length(
+            &mut connection,
+            8,
+            Some(&character),
+            -23,
+        ),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_character_stream_by_label_with_int_length(
+            &mut connection,
+            "character_int",
+            None,
+            29,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_character_stream_with_length(&mut connection, 9, Some(&character), -31,),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_character_stream_by_label_with_length(
+            &mut connection,
+            "character_long",
+            None,
+            37,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_n_character_stream(&mut connection, 10, Some(&n_character)),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_n_character_stream_by_label(&mut connection, "n_character", None),
+        "result_set_update_value_by_label"
+    );
+    assert_stream_unsupported!(
+        result_set.update_n_character_stream_with_length(
+            &mut connection,
+            11,
+            Some(&n_character),
+            -41,
+        ),
+        "result_set_update_value"
+    );
+    assert_stream_unsupported!(
+        result_set.update_n_character_stream_by_label_with_length(
+            &mut connection,
+            "n_character_long",
+            None,
+            43,
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_eq!(statement.exception_count(), 22);
+    assert!(!result_set.is_closed());
+    result_set.close_with_connection(&mut connection).unwrap();
+}

@@ -34,7 +34,7 @@ const SESSION_TTL: Duration = Duration::from_secs(7200);
 /// 对应 Java: `com.alibaba.druid.admin.servlet.MonitorViewServlet`。
 ///
 /// Sessions are stored with creation timestamps and expired after
-/// [`SESSION_TTL`] to prevent unbounded memory growth.
+/// the two-hour session expiry interval to prevent unbounded memory growth.
 #[derive(Clone)]
 pub struct MonitorViewServlet {
     backend: MonitorBackend,

@@ -1,0 +1,70 @@
+//! Canonical connection-state matrix replacing the retired physical lease identity.
+
+use druid_rdbc::statement::ResultSetHoldability;
+use druid_rdbc::types::Value;
+use druid_wrapper::sqlx::SqlxConnectionFactory;
+
+fn task6_standard_connection_lease_case_ids() -> &'static [&'static str] {
+    &[
+        "lease_delegates_complete_spi",
+    ]
+}
+
+#[tokio::test]
+async fn task6_standard_connection_lease_matrix() {
+    let cases = task6_standard_connection_lease_case_ids();
+    let mut executed = Vec::with_capacity(cases.len());
+    for case_id in cases {
+        let factory = SqlxConnectionFactory::new("sqlite::memory:");
+        let mut connection = druid_rdbc::driver::ConnectionFactory::create(&factory)
+            .await
+            .unwrap();
+        assert_eq!(connection.auto_commit(), Ok(true));
+        assert_eq!(connection.read_only(), Ok(false));
+        assert!(!connection.driver_name().unwrap().is_empty());
+        assert!(connection.ping().await.is_ok());
+        connection
+            .exec(
+                "CREATE TABLE lease_case(id INTEGER PRIMARY KEY)",
+                Vec::new(),
+            )
+            .await
+            .unwrap();
+        assert!(connection
+            .fetch("SELECT id FROM lease_case", Vec::new())
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(connection.set_catalog(Some("main")).await.is_err());
+        assert!(connection.set_schema(Some("main")).await.is_err());
+        assert!(connection
+            .set_holdability(ResultSetHoldability::CloseAtCommit)
+            .await
+            .is_err());
+        assert!(connection.create_blob().await.is_err());
+        assert!(connection.create_clob().await.is_err());
+        assert!(connection.create_n_clob().await.is_err());
+        if connection.capabilities().transactions {
+            connection.begin().await.unwrap();
+            connection
+                .exec("INSERT INTO lease_case(id) VALUES (?)", vec![Value::Int(1)])
+                .await
+                .unwrap();
+            connection.rollback().await.unwrap();
+            connection.set_auto_commit(true).await.unwrap();
+            assert!(connection
+                .fetch("SELECT id FROM lease_case", Vec::new())
+                .await
+                .unwrap()
+                .is_empty());
+        }
+        connection.close().await.unwrap();
+        assert_eq!(connection.is_closed(), Ok(true));
+        executed.push(*case_id);
+    }
+    assert_eq!(executed, cases);
+    println!(
+        "TASK6_CASE_DIGEST=task6_standard_connection_lease_matrix:{}",
+        executed.join("|")
+    );
+}

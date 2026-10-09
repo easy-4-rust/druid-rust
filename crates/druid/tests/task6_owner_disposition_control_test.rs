@@ -143,3 +143,42 @@ async fn native_pool_fatal_signal_is_synchronous_and_holder_transfer_is_one_shot
     pool.close().await;
     wait_for_count(driver_close_count.as_ref(), 2).await;
 }
+
+/// 致命错误后先关闭池，延后归还的租约仍必须恰好关闭一次驱动连接。
+#[tokio::test]
+async fn native_pool_shutdown_before_fatal_holder_return_closes_driver_once() {
+    for drop_lease in [false, true] {
+        let driver_close_count = Arc::new(AtomicU64::new(0));
+        let pool = DruidPool::builder()
+            .name("owner-disposition-shutdown-before-return")
+            .driver_name("owner-disposition-test")
+            .factory(Arc::new(TrackingFactory {
+                create_count: Arc::new(AtomicU64::new(0)),
+                close_count: Arc::clone(&driver_close_count),
+            }))
+            .max_open(1)
+            .max_idle(1)
+            .exception_sorter(Arc::new(AlwaysFatalSorter))
+            .build()
+            .await
+            .unwrap();
+        let mut connection = pool.get().await.unwrap();
+        assert!(matches!(
+            connection.clear_warnings().await,
+            Err(RdbcError::SqlException(_))
+        ));
+        assert_eq!(pool.state().active_count, 0);
+        pool.close().await;
+
+        if drop_lease {
+            drop(connection);
+        } else {
+            connection.close().await.unwrap();
+            connection.close().await.unwrap();
+            drop(connection);
+        }
+        wait_for_count(driver_close_count.as_ref(), 1).await;
+        assert_eq!(pool.state().discard_count, 1);
+        assert_eq!(pool.state().destroy_count, 1);
+    }
+}

@@ -14,6 +14,9 @@ use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
 use std::time::Duration;
 
+#[cfg(test)]
+mod generated_keys_tests;
+
 /// Owns one bb8/deadpool lease and delegates the canonical connection contract.
 pub struct ExternalConnectionLease<L>
 where
@@ -120,6 +123,18 @@ where
         options: StatementOptions,
     ) -> Result<Box<dyn CallableStatement>, RdbcError> {
         self.connection_mut().prepare_call(sql, options).await
+    }
+
+    /// 将生成键模式和列选择原样交给外部池租约中的连接，保留底层错误。
+    async fn prepare_statement_with_generated_keys(
+        &mut self,
+        sql: &str,
+        options: StatementOptions,
+        generated_keys: druid_rdbc::statement::GeneratedKeys,
+    ) -> Result<Box<dyn PreparedStatement>, RdbcError> {
+        self.connection_mut()
+            .prepare_statement_with_generated_keys(sql, options, generated_keys)
+            .await
     }
 
     async fn database_meta_data(&mut self) -> Result<Box<dyn DatabaseMetaData>, RdbcError> {

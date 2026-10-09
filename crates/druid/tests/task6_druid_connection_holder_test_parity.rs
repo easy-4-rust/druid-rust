@@ -38,7 +38,7 @@ impl HolderConnection {
             probe,
             auto_commit: true,
             read_only: false,
-            holdability: ResultSetHoldability::CloseAtCommit,
+            holdability: ResultSetHoldability::HoldOverCommit,
             isolation: TransactionIsolation::READ_COMMITTED,
             schema: Some("base".to_string()),
         }
@@ -138,7 +138,7 @@ impl Connection for HolderConnection {
         &mut self,
         holdability: ResultSetHoldability,
     ) -> Result<(), RdbcError> {
-        self.record(format!("holdability:{holdability:?}"));
+        self.record(format!("holdability:{}", holdability.rdbc_code()));
         self.holdability = holdability;
         Ok(())
     }
@@ -193,7 +193,7 @@ async fn task6_druid_connection_holder_test_holder_owns_connection_and_resets_ja
     assert!(holder.has_standard_connection());
     assert!(holder.defaults().auto_commit());
     assert!(!holder.defaults().read_only());
-    assert_eq!(holder.defaults().holdability(), 0);
+    assert_eq!(holder.defaults().holdability(), 1);
     assert_eq!(holder.defaults().transaction_isolation(), 2);
     let returned = Arc::new(Mutex::new(None));
     let returned_holder = Arc::clone(&returned);
@@ -213,7 +213,7 @@ async fn task6_druid_connection_holder_test_holder_owns_connection_and_resets_ja
     );
     connection.set_read_only(true).await.unwrap();
     connection
-        .set_holdability(ResultSetHoldability::HoldOverCommit)
+        .set_holdability(ResultSetHoldability::DriverValue(9))
         .await
         .unwrap();
     connection
@@ -226,7 +226,13 @@ async fn task6_druid_connection_holder_test_holder_owns_connection_and_resets_ja
     assert!(returned.lock().unwrap().is_some());
     assert_eq!(
         probe.lock().unwrap().events,
-        vec!["read_only:false", "auto_commit:true", "clear_warnings"]
+        vec![
+            "read_only:false",
+            "holdability:1",
+            "isolation:2",
+            "auto_commit:true",
+            "clear_warnings"
+        ]
     );
 }
 

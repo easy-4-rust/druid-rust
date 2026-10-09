@@ -1,0 +1,103 @@
+/// 用真实 SQLite 证明 EOF 不能重新开始，且关闭后导航保留原错误。
+/// 对应 Java: ResultSet#next。
+#[tokio::test]
+async fn native_buffered_next_stays_exhausted_until_explicit_navigation() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:").await.unwrap();
+    let mut connection = factory.create().await.unwrap();
+    let mut statement = connection.create_statement(StatementOptions::default()).await.unwrap();
+    let mut rows = statement.execute_query("SELECT 1 AS id UNION ALL SELECT 2").await.unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(rows.int(ColumnIndex::new(1).unwrap()), Ok(1));
+    assert!(rows.next().await.unwrap());
+    assert_eq!(rows.int(ColumnIndex::new(1).unwrap()), Ok(2));
+    assert!(!rows.next().await.unwrap());
+    assert!(!rows.next().await.unwrap(), "EOF 后 next 不得重新跳到第一行");
+    assert!(!rows.next().await.unwrap());
+    rows.close().await.unwrap();
+    assert_eq!(rows.next().await, Err(RdbcError::ConnectionDiscarded));
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 用真实结果验证双向、绝对、相对定位与空结果边界，不重新执行查询。
+/// 对应 Java: ResultSet#previous/absolute/relative/beforeFirst/afterLast。
+#[tokio::test]
+async fn native_buffered_navigation_preserves_positions_and_empty_boundaries() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:").await.unwrap();
+    let mut connection = factory.create().await.unwrap();
+    let mut statement = connection.create_statement(StatementOptions::default()).await.unwrap();
+    let mut rows = statement.execute_query("SELECT 1 AS id UNION ALL SELECT 2").await.unwrap();
+    assert_eq!(rows.row(), Ok(0));
+    assert_eq!(rows.is_before_first(), Ok(true));
+    assert_eq!(rows.is_after_last(), Ok(false));
+    assert!(!rows.previous().await.unwrap());
+    assert!(rows.last().await.unwrap());
+    assert_eq!(rows.row(), Ok(2));
+    assert_eq!(rows.is_last(), Ok(true));
+    assert!(rows.previous().await.unwrap());
+    assert_eq!(rows.row(), Ok(1));
+    assert_eq!(rows.is_first(), Ok(true));
+    assert!(rows.relative(1).await.unwrap());
+    assert_eq!(rows.row(), Ok(2));
+    assert!(!rows.relative(i32::MAX).await.unwrap());
+    assert_eq!(rows.is_after_last(), Ok(true));
+    assert_eq!(rows.row(), Ok(0));
+    assert!(!rows.next().await.unwrap());
+    assert!(rows.previous().await.unwrap());
+    assert_eq!(rows.row(), Ok(2));
+    assert!(rows.absolute(-2).await.unwrap());
+    assert_eq!(rows.row(), Ok(1));
+    assert!(!rows.absolute(i32::MIN).await.unwrap());
+    assert_eq!(rows.is_before_first(), Ok(true));
+    assert!(rows.first().await.unwrap());
+    assert!(rows.absolute(-1).await.unwrap());
+    assert_eq!(rows.row(), Ok(2));
+    rows.before_first().await.unwrap();
+    assert_eq!(rows.row(), Ok(0));
+    assert!(rows.next().await.unwrap());
+    rows.after_last().await.unwrap();
+    assert!(rows.previous().await.unwrap());
+    assert_eq!(rows.row(), Ok(2));
+    assert!(!rows.absolute(0).await.unwrap());
+    assert_eq!(rows.is_before_first(), Ok(true));
+    rows.close().await.unwrap();
+    assert_eq!(rows.previous().await, Err(RdbcError::ConnectionDiscarded));
+    assert_eq!(rows.row(), Err(RdbcError::ConnectionDiscarded));
+    let mut empty = statement.execute_query("SELECT 1 AS id WHERE 0").await.unwrap();
+    assert_eq!(empty.is_before_first(), Ok(false));
+    assert_eq!(empty.is_after_last(), Ok(false));
+    assert_eq!(empty.is_first(), Ok(false));
+    assert_eq!(empty.is_last(), Ok(false));
+    assert_eq!(empty.row(), Ok(0));
+    assert!(!empty.next().await.unwrap());
+    assert!(!empty.next().await.unwrap());
+    assert!(!empty.previous().await.unwrap());
+    assert!(!empty.first().await.unwrap());
+    assert!(!empty.last().await.unwrap());
+    empty.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+/// 只以实际 SQL NULL 证明可空；非空样本和空结果仍保留未知。
+/// 对应 Java: ResultSetMetaData#isNullable。
+#[tokio::test]
+async fn native_buffered_nullability_requires_observed_null_evidence() {
+    use druid_rdbc::metadata::ColumnNullability;
+    let factory = ToastyConnectionFactory::new("sqlite::memory:").await.unwrap();
+    let mut connection = factory.create().await.unwrap();
+    let mut statement = connection.create_statement(StatementOptions::default()).await.unwrap();
+    let one = ColumnIndex::new(1).unwrap();
+    let two = ColumnIndex::new(2).unwrap();
+    let mut rows = statement.execute_query("SELECT 'first' AS optional_label, 1 AS id UNION ALL SELECT NULL, 2").await.unwrap();
+    let metadata = rows.meta_data().unwrap();
+    assert_eq!(metadata.nullability(one), Ok(ColumnNullability::Nullable));
+    assert_eq!(metadata.nullability(two), Ok(ColumnNullability::Unknown));
+    assert_eq!(metadata.column_label(one).unwrap(), "optional_label");
+    rows.close().await.unwrap();
+    let mut empty = statement.execute_query("SELECT NULL AS optional_label WHERE 0").await.unwrap();
+    assert_eq!(empty.meta_data().unwrap().nullability(one), Ok(ColumnNullability::Unknown));
+    empty.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}

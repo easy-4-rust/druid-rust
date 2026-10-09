@@ -55,6 +55,10 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
         .tables(TablesQuery::default())
         .await
         .expect("owned metadata result set");
+    assert!(tables
+        .get_statement()
+        .expect("metadata 无创建语句")
+        .is_none());
     assert!(tables.next().await.expect("metadata result next"));
     assert_eq!(
         tables
@@ -109,6 +113,7 @@ async fn live_metadata_owns_logical_actor_and_snapshots_are_borrow_free() {
         .value(ColumnIndex::new(1).expect("1-based column"))
         .is_err());
     assert!(tables.meta_data().is_err());
+    assert!(tables.get_statement().is_err());
     assert!(Statement::is_closed(stale_statement.as_ref()).expect("logical close state"));
     assert!(stale_statement
         .execute_update("UPDATE stale", GeneratedKeys::None)

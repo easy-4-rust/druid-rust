@@ -50,7 +50,7 @@ async fn toasty_standard_factory_emits_typed_runtime_trace() {
             .column(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())
             .unwrap()
             .label(),
-        "column_1"
+        "?"
     );
     assert_eq!(
         rows.value(druid_rdbc::result_set::ColumnIndex::new(1).unwrap())

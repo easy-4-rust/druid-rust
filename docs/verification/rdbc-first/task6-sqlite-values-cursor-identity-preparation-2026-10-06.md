@@ -1,0 +1,38 @@
+# Task6 SQLite 值、游标与真实语句身份原合同准备（2026-10-06）
+
+完整workspace61393/cargo70220仍实际LIVE，未修改Rust/Cargo输入。下一完整BASE案例保存于drafts/sqlite_result_values_cursor_identity_full_base.rs.txt；本文件为源码准备，不是正式迁移或运行证据。
+
+固定BASE5afe8609b177544ff7d18461aa84f69efe8ee90e，案例sqlite_result_set_preserves_values_cursor_peak_and_wrapper_identity，bodySHA f43cd3a8cb862965ba9e57a82d6fe91a3a253f3cb4475db44f2676766c579297；原观察assert27/assert_eq29/matches2。
+
+必须保留真实Toasty SQLite、原result_event六列表结构、原两行值（first/second、1.5/2.5、payload0102/0304与NULL/present）、原完整SQL。创建语句峰值初始-1；poolable/statement返回同一底层对象身份，普通Statement不广告Prepared或Callable。Concrete/standard wrapper、as_any、unwrap_ref、空role拒绝及Debug名字全部映射到真实标准身份，不能以名字断言替代对象身份。
+
+游标合同包括before-first=true、row0->1、first/last、next两行后fetch_row_count2、previous仍不增加到3、显式关闭后真实statement.fetch_row_peak2。元数据6列及Integer/Float/Text/Binary/nullable观察保持；warnings空/clear、cursor_name空保持。
+
+42个精确不支持调用：Ref/Blob/Clob/Array/URL/RowId/NClob/SQLXML各下标与标签16；Ref/Blob/Clob/Array/RowId/NClob/SQLXML更新各下标与标签14；BlobStream/ClobReader/NClobReader各无长度/Long(1)及下标/标签12。必须分别保留原精确错误名与实际creatingStatement.exception_count42，不能把所有不支持统一成generic错误或假计数。
+
+然后必须成功读取binary payload[1,2]、ASCII/Unicode bytes(first)、character/n_character文本first、n_string(first)、object(SQL NULL)及was_null。只读rowUpdated/Inserted/Deleted为false；七种行修改均原Unsupported。成功流读取和失败资源读取是不同能力，不能为了恢复42个失败而禁用原成功流。
+
+当前CodeGraph已核实实际Toasty缓冲结果为StandardAdapterResultSet，具有真实值/标签/对象/元数据/row flags，但没有原input_stream/reader与导航状态覆盖；统一默认已经明确拒绝部分能力。因此后续完整案例可能需要恢复具体缓冲能力，必须以完整运行RED为证，不能直接改默认或用另一Buffered fixture绕过真实Toasty。原owner身份/实际fetch峰值应沿真实私有语句、结果registry及logical owner观察。
+
+当前先完成58次更新拒绝完整案例，再恢复本完整案例；1283正式源码floor1241PASS42FAIL和18顶层任务不变，所有公共API/features/MSRV/Java实库/生产可靠性/最终验收继续开放。
+
+## 本轮源码核对与下一完整验收
+
+Toasty原生元数据及流能力已取得局部163/0验证，全workspace4342仍LIVE；
+本案例尚未接入Cargo，原完整body与SHA仍保留。
+
+CodeGraph当前StandardAdapterResultSet只有next，没有navigate/row/is_before_first/
+is_after_last/is_first/is_last覆盖，默认导航会准确拒绝。next自身在非定位状态
+回到0，源码显示耗尽后再次next可能重新开始；这仍是源码推断，需真实运行控制。
+后续必须在真实Toasty结果上验证before-first/两行/after-last重复next/previous，
+同时保持creatingStatement fetch计数与峰值；不能用别的BufferedRowSet替代原驱动。
+
+原get_statement两个观察应核对同一共享创建语句实际对象身份，不能只比Debug或名称。
+标准get_statement当前通过logical_owner.statement_handle返回拥有型同owner句柄，
+metadata通过原资源的代理snapshot返回。原is_nullable的布尔观察需准确映射
+JDBC nullable状态；真实声明类型已提供，未提供的nullable应如实Unknown，
+不能凭声明类型或列名猜测NoNulls/Nullable。资源42次拒绝与行修改拒绝保留
+原入口精确操作名，成功的五种流读取独立保留。待完整全仓终态再接入本案例。
+
+
+完整六列ResultSet正式恢复（2026-10-06）：label真实RED32531为ref_by_label->ref；修复八资源列名身份后83221真实RED为update_ref->update_value；具体缓冲更新恢复七资源家族与三LOB流家族，标量保持原generic拒绝，不消费资源。完整91706终态exit0/1PASS0FAIL，全部42精确拒绝/实际Statement42/五流/六列metadata/NULL/identity/两行navigation/fetchpeak2通过。正式1283 sourcefloor1243PASS40FAIL，1106exact177parameterized，前7冻结字段/反向调用索引PASS；C2 --no-execute仍FAIL首败statement_close_closes_traced_result_set_and_records_fetched_peak。Wrapper63863六目标52/0，新增八资源NULL/定位/缺失/关闭优先控制另9/0含旧8，不能累计为61。15自测/48final纯度/79authority pending25 physical73/生成14/diffPASS。准备CRLF与GBK错误已修正，验证器逻辑不变；两个错误目标名Cargo命令未运行测试，保留日志，不计失败产品测试。Druid五目标正确名称复测已启动task6-sqlite-values-druid-regression-corrected.log，未获终态；尚无本轮完整workspace证据。完整18任务/Task6FIX_REQUIRED及Task7八义务/API/SemVer/MSRV/features/最终审查保持开放。

@@ -72,7 +72,7 @@ pub use driver::Driver;
 pub use driver_action::DriverAction;
 pub use driver_manager::DriverManager;
 pub use driver_property_info::DriverPropertyInfo;
-pub use druid_rdbc::compat::{BatchUpdateException, DataTruncation, SqlClientInfoException};
+pub use druid_rdbc::error::{BatchUpdateException, DataTruncation, SqlClientInfoException};
 pub use druid_rdbc::error::{
     SqlException as SqlDataException, SqlException as SqlFeatureNotSupportedException,
     SqlException as SqlIntegrityConstraintViolationException,

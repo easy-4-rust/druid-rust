@@ -1,4 +1,4 @@
-/// Configuration validation errors for [`DruidMetricsConfig`].
+/// Configuration validation errors for [`DruidMetricsConfig`](crate::DruidMetricsConfig).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum MetricsConfigError {
     #[error("queue_capacity must be > 0")]

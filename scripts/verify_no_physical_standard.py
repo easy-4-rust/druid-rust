@@ -59,7 +59,8 @@ MIGRATION_AUTHORITY = Path(
     "docs/verification/rdbc-first/task6-migration-authority.tsv"
 )
 API_SNAPSHOT = Path("api/druid-rdbc.single-standard.after.txt")
-PUBLIC_API_TOOLCHAIN = "nightly-2026-08-07-aarch64-apple-darwin"
+# 固定编译器日期；省略 host 后缀，由 rustup 选择当前主机的工具链。
+PUBLIC_API_TOOLCHAIN = "nightly-2026-08-07"
 TASK6_PENDING = "TASK6_COMPATIBILITY_PENDING"
 TASK6_CLOSED = "TASK6_COMPATIBILITY_CLOSED"
 

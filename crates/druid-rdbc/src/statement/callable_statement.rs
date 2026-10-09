@@ -267,6 +267,13 @@ impl CallableInputParameter {
 /// JDBC `CallableStatement` 标准。
 #[async_trait::async_trait]
 pub trait CallableStatement: PreparedStatement {
+    /// 在当前调用语句中校验参数索引并返回严格的 1-based selector。
+    /// 参数 parameter_index 为原调用者索引；返回有效 selector 或原参数错误。
+    /// 对应 Java: DruidPooledCallableStatement#index_parameter；池化实现记录所属语句错误。
+    fn index_parameter(&self, parameter_index: usize) -> Result<CallableParameter, RdbcError> {
+        CallableParameter::by_index(parameter_index)
+    }
+
     /// 注册 indexed/named OUT 参数及其完整 SQL type 描述。
     fn register_out_parameter(
         &mut self,

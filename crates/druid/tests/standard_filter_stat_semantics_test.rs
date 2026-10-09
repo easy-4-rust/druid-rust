@@ -990,7 +990,8 @@ async fn canonical_prepare_rewrite_cache_parameters_batch_events_and_timeout_mat
             .statement_query_timeouts
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner),
-        vec![13, 13, 13, 13]
+        // 两次 Prepared 与一次 Callable 关闭均恢复 raw 初始 timeout 为0；重借时应用池配置13。
+        vec![13, 13, 0, 13, 0, 13, 0]
     );
 
     connection.close().await.expect("logical close");

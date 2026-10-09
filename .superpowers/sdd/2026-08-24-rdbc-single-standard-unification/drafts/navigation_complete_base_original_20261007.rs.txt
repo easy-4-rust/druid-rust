@@ -1,0 +1,102 @@
+async fn pooled_result_set_routes_navigation_properties_and_real_sqlite_state() {
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(NavigationShortCircuitFilter {
+        calls: Arc::clone(&call_log),
+    }));
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .expect("Toasty SQLite 工厂必须创建成功");
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        78,
+        "sqlite-navigation-filter".to_string(),
+        Some(Arc::new(filter_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 1")
+        .await
+        .unwrap();
+
+    assert!(!result_set.was_null(&mut connection).unwrap());
+    assert!(result_set.previous(&mut connection).unwrap());
+    assert!(!result_set.is_before_first(&mut connection).unwrap());
+    assert!(result_set.is_after_last(&mut connection).unwrap());
+    assert!(result_set.is_first(&mut connection).unwrap());
+    assert!(!result_set.is_last(&mut connection).unwrap());
+    result_set.before_first(&mut connection).unwrap();
+    result_set.after_last(&mut connection).unwrap();
+    assert!(!result_set.first(&mut connection).unwrap());
+    assert!(!result_set.last(&mut connection).unwrap());
+    assert_eq!(result_set.row(&mut connection).unwrap(), 99);
+    assert!(result_set.absolute(&mut connection, 50).unwrap());
+    assert!(result_set.relative(&mut connection, -20).unwrap());
+    result_set
+        .set_fetch_direction(&mut connection, 2000)
+        .unwrap();
+    assert_eq!(result_set.fetch_direction(&mut connection).unwrap(), 2000);
+    result_set.set_fetch_size(&mut connection, 128).unwrap();
+    assert_eq!(result_set.fetch_size(&mut connection).unwrap(), 128);
+    assert_eq!(result_set.result_set_type(&mut connection).unwrap(), 2004);
+    assert_eq!(result_set.concurrency(&mut connection).unwrap(), 2007);
+    assert_eq!(result_set.holdability(&mut connection).unwrap(), 2);
+    assert_eq!(
+        result_set.cursor_name(&mut connection).unwrap(),
+        Some("filtered-cursor".to_string())
+    );
+    assert!(!result_set.row_updated(&mut connection).unwrap());
+    assert!(result_set.row_inserted(&mut connection).unwrap());
+    assert!(!result_set.row_deleted(&mut connection).unwrap());
+    assert_eq!(
+        result_set.find_column(&mut connection, "named").unwrap(),
+        88
+    );
+    assert!(!result_set
+        .is_closed_with_connection(&mut connection)
+        .unwrap());
+    assert_eq!(calls(&call_log).len(), 26);
+    assert_eq!(
+        result_set.find_column(&mut connection, "fail"),
+        Err(RdbcError::DriverError(
+            "filtered findColumn failure".to_string()
+        ))
+    );
+    assert_eq!(statement.exception_count(), 1);
+    result_set.close_with_connection(&mut connection).unwrap();
+
+    // VALUE_ADD / V5_HOST：真实 Toasty SQLite RowSet 经默认 Filter 执行游标状态机。
+    let mut pass_chain = FilterChain::new();
+    pass_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let physical = factory.create().await.unwrap();
+    let mut connection = DruidPooledConnection::with_context(
+        physical,
+        79,
+        "sqlite-navigation-pass-through".to_string(),
+        Some(Arc::new(pass_chain)),
+        Box::new(|_, _| {}),
+    );
+    let mut statement = connection.create_statement().await.unwrap();
+    let mut result_set = statement
+        .execute_query_result_set(&mut connection, "SELECT 10 AS value UNION ALL SELECT 20")
+        .await
+        .unwrap();
+    assert!(result_set.is_before_first(&mut connection).unwrap());
+    assert!(result_set.next(&mut connection).unwrap());
+    assert_eq!(result_set.row(&mut connection).unwrap(), 1);
+    assert!(result_set.last(&mut connection).unwrap());
+    assert_eq!(result_set.row(&mut connection).unwrap(), 2);
+    assert!(result_set.previous(&mut connection).unwrap());
+    assert_eq!(result_set.int(&mut connection, 1).unwrap(), 10);
+    result_set.after_last(&mut connection).unwrap();
+    assert!(result_set.is_after_last(&mut connection).unwrap());
+    result_set.before_first(&mut connection).unwrap();
+    assert!(result_set.is_before_first(&mut connection).unwrap());
+    assert!(!result_set
+        .is_closed_with_connection(&mut connection)
+        .unwrap());
+    result_set.close_with_connection(&mut connection).unwrap();
+    assert!(result_set.is_closed());
+}

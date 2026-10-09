@@ -1,0 +1,52 @@
+// 非 Cargo 输入；完整 BASE 属性合同草案，待当前 workspace 终态后接入正式测试。
+// BASE body SHA256: ef39cee737f247494ff796bf936516d476425a373b42b8b0b07d169bafb3d650
+#[test]
+fn task6_sparse_result_set_property_defaults_report_exact_capabilities() {
+    let mut result_set = SparseDefaultResultSet;
+    task6_assert_unsupported_operation(result_set.find_column("id"), "result_set_find_column");
+    task6_assert_unsupported_operation(result_set.was_null(), "result_set_was_null");
+    task6_assert_unsupported_operation(result_set.ascii_stream(ColumnIndex::new(1).unwrap()), "result_set_ascii_stream");
+    task6_assert_unsupported_operation(result_set.unicode_stream(ColumnIndex::new(1).unwrap()), "result_set_unicode_stream");
+    task6_assert_unsupported_operation(result_set.binary_stream(ColumnIndex::new(1).unwrap()), "result_set_binary_stream");
+    task6_assert_unsupported_operation(
+        result_set.character_stream(ColumnIndex::new(1).unwrap()),
+        "result_set_character_stream",
+    );
+    task6_assert_unsupported_operation(result_set.is_before_first(), "result_set_is_before_first");
+    task6_assert_unsupported_operation(result_set.is_after_last(), "result_set_is_after_last");
+    task6_assert_unsupported_operation(result_set.is_first(), "result_set_is_first");
+    task6_assert_unsupported_operation(result_set.is_last(), "result_set_is_last");
+    task6_assert_unsupported_operation(
+        result_set.set_fetch_direction(FetchDirection::Forward),
+        "result_set_set_fetch_direction",
+    );
+    task6_assert_unsupported_operation(result_set.fetch_direction(), "result_set_fetch_direction");
+    task6_assert_unsupported_operation(result_set.set_fetch_size(10), "result_set_set_fetch_size");
+    task6_assert_unsupported_operation(result_set.fetch_size(), "result_set_fetch_size");
+    task6_assert_unsupported_operation(result_set.result_set_type(), "result_set_type");
+    task6_assert_unsupported_operation(result_set.concurrency(), "result_set_concurrency");
+    task6_assert_unsupported_operation(result_set.holdability(), "result_set_holdability");
+    task6_assert_unsupported_operation(result_set.warnings(), "result_set_warnings");
+    task6_assert_unsupported_operation(result_set.clear_warnings(), "result_set_clear_warnings");
+    task6_assert_unsupported_operation(result_set.cursor_name(), "result_set_cursor_name");
+    task6_assert_unsupported_operation(result_set.meta_data(), "result_set_meta_data");
+    task6_assert_unsupported_operation(result_set.row_updated(), "result_set_row_updated");
+    task6_assert_unsupported_operation(result_set.row_inserted(), "result_set_row_inserted");
+    task6_assert_unsupported_operation(result_set.row_deleted(), "result_set_row_deleted");
+    task6_assert_unsupported_operation(result_set.insert_row(), "result_set_insert_row");
+    task6_assert_unsupported_operation(result_set.update_row(), "result_set_update_row");
+    task6_assert_unsupported_operation(result_set.delete_row(), "result_set_delete_row");
+    task6_assert_unsupported_operation(result_set.refresh_row(), "result_set_refresh_row");
+    task6_assert_unsupported_operation(
+        result_set.cancel_row_updates(),
+        "result_set_cancel_row_updates",
+    );
+    task6_assert_unsupported_operation(
+        result_set.move_to_insert_row(),
+        "result_set_move_to_insert_row",
+    );
+    task6_assert_unsupported_operation(
+        result_set.move_to_current_row(),
+        "result_set_move_to_current_row",
+    );
+}

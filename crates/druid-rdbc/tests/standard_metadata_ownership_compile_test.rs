@@ -16,6 +16,7 @@ struct MockResultSet {
     meta_data: Arc<dyn ResultSetMetaData>,
     advanced: bool,
 }
+#[derive(Debug)]
 struct MockResultSetMetaData;
 struct MockParameterMetaData;
 struct MockPreparedStatement {

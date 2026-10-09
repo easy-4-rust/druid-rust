@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub use crate::error::SqlExceptionKind;
 
 /// Base exception for database access failures and other SQL errors.
@@ -37,71 +35,5 @@ pub type SqlFeatureNotSupportedException = crate::error::SqlException;
 /// RDBC query or login timeout.
 pub type SqlTimeoutException = crate::error::SqlException;
 
-/// Error raised when at least one command in a batch update fails.
-///
-/// Corresponds to Java: `java.sql.BatchUpdateException`. Counts follow command order. A driver
-/// may stop at the first failure or continue with `EXECUTE_FAILED(-3)`; unknown successful counts
-/// use `SUCCESS_NO_INFO(-2)`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct BatchUpdateException {
-    /// Underlying SQL exception information.
-    pub exception: SqlException,
-    /// Ordered update counts, including standard success-unknown and failed markers.
-    pub update_counts: Vec<i64>,
-}
-
-impl BatchUpdateException {
-    /// Creates a batch exception from an SQL exception and command-ordered counts.
-    #[must_use]
-    pub fn new(exception: SqlException, update_counts: Vec<i64>) -> Self {
-        Self {
-            exception,
-            update_counts,
-        }
-    }
-
-    /// Returns Java `int[] getUpdateCounts()` semantics; out-of-range values are saturated.
-    #[must_use]
-    pub fn update_counts(&self) -> Vec<i32> {
-        self.update_counts
-            .iter()
-            .map(|value| *value as i32)
-            .collect()
-    }
-
-    /// Returns RDBC 4.2 `long[] getLargeUpdateCounts()` semantics.
-    #[must_use]
-    pub fn large_update_counts(&self) -> &[i64] {
-        &self.update_counts
-    }
-}
-
-/// Diagnostic information for unexpected truncation unrelated to `maxFieldSize`.
-///
-/// Corresponds to Java: `java.sql.DataTruncation`. Write truncation is an exception and read
-/// truncation is a warning. `index` is a 1-based parameter or column position.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DataTruncation {
-    /// Parameter or column index.
-    pub index: usize,
-    /// Whether the truncated value is a parameter.
-    pub parameter: bool,
-    /// Whether truncation occurred while reading; `false` means writing.
-    pub read: bool,
-    /// Original byte length, or `None` when unknown.
-    pub data_size: Option<usize>,
-    /// Transferred byte length, or `None` when unknown.
-    pub transfer_size: Option<usize>,
-}
-
-/// Failure to set one or more connection client-information properties.
-///
-/// Corresponds to Java: `java.sql.SQLClientInfoException`. `failed_properties` contains only
-/// rejected properties and their standard status.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SqlClientInfoException {
-    /// Underlying SQL exception information.
-    pub exception: SqlException,
-    /// Rejected property names and standard status names.
-    pub failed_properties: HashMap<String, String>,
-}
+// 历史兼容入口重导出唯一标准对象；真实定义和逻辑归标准 error 层所有。
+pub use crate::error::{BatchUpdateException, DataTruncation, SqlClientInfoException};

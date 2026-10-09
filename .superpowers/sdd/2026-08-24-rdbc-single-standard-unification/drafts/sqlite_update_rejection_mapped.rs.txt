@@ -1,0 +1,300 @@
+// 非 Cargo 输入。完整 BASE 的58个失败调用映射；尚未编译、运行或绑定。
+// BASE body SHA: 8f33bdc25cc124a51ffef0ce5a42ba463c3d5f25d5020b3ca69457598b962a1e
+#[tokio::test]
+async fn task6_sqlite_rejects_every_scalar_and_stream_update_without_corrupting_cursor() {
+    use crate::core::RdbcError;
+    use druid_rdbc::result_set::{ResultSetExt, ResultSetUpdate};
+    use druid_rdbc::types::{
+        RdbcBigDecimal, RdbcCharacterLength, RdbcInputStream, RdbcNaiveDate, RdbcNaiveDateTime,
+        RdbcNaiveTime, RdbcObject, RdbcReader, RdbcStreamLength, RdbcTargetType, RdbcTypeMap,
+    };
+
+    // 与 BASE 同一 Toasty SQLite；私有入口保留实际创建语句统计，不伪造计数。
+    let (mut statement, mut connection) =
+        task6_sqlite_diagnostic_statement_with_filters(None).await;
+    let mut result_set = statement
+        .execute_query("SELECT 1 AS id, 'first' AS label UNION ALL SELECT 2, 'second'")
+        .await
+        .unwrap();
+    assert!(result_set.next().await.unwrap());
+    let input = RdbcInputStream::from_bytes([1, 2, 3]);
+    let reader = RdbcReader::from_string("严格 SQLite");
+
+    macro_rules! assert_update_unsupported {
+        ($expression:expr, $operation:literal) => {
+            assert!(matches!(
+                $expression,
+                Err(RdbcError::UnsupportedOperation {
+                    operation: $operation
+                })
+            ));
+        };
+    }
+    // 每家族仍分别执行下标1和原列名id；descriptor不读流、不预验长度。
+    macro_rules! assert_pair_unsupported {
+        ($variant:ident, $value:expr) => {
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant($value)
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label("id", ResultSetUpdate::$variant($value)),
+                "result_set_update_value_by_label"
+            );
+        };
+    }
+    assert_update_unsupported!(
+        result_set.update_value(ColumnIndex::new(1).unwrap(), ResultSetUpdate::Null),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_value_by_label("id", ResultSetUpdate::Null),
+        "result_set_update_value_by_label"
+    );
+    assert_pair_unsupported!(Boolean, true);
+    assert_pair_unsupported!(Byte, 1);
+    assert_pair_unsupported!(Short, 2);
+    assert_pair_unsupported!(Int, 3);
+    assert_pair_unsupported!(Long, 4);
+    assert_pair_unsupported!(Float, 5.0);
+    assert_pair_unsupported!(Double, 6.0);
+    assert_pair_unsupported!(BigDecimal, None::<RdbcBigDecimal>);
+    assert_pair_unsupported!(String, None::<String>);
+    assert_pair_unsupported!(Bytes, None::<Vec<u8>>);
+    assert_pair_unsupported!(Date, None::<RdbcNaiveDate>);
+    assert_pair_unsupported!(Time, None::<RdbcNaiveTime>);
+    assert_pair_unsupported!(Timestamp, None::<RdbcNaiveDateTime>);
+    assert_update_unsupported!(
+        result_set.update_value(
+            ColumnIndex::new(1).unwrap(),
+            ResultSetUpdate::Object(RdbcObject::from(druid_rdbc::types::Value::Null))
+        ),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_value_by_label(
+            "id",
+            ResultSetUpdate::Object(RdbcObject::from(druid_rdbc::types::Value::Null))
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_update_unsupported!(
+        result_set.update_value(
+            ColumnIndex::new(1).unwrap(),
+            ResultSetUpdate::ObjectWithScaleOrLength {
+                value: RdbcObject::from(druid_rdbc::types::Value::Null),
+                scale_or_length: -1
+            }
+        ),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_value_by_label(
+            "id",
+            ResultSetUpdate::ObjectWithScaleOrLength {
+                value: RdbcObject::from(druid_rdbc::types::Value::Null),
+                scale_or_length: -1
+            }
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_pair_unsupported!(NString, None::<String>);
+
+    macro_rules! assert_stream_family_unsupported {
+        ($variant:ident) => {
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant {
+                        stream: Some(input.clone()),
+                        length: RdbcStreamLength::Unspecified
+                    }
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label(
+                    "id",
+                    ResultSetUpdate::$variant {
+                        stream: Some(input.clone()),
+                        length: RdbcStreamLength::Unspecified
+                    }
+                ),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant {
+                        stream: Some(input.clone()),
+                        length: RdbcStreamLength::Int(-1)
+                    }
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label(
+                    "id",
+                    ResultSetUpdate::$variant {
+                        stream: Some(input.clone()),
+                        length: RdbcStreamLength::Int(-1)
+                    }
+                ),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant {
+                        stream: Some(input.clone()),
+                        length: RdbcStreamLength::Long(-1)
+                    }
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label(
+                    "id",
+                    ResultSetUpdate::$variant {
+                        stream: Some(input.clone()),
+                        length: RdbcStreamLength::Long(-1)
+                    }
+                ),
+                "result_set_update_value_by_label"
+            );
+        };
+    }
+    assert_stream_family_unsupported!(AsciiStream);
+    assert_stream_family_unsupported!(BinaryStream);
+    macro_rules! assert_reader_family_unsupported {
+        ($variant:ident) => {
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant {
+                        reader: Some(reader.clone()),
+                        length: RdbcCharacterLength::Unspecified
+                    }
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label(
+                    "id",
+                    ResultSetUpdate::$variant {
+                        reader: Some(reader.clone()),
+                        length: RdbcCharacterLength::Unspecified
+                    }
+                ),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant {
+                        reader: Some(reader.clone()),
+                        length: RdbcCharacterLength::Int(-1)
+                    }
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label(
+                    "id",
+                    ResultSetUpdate::$variant {
+                        reader: Some(reader.clone()),
+                        length: RdbcCharacterLength::Int(-1)
+                    }
+                ),
+                "result_set_update_value_by_label"
+            );
+            assert_update_unsupported!(
+                result_set.update_value(
+                    ColumnIndex::new(1).unwrap(),
+                    ResultSetUpdate::$variant {
+                        reader: Some(reader.clone()),
+                        length: RdbcCharacterLength::Long(-1)
+                    }
+                ),
+                "result_set_update_value"
+            );
+            assert_update_unsupported!(
+                result_set.update_value_by_label(
+                    "id",
+                    ResultSetUpdate::$variant {
+                        reader: Some(reader.clone()),
+                        length: RdbcCharacterLength::Long(-1)
+                    }
+                ),
+                "result_set_update_value_by_label"
+            );
+        };
+    }
+    assert_reader_family_unsupported!(CharacterStream);
+    assert_update_unsupported!(
+        result_set.update_value(
+            ColumnIndex::new(1).unwrap(),
+            ResultSetUpdate::NCharacterStream {
+                reader: Some(reader.clone()),
+                length: RdbcCharacterLength::Unspecified
+            }
+        ),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_value_by_label(
+            "id",
+            ResultSetUpdate::NCharacterStream {
+                reader: Some(reader.clone()),
+                length: RdbcCharacterLength::Unspecified
+            }
+        ),
+        "result_set_update_value_by_label"
+    );
+    assert_update_unsupported!(
+        result_set.update_value(
+            ColumnIndex::new(1).unwrap(),
+            ResultSetUpdate::NCharacterStream {
+                reader: Some(reader.clone()),
+                length: RdbcCharacterLength::Long(-1)
+            }
+        ),
+        "result_set_update_value"
+    );
+    assert_update_unsupported!(
+        result_set.update_value_by_label(
+            "id",
+            ResultSetUpdate::NCharacterStream {
+                reader: Some(reader.clone()),
+                length: RdbcCharacterLength::Long(-1)
+            }
+        ),
+        "result_set_update_value_by_label"
+    );
+    let mut type_map = RdbcTypeMap::new();
+    type_map.insert("APP.USER_TYPE", RdbcTargetType::Custom("User".to_string()));
+    assert_update_unsupported!(
+        result_set.object_with_type_map(ColumnIndex::new(1).unwrap(), Some(&type_map)),
+        "result_set_get_object_with_type_map"
+    );
+    assert_update_unsupported!(
+        result_set.object_with_type_map_by_label("id", None),
+        "result_set_get_object_by_label_with_type_map"
+    );
+    assert_eq!(statement.exception_count(), 58);
+    assert!(result_set.next().await.unwrap());
+    assert_eq!(result_set.int(ColumnIndex::new(1).unwrap()).unwrap(), 2);
+    assert_eq!(
+        result_set.string(ColumnIndex::new(2).unwrap()).unwrap(),
+        Some("second".to_string())
+    );
+    assert!(!input.is_closed());
+    assert!(!reader.is_closed());
+    // 额外清理不替代前面的原始58次观察。
+    result_set.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}

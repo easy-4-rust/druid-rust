@@ -1,0 +1,199 @@
+//! 同一真实Toasty SQLite查询的原生元数据交接控制；尚未接入Cargo。
+use druid_rdbc::driver::ConnectionFactory;
+use druid_rdbc::error::RdbcError;
+use druid_rdbc::result_set::{ColumnIndex, ResultSetExt};
+use druid_rdbc::statement::{GeneratedKeys, ParameterIndex, PreparedParameter, StatementOptions};
+use druid_rdbc::types::Value;
+use druid_wrapper::toasty::ToastyConnectionFactory;
+
+#[tokio::test]
+async fn native_labels_preserve_duplicate_order_case_and_empty_results() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut connection = factory.create().await.unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let one = ColumnIndex::new(1).unwrap();
+    let two = ColumnIndex::new(2).unwrap();
+    let mut rows = statement
+        .execute_query("SELECT 1 AS \"DuP\", 2 AS \"dup\" WHERE 0")
+        .await
+        .unwrap();
+    assert!(!rows.next().await.unwrap());
+    assert_eq!(rows.find_column("DUP"), Ok(one));
+    let metadata = rows.meta_data().unwrap();
+    assert_eq!(metadata.column_count(), 2);
+    assert_eq!(metadata.column_label(one).unwrap(), "DuP");
+    assert_eq!(metadata.column_label(two).unwrap(), "dup");
+    rows.close().await.unwrap();
+    let mut rows = statement
+        .execute_query("SELECT 1 AS \"DuP\", 2 AS \"dup\"")
+        .await
+        .unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(rows.int_by_label("dup"), Ok(1));
+    assert_eq!(rows.int(two), Ok(2));
+    assert_eq!(
+        rows.find_column("column_1"),
+        Err(RdbcError::InvalidArgument(
+            "unknown column: column_1".to_owned()
+        ))
+    );
+    rows.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_wildcard_and_subquery_labels_are_retained_without_rows() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut connection = factory.create().await.unwrap();
+    let mut statement = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    statement
+        .execute_update(
+            "CREATE TABLE native_columns (id INTEGER, payload BLOB)",
+            GeneratedKeys::None,
+        )
+        .await
+        .unwrap();
+    let mut rows = statement
+        .execute_query("SELECT * FROM (SELECT * FROM native_columns) WHERE 0")
+        .await
+        .unwrap();
+    assert!(!rows.next().await.unwrap());
+    assert_eq!(rows.find_column("id"), Ok(ColumnIndex::new(1).unwrap()));
+    assert_eq!(
+        rows.find_column("payload"),
+        Ok(ColumnIndex::new(2).unwrap())
+    );
+    let metadata = rows.meta_data().unwrap();
+    assert_eq!(metadata.column_count(), 2);
+    assert_eq!(
+        metadata.column_label(ColumnIndex::new(1).unwrap()).unwrap(),
+        "id"
+    );
+    assert_eq!(
+        metadata.column_label(ColumnIndex::new(2).unwrap()).unwrap(),
+        "payload"
+    );
+    rows.close().await.unwrap();
+    statement.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_prepared_returning_keeps_labels_and_hides_internal_key_column() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut connection = factory.create().await.unwrap();
+    let mut setup = connection
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    setup
+        .execute_update(
+            "CREATE TABLE native_returning (id INTEGER PRIMARY KEY, note TEXT)",
+            GeneratedKeys::None,
+        )
+        .await
+        .unwrap();
+    let mut prepared = connection.prepare_statement(
+        "INSERT INTO native_returning(id, note) VALUES (?, ?) RETURNING id AS ReturnedId, note AS ReturnedNote",
+        StatementOptions::default(),
+    ).await.unwrap();
+    prepared
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(1).unwrap(),
+            value: Value::Int(7),
+        })
+        .unwrap();
+    prepared
+        .set_parameter(PreparedParameter {
+            index: ParameterIndex::new(2).unwrap(),
+            value: Value::String("原始参数".to_owned()),
+        })
+        .unwrap();
+    let mut rows = prepared.execute_prepared_query().await.unwrap();
+    assert!(rows.next().await.unwrap());
+    assert_eq!(rows.int_by_label("ReturnedId"), Ok(7));
+    assert_eq!(
+        rows.string_by_label("ReturnedNote"),
+        Ok(Some("原始参数".to_owned()))
+    );
+    let metadata = rows.meta_data().unwrap();
+    assert_eq!(metadata.column_count(), 2);
+    assert_eq!(
+        metadata.column_label(ColumnIndex::new(1).unwrap()).unwrap(),
+        "ReturnedId"
+    );
+    assert_eq!(
+        metadata.column_label(ColumnIndex::new(2).unwrap()).unwrap(),
+        "ReturnedNote"
+    );
+    assert!(!rows.next().await.unwrap());
+    rows.close().await.unwrap();
+    prepared.close().await.unwrap();
+    let mut count = setup
+        .execute_query("SELECT count(*) AS actual_count FROM native_returning")
+        .await
+        .unwrap();
+    assert!(count.next().await.unwrap());
+    assert_eq!(count.int(ColumnIndex::new(1).unwrap()), Ok(1));
+    count.close().await.unwrap();
+    setup.close().await.unwrap();
+    connection.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn native_query_metadata_is_isolated_between_real_connections() {
+    let factory = ToastyConnectionFactory::new("sqlite::memory:")
+        .await
+        .unwrap();
+    let mut left = factory.create().await.unwrap();
+    let mut right = factory.create().await.unwrap();
+    let mut left_statement = left
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let mut right_statement = right
+        .create_statement(StatementOptions::default())
+        .await
+        .unwrap();
+    let (left_rows, right_rows) = tokio::join!(
+        left_statement.execute_query("SELECT 11 AS LeftOnly"),
+        right_statement.execute_query("SELECT 22 AS RightOnly"),
+    );
+    let mut left_rows = left_rows.unwrap();
+    let mut right_rows = right_rows.unwrap();
+    assert!(left_rows.next().await.unwrap());
+    assert!(right_rows.next().await.unwrap());
+    assert_eq!(left_rows.int_by_label("leftonly"), Ok(11));
+    assert_eq!(right_rows.int_by_label("rightonly"), Ok(22));
+    assert_eq!(
+        left_rows.find_column("RightOnly"),
+        Err(RdbcError::InvalidArgument(
+            "unknown column: RightOnly".to_owned()
+        ))
+    );
+    assert_eq!(
+        right_rows.find_column("LeftOnly"),
+        Err(RdbcError::InvalidArgument(
+            "unknown column: LeftOnly".to_owned()
+        ))
+    );
+    left_rows.close().await.unwrap();
+    right_rows.close().await.unwrap();
+    left_statement.close().await.unwrap();
+    right_statement.close().await.unwrap();
+    left.close().await.unwrap();
+    right.close().await.unwrap();
+}

@@ -84,12 +84,16 @@ async fn task6_filter_chain_public_behavior(case_id: &str) {
     assert_eq!(result_set.int(id), Ok(1));
     assert_eq!(result_set.long(id), Ok(1));
     assert_eq!(result_set.string(name).unwrap().as_deref(), Some("hello"));
-    assert!(matches!(
+    assert_eq!(
         result_set.string_by_label("name"),
-        Err(druid_rdbc::RdbcError::UnsupportedOperation {
-            operation: "result_set_find_column"
-        })
-    ));
+        Ok(Some("hello".to_owned()))
+    );
+    assert_eq!(
+        result_set.string_by_label("missing"),
+        Err(druid_rdbc::RdbcError::InvalidArgument(
+            "unknown column: missing".to_owned()
+        ))
+    );
     assert!(result_set.double(value).unwrap() > 3.0);
     assert_eq!(
         result_set.bytes(raw).unwrap(),
@@ -107,12 +111,13 @@ async fn task6_filter_chain_public_behavior(case_id: &str) {
     let _ = result_set.character_stream(name);
     let _ = result_set.blob(raw);
     let _ = result_set.clob(name);
-    assert!(matches!(
-        result_set.find_column("id"),
-        Err(druid_rdbc::RdbcError::UnsupportedOperation {
-            operation: "result_set_find_column"
-        })
-    ));
+    assert_eq!(result_set.find_column("id"), Ok(id));
+    assert_eq!(
+        result_set.find_column("missing"),
+        Err(druid_rdbc::RdbcError::InvalidArgument(
+            "unknown column: missing".to_owned()
+        ))
+    );
     assert!(result_set.next().await.unwrap());
     let _ = result_set.previous().await;
     let _ = result_set.row();

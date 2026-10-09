@@ -1,7 +1,7 @@
 //! Non-blocking local metrics runtime for Druid datasource observability.
 //!
 //! `druid-metrics` provides a background metrics pipeline that samples
-//! [`DataSourceMonitorable`] instances on a configurable interval, coalesces
+//! [`DataSourceMonitorable`](druid::stats::DataSourceMonitorable) instances on a configurable interval, coalesces
 //! snapshots through a bounded queue, and exports timeline + Prometheus data.
 //!
 //! # Architecture

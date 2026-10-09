@@ -1,0 +1,50 @@
+{
+    let factory = Arc::new(TrackingFactory::new());
+    let pool = build_pool(factory.clone(), |builder| builder).await;
+    let mut connection = pool.get().await.expect("connection must open");
+    let connection_id = connection.id();
+    connection.begin().await.expect("transaction must begin");
+    connection
+        .set_holdability(1)
+        .await
+        .expect("holdability must change");
+    connection
+        .set_transaction_isolation(8)
+        .await
+        .expect("isolation must change");
+
+    let state = factory.state(0);
+    state
+        .lock()
+        .expect("tracking state poisoned")
+        .events
+        .clear();
+    connection
+        .close()
+        .await
+        .expect("recycle errors are swallowed");
+
+    assert_eq!(
+        state.lock().expect("tracking state poisoned").events,
+        vec![
+            "rollback",
+            "set_holdability",
+            "set_transaction_isolation",
+            "set_auto_commit",
+            "clear_warnings"
+        ]
+    );
+    let pool_state = pool.state();
+    assert_eq!(pool_state.active_count, 0);
+    assert_eq!(pool_state.idle_count, 1);
+    assert_eq!(pool_state.close_count, 1);
+    assert_eq!(pool_state.recycle_count, 1);
+    assert_eq!(pool_state.destroy_count, 0);
+
+    let connection = pool.get().await.expect("connection must be reusable");
+    assert_eq!(connection.id(), connection_id);
+    assert!(connection.auto_commit());
+    assert!(!connection.read_only());
+    assert_eq!(connection.holdability(), 0);
+    assert_eq!(connection.transaction_isolation(), 2);
+}

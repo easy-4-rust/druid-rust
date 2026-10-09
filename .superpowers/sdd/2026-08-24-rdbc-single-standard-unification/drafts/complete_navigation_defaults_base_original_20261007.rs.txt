@@ -1,0 +1,105 @@
+{
+    let call_log = Arc::new(Mutex::new(Vec::new()));
+    let physical = PhysicalResultSetProbe::new(Arc::clone(&call_log), false);
+    let context = ResultSetFilterContext::new();
+    let mut chain = FilterChain::new();
+    chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+
+    assert!(chain.result_set_was_null(&physical, &context).unwrap());
+    assert!(!chain.result_set_previous(&physical, &context).unwrap());
+    assert!(chain
+        .result_set_is_before_first(&physical, &context)
+        .unwrap());
+    assert!(!chain.result_set_is_after_last(&physical, &context).unwrap());
+    assert!(!chain.result_set_is_first(&physical, &context).unwrap());
+    assert!(chain.result_set_is_last(&physical, &context).unwrap());
+    chain.result_set_before_first(&physical, &context).unwrap();
+    chain.result_set_after_last(&physical, &context).unwrap();
+    assert!(chain.result_set_first(&physical, &context).unwrap());
+    assert!(chain.result_set_last(&physical, &context).unwrap());
+    assert_eq!(chain.result_set_get_row(&physical, &context).unwrap(), 7);
+    assert!(chain.result_set_absolute(&physical, &context, 5).unwrap());
+    assert!(chain.result_set_relative(&physical, &context, -2).unwrap());
+    chain
+        .result_set_set_fetch_direction(&physical, &context, 1000)
+        .unwrap();
+    assert_eq!(
+        chain
+            .result_set_get_fetch_direction(&physical, &context)
+            .unwrap(),
+        1000
+    );
+    chain
+        .result_set_set_fetch_size(&physical, &context, 64)
+        .unwrap();
+    assert_eq!(
+        chain
+            .result_set_get_fetch_size(&physical, &context)
+            .unwrap(),
+        64
+    );
+    assert_eq!(
+        chain.result_set_get_type(&physical, &context).unwrap(),
+        1004
+    );
+    assert_eq!(
+        chain
+            .result_set_get_concurrency(&physical, &context)
+            .unwrap(),
+        1007
+    );
+    assert_eq!(
+        chain
+            .result_set_get_holdability(&physical, &context)
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        chain
+            .result_set_get_cursor_name(&physical, &context)
+            .unwrap(),
+        Some("cursor".to_string())
+    );
+    assert!(chain.result_set_row_updated(&physical, &context).unwrap());
+    assert!(!chain.result_set_row_inserted(&physical, &context).unwrap());
+    assert!(chain.result_set_row_deleted(&physical, &context).unwrap());
+    assert_eq!(
+        chain
+            .result_set_find_column(&physical, &context, "named")
+            .unwrap(),
+        23
+    );
+    assert!(!chain.result_set_is_closed(&physical, &context).unwrap());
+
+    let observed = calls(&call_log);
+    assert_eq!(observed.len(), 25);
+    for expected in [
+        "physical:was_null",
+        "physical:previous",
+        "physical:is_before_first",
+        "physical:is_after_last",
+        "physical:is_first",
+        "physical:is_last",
+        "physical:before_first",
+        "physical:after_last",
+        "physical:first",
+        "physical:last",
+        "physical:row",
+        "physical:absolute:5",
+        "physical:relative:-2",
+        "physical:set_fetch_direction:1000",
+        "physical:fetch_direction",
+        "physical:set_fetch_size:64",
+        "physical:fetch_size",
+        "physical:result_set_type",
+        "physical:concurrency",
+        "physical:holdability",
+        "physical:cursor_name",
+        "physical:row_updated",
+        "physical:row_inserted",
+        "physical:row_deleted",
+        "physical:find_column:named",
+    ] {
+        assert!(observed.iter().any(|call| call == expected), "{expected}");
+    }
+}

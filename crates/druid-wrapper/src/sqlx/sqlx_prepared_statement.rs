@@ -28,10 +28,13 @@ pub struct SqlxPreparedStatement {
     close_on_completion: AtomicBool,
     statement_batch: Mutex<Vec<String>>,
     parameter_state: PreparedParameterState,
-    prepared_batch: Mutex<Vec<Vec<Value>>>,
+    prepared_batch: Mutex<Vec<Vec<druid_rdbc::statement::PreparedInputParameter>>>,
     parameter_count: usize,
     result_set_meta_data: Arc<ResultSetMetaDataSnapshot>,
-    generated_key: Mutex<Option<i64>>,
+    /// 当前成功执行的完整生成键，批次完成后按执行顺序发布。
+    generated_key: Mutex<Vec<i64>>,
+    /// 对应 Java Connection#prepareStatement 的生成键请求，随缓存句柄保留。
+    prepared_generated_keys: GeneratedKeys,
     last_update_count: AtomicI64,
 }
 
@@ -87,9 +90,16 @@ impl SqlxPreparedStatement {
             prepared_batch: Mutex::new(Vec::new()),
             parameter_count,
             result_set_meta_data: Arc::new(result_set_meta_data),
-            generated_key: Mutex::new(None),
+            generated_key: Mutex::new(Vec::new()),
+            prepared_generated_keys: GeneratedKeys::None,
             last_update_count: AtomicI64::new(-1),
         }
+    }
+
+    /// 为已创建句柄保留调用方的准备请求；执行不得改用默认 None。
+    pub(crate) fn with_generated_keys_request(mut self, generated_keys: GeneratedKeys) -> Self {
+        self.prepared_generated_keys = generated_keys;
+        self
     }
 
     fn actor(&self) -> Result<&Arc<SqlxConnectionActor>, RdbcError> {
@@ -115,12 +125,40 @@ impl SqlxPreparedStatement {
             .map_err(|_| RdbcError::Other("statement query timed out".to_owned()))?
     }
 
+    /// 在可能失败或挂起的执行步骤前使上一轮结果失效。
+    /// 参数物化、驱动错误或调用取消均不得继续暴露旧生成键。
+    fn reset_execution_results(&self) {
+        *self
+            .generated_key
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Vec::new();
+        self.last_update_count.store(-1, Ordering::Release);
+    }
+
     async fn execute_update_values(
         &self,
         sql: &str,
         values: Vec<Value>,
         generated_keys: &GeneratedKeys,
     ) -> Result<i64, RdbcError> {
+        let (count, key) = self
+            .execute_update_values_result(sql, values, generated_keys)
+            .await?;
+        self.last_update_count.store(count, Ordering::Release);
+        *self
+            .generated_key
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = key;
+        Ok(count)
+    }
+
+    /// 返回单次执行结果供 batch 暂存，避免批次中途把部分结果写入句柄。
+    async fn execute_update_values_result(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+        generated_keys: &GeneratedKeys,
+    ) -> Result<(i64, Vec<i64>), RdbcError> {
         if std::matches!(
             generated_keys,
             GeneratedKeys::ColumnIndexes(_) | GeneratedKeys::ColumnNames(_)
@@ -130,23 +168,43 @@ impl SqlxPreparedStatement {
             ));
         }
         let actor = Arc::clone(self.actor()?);
+        if std::matches!(generated_keys, GeneratedKeys::ReturnGeneratedKeys) {
+            return self.bounded(actor.execute_update_keys(sql, values)).await;
+        }
         let result = self
             .bounded(actor.execute_update_result(sql, values))
             .await?;
         let count = i64::try_from(result.rows_affected).map_err(|_| {
             RdbcError::InvalidArgument("rows affected exceeds canonical i64".to_owned())
         })?;
-        self.last_update_count.store(count, Ordering::Release);
+        Ok((count, Vec::new()))
+    }
+
+    /// 执行准备查询并更新本次生成键；无插入行时清除上次键。
+    /// 对应 Java PreparedStatement#executeQuery 与 Statement#getGeneratedKeys。
+    async fn execute_prepared_query_values(
+        &self,
+        actor: &Arc<SqlxConnectionActor>,
+        values: Vec<Value>,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        let (rows, key) = if matches!(
+            self.prepared_generated_keys,
+            GeneratedKeys::ReturnGeneratedKeys
+        ) {
+            self.bounded(actor.execute_query_with_generated_key(&self.sql, values))
+                .await?
+        } else {
+            (
+                self.bounded(actor.execute_query(&self.sql, values)).await?,
+                Vec::new(),
+            )
+        };
+        self.last_update_count.store(-1, Ordering::Release);
         *self
             .generated_key
             .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) =
-            if std::matches!(generated_keys, GeneratedKeys::ReturnGeneratedKeys) {
-                result.last_insert_id
-            } else {
-                None
-            };
-        Ok(count)
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = key;
+        Ok(rows)
     }
 
     fn parameter_values(
@@ -369,14 +427,16 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         self.actor()?;
-        let key = self
-            .generated_key
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .take();
-        let rows = key
-            .map(|value| vec![druid_rdbc::types::Row::new(vec![Value::Int(value)])])
-            .unwrap_or_default();
+        let keys = std::mem::take(
+            &mut *self
+                .generated_key
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+        let rows = keys
+            .into_iter()
+            .map(|value| druid_rdbc::types::Row::new(vec![Value::Int(value)]))
+            .collect();
         Ok(Box::new(BufferedRowSet::with_column_labels(
             rows,
             vec!["GENERATED_KEY".to_owned()],
@@ -443,6 +503,36 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
 
 #[async_trait::async_trait]
 impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
+    fn set_input_parameter(
+        &mut self,
+        index: druid_rdbc::statement::ParameterIndex,
+        parameter: druid_rdbc::statement::PreparedInputParameter,
+    ) -> Result<(), RdbcError> {
+        let actor = Arc::clone(self.actor()?);
+        let parameter = if actor.backend_key() == "sqlite"
+            && matches!(
+                parameter,
+                druid_rdbc::statement::PreparedInputParameter::AsciiStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::UnicodeStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::BinaryStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::BlobStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::CharacterStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::NCharacterStream { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::ClobReader { .. }
+                    | druid_rdbc::statement::PreparedInputParameter::NClobReader { .. }
+            ) {
+            // SQLite 保留 BASE 同步绑定：底层保存读取后的值，执行及缓存复用不再次读流。
+            let value = crate::prepared_parameter_materializer::PreparedParameterMaterializer::materialize_immediate(&parameter)?
+                .ok_or_else(|| RdbcError::Other("synchronous stream binding requires a value".to_owned()))?;
+            druid_rdbc::statement::PreparedInputParameter::RustValue(value)
+        } else {
+            parameter
+        };
+        self.parameter_state.set_input(index, parameter)?;
+        actor.task4_trace_parameter_set();
+        Ok(())
+    }
+
     fn sql(&self) -> Result<&str, RdbcError> {
         self.actor()?;
         Ok(&self.sql)
@@ -466,7 +556,7 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
 
     fn add_prepared_batch(&mut self) -> Result<(), RdbcError> {
         self.actor()?;
-        let values = self.parameter_state.values(self.parameter_count)?;
+        let values = self.parameter_state.inputs(self.parameter_count)?;
         self.prepared_batch
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -480,7 +570,38 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
         self.prepared_batch
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .push(values);
+            .push(
+                values
+                    .into_iter()
+                    .map(druid_rdbc::statement::PreparedInputParameter::RustValue)
+                    .collect(),
+            );
+        Ok(())
+    }
+
+    fn add_input_parameter_batch(
+        &mut self,
+        mut parameters: Vec<(
+            druid_rdbc::statement::ParameterIndex,
+            druid_rdbc::statement::PreparedInputParameter,
+        )>,
+    ) -> Result<(), RdbcError> {
+        self.actor()?;
+        parameters.sort_by_key(|(index, _)| index.get());
+        if parameters.len() != self.parameter_count
+            || parameters
+                .iter()
+                .enumerate()
+                .any(|(offset, (index, _))| index.get() != offset + 1)
+        {
+            return Err(RdbcError::InvalidArgument(
+                "prepared batch indexes must match contiguous prepared width".to_owned(),
+            ));
+        }
+        self.prepared_batch
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(parameters.into_iter().map(|(_, input)| input).collect());
         Ok(())
     }
 
@@ -496,36 +617,39 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     async fn execute_prepared_query(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.reset_execution_results();
         let actor = Arc::clone(self.actor()?);
-        let values = self.parameter_state.values(self.parameter_count)?;
-        let result = self.bounded(actor.execute_query(&self.sql, values)).await?;
+        let values = self.parameter_state.values(self.parameter_count).await?;
+        let result = self.execute_prepared_query_values(&actor, values).await?;
         actor.task4_trace_prepared_query();
         Ok(result)
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
+        self.reset_execution_results();
         self.actor()?;
-        let values = self.parameter_state.values(self.parameter_count)?;
-        self.execute_update_values(&self.sql, values, &GeneratedKeys::None)
+        let values = self.parameter_state.values(self.parameter_count).await?;
+        self.execute_update_values(&self.sql, values, &self.prepared_generated_keys)
             .await
     }
 
     async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.reset_execution_results();
         let actor = Arc::clone(self.actor()?);
-        let values = self.parameter_state.values(self.parameter_count)?;
+        let values = self.parameter_state.values(self.parameter_count).await?;
         if actor.statement_returns_rows(&self.sql).await? {
-            self.last_update_count.store(-1, Ordering::Release);
             Ok(vec![ExecutionResult::ResultSet(
-                self.bounded(actor.execute_query(&self.sql, values)).await?,
+                self.execute_prepared_query_values(&actor, values).await?,
             )])
         } else {
-            self.execute_update_values(&self.sql, values, &GeneratedKeys::None)
+            self.execute_update_values(&self.sql, values, &self.prepared_generated_keys)
                 .await
                 .map(|count| vec![ExecutionResult::UpdateCount(count)])
         }
     }
 
     async fn execute_prepared_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.reset_execution_results();
         self.actor()?;
         let parameter_sets = std::mem::take(
             &mut *self
@@ -534,12 +658,18 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         );
         let mut counts = Vec::with_capacity(parameter_sets.len());
-        for values in parameter_sets {
-            match self
-                .execute_update_values(&self.sql, values, &GeneratedKeys::None)
-                .await
-            {
-                Ok(count) => counts.push(count),
+        let mut keys = Vec::with_capacity(parameter_sets.len());
+        for inputs in parameter_sets {
+            let execution = async {
+                let values = PreparedParameterState::materialize(&inputs).await?;
+                self.execute_update_values_result(&self.sql, values, &self.prepared_generated_keys)
+                    .await
+            };
+            match execution.await {
+                Ok((count, key)) => {
+                    counts.push(count);
+                    keys.extend(key);
+                }
                 Err(cause) => {
                     return Err(RdbcError::BatchUpdateException {
                         update_counts: counts.into(),
@@ -548,6 +678,10 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
                 }
             }
         }
+        *self
+            .generated_key
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = keys;
         Ok(counts)
     }
 

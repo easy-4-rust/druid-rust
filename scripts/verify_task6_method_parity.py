@@ -1192,7 +1192,13 @@ def _target_package(source_path: str) -> tuple[str, str]:
                     f"method evidence must be a root integration target: {source_path}"
                 )
             return package, relative.removesuffix(".rs")
-    raise VerificationError(f"unknown method evidence package: {source_path}")
+    # 私有 lib 证据只复用 C2 的显式来源登记，不允许任意 src 文件充当测试目标。
+    import verify_task6_deleted_test_parity as deleted_test_verifier
+
+    try:
+        return deleted_test_verifier.target_package(source_path)
+    except deleted_test_verifier.VerificationError as error:
+        raise VerificationError(f"unknown method evidence package: {source_path}") from error
 
 
 def _executed_functions(output: str) -> set[str]:
@@ -1232,6 +1238,14 @@ def execute_behavior_evidence(
     ] = defaultdict(lambda: defaultdict(list))
     for selector in selectors:
         package, target = _target_package(selector.source_path)
+        if target == "__lib__":
+            import verify_task6_deleted_test_parity as deleted_test_verifier
+
+            registered = deleted_test_verifier.LIB_TEST_TARGETS[selector.source_path]
+            if selector.case_id is not None or selector.function not in registered.values():
+                raise VerificationError(
+                    f"unregistered qualified unit method evidence: {selector.render()}"
+                )
         expected_by_target[(package, target)].add(selector.function)
         if selector.case_id is not None:
             expected_cases_by_target[(package, target)][selector.function].append(
@@ -1251,11 +1265,13 @@ def execute_behavior_evidence(
             "-p",
             package,
             "--all-features",
-            "--test",
-            target,
-            "--",
-            "--nocapture",
         ]
+        if target == "__lib__":
+            command.append("--lib")
+        else:
+            command.extend(["--test", target])
+        # 保留成功函数整行，并在 successes stdout 中取得完整案例 digest。
+        command.extend(["--", "--show-output"])
         try:
             result = runner(
                 command,
@@ -1279,7 +1295,9 @@ def execute_behavior_evidence(
             function
             for function in sorted(expected)
             if not any(
-                name == function or name.endswith(f"::{function}") for name in executed
+                name == function
+                or (target != "__lib__" and name.endswith(f"::{function}"))
+                for name in executed
             )
         ]
         if missing:
@@ -1319,6 +1337,8 @@ def verify_c2_runtime_evidence(
 
     command = [
         sys.executable,
+        "-X",
+        "utf8",
         "scripts/verify_task6_deleted_test_parity.py",
     ]
     try:
@@ -1328,6 +1348,7 @@ def verify_c2_runtime_evidence(
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=7_200,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -1353,6 +1374,8 @@ def verify_c2_source_evidence(
 
     command = [
         sys.executable,
+        "-X",
+        "utf8",
         "scripts/verify_task6_deleted_test_parity.py",
         "--no-execute",
     ]
@@ -1363,6 +1386,7 @@ def verify_c2_source_evidence(
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=1_800,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
@@ -1455,7 +1479,11 @@ def _summary(
         f"{row.behavior_evidence}\n"
         for row in sorted(rows)
     ).encode("utf-8")
-    parameterized_rows = sum("::" in row.behavior_evidence.split("#", 1)[1] for row in rows)
+    parameterized_rows = sum(
+        any(selector.case_id is not None for selector in parse_behavior_evidence(row.behavior_evidence))
+        for row in rows
+        if row.disposition != "APPROVED_BREAK"
+    )
     execution_text = (
         "TASK6_METHOD_EVIDENCE_EXECUTED=no"
         if execution is None

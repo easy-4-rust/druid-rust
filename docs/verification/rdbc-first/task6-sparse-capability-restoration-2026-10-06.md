@@ -1,0 +1,29 @@
+# Task6 稀疏能力原调用点恢复
+
+固定BASE：5afe8609b177544ff7d18461aa84f69efe8ee90e。原案例为druid_pooled_result_set_semantics_test.rs#pooled_result_set_classifies_every_sparse_capability_at_the_java_call_site。
+
+## 原义与实际验证
+
+原13导航、14属性、7行修改共34次调用保留精确UnsupportedOperation名称，absolute(-2)、relative(3)、fetch direction1000（映射Forward）、fetch size10参数不变。标准SparseResultSet明确实现原稀疏驱动拒绝合同并记录真实调用；默认standard类型/行状态能力不因fixture而改动。生产new_standard与真实Toasty SQLite创建语句、同一admission和registry连接，不用通用BufferedRowSet代替稀疏后端。
+
+首次构建78975 exit101为non-exhaustive navigation匹配错误；补充未知variant拒绝后54697实际runtime exit101/0PASS1FAIL/89filtered，在构造时返回UnsupportedOperation(result_set_meta_data)，34目标调用均未执行。日志task6-sparse-capability-red.log和task6-sparse-capability-runtime-red.log分别保留。
+
+无Filter包装恢复惰性，不预读metadata；Filter开放配置仍使用真实raw metadata与原列治理流程，不向getter提供虚假快照。80071实际exit101/0PASS1FAIL/89filtered，包装及34精确错误通过，随后原Statement.exception_count34断言实际0失败。其后的调用日志/关闭观察尚未执行。日志task6-sparse-capability-lazy-open.log。
+
+恢复private record_operation_result：在底层既有policy分类完成后，对导航/属性/行操作错误记录ResultSet统计及实际creatingStatement异常一次；已有强getter/update记账保持原流程，外层关闭/过期租约门禁保留。12098终态exit0/1PASS0FAIL/89filtered，全部34原错误与Statement.exception_count34、严格原调用顺序、实际driver close1、重复关闭/statement/registry收尾仍close1执行通过。日志task6-sparse-capability-accounting.log。
+
+现有验证器直接对固定BASE及新完整目标执行verify_observation_floor，SPARSE_BASE_SOURCE_FLOOR=1/1；BASE assert_eq1，目标assert2/assert_eq4/matches1。源门槛不替代上述runtime或其他C1/C2案例。
+
+## 回归及完整范围
+
+相关回归65878正在执行Druid全部lib和Buffered/metadata/FilterStat/FilterCoverage/Filter矩阵，task6-sparse-capability-related-regression.log尚待终态。标准纯度44/final与diff检查通过。账本尚未绑定，现1093exact/190parameterized/固定1283。不得以此单案例通过宣称完整C2或当前workspace通过。最近全workspace3705/3早于后续修复；Callable两个失败仍未关闭。
+
+完整Task6 FIX_REQUIRED、Task7八组件、Task8、P05–P07合计18顶层任务继续开放；公共API/SemVer/features/MSRV/真实数据库/性能及最终审查未完成。
+
+
+稀疏完整相关回归65878终态exit0/6blocks/137PASS/0FAIL/0ignored：全部lib90、FilterStat21、metadata3、buffered6、FilterCoverage16、FilterMatrix1。此前1/1定向结果不重复计入137。原稀疏案例随后准确绑定到private完整lib函数，验证器仅增加该精确函数白名单；所有1283 BASE行前7字段保持不变，现1094exact/189parameterized。移除缓冲generic列表同一phantom ID；更新原reverse index和79行derived doc，不削弱验证规则。自测15/15、authority79/pending25/Physical73固定SHA、格式/diff通过。移除ID后的实际矩阵将由新workspace命令再次验证。完整C2及当前workspace仍待终态，不提前关闭C1/C2或18任务。
+
+
+完整C2 93173终态exit1已推进至pooled_scalar_getters_delegate_exact_physical_overloads_and_classify_errors缺明确分支。固定BASE原完整案例要求boolean_by_label("failing")返回精确DriverError("boolean_by_label failed")且actualStatement.exception_count1；成功probe19次包括object label、string/boolean/long/int/short/byte/double/float/bytes下标及原列名，原不同返回值不得合并为同一个value getter。源码ResultSetExt多数label先find_column再index，int/short/byte委托long、float委托double；现ResultSetRead缺这些标量重载描述。因此下一恢复须保留动态原列名/重载身份，不能靠label解析/通用值表/替换错误缩窄。尚未新运行该案例RED，源码缺口不当作已经完成runtime证明。
+
+当前完整workspace同一93448已启动，日志task6-sparse-capability-workspace.log；实际cargo33768/rustc52068仍LIVE并从RDBC/Druid编译推进，不修改其Rust输入、不重启。此前3705/3不代表当前新源码，related137/0亦非全仓结果。完整18任务保持active，Task6 FIX_REQUIRED，C1/C2/公共API/SemVer/features/MSRV/真实数据库/性能/最终审查未关闭。

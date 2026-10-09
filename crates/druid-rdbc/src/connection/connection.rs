@@ -3,8 +3,8 @@ use crate::error::SqlWarning;
 use crate::extensions::ConnectionCapabilities;
 use crate::metadata::DatabaseMetaData;
 use crate::statement::{
-    CallableStatement, ExecResult, ParameterIndex, PreparedInputParameter, PreparedParameter,
-    PreparedStatement, ResultSetHoldability, Statement, StatementOptions,
+    CallableStatement, ExecResult, GeneratedKeys, ParameterIndex, PreparedInputParameter,
+    PreparedParameter, PreparedStatement, ResultSetHoldability, Statement, StatementOptions,
 };
 use crate::types::RdbcTypeMap;
 use crate::types::{RdbcBlob, RdbcClob, RdbcNClob, Row, Savepoint, Value};
@@ -150,6 +150,26 @@ pub trait Connection: Wrapper + Send + 'static {
         Err(RdbcError::UnsupportedOperation {
             operation: "connection_prepare_statement",
         })
+    }
+
+    /// 按类型化生成键请求创建拥有独立句柄的预编译语句。
+    ///
+    /// 对应 Java: `Connection#prepareStatement(String, int/int[]/String[])`。
+    /// `sql` 为待准备 SQL，`options` 为结果集选项，`generated_keys` 保留请求模式及列顺序。
+    /// 返回 owned 预编译语句；默认仅将 `None` 委托普通准备入口，其他请求在创建句柄前
+    /// 明确报不支持，避免静默丢失请求或遗留已创建的底层资源。
+    async fn prepare_statement_with_generated_keys(
+        &mut self,
+        sql: &str,
+        options: StatementOptions,
+        generated_keys: GeneratedKeys,
+    ) -> Result<Box<dyn PreparedStatement>, RdbcError> {
+        match generated_keys {
+            GeneratedKeys::None => self.prepare_statement(sql, options).await,
+            _ => Err(RdbcError::UnsupportedOperation {
+                operation: "connection_prepare_statement_generated_keys",
+            }),
+        }
     }
 
     /// 创建 owned callable statement。

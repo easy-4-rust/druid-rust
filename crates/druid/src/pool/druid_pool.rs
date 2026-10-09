@@ -1255,7 +1255,7 @@ impl DruidPool {
             let _ = create_worker_task.await;
         }
         self.inner.request_close_worker_shutdown_if_idle();
-        if self.inner.active_count.load(Ordering::Acquire) == 0 {
+        if self.inner.close_worker_is_idle() {
             let close_worker_task = self.close_worker_task.lock().take();
             if let Some(close_worker_task) = close_worker_task {
                 let _ = close_worker_task.await;
@@ -1308,7 +1308,7 @@ impl DruidPool {
     }
 
     async fn drain_close_worker_if_idle(&self) {
-        if self.inner.active_count.load(Ordering::Acquire) != 0 {
+        if !self.inner.close_worker_is_idle() {
             return;
         }
         self.inner.request_close_worker_shutdown_if_idle();
@@ -1407,6 +1407,7 @@ impl DruidPool {
             disposition_observer,
             return_connection,
         );
+        connection.set_native_return_validation(Arc::clone(&self.inner));
         if let Some(exception_sorter) = self.exception_sorter.clone() {
             connection.set_exception_sorter(exception_sorter);
         }
@@ -1614,3 +1615,7 @@ impl crate::core::Pool for DruidPool {
         DruidPool::name(self)
     }
 }
+
+#[cfg(test)]
+#[path = "druid_pool/lifetime_tests.rs"]
+mod lifetime_tests;

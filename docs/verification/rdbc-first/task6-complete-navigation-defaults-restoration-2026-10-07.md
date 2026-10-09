@@ -1,0 +1,35 @@
+# Task6 完整导航默认委托恢复（2026-10-07）
+
+完整原合同已通过真实RED/GREEN并正式EXACT绑定。Task6仍FIX_REQUIRED，全部18顶层任务仍OPEN。
+
+## 原合同与修复
+
+固定BASE为5afe8609b177544ff7d18461aa84f69efe8ee90e，原body SHA为cd976b902ebe764ba11a7be35ee6667bbf8a068dd88182f81ab81957b7121b5b。原15个assert、9个assert_eq和25条原生事件全部保留。覆盖wasNull、previous、位置属性、beforeFirst/afterLast/first/last、行号7、absolute5/relative-2、方向1000、fetchSize64、类型1004/并发1007/holdability1、cursor名称、行修改状态、named标签下标23和关闭状态。
+
+新增NavigationDefaultsResultSetProbe与NavigationDefaultsChainHarness两个单对象测试夹具；所有入口桥接到实际标准FilterChain导航/属性调用，不合成最终观察结果。原探针的row调用照常记录，未隐藏额外事件。
+
+session69336首次完整lib真实终态exit101，143PASS/1FAIL，原25事件断言实际得到32。多出的七次row来自标准默认导航末端自动行号查询。原断言没有改动。
+
+按已更新规格修正三个生产文件：标准链显式区分是否跟踪导航行号；唯一FilterChain导航分派接收私有跟踪开关；池化access路径明确启用跟踪。普通默认链不额外读取row，池化结果集继续真实导航后取得实际行号；短路、取消或导航错误不读取row。未新增公开标准trait、第二驱动端口或重复导航实现。
+
+新增独立稀疏能力控制：row返回精确UnsupportedOperation时普通导航仍返回原false且只记录previous；池化跟踪保留原row错误和previous/row两事件；池化模式的Filter短路返回true/None，驱动日志为空，过滤器进入/退出事件完整。原真实池化游标、错误计数、关闭/旧租约、取消和外部Filter控制继续通过。
+
+## 实际终态证据
+
+- session69336：完整Druid lib143PASS/1FAIL，1080冻结输入不变。日志task6-complete-navigation-defaults-initial-2026-10-07.log，SHAb2cd64e24a3869cebf75b1f778e134a2a87b22e042f1d6bf0ff1199199a251e0。
+- session29605：修正后完整lib145、FilterStat21、外部导航1、外部Resource1，共四结果块，exit0、全部0FAIL/0ignored。1080冻结输入不变。日志task6-complete-navigation-defaults-green-2026-10-07.log，SHAf018aa5104c4a5a93f0a08830b24e3b14126acf8c6170faf99ce2e82aa88cdb7。lib与23项消费者分别报告，不能把168项当全workspace通过。
+- session8846：保护式绑定exit0，1283项原始前七字段逐项固定，当前合同唯一EXACT、原矩阵占位退役，反向调用索引和派生文档同步。正式1141EXACT/142PARAMETERIZED，验证器规则未放宽。
+- session64033：绑定后五个完整消费者目标exit0，FilterStat21、外部导航1、Resource1、ResultSet矩阵1、StrongRead2，共26PASS/0FAIL/0ignored，1080冻结输入不变。日志task6-complete-navigation-defaults-consumers-2026-10-07.log，SHA1c566ec569481ac0e47c69cf89e1fcbb69d1409442c2731ff3102cf07d5377be。
+- session94157：完整源码观测审计完成，1278PASS/5FAIL，全部1283原始前七字段保持不变。审计exit0只表示审计结束，不代表全部合同通过。
+- session68573：C2 --no-execute终态exit1，下一缺口为result_set_resource_filter_defaults_preserve_all_physical_overload_identities缺显式完整案例。整体C2仍FAIL。
+- 验证器自测17/17、final purity48、authority79/pending25/physical73及固定SHA7210995f5b1e9ac4b50ec56693cc4a5f95905b0aee923f4048a3d2819d7620c3、派生文档79、六Rust文件格式检查和git diff --check通过。原有警告保留，无零警告声明。
+
+## 剩余范围
+
+源码观测剩余五项：资源读取默认委托、资源更新默认委托、行修改默认委托、流更新默认委托及下游关闭错误前统计提交。源码floor不能替代完整运行时验收。
+
+Task6其他门禁、Task7八义务、Task8/P05/P06/P07及全部18顶层任务保持OPEN。历史全workspace3795PASS/11FAIL及独立Admin49PASS/11FAIL保留，没有当前源码全workspace/API/compiler/SemVer/MSRV/features/完整审查通过声明，没有系统安全策略更改。
+
+下一资源读取默认委托原文及manifest已保存至drafts/complete_resource_defaults_base_original_20261007.rs.txt与对应manifest，原2assert/1eq、body SHA60becd81980c7076b7993504428426cf6e29dc66e67e868281ad846b6d7256fc，仍NOT_COMPILED/NOT_RUN/NOT_BOUND，不计入完成。
+
+本轮所有启动句柄均已终态。没有创建分支、stage、commit、push、安装、发布或系统策略修改。

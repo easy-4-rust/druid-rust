@@ -1,6 +1,7 @@
 //! 平台值、SQL 类型与日期时间合同的声明入口。
 
 mod date;
+mod jdbc_type;
 mod rdbc_calendar;
 mod rdbc_object;
 mod rdbc_opaque_object;
@@ -13,23 +14,23 @@ mod rdbc_parameter_long;
 mod rdbc_parameter_null;
 mod rdbc_parameter_string;
 mod rdbc_parameter_timestamp;
-mod rdbc_row_id;
 mod rdbc_sql_type;
 mod rdbc_string;
 mod rdbc_target_type;
-mod rdbc_type;
 mod rdbc_type_map;
 mod rdbc_url;
 mod resource_handle;
 mod row;
+mod row_id;
 mod savepoint;
 mod sql_scalar;
 mod time;
 mod timestamp;
-mod types;
+pub mod types;
 mod value;
 
 pub use date::Date;
+pub use jdbc_type::{JdbcType, JdbcType as RdbcType};
 pub use rdbc_calendar::RdbcCalendar;
 pub use rdbc_calendar::RdbcCalendarArgument;
 pub use rdbc_object::RdbcObject;
@@ -51,11 +52,9 @@ pub use rdbc_parameter_long::RdbcParameterLong;
 pub use rdbc_parameter_null::RdbcParameterNull;
 pub use rdbc_parameter_string::RdbcParameterString;
 pub use rdbc_parameter_timestamp::RdbcParameterTimestamp;
-pub use rdbc_row_id::RdbcRowId;
 pub use rdbc_sql_type::SqlType;
 pub use rdbc_string::RdbcString;
 pub use rdbc_target_type::RdbcTargetType;
-pub use rdbc_type::RdbcType;
 pub use rdbc_type_map::RdbcTypeMap;
 pub use rdbc_url::RdbcUrl;
 pub use resource_handle::{
@@ -63,7 +62,9 @@ pub use resource_handle::{
     RdbcRef, RdbcSqlXml, RdbcStreamLength,
 };
 pub use row::Row;
+pub use row_id::{RowId, RowId as RdbcRowId};
 pub use savepoint::Savepoint;
+pub(crate) use sql_scalar::{decimal_from_f64, decimal_to_f64, decimal_to_i64};
 pub use sql_scalar::{RdbcBigDecimal, RdbcNaiveDate, RdbcNaiveDateTime, RdbcNaiveTime};
 pub use time::Time;
 pub use timestamp::Timestamp;

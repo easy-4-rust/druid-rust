@@ -3,6 +3,7 @@
 use super::druid_execution_filter_policy::DruidExecutionFilterPolicy;
 use super::druid_pooled_result_set::StandardResultSetResource;
 use super::filter::ExecOperation;
+use super::logical_statement_owner::LogicalStatementOwner;
 use super::standard_logical_policy::StandardLogicalPolicy;
 use super::standard_resource_admission::StandardResourceAdmission;
 use super::standard_resource_handle::StandardResourceHandle;
@@ -37,6 +38,7 @@ pub(crate) struct DruidPooledStatementInner {
     state: Mutex<DruidPooledStatementState>,
     result_sets: Mutex<Vec<std::sync::Weak<StandardResultSetResource>>>,
     result_sequence: Mutex<Option<StatementResultSequence>>,
+    logical_owner: Mutex<Option<std::sync::Weak<dyn LogicalStatementOwner>>>,
 }
 
 struct DruidPooledStatementState {
@@ -79,6 +81,41 @@ pub struct DruidPooledStatement {
 }
 
 impl DruidPooledStatement {
+    /// 测试专用：读取原查询登记的实际结果资源，返回同一共享资源。
+    /// 对应 Java: Statement#getResultSet；不创建游标、不重新执行 SQL。
+    #[cfg(test)]
+    pub(crate) fn current_result_set_for_diagnostics(&self) -> Arc<StandardResultSetResource> {
+        let sequence = self.inner.result_sequence.lock().unwrap();
+        let sequence = sequence.as_ref().expect("查询必须登记结果序列");
+        match &sequence.results[sequence.current] {
+            TrackedStatementResult::ResultSet(resource) => {
+                resource.upgrade().expect("原结果资源必须仍在 registry 中")
+            }
+            TrackedStatementResult::UpdateCount(_) => panic!("原查询必须返回结果集"),
+        }
+    }
+
+    /// 安装创建语句的弱 owner；参数不延长 owner 生命周期，无返回值。
+    /// 对应 Java: java.sql.ResultSet#getStatement 的逻辑身份绑定。
+    pub(crate) fn install_logical_owner(&self, owner: std::sync::Weak<dyn LogicalStatementOwner>) {
+        *self
+            .inner
+            .logical_owner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(owner);
+    }
+
+    /// 返回仍存活的共享创建语句 owner；普通语句不额外设置 owner。
+    /// 对应 Java: java.sql.ResultSet#getStatement；无参数，返回强引用或 None。
+    pub(crate) fn logical_owner(&self) -> Option<Arc<dyn LogicalStatementOwner>> {
+        self.inner
+            .logical_owner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+    }
+
     /// Creates a canonical pooled statement.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_standard(
@@ -132,12 +169,41 @@ impl DruidPooledStatement {
                 }),
                 result_sets: Mutex::new(Vec::new()),
                 result_sequence: Mutex::new(None),
+                logical_owner: Mutex::new(None),
             }),
         }
     }
 
     pub(crate) fn from_inner(inner: Arc<DruidPooledStatementInner>) -> Self {
         Self { inner }
+    }
+
+    /// 用底层已支持的初始属性初始化代理状态，供关闭时精确恢复。
+    pub(crate) fn initialize_prepared_properties(
+        &self,
+        properties: &super::prepared_statement_property_snapshot::PreparedStatementPropertySnapshot,
+    ) {
+        let mut state = self.state_mut();
+        if let Some(value) = properties.max_field_size {
+            state.max_field_size = value;
+        }
+        if let Some(value) = properties.max_rows {
+            state.max_rows = value;
+        }
+        if let Some(value) = properties.query_timeout {
+            state.query_timeout = value;
+        }
+        if let Some(value) = properties.fetch_direction {
+            state.fetch_direction = value;
+        }
+        if let Some(value) = properties.fetch_size {
+            state.fetch_size = value;
+        }
+    }
+
+    /// 返回代理中已确认的 query timeout，避免恢复流程额外访问 driver getter。
+    pub(crate) fn prepared_query_timeout(&self) -> i32 {
+        self.state().query_timeout
     }
 
     /// Returns whether two handles share one logical Statement identity.
@@ -308,7 +374,9 @@ impl DruidPooledStatement {
         state.fetch_row_peak = state.fetch_row_peak.max(count);
     }
 
-    fn record_exception(&self) {
+    /// 记录本语句执行或结果读取的实际失败；无参数，无返回值。
+    /// 对应 Java: DruidPooledStatement#checkException。
+    pub(crate) fn record_exception(&self) {
         let mut state = self.state_mut();
         state.exception_count = state.exception_count.saturating_add(1);
     }
@@ -357,7 +425,7 @@ impl DruidPooledStatementInner {
         state.update_count = update_count;
     }
 
-    async fn dispose_result_sets(
+    pub(super) async fn dispose_result_sets(
         &self,
         disposition: CurrentResultDisposition,
         current: Option<std::sync::Weak<StandardResultSetResource>>,
@@ -389,6 +457,13 @@ impl DruidPooledStatementInner {
         for result_set in targets {
             if let Err(error) = result_set.close_core().await {
                 first_error.get_or_insert(error);
+            } else {
+                // 级联关闭不经过结果集外层 close，仍须把同一游标的实际峰值交回创建语句。
+                let mut state = self
+                    .state
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                state.fetch_row_peak = state.fetch_row_peak.max(result_set.fetch_row_count());
             }
         }
         let mut result_sets = self
@@ -414,6 +489,10 @@ impl DruidPooledStatementInner {
             self.unregister_resource();
             return Ok(());
         }
+        // 先关闭 logical 子游标；raw driver close 不一定知道已经代理/交出的 cursor。
+        // 子资源失败仍由 registry 持有，可重试；此处不持有 raw statement 锁跨回调。
+        self.dispose_result_sets(CurrentResultDisposition::CloseAll, None)
+            .await?;
         let mut statement = self.statement.lock().await;
         if self
             .state
@@ -468,6 +547,17 @@ impl DruidPooledStatementInner {
 #[async_trait::async_trait]
 impl StandardResourceHandle for DruidPooledStatementInner {
     async fn close_resource(&self) -> Result<(), RdbcError> {
+        // 连接归还时也必须经过创建语句的逻辑关闭策略：恢复属性并归还可缓存句柄。
+        // 在 await 前释放同步锁；owner 只有弱引用，不形成 registry/statement 强引用环。
+        let owner = self
+            .logical_owner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade);
+        if let Some(owner) = owner {
+            return owner.statement_handle().close().await;
+        }
         self.close_standard_core().await
     }
 
@@ -489,6 +579,14 @@ druid_rdbc::impl_standard_wrapper!(DruidPooledStatement => Statement);
 
 #[async_trait::async_trait]
 impl Statement for DruidPooledStatement {
+    /// 按 JDBC 整数处置推进结果；先检查逻辑关闭和租约，再验证参数且不改变游标。
+    /// 对应 Java：DruidPooledStatement#getMoreResults(int)。返回下个结果是否为游标。
+    async fn get_more_results_current(&mut self, current: i32) -> Result<bool, RdbcError> {
+        self.ensure_open()?;
+        self.get_more_results(CurrentResultDisposition::try_from(current)?)
+            .await
+    }
+
     fn options(&self) -> Result<StatementOptions, RdbcError> {
         self.ensure_open()?;
         Ok(self.state().options)
@@ -726,8 +824,8 @@ impl Statement for DruidPooledStatement {
                         rows_affected: u64::try_from(*count).unwrap_or_default(),
                         ..ExecResult::default()
                     },
-                    Some(ExecutionResult::ResultSet(_)) => ExecResult {
-                        row_count: Some(0),
+                    Some(ExecutionResult::ResultSet(rows)) => ExecResult {
+                        row_count: rows.known_row_count(),
                         ..ExecResult::default()
                     },
                     None => ExecResult::default(),
@@ -818,7 +916,8 @@ impl Statement for DruidPooledStatement {
         let admission = self.inner.begin_standard_admission()?;
         let raw = self.inner.statement.lock().await.generated_keys().await?;
         Ok(Box::new(
-            DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw, &admission).await?,
+            DruidPooledResultSet::new_standard_auxiliary(Arc::clone(&self.inner), raw, &admission)
+                .await?,
         ))
     }
 
@@ -826,8 +925,38 @@ impl Statement for DruidPooledStatement {
         &mut self,
     ) -> Result<Option<Box<dyn druid_rdbc::result_set::ResultSet>>, RdbcError> {
         self.ensure_open()?;
+        // 即使只恢复共享视图，也保留原 getter 的 registry generation 入场检查。
         let admission = self.inner.begin_standard_admission()?;
-        let raw = self.inner.statement.lock().await.get_result_set().await?;
+        // 已登记的游标保留共享身份；raw getter 仍参与驱动错误分类和拥有型交接。
+        let tracked = {
+            let sequence = self
+                .inner
+                .result_sequence
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            sequence
+                .as_ref()
+                .map(|sequence| match sequence.results.get(sequence.current) {
+                    Some(TrackedStatementResult::ResultSet(resource)) => resource.upgrade(),
+                    Some(TrackedStatementResult::UpdateCount(_)) | None => None,
+                })
+        };
+        let raw = self.inner.statement.lock().await.get_result_set().await;
+        let raw = match raw {
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_get_result_set",
+            }) if tracked.is_some() => None,
+            result => self.classify_statement_mutation(result)?,
+        };
+        if let Some(Some(resource)) = tracked {
+            if let Some(raw) = raw {
+                resource.adopt_current_view(raw).await?;
+            }
+            return DruidPooledResultSet::from_tracked_resource(Arc::clone(&self.inner), resource)
+                .map(
+                    |result| Some(Box::new(result) as Box<dyn druid_rdbc::result_set::ResultSet>),
+                );
+        }
         match raw {
             Some(raw) => Ok(Some(Box::new(
                 DruidPooledResultSet::new_standard(Arc::clone(&self.inner), raw, &admission)
@@ -839,8 +968,34 @@ impl Statement for DruidPooledStatement {
 
     fn get_update_count(&self) -> Result<Option<i64>, RdbcError> {
         self.ensure_open()?;
+        let raw = {
+            let statement = self
+                .inner
+                .statement
+                .try_lock()
+                .map_err(|_| RdbcError::Other("statement is busy".to_owned()))?;
+            statement.get_update_count()
+        };
+        let raw = match raw {
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_get_update_count",
+            }) => None,
+            result => self.classify_statement_mutation(result)?,
+        };
         let count = self.state().update_count;
-        Ok((count >= 0).then_some(count))
+        // eager execute 已登记完整混合序列；driver getter 仍须接受错误分类，
+        // 但它的单次执行计数不能覆盖逻辑序列当前的 ResultSet/UpdateCount。
+        let has_sequence = self
+            .inner
+            .result_sequence
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_some();
+        if has_sequence || count >= 0 {
+            Ok((count >= 0).then_some(count))
+        } else {
+            Ok(raw)
+        }
     }
 
     async fn get_more_results(
@@ -863,6 +1018,19 @@ impl Statement for DruidPooledStatement {
             (sequence.is_some(), current)
         };
         self.inner.dispose_result_sets(disposition, current).await?;
+        let raw = self
+            .inner
+            .statement
+            .lock()
+            .await
+            .get_more_results(disposition)
+            .await;
+        let raw = match raw {
+            Err(RdbcError::UnsupportedOperation {
+                operation: "statement_get_more_results",
+            }) if has_sequence => false,
+            result => self.classify_statement_mutation(result)?,
+        };
         if has_sequence {
             let (has_more, update_count) = {
                 let mut sequence_guard = self
@@ -882,7 +1050,8 @@ impl Statement for DruidPooledStatement {
                 if let Some(next) = next {
                     next
                 } else {
-                    *sequence_guard = None;
+                    // 保留已耗尽的逻辑执行身份，后续 getter/推进不能退回 raw 默认实现。
+                    sequence.current = sequence.results.len();
                     (false, -1)
                 }
             };
@@ -891,13 +1060,7 @@ impl Statement for DruidPooledStatement {
             state.update_count = update_count;
             return Ok(has_more);
         }
-        let has_more = self
-            .inner
-            .statement
-            .lock()
-            .await
-            .get_more_results(disposition)
-            .await?;
+        let has_more = raw;
         let mut state = self.state_mut();
         state.first_result_set = has_more;
         state.update_count = -1;

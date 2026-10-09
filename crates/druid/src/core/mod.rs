@@ -9,6 +9,7 @@
 
 pub mod abstract_oracle_exception_sorter;
 pub mod auto_load;
+mod cached_prepared_statement;
 pub mod callable_input_parameter;
 pub mod callable_out_parameter;
 pub mod callable_parameter;
@@ -113,6 +114,9 @@ pub mod result_set_filter_context;
 pub mod result_set_meta_data;
 mod result_set_meta_data_proxy;
 pub mod result_set_nullability;
+pub mod result_set_object_read;
+mod result_set_property_operation;
+mod result_set_property_value;
 pub mod result_set_update;
 pub mod row;
 pub mod savepoint;
@@ -260,6 +264,11 @@ pub use proxy_attributes::{ProxyAttributeValue, ProxyAttributes};
 pub use rdbc4_valid_connection_checker::{PingConnectionChecker, Rdbc4ValidConnectionChecker};
 pub use result_set_filter::ResultSetFilter;
 pub use result_set_filter_context::ResultSetFilterContext;
+pub use result_set_object_read::ResultSetObjectRead;
+pub use result_set_property_operation::ResultSetPropertyOperation;
+mod result_set_row_operation;
+pub use result_set_property_value::ResultSetPropertyValue;
+pub use result_set_row_operation::ResultSetRowOperation;
 pub(crate) use standard_result_set_filter_chain::StandardResultSetFilterChain;
 pub(crate) use standard_result_set_open_context::StandardResultSetOpenContext;
 pub use statement_event_listener::StatementEventListener;
@@ -273,3 +282,6 @@ pub use xa::{
     flags as xa_flags, XaOperation, XaPrepareResult, XaResource, XaState, XaStateTransitionError,
     XaStateTransitionRecord, XaTransactionState, Xid,
 };
+mod prepared_statement_property_snapshot;
+
+mod logical_statement_owner;

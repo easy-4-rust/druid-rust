@@ -7,6 +7,7 @@ import json
 import inspect
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 import verify_no_physical_standard as verifier
@@ -35,7 +36,8 @@ class RepositoryFixture:
     def write(self, relative: str, text: str) -> None:
         path = self.root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # 固定 UTF-8/LF 字节，避免 Windows 文本模式把规范夹具转换为 CRLF。
+        path.write_bytes(text.encode("utf-8"))
 
     def add_package(self, name: str) -> None:
         self.write(
@@ -80,6 +82,41 @@ class NoPhysicalVerifierTest(unittest.TestCase):
     def assert_rejected(self, expected: str, operation) -> None:
         with self.assertRaisesRegex(VerificationError, expected):
             operation()
+
+    def test_fixture_preserves_lf_and_verifier_rejects_crlf(self) -> None:
+        """规范夹具保持 LF；真实 CRLF 输入仍必须被严格拒绝。"""
+
+        canonical = "old_path\ttarget_path\nold\tnew\n"
+        self.fixture.write("canonical.tsv", canonical)
+        path = self.root / "canonical.tsv"
+        self.assertEqual(path.read_bytes(), canonical.encode("utf-8"))
+        self.assertEqual(
+            verifier.read_tsv(path), [{"old_path": "old", "target_path": "new"}]
+        )
+        path.write_bytes(canonical.replace("\n", "\r\n").encode("utf-8"))
+        self.assert_rejected("TSV is not canonical", lambda: verifier.read_tsv(path))
+
+    def test_public_api_generators_keep_date_without_foreign_host(self) -> None:
+        """API 两入口固定同一日期，主机由 rustup 选择，不使用外国主机工具链。"""
+
+        import subprocess
+        import verify_task6_public_contract as public_contract
+
+        for label, generate in (
+            ("rdbc", lambda: verifier.generate_public_api(self.root)),
+            ("druid", lambda: public_contract.generate_api(self.root, "druid")),
+        ):
+            with self.subTest(label=label):
+                output = subprocess.CompletedProcess([], 0, stdout="canonical API", stderr="")
+                with patch("subprocess.run", return_value=output) as run:
+                    self.assertEqual(generate(), "canonical API")
+                command = run.call_args.args[0]
+                self.assertEqual(command[:2], ["cargo", "public-api"])
+                self.assertIn("--all-features", command)
+                self.assertIn("-sss", command)
+                self.assertEqual(
+                    run.call_args.kwargs["env"]["RUSTUP_TOOLCHAIN"], "nightly-2026-08-07"
+                )
 
     def test_discovers_every_package_source_instead_of_a_fixed_file_list(self) -> None:
         self.fixture.write(

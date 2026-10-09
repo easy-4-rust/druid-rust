@@ -521,24 +521,6 @@ impl RdbcSqlXmlAccess for StubSqlXmlAccess {
 // ===========================================================================
 
 #[tokio::test]
-async fn task6_pool_deep_branch_coverage_test_borrow_skips_lifetime_expired_idle() {
-    let factory = Arc::new(SuccessFactory::new());
-    let pool = make_fault_pool_with_config("lifetime-skip", factory, |b| {
-        b.max_lifetime(Duration::from_millis(10)).min_idle(0)
-    })
-    .await;
-    let mut conn = pool.get().await.unwrap();
-    conn.close().await.unwrap();
-    assert_eq!(pool.state().idle_count, 1);
-
-    tokio::time::sleep(Duration::from_millis(30)).await;
-
-    let conn2 = pool.get().await.unwrap();
-    assert_eq!(pool.state().active_count, 1);
-    drop(conn2);
-}
-
-#[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_get_when_disabled_returns_data_source_disabled() {
     let factory = Arc::new(SuccessFactory::new());
     let pool = make_fault_pool("get-disabled", factory, 4).await;

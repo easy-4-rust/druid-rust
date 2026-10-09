@@ -1,0 +1,73 @@
+{
+    let physical_log = Arc::new(Mutex::new(Vec::new()));
+    let physical = PhysicalResultSetProbe::new(Arc::clone(&physical_log), false);
+    let context = ResultSetFilterContext::new();
+    let mut filter_chain = FilterChain::new();
+    filter_chain.add_result_set(Arc::new(PassThroughResultSetFilter));
+    let row_id = RdbcRowId::new([1, 2, 3]);
+
+    // SOURCE_PARITY / V2_MIRRORED：七个资源类型的 index/label 重载分别进入
+    // Filter，Java null 与 RowId 值身份在默认末端保持不变。
+    filter_chain
+        .result_set_update_reference(&physical, &context, 1, None)
+        .unwrap();
+    filter_chain
+        .result_set_update_reference_by_label(&physical, &context, "ref", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_blob(&physical, &context, 2, None)
+        .unwrap();
+    filter_chain
+        .result_set_update_blob_by_label(&physical, &context, "blob", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_clob(&physical, &context, 3, None)
+        .unwrap();
+    filter_chain
+        .result_set_update_clob_by_label(&physical, &context, "clob", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_array(&physical, &context, 4, None)
+        .unwrap();
+    filter_chain
+        .result_set_update_array_by_label(&physical, &context, "array", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_row_id(&physical, &context, 5, Some(row_id.clone()))
+        .unwrap();
+    filter_chain
+        .result_set_update_row_id_by_label(&physical, &context, "row_id", Some(row_id))
+        .unwrap();
+    filter_chain
+        .result_set_update_n_clob(&physical, &context, 6, None)
+        .unwrap();
+    filter_chain
+        .result_set_update_n_clob_by_label(&physical, &context, "n_clob", None)
+        .unwrap();
+    filter_chain
+        .result_set_update_sql_xml(&physical, &context, 7, None)
+        .unwrap();
+    filter_chain
+        .result_set_update_sql_xml_by_label(&physical, &context, "sql_xml", None)
+        .unwrap();
+
+    assert_eq!(
+        calls(&physical_log),
+        [
+            "physical:update_reference:1:None",
+            "physical:update_reference_by_label:ref:None",
+            "physical:update_blob:2:None",
+            "physical:update_blob_by_label:blob:None",
+            "physical:update_clob:3:None",
+            "physical:update_clob_by_label:clob:None",
+            "physical:update_array:4:None",
+            "physical:update_array_by_label:array:None",
+            "physical:update_row_id:5:Some(RdbcRowId { bytes: [1, 2, 3] })",
+            "physical:update_row_id_by_label:row_id:Some(RdbcRowId { bytes: [1, 2, 3] })",
+            "physical:update_n_clob:6:None",
+            "physical:update_n_clob_by_label:n_clob:None",
+            "physical:update_sql_xml:7:None",
+            "physical:update_sql_xml_by_label:sql_xml:None",
+        ]
+    );
+}

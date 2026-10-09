@@ -10,7 +10,7 @@
 
 [Positioning](#1-project-positioning-and-status) ·
 [Features](#2-features-and-maturity) ·
-[Three-module architecture](#4-three-module-architecture-and-five-crate-target) ·
+[Five-product-crate architecture](#4-three-module-architecture-and-five-crate-target) ·
 [Examples](#6-executable-examples-and-call-paths) ·
 [Migration roadmap](#11-migration-roadmap-and-phases) ·
 [Contributing](#19-contributing-security-and-license)
@@ -30,7 +30,7 @@
 > This is not a line-by-line Java translation, but it is also not an
 > architecture-inspired subset that silently drops functionality.
 
-> **Last verified:** 2026-08-07.
+> **Architecture/configuration checked:** 2026-10-08. Runtime and release gates remain open; see the [current audit](docs/verification/rdbc-first/architecture-progress-audit-2026-10-08.md).
 
 ## 1. Project Positioning and Status
 
@@ -51,7 +51,7 @@ the obligation to migrate Druid result semantics.
 | Product modules (current source) | `druid-rdbc`, `druid`, `druid-wrapper`, `druid-metrics`, `druid-admin`; `druid-bench` is a verification member |
 | Approved architecture | ADR-CRATE-002 + ADR-RDBC-006: one `druid-rdbc` standard implemented by wrappers and Druid proxies |
 | Public connection | `DruidPooledConnection` |
-| Current transitional raw contract | `PhysicalConnection*`, pending merge/delete under ADR-RDBC-006 |
+| Current raw contract | `druid_rdbc::connection::Connection`; final Task6 deletion/API/runtime acceptance remains open |
 | Approved integration contract | `druid-rdbc::Connection/Statement/ResultSet/...` single standard trait tree |
 | Native pool | `DruidPool` |
 | Built-in standard data source | Toasty 0.9, SQLite by default |
@@ -81,18 +81,12 @@ the obligation to migrate Druid result semantics.
 
 ### 1.3 Status evidence
 
-| Claim | Current value | Evidence |
-| :--- | :--- | :--- |
-| Workspace builds | Yes | `cargo check --workspace` |
-| Workspace tests | New driver contracts pass; the full suite still has pre-existing core assertion failures | `cargo test --workspace` |
-| Real SQLite | 21 cross-layer cases pass | Toasty, SQLx, bb8, deadpool, wrapper tests |
-| Toasty feature graph | All features compose and compile | `cargo check -p druid --all-features` |
-| Connection API | Implemented, unstable | `DruidPooledConnection → DruidConnectionHolder → PhysicalConnection` |
-| Migration completion | Partial | module ledgers under `docs/druid*` |
-| crates.io / docs.rs | Unpublished | `publish = false` |
-| CI | Driver matrix configured; remote run pending | `.github/workflows/driver-matrix.yml` |
-| Coverage | Historical snapshots exist; exit gate is open | migration roadmap §15 |
-| Benchmarks | Not measured | no stable benchmark report |
+Current acceptance is recorded in [verification status](docs/verification/rdbc-first/status.md),
+not inferred from the commands listed in this README. P01/P02 have historical accepted
+scopes; P04 Task6 remains FIX_REQUIRED and Task7–8/P05–P07 remain open. The
+[2026-10-08 audit](docs/verification/rdbc-first/architecture-progress-audit-2026-10-08.md)
+separates source checks, actual targeted tests, historical workspace failures and missing
+release evidence. No stable API, full database matrix or production certification is claimed.
 
 ## 2. Features and Maturity
 
@@ -101,19 +95,19 @@ the obligation to migrate Druid result semantics.
 | Feature | Status | Owning module | Current boundary | Verification |
 | :--- | :---: | :--- | :--- | :--- |
 | Public `DruidPooledConnection` | 🚧 Partial | `druid` | Full JDBC breadth is incomplete | core/pool contracts |
-| Internal `PhysicalConnection` SPI | 🚧 Partial | `druid` | metadata/LOB/vendor surface pending | physical contract |
+| Standard `Connection` contract | 🚧 Partial | `druid-rdbc` | lifecycle/resource/capability certification pending | standard contract |
 | Druid native async pool | 🚧 Partial | `druid` | Full configuration and production matrix pending | lifecycle/concurrency/maintenance |
 | PreparedStatement cache | 🚧 Partial | `druid` | Callable and driver matrices pending | Java oracle + Rust tests |
 | SQL AST, Wall, and statistics | 🚧 Partial | `druid` | dialect/rule/layered-stat matrix incomplete | differential tests |
 | Dynamic data-source switching | 🚧 Partial | `druid` | HA health and recovery pending | route/switch tests |
-| Default Toasty integration | 🧪 Preview | `druid` | SQLite tested; other real DBs pending | real SQLite + all-features |
+| Default Toasty integration | 🧪 Preview | `druid-wrapper` | SQLite tested; other real DBs pending | real SQLite + all-features |
 | SQLx/RBDC database operations | 🚧 Partial | `druid-wrapper` | real-database matrix pending | adapter contracts |
 | 80 SQL database product catalog | 🧪 Preview | `druid-wrapper` | fixed 15/25/40 phases; catalog entries are not verified support | manifest/registry contracts |
 | JDBC Agent long tail | 🧪 Preview | `druid-wrapper` + release asset | cross-language H2 contract works; vendor matrix pending | Rust/Java/H2 contract |
-| Explicit driver install and diagnostics | 🧪 Preview | `druid-admin` | content-addressed JARs, SHA-256, doctor; no implicit download | installer contract |
+| Explicit driver install and diagnostics | 🧪 Preview | `druid-wrapper` | content-addressed JARs, SHA-256, doctor; no implicit download | installer contract |
 | bb8/deadpool external pools | 🧪 Preview | `druid-wrapper` | must not nest DruidPool | real SQLite bridges |
-| Java-compatible `/druid/*` Admin | 🗓️ Planned | `druid-admin` | only placeholder state/endpoint strings | migration ledger |
-| Complete Java semantics | 🚧 Partial | workspace | P0–P10 are not closed | object/semantic ledgers |
+| Java-compatible `/druid/*` Admin | 🚧 Partial | `druid-admin` | real HTTP/gRPC services; current network acceptance remains open | verification status |
+| Complete Java semantics | 🚧 Partial | workspace | full semantic and production acceptance remains open | specifications and verification status |
 
 ### 2.2 Status legend
 
@@ -141,118 +135,63 @@ the obligation to migrate Druid result semantics.
 Stable Linux, macOS, and Windows support requires CI evidence. The current local
 verification environment is not a cross-platform release commitment.
 
-## 4. Three-Module Architecture and Five-Crate Target
+<a id="4-three-module-architecture-and-five-crate-target"></a>
 
-### 4.1 One-screen view
+## 4. RDBC-First Five-Product-Crate Architecture
 
-```text
-[Downstream application]
-        │
-        ▼
-┌──────────────────────────────────────────────────────────────┐
-│ druid                                                        │
-│ Complete Druid core semantic body                            │
-│ Pool / SQL / Wall / Stat / Dynamic / JDBC platform objects  │
-│ Toasty integrated by default                                 │
-└──────────────────────────────────────────────────────────────┘
-        ▲                                  ▲
-        │                                  │
-┌──────────────────────────┐  ┌───────────────────────────────┐
-│ druid-wrapper            │  │ druid-admin                   │
-│ SQLx / RBDC              │  │ Java Admin compatibility      │
-│ bb8 / deadpool           │  │ discovery, aggregation, DTOs  │
-│ DB operations and pools  │  │ routes and resources          │
-└──────────────────────────┘  └───────────────────────────────┘
-```
+### 4.1 Current module responsibilities
 
-The connection boundary is fixed:
+ADR-CRATE-002 supersedes the former ADR-CRATE-001 `druid-core + facade` target.
+The five product crates already exist; their presence does not establish release readiness.
 
-```text
-DruidPooledConnection            public pooled connection
-└── DruidConnectionHolder        Druid lifecycle authority
-    └── PhysicalConnection       minimal internal SPI
-        ├── ToastyConnectionAdapter
-        ├── SqlxConnectionAdapter
-        ├── RbdcConnectionAdapter
-        └── other direct-driver adapters
-```
-
-bb8 and deadpool are `Pool` providers. They hold external leases through
-`PhysicalConnectionLease`, do not implement `PhysicalConnectionFactory`, and must not
-be nested inside `DruidPool`.
-
-### 4.2 Module dependency graph
-
-```mermaid
-flowchart TB
-    APP["Application"] --> DRUID["druid<br/>Toasty by default"]
-    APP -. "optional DB/pool extensions" .-> WRAPPER["druid-wrapper"]
-    APP -. "optional management plane" .-> ADMIN["druid-admin"]
-    WRAPPER -->|"implements druid internal SPI/Pool contracts"| DRUID
-    ADMIN -->|"reads pool/stat/dynamic state"| DRUID
-```
-
-### 4.3 Module map
-
-**Current source (three crates):**
-
-| Module | Java source | Responsibility | Default/optional |
-| :--- | :---: | :--- | :--- |
-| `druid` | Java `/core` | 1,644 core-object semantics; pool/sql/wall/stat/dynamic; Toasty by default | default |
-| `druid-wrapper` | Java `/druid-wrapper` | SQLx, RBDC, bb8, deadpool, database-operation and connection-ecosystem adapters | optional |
-| `druid-admin` | Java `/druid-admin` | discovery, monitoring aggregation, DTOs, routing, resources, management extensions | optional |
-
-**Approved target (five crates, ADR-CRATE-001):**
-
-| Target crate | Responsibility | Depends on |
+| Product crate | Responsibility | Main production dependencies |
 | :--- | :--- | :--- |
-| `druid-core` | RDBC/JDBC types, Pool, Filter, SQL, Wall, Dynamic, raw stats and typed snapshot | -- |
-| `druid` (facade) | Stable re-exports and optional features only | druid-core |
-| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent, vendor checker/sorter, driver tooling | druid-core |
-| `druid-metrics` | Registry, sampler, timeline, Prometheus model, gRPC protocol/runtime | druid-core |
-| `druid-admin` | Ingest repository, REST, authentication, compatible static UI, standalone binary | druid-metrics |
+| `druid-rdbc` | Independent standard traits, errors, metadata, resources and Wrapper identity | No Druid product dependency |
+| `druid` | Pool, holder, logical proxies, Filter, SQL, Wall, Stat and Dynamic | druid-rdbc |
+| `druid-wrapper` | Toasty/SQLx/RBDC/DuckDB/libSQL/HTTP SQL/JDBC Agent and external-pool integration | druid, druid-rdbc |
+| `druid-metrics` | Local observation, sampling, push and shared gRPC protocol | druid |
+| `druid-admin` | HTTP/gRPC management, repository, authentication, static UI and standalone binary | druid, druid-metrics; optional druid-wrapper |
 
-The five-crate source migration is not yet started. See
-[docs/superpowers/plans/](docs/superpowers/plans/) for the eight migration plans.
+`druid-bench` is the sixth workspace member and a verification helper, not a sixth product crate.
+Toasty integration belongs to `druid-wrapper`; its default features are `driver-catalog` and `sqlite`.
 
-### 4.4 Five-Crate Target Dependency Graph
+### 4.2 Dependency direction
 
-> Current source remains three crates. The following is the approved five-crate
-> target topology (ADR-CRATE-001). Source migration is pending.
+Arrows point from a dependent crate to its dependency; optional edges are dashed.
 
 ```mermaid
 flowchart TD
-    CORE["druid-core<br/>RDBC/JDBC types, Pool, Filter,<br/>SQL, Wall, Dynamic, raw stats"]
-    FACADE["druid (facade)<br/>stable re-exports,<br/>optional features"]
-    WRAPPER["druid-wrapper<br/>Toasty/SQLx/RBDC/DuckDB/<br/>libSQL/HTTP SQL/JDBC Agent"]
-    METRICS["druid-metrics<br/>registry, sampler, timeline,<br/>Prometheus model, gRPC"]
-    ADMIN["druid-admin<br/>ingest repository, REST,<br/>auth, static UI, binary"]
-
-    CORE --> FACADE
-    CORE --> WRAPPER
-    CORE --> METRICS
-    METRICS --> ADMIN
-    WRAPPER -. "no dependency" .-> ADMIN
+    WRAPPER["druid-wrapper<br/>Toasty / SQLx / RBDC / external pools"] --> DRUID["druid<br/>Pool / Filter / SQL / Wall / Stat / Dynamic"]
+    WRAPPER --> RDBC["druid-rdbc<br/>Connection / Statement / ResultSet / resources"]
+    DRUID --> RDBC
+    METRICS["druid-metrics<br/>sampling / push / gRPC protocol"] --> DRUID
+    ADMIN["druid-admin<br/>HTTP / gRPC / repository / authentication"] --> METRICS
+    ADMIN --> DRUID
+    ADMIN -. "optional driver bootstrap" .-> WRAPPER
 ```
 
-### 4.5 Completed Physical Consolidation
+### 4.3 Connection ownership and dispatch
 
-The workspace has physically converged to three crates. The former ten internal crates
-were removed and moved into named internal directories:
+```text
+Driver / ConnectionFactory
+    -> Box<dyn druid_rdbc::connection::Connection>
+        -> DruidConnectionHolder
+            -> DruidPooledConnection
+                -> pooled Statement / PreparedStatement / CallableStatement / ResultSet
+```
 
-| Removed former crate | Current module | Current internal directory |
-| :--- | :--- | :--- |
-| `druid-core`, `druid-pool`, `druid-sql`, `druid-stats`, `druid-dynamic` | `druid` | `crates/druid/src/{core,pool,sql,stats,dynamic}/` |
-| `druid-toasty` | `druid` | `crates/druid/src/toasty/`, enabled by default |
-| `druid-sqlx`, `druid-rbdc`, `druid-sqlx-bb8`, `druid-sqlx-deadpool` | `druid-wrapper` | `crates/druid-wrapper/src/rbdc/`、`crates/druid-wrapper/src/sqlx/{bb8,deadpool}/` |
+Wrappers and Druid logical proxies implement the same standard trait tree. Druid adds
+Filter dispatch, statistics, prepared cache and lifecycle policy around that contract.
+bb8/deadpool implement the `Pool` acquisition contract and retain their original pool
+authority through `ExternalConnectionLease`; they must not be nested as factories inside `DruidPool`.
 
-- `cargo metadata` reports only `druid`, `druid-wrapper`, and `druid-admin` as workspace members.
-- Internal directories do not own independent public APIs, versions, completion
-  percentages, or release artifacts.
-- Native and external pooling modes remain mutually exclusive after consolidation.
-- `druid-wrapper` integrates through druid's internal SPI/Pool contracts and does not
-  leak third-party types to applications.
-- `druid-admin` depends only on druid's management read contracts.
+### 4.4 Verification boundary
+
+Current source and configuration were checked on 2026-10-08. P04 Task6 remains
+FIX_REQUIRED; Task7, Task8 and P05–P07 remain open. Source checks and historical
+package passes do not establish current full-workspace or release acceptance.
+See the [architecture/progress audit](docs/verification/rdbc-first/architecture-progress-audit-2026-10-08.md)
+and [authoritative verification status](docs/verification/rdbc-first/status.md).
 
 ## 5. Design Principles
 
@@ -269,35 +208,30 @@ were removed and moved into named internal directories:
 
 ## 6. Executable Examples and Call Paths
 
-The README no longer publishes non-compiling pseudo APIs. Executable usage for the
-current revision lives in tests under the three product crates:
+The current tests use the single standard contract. These source links are entry points,
+not an assertion that every target or feature has passed on the current revision.
 
-### 6.1 Built-in Toasty SQLite
+### 6.1 Toasty and direct standard connections
 
-- [`toasty_connection_adapter_test.rs`](crates/druid/tests/toasty_connection_adapter_test.rs)
-  covers DDL/DML/query, six `Value` types, prepared execution, transactions,
-  savepoints, generated keys, discard, and unknown URLs.
-- [`sqlite_core_semantics_test.rs`](crates/druid/tests/sqlite_core_semantics_test.rs)
-  covers the Toasty → DruidPool → DruidPooledConnection vertical path.
+- [Toasty canonical matrix](crates/druid-wrapper/tests/task6_toasty_canonical_matrix_test.rs)
+- [SQLx canonical matrix](crates/druid-wrapper/tests/task6_sqlx_canonical_matrix_test.rs)
+- [External Wrapper identity and borrow contracts](crates/druid-rdbc/tests/standard_wrapper_contract_test.rs)
 
-### 6.2 Native pool and connection lifecycle
+### 6.2 Pooled connections, filters and prepared resources
 
-- [`physical_connection_contract.rs`](crates/druid/tests/physical_connection_contract.rs)
-  covers concurrent capacity, Filter dispatch, and exactly-once return.
-- [`recycle_semantics_test.rs`](crates/druid/tests/recycle_semantics_test.rs)
-  covers rollback, reset, validation, discard, and schema behavior.
-- [`prepared_statement_semantics_test.rs`](crates/druid/tests/prepared_statement_semantics_test.rs)
-  covers cache, LRU, in-use state, and connection lease boundaries.
+- [Filter and statistics semantics](crates/druid/tests/standard_filter_stat_semantics_test.rs)
+- [Prepared cache LRU regression](crates/druid/tests/task6_prepared_cache_lru_regression_test.rs)
+- [Prepared close cleanup regression](crates/druid/tests/task6_prepared_close_cleanup_regression_test.rs)
 
-### 6.3 Direct and external extensions
+### 6.3 External pools and migration evidence
 
-- [`sqlx_connection_adapter_test.rs`](crates/druid-wrapper/tests/sqlx_connection_adapter_test.rs)
-- [`sqlx_bb8_pool_test.rs`](crates/druid-wrapper/tests/sqlx_bb8_pool_test.rs)
-- [`sqlx_deadpool_pool_test.rs`](crates/druid-wrapper/tests/sqlx_deadpool_pool_test.rs)
-- [`sqlite_wrapper_semantics_test.rs`](crates/druid-wrapper/tests/sqlite_wrapper_semantics_test.rs)
+- [SQLx bb8 pool](crates/druid-wrapper/tests/sqlx_bb8_pool_test.rs)
+- [SQLx deadpool pool](crates/druid-wrapper/tests/sqlx_deadpool_pool_test.rs)
+- [Deleted-test migration ledger](docs/verification/rdbc-first/task6-deleted-test-migration.tsv)
+- [Physical-to-standard migration](docs/rdbc/physical-to-standard-migration.md)
 
-Until the API stabilizes, the README does not promise constructor signatures. Tests
-are the executable examples for the current source revision.
+API signatures remain unstable. The migration ledger binds original behavior to current
+test identities; a linked source file alone does not prove execution or equivalence.
 
 ### 6.4 80-database catalog and JDBC Agent
 
@@ -331,63 +265,38 @@ for Linux, macOS, and Windows, but its first remote result is still pending; eac
 also needs its own live evidence gate.
 
 ```bash
-cargo run -p druid-admin --bin druid-driver -- catalog
-cargo run -p druid-admin --bin druid-driver -- install-agent <root> <agent.jar> [sha256]
-cargo run -p druid-admin --bin druid-driver -- install-file <root> h2 <h2.jar> [sha256]
-cargo run -p druid-admin --bin druid-driver -- doctor <root> h2
+cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- catalog
+cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- install-agent <root> <agent.jar> [sha256]
+cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- install-file <root> h2 <h2.jar> [sha256]
+cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- doctor <root> h2
 ```
 
 ## 7. Cargo Features
 
-The facade `druid` crate exposes optional integrations through Cargo features.
-Default features are empty; the facade depends only on `druid-core` unless a
-feature explicitly activates an upstream crate.
+Features are owned by their product crate. `druid` has an empty default feature set;
+it depends on `druid-rdbc` and its runtime libraries, not on a `druid-core` facade.
 
-### 7.1 Feature matrix
-
-| Feature | Default | Upstream crate | Capability | Boundary |
-| :--- | :---: | :--- | :--- | :--- |
-| `sqlite` | ❌ | druid-core | Toasty SQLite driver | built-in real SQLite gate |
-| `postgresql` | ❌ | druid-core | Toasty PostgreSQL driver | real container pending |
-| `mysql` | ❌ | druid-core | Toasty MySQL driver | real container pending |
-| `turso` | ❌ | druid-core | Toasty Turso driver | real service pending |
-| `metrics` | ❌ | druid-metrics | Non-blocking local metrics runtime, Prometheus export | `druid::metrics` module |
-| `wrapper` | ❌ | druid-wrapper | SQLx, RBDC, bb8, deadpool, driver catalog, JDBC Agent | `druid::wrapper` module |
-
-Non-SQL Toasty providers such as DynamoDB are intentionally not exposed as Druid
-features and do not enter the database support count.
-
-### 7.2 Usage
+| Crate / feature | Default | Current behavior |
+| :--- | :---: | :--- |
+| `druid` / `config-http` | No | Optional HTTP configuration dependency |
+| `druid` / `sqlite`, `postgresql`, `mysql`, `turso` | No | Empty feature entries; they do not activate a database driver |
+| `druid-wrapper` / `driver-catalog`, `sqlite` | Yes | Driver catalog and Toasty SQLite integration |
+| `druid-wrapper` / `postgresql`, `mysql`, `turso` | No | Toasty provider feature selection |
+| `druid-wrapper` / `duckdb-native`, `http-sql`, `libsql-native` | No | Optional native/HTTP driver dependencies |
+| `druid-wrapper` / `jdbc-agent`, `managed-driver-install` | No | JDBC Agent bridge and managed driver tooling |
+| `druid-metrics` / `client`, `server` | No | gRPC client/server dependencies |
 
 ```bash
-# Core only (default, no optional deps)
 cargo check -p druid --no-default-features
-
-# With metrics runtime
-cargo check -p druid --features metrics
-
-# With driver wrappers (SQLx, RBDC, Toasty, etc.)
-cargo check -p druid --features wrapper
-
-# All features
-cargo check -p druid --all-features
+cargo check -p druid-wrapper --features sqlite
+cargo check -p druid-metrics --features client
+cargo check -p druid-wrapper --all-features
 ```
 
-### 7.3 Dependency topology
-
-```text
-druid-rdbc <- druid <- druid-wrapper
-      ^                    |
-      +--------------------+
-
-druid-metrics -> druid
-druid-admin   -> druid-metrics
-```
-
-SQLx/RBDC/bb8/deadpool features are unified under `druid-wrapper`, not
-form independent version contracts in separately published crates. A new feature must
-update the capability matrix, dependency tree, real integration tests, and release
-notes.
+These are usage examples, not proof that the current feature matrix passes. SQLx/RBDC/
+bb8/deadpool remain non-optional wrapper dependencies; complete feature isolation and
+feature-combination verification are open P05 requirements. Non-SQL Toasty providers
+do not enter the Druid SQL database support count.
 
 ## 8. Core API and Usage
 
@@ -395,12 +304,12 @@ The approved ADR-RDBC-006 relationship is:
 
 ```text
 Driver / ConnectionFactory
-    → Box<dyn druid_rdbc::Connection>
+    → Box<dyn druid_rdbc::connection::Connection>
         → DruidConnectionHolder (raw owner slot)
             → DruidPooledConnection (implements the same Connection)
 ```
 
-The current `Physical*` names are transitional migration inputs, not a second approved standard.
+Retired `Physical*` names belong to migration history. Current adapters and logical proxies use the single standard; complete Task6 acceptance remains open.
 
 Core traits and objects:
 
@@ -410,13 +319,13 @@ Core traits and objects:
 | `DruidPool` | Native pool implementation |
 | `DruidPooledConnection` | Public facade, Filter dispatch, recycling |
 | `DruidConnectionHolder` | Physical connection, state, timing, counters, prepared cache |
-| `PhysicalConnection` | Minimal internal SPI for direct adapters |
-| `PhysicalConnectionFactory` | Creates/validates unpooled connections in native mode |
-| `PhysicalConnectionLease` | Holds and returns an external-pool object |
-| `PhysicalConnectionCapabilities` | Declares advanced adapter capabilities |
+| `druid_rdbc::connection::Connection` | Standard contract implemented by direct adapters and pooled proxies |
+| `ConnectionFactory` | Creates/validates unpooled connections in native mode |
+| `ExternalConnectionLease` | Holds and returns an external-pool object |
+| `ConnectionCapabilities` | Declares advanced adapter capabilities |
 
-The old `Connection`, `ConnectionFactory`, and `PooledConnection` names remain only as
-migration compatibility re-exports and are not canonical for new code.
+Use `druid_rdbc::connection::Connection` and `druid_rdbc::driver::ConnectionFactory`
+for the standard boundary, and `DruidPooledConnection` for the product pooled handle.
 
 ## 9. Backends, Formats, and Optional Engines
 
@@ -451,51 +360,33 @@ operations return explicit errors and never silently report success.
 
 ## 11. Migration Roadmap and Phases
 
-The authoritative plan is the
-[migration roadmap](docs/迁移总路线图.md):
-
-| Phase | Object domain | Current status |
-| :--- | :--- | :--- |
-| P0 | Baseline, object governance, correctness triage | in progress |
-| P1 | Internal SPI and real-database adapters | SQLite path implemented; matrix open |
-| P2 | Connection-pool lifecycle | partial |
-| P3 | Filter, Proxy, execution events | partial |
-| P4 | SQL core and dialects | partial |
-| P5 | Wall | partial |
-| P6 | Stat, tracing, logging | partial |
-| P7 | HA, dynamic data sources, recovery | partial |
-| P8 | Admin, monitoring, framework integration | TODO |
-| P9 | XA, distributed transactions, advanced compatibility | TODO |
-| P10 | Full differential, performance, production release | TODO |
-
-A crate's existence does not close a phase. Exit criteria require object, behavior,
-error, real-integration, and production-property evidence.
+Execute the [RDBC-first master roadmap](docs/superpowers/plans/2026-08-21-rdbc-first-master-roadmap.md)
+and its existing child plans. The accepted [five-crate specification](docs/superpowers/specs/2026-08-21-rdbc-first-five-crate-architecture.md)
+and [single-standard specification](docs/superpowers/specs/2026-08-24-rdbc-single-standard-trait-tree.md)
+define the architecture and behavior requirements. Consult [verification status](docs/verification/rdbc-first/status.md)
+for accepted scope, failures, prerequisites and open tasks. Module existence and source
+checks cannot replace behavioral, real-integration or production-property evidence.
 
 ## 12. Documentation Set
 
-The root `docs/` directory maintains only:
-
 | Document | Responsibility |
 | :--- | :--- |
-| [Architecture](docs/druid-rust-Architecture.zh_CN.md) | current/target architecture, invariants, ADRs |
-| [Documentation index](docs/README.md) | roadmap, module ledgers, semantics, naming, connection design |
+| [Architecture baseline](docs/druid-rust-Architecture.zh_CN.md) | Architecture history, invariants and ADRs; interpret historical snapshots with current evidence |
+| [Accepted five-crate specification](docs/superpowers/specs/2026-08-21-rdbc-first-five-crate-architecture.md) | Product responsibilities and acceptance requirements |
+| [Master roadmap](docs/superpowers/plans/2026-08-21-rdbc-first-master-roadmap.md) | Plan dependencies and execution sequence |
+| [Verification status](docs/verification/rdbc-first/status.md) | Actual evidence and open acceptance gates |
+| [Current architecture/progress audit](docs/verification/rdbc-first/architecture-progress-audit-2026-10-08.md) | Dated source, configuration and progress interpretation |
 
-The three module directories are the authoritative object, semantic, and naming
-ledgers. Project-level documents aggregate navigation and gates without copying a
-second completion ledger. The README is the project entry point, not another roadmap.
+README provides navigation; specifications, plans and evidence remain their respective
+sources of truth. Historical counts are not current completion percentages.
 
 ## 13. Quality Gates
 
-| Command / gate | Current result |
-| :--- | :--- |
-| `cargo fmt --all -- --check` | passes |
-| `cargo test --workspace` | new driver contracts pass; existing callable/cache, pool-default, and filter-lifecycle assertions keep the full gate open |
-| `cargo check -p druid --all-features` | passes |
-| `cargo clippy --workspace --all-targets --no-deps -- -D warnings` | fails; pre-existing pedantic lint debt remains |
-| `cargo llvm-cov` | historical snapshots exist; completion gate is open |
-| `cargo audit` / `cargo deny` | not yet continuous CI gates |
-| Full Java/Rust differential | incomplete |
-| Real PostgreSQL/MySQL/Turso matrix | incomplete |
+Fresh fmt/build/clippy/docs, complete C1/C2 runtime, compiler coverage, public API/SemVer,
+feature combinations, MSRV, Java differential, real-database, network/security and supply-chain
+gates are required by the plans. Their current status is recorded in the
+[verification ledger](docs/verification/rdbc-first/status.md). Example commands below are
+not recorded PASS results; default tests do not certify all features or release readiness.
 
 Recommended local commands:
 
@@ -558,22 +449,24 @@ must share state.
 
 Check whether a bb8/deadpool bridge was nested inside `DruidPool`. An external provider
 returns the canonical `DruidPooledConnection` directly and
-`PhysicalConnectionLease` returns the object to its original owner.
+`ExternalConnectionLease` returns the object to its original owner.
 
 ### Endpoint strings exist but Admin HTTP is unavailable
 
-`druid-admin` remains a placeholder and has no real Axum Router or handlers. Endpoint
-list tests do not establish a working HTTP service.
+`druid-admin` has real Topcoat/Axum routes and HTTP/gRPC services. Check listener,
+authentication/TLS configuration and the latest network-test evidence. Endpoint strings
+alone do not prove reachability; current network acceptance remains open.
 
 ### `UnsupportedOperation`
 
-Inspect `PhysicalConnectionCapabilities` first. An adapter must not emulate unsupported
+Inspect `ConnectionCapabilities` first. An adapter must not emulate unsupported
 capabilities with configuration or an in-memory flag.
 
 ## 17. crates.io Publication
 
-No module is published. Only `druid`, `druid-wrapper`, and `druid-admin` may ultimately
-be published. Minimum publication conditions:
+All workspace packages currently set `publish = false`. The five planned product
+packages are `druid-rdbc`, `druid`, `druid-wrapper`, `druid-metrics` and `druid-admin`;
+`druid-bench` is a verification helper. Minimum publication conditions:
 
 - [ ] The target module has no false `DONE` states in object or semantic ledgers.
 - [x] Its former transitional implementation crates have been consolidated and are
@@ -619,7 +512,7 @@ then.
 
 [Back to top](#readme-top) ·
 [Architecture](docs/druid-rust-Architecture.zh_CN.md) ·
-[Documentation index](docs/README.md) ·
+[Documentation index](docs/superpowers/plans/2026-08-21-rdbc-first-master-roadmap.md) ·
 [Issues](https://github.com/easy-4-rust/druid-rust/issues)
 
 </div>

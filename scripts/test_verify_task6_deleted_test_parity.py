@@ -31,6 +31,7 @@ from verify_task6_deleted_test_parity import (
     target_package,
     verify_ledger,
     render_method_call_index,
+    run_git,
 )
 
 
@@ -159,7 +160,7 @@ class DeletedTestParityVerifierTest(unittest.TestCase):
 
     def test_ledger_parser_rejects_header_drift_and_empty_fields(self) -> None:
         path = self.root / "ledger.tsv"
-        path.write_text("wrong\theader\n", encoding="utf-8")
+        path.write_text("wrong\theader\n", encoding="utf-8", newline="\n")
         with self.assertRaisesRegex(VerificationError, "header drift"):
             parse_ledger(path)
 
@@ -167,9 +168,17 @@ class DeletedTestParityVerifierTest(unittest.TestCase):
         writer = csv.writer(buffer, delimiter="\t", lineterminator="\n")
         writer.writerow(LEDGER_HEADER)
         writer.writerow(["value"] * (len(LEDGER_HEADER) - 1) + [""])
-        path.write_text(buffer.getvalue(), encoding="utf-8")
+        path.write_text(buffer.getvalue(), encoding="utf-8", newline="\n")
         with self.assertRaisesRegex(VerificationError, "empty"):
             parse_ledger(path)
+
+    def test_git_baseline_decodes_chinese_source_as_utf8(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        source = run_git(
+            root,
+            ["show", "HEAD:docs/superpowers/specs/2026-08-24-rdbc-single-standard-trait-tree.md"],
+        )
+        self.assertIn("单一 JDBC-like Standard Trait Tree", source)
 
     def test_execution_parser_accepts_only_successful_libtest_functions(self) -> None:
         output = (
@@ -178,6 +187,27 @@ class DeletedTestParityVerifierTest(unittest.TestCase):
             "test cases::failed ... FAILED\n"
         )
         self.assertEqual({"cases::canonical_ok"}, executed_functions(output))
+
+    def test_runtime_proof_keeps_success_marker_separate_from_case_stdout(self) -> None:
+        """成功案例 stdout 必须可观察，且不能打断 libtest 的精确成功行。"""
+        import subprocess
+        from unittest.mock import patch
+        import verify_task6_deleted_test_parity as parity
+
+        base = parse_test_functions("crates/druid/tests/base.rs", self.source())[0]
+        row = self.row(base, disposition="MERGED_PARAMETERIZED(onlycase)",
+            target_function="matrix", case_id="onlycase")
+
+        def actual_harness_shape(command, **kwargs):
+            # 对应真实单线程 --nocapture 输出：digest 插入测试名和 ok 之间。
+            output = "test matrix ... TASK6_CASE_DIGEST=matrix:onlycase\nok\n"
+            if "--show-output" in command:
+                output = ("test matrix ... ok\n\nsuccesses:\n\n---- matrix stdout ----\n"
+                    "TASK6_CASE_DIGEST=matrix:onlycase\n")
+            return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+        with patch("subprocess.run", side_effect=actual_harness_shape):
+            parity.execute_targets(self.root, (row,), ())
 
     def test_same_name_in_another_target_cannot_satisfy_claimed_target(self) -> None:
         expected = {
@@ -285,6 +315,49 @@ class DeletedTestParityVerifierTest(unittest.TestCase):
         )
         self.assertIn(identity, tests)
         self.assertEqual(("druid", "__lib__"), target_package(source_path))
+
+
+    def test_result_set_diagnostics_keep_qualified_lib_identity(self) -> None:
+        source_path = "crates/druid/src/core/druid_pooled_result_set/diagnostic_tests.rs"
+        target = self.root / source_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            "#[tokio::test]\n"
+            "async fn task6_close_count_zero_before_close() { assert_eq!(observed(), 0); }\n",
+            encoding="utf-8",
+        )
+        tests = current_tests(self.root, (source_path,))
+        identity = (
+            f"{source_path}#core::druid_pooled_result_set::diagnostic_tests::"
+            "task6_close_count_zero_before_close"
+        )
+        self.assertIn(identity, tests)
+        self.assertEqual(("druid", "__lib__"), target_package(source_path))
+        with self.assertRaisesRegex(VerificationError, "unknown target test package"):
+            target_package("crates/druid/src/core/unregistered_diagnostics.rs")
+
+
+    def test_wrapper_private_lib_target_keeps_own_package_and_qualified_identity(self) -> None:
+        from unittest.mock import patch
+        import verify_task6_deleted_test_parity as parity
+        source_path = "crates/druid-wrapper/src/sqlx/external_pool_connection_control/lease_complete_tests.rs"
+        function = "task6_lease_delegates_complete_spi"
+        qualified = "sqlx::external_pool_connection_control::lease_complete_tests::" + function
+        target = self.root / source_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(self.source(function=function), encoding="utf-8")
+        with patch.dict(parity.LIB_TEST_TARGETS, {source_path: {function: qualified}}):
+            tests = parity.current_tests(self.root, (source_path,))
+            self.assertIn(source_path + "#" + qualified, tests)
+            self.assertEqual(("druid-wrapper", "__lib__"), parity.target_package(source_path))
+
+    def test_unknown_registered_lib_package_cannot_route_to_druid(self) -> None:
+        from unittest.mock import patch
+        import verify_task6_deleted_test_parity as parity
+        source_path = "crates/other/src/private_tests.rs"
+        with patch.dict(parity.LIB_TEST_TARGETS, {source_path: {"test": "tests::test"}}):
+            with self.assertRaisesRegex(VerificationError, "unknown target test package"):
+                parity.target_package(source_path)
 
 
 if __name__ == "__main__":

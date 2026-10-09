@@ -54,6 +54,21 @@ pub(crate) trait AdapterExecutionCore: Send + 'static {
 
     async fn standard_close_connection_core(&mut self) -> Result<(), RdbcError>;
 
+    /// 参数为SQL及值；默认保留驱动单键，支持完整键的驱动覆写此执行通道。
+    async fn standard_execute_update_keys_core(
+        &mut self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<(i64, Vec<i64>), RdbcError> {
+        let result = self
+            .standard_execute_update_result_core(sql, values)
+            .await?;
+        let count = i64::try_from(result.rows_affected).map_err(|_| {
+            RdbcError::InvalidArgument("rows affected exceeds canonical i64".into())
+        })?;
+        Ok((count, result.last_insert_id.into_iter().collect()))
+    }
+
     async fn standard_parameter_count_core(
         &mut self,
         sql: &str,
@@ -65,6 +80,12 @@ pub(crate) trait AdapterExecutionCore: Send + 'static {
 /// Type-erased executor owned by canonical Statement/Prepared/ResultSet handles.
 #[async_trait::async_trait]
 pub(crate) trait StandardExecutor: Send + Sync {
+    /// 参数为SQL及值；返回更新计数与当前执行的完整生成键，不提前发布句柄状态。
+    async fn execute_update_keys(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<(i64, Vec<i64>), RdbcError>;
     async fn execute_update(&self, sql: &str, values: Vec<Value>) -> Result<i64, RdbcError>;
     async fn execute_update_result(
         &self,
@@ -128,6 +149,17 @@ impl<C> StandardExecutor for OwnedAdapterExecutor<C>
 where
     C: AdapterExecutionCore,
 {
+    async fn execute_update_keys(
+        &self,
+        sql: &str,
+        values: Vec<Value>,
+    ) -> Result<(i64, Vec<i64>), RdbcError> {
+        let mut guard = self.connection.lock().await;
+        let connection = guard.as_mut().ok_or(RdbcError::ConnectionDiscarded)?;
+        connection
+            .standard_execute_update_keys_core(sql, values)
+            .await
+    }
     async fn execute_update(&self, sql: &str, values: Vec<Value>) -> Result<i64, RdbcError> {
         let result = self.execute_update_result(sql, values).await?;
         i64::try_from(result.rows_affected).map_err(|_| {
@@ -248,7 +280,8 @@ where
     }
 }
 
-fn statement_returns_rows(sql: &str) -> bool {
+/// 根据已有首关键字规则判断普通语句是否返回行，供驱动专有 AST 判断回退使用。
+pub(crate) fn statement_returns_rows(sql: &str) -> bool {
     let sql = sql.trim_start();
     let keyword_end = sql
         .find(|character: char| !character.is_ascii_alphabetic())

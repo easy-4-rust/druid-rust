@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from dataclasses import replace
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPTS = Path(__file__).resolve().parent
@@ -34,6 +35,7 @@ from verify_task6_method_parity import (  # noqa: E402
     verify_rows,
     _verify_selector_contract,
     _verify_selector_source,
+    _summary,
 )
 import render_task6_method_default_evidence as evidence_renderer  # noqa: E402
 
@@ -388,6 +390,47 @@ fn required_behavior() {
                 with self.assertRaisesRegex(VerificationError, "observable assertion"):
                     _verify_selector_contract(root, selector, row)
 
+    def test_c2_rebinding_preserves_independent_default_execution_control(self) -> None:
+        """C2 主证据重新绑定后，原独立 default 控制必须保留且不得重复。"""
+
+        default = replace(
+            self.rows()[1],
+            source_object="PhysicalConnection",
+            method="execute",
+            target_trait="Statement",
+            target_symbol="Statement::execute",
+            target_signature="async fn execute(&mut self,sql:&str)->Result<bool,RdbcError>",
+            target_ufcs="canonical::Statement::execute",
+            behavior_evidence=(
+                "crates/druid-rdbc/tests/task6_method_default_evidence_test.rs#"
+                "task6_method_behavior_physical_connection_execute"
+            ),
+        )
+        rebound = replace(
+            default,
+            behavior_evidence=(
+                "crates/druid-wrapper/src/sqlx/external_pool_connection_control/"
+                "lease_complete_tests.rs#sqlx::external_pool_connection_control::"
+                "lease_complete_tests::task6_lease_delegates_complete_spi"
+            ),
+        )
+        unrelated = replace(rebound, source_object="AnotherConnection")
+        with (
+            patch.object(evidence_renderer, "_method_lookup", return_value={}),
+            patch.object(evidence_renderer, "_render_trace_impl", return_value=""),
+            patch.object(evidence_renderer, "_rustfmt", side_effect=lambda source: source.encode()),
+        ):
+            before = evidence_renderer.render_files(Path("/tmp/method-render"), (default,))
+            after = evidence_renderer.render_files(Path("/tmp/method-render"), (rebound,))
+            self.assertEqual(before, after)
+            statement = after[evidence_renderer.GENERATED_DIRECTORY / "statement.inc.rs"]
+            self.assertEqual(1, statement.count(b"fn task6_method_behavior_physical_connection_execute("))
+            other = evidence_renderer.render_files(Path("/tmp/method-render"), (unrelated,))
+            self.assertNotIn(
+                b"task6_method_behavior_another_connection_execute",
+                b"".join(other.values()),
+            )
+
     def test_rejects_case_id_list_without_literal_arm_and_reachable_helper(self) -> None:
         """Case-ID list/digest 不能替代唯一 arm 到 receiver-exact helper 的路径。"""
 
@@ -541,6 +584,103 @@ fn typed_trace_behavior() {
             )
             with self.assertRaisesRegex(VerificationError, "module"):
                 _verify_selector_source(root, wrong)
+
+    def test_runtime_digest_stdout_does_not_interrupt_success_marker(self) -> None:
+        """使用真实 libtest 输出形态，同时严格证明成功函数与参数案例。"""
+
+        selector = BehaviorSelector(
+            "crates/druid-rdbc/tests/evidence.rs", "required_behavior", "case_one"
+        )
+
+        def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+            self.assertIn("--all-features", command)
+            self.assertIn("--locked", command)
+            self.assertIn("--offline", command)
+            if "--show-output" in command:
+                output = (
+                    "test required_behavior ... ok\n\nsuccesses:\n"
+                    "---- required_behavior stdout ----\n"
+                    "TASK6_CASE_DIGEST=required_behavior:case_one\n"
+                )
+            else:
+                output = (
+                    "test required_behavior ... "
+                    "TASK6_CASE_DIGEST=required_behavior:case_one\nok\n"
+                )
+            return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+        self.assertEqual(
+            (1, 1, 1),
+            execute_behavior_evidence(Path("/tmp/method-runtime"), (selector,), runner=runner),
+        )
+
+    def test_runtime_routes_registered_unit_evidence_and_requires_exact_module(self) -> None:
+        """已登记的两个包私有测试必须实际跑完整lib并证明精确模块身份。"""
+
+        selectors = (
+            BehaviorSelector(
+                "crates/druid-wrapper/src/sqlx/external_pool_connection_control/lease_complete_tests.rs",
+                "sqlx::external_pool_connection_control::lease_complete_tests::task6_lease_delegates_complete_spi",
+            ),
+            BehaviorSelector(
+                "crates/druid/src/core/connection_defaults/complete_state_tests.rs",
+                "core::connection_defaults::complete_state_tests::task6_connection_defaults_capture_compare_and_reset_complete_state",
+            ),
+        )
+        for selector in selectors:
+            with self.subTest(source_path=selector.source_path):
+                def runner(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                    self.assertIn("--lib", command)
+                    self.assertNotIn("--test", command)
+                    self.assertIn("--all-features", command)
+                    return subprocess.CompletedProcess(
+                        command, 0, stdout=f"test {selector.function} ... ok\n", stderr=""
+                    )
+
+                self.assertEqual(
+                    (1, 1, 1),
+                    execute_behavior_evidence(Path("/tmp/unit-runtime"), (selector,), runner=runner),
+                )
+                for output in (
+                    "running 0 tests\n",
+                    f"test {selector.function.rsplit('::', 1)[-1]} ... ok\n",
+                    f"test wrong::{selector.function} ... ok\n",
+                ):
+                    with self.assertRaisesRegex(VerificationError, "not executed"):
+                        execute_behavior_evidence(
+                            Path("/tmp/unit-runtime"), (selector,),
+                            runner=lambda *args, _output=output, **kwargs: subprocess.CompletedProcess(
+                                [], 0, stdout=_output, stderr=""
+                            ),
+                        )
+                for invalid in (
+                    replace(selector, source_path="crates/druid/src/core/not_registered.rs"),
+                    replace(selector, function="wrong::" + selector.function),
+                ):
+                    with self.assertRaises(VerificationError):
+                        execute_behavior_evidence(
+                            Path("/tmp/unit-runtime"), (invalid,),
+                            runner=lambda *args, **kwargs: self.fail("unregistered evidence must not run Cargo"),
+                        )
+
+    def test_summary_does_not_count_qualified_unit_modules_as_parameter_cases(self) -> None:
+        """模块路径中的双冒号不能被统计为参数化案例。"""
+
+        unit = replace(
+            self.rows()[0],
+            behavior_evidence=(
+                "crates/druid-wrapper/src/sqlx/external_pool_connection_control/lease_complete_tests.rs#"
+                "sqlx::external_pool_connection_control::lease_complete_tests::task6_lease_delegates_complete_spi"
+            ),
+        )
+        parameterized = replace(
+            self.rows()[1],
+            behavior_evidence="crates/druid-rdbc/tests/evidence.rs#required_behavior::case_one",
+        )
+        selectors = tuple(parse_behavior_selector(row.behavior_evidence) for row in (unit, parameterized))
+        summary = _summary((unit, parameterized), render_rows((unit, parameterized)), selectors, None)
+        self.assertIn("TASK6_METHOD_EVIDENCE_PARAMETERIZED_ROWS=1\n", summary)
+        self.assertIn("TASK6_METHOD_EVIDENCE_EXECUTED=no", summary)
 
     def test_rejects_c2_structural_only_or_failed_runtime_proof(self) -> None:
         """C2 selector 必须消费 authoritative 1283-row executed=yes 结果。"""

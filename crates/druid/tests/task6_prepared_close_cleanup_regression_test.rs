@@ -281,25 +281,26 @@ async fn assert_direct_mutator_failure(failure: CleanupStage) {
 
 #[tokio::test]
 async fn prepared_batch_cleanup_failure_stops_later_stages_and_discards() {
-    assert_cleanup_failure(CleanupStage::PreparedBatch, &["prepared_batch", "close"]).await;
+    // BASE 先清参数，再清批次；每个失败点均保留 fatal 分类和恰好一次关闭证据。
+    assert_cleanup_failure(
+        CleanupStage::PreparedBatch,
+        &["parameters", "prepared_batch", "close"],
+    )
+    .await;
 }
 
 #[tokio::test]
-async fn statement_batch_cleanup_failure_runs_after_prepared_batch_and_discards() {
+async fn statement_batch_cleanup_failure_runs_after_parameters_and_prepared_batch_and_discards() {
     assert_cleanup_failure(
         CleanupStage::StatementBatch,
-        &["prepared_batch", "statement_batch", "close"],
+        &["parameters", "prepared_batch", "statement_batch", "close"],
     )
     .await;
 }
 
 #[tokio::test]
-async fn parameter_cleanup_failure_runs_last_and_discards() {
-    assert_cleanup_failure(
-        CleanupStage::Parameters,
-        &["prepared_batch", "statement_batch", "parameters", "close"],
-    )
-    .await;
+async fn parameter_cleanup_failure_runs_first_and_discards() {
+    assert_cleanup_failure(CleanupStage::Parameters, &["parameters", "close"]).await;
 }
 
 #[tokio::test]
