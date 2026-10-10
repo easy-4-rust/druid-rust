@@ -449,6 +449,47 @@ fn typed_encoder_limits_sql_and_applies_disabled_privacy_policy() {
     assert!(!encoded_text.contains("token"));
 }
 
+#[tokio::test(start_paused = true)]
+async fn aggregator_applies_configured_sql_limit_and_text_policy() {
+    let config = DruidMetricsConfig::builder()
+        .queue_capacity(8)
+        .batch_size(1)
+        .coalesce_window(Duration::from_secs(30))
+        .max_sql_statements(1)
+        .sql_text_policy(SqlTextPolicy::Disabled)
+        .build()
+        .expect("valid privacy config");
+    let (snapshot_tx, mut batch_rx, _command_tx, _cancel, task) = spawn_aggregator(config);
+    let mut pending = snapshot(93, 40);
+    pending.snapshot.sql_stats = vec![
+        SqlStatSnapshot {
+            fingerprint: "SELECT * FROM account WHERE password = ?".to_owned(),
+            exec_count: 10,
+            exec_time_millis: 11,
+            fetch_row_count: 12,
+            update_count: 13,
+        },
+        SqlStatSnapshot {
+            fingerprint: "SELECT * FROM audit WHERE token = ?".to_owned(),
+            exec_count: 20,
+            exec_time_millis: 21,
+            fetch_row_count: 22,
+            update_count: 23,
+        },
+    ];
+    snapshot_tx.send(pending).await.expect("submit snapshot");
+    drop(snapshot_tx);
+    task.await
+        .expect("join aggregator")
+        .expect("flush snapshot");
+
+    let batch = batch_rx.recv().await.expect("configured batch");
+    assert_eq!(batch.entries.len(), 1);
+    assert_eq!(batch.entries[0].sql_stats.len(), 1);
+    assert_eq!(batch.entries[0].sql_stats[0].fingerprint, "");
+    assert!(batch_rx.recv().await.is_none());
+}
+
 #[test]
 fn typed_encoder_maps_pool_wall_and_identity_fields_without_json() {
     let pending = snapshot(12, 60);

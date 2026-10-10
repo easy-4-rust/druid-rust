@@ -223,10 +223,10 @@ impl DruidMetricsRuntime {
     /// 4. Wait for exporter to finish
     /// 5. Join all tasks
     ///
-    /// Returns `Err(MetricsError::ShutdownTimeout)` with the count of unflushed
-    /// snapshots if the deadline is exceeded.
+    /// 使用调用方期限与配置的 `shutdown_timeout` 中较短者；超时返回尚未刷新的快照数。
     pub async fn shutdown(mut self, deadline: Duration) -> Result<(), MetricsError> {
         // Stop admission first so the aggregator can drain a stable input queue.
+        let deadline = deadline.min(self.config.shutdown_timeout);
         self.supervisor.cancel();
         let self_metrics = Arc::clone(&self.self_metrics);
 

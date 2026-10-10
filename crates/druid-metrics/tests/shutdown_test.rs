@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{mpsc as std_mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use druid::stats::{
@@ -102,6 +102,38 @@ impl DataSourceMonitorable for SlowDataSource {
 struct PanicDataSource {
     identity: DataSourceIdentity,
     entered: Arc<AtomicBool>,
+}
+
+struct BlockingSnapshotDataSource {
+    identity: DataSourceIdentity,
+    entered: Arc<AtomicBool>,
+    release: Mutex<std_mpsc::Receiver<()>>,
+}
+
+impl DataSourceMonitorable for BlockingSnapshotDataSource {
+    fn name(&self) -> &str {
+        &self.identity.name
+    }
+
+    fn data_source_stat_data(&self) -> Value {
+        Value::Null
+    }
+
+    fn reset_stat(&self) {}
+
+    fn identity(&self) -> DataSourceIdentity {
+        self.identity.clone()
+    }
+
+    fn try_snapshot(&self) -> Result<DruidTelemetrySnapshot, SnapshotUnavailable> {
+        self.entered.store(true, Ordering::Release);
+        self.release
+            .lock()
+            .expect("release lock")
+            .recv()
+            .expect("release sampler");
+        Err(SnapshotUnavailable::Busy)
+    }
 }
 
 impl DataSourceMonitorable for PanicDataSource {
@@ -228,6 +260,57 @@ fn config_shutdown_timeout_is_respected() {
         .build()
         .unwrap();
     assert_eq!(config.shutdown_timeout, Duration::from_secs(7));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn configured_shutdown_timeout_caps_a_longer_caller_deadline() {
+    let runtime = DruidMetricsRuntime::start(
+        DruidMetricsConfig::builder()
+            .sample_interval(Duration::from_millis(10))
+            .shutdown_timeout(Duration::from_millis(60))
+            .build()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let metrics = runtime.self_metrics().clone();
+    let entered = Arc::new(AtomicBool::new(false));
+    let (release_tx, release_rx) = std_mpsc::channel();
+    let source = Arc::new(BlockingSnapshotDataSource {
+        identity: DataSourceIdentity {
+            id: 79,
+            name: "blocked-shutdown".to_owned(),
+            driver_name: Some("test-driver".to_owned()),
+        },
+        entered: Arc::clone(&entered),
+        release: Mutex::new(release_rx),
+    });
+    let _guard = runtime.register(source.clone());
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while !entered.load(Ordering::Acquire) {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("sampler enters blocked snapshot");
+
+    let result = tokio::time::timeout(
+        Duration::from_millis(500),
+        runtime.shutdown(Duration::from_secs(2)),
+    )
+    .await;
+    release_tx.send(()).expect("release blocked sampler");
+    assert!(matches!(
+        result,
+        Ok(Err(MetricsError::ShutdownTimeout { .. }))
+    ));
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while metrics.active_tasks() != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("aborted supervisor tasks finish after sampler unblocks");
 }
 
 #[tokio::test]
