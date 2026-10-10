@@ -2,7 +2,7 @@ use super::delegation_counts::DelegationCounts;
 use super::lease_blob_access::LeaseBlobAccess;
 use super::lease_clob_access::LeaseClobAccess;
 use super::lease_statement_probe::LeaseStatementProbe;
-use druid_rdbc::resource::{RdbcBlob, RdbcClob, RdbcNClob, ResourceHandleFactory};
+use druid_rdbc::resource::{Blob, Clob, NClob};
 use druid_rdbc::statement::{
     CallableStatement, GeneratedKeys, PreparedStatement, Statement, StatementOptions,
 };
@@ -12,9 +12,9 @@ pub(super) struct DelegationResources {
     pub(super) statement: Option<Box<dyn Statement>>,
     pub(super) prepared_statement: Option<Box<dyn PreparedStatement>>,
     pub(super) callable_statement: Option<Box<dyn CallableStatement>>,
-    pub(super) blob: RdbcBlob,
-    pub(super) clob: RdbcClob,
-    pub(super) n_clob: RdbcNClob,
+    pub(super) blob: Option<Box<dyn Blob>>,
+    pub(super) clob: Option<Box<dyn Clob>>,
+    pub(super) n_clob: Option<Box<dyn NClob>>,
 }
 impl DelegationResources {
     /// 预先分配三个实际 owned 对象；返回可只移动一次的真实资源集合。
@@ -38,9 +38,9 @@ impl DelegationResources {
                 GeneratedKeys::None,
                 counts,
             ))),
-            blob: ResourceHandleFactory::blob(Arc::new(LeaseBlobAccess)),
-            clob: ResourceHandleFactory::clob(Arc::new(LeaseClobAccess)),
-            n_clob: ResourceHandleFactory::n_clob(Arc::new(LeaseClobAccess)),
+            blob: Some(Box::new(LeaseBlobAccess::default())),
+            clob: Some(Box::new(LeaseClobAccess::default())),
+            n_clob: Some(Box::new(LeaseClobAccess::default())),
         }
     }
     /// 返回预分配 Statement 的实际数据地址，用于观察移动前后身份。

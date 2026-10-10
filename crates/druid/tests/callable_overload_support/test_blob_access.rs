@@ -1,10 +1,10 @@
 #![allow(dead_code, unused_imports)]
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::resource::BlobPattern;
 use druid_rdbc::resource::{
-    RdbcArrayAccess, RdbcBlob, RdbcBlobAccess, RdbcClob, RdbcClobAccess, RdbcInputStream,
-    RdbcNClob, RdbcNClobAccess, RdbcOutputStream, RdbcReader, RdbcRefAccess, RdbcResourceAccess,
-    RdbcSqlXmlAccess, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource,
-    ResourceHandleFactory, ResourceOperations,
+    Array, Blob, Clob, NClob, RdbcBlob, RdbcClob, RdbcInputStream, RdbcNClob, RdbcOutputStream,
+    RdbcReader, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Ref,
+    ResourceHandleFactory, ResourceOperations, SqlXml,
 };
 use druid_rdbc::types::{RdbcObject, RdbcString, RdbcTypeMap, Value};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -28,25 +28,26 @@ impl TestBlobAccess {
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for TestBlobAccess {
+impl Blob for TestBlobAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::blob()
+        ResourceOperations::READ
+            | ResourceOperations::RANGE
+            | ResourceOperations::STREAM
+            | ResourceOperations::SEARCH
+            | ResourceOperations::FREE
     }
 
-    async fn free(&self) -> Result<(), RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
-}
 
-#[async_trait::async_trait]
-impl RdbcBlobAccess for TestBlobAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         self.ensure_open()?;
         Ok(i64::try_from(self.bytes.len()).expect("test Blob length fits i64"))
     }
 
-    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
+    async fn get_bytes(&mut self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
         self.ensure_open()?;
         let start = usize::try_from(position - 1)
             .map_err(|_| RdbcError::DriverError("invalid Blob position".to_string()))?;
@@ -62,12 +63,16 @@ impl RdbcBlobAccess for TestBlobAccess {
             .ok_or_else(|| RdbcError::DriverError("invalid Blob range".to_string()))
     }
 
-    async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
+    async fn get_binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcInputStream::from_bytes(self.bytes.clone()))
     }
 
-    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, RdbcError> {
+    async fn position_bytes(
+        &mut self,
+        pattern: &[u8],
+        start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
         self.ensure_open()?;
         let start = usize::try_from(start - 1)
             .map_err(|_| RdbcError::DriverError("invalid Blob position".to_string()))?;
@@ -83,24 +88,35 @@ impl RdbcBlobAccess for TestBlobAccess {
     }
 
     async fn position_blob(
-        &self,
-        pattern: &RdbcBlob,
+        &mut self,
+        pattern: BlobPattern<'_>,
         start: i64,
     ) -> Result<Option<i64>, RdbcError> {
-        let length = i32::try_from(pattern.length().await?)
-            .map_err(|_| RdbcError::DriverError("test pattern is too large".to_string()))?;
-        let bytes = pattern.get_bytes(1, length).await?;
+        let bytes = match pattern {
+            BlobPattern::SameResource => {
+                let length = i32::try_from(self.length().await?)
+                    .map_err(|_| RdbcError::DriverError("test pattern is too large".to_string()))?;
+                let bytes = self.get_bytes(1, length).await?;
+                bytes
+            }
+            BlobPattern::Other(pattern) => {
+                let length = i32::try_from(pattern.length().await?)
+                    .map_err(|_| RdbcError::DriverError("test pattern is too large".to_string()))?;
+                let bytes = pattern.get_bytes(1, length).await?;
+                bytes
+            }
+        };
         self.position_bytes(&bytes, start).await
     }
 
-    async fn set_bytes(&self, _position: i64, _bytes: &[u8]) -> Result<i32, RdbcError> {
+    async fn set_bytes(&mut self, _position: i64, _bytes: &[u8]) -> Result<i32, RdbcError> {
         Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_set_bytes",
         })
     }
 
     async fn set_bytes_range(
-        &self,
+        &mut self,
         _position: i64,
         _bytes: &[u8],
         _offset: i32,
@@ -111,20 +127,20 @@ impl RdbcBlobAccess for TestBlobAccess {
         })
     }
 
-    async fn set_binary_stream(&self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+    async fn set_binary_stream(&mut self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
         Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_set_binary_stream",
         })
     }
 
-    async fn truncate(&self, _length: i64) -> Result<(), RdbcError> {
+    async fn truncate(&mut self, _length: i64) -> Result<(), RdbcError> {
         Err(RdbcError::UnsupportedOperation {
             operation: "test_read_only_blob_truncate",
         })
     }
 
     async fn get_binary_stream_range(
-        &self,
+        &mut self,
         position: i64,
         length: i64,
     ) -> Result<RdbcInputStream, RdbcError> {
@@ -137,7 +153,7 @@ impl RdbcBlobAccess for TestBlobAccess {
 }
 
 pub(crate) fn test_blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
-    ResourceHandleFactory::blob(Arc::new(TestBlobAccess {
+    ResourceHandleFactory::blob(Box::new(TestBlobAccess {
         bytes: bytes.into(),
         freed: AtomicBool::new(false),
     }))

@@ -1,3 +1,4 @@
+use super::owned_result_set::OwnedResultSet;
 use crate::error::RdbcError;
 use crate::result_set::{ColumnIndex, ResultSet, ResultSetRead, ResultSetUpdate};
 use crate::types::{decimal_from_f64, decimal_to_f64, decimal_to_i64};
@@ -13,6 +14,43 @@ use crate::types::{
 /// 本 trait 不拥有 cursor state；所有实现均委托唯一 [`ResultSet`] core，因此不会形成
 /// 第二套 raw/logical hierarchy。
 pub trait ResultSetExt: ResultSet {
+    /// 将唯一拥有的标准游标转换为按需 Stream，每次轮询至多推进一行。
+    /// 参数 map 在当前行上生成拥有所有权的输出；返回 Send Stream，不要求游标 Sync。
+    /// EOF、读取或映射失败会等待 close；错误优先保留原读取/映射错误。
+    /// 提前丢弃 Stream 通过 release_owned 交接游标，池化实现沿既有所有者监管释放。
+    /// 对应 Java: java.sql.ResultSet#next/close 的 Rust 异步消费扩展。
+    fn into_stream<T, F>(
+        self: Box<Self>,
+        map: F,
+    ) -> std::pin::Pin<Box<dyn futures::Stream<Item = Result<T, RdbcError>> + Send>>
+    where
+        T: Send + 'static,
+        F: FnMut(&Self) -> Result<T, RdbcError> + Send + 'static,
+    {
+        Box::pin(futures::stream::try_unfold(
+            (OwnedResultSet::new(self), map),
+            |(mut cursor, mut map)| async move {
+                match cursor.as_mut().next().await {
+                    Ok(true) => match map(cursor.as_ref()) {
+                        Ok(value) => Ok(Some((value, (cursor, map)))),
+                        Err(error) => {
+                            let _ = cursor.as_mut().close().await;
+                            Err(error)
+                        }
+                    },
+                    Ok(false) => {
+                        cursor.as_mut().close().await?;
+                        Ok(None)
+                    }
+                    Err(error) => {
+                        let _ = cursor.as_mut().close().await;
+                        Err(error)
+                    }
+                }
+            },
+        ))
+    }
+
     /// 读取可空 String。
     fn string(&self, column: ColumnIndex) -> Result<Option<String>, RdbcError> {
         string_object(self.read_object(column, &ResultSetRead::String)?)

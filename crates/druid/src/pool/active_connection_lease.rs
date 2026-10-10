@@ -15,13 +15,16 @@ pub(crate) struct ActiveConnectionLease {
 
 impl ActiveConnectionLease {
     pub(crate) fn new(lease_active: Weak<AtomicBool>, execution_running: Weak<AtomicBool>) -> Self {
+        // 对齐 Java：先完成借出堆栈捕获，再开始 removeAbandoned 的租约计时。
+        // 符号解析属于借出诊断成本，不应消耗调用者实际持有连接的超时预算。
+        let connect_stack_trace = std::backtrace::Backtrace::force_capture().to_string();
         Self {
             borrowed_at: Instant::now(),
             lease_active,
             execution_running,
             // Java 在 removeAbandoned 开启时记录借出线程堆栈。Rust 的
             // Backtrace 同样在借出点捕获，管理端读取时不再伪造空结果。
-            connect_stack_trace: std::backtrace::Backtrace::force_capture().to_string(),
+            connect_stack_trace,
         }
     }
 }

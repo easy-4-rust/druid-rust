@@ -559,6 +559,15 @@ pub trait ResultSet: Wrapper + Send + 'static {
         })
     }
 
+    /// 交接唯一拥有的游标以执行非阻塞释放；无参数、无返回值。
+    /// 默认直接丢弃驱动对象，沿用驱动自身的 Drop；池化代理应把异步关闭
+    /// 提交给已有所有者监管队列，保留失败与重试，不在 Drop 中阻塞等待。
+    /// 仅 owning Stream 的所有权适配调用，不改变普通共享视图的生命周期。
+    /// 对应 Java: java.sql.ResultSet#close 的 Rust 拥有型消费扩展。
+    fn release_owned(self: Box<Self>) {
+        drop(self);
+    }
+
     /// 关闭游标并释放其 owned actor/native handle。
     async fn close(&mut self) -> Result<(), RdbcError> {
         Err(RdbcError::feature_not_supported("result_set_close"))

@@ -9,11 +9,14 @@
 use druid::core::{
     Connection, ConnectionFactory, DruidError, ExecResult, RdbcError, Row, SqlException, Value,
 };
-use druid::core::{
-    RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
-    RdbcResourceAccess, RdbcSqlXmlAccess, ResourceHandleFactory, ResourceOperations,
-};
+use druid::core::{ResourceHandleFactory, ResourceOperations};
 use druid::pool::{DruidDataSourceFactory, DruidPool, DruidPoolBuilder};
+use druid_rdbc::resource::{
+    Array, Blob, BlobPattern, Clob, ClobPattern, NClob, RdbcInputStream, RdbcOutputStream,
+    RdbcReader, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Ref, SqlXml,
+};
+use druid_rdbc::result_set::ResultSet;
+use druid_rdbc::types::{RdbcObject, RdbcString, RdbcTypeMap};
 use druid_wrapper::toasty::ToastyConnectionFactory;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -316,163 +319,367 @@ async fn pool_with_db_type(name: &str, db_type: &str) -> DruidPool {
 // 28. spi: ResourceHandleFactory
 // ===========================================================================
 
+/// 保留原测试值及不支持分支的标准夹具。对应 Java: java.sql.Array。
+#[derive(Debug)]
 struct StubArrayAccess;
-
-impl std::fmt::Debug for StubArrayAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StubArrayAccess").finish()
-    }
-}
-
 #[async_trait::async_trait]
-impl RdbcResourceAccess for StubArrayAccess {
+impl Array for StubArrayAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::array()
+        ResourceOperations::READ | ResourceOperations::FREE
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcArrayAccess for StubArrayAccess {
-    async fn base_type_name(&self) -> Result<String, RdbcError> {
+    async fn base_type_name(&mut self) -> Result<String, RdbcError> {
         Ok("VARCHAR".to_owned())
     }
-    async fn base_type(&self) -> Result<i32, RdbcError> {
+    async fn base_type(&mut self) -> Result<i32, RdbcError> {
         Ok(12)
     }
-    async fn values(&self) -> Result<Vec<druid::core::RdbcObject>, RdbcError> {
+    async fn values(&mut self) -> Result<Vec<RdbcObject>, RdbcError> {
         Ok(Vec::new())
     }
+    async fn values_with_type_map(
+        &mut self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Array#values_with_type_map",
+        ))
+    }
+    async fn values_range(
+        &mut self,
+        _index: i64,
+        _count: i32,
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Array#values_range"))
+    }
+    async fn values_range_with_type_map(
+        &mut self,
+        _index: i64,
+        _count: i32,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Vec<RdbcObject>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Array#values_range_with_type_map",
+        ))
+    }
+    async fn result_set(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Array#result_set"))
+    }
+    async fn result_set_with_type_map(
+        &mut self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Array#result_set_with_type_map",
+        ))
+    }
+    async fn result_set_range(
+        &mut self,
+        _index: i64,
+        _count: i32,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Array#result_set_range"))
+    }
+    async fn result_set_range_with_type_map(
+        &mut self,
+        _index: i64,
+        _count: i32,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Array#result_set_range_with_type_map",
+        ))
+    }
+    async fn free(&mut self) -> Result<(), RdbcError> {
+        // 原夹具无外部状态，保留旧默认free成功。
+        Ok(())
+    }
 }
-
+/// 保留原测试值及不支持分支的标准夹具。对应 Java: java.sql.Blob。
+#[derive(Debug)]
 struct StubBlobAccess;
-
-impl std::fmt::Debug for StubBlobAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StubBlobAccess").finish()
-    }
-}
-
 #[async_trait::async_trait]
-impl RdbcResourceAccess for StubBlobAccess {
+impl Blob for StubBlobAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::blob()
+        ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcBlobAccess for StubBlobAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         Ok(0)
     }
-    async fn get_bytes(&self, _position: i64, _length: i32) -> Result<Vec<u8>, RdbcError> {
+    async fn get_bytes(&mut self, _position: i64, _length: i32) -> Result<Vec<u8>, RdbcError> {
         Ok(Vec::new())
     }
+    async fn get_binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#get_binary_stream"))
+    }
+    async fn position_bytes(
+        &mut self,
+        _pattern: &[u8],
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#position_bytes"))
+    }
+    async fn position_blob(
+        &mut self,
+        _pattern: BlobPattern<'_>,
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#position_blob"))
+    }
+    async fn set_bytes(&mut self, _position: i64, _bytes: &[u8]) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#set_bytes"))
+    }
+    async fn set_bytes_range(
+        &mut self,
+        _position: i64,
+        _bytes: &[u8],
+        _offset: i32,
+        _length: i32,
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#set_bytes_range"))
+    }
+    async fn set_binary_stream(&mut self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#set_binary_stream"))
+    }
+    async fn truncate(&mut self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#truncate"))
+    }
+    async fn free(&mut self) -> Result<(), RdbcError> {
+        // 原夹具无外部状态，保留旧默认free成功。
+        Ok(())
+    }
+    async fn get_binary_stream_range(
+        &mut self,
+        _position: i64,
+        _length: i64,
+    ) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Blob#get_binary_stream_range",
+        ))
+    }
 }
-
+/// 保留原测试值及不支持分支的标准夹具。对应 Java: java.sql.Clob。
+#[derive(Debug)]
 struct StubClobAccess;
-
-impl std::fmt::Debug for StubClobAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StubClobAccess").finish()
-    }
-}
-
 #[async_trait::async_trait]
-impl RdbcResourceAccess for StubClobAccess {
+impl Clob for StubClobAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::clob()
+        ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcClobAccess for StubClobAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         Ok(0)
     }
     async fn get_sub_string(
-        &self,
+        &mut self,
         _position: i64,
         _length: i32,
-    ) -> Result<druid::core::RdbcString, RdbcError> {
+    ) -> Result<RdbcString, RdbcError> {
         Ok("".into())
     }
+    async fn get_character_stream(&mut self) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Clob#get_character_stream",
+        ))
+    }
+    async fn get_ascii_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#get_ascii_stream"))
+    }
+    async fn position_string(
+        &mut self,
+        _pattern: &RdbcString,
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#position_string"))
+    }
+    async fn position_clob(
+        &mut self,
+        _pattern: ClobPattern<'_>,
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#position_clob"))
+    }
+    async fn set_string(&mut self, _position: i64, _value: &RdbcString) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#set_string"))
+    }
+    async fn set_string_range(
+        &mut self,
+        _position: i64,
+        _value: &RdbcString,
+        _offset: i32,
+        _length: i32,
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#set_string_range"))
+    }
+    async fn set_ascii_stream(&mut self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#set_ascii_stream"))
+    }
+    async fn set_character_stream(&mut self, _position: i64) -> Result<RdbcWriter, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Clob#set_character_stream",
+        ))
+    }
+    async fn truncate(&mut self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#truncate"))
+    }
+    async fn free(&mut self) -> Result<(), RdbcError> {
+        // 原夹具无外部状态，保留旧默认free成功。
+        Ok(())
+    }
+    async fn get_character_stream_range(
+        &mut self,
+        _position: i64,
+        _length: i64,
+    ) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Clob#get_character_stream_range",
+        ))
+    }
 }
-
+/// 保留原测试值及不支持分支的标准夹具。对应 Java: java.sql.NClob。
+#[derive(Debug)]
 struct StubNClobAccess;
-
-impl std::fmt::Debug for StubNClobAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StubNClobAccess").finish()
-    }
-}
-
 #[async_trait::async_trait]
-impl RdbcResourceAccess for StubNClobAccess {
+impl Clob for StubNClobAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::clob()
+        ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::FREE
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcClobAccess for StubNClobAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         Ok(0)
     }
     async fn get_sub_string(
-        &self,
+        &mut self,
         _position: i64,
         _length: i32,
-    ) -> Result<druid::core::RdbcString, RdbcError> {
+    ) -> Result<RdbcString, RdbcError> {
         Ok("".into())
     }
+    async fn get_character_stream(&mut self) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Clob#get_character_stream",
+        ))
+    }
+    async fn get_ascii_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#get_ascii_stream"))
+    }
+    async fn position_string(
+        &mut self,
+        _pattern: &RdbcString,
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#position_string"))
+    }
+    async fn position_clob(
+        &mut self,
+        _pattern: ClobPattern<'_>,
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#position_clob"))
+    }
+    async fn set_string(&mut self, _position: i64, _value: &RdbcString) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#set_string"))
+    }
+    async fn set_string_range(
+        &mut self,
+        _position: i64,
+        _value: &RdbcString,
+        _offset: i32,
+        _length: i32,
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#set_string_range"))
+    }
+    async fn set_ascii_stream(&mut self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#set_ascii_stream"))
+    }
+    async fn set_character_stream(&mut self, _position: i64) -> Result<RdbcWriter, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Clob#set_character_stream",
+        ))
+    }
+    async fn truncate(&mut self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("Clob#truncate"))
+    }
+    async fn free(&mut self) -> Result<(), RdbcError> {
+        // 原夹具无外部状态，保留旧默认free成功。
+        Ok(())
+    }
+    async fn get_character_stream_range(
+        &mut self,
+        _position: i64,
+        _length: i64,
+    ) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Clob#get_character_stream_range",
+        ))
+    }
 }
-
-impl RdbcNClobAccess for StubNClobAccess {}
-
+impl NClob for StubNClobAccess {}
+/// 保留原测试值及不支持分支的标准夹具。对应 Java: java.sql.Ref。
+#[derive(Debug)]
 struct StubRefAccess;
-
-impl std::fmt::Debug for StubRefAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StubRefAccess").finish()
-    }
-}
-
 #[async_trait::async_trait]
-impl RdbcResourceAccess for StubRefAccess {
+impl Ref for StubRefAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::reference()
+        ResourceOperations::READ
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcRefAccess for StubRefAccess {
-    async fn base_type_name(&self) -> Result<String, RdbcError> {
+    async fn base_type_name(&mut self) -> Result<String, RdbcError> {
         Ok("REF".to_owned())
     }
-    async fn object(&self) -> Result<druid::core::RdbcObject, RdbcError> {
-        Ok(druid::core::RdbcObject::Scalar(druid::core::Value::Null))
+    async fn object(&mut self) -> Result<RdbcObject, RdbcError> {
+        Ok(RdbcObject::Scalar(Value::Null))
+    }
+    async fn object_with_type_map(
+        &mut self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcObject, RdbcError> {
+        Err(RdbcError::feature_not_supported("Ref#object_with_type_map"))
+    }
+    async fn set_object(&mut self, _value: RdbcObject) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("Ref#set_object"))
     }
 }
-
+/// 保留原测试值及不支持分支的标准夹具。对应 Java: java.sql.SqlXml。
+#[derive(Debug)]
 struct StubSqlXmlAccess;
-
-impl std::fmt::Debug for StubSqlXmlAccess {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("StubSqlXmlAccess").finish()
-    }
-}
-
 #[async_trait::async_trait]
-impl RdbcResourceAccess for StubSqlXmlAccess {
+impl SqlXml for StubSqlXmlAccess {
     fn capabilities(&self) -> ResourceOperations {
-        ResourceOperations::sql_xml()
+        // Source仍不支持，不能宣称包含Source的整组READ能力。
+        ResourceOperations::FREE
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcSqlXmlAccess for StubSqlXmlAccess {
-    async fn string(&self) -> Result<druid::core::RdbcString, RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
+        // 原夹具无外部状态，保留旧默认free成功。
+        Ok(())
+    }
+    async fn binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("SqlXml#binary_stream"))
+    }
+    async fn set_binary_stream(&mut self) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("SqlXml#set_binary_stream"))
+    }
+    async fn character_stream(&mut self) -> Result<RdbcReader, RdbcError> {
+        Err(RdbcError::feature_not_supported("SqlXml#character_stream"))
+    }
+    async fn set_character_stream(&mut self) -> Result<RdbcWriter, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "SqlXml#set_character_stream",
+        ))
+    }
+    async fn string(&mut self) -> Result<RdbcString, RdbcError> {
         Ok("<root/>".into())
+    }
+    async fn set_string(&mut self, _value: &RdbcString) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("SqlXml#set_string"))
+    }
+    async fn source(
+        &mut self,
+        _representation: Option<&RdbcXmlRepresentationType>,
+    ) -> Result<RdbcXmlSource, RdbcError> {
+        Err(RdbcError::feature_not_supported("SqlXml#source"))
+    }
+    async fn result(
+        &mut self,
+        _representation: Option<&RdbcXmlRepresentationType>,
+    ) -> Result<RdbcXmlResult, RdbcError> {
+        Err(RdbcError::feature_not_supported("SqlXml#result"))
     }
 }
 
@@ -555,52 +762,50 @@ fn task6_pool_deep_branch_coverage_test_spi_resource_capabilities_presets() {
 
 #[test]
 fn task6_pool_deep_branch_coverage_test_spi_factory_detached_array() {
-    let access = Arc::new(StubArrayAccess);
+    let access = Box::new(StubArrayAccess);
     let _array = ResourceHandleFactory::array(access);
 }
 
 #[test]
 fn task6_pool_deep_branch_coverage_test_spi_factory_detached_blob() {
-    let access = Arc::new(StubBlobAccess);
+    let access = Box::new(StubBlobAccess);
     let _blob = ResourceHandleFactory::blob(access);
 }
 
 #[test]
 fn task6_pool_deep_branch_coverage_test_spi_factory_detached_clob() {
-    let access = Arc::new(StubClobAccess);
+    let access = Box::new(StubClobAccess);
     let _clob = ResourceHandleFactory::clob(access);
 }
 
 #[test]
 fn task6_pool_deep_branch_coverage_test_spi_factory_detached_n_clob() {
-    let access = Arc::new(StubNClobAccess);
+    let access = Box::new(StubNClobAccess);
     let _n_clob = ResourceHandleFactory::n_clob(access);
 }
 
 #[test]
 fn task6_pool_deep_branch_coverage_test_spi_factory_detached_reference() {
-    let access = Arc::new(StubRefAccess);
+    let access = Box::new(StubRefAccess);
     let _reference = ResourceHandleFactory::reference(access);
 }
 
 #[test]
 fn task6_pool_deep_branch_coverage_test_spi_factory_detached_sql_xml() {
-    let access = Arc::new(StubSqlXmlAccess);
+    let access = Box::new(StubSqlXmlAccess);
     let _sql_xml = ResourceHandleFactory::sql_xml(access);
 }
 
 #[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_spi_resource_access_default_free_returns_ok() {
-    let access = StubArrayAccess;
-    assert!(<StubArrayAccess as RdbcResourceAccess>::free(&access)
-        .await
-        .is_ok());
+    let mut access = StubArrayAccess;
+    assert!(<StubArrayAccess as Array>::free(&mut access).await.is_ok());
 }
 
 #[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_spi_array_access_default_methods_return_not_supported(
 ) {
-    let access = StubArrayAccess;
+    let mut access = StubArrayAccess;
     assert!(access
         .values_with_type_map(&Default::default())
         .await
@@ -625,7 +830,7 @@ async fn task6_pool_deep_branch_coverage_test_spi_array_access_default_methods_r
 #[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_spi_blob_access_default_methods_return_not_supported()
 {
-    let access = StubBlobAccess;
+    let mut access = StubBlobAccess;
     assert!(access.get_binary_stream().await.is_err());
     assert!(access.position_bytes(&[1, 2], 0).await.is_err());
     assert!(access.set_bytes(0, &[1, 2]).await.is_err());
@@ -638,7 +843,7 @@ async fn task6_pool_deep_branch_coverage_test_spi_blob_access_default_methods_re
 #[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_spi_clob_access_default_methods_return_not_supported()
 {
-    let access = StubClobAccess;
+    let mut access = StubClobAccess;
     assert!(access.get_character_stream().await.is_err());
     assert!(access.get_ascii_stream().await.is_err());
     let test_str: druid::core::RdbcString = "test".into();
@@ -654,7 +859,7 @@ async fn task6_pool_deep_branch_coverage_test_spi_clob_access_default_methods_re
 #[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_spi_ref_access_default_methods_return_not_supported()
 {
-    let access = StubRefAccess;
+    let mut access = StubRefAccess;
     assert!(access
         .object_with_type_map(&Default::default())
         .await
@@ -668,7 +873,7 @@ async fn task6_pool_deep_branch_coverage_test_spi_ref_access_default_methods_ret
 #[tokio::test]
 async fn task6_pool_deep_branch_coverage_test_spi_sql_xml_access_default_methods_return_not_supported(
 ) {
-    let access = StubSqlXmlAccess;
+    let mut access = StubSqlXmlAccess;
     assert!(access.binary_stream().await.is_err());
     assert!(access.set_binary_stream().await.is_err());
     assert!(access.character_stream().await.is_err());

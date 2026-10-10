@@ -1,214 +1,57 @@
-//! Standard Rust mapping for Java `java.sql.Clob`.
-
 use crate::error::RdbcError;
-use crate::resource::{
-    RdbcClobAccess, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcWriter, ResourceLifecycle,
-    ResourceOperations,
-};
+use crate::resource::ResourceOperations;
+use crate::resource::{ClobPattern, RdbcInputStream, RdbcOutputStream, RdbcReader, RdbcWriter};
 use crate::types::RdbcString;
-use std::fmt;
-use std::sync::Arc;
 
-/// Driver-neutral RDBC `Clob` handle.
-///
-/// Clone preserves resource identity and never reads character content implicitly.
-#[derive(Clone)]
-pub struct RdbcClob {
-    access: Arc<dyn RdbcClobAccess>,
-    context: Arc<ResourceLifecycle>,
-}
-
-impl RdbcClob {
-    pub(crate) fn from_parts(
-        access: Arc<dyn RdbcClobAccess>,
-        context: Arc<ResourceLifecycle>,
-    ) -> Self {
-        Self { access, context }
-    }
-
-    /// Returns the character length. Corresponds to `Clob#length()`.
-    pub async fn length(&self) -> Result<i64, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Clob#length")?;
-        self.context.observe(self.access.length().await)
-    }
-
-    /// Returns a 1-based substring. Corresponds to `Clob#getSubString(long,int)`.
-    pub async fn get_sub_string(
-        &self,
-        position: i64,
-        length: i32,
-    ) -> Result<RdbcString, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::RANGE,
-            "Clob#getSubString",
-        )?;
-        self.context
-            .observe(self.access.get_sub_string(position, length).await)
-    }
-
-    /// Opens the full character stream. Corresponds to `Clob#getCharacterStream()`.
-    pub async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::STREAM,
-            "Clob#getCharacterStream",
-        )?;
-        self.context
-            .observe(self.access.get_character_stream().await)
-    }
-
-    /// Opens the ASCII stream. Corresponds to `Clob#getAsciiStream()`.
-    pub async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::STREAM,
-            "Clob#getAsciiStream",
-        )?;
-        self.context.observe(self.access.get_ascii_stream().await)
-    }
-
-    /// Finds a string. Corresponds to `Clob#position(String,long)`.
-    pub async fn position_string(
-        &self,
+/// 独占可变SQL资源标准接口；对应 Java: java.sql.Clob。
+/// 对象独立拥有，仅要求Send，不要求Sync。各方法返回实际值或数据库错误。
+#[async_trait::async_trait]
+pub trait Clob: std::fmt::Debug + Send + 'static {
+    /// 返回真实支持的操作集合（Rust扩展）。
+    fn capabilities(&self) -> ResourceOperations;
+    /// 对应 Java: Clob#length()；字符长度采用Java UTF-16单元。
+    async fn length(&mut self) -> Result<i64, RdbcError>;
+    /// 对应 Java: Clob#getSubString(long,int)；1-based位置，保留UTF-16包括孤立代理项。
+    async fn get_sub_string(&mut self, position: i64, length: i32)
+        -> Result<RdbcString, RdbcError>;
+    /// 对应 Java: Clob#getCharacterStream()；返回字符读取流。
+    async fn get_character_stream(&mut self) -> Result<RdbcReader, RdbcError>;
+    /// 对应 Java: Clob#getAsciiStream()；返回ASCII读取流。
+    async fn get_ascii_stream(&mut self) -> Result<RdbcInputStream, RdbcError>;
+    /// 对应 Java: Clob#position(String,long)；返回1-based位置，未找到为None。
+    async fn position_string(
+        &mut self,
         pattern: &RdbcString,
         start: i64,
-    ) -> Result<Option<i64>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::SEARCH,
-            "Clob#position(String,long)",
-        )?;
-        self.context
-            .observe(self.access.position_string(pattern, start).await)
-    }
-
-    /// Finds another Clob. Corresponds to `Clob#position(Clob,long)`.
-    pub async fn position_clob(
-        &self,
-        pattern: &RdbcClob,
+    ) -> Result<Option<i64>, RdbcError>;
+    /// 对应 Java: Clob#position(Clob,long)；模式也使用同一标准接口。
+    async fn position_clob(
+        &mut self,
+        pattern: ClobPattern<'_>,
         start: i64,
-    ) -> Result<Option<i64>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::SEARCH,
-            "Clob#position(Clob,long)",
-        )?;
-        self.context
-            .observe(self.access.position_clob(pattern, start).await)
-    }
-
-    /// Writes a string. Corresponds to `Clob#setString(long,String)`.
-    pub async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, RdbcError> {
-        self.context
-            .require(ResourceOperations::WRITE, "Clob#setString")?;
-        self.context
-            .observe(self.access.set_string(position, value).await)
-    }
-
-    /// Writes a string range. Corresponds to `Clob#setString(long,String,int,int)`.
-    pub async fn set_string_range(
-        &self,
+    ) -> Result<Option<i64>, RdbcError>;
+    /// 对应 Java: Clob#setString(long,String)；返回写入字符单元数。
+    async fn set_string(&mut self, position: i64, value: &RdbcString) -> Result<i32, RdbcError>;
+    /// 对应 Java: Clob#setString(long,String,int,int)；资源位置1-based，输入offset为0-based UTF-16。
+    async fn set_string_range(
+        &mut self,
         position: i64,
         value: &RdbcString,
         offset: i32,
         length: i32,
-    ) -> Result<i32, RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::RANGE,
-            "Clob#setString(long,String,int,int)",
-        )?;
-        self.context.observe(
-            self.access
-                .set_string_range(position, value, offset, length)
-                .await,
-        )
-    }
-
-    /// Opens a positioned ASCII output stream. Corresponds to `Clob#setAsciiStream(long)`.
-    pub async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::STREAM,
-            "Clob#setAsciiStream",
-        )?;
-        self.context
-            .observe(self.access.set_ascii_stream(position).await)
-    }
-
-    /// Opens a positioned character writer. Corresponds to `Clob#setCharacterStream(long)`.
-    pub async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::STREAM,
-            "Clob#setCharacterStream",
-        )?;
-        self.context
-            .observe(self.access.set_character_stream(position).await)
-    }
-
-    /// Truncates the Clob. Corresponds to `Clob#truncate(long)`.
-    pub async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::TRUNCATE,
-            "Clob#truncate",
-        )?;
-        self.context.observe(self.access.truncate(length).await)
-    }
-
-    /// Releases the Clob. Corresponds to `Clob#free()`.
-    pub async fn free(&self) -> Result<(), RdbcError> {
-        self.context
-            .require_capability(ResourceOperations::FREE, "Clob#free")?;
-        self.context.free(self.access.as_ref()).await
-    }
-
-    /// Returns whether the Clob was released.
-    #[must_use]
-    pub fn is_freed(&self) -> bool {
-        self.context.is_freed()
-    }
-
-    /// Opens a character stream over a range. Corresponds to `Clob#getCharacterStream(long,long)`.
-    pub async fn get_character_stream_range(
-        &self,
+    ) -> Result<i32, RdbcError>;
+    /// 对应 Java: Clob#setAsciiStream(long)；返回指定位置ASCII写入流。
+    async fn set_ascii_stream(&mut self, position: i64) -> Result<RdbcOutputStream, RdbcError>;
+    /// 对应 Java: Clob#setCharacterStream(long)；返回指定位置字符写入器。
+    async fn set_character_stream(&mut self, position: i64) -> Result<RdbcWriter, RdbcError>;
+    /// 对应 Java: Clob#truncate(long)；截断为指定字符长度，负值拒绝。
+    async fn truncate(&mut self, length: i64) -> Result<(), RdbcError>;
+    /// 对应 Java: Clob#free()；幂等释放后其他JDBC操作拒绝。
+    async fn free(&mut self) -> Result<(), RdbcError>;
+    /// 对应 Java: Clob#getCharacterStream(long,long)；返回指定1-based字符范围。
+    async fn get_character_stream_range(
+        &mut self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcReader, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::STREAM | ResourceOperations::RANGE,
-            "Clob#getCharacterStream(long,long)",
-        )?;
-        self.context.observe(
-            self.access
-                .get_character_stream_range(position, length)
-                .await,
-        )
-    }
-
-    /// Returns the driver-neutral resource identifier.
-    #[must_use]
-    pub fn resource_id(&self) -> &str {
-        self.context.resource_id().as_str()
-    }
-
-    /// Returns the operations enabled for this Clob instance.
-    #[must_use]
-    pub fn capabilities(&self) -> ResourceOperations {
-        self.context.capabilities()
-    }
+    ) -> Result<RdbcReader, RdbcError>;
 }
-
-impl fmt::Debug for RdbcClob {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("RdbcClob")
-            .field("context", &self.context)
-            .finish_non_exhaustive()
-    }
-}
-
-impl PartialEq for RdbcClob {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.context, &other.context)
-    }
-}
-
-impl Eq for RdbcClob {}
-
-/// Mapping of an SQL `CLOB` character large object.
-pub type Clob = RdbcClob;

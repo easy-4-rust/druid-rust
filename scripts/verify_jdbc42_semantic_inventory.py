@@ -435,6 +435,7 @@ def verify_inventory(
     logical_live_entries: set[str] | None = None,
     require_adapter_evidence: bool = True,
     require_logical_evidence: bool = True,
+    require_final_evidence: bool = False,
 ) -> InventorySummary:
     """Verify exact source coverage and honest planned/declared target phases."""
 
@@ -452,6 +453,7 @@ def verify_inventory(
     )
     semantic = resolve_path(root, semantic_path)
     oracle = resolve_path(root, oracle_path)
+    oracle_payload = oracle.read_bytes() if require_final_evidence and oracle.is_file() else None
     records, expected_semantic_hashes = load_oracle(
         oracle,
         expected_source_manifest_sha256,
@@ -461,6 +463,26 @@ def verify_inventory(
     payload = semantic.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     rows = parse_semantic_payload(payload)
+    if require_final_evidence:
+        if not require_adapter_evidence or not require_logical_evidence:
+            fail("final semantic gate cannot skip adapter or logical evidence")
+        # 最终阶段允许证据状态晋升，但 Java 来源身份仍绑定独立重建的冻结摘要。
+        final_digest = verify_final_source_binding(rows, records, expected_semantic_hashes)
+        verify_final_state_policy(rows)
+        for line_number, row in enumerate(rows, start=2):
+            if row[3] not in RUST_SHAPES:
+                fail(f"final semantic row {line_number} has unknown rust_shape")
+            if row[4] not in SEMANTIC_DISPOSITIONS:
+                fail(f"final semantic row {line_number} has unknown disposition")
+            if require_standard_entries and row[1] in TASK3_STANDARD_ENTRIES:
+                if row[5] != TASK3_STANDARD_ENTRIES[row[1]]:
+                    fail(f"final Task3 canonical entry drift: {row[1]}")
+        verify_final_runtime_evidence(root, rows)
+        if semantic.read_bytes() != payload:
+            fail("final semantic inventory changed during evidence verification")
+        if oracle.read_bytes() != oracle_payload:
+            fail("final source oracle changed during evidence verification")
+        return InventorySummary(52, 17, 0, final_digest)
     phase_digest = normalized_phase_digest(
         rows,
         phase,
@@ -655,6 +677,13 @@ def repository_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def verify_final_runtime_evidence(root: Path, rows: list[list[str]]) -> None:
+    """执行新鲜公开形态及原完整运行门禁，不接受仅状态晋升或历史收据。"""
+    from verify_jdbc42_final_runtime import verify_runtime
+
+    verify_runtime(root, rows)
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse optional manifest paths for self-tests and the default live gate."""
 
@@ -662,6 +691,7 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--semantic", type=Path, default=DEFAULT_SEMANTIC)
     parser.add_argument("--oracle", type=Path, default=DEFAULT_ORACLE)
     parser.add_argument("--require-standard-entries", action="store_true")
+    parser.add_argument("--require-final-evidence", action="store_true")
     parser.add_argument("--phase", choices=sorted(PHASES), default="planned")
     return parser.parse_args()
 
@@ -677,6 +707,7 @@ def main() -> int:
             arguments.oracle,
             require_standard_entries=arguments.require_standard_entries,
             phase=arguments.phase,
+            require_final_evidence=arguments.require_final_evidence,
         )
     except VerificationError as error:
         print(f"ERROR: {error}", file=sys.stderr)

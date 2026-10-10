@@ -4,6 +4,7 @@ use crate::data_source::{
     XaDataSource,
 };
 use crate::driver::{ConnectionFactory, Driver};
+use crate::extensions::{RowSet, RowSetMetaData};
 use crate::metadata::{DatabaseMetaData, ParameterMetaData, ResultSetMetaData};
 use crate::result_set::ResultSet;
 use crate::statement::{CallableStatement, PreparedStatement, Statement};
@@ -23,10 +24,14 @@ pub enum StandardUnwrappedMut<'a> {
     CallableStatement(&'a mut dyn CallableStatement),
     /// 结果游标标准接口。
     ResultSet(&'a mut dyn ResultSet),
+    /// 同一行集的标准接口，继承 ResultSet。
+    RowSet(&'a mut dyn RowSet),
     /// 数据库元数据标准接口。
     DatabaseMetaData(&'a mut dyn DatabaseMetaData),
     /// 结果元数据标准接口。
     ResultSetMetaData(&'a mut dyn ResultSetMetaData),
+    /// 行集元数据标准接口；setter作用于同一原对象。
+    RowSetMetaData(&'a mut dyn RowSetMetaData),
     /// 参数元数据标准接口。
     ParameterMetaData(&'a mut dyn ParameterMetaData),
     /// 公共数据源标准接口。

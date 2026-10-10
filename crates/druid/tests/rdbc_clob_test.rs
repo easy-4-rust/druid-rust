@@ -4,9 +4,8 @@ use druid::core::{
     CharacterReader, CharacterWriter, RdbcClob, RdbcError, RdbcInputStream, RdbcNClob, RdbcObject,
     RdbcOutputStream, RdbcReader, RdbcString, RdbcWriter,
 };
-use druid::core::{
-    RdbcClobAccess, RdbcNClobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations,
-};
+use druid::core::{ResourceHandleFactory, ResourceOperations};
+use druid_rdbc::resource::{Clob, ClobPattern, NClob};
 use std::io::{Error, Write};
 use std::sync::{Arc, Mutex};
 
@@ -130,22 +129,19 @@ impl Write for ClobAsciiWriter {
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for InMemoryClobAccess {
+impl Clob for InMemoryClobAccess {
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::clob()
     }
 
-    async fn free(&self) -> Result<(), RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
         let mut state = self.state();
         state.freed = true;
         state.code_units.clear();
         Ok(())
     }
-}
 
-#[async_trait::async_trait]
-impl RdbcClobAccess for InMemoryClobAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         let state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Clob has been freed".to_string()));
@@ -154,7 +150,11 @@ impl RdbcClobAccess for InMemoryClobAccess {
             .map_err(|_| RdbcError::DriverError("Clob length exceeds i64".to_string()))
     }
 
-    async fn get_sub_string(&self, position: i64, length: i32) -> Result<RdbcString, RdbcError> {
+    async fn get_sub_string(
+        &mut self,
+        position: i64,
+        length: i32,
+    ) -> Result<RdbcString, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, position)?;
         let length = Self::checked_length(i64::from(length))?;
@@ -167,7 +167,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         ))
     }
 
-    async fn get_character_stream(&self) -> Result<RdbcReader, RdbcError> {
+    async fn get_character_stream(&mut self) -> Result<RdbcReader, RdbcError> {
         let state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Clob has been freed".to_string()));
@@ -175,7 +175,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         Ok(RdbcReader::from_utf16(state.code_units.clone()))
     }
 
-    async fn get_ascii_stream(&self) -> Result<RdbcInputStream, RdbcError> {
+    async fn get_ascii_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
         let state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Clob has been freed".to_string()));
@@ -193,7 +193,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
     }
 
     async fn position_string(
-        &self,
+        &mut self,
         pattern: &RdbcString,
         start: i64,
     ) -> Result<Option<i64>, RdbcError> {
@@ -217,24 +217,34 @@ impl RdbcClobAccess for InMemoryClobAccess {
     }
 
     async fn position_clob(
-        &self,
-        pattern: &RdbcClob,
+        &mut self,
+        pattern: ClobPattern<'_>,
         start: i64,
     ) -> Result<Option<i64>, RdbcError> {
-        let length = i32::try_from(pattern.length().await?)
-            .map_err(|_| RdbcError::DriverError("pattern Clob is too large".to_string()))?;
-        let value = pattern.get_sub_string(1, length).await?;
+        // 保留UTF-16模式与1-based搜索，驱动自行处理自身模式。
+        let value = match pattern {
+            ClobPattern::SameResource => {
+                let length = i32::try_from(self.length().await?)
+                    .map_err(|_| RdbcError::DriverError("pattern Clob is too large".to_string()))?;
+                self.get_sub_string(1, length).await?
+            }
+            ClobPattern::Other(pattern) => {
+                let length = i32::try_from(pattern.length().await?)
+                    .map_err(|_| RdbcError::DriverError("pattern Clob is too large".to_string()))?;
+                pattern.get_sub_string(1, length).await?
+            }
+        };
         self.position_string(&value, start).await
     }
 
-    async fn set_string(&self, position: i64, value: &RdbcString) -> Result<i32, RdbcError> {
+    async fn set_string(&mut self, position: i64, value: &RdbcString) -> Result<i32, RdbcError> {
         let length = i32::try_from(value.len())
             .map_err(|_| RdbcError::DriverError("Clob write is too large".to_string()))?;
         self.set_string_range(position, value, 0, length).await
     }
 
     async fn set_string_range(
-        &self,
+        &mut self,
         position: i64,
         value: &RdbcString,
         offset: i32,
@@ -253,7 +263,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
             .map_err(|_| RdbcError::DriverError("Clob write exceeds i32".to_string()))
     }
 
-    async fn set_ascii_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
+    async fn set_ascii_stream(&mut self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         let state = self.state();
         let position = Self::checked_start(&state, position)?;
         drop(state);
@@ -263,7 +273,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         }))
     }
 
-    async fn set_character_stream(&self, position: i64) -> Result<RdbcWriter, RdbcError> {
+    async fn set_character_stream(&mut self, position: i64) -> Result<RdbcWriter, RdbcError> {
         let state = self.state();
         let position = Self::checked_start(&state, position)?;
         drop(state);
@@ -273,7 +283,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
         }))
     }
 
-    async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
+    async fn truncate(&mut self, length: i64) -> Result<(), RdbcError> {
         let mut state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Clob has been freed".to_string()));
@@ -289,7 +299,7 @@ impl RdbcClobAccess for InMemoryClobAccess {
     }
 
     async fn get_character_stream_range(
-        &self,
+        &mut self,
         position: i64,
         length: i64,
     ) -> Result<RdbcReader, RdbcError> {
@@ -306,14 +316,14 @@ impl RdbcClobAccess for InMemoryClobAccess {
     }
 }
 
-impl RdbcNClobAccess for InMemoryClobAccess {}
+impl NClob for InMemoryClobAccess {}
 
 fn clob(value: impl Into<RdbcString>) -> RdbcClob {
-    ResourceHandleFactory::clob(Arc::new(InMemoryClobAccess::new(value.into())))
+    ResourceHandleFactory::clob(Box::new(InMemoryClobAccess::new(value.into())))
 }
 
 fn n_clob(value: impl Into<RdbcString>) -> RdbcNClob {
-    ResourceHandleFactory::n_clob(Arc::new(InMemoryClobAccess::new(value.into())))
+    ResourceHandleFactory::n_clob(Box::new(InMemoryClobAccess::new(value.into())))
 }
 
 #[derive(Debug)]
@@ -361,7 +371,6 @@ impl CharacterWriter for FailingWriter {
         ))
     }
 }
-
 #[test]
 fn rdbc_string_and_reader_preserve_utf16_identity_cursor_and_close() {
     let supplementary = RdbcString::from("A😀B");

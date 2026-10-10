@@ -7,10 +7,9 @@ use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::resource::{
-    RdbcArrayAccess, RdbcBlob, RdbcBlobAccess, RdbcClob, RdbcClobAccess, RdbcInputStream,
-    RdbcNClob, RdbcNClobAccess, RdbcOutputStream, RdbcReader, RdbcRefAccess, RdbcResourceAccess,
-    RdbcSqlXmlAccess, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource,
-    ResourceHandleFactory, ResourceOperations,
+    Array, Blob, Clob, NClob, RdbcBlob, RdbcClob, RdbcInputStream, RdbcNClob, RdbcOutputStream,
+    RdbcReader, RdbcWriter, RdbcXmlRepresentationType, RdbcXmlResult, RdbcXmlSource, Ref,
+    ResourceHandleFactory, ResourceOperations, SqlXml,
 };
 use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement,
@@ -41,10 +40,10 @@ impl TestCallableStatement {
         let clob = test_clob("callable-clob");
         let n_clob = test_n_clob("国家字符");
         let url = RdbcUrl::new("https://example.test/callable");
-        let reference = ResourceHandleFactory::reference(Arc::new(TestRefAccess));
-        let array = ResourceHandleFactory::array(Arc::new(TestArrayAccess));
+        let reference = ResourceHandleFactory::reference(Box::new(TestRefAccess));
+        let array = ResourceHandleFactory::array(Box::new(TestArrayAccess));
         let row_id = RdbcRowId::new(vec![1, 2, 3]);
-        let sql_xml = ResourceHandleFactory::sql_xml(Arc::new(TestSqlXmlAccess));
+        let sql_xml = ResourceHandleFactory::sql_xml(Box::new(TestSqlXmlAccess));
         Self {
             sql: sql.into(),
             closed: AtomicBool::new(false),
@@ -206,7 +205,8 @@ impl TestCallableStatement {
                 ),
                 (
                     CallableParameter::Name("sql_xml".to_string()),
-                    RdbcObject::SqlXml(sql_xml),
+                    // 名称OUT独立拥有同内容SQLXML；不能复用已由索引读取的对象。
+                    RdbcObject::SqlXml(ResourceHandleFactory::sql_xml(Box::new(TestSqlXmlAccess))),
                 ),
             ]),
         }

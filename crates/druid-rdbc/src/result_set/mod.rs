@@ -1,5 +1,7 @@
 //! JDBC-like 结果集标准。
 
+mod owned_result_set;
+
 #[expect(
     clippy::module_inception,
     reason = "one standard object per file keeps mod.rs declaration-only"

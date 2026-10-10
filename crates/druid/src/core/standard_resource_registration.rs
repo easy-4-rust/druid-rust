@@ -1,7 +1,7 @@
 //! Standard resource registry 的 generation-safe 注册令牌。
 
 use super::standard_resource_registry::StandardResourceRegistry;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 
 #[derive(Clone)]
 pub(crate) struct StandardResourceRegistration {
@@ -23,9 +23,22 @@ impl StandardResourceRegistration {
         }
     }
 
+    /// 校验令牌所属 registry；参数为目标 registry，返回弱引用身份是否一致。
+    pub(crate) fn belongs_to(&self, registry: &Arc<StandardResourceRegistry>) -> bool {
+        self.registry.ptr_eq(&Arc::downgrade(registry))
+    }
+
     pub(crate) fn unregister(&self) {
         if let Some(registry) = self.registry.upgrade() {
             registry.unregister(self.generation, self.id);
+        }
+    }
+
+    /// 向原所有者交接非阻塞清理；无参数，无返回值。
+    /// generation 与 registry 身份在原队列内校验，错误及重试继续归所有者保管。
+    pub(crate) fn request_cleanup(&self) {
+        if let Some(registry) = self.registry.upgrade() {
+            registry.request_registered_cleanup(self);
         }
     }
 

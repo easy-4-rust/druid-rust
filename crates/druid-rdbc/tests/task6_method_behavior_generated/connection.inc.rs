@@ -23,13 +23,13 @@ impl Connection for StrictConnection {
     async fn commit(&mut self) -> Result<(), RdbcError> {
         self.trace.fail()
     }
-    async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
+    async fn create_blob(&mut self) -> Result<Box<dyn Blob>, RdbcError> {
         self.trace.fail()
     }
-    async fn create_clob(&mut self) -> Result<RdbcClob, RdbcError> {
+    async fn create_clob(&mut self) -> Result<Box<dyn Clob>, RdbcError> {
         self.trace.fail()
     }
-    async fn create_n_clob(&mut self) -> Result<RdbcNClob, RdbcError> {
+    async fn create_n_clob(&mut self) -> Result<Box<dyn NClob>, RdbcError> {
         self.trace.fail()
     }
     async fn database_meta_data(&mut self) -> Result<Box<dyn DatabaseMetaData>, RdbcError> {

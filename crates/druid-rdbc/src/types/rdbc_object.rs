@@ -5,7 +5,9 @@
 //! `Array#getArray` 与 `Ref#getObject` 的返回对象。该类型属于 RDBC 平台层，
 //! 不绑定某一种 Statement。
 
-use crate::resource::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcReader, RdbcRef, RdbcSqlXml};
+use crate::resource::{
+    RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcReader, RdbcRef, RdbcSqlXml, RdbcStruct,
+};
 use crate::types::{RdbcOpaqueObject, RdbcRowId, RdbcUrl, Value};
 use bigdecimal::BigDecimal;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
@@ -48,6 +50,8 @@ pub enum RdbcObject {
     Url(RdbcUrl),
     /// `java.sql.Ref`。
     Ref(RdbcRef),
+    /// SQL结构类型对象；对应 Java: java.sql.Struct，保留引用身份及延迟属性读取。
+    Struct(RdbcStruct),
     /// `java.sql.Array`。
     Array(RdbcArray),
     /// `java.sql.RowId`。
@@ -101,6 +105,7 @@ impl fmt::Display for RdbcObject {
             Self::NString(value) => value.fmt(formatter),
             Self::Url(value) => value.external_form().fmt(formatter),
             Self::Ref(_) => formatter.write_str("<Ref>"),
+            Self::Struct(_) => formatter.write_str("<Struct>"),
             Self::Array(_) => formatter.write_str("<Array>"),
             Self::RowId(_) => formatter.write_str("<RowId>"),
             Self::SqlXml(_) => formatter.write_str("<SQLXML>"),

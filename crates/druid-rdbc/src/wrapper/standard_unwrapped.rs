@@ -4,6 +4,7 @@ use crate::data_source::{
     XaDataSource,
 };
 use crate::driver::{ConnectionFactory, Driver};
+use crate::extensions::{RowSet, RowSetMetaData};
 use crate::metadata::{DatabaseMetaData, ParameterMetaData, ResultSetMetaData};
 use crate::result_set::ResultSet;
 use crate::statement::{CallableStatement, PreparedStatement, Statement};
@@ -24,10 +25,14 @@ pub enum StandardUnwrapped<'a> {
     CallableStatement(&'a dyn CallableStatement),
     /// Canonical [`ResultSet`]。
     ResultSet(&'a dyn ResultSet),
+    /// 同一行集的标准接口，继承 ResultSet。
+    RowSet(&'a dyn RowSet),
     /// Canonical live [`DatabaseMetaData`]。
     DatabaseMetaData(&'a dyn DatabaseMetaData),
     /// Canonical [`ResultSetMetaData`] snapshot。
     ResultSetMetaData(&'a dyn ResultSetMetaData),
+    /// Canonical行集可变元数据接口；继承同一ResultSetMetaData。
+    RowSetMetaData(&'a dyn RowSetMetaData),
     /// Canonical [`ParameterMetaData`] snapshot。
     ParameterMetaData(&'a dyn ParameterMetaData),
     /// Canonical [`CommonDataSource`]。
@@ -58,8 +63,10 @@ impl StandardUnwrapped<'_> {
             Self::PreparedStatement(_) => TypeId::of::<dyn PreparedStatement>(),
             Self::CallableStatement(_) => TypeId::of::<dyn CallableStatement>(),
             Self::ResultSet(_) => TypeId::of::<dyn ResultSet>(),
+            Self::RowSet(_) => TypeId::of::<dyn RowSet>(),
             Self::DatabaseMetaData(_) => TypeId::of::<dyn DatabaseMetaData>(),
             Self::ResultSetMetaData(_) => TypeId::of::<dyn ResultSetMetaData>(),
+            Self::RowSetMetaData(_) => TypeId::of::<dyn RowSetMetaData>(),
             Self::ParameterMetaData(_) => TypeId::of::<dyn ParameterMetaData>(),
             Self::CommonDataSource(_) => TypeId::of::<dyn CommonDataSource>(),
             Self::DataSource(_) => TypeId::of::<dyn DataSource>(),

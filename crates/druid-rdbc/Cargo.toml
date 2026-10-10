@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 async-trait.workspace = true
+futures.workspace = true
 bitflags.workspace = true
 bigdecimal.workspace = true
 chrono.workspace = true

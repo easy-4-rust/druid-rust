@@ -322,6 +322,7 @@ use druid_rdbc::statement::{
     ParameterIndex, PreparedInputParameter, PreparedParameter, PreparedStatement,
     ResultSetConcurrency, ResultSetHoldability, ResultSetType, Statement, StatementOptions,
 };
+use druid_rdbc::resource::{Blob, Clob, NClob};
 use druid_rdbc::types::{
     RdbcArray, RdbcBigDecimal as BigDecimal, RdbcBlob, RdbcCalendarArgument,
     RdbcCharacterLength, RdbcClob, RdbcNClob,

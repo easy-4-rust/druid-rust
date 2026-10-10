@@ -6,11 +6,12 @@ use druid_rdbc::connection::{Connection, TransactionIsolation};
 use druid_rdbc::error::{RdbcError, SqlWarning};
 use druid_rdbc::extensions::ConnectionCapabilities;
 use druid_rdbc::metadata::DatabaseMetaData;
+use druid_rdbc::resource::{Blob, Clob, NClob};
 use druid_rdbc::statement::{
     CallableStatement, ExecResult, GeneratedKeys, PreparedStatement, ResultSetHoldability,
     Statement, StatementOptions,
 };
-use druid_rdbc::types::{RdbcBlob, RdbcClob, RdbcNClob, Row, Savepoint, Value};
+use druid_rdbc::types::{Row, Savepoint, Value};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 /// 保存固定原案例的连接状态与实际委托资源，验证外部池租约的标准委托合同。
@@ -110,19 +111,31 @@ impl Connection for ContractConnection {
         Ok(self.closed)
     }
 
-    async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
+    async fn create_blob(&mut self) -> Result<Box<dyn Blob>, RdbcError> {
         self.counts.create_blob.fetch_add(1, Ordering::Relaxed);
-        Ok(self.resources.blob.clone())
+        Ok(self
+            .resources
+            .blob
+            .take()
+            .expect("same preallocated resource transferred once"))
     }
 
-    async fn create_clob(&mut self) -> Result<RdbcClob, RdbcError> {
+    async fn create_clob(&mut self) -> Result<Box<dyn Clob>, RdbcError> {
         self.counts.create_clob.fetch_add(1, Ordering::Relaxed);
-        Ok(self.resources.clob.clone())
+        Ok(self
+            .resources
+            .clob
+            .take()
+            .expect("same preallocated resource transferred once"))
     }
 
-    async fn create_n_clob(&mut self) -> Result<RdbcNClob, RdbcError> {
+    async fn create_n_clob(&mut self) -> Result<Box<dyn NClob>, RdbcError> {
         self.counts.create_n_clob.fetch_add(1, Ordering::Relaxed);
-        Ok(self.resources.n_clob.clone())
+        Ok(self
+            .resources
+            .n_clob
+            .take()
+            .expect("same preallocated resource transferred once"))
     }
 
     fn auto_commit(&self) -> Result<bool, RdbcError> {

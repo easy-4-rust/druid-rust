@@ -1,8 +1,6 @@
 //! 池寿命分支测试：直接控制空闲 holder 的年龄，避免依赖毫秒级调度。
 
-#[path = "lifetime_tests/lifetime_test_connection.rs"]
 mod lifetime_test_connection;
-#[path = "lifetime_tests/lifetime_test_factory.rs"]
 mod lifetime_test_factory;
 
 use self::lifetime_test_factory::LifetimeTestFactory;
@@ -44,7 +42,9 @@ async fn task6_pool_deep_branch_coverage_test_borrow_skips_lifetime_expired_idle
     {
         let mut idle = pool.inner.idle.lock();
         let holder = idle.front_mut().unwrap();
-        holder.created_at = Instant::now() - Duration::from_millis(30);
+        holder.created_at = Instant::now()
+            .checked_sub(Duration::from_millis(30))
+            .expect("测试时钟应支持回退30毫秒");
         assert!(holder.connection_age() >= Duration::from_millis(10));
     }
     let mut conn = pool.get().await.unwrap();
@@ -73,7 +73,9 @@ async fn task6_lifetime_return_discards_expired_holder_exactly_once() {
     let mut conn = pool.get().await.unwrap();
     let holder = conn.connection_holder_mut().unwrap();
     let expired_id = holder.connection_id();
-    holder.created_at = Instant::now() - Duration::from_secs(1);
+    holder.created_at = Instant::now()
+        .checked_sub(Duration::from_secs(1))
+        .expect("测试时钟应支持回退1秒");
     conn.close().await.unwrap();
     let state = pool.state();
     assert_eq!(state.active_count, 0);

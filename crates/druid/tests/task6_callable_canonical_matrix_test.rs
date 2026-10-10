@@ -2420,3 +2420,54 @@ async fn callable_index_validation_preserves_owner_error_and_cache_disposition()
     callable_connection.close().await.unwrap();
     pool.close().await;
 }
+
+/// 同一OUT对象的克隆共享状态；不同OUT值各自持有一次性SQLXML读取机会。
+#[tokio::test]
+async fn callable_sqlxml_out_values_preserve_independence_and_per_selector_alias_state() {
+    let driver = callable_overload_support::TestCallableStatement::new(
+        "{call xml()}",
+        std::sync::Arc::new(callable_overload_support::TestCallableState::default()),
+    );
+    let index = CallableParameter::by_index(19).unwrap();
+    let name = CallableParameter::by_name("sql_xml").unwrap();
+    let indexed = driver.sql_xml_out_parameter(&index).unwrap().unwrap();
+    let indexed_alias = driver.sql_xml_out_parameter(&index).unwrap().unwrap();
+    let named = driver.sql_xml_out_parameter(&name).unwrap().unwrap();
+    let named_alias = driver.sql_xml_out_parameter(&name).unwrap().unwrap();
+    assert_eq!(indexed, indexed_alias);
+    assert_eq!(named, named_alias);
+    assert_ne!(indexed, named);
+    assert_eq!(
+        indexed.string().await.unwrap().to_rust_string().unwrap(),
+        "<x/>"
+    );
+    assert_eq!(
+        indexed_alias
+            .binary_stream()
+            .await
+            .expect_err("same XML cannot be read twice")
+            .sql_exception()
+            .unwrap()
+            .sql_state(),
+        Some("HY010")
+    );
+    indexed.free().await.unwrap();
+    assert!(indexed_alias.is_freed());
+    assert!(!named.is_freed());
+    assert_eq!(
+        named.binary_stream().await.unwrap().read_to_end().unwrap(),
+        b"<x/>"
+    );
+    assert_eq!(
+        named_alias
+            .string()
+            .await
+            .expect_err("named alias shares consumed read")
+            .sql_exception()
+            .unwrap()
+            .sql_state(),
+        Some("HY010")
+    );
+    named.free().await.unwrap();
+    assert!(named_alias.is_freed());
+}

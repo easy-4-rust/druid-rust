@@ -51,7 +51,10 @@ fn check_external(name: &str, source: &str) -> Result<Output, Box<dyn Error>> {
         .args(["check", "--offline", "--quiet"])
         .env(
             "CARGO_TARGET_DIR",
-            manifest_dir.join("target/no-physical-public-surface"),
+            std::env::var_os("DRUID_RDBC_EXTERNAL_TARGET_ROOT").map_or_else(
+                || manifest_dir.join("target/no-physical-public-surface"),
+                |root| std::path::PathBuf::from(root).join("no-physical-public-surface"),
+            ),
         )
         .current_dir(&package.path)
         .output()?;

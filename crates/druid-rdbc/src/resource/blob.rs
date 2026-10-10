@@ -1,185 +1,59 @@
-//! Standard Rust mapping for Java `java.sql.Blob`.
-
 use crate::error::RdbcError;
-use crate::resource::{
-    RdbcBlobAccess, RdbcInputStream, RdbcOutputStream, ResourceLifecycle, ResourceOperations,
-};
-use std::fmt;
-use std::sync::Arc;
+use crate::resource::{BlobPattern, RdbcInputStream, RdbcOutputStream, ResourceOperations};
 
-/// Driver-neutral RDBC `Blob` handle.
-///
-/// Clone preserves resource identity. Equality never reads large-object content.
-#[derive(Clone)]
-pub struct RdbcBlob {
-    access: Arc<dyn RdbcBlobAccess>,
-    context: Arc<ResourceLifecycle>,
-}
-
-impl RdbcBlob {
-    pub(crate) fn from_parts(
-        access: Arc<dyn RdbcBlobAccess>,
-        context: Arc<ResourceLifecycle>,
-    ) -> Self {
-        Self { access, context }
-    }
-
-    /// Returns the Blob length. Corresponds to `Blob#length()`.
-    pub async fn length(&self) -> Result<i64, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Blob#length")?;
-        self.context.observe(self.access.length().await)
-    }
-
-    /// Reads a 1-based byte range. Corresponds to `Blob#getBytes(long,int)`.
-    pub async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::RANGE,
-            "Blob#getBytes",
-        )?;
-        self.context
-            .observe(self.access.get_bytes(position, length).await)
-    }
-
-    /// Opens the full binary stream. Corresponds to `Blob#getBinaryStream()`.
-    pub async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::STREAM,
-            "Blob#getBinaryStream",
-        )?;
-        self.context.observe(self.access.get_binary_stream().await)
-    }
-
-    /// Finds a byte pattern. Corresponds to `Blob#position(byte[],long)`.
-    pub async fn position_bytes(
-        &self,
+/// 表示 SQL 二进制大对象的独占可变标准接口。
+/// 对应 Java: java.sql.Blob。资源按值拥有，不借用创建连接；只要求 Send，不要求 Sync。
+/// JDBC 声明共十一项；调用 free 后，除再次 free 外的 JDBC 操作必须拒绝。
+#[async_trait::async_trait]
+pub trait Blob: std::fmt::Debug + Send + 'static {
+    /// 返回实例支持的操作集合；这是 Rust 能力扩展，声明必须与实际行为一致。
+    fn capabilities(&self) -> ResourceOperations;
+    /// 返回字节长度；失败时返回数据库错误。对应 Java: Blob#length。
+    async fn length(&mut self) -> Result<i64, RdbcError>;
+    /// 从1-based position读取至多length字节；position<1或length<0必须报错。
+    /// 对应 Java: Blob#getBytes(long,int)。返回实际可用的字节副本。
+    async fn get_bytes(&mut self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError>;
+    /// 返回完整二进制读取流；不支持时显式返回错误。对应 Java: Blob#getBinaryStream()。
+    async fn get_binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError>;
+    /// 从1-based start搜索字节模式；未找到返回None，start<1必须报错。
+    /// 对应 Java: Blob#position(byte[],long)，Java的-1映射为None。
+    async fn position_bytes(
+        &mut self,
         pattern: &[u8],
         start: i64,
-    ) -> Result<Option<i64>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::SEARCH,
-            "Blob#position(byte[],long)",
-        )?;
-        self.context
-            .observe(self.access.position_bytes(pattern, start).await)
-    }
-
-    /// Finds another Blob. Corresponds to `Blob#position(Blob,long)`.
-    pub async fn position_blob(
-        &self,
-        pattern: &RdbcBlob,
+    ) -> Result<Option<i64>, RdbcError>;
+    /// 搜索另一个标准Blob的内容并返回1-based位置；未找到返回None。
+    /// 对应 Java: Blob#position(Blob,long)。Other独占借用另一资源；SameResource保留自身模式，不构造重叠可变引用或具体类型downcast。
+    async fn position_blob(
+        &mut self,
+        pattern: BlobPattern<'_>,
         start: i64,
-    ) -> Result<Option<i64>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::SEARCH,
-            "Blob#position(Blob,long)",
-        )?;
-        self.context
-            .observe(self.access.position_blob(pattern, start).await)
-    }
-
-    /// Writes all bytes. Corresponds to `Blob#setBytes(long,byte[])`.
-    pub async fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, RdbcError> {
-        self.context
-            .require(ResourceOperations::WRITE, "Blob#setBytes")?;
-        self.context
-            .observe(self.access.set_bytes(position, bytes).await)
-    }
-
-    /// Writes a byte subrange. Corresponds to `Blob#setBytes(long,byte[],int,int)`.
-    pub async fn set_bytes_range(
-        &self,
+    ) -> Result<Option<i64>, RdbcError>;
+    /// 从1-based position覆盖写入bytes，越过原尾部时扩展，返回写入字节数。
+    /// 对应 Java: Blob#setBytes(long,byte[])。position>长度+1属于驱动定义行为。
+    async fn set_bytes(&mut self, position: i64, bytes: &[u8]) -> Result<i32, RdbcError>;
+    /// 从输入bytes的0-based offset取length字节，写入1-based position并返回写入数。
+    /// 对应 Java: Blob#setBytes(long,byte[],int,int)，不得混淆两种索引基准。
+    async fn set_bytes_range(
+        &mut self,
         position: i64,
         bytes: &[u8],
         offset: i32,
         length: i32,
-    ) -> Result<i32, RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::RANGE,
-            "Blob#setBytes(long,byte[],int,int)",
-        )?;
-        self.context.observe(
-            self.access
-                .set_bytes_range(position, bytes, offset, length)
-                .await,
-        )
-    }
-
-    /// Opens a positioned output stream. Corresponds to `Blob#setBinaryStream(long)`.
-    pub async fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::STREAM,
-            "Blob#setBinaryStream",
-        )?;
-        self.context
-            .observe(self.access.set_binary_stream(position).await)
-    }
-
-    /// Truncates the Blob. Corresponds to `Blob#truncate(long)`.
-    pub async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
-        self.context.require(
-            ResourceOperations::WRITE | ResourceOperations::TRUNCATE,
-            "Blob#truncate",
-        )?;
-        self.context.observe(self.access.truncate(length).await)
-    }
-
-    /// Releases the Blob. Corresponds to `Blob#free()`.
-    pub async fn free(&self) -> Result<(), RdbcError> {
-        self.context
-            .require_capability(ResourceOperations::FREE, "Blob#free")?;
-        self.context.free(self.access.as_ref()).await
-    }
-
-    /// Returns whether the Blob was released.
-    #[must_use]
-    pub fn is_freed(&self) -> bool {
-        self.context.is_freed()
-    }
-
-    /// Opens a binary stream over a range. Corresponds to `Blob#getBinaryStream(long,long)`.
-    pub async fn get_binary_stream_range(
-        &self,
+    ) -> Result<i32, RdbcError>;
+    /// 从1-based position打开写入流，写入覆盖旧内容并可扩展资源。
+    /// 对应 Java: Blob#setBinaryStream(long)。position>长度+1属于驱动定义行为。
+    async fn set_binary_stream(&mut self, position: i64) -> Result<RdbcOutputStream, RdbcError>;
+    /// 将资源截断为length字节，负长度必须报错。对应 Java: Blob#truncate(long)。
+    async fn truncate(&mut self, length: i64) -> Result<(), RdbcError>;
+    /// 释放资源；重复调用无副作用，其他JDBC操作随后必须拒绝。
+    /// 对应 Java: Blob#free。取消安全及owner通知由Druid内部包装监管。
+    async fn free(&mut self) -> Result<(), RdbcError>;
+    /// 打开1-based position起始、length字节长的部分读取流。
+    /// 对应 Java: Blob#getBinaryStream(long,long)。非法起点或越界范围必须报错。
+    async fn get_binary_stream_range(
+        &mut self,
         position: i64,
         length: i64,
-    ) -> Result<RdbcInputStream, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::STREAM | ResourceOperations::RANGE,
-            "Blob#getBinaryStream(long,long)",
-        )?;
-        self.context
-            .observe(self.access.get_binary_stream_range(position, length).await)
-    }
-
-    /// Returns the driver-neutral resource identifier.
-    #[must_use]
-    pub fn resource_id(&self) -> &str {
-        self.context.resource_id().as_str()
-    }
-
-    /// Returns the operations enabled for this Blob instance.
-    #[must_use]
-    pub fn capabilities(&self) -> ResourceOperations {
-        self.context.capabilities()
-    }
+    ) -> Result<RdbcInputStream, RdbcError>;
 }
-
-impl fmt::Debug for RdbcBlob {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("RdbcBlob")
-            .field("context", &self.context)
-            .finish_non_exhaustive()
-    }
-}
-
-impl PartialEq for RdbcBlob {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.context, &other.context)
-    }
-}
-
-impl Eq for RdbcBlob {}
-
-/// Mapping of an SQL `BLOB` binary large object.
-pub type Blob = RdbcBlob;

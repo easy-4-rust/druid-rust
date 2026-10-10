@@ -211,11 +211,11 @@ TRACE_RECORD_CALLSITE_COUNTS = {
         "task4_trace_prepared_query",
     ): 1,
     (
-        "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+        "crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs",
         "task4_trace_result_next",
     ): 1,
     (
-        "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+        "crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs",
         "task4_trace_result_set_metadata",
     ): 1,
     (
@@ -251,6 +251,10 @@ TRACE_RECORD_CALLSITE_COUNTS = {
         for family, factory_file in FAMILY_FACTORY_FILES.items()
     },
 }
+TRACE_RECORD_CALLSITE_COUNTS.update({
+    ("crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs", "task4_trace_result_next"): 1,
+    ("crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs", "task4_trace_result_set_metadata"): 1,
+})
 TRACE_BRANCH_CALLSITE_COUNTS = {
     **{
         (relative, function, "task4_trace_parameter_set"): 1
@@ -303,8 +307,8 @@ SQLX_STAGE_FILES = {
     "PreparedCreate": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
     "ParameterSet": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
     "PreparedQuery": "crates/druid-wrapper/src/sqlx/sqlx_prepared_statement.rs",
-    "ResultNext": "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
-    "ResultSetMetadata": "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs",
+    "ResultNext": "crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs",
+    "ResultSetMetadata": "crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs",
     "DatabaseMetadata": "crates/druid-wrapper/src/sqlx/sqlx_database_meta_data.rs",
     "ConnectionClose": "crates/druid-wrapper/src/sqlx/sqlx_connection_actor.rs",
 }
@@ -1950,6 +1954,20 @@ def run_bounded_process(
 
     if timeout_seconds <= 0 or output_limit <= 0:
         fail("bounded process requires positive timeout and output limit")
+    if os.name == "nt":
+        from windows_bounded_process import WindowsBoundedProcessError, run_windows_bounded_process
+        try:
+            return BoundedProcessResult(*run_windows_bounded_process(
+                command, cwd=cwd, timeout_seconds=timeout_seconds,
+                output_limit=output_limit, env=env,
+            ))
+        except WindowsBoundedProcessError as error:
+            failure = VerificationError(str(error))
+            failure.owned_descendants = error.owned_descendants
+            failure.ownership_capture_error = error.ownership_capture_error
+            raise failure from error
+        except (OSError, RuntimeError, ValueError) as error:
+            fail(str(error))
     process = subprocess.Popen(
         command,
         cwd=cwd,
@@ -2502,7 +2520,7 @@ def verify_sqlx_ownership(root: Path) -> None:
         )
     )
     result_set = code_tokens(
-        (root / "crates/druid-wrapper/src/sqlx/sqlx_streaming_result_set.rs").read_text(
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_buffered_result_set.rs").read_text(
             encoding="utf-8"
         )
     )
@@ -2529,6 +2547,32 @@ def verify_sqlx_ownership(root: Path) -> None:
         fail("SQLx ResultSet metadata is not an immutable Arc snapshot")
     if "Arc < dyn ParameterMetaData >" not in prepared:
         fail("SQLx parameter metadata is not an immutable Arc snapshot")
+
+
+    async_source = code_tokens(
+        (root / "crates/druid-wrapper/src/sqlx/sqlx_async_result_set.rs").read_text(
+            encoding="utf-8"
+        )
+    )
+    required_async = (
+        "struct SqlxAsyncResultSet",
+        "actor : Arc < SqlxConnectionActor >",
+        "metadata : Option < Arc < ResultSetMetaDataSnapshot > >",
+        "mpsc :: channel ( 1 )",
+        "actor . spawn_cursor",
+        "async fn next",
+        ". try_send ( SqlxCursorRequest",
+        "async fn close",
+        "worker . await",
+        "self . shutdown . send_replace ( true )",
+    )
+    missing_async = [marker for marker in required_async if marker not in async_source]
+    if missing_async:
+        fail(f"SQLx async ResultSet ownership/bounded pull evidence is incomplete: {missing_async}")
+    if "Vec < Row >" in async_source:
+        fail("SQLx async ResultSet retains an eager row vector")
+    if "connection : Mutex < SqlxConnectionAdapter >" not in actor_source:
+        fail("SQLx actor does not own the raw adapter under its Tokio mutex")
 
 
 def verify_family_executor_call_chains(root: Path) -> None:

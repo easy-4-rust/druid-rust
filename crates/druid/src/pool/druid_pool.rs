@@ -1741,5 +1741,4 @@ impl crate::core::Pool for DruidPool {
 }
 
 #[cfg(test)]
-#[path = "druid_pool/lifetime_tests.rs"]
 mod lifetime_tests;

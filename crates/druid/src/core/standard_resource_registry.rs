@@ -19,6 +19,8 @@ pub(crate) struct StandardResourceRegistry {
     changed: Arc<Notify>,
     shutting_down: Arc<AtomicBool>,
     shutdown: Arc<Notify>,
+    // 资源拥有者创建时的执行器，允许调用方在普通线程丢弃 owning Stream。
+    coordinator_runtime: Option<tokio::runtime::Handle>,
 }
 
 struct StandardResourceCoordinatorGuard {
@@ -69,6 +71,7 @@ impl Default for StandardResourceRegistry {
             changed: Arc::new(Notify::new()),
             shutting_down: Arc::new(AtomicBool::new(false)),
             shutdown: Arc::new(Notify::new()),
+            coordinator_runtime: tokio::runtime::Handle::try_current().ok(),
         }
     }
 }
@@ -278,6 +281,53 @@ impl StandardResourceRegistry {
         registrations: &[StandardResourceRegistration],
         admission: &StandardResourceAdmission,
     ) -> Result<(), RdbcError> {
+        self.close_registered_inner(registrations, Some(admission))
+            .await
+    }
+
+    /// 关闭已登记资源；参数为同一 registry 的注册令牌，返回该批清理结果。
+    /// 父级 Closing 时仍可加入清理等待，不申请新的创建 admission。
+    pub(crate) async fn close_registered(
+        self: &Arc<Self>,
+        registrations: &[StandardResourceRegistration],
+    ) -> Result<(), RdbcError> {
+        // 先校验整批归属，避免相同 generation/id 的跨连接令牌清理本地资源。
+        if registrations
+            .iter()
+            .any(|registration| !registration.belongs_to(self))
+        {
+            return Err(RdbcError::ConnectionDiscarded);
+        }
+        self.close_registered_inner(registrations, None).await
+    }
+
+    async fn close_registered_inner(
+        self: &Arc<Self>,
+        registrations: &[StandardResourceRegistration],
+        admission: Option<&StandardResourceAdmission>,
+    ) -> Result<(), RdbcError> {
+        let receivers = self.queue_registered_cleanup(registrations, admission);
+        Self::await_cleanup(receivers).await
+    }
+
+    /// 同步移交已登记资源的关闭请求；参数为同一 registry 的令牌，无返回值。
+    /// 不等待驱动或重试，具体结果继续由 registry 与父级 close/drain 保管。
+    pub(crate) fn request_registered_cleanup(
+        self: &Arc<Self>,
+        registration: &StandardResourceRegistration,
+    ) {
+        if !registration.belongs_to(self) {
+            return;
+        }
+        // 与显式 close 共用同一入队段；丢弃等待者不会取消已监管的 actor。
+        drop(self.queue_registered_cleanup(std::slice::from_ref(registration), None));
+    }
+
+    fn queue_registered_cleanup(
+        self: &Arc<Self>,
+        registrations: &[StandardResourceRegistration],
+        admission: Option<&StandardResourceAdmission>,
+    ) -> Vec<oneshot::Receiver<Result<(), RdbcError>>> {
         let mut receivers = Vec::new();
         let mut spawn_generation = None;
         {
@@ -328,14 +378,16 @@ impl StandardResourceRegistry {
             }
         }
         // waiters 与 actor 都已在 registry state 中；caller cancellation 从此不影响清理。
-        admission.finish();
+        if let Some(admission) = admission {
+            admission.finish();
+        }
         if let Some(generation) = spawn_generation {
             self.spawn_coordinator(generation);
         }
         if !receivers.is_empty() {
             self.changed.notify_waiters();
         }
-        Self::await_cleanup(receivers).await
+        receivers
     }
 
     pub(crate) fn has_open_resources(&self) -> bool {
@@ -502,9 +554,16 @@ impl StandardResourceRegistry {
 
     fn spawn_coordinator(self: &Arc<Self>, generation: u64) {
         let registry = Arc::downgrade(self);
-        tokio::spawn(async move {
-            Self::run_coordinator(registry, generation).await;
-        });
+        if let Some(runtime) = &self.coordinator_runtime {
+            runtime.spawn(async move {
+                Self::run_coordinator(registry, generation).await;
+            });
+        } else {
+            // 保留纯同步构造后首次进入 Tokio 的原路径。
+            tokio::spawn(async move {
+                Self::run_coordinator(registry, generation).await;
+            });
+        }
     }
 
     async fn run_coordinator(registry: Weak<Self>, generation: u64) {

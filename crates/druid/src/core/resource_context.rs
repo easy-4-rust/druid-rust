@@ -80,10 +80,24 @@ impl ResourceContext {
         if self.state() != ResourceState::Open {
             return Err(RdbcError::rdbc_resource_closed(self.kind.standard_name()));
         }
+        if let Some(owner) = &self.owner {
+            owner.ensure_open()?;
+        }
         if !self.capabilities.contains(capability) {
             return Err(RdbcError::feature_not_supported(operation));
         }
         Ok(())
+    }
+
+    /// 将真实驱动操作失败通知 owner；参数为驱动结果，返回原值或原错误。
+    pub(crate) fn classify_operation_result<T>(
+        &self,
+        result: Result<T, RdbcError>,
+    ) -> Result<T, RdbcError> {
+        if let (Some(owner), Err(error)) = (&self.owner, &result) {
+            owner.resource_failed(&self.resource_id, self.kind, error);
+        }
+        result
     }
 
     pub(crate) async fn release_with<F, Fut>(&self, release: F) -> Result<(), RdbcError>

@@ -64,10 +64,12 @@ fn task6_adapter_boundary_test_canonical_rdbc_contracts_are_bidirectionally_iden
         dyn druid::core::DatabaseMetaData,
         dyn druid::core::DatabaseMetaData
     );
-    assert_type_eq_all!(
-        dyn druid::core::RdbcResourceAccess,
-        dyn druid_rdbc::resource::RdbcResourceAccess
-    );
+    assert_type_eq_all!(druid::core::RdbcArray, druid_rdbc::resource::RdbcArray);
+    assert_type_eq_all!(druid::core::RdbcBlob, druid_rdbc::resource::RdbcBlob);
+    assert_type_eq_all!(druid::core::RdbcClob, druid_rdbc::resource::RdbcClob);
+    assert_type_eq_all!(druid::core::RdbcNClob, druid_rdbc::resource::RdbcNClob);
+    assert_type_eq_all!(druid::core::RdbcRef, druid_rdbc::resource::RdbcRef);
+    assert_type_eq_all!(druid::core::RdbcSqlXml, druid_rdbc::resource::RdbcSqlXml);
     assert_type_eq_all!(
         druid::core::PreparedInputParameter,
         druid::core::PreparedInputParameter

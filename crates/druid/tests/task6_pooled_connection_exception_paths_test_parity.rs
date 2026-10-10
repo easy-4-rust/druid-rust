@@ -146,13 +146,13 @@ impl Connection for FailingConnection {
     async fn set_schema(&mut self, _schema: Option<&str>) -> Result<(), RdbcError> {
         Self::error()
     }
-    async fn create_blob(&mut self) -> Result<druid_rdbc::types::RdbcBlob, RdbcError> {
+    async fn create_blob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Blob>, RdbcError> {
         Self::error()
     }
-    async fn create_clob(&mut self) -> Result<druid_rdbc::types::RdbcClob, RdbcError> {
+    async fn create_clob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Clob>, RdbcError> {
         Self::error()
     }
-    async fn create_n_clob(&mut self) -> Result<druid_rdbc::types::RdbcNClob, RdbcError> {
+    async fn create_n_clob(&mut self) -> Result<Box<dyn druid_rdbc::resource::NClob>, RdbcError> {
         Self::error()
     }
     fn driver_name(&self) -> Result<String, RdbcError> {

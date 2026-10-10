@@ -1,35 +1,76 @@
-use druid::core::{
-    RdbcBlobAccess, RdbcRefAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations,
-};
 use druid::core::{RdbcError, RdbcObject, RdbcTypeMap, Value};
+use druid::core::{ResourceHandleFactory, ResourceOperations};
+use druid_rdbc::resource::{Blob, BlobPattern, RdbcInputStream, RdbcOutputStream, Ref};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 #[derive(Debug)]
 struct CountingAccess {
-    free_count: AtomicUsize,
+    free_count: Arc<AtomicUsize>,
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for CountingAccess {
+impl Blob for CountingAccess {
+    async fn get_binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#get_binary_stream"))
+    }
+    async fn position_bytes(
+        &mut self,
+        _pattern: &[u8],
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#position_bytes"))
+    }
+    async fn position_blob(
+        &mut self,
+        _pattern: BlobPattern<'_>,
+        _start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#position_blob"))
+    }
+    async fn set_bytes(&mut self, _position: i64, _bytes: &[u8]) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#set_bytes"))
+    }
+    async fn set_bytes_range(
+        &mut self,
+        _position: i64,
+        _bytes: &[u8],
+        _offset: i32,
+        _length: i32,
+    ) -> Result<i32, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#set_bytes_range"))
+    }
+    async fn set_binary_stream(&mut self, _position: i64) -> Result<RdbcOutputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#set_binary_stream"))
+    }
+    async fn truncate(&mut self, _length: i64) -> Result<(), RdbcError> {
+        Err(RdbcError::feature_not_supported("Blob#truncate"))
+    }
+    async fn get_binary_stream_range(
+        &mut self,
+        _position: i64,
+        _length: i64,
+    ) -> Result<RdbcInputStream, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "Blob#get_binary_stream_range",
+        ))
+    }
+
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::FREE
     }
 
-    async fn free(&self) -> Result<(), RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
         self.free_count.fetch_add(1, Ordering::SeqCst);
         tokio::task::yield_now().await;
         Ok(())
     }
-}
 
-#[async_trait::async_trait]
-impl RdbcBlobAccess for CountingAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         Ok(0)
     }
 
-    async fn get_bytes(&self, _position: i64, _length: i32) -> Result<Vec<u8>, RdbcError> {
+    async fn get_bytes(&mut self, _position: i64, _length: i32) -> Result<Vec<u8>, RdbcError> {
         Ok(Vec::new())
     }
 }
@@ -38,27 +79,27 @@ impl RdbcBlobAccess for CountingAccess {
 struct ReadOnlyRefAccess;
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for ReadOnlyRefAccess {
+impl Ref for ReadOnlyRefAccess {
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::READ
     }
-}
 
-#[async_trait::async_trait]
-impl RdbcRefAccess for ReadOnlyRefAccess {
-    async fn base_type_name(&self) -> Result<String, RdbcError> {
+    async fn base_type_name(&mut self) -> Result<String, RdbcError> {
         Ok("schema.kind".to_string())
     }
 
-    async fn object(&self) -> Result<RdbcObject, RdbcError> {
+    async fn object(&mut self) -> Result<RdbcObject, RdbcError> {
         Err(RdbcError::DriverError("read failed".to_string()))
     }
 
-    async fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, RdbcError> {
+    async fn object_with_type_map(
+        &mut self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcObject, RdbcError> {
         unreachable!("the standard handle does not advertise TYPE_MAP")
     }
 
-    async fn set_object(&self, _value: RdbcObject) -> Result<(), RdbcError> {
+    async fn set_object(&mut self, _value: RdbcObject) -> Result<(), RdbcError> {
         unreachable!("the standard handle does not advertise WRITE")
     }
 }
@@ -66,9 +107,11 @@ impl RdbcRefAccess for ReadOnlyRefAccess {
 #[tokio::test]
 async fn detached_handle_free_is_exactly_once_under_concurrency() {
     let access = Arc::new(CountingAccess {
-        free_count: AtomicUsize::new(0),
+        free_count: Arc::new(AtomicUsize::new(0)),
     });
-    let blob = ResourceHandleFactory::blob(access.clone());
+    let blob = ResourceHandleFactory::blob(Box::new(CountingAccess {
+        free_count: Arc::clone(&access.free_count),
+    }));
 
     let (first, second) = tokio::join!(blob.free(), blob.free());
 
@@ -82,7 +125,7 @@ async fn detached_handle_free_is_exactly_once_under_concurrency() {
 
 #[tokio::test]
 async fn standard_handle_enforces_operations_without_druid_owner_runtime() {
-    let reference = ResourceHandleFactory::reference(Arc::new(ReadOnlyRefAccess));
+    let reference = ResourceHandleFactory::reference(Box::new(ReadOnlyRefAccess));
     let unsupported = reference
         .set_object(RdbcObject::from(Value::Int(1)))
         .await

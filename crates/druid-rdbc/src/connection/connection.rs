@@ -2,12 +2,13 @@ use crate::error::RdbcError;
 use crate::error::SqlWarning;
 use crate::extensions::ConnectionCapabilities;
 use crate::metadata::DatabaseMetaData;
+use crate::resource::{Array, Blob, Clob, NClob, SqlXml};
 use crate::statement::{
     CallableStatement, ExecResult, GeneratedKeys, ParameterIndex, PreparedInputParameter,
     PreparedParameter, PreparedStatement, ResultSetHoldability, Statement, StatementOptions,
 };
 use crate::types::RdbcTypeMap;
-use crate::types::{RdbcBlob, RdbcClob, RdbcNClob, Row, Savepoint, Value};
+use crate::types::{RdbcObject, Row, Savepoint, Value};
 use crate::wrapper::Wrapper;
 use std::time::Duration;
 
@@ -44,6 +45,17 @@ impl TransactionIsolation {
 /// 创建的 statement 与 live metadata 拥有独立 actor/native handle，不借用 caller。
 #[async_trait::async_trait]
 pub trait Connection: Wrapper + Send + 'static {
+    /// 按参数type_name与有序attributes创建独立拥有的SQL结构对象，返回对象或驱动错误。
+    /// 对应 Java: Connection#createStruct；None保留原nullable输入供驱动验证。
+    /// 类型名为NULL、数据库错误或连接已关闭时返回SQLException；不支持该类型时明确报错。
+    async fn create_struct(
+        &mut self,
+        _type_name: Option<&str>,
+        _attributes: Option<Vec<crate::types::RdbcObject>>,
+    ) -> Result<Box<dyn crate::resource::Struct>, RdbcError> {
+        Err(RdbcError::feature_not_supported("Connection#create_struct"))
+    }
+
     /// 创建 owned statement。
     async fn create_statement(
         &mut self,
@@ -428,19 +440,52 @@ pub trait Connection: Wrapper + Send + 'static {
         })
     }
 
-    /// 创建 driver-owned Blob handle。
-    async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
+    /// 创建独占的标准 Blob 资源。对应 Java: `Connection#createBlob`。
+    ///
+    /// 无参数；返回不借用调用方的 `Send + 'static` 资源对象，驱动不支持时返回错误。
+    async fn create_blob(&mut self) -> Result<Box<dyn Blob>, RdbcError> {
         Err(RdbcError::feature_not_supported("connection_create_blob"))
     }
 
-    /// 创建 driver-owned Clob handle。
-    async fn create_clob(&mut self) -> Result<RdbcClob, RdbcError> {
+    /// 创建独占的标准 Clob 资源。对应 Java: `Connection#createClob`。
+    ///
+    /// 无参数；返回不借用调用方的 `Send + 'static` 资源对象，驱动不支持时返回错误。
+    async fn create_clob(&mut self) -> Result<Box<dyn Clob>, RdbcError> {
         Err(RdbcError::feature_not_supported("connection_create_clob"))
     }
 
-    /// 创建 driver-owned NClob handle。
-    async fn create_n_clob(&mut self) -> Result<RdbcNClob, RdbcError> {
+    /// 创建独占的标准 NClob 资源。对应 Java: `Connection#createNClob`。
+    ///
+    /// 无参数；返回不借用调用方的 `Send + 'static` 资源对象，驱动不支持时返回错误。
+    async fn create_n_clob(&mut self) -> Result<Box<dyn NClob>, RdbcError> {
         Err(RdbcError::feature_not_supported("connection_create_n_clob"))
+    }
+
+    /// 创建初始不含数据的独占 SQLXML 资源。对应 Java: `Connection#createSQLXML`。
+    ///
+    /// 无参数；返回不借用调用方的标准资源对象，后续可通过 SQLXML 写入方法填充数据。
+    /// 驱动不支持该 SQL 类型时返回标准不支持错误；关闭连接由驱动拒绝创建。
+    async fn create_sql_xml(&mut self) -> Result<Box<dyn SqlXml>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "connection_create_sql_xml",
+        ))
+    }
+
+    /// 创建 SQL 元素数组。对应 Java: `Connection#createArrayOf(String, Object[])`。
+    ///
+    /// `type_name` 是数据库支持的内置、用户定义或标准 SQL 元素类型名称；
+    /// `None` 保留 Java null 类型名，由驱动返回错误，不能替换为空字符串。
+    /// `elements` 保留 null 数组、空数组及元素顺序，元素的 SQL NULL 使用 `RdbcObject` 表示。
+    /// 驱动负责 JDBC 默认元素类型映射；不兼容转换及 primitive/object 数组表示由驱动决定。
+    /// 返回独立拥有的标准 Array，`base_type_name` 应与请求类型对应；不支持时明确返回错误。
+    async fn create_array_of(
+        &mut self,
+        _type_name: Option<&str>,
+        _elements: Option<Vec<RdbcObject>>,
+    ) -> Result<Box<dyn Array>, RdbcError> {
+        Err(RdbcError::feature_not_supported(
+            "connection_create_array_of",
+        ))
     }
 
     /// 返回 immutable capability descriptor。

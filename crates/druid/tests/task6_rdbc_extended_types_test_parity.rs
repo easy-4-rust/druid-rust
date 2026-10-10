@@ -7,10 +7,8 @@ use druid::core::{
     RdbcRowId, RdbcString, RdbcTargetType, RdbcTypeMap, RdbcWriter, RdbcXmlRepresentationType,
     RdbcXmlResult, RdbcXmlSource, ResultSet, Value, XmlResult, XmlSource,
 };
-use druid::core::{
-    RdbcArrayAccess, RdbcRefAccess, RdbcResourceAccess, RdbcSqlXmlAccess, ResourceHandleFactory,
-    ResourceOperations,
-};
+use druid::core::{ResourceHandleFactory, ResourceOperations};
+use druid_rdbc::resource::{Array, Ref, SqlXml};
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
 use std::any::TypeId;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -79,47 +77,43 @@ impl TestArray {
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for TestArray {
+impl Array for TestArray {
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::array()
     }
 
-    async fn free(&self) -> Result<(), RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcArrayAccess for TestArray {
-    async fn base_type_name(&self) -> Result<String, RdbcError> {
+    async fn base_type_name(&mut self) -> Result<String, RdbcError> {
         self.ensure_open()?;
         Ok("INTEGER".to_string())
     }
 
-    async fn base_type(&self) -> Result<i32, RdbcError> {
+    async fn base_type(&mut self) -> Result<i32, RdbcError> {
         self.ensure_open()?;
         Ok(4)
     }
 
-    async fn values(&self) -> Result<Vec<RdbcObject>, RdbcError> {
+    async fn values(&mut self) -> Result<Vec<RdbcObject>, RdbcError> {
         self.ensure_open()?;
         Ok(self.values.clone())
     }
 
     async fn values_with_type_map(
-        &self,
+        &mut self,
         _type_map: &RdbcTypeMap,
     ) -> Result<Vec<RdbcObject>, RdbcError> {
         self.values().await
     }
 
-    async fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
+    async fn values_range(&mut self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
         self.range(index, count)
     }
 
     async fn values_range_with_type_map(
-        &self,
+        &mut self,
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
@@ -127,20 +121,20 @@ impl RdbcArrayAccess for TestArray {
         self.range(index, count)
     }
 
-    async fn result_set(&self) -> Result<Box<dyn ResultSet>, RdbcError> {
+    async fn result_set(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.ensure_open()?;
         Ok(result_set())
     }
 
     async fn result_set_with_type_map(
-        &self,
+        &mut self,
         _type_map: &RdbcTypeMap,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.result_set().await
     }
 
     async fn result_set_range(
-        &self,
+        &mut self,
         index: i64,
         count: i32,
     ) -> Result<Box<dyn ResultSet>, RdbcError> {
@@ -149,7 +143,7 @@ impl RdbcArrayAccess for TestArray {
     }
 
     async fn result_set_range_with_type_map(
-        &self,
+        &mut self,
         index: i64,
         count: i32,
         _type_map: &RdbcTypeMap,
@@ -159,7 +153,7 @@ impl RdbcArrayAccess for TestArray {
 }
 
 fn array() -> RdbcArray {
-    ResourceHandleFactory::array(Arc::new(TestArray {
+    ResourceHandleFactory::array(Box::new(TestArray {
         values: vec![
             RdbcObject::from(Value::Int(10)),
             RdbcObject::from(Value::Int(20)),
@@ -175,19 +169,15 @@ struct TestRef {
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for TestRef {
+impl Ref for TestRef {
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::reference()
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcRefAccess for TestRef {
-    async fn base_type_name(&self) -> Result<String, RdbcError> {
+    async fn base_type_name(&mut self) -> Result<String, RdbcError> {
         Ok("schema.kind".to_string())
     }
 
-    async fn object(&self) -> Result<RdbcObject, RdbcError> {
+    async fn object(&mut self) -> Result<RdbcObject, RdbcError> {
         Ok(self
             .value
             .lock()
@@ -195,11 +185,14 @@ impl RdbcRefAccess for TestRef {
             .clone())
     }
 
-    async fn object_with_type_map(&self, _type_map: &RdbcTypeMap) -> Result<RdbcObject, RdbcError> {
+    async fn object_with_type_map(
+        &mut self,
+        _type_map: &RdbcTypeMap,
+    ) -> Result<RdbcObject, RdbcError> {
         self.object().await
     }
 
-    async fn set_object(&self, value: RdbcObject) -> Result<(), RdbcError> {
+    async fn set_object(&mut self, value: RdbcObject) -> Result<(), RdbcError> {
         *self
             .value
             .lock()
@@ -250,32 +243,28 @@ impl TestSqlXml {
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for TestSqlXml {
+impl SqlXml for TestSqlXml {
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::sql_xml()
     }
 
-    async fn free(&self) -> Result<(), RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
         self.freed.store(true, Ordering::Release);
         Ok(())
     }
-}
-
-#[async_trait::async_trait]
-impl RdbcSqlXmlAccess for TestSqlXml {
-    async fn binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
+    async fn binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcInputStream::from_bytes(
             self.string().await?.to_rust_string()?.into_bytes(),
         ))
     }
 
-    async fn set_binary_stream(&self) -> Result<RdbcOutputStream, RdbcError> {
+    async fn set_binary_stream(&mut self) -> Result<RdbcOutputStream, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcOutputStream::new(Vec::<u8>::new()))
     }
 
-    async fn character_stream(&self) -> Result<druid::core::RdbcReader, RdbcError> {
+    async fn character_stream(&mut self) -> Result<druid::core::RdbcReader, RdbcError> {
         self.ensure_open()?;
         Ok(druid::core::RdbcReader::from_utf16(
             self.value
@@ -286,12 +275,12 @@ impl RdbcSqlXmlAccess for TestSqlXml {
         ))
     }
 
-    async fn set_character_stream(&self) -> Result<RdbcWriter, RdbcError> {
+    async fn set_character_stream(&mut self) -> Result<RdbcWriter, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcWriter::new(TestCharacterWriter))
     }
 
-    async fn string(&self) -> Result<RdbcString, RdbcError> {
+    async fn string(&mut self) -> Result<RdbcString, RdbcError> {
         self.ensure_open()?;
         Ok(self
             .value
@@ -300,7 +289,7 @@ impl RdbcSqlXmlAccess for TestSqlXml {
             .clone())
     }
 
-    async fn set_string(&self, value: &RdbcString) -> Result<(), RdbcError> {
+    async fn set_string(&mut self, value: &RdbcString) -> Result<(), RdbcError> {
         self.ensure_open()?;
         *self
             .value
@@ -310,20 +299,27 @@ impl RdbcSqlXmlAccess for TestSqlXml {
     }
 
     async fn source(
-        &self,
-        _representation: &RdbcXmlRepresentationType,
+        &mut self,
+        _representation: Option<&RdbcXmlRepresentationType>,
     ) -> Result<RdbcXmlSource, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcXmlSource::new(Arc::new(TestXmlSource)))
     }
 
     async fn result(
-        &self,
-        _representation: &RdbcXmlRepresentationType,
+        &mut self,
+        _representation: Option<&RdbcXmlRepresentationType>,
     ) -> Result<RdbcXmlResult, RdbcError> {
         self.ensure_open()?;
         Ok(RdbcXmlResult::new(Arc::new(TestXmlResult)))
     }
+}
+
+fn xml() -> druid::core::RdbcSqlXml {
+    ResourceHandleFactory::sql_xml(Box::new(TestSqlXml {
+        value: Mutex::new(RdbcString::from("<root>值</root>")),
+        freed: AtomicBool::new(false),
+    }))
 }
 
 #[tokio::test]
@@ -386,7 +382,7 @@ async fn task6_rdbc_extended_types_test_array_and_ref_preserve_complete_rdbc_ope
     assert!(value.is_freed());
     assert!(value.values().await.is_err());
 
-    let reference = ResourceHandleFactory::reference(Arc::new(TestRef {
+    let reference = ResourceHandleFactory::reference(Box::new(TestRef {
         value: Mutex::new(RdbcObject::from(Value::Int(1))),
     }));
     assert_eq!(reference, reference.clone());
@@ -417,16 +413,17 @@ async fn task6_rdbc_extended_types_test_row_id_url_and_sql_xml_preserve_values_s
     assert_eq!(url.external_form(), "https://example.test/a?b=1#c");
     assert_eq!(url, druid::core::RdbcUrl::from(url.external_form()));
 
-    let xml = ResourceHandleFactory::sql_xml(Arc::new(TestSqlXml {
-        value: Mutex::new(RdbcString::from("<root>值</root>")),
-        freed: AtomicBool::new(false),
-    }));
+    let xml = xml();
     assert_eq!(xml, xml.clone());
     assert!(format!("{xml:?}").contains("state: Open"));
     assert_eq!(
         xml.binary_stream().await.unwrap().read_to_end().unwrap(),
         "<root>值</root>".as_bytes()
     );
+    // 独立表示场景先释放前一对象，保留同一对象的一次性读写约束。
+    xml.free().await.unwrap();
+    assert!(xml.is_freed());
+    let xml = self::xml();
     assert_eq!(
         xml.character_stream()
             .await
@@ -440,20 +437,35 @@ async fn task6_rdbc_extended_types_test_row_id_url_and_sql_xml_preserve_values_s
         .unwrap()
         .write(b"<binary/>")
         .unwrap();
+    // 独立表示场景先释放前一对象，保留同一对象的一次性读写约束。
+    xml.free().await.unwrap();
+    assert!(xml.is_freed());
+    let xml = self::xml();
     xml.set_character_stream()
         .await
         .unwrap()
         .write_str("<character/>")
         .unwrap();
+    // 独立表示场景先释放前一对象，保留同一对象的一次性读写约束。
+    xml.free().await.unwrap();
+    assert!(xml.is_freed());
+    let xml = self::xml();
     xml.set_string(&RdbcString::from_utf16(vec![0xD800]))
         .await
         .unwrap();
     assert_eq!(xml.string().await.unwrap().as_utf16(), &[0xD800]);
-    let source = xml.source(&RdbcXmlRepresentationType::Dom).await.unwrap();
+    // 独立表示场景先释放前一对象，保留同一对象的一次性读写约束。
+    xml.free().await.unwrap();
+    assert!(xml.is_freed());
+    let xml = self::xml();
+    let source = xml
+        .source(Some(&RdbcXmlRepresentationType::Dom))
+        .await
+        .unwrap();
     assert_eq!(source, source.clone());
     assert!(format!("{source:?}").contains("RdbcXmlSource"));
     let result = xml
-        .result(&RdbcXmlRepresentationType::Stream)
+        .result(Some(&RdbcXmlRepresentationType::Stream))
         .await
         .unwrap();
     assert_eq!(result, result.clone());
@@ -461,4 +473,29 @@ async fn task6_rdbc_extended_types_test_row_id_url_and_sql_xml_preserve_values_s
     xml.free().await.unwrap();
     assert!(xml.is_freed());
     assert!(xml.string().await.is_err());
+}
+
+/// 克隆共享一次性读取机会及释放确认，不因测试场景分离而重置。
+#[tokio::test]
+async fn extended_sqlxml_alias_preserves_one_shot_read_and_free_state() {
+    let value = xml();
+    let alias = value.clone();
+    assert_eq!(value, alias);
+    assert_eq!(
+        value.string().await.unwrap().to_rust_string().unwrap(),
+        "<root>值</root>"
+    );
+    assert_eq!(
+        alias
+            .character_stream()
+            .await
+            .expect_err("alias shares consumed read")
+            .sql_exception()
+            .unwrap()
+            .sql_state(),
+        Some("HY010")
+    );
+    alias.free().await.unwrap();
+    assert!(value.is_freed());
+    assert!(value.string().await.is_err());
 }

@@ -23,6 +23,7 @@ categories    = ["database", "asynchronous", "development-tools"]
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(task7_require_character_sync)", "cfg(task7_require_clob_value_sync)", "cfg(task7_require_driver_sync)", "cfg(task7_require_old_clob_access)", "cfg(task7_require_old_xml_access)", "cfg(task7_require_xml_sync)", "cfg(task7_require_xml_value_sync)"] }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

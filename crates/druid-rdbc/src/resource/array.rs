@@ -1,208 +1,54 @@
-//! Standard Rust mapping for Java `java.sql.Array`.
-
 use crate::error::RdbcError;
-use crate::resource::{RdbcArrayAccess, ResourceLifecycle, ResourceOperations};
+use crate::resource::ResourceOperations;
 use crate::result_set::ResultSet;
 use crate::types::{RdbcObject, RdbcTypeMap};
-use std::fmt;
-use std::sync::Arc;
 
-/// Driver-neutral RDBC `Array` handle.
-///
-/// The handle preserves the SQL base type, type-map conversion, range, result-set, and release
-/// semantics defined by `java.sql.Array`. Clones share identity and lifecycle state.
-#[derive(Clone)]
-pub struct RdbcArray {
-    access: Arc<dyn RdbcArrayAccess>,
-    context: Arc<ResourceLifecycle>,
-}
-
-impl RdbcArray {
-    pub(crate) fn from_parts(
-        access: Arc<dyn RdbcArrayAccess>,
-        context: Arc<ResourceLifecycle>,
-    ) -> Self {
-        Self { access, context }
-    }
-
-    /// Returns the SQL type name of array elements. Corresponds to `Array#getBaseTypeName()`.
-    pub async fn base_type_name(&self) -> Result<String, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Array#getBaseTypeName")?;
-        self.context.observe(self.access.base_type_name().await)
-    }
-
-    /// Returns the SQL type name of array elements. Corresponds to `Array#getBaseTypeName()`.
-    pub async fn get_base_type_name(&self) -> Result<String, RdbcError> {
-        self.base_type_name().await
-    }
-
-    /// Returns the `java.sql.Types` number of array elements. Corresponds to `Array#getBaseType()`.
-    pub async fn base_type(&self) -> Result<i32, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Array#getBaseType")?;
-        self.context.observe(self.access.base_type().await)
-    }
-
-    /// Returns the `java.sql.Types` number of array elements. Corresponds to `Array#getBaseType()`.
-    pub async fn get_base_type(&self) -> Result<i32, RdbcError> {
-        self.base_type().await
-    }
-
-    /// Reads all elements using the driver's default type map. Corresponds to `Array#getArray()`.
-    pub async fn values(&self) -> Result<Vec<RdbcObject>, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Array#getArray")?;
-        self.context.observe(self.access.values().await)
-    }
-
-    /// Reads all elements using the driver's default type map. Corresponds to `Array#getArray()`.
-    pub async fn get_array(&self) -> Result<Vec<RdbcObject>, RdbcError> {
-        self.values().await
-    }
-
-    /// Reads all elements using an explicit type map. Corresponds to `Array#getArray(Map)`.
-    pub async fn values_with_type_map(
-        &self,
+/// 独占可变SQL资源标准接口；对应 Java: java.sql.Array。
+/// 对象独立拥有，仅要求Send，不要求Sync。各方法返回实际值或数据库错误。
+#[async_trait::async_trait]
+pub trait Array: std::fmt::Debug + Send + 'static {
+    /// 返回真实支持的操作集合（Rust扩展）。
+    fn capabilities(&self) -> ResourceOperations;
+    /// 对应 Java: Array#getBaseTypeName()；返回完整SQL元素类型名。
+    async fn base_type_name(&mut self) -> Result<String, RdbcError>;
+    /// 对应 Java: Array#getBaseType()；返回Types编号。
+    async fn base_type(&mut self) -> Result<i32, RdbcError>;
+    /// 对应 Java: Array#getArray()；按默认类型映射返回元素。
+    async fn values(&mut self) -> Result<Vec<RdbcObject>, RdbcError>;
+    /// 对应 Java: Array#getArray(Map)；保留显式类型映射。
+    async fn values_with_type_map(
+        &mut self,
         type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::TYPE_MAP,
-            "Array#getArray(Map)",
-        )?;
-        self.context
-            .observe(self.access.values_with_type_map(type_map).await)
-    }
-
-    /// Reads a 1-based range. Corresponds to `Array#getArray(long,int)`.
-    pub async fn values_range(&self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::RANGE,
-            "Array#getArray(long,int)",
-        )?;
-        self.context
-            .observe(self.access.values_range(index, count).await)
-    }
-
-    /// Reads a 1-based range with an explicit type map.
-    pub async fn values_range_with_type_map(
-        &self,
+    ) -> Result<Vec<RdbcObject>, RdbcError>;
+    /// 对应 Java: Array#getArray(long,int)；元素位置从1开始。
+    async fn values_range(&mut self, index: i64, count: i32) -> Result<Vec<RdbcObject>, RdbcError>;
+    /// 对应 Java: Array#getArray(long,int,Map)；保留范围与显式映射。
+    async fn values_range_with_type_map(
+        &mut self,
         index: i64,
         count: i32,
         type_map: &RdbcTypeMap,
-    ) -> Result<Vec<RdbcObject>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::TYPE_MAP,
-            "Array#getArray(long,int,Map)",
-        )?;
-        self.context.observe(
-            self.access
-                .values_range_with_type_map(index, count, type_map)
-                .await,
-        )
-    }
-
-    /// Returns all elements as a result set. Corresponds to `Array#getResultSet()`.
-    pub async fn result_set(&self) -> Result<Box<dyn ResultSet>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::RESULT_SET,
-            "Array#getResultSet",
-        )?;
-        self.context.observe(self.access.result_set().await)
-    }
-
-    /// Returns all elements as a result set using an explicit type map.
-    pub async fn result_set_with_type_map(
-        &self,
+    ) -> Result<Vec<RdbcObject>, RdbcError>;
+    /// 对应 Java: Array#getResultSet()；返回独立拥有的索引/值结果游标。
+    async fn result_set(&mut self) -> Result<Box<dyn ResultSet>, RdbcError>;
+    /// 对应 Java: Array#getResultSet(Map)；保留结果游标和类型映射。
+    async fn result_set_with_type_map(
+        &mut self,
         type_map: &RdbcTypeMap,
-    ) -> Result<Box<dyn ResultSet>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ
-                | ResourceOperations::RESULT_SET
-                | ResourceOperations::TYPE_MAP,
-            "Array#getResultSet(Map)",
-        )?;
-        self.context
-            .observe(self.access.result_set_with_type_map(type_map).await)
-    }
-
-    /// Returns a 1-based range as a result set.
-    pub async fn result_set_range(
-        &self,
+    ) -> Result<Box<dyn ResultSet>, RdbcError>;
+    /// 对应 Java: Array#getResultSet(long,int)；返回1-based范围游标。
+    async fn result_set_range(
+        &mut self,
         index: i64,
         count: i32,
-    ) -> Result<Box<dyn ResultSet>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::RANGE | ResourceOperations::RESULT_SET,
-            "Array#getResultSet(long,int)",
-        )?;
-        self.context
-            .observe(self.access.result_set_range(index, count).await)
-    }
-
-    /// Returns a 1-based range as a result set using an explicit type map.
-    pub async fn result_set_range_with_type_map(
-        &self,
+    ) -> Result<Box<dyn ResultSet>, RdbcError>;
+    /// 对应 Java: Array#getResultSet(long,int,Map)；保留范围及映射。
+    async fn result_set_range_with_type_map(
+        &mut self,
         index: i64,
         count: i32,
         type_map: &RdbcTypeMap,
-    ) -> Result<Box<dyn ResultSet>, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ
-                | ResourceOperations::RANGE
-                | ResourceOperations::RESULT_SET
-                | ResourceOperations::TYPE_MAP,
-            "Array#getResultSet(long,int,Map)",
-        )?;
-        self.context.observe(
-            self.access
-                .result_set_range_with_type_map(index, count, type_map)
-                .await,
-        )
-    }
-
-    /// Releases the array resource. Corresponds to `Array#free()`.
-    pub async fn free(&self) -> Result<(), RdbcError> {
-        self.context
-            .require_capability(ResourceOperations::FREE, "Array#free")?;
-        self.context.free(self.access.as_ref()).await
-    }
-
-    /// Returns whether the array was released.
-    #[must_use]
-    pub fn is_freed(&self) -> bool {
-        self.context.is_freed()
-    }
-
-    /// Returns the driver-neutral resource identifier.
-    #[must_use]
-    pub fn resource_id(&self) -> &str {
-        self.context.resource_id().as_str()
-    }
-
-    /// Returns the operations enabled for this array instance.
-    #[must_use]
-    pub fn capabilities(&self) -> ResourceOperations {
-        self.context.capabilities()
-    }
+    ) -> Result<Box<dyn ResultSet>, RdbcError>;
+    /// 对应 Java: Array#free()；幂等释放后其他JDBC操作拒绝。
+    async fn free(&mut self) -> Result<(), RdbcError>;
 }
-
-impl fmt::Debug for RdbcArray {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("RdbcArray")
-            .field("context", &self.context)
-            .finish_non_exhaustive()
-    }
-}
-
-impl PartialEq for RdbcArray {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.context, &other.context)
-    }
-}
-
-impl Eq for RdbcArray {}
-
-/// Standard Rust mapping for an SQL `ARRAY` value.
-pub type Array = RdbcArray;

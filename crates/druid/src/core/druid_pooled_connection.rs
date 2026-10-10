@@ -1510,6 +1510,225 @@ impl druid_rdbc::connection::Connection for DruidPooledConnection {
         )))
     }
 
+    /// 创建受当前租约监管的标准 Blob，返回独占资源或驱动错误。
+    /// 对应 Java: DruidPooledConnection#createBlob。
+    async fn create_blob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Blob>, RdbcError> {
+        self.standard_ref()?;
+        let registry = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        policy.ensure_open()?;
+        let admission = registry.begin_admission(policy.resource_generation())?;
+        let raw_result = self.standard_mut()?.create_blob().await;
+        let raw = self.classify_result(raw_result)?;
+        // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。
+        let id = super::resource_id::ResourceId::local();
+        let owner = Arc::new(super::druid_resource_owner::DruidResourceOwner::new(
+            id.clone(),
+            super::resource_kind::ResourceKind::Blob,
+            policy,
+        ));
+        let context = Arc::new(super::resource_context::ResourceContext::new(
+            id,
+            super::resource_kind::ResourceKind::Blob,
+            super::resource_runtime_capabilities::ResourceRuntimeCapabilities::large_object(),
+            owner,
+        ));
+        let resource =
+            super::druid_blob::DruidBlob::register(raw, context, registry, &admission).await?;
+        Ok(Box::new(resource))
+    }
+
+    /// 创建受当前租约监管的标准 Clob，返回独占资源或驱动错误。
+    /// 对应 Java: DruidPooledConnection#createClob。
+    async fn create_clob(&mut self) -> Result<Box<dyn druid_rdbc::resource::Clob>, RdbcError> {
+        self.standard_ref()?;
+        let registry = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        policy.ensure_open()?;
+        let admission = registry.begin_admission(policy.resource_generation())?;
+        let raw_result = self.standard_mut()?.create_clob().await;
+        let raw = self.classify_result(raw_result)?;
+        // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。
+        let id = super::resource_id::ResourceId::local();
+        let owner = Arc::new(super::druid_resource_owner::DruidResourceOwner::new(
+            id.clone(),
+            super::resource_kind::ResourceKind::Clob,
+            policy,
+        ));
+        let context = Arc::new(super::resource_context::ResourceContext::new(
+            id,
+            super::resource_kind::ResourceKind::Clob,
+            super::resource_runtime_capabilities::ResourceRuntimeCapabilities::large_object(),
+            owner,
+        ));
+        let resource =
+            super::druid_clob::DruidClob::register(raw, context, registry, &admission).await?;
+        Ok(Box::new(resource))
+    }
+
+    /// 创建受当前租约监管的标准 NClob，返回独占资源或驱动错误。
+    /// 对应 Java: DruidPooledConnection#createNClob。
+    async fn create_n_clob(&mut self) -> Result<Box<dyn druid_rdbc::resource::NClob>, RdbcError> {
+        self.standard_ref()?;
+        let registry = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        policy.ensure_open()?;
+        let admission = registry.begin_admission(policy.resource_generation())?;
+        let raw_result = self.standard_mut()?.create_n_clob().await;
+        let raw = self.classify_result(raw_result)?;
+        // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。
+        let id = super::resource_id::ResourceId::local();
+        let owner = Arc::new(super::druid_resource_owner::DruidResourceOwner::new(
+            id.clone(),
+            super::resource_kind::ResourceKind::NClob,
+            policy,
+        ));
+        let context = Arc::new(super::resource_context::ResourceContext::new(
+            id,
+            super::resource_kind::ResourceKind::NClob,
+            super::resource_runtime_capabilities::ResourceRuntimeCapabilities::large_object(),
+            owner,
+        ));
+        let resource =
+            super::druid_n_clob::DruidNClob::register(raw, context, registry, &admission).await?;
+        Ok(Box::new(resource))
+    }
+
+    /// 创建受当前租约监管的标准 SqlXml，返回独占资源或驱动错误。
+    /// 对应 Java: DruidPooledConnection#createSqlXml。
+    async fn create_sql_xml(&mut self) -> Result<Box<dyn druid_rdbc::resource::SqlXml>, RdbcError> {
+        self.standard_ref()?;
+        let registry = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        policy.ensure_open()?;
+        let admission = registry.begin_admission(policy.resource_generation())?;
+        let raw_result = self.standard_mut()?.create_sql_xml().await;
+        let raw = self.classify_result(raw_result)?;
+        // 驱动返回后直到 registry 接管前不再 await，取消不会丢失已创建资源。
+        let id = super::resource_id::ResourceId::local();
+        let owner = Arc::new(super::druid_resource_owner::DruidResourceOwner::new(
+            id.clone(),
+            super::resource_kind::ResourceKind::SqlXml,
+            policy,
+        ));
+        let context = Arc::new(super::resource_context::ResourceContext::new(
+            id,
+            super::resource_kind::ResourceKind::SqlXml,
+            super::resource_runtime_capabilities::ResourceRuntimeCapabilities::READ
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::WRITE
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::STREAM
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::FREE,
+            owner,
+        ));
+        let resource =
+            super::druid_sql_xml::DruidSqlXml::register(raw, context, registry, &admission).await?;
+        Ok(Box::new(resource))
+    }
+
+    /// 创建独立拥有的SQL结构对象，保留nullable名称与有序属性；返回原驱动对象或分类错误。
+    /// 对应 Java: DruidPooledConnection#createStruct。Struct无free且默认随应用引用有效，不能加入LOB释放状态机。
+    async fn create_struct(
+        &mut self,
+        type_name: Option<&str>,
+        attributes: Option<Vec<druid_rdbc::types::RdbcObject>>,
+    ) -> Result<Box<dyn druid_rdbc::resource::Struct>, RdbcError> {
+        self.standard_ref()?;
+        let result = self
+            .standard_mut()?
+            .create_struct(type_name, attributes)
+            .await;
+        self.classify_result(result)
+    }
+
+    /// 创建当前租约监管的 SQL 数组，保留可空类型名和有序元素；返回资源或驱动错误。
+    /// 对应 Java: DruidPooledConnection#createArrayOf。
+    async fn create_array_of(
+        &mut self,
+        type_name: Option<&str>,
+        elements: Option<Vec<druid_rdbc::types::RdbcObject>>,
+    ) -> Result<Box<dyn druid_rdbc::resource::Array>, RdbcError> {
+        self.standard_ref()?;
+        let registry = self
+            .holder
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .standard_resource_registry();
+        let policy = self
+            .standard_policy
+            .as_ref()
+            .ok_or(RdbcError::ConnectionDiscarded)?
+            .clone();
+        policy.ensure_open()?;
+        let admission = registry.begin_admission(policy.resource_generation())?;
+        let raw_result = self
+            .standard_mut()?
+            .create_array_of(type_name, elements)
+            .await;
+        let raw = self.classify_result(raw_result)?;
+        let id = super::resource_id::ResourceId::local();
+        let owner = Arc::new(super::druid_resource_owner::DruidResourceOwner::new(
+            id.clone(),
+            super::resource_kind::ResourceKind::Array,
+            policy.clone(),
+        ));
+        let context = Arc::new(super::resource_context::ResourceContext::new(
+            id,
+            super::resource_kind::ResourceKind::Array,
+            super::resource_runtime_capabilities::ResourceRuntimeCapabilities::READ
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::RANGE
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::TYPE_MAP
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::RESULT_SET
+                | super::resource_runtime_capabilities::ResourceRuntimeCapabilities::FREE,
+            owner,
+        ));
+        let resource = super::druid_array::DruidArray::register(
+            raw,
+            context,
+            registry,
+            &admission,
+            self.id,
+            Arc::clone(&self.result_set_id_seed),
+            Arc::clone(&self.lease_active),
+            self.filter_chain.clone(),
+            self.stats_collector.clone(),
+            policy,
+        )
+        .await?;
+        Ok(Box::new(resource))
+    }
+
     async fn commit(&mut self) -> Result<(), RdbcError> {
         let event = ConnectionEvent::Commit;
         let started_at = Instant::now();

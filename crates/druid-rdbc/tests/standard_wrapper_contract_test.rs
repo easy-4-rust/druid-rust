@@ -44,7 +44,10 @@ tokio = {{ version = "1", features = ["macros", "rt"] }}
         .current_dir(&root)
         .env(
             "CARGO_TARGET_DIR",
-            manifest_dir.join("target/external-wrapper-fixtures"),
+            std::env::var_os("DRUID_RDBC_EXTERNAL_TARGET_ROOT").map_or_else(
+                || manifest_dir.join("target/external-wrapper-fixtures"),
+                |root| std::path::PathBuf::from(root).join("external-wrapper-fixtures"),
+            ),
         )
         .output()
         .expect("external cargo command must execute");

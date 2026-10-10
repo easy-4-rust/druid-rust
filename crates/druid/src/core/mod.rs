@@ -29,13 +29,24 @@ pub mod db2_exception_sorter;
 pub mod driver;
 pub mod driver_extension_descriptor;
 pub mod driver_extension_registry;
+mod druid_array;
+mod druid_array_state;
+mod druid_blob;
+mod druid_blob_state;
+mod druid_clob;
+mod druid_clob_state;
 pub mod druid_connection_holder;
 mod druid_execution_filter_policy;
+mod druid_n_clob;
 pub mod druid_pooled_callable_statement;
 pub mod druid_pooled_connection;
 pub mod druid_pooled_prepared_statement;
 pub mod druid_pooled_result_set;
 pub mod druid_pooled_statement;
+mod druid_resource_owner;
+mod druid_sql_xml;
+mod druid_sql_xml_payload;
+mod druid_sql_xml_state;
 pub mod error;
 pub mod exception_sorter;
 pub mod exec_result;
@@ -182,13 +193,10 @@ pub use druid_rdbc::metadata::{
 pub use druid_rdbc::resource::RdbcOutputStream;
 pub use druid_rdbc::resource::RdbcXmlRepresentationType;
 pub use druid_rdbc::resource::{RdbcArray, RdbcBlob, RdbcClob, RdbcNClob, RdbcRef, RdbcSqlXml};
-pub use druid_rdbc::resource::{
-    RdbcArrayAccess, RdbcBlobAccess, RdbcClobAccess, RdbcNClobAccess, RdbcRefAccess,
-    RdbcResourceAccess, RdbcSqlXmlAccess, ResourceHandleFactory, ResourceOperations,
-};
 pub use druid_rdbc::resource::{RdbcCharacterLength, RdbcReader, RdbcWriter};
 pub use druid_rdbc::resource::{RdbcInputStream, RdbcStreamLength};
 pub use druid_rdbc::resource::{RdbcXmlResult, RdbcXmlSource};
+pub use druid_rdbc::resource::{ResourceHandleFactory, ResourceOperations};
 pub use druid_rdbc::result_set::{ResultSet, ResultSetUpdate};
 pub use druid_rdbc::statement::{
     CallableInputParameter, CallableOutParameter, CallableParameter, CallableStatement, ExecResult,

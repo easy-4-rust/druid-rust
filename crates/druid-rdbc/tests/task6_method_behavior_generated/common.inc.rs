@@ -7,6 +7,7 @@ use druid_rdbc::metadata::{
     DatabaseMetaDataLimitsExt, DatabaseMetaDataQueryExt, DatabaseMetaDataRequest,
     DatabaseMetaDataSqlCapabilitiesExt, ResultSetColumnType, ResultSetMetaData, RowIdLifetime,
 };
+use druid_rdbc::resource::{Blob, Clob, NClob};
 use druid_rdbc::result_set::{
     ColumnIndex, ResultSet, ResultSetExt, ResultSetStreamKind, ResultSetUpdate,
 };

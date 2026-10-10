@@ -83,7 +83,7 @@ impl<T> WrapperExt for T where T: Wrapper + ?Sized {}
 /// 为一个外部实现类型生成唯一的 canonical [`Wrapper`] 实现。
 ///
 /// 每个具体类型只调用一次，并传入最具体的 canonical leaf；例如
-/// `CallableStatement` 会自动展开 `PreparedStatement -> Statement` inheritance closure。
+/// `RowSet` 会自动展开 `ResultSet`，`CallableStatement` 会自动展开 `PreparedStatement -> Statement` inheritance closure。
 /// `DataSource`、`ConnectionPoolDataSource`、`XaDataSource` 与 `XaConnection` 的继承接口也会
 /// 自动展开。带多个类型参数、const generic 与 where predicate 时使用
 /// `generics [T, U, const N: usize] for Type<T, U, N> where [T: Bound] => ResultSet`。
@@ -92,6 +92,70 @@ impl<T> WrapperExt for T where T: Wrapper + ?Sized {}
 /// 应手写唯一的 [`Wrapper`] implementation，并在 `canonical_unwrap` 中显式返回全部 roles。
 #[macro_export]
 macro_rules! impl_standard_wrapper {
+    // RowSet 的 canonical leaf 自动包含 ResultSet 父接口，并保留同一可变对象身份。
+    (@emit [$($g:tt)*] $t:ty => RowSet) => {
+        impl $($g)* $crate::wrapper::Wrapper for $t {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::extensions::RowSet>() || target == std::any::TypeId::of::<Self>() {
+                    Some($crate::wrapper::StandardUnwrapped::RowSet(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::result_set::ResultSet>() {
+                    Some($crate::wrapper::StandardUnwrapped::ResultSet(self))
+                } else { None }
+            }
+            fn canonical_unwrap_mut(&mut self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrappedMut<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::wrapper::Wrapper>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::Wrapper(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::extensions::RowSet>() || target == std::any::TypeId::of::<Self>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::RowSet(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::result_set::ResultSet>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::ResultSet(self))
+                } else { None }
+            }
+        }
+    };
+    (@emit [$($g:tt)*] $t:ty where [$($w:tt)*] => RowSet) => {
+        impl $($g)* $crate::wrapper::Wrapper for $t where $($w)* {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::extensions::RowSet>() || target == std::any::TypeId::of::<Self>() {
+                    Some($crate::wrapper::StandardUnwrapped::RowSet(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::result_set::ResultSet>() {
+                    Some($crate::wrapper::StandardUnwrapped::ResultSet(self))
+                } else { None }
+            }
+            fn canonical_unwrap_mut(&mut self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrappedMut<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::wrapper::Wrapper>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::Wrapper(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::extensions::RowSet>() || target == std::any::TypeId::of::<Self>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::RowSet(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::result_set::ResultSet>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::ResultSet(self))
+                } else { None }
+            }
+        }
+    };
+    (@emit [$($g:tt)*] $t:ty => RowSetMetaData) => {
+        impl $($g)* $crate::wrapper::Wrapper for $t {
+            fn wrapper_view(&self) -> &dyn $crate::wrapper::Wrapper { self }
+            fn canonical_unwrap(&self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrapped<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::extensions::RowSetMetaData>() || target == std::any::TypeId::of::<Self>() {
+                    Some($crate::wrapper::StandardUnwrapped::RowSetMetaData(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::metadata::ResultSetMetaData>() {
+                    Some($crate::wrapper::StandardUnwrapped::ResultSetMetaData(self))
+                } else { None }
+            }
+            fn canonical_unwrap_mut(&mut self, target: std::any::TypeId) -> Option<$crate::wrapper::StandardUnwrappedMut<'_>> {
+                if target == std::any::TypeId::of::<dyn $crate::wrapper::Wrapper>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::Wrapper(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::extensions::RowSetMetaData>() || target == std::any::TypeId::of::<Self>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::RowSetMetaData(self))
+                } else if target == std::any::TypeId::of::<dyn $crate::metadata::ResultSetMetaData>() {
+                    Some($crate::wrapper::StandardUnwrappedMut::ResultSetMetaData(self))
+                } else { None }
+            }
+        }
+    };
     (generics [$($generics:tt)*] for $target:ty where [$($where_clause:tt)*] => $kind:ident) => {
         $crate::impl_standard_wrapper!(@emit [<$($generics)*>] $target where [$($where_clause)*] => $kind);
     };

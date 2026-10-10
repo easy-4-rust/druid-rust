@@ -4,11 +4,12 @@ use druid_rdbc::connection::{Connection, TransactionIsolation};
 use druid_rdbc::error::RdbcError;
 use druid_rdbc::extensions::ConnectionCapabilities;
 use druid_rdbc::metadata::DatabaseMetaData;
+use druid_rdbc::resource::{Array, Blob, Clob, NClob, SqlXml};
 use druid_rdbc::statement::{
     CallableStatement, ExecResult, PreparedInputParameter, PreparedStatement, ResultSetHoldability,
     Statement, StatementOptions,
 };
-use druid_rdbc::types::{RdbcBlob, RdbcClob, RdbcNClob, RdbcTypeMap, Row, Savepoint, Value};
+use druid_rdbc::types::{RdbcObject, RdbcTypeMap, Row, Savepoint, Value};
 use druid_rdbc::wrapper::{StandardUnwrapped, Wrapper};
 use std::any::TypeId;
 use std::ops::{Deref, DerefMut};
@@ -275,16 +276,44 @@ where
         self.connection_mut().clear_warnings().await
     }
 
-    async fn create_blob(&mut self) -> Result<RdbcBlob, RdbcError> {
+    async fn create_blob(&mut self) -> Result<Box<dyn Blob>, RdbcError> {
         self.connection_mut().create_blob().await
     }
 
-    async fn create_clob(&mut self) -> Result<RdbcClob, RdbcError> {
+    async fn create_clob(&mut self) -> Result<Box<dyn Clob>, RdbcError> {
         self.connection_mut().create_clob().await
     }
 
-    async fn create_n_clob(&mut self) -> Result<RdbcNClob, RdbcError> {
+    async fn create_n_clob(&mut self) -> Result<Box<dyn NClob>, RdbcError> {
         self.connection_mut().create_n_clob().await
+    }
+
+    /// 委托外部租约连接创建 SQLXML；对应 Java: Connection#createSQLXML。
+    async fn create_sql_xml(&mut self) -> Result<Box<dyn SqlXml>, RdbcError> {
+        self.connection_mut().create_sql_xml().await
+    }
+
+    /// 将SQL结构创建的nullable类型名与有序属性原样交给外部池连接；返回独立拥有的对象或原错误。
+    /// 对应 Java: Connection#createStruct，不引入第二层资源所有者。
+    async fn create_struct(
+        &mut self,
+        type_name: Option<&str>,
+        attributes: Option<Vec<druid_rdbc::types::RdbcObject>>,
+    ) -> Result<Box<dyn druid_rdbc::resource::Struct>, RdbcError> {
+        self.connection_mut()
+            .create_struct(type_name, attributes)
+            .await
+    }
+
+    /// 原样委托类型名与元素数组，返回独占 Array；对应 Java: Connection#createArrayOf。
+    async fn create_array_of(
+        &mut self,
+        type_name: Option<&str>,
+        elements: Option<Vec<RdbcObject>>,
+    ) -> Result<Box<dyn Array>, RdbcError> {
+        self.connection_mut()
+            .create_array_of(type_name, elements)
+            .await
     }
 
     fn capabilities(&self) -> ConnectionCapabilities {

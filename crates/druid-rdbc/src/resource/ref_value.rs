@@ -1,107 +1,24 @@
-//! Standard Rust mapping for Java `java.sql.Ref`.
-
 use crate::error::RdbcError;
-use crate::resource::{RdbcRefAccess, ResourceLifecycle, ResourceOperations};
+use crate::resource::ResourceOperations;
 use crate::types::{RdbcObject, RdbcTypeMap};
-use std::fmt;
-use std::sync::Arc;
 
-/// Driver-neutral RDBC `Ref` handle.
-#[derive(Clone)]
-pub struct RdbcRef {
-    access: Arc<dyn RdbcRefAccess>,
-    context: Arc<ResourceLifecycle>,
-}
-
-impl RdbcRef {
-    pub(crate) fn from_parts(
-        access: Arc<dyn RdbcRefAccess>,
-        context: Arc<ResourceLifecycle>,
-    ) -> Self {
-        Self { access, context }
-    }
-
-    /// Returns the fully qualified SQL type name. Corresponds to `Ref#getBaseTypeName()`.
-    pub async fn base_type_name(&self) -> Result<String, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Ref#getBaseTypeName")?;
-        self.context.observe(self.access.base_type_name().await)
-    }
-
-    /// Returns the fully qualified SQL type name. Corresponds to `Ref#getBaseTypeName()`.
-    pub async fn get_base_type_name(&self) -> Result<String, RdbcError> {
-        self.base_type_name().await
-    }
-
-    /// Reads the referenced object using the driver's default type map.
-    pub async fn object(&self) -> Result<RdbcObject, RdbcError> {
-        self.context
-            .require(ResourceOperations::READ, "Ref#getObject")?;
-        self.context.observe(self.access.object().await)
-    }
-
-    /// Reads the referenced object using the driver's default type map.
-    pub async fn get_object(&self) -> Result<RdbcObject, RdbcError> {
-        self.object().await
-    }
-
-    /// Reads the referenced object using an explicit type map.
-    pub async fn object_with_type_map(
-        &self,
+/// 独占可变SQL资源标准接口；对应 Java: java.sql.Ref。
+/// 对象独立拥有，仅要求Send，不要求Sync。SQL REF是结构值的逻辑指针，取得引用不物化目标属性。
+/// 支持该数据类型的驱动必须实现全部四个JDBC方法；不继承Wrapper，没有free或Connection#createRef。
+/// 引用可作为列值或结构属性，也可通过PreparedStatement#setRef写入数据库。各方法返回实际值或数据库错误。
+#[async_trait::async_trait]
+pub trait Ref: std::fmt::Debug + Send + 'static {
+    /// 返回真实支持的操作集合（Rust扩展）。
+    fn capabilities(&self) -> ResourceOperations;
+    /// 对应 Java: Ref#getBaseTypeName()；返回引用目标的完整SQL结构类型名。
+    async fn base_type_name(&mut self) -> Result<String, RdbcError>;
+    /// 对应 Java: Ref#getObject()；按连接关联映射读取目标，无匹配映射时返回Struct对象。
+    async fn object(&mut self) -> Result<RdbcObject, RdbcError>;
+    /// 对应 Java: Ref#getObject(Map)；使用参数type_map的完整SQL结构类型名与SQLData目标映射读取对象。
+    async fn object_with_type_map(
+        &mut self,
         type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, RdbcError> {
-        self.context.require(
-            ResourceOperations::READ | ResourceOperations::TYPE_MAP,
-            "Ref#getObject(Map)",
-        )?;
-        self.context
-            .observe(self.access.object_with_type_map(type_map).await)
-    }
-
-    /// Reads the referenced object using an explicit type map.
-    pub async fn get_object_with_type_map(
-        &self,
-        type_map: &RdbcTypeMap,
-    ) -> Result<RdbcObject, RdbcError> {
-        self.object_with_type_map(type_map).await
-    }
-
-    /// Replaces the referenced object. Corresponds to `Ref#setObject(Object)`.
-    pub async fn set_object(&self, value: RdbcObject) -> Result<(), RdbcError> {
-        self.context
-            .require(ResourceOperations::WRITE, "Ref#setObject")?;
-        self.context.observe(self.access.set_object(value).await)
-    }
-
-    /// Returns the driver-neutral resource identifier.
-    #[must_use]
-    pub fn resource_id(&self) -> &str {
-        self.context.resource_id().as_str()
-    }
-
-    /// Returns the operations enabled for this Ref instance.
-    #[must_use]
-    pub fn capabilities(&self) -> ResourceOperations {
-        self.context.capabilities()
-    }
+    ) -> Result<RdbcObject, RdbcError>;
+    /// 对应 Java: Ref#setObject(Object)；替换引用目标。
+    async fn set_object(&mut self, value: RdbcObject) -> Result<(), RdbcError>;
 }
-
-impl fmt::Debug for RdbcRef {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("RdbcRef")
-            .field("context", &self.context)
-            .finish_non_exhaustive()
-    }
-}
-
-impl PartialEq for RdbcRef {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.context, &other.context)
-    }
-}
-
-impl Eq for RdbcRef {}
-
-/// Mapping of an SQL `REF` that refers to a structured value in the database.
-pub type Ref = RdbcRef;

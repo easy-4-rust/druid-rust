@@ -94,9 +94,18 @@ async fn task6_lease_delegates_complete_spi() {
     let statement_address = delegation_resources.statement_address();
     let prepared_address = delegation_resources.prepared_address();
     let callable_address = delegation_resources.callable_address();
-    let expected_blob = delegation_resources.blob.clone();
-    let expected_clob = delegation_resources.clob.clone();
-    let expected_n_clob = delegation_resources.n_clob.clone();
+    let expected_blob = std::ptr::from_ref::<dyn druid_rdbc::resource::Blob>(
+        delegation_resources.blob.as_deref().unwrap(),
+    )
+    .cast::<()>() as usize;
+    let expected_clob = std::ptr::from_ref::<dyn druid_rdbc::resource::Clob>(
+        delegation_resources.clob.as_deref().unwrap(),
+    )
+    .cast::<()>() as usize;
+    let expected_n_clob = std::ptr::from_ref::<dyn druid_rdbc::resource::NClob>(
+        delegation_resources.n_clob.as_deref().unwrap(),
+    )
+    .cast::<()>() as usize;
     let mut connection = connection_lease_with_delegation(
         drop_count.clone(),
         Arc::clone(&delegation_counts),
@@ -161,21 +170,30 @@ async fn task6_lease_delegates_complete_spi() {
         Some("lease-metadata".to_string())
     );
     drop(metadata);
+    let mut actual_blob = connection.create_blob().await.expect("blob must delegate");
     assert_eq!(
-        connection.create_blob().await.expect("blob must delegate"),
+        std::ptr::from_ref::<dyn druid_rdbc::resource::Blob>(actual_blob.as_ref()).cast::<()>()
+            as usize,
         expected_blob
     );
+    assert_eq!(actual_blob.length().await.unwrap(), 4);
+    let mut actual_clob = connection.create_clob().await.expect("clob must delegate");
     assert_eq!(
-        connection.create_clob().await.expect("clob must delegate"),
+        std::ptr::from_ref::<dyn druid_rdbc::resource::Clob>(actual_clob.as_ref()).cast::<()>()
+            as usize,
         expected_clob
     );
+    assert_eq!(actual_clob.length().await.unwrap(), 4);
+    let mut actual_n_clob = connection
+        .create_n_clob()
+        .await
+        .expect("nclob must delegate");
     assert_eq!(
-        connection
-            .create_n_clob()
-            .await
-            .expect("nclob must delegate"),
+        std::ptr::from_ref::<dyn druid_rdbc::resource::NClob>(actual_n_clob.as_ref()).cast::<()>()
+            as usize,
         expected_n_clob
     );
+    assert_eq!(actual_n_clob.length().await.unwrap(), 4);
     assert_eq!(
         delegation_counts
             .create_physical_statement

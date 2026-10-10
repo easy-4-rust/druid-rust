@@ -379,6 +379,25 @@ impl StandardLogicalPolicy {
         result
     }
 
+    /// 分类真实资源错误并记录连接错误；参数为驱动错误，不增加 SQL 执行或结果集错误计数。
+    pub(crate) fn classify_resource_error(&self, error: &RdbcError) {
+        let _ = self.classify::<()>(Err(error.clone()), None);
+        if let Some(stats) = self.stats_collector.read().as_ref() {
+            stats.record_error();
+            if let Some(entry) = stats.connection_stat().entry(self.connection_id) {
+                entry.error(error);
+            }
+        }
+    }
+
+    /// 资源所有权丢失时停止租约并发送一次丢弃通知，无参数和返回值。
+    pub(crate) fn discard_resource_lease(&self) {
+        self.discarded.store(true, Ordering::Release);
+        self.lease_active.store(false, Ordering::Release);
+        self.owner_disposition
+            .signal_discard(super::ConnectionRecycleDisposition::discard());
+    }
+
     /// 记录一次 canonical ResultSet 访问错误，不伪增 SQL executeCount。
     pub(crate) fn record_result_set_error(&self, error: &RdbcError) {
         let Some(stats) = self.stats_collector.read().clone() else {

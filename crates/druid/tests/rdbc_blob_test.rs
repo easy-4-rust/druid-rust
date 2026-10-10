@@ -1,7 +1,8 @@
 //! java.sql.Blob / java.io 流对象的资源语义契约。
 
 use druid::core::{RdbcBlob, RdbcError, RdbcInputStream, RdbcObject, RdbcOutputStream};
-use druid::core::{RdbcBlobAccess, RdbcResourceAccess, ResourceHandleFactory, ResourceOperations};
+use druid::core::{ResourceHandleFactory, ResourceOperations};
+use druid_rdbc::resource::{Blob, BlobPattern};
 use std::io::{Error, Read, Write};
 use std::sync::{Arc, Mutex};
 
@@ -128,22 +129,19 @@ impl Write for BlobWriteCursor {
 }
 
 #[async_trait::async_trait]
-impl RdbcResourceAccess for InMemoryBlobAccess {
+impl Blob for InMemoryBlobAccess {
     fn capabilities(&self) -> ResourceOperations {
         ResourceOperations::blob()
     }
 
-    async fn free(&self) -> Result<(), RdbcError> {
+    async fn free(&mut self) -> Result<(), RdbcError> {
         let mut state = self.state();
         state.freed = true;
         state.bytes.clear();
         Ok(())
     }
-}
 
-#[async_trait::async_trait]
-impl RdbcBlobAccess for InMemoryBlobAccess {
-    async fn length(&self) -> Result<i64, RdbcError> {
+    async fn length(&mut self) -> Result<i64, RdbcError> {
         let state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Blob has been freed".to_string()));
@@ -152,7 +150,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
             .map_err(|_| RdbcError::DriverError("Blob length exceeds i64".to_string()))
     }
 
-    async fn get_bytes(&self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
+    async fn get_bytes(&mut self, position: i64, length: i32) -> Result<Vec<u8>, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, position, true)?;
         let length = Self::checked_length(i64::from(length))?;
@@ -163,7 +161,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         Ok(state.bytes[start..end].to_vec())
     }
 
-    async fn get_binary_stream(&self) -> Result<RdbcInputStream, RdbcError> {
+    async fn get_binary_stream(&mut self) -> Result<RdbcInputStream, RdbcError> {
         let state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Blob has been freed".to_string()));
@@ -171,7 +169,11 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         Ok(RdbcInputStream::from_bytes(state.bytes.clone()))
     }
 
-    async fn position_bytes(&self, pattern: &[u8], start: i64) -> Result<Option<i64>, RdbcError> {
+    async fn position_bytes(
+        &mut self,
+        pattern: &[u8],
+        start: i64,
+    ) -> Result<Option<i64>, RdbcError> {
         let state = self.state();
         let start = Self::checked_start(&state, start, true)?;
         let result = if pattern.is_empty() {
@@ -191,25 +193,34 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
     }
 
     async fn position_blob(
-        &self,
-        pattern: &RdbcBlob,
+        &mut self,
+        pattern: BlobPattern<'_>,
         start: i64,
     ) -> Result<Option<i64>, RdbcError> {
-        let length = pattern.length().await?;
-        let length = i32::try_from(length)
-            .map_err(|_| RdbcError::DriverError("pattern Blob is too large".to_string()))?;
-        let bytes = pattern.get_bytes(1, length).await?;
+        // 驱动夹具自行读取模式；共享值句柄保留标准对象及自身别名。
+        let bytes = match pattern {
+            BlobPattern::SameResource => {
+                let length = i32::try_from(self.length().await?)
+                    .map_err(|_| RdbcError::DriverError("pattern Blob is too large".to_string()))?;
+                self.get_bytes(1, length).await?
+            }
+            BlobPattern::Other(pattern) => {
+                let length = i32::try_from(pattern.length().await?)
+                    .map_err(|_| RdbcError::DriverError("pattern Blob is too large".to_string()))?;
+                pattern.get_bytes(1, length).await?
+            }
+        };
         self.position_bytes(&bytes, start).await
     }
 
-    async fn set_bytes(&self, position: i64, bytes: &[u8]) -> Result<i32, RdbcError> {
+    async fn set_bytes(&mut self, position: i64, bytes: &[u8]) -> Result<i32, RdbcError> {
         let length = i32::try_from(bytes.len())
             .map_err(|_| RdbcError::DriverError("Blob write is too large".to_string()))?;
         self.set_bytes_range(position, bytes, 0, length).await
     }
 
     async fn set_bytes_range(
-        &self,
+        &mut self,
         position: i64,
         bytes: &[u8],
         offset: i32,
@@ -234,7 +245,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
             .map_err(|_| RdbcError::DriverError("Blob write exceeds i32".to_string()))
     }
 
-    async fn set_binary_stream(&self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
+    async fn set_binary_stream(&mut self, position: i64) -> Result<RdbcOutputStream, RdbcError> {
         let state = self.state();
         let position = Self::checked_start(&state, position, true)?;
         drop(state);
@@ -244,7 +255,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
         }))
     }
 
-    async fn truncate(&self, length: i64) -> Result<(), RdbcError> {
+    async fn truncate(&mut self, length: i64) -> Result<(), RdbcError> {
         let mut state = self.state();
         if state.freed {
             return Err(RdbcError::DriverError("Blob has been freed".to_string()));
@@ -260,7 +271,7 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
     }
 
     async fn get_binary_stream_range(
-        &self,
+        &mut self,
         position: i64,
         length: i64,
     ) -> Result<RdbcInputStream, RdbcError> {
@@ -278,9 +289,8 @@ impl RdbcBlobAccess for InMemoryBlobAccess {
 }
 
 fn blob(bytes: impl Into<Vec<u8>>) -> RdbcBlob {
-    ResourceHandleFactory::blob(Arc::new(InMemoryBlobAccess::new(bytes)))
+    ResourceHandleFactory::blob(Box::new(InMemoryBlobAccess::new(bytes)))
 }
-
 #[test]
 fn input_stream_clones_share_cursor_and_close_state() {
     let stream = RdbcInputStream::from_bytes([1, 2, 3, 4]);

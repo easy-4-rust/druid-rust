@@ -8,6 +8,7 @@ import hashlib
 import inspect
 import os
 import signal
+import sys
 import shutil
 import tempfile
 import time
@@ -36,6 +37,38 @@ from verify_wrapper_standard_impls import (
     verify_trace_record_callsites,
 )
 
+
+
+def process_is_running(pid: int) -> bool:
+    """仅查询进程状态；Windows不能使用会终止进程的os.kill(pid,0)。"""
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+    import ctypes
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.OpenProcess.argtypes = [ctypes.c_ulong, ctypes.c_int, ctypes.c_ulong]
+    kernel.OpenProcess.restype = ctypes.c_void_p
+    kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+    kernel.WaitForSingleObject.restype = ctypes.c_ulong
+    kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+    kernel.CloseHandle.restype = ctypes.c_int
+    handle = kernel.OpenProcess(0x101000, False, pid)
+    if not handle:
+        error = ctypes.get_last_error()
+        if error in (87, 1168):
+            return False
+        raise ctypes.WinError(error)
+    try:
+        status = kernel.WaitForSingleObject(handle, 0)
+        if status not in (0, 258):
+            raise ctypes.WinError(ctypes.get_last_error())
+        return status == 258
+    finally:
+        if not kernel.CloseHandle(handle):
+            raise ctypes.WinError(ctypes.get_last_error())
 
 class WrapperStandardVerifierTest(unittest.TestCase):
     """Reject split standard identity, forged traces, and runtime execution bypasses."""
@@ -117,7 +150,8 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         names = (
             "sqlx_connection_actor.rs",
             "sqlx_prepared_statement.rs",
-            "sqlx_streaming_result_set.rs",
+            "sqlx_buffered_result_set.rs",
+            "sqlx_async_result_set.rs",
             "sqlx_database_meta_data.rs",
         )
         for name in names:
@@ -249,7 +283,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
         for name, source in {
             "sqlx_prepared_statement.rs": "// Arc<SqlxConnectionActor> Arc<dyn ParameterMetaData>\n",
-            "sqlx_streaming_result_set.rs": (
+            "sqlx_buffered_result_set.rs": (
                 "// Arc<SqlxConnectionActor> ResultSetMetaDataSnapshot Arc<dyn ResultSetMetaData>\n"
             ),
             "sqlx_database_meta_data.rs": "// Arc<SqlxConnectionActor>\n",
@@ -257,6 +291,62 @@ class WrapperStandardVerifierTest(unittest.TestCase):
             (actor.parent / name).write_text(source, encoding="utf-8")
         with self.assertRaises(VerificationError):
             verify_sqlx_ownership(self.root)
+
+
+    def test_current_sqlx_async_ownership_rejects_lost_lease_and_unbounded_pull(self) -> None:
+        """真实当前源码负例：异步游标必须保留actor、容量1及受监管关闭。"""
+        repository = Path(__file__).resolve().parents[1]
+        source_root = repository / "crates/druid-wrapper/src/sqlx"
+        target_root = self.root / "crates/druid-wrapper/src/sqlx"
+        target_root.mkdir(parents=True)
+        for name in (
+            "sqlx_connection_actor.rs", "sqlx_prepared_statement.rs",
+            "sqlx_buffered_result_set.rs", "sqlx_async_result_set.rs",
+            "sqlx_database_meta_data.rs",
+        ):
+            (target_root / name).write_bytes((source_root / name).read_bytes())
+        verify_sqlx_ownership(self.root)
+        path = target_root / "sqlx_async_result_set.rs"
+        source = path.read_text(encoding="utf-8")
+        mutations = (
+            ("actor: Arc<SqlxConnectionActor>", "actor: usize"),
+            ("mpsc::channel(1)", "mpsc::channel(100)"),
+            ("actor.spawn_cursor", "actor.retired_spawn_cursor"),
+            (".try_send(SqlxCursorRequest", ".retired_send(SqlxCursorRequest"),
+            ("worker.await", "worker.retired_wait"),
+            ("self.shutdown.send_replace(true)", "self.shutdown.retired_send(true)"),
+            ("current: Option<Row>", "current: Vec<Row>"),
+        )
+        for old, new in mutations:
+            with self.subTest(mutation=old):
+                self.assertIn(old, source)
+                path.write_text(source.replace(old, new), encoding="utf-8")
+                with self.assertRaises(VerificationError):
+                    verify_sqlx_ownership(self.root)
+        path.write_text(source, encoding="utf-8")
+
+    def test_sqlx_buffered_and_async_trace_calls_each_remain_exact(self) -> None:
+        """缓冲与异步两个真实分支的next/metadata调用各恰好一次。"""
+        repository_source = Path(__file__).resolve().parents[1] / "crates/druid-wrapper/src"
+        target = self.root / "crates/druid-wrapper/src"
+        shutil.copytree(repository_source, target, dirs_exist_ok=True)
+        verify_trace_record_callsites(self.root)
+        for name in ("sqlx_buffered_result_set.rs", "sqlx_async_result_set.rs"):
+            path = target / "sqlx" / name
+            source = path.read_text(encoding="utf-8")
+            for method in ("task4_trace_result_next", "task4_trace_result_set_metadata"):
+                call = "." + method + "("
+                self.assertEqual(source.count(call), 1)
+                mutations = (
+                    source.replace(call, ".retired_" + method + "("),
+                    source + "\nfn invalid_duplicate(actor: &SqlxConnectionActor) { actor." + method + "(); }\n",
+                )
+                for index, changed in enumerate(mutations):
+                    with self.subTest(file=name, method=method, mutation=index):
+                        path.write_text(changed, encoding="utf-8")
+                        with self.assertRaisesRegex(VerificationError, "callsite multiset drift"):
+                            verify_trace_record_callsites(self.root)
+                path.write_text(source, encoding="utf-8")
 
     @staticmethod
     def marker(
@@ -614,10 +704,33 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                 self.root, expected, family_specs, report
             )
 
+
+    def unit_coverage_manifest_root(self) -> Path:
+        """构建临时单元fixture；人工compiler标识不作为生产LLVM覆盖证据。"""
+        repository = Path(__file__).resolve().parents[1]
+        fixture_root = self.root / "unit_only_coverage_manifest"
+        document = json.loads((repository / verifier.DEFAULT_COVERAGE_MANIFEST).read_bytes())
+        self.assertEqual(len(document["families"]), 7)
+        for family in document["families"]:
+            self.assertEqual(len(family["requirements"]), 15)
+            for requirement in family["requirements"]:
+                relative = Path(requirement["source_path"])
+                destination = fixture_root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes((repository / relative).read_bytes())
+                requirement["source_sha256"] = hashlib.sha256(destination.read_bytes()).hexdigest()
+                requirement["compiler_function_name"] = (
+                    "UNIT_TEST_ONLY_NO_LLVM_" + family["family"] + "_" + requirement["requirement_id"]
+                )
+        manifest = fixture_root / verifier.DEFAULT_COVERAGE_MANIFEST
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+        return fixture_root
+
     def test_wrong_source_hash_or_compiler_function_identity_is_rejected(self) -> None:
         """Neither stale source bytes nor a different exact function can be credited."""
 
-        repository = Path(__file__).resolve().parents[1]
+        repository = self.unit_coverage_manifest_root()
         canonical = verifier.load_coverage_manifest(repository)
         first = canonical[0]
         stale = replace(
@@ -754,7 +867,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
     def test_wrong_family_factory_manifest_mapping_is_rejected(self) -> None:
         """A family cannot point its factory requirement at another adapter family."""
 
-        repository = Path(__file__).resolve().parents[1]
+        repository = self.unit_coverage_manifest_root()
         loader = getattr(verifier, "load_coverage_manifest", None)
         manifest_validator = getattr(verifier, "validate_coverage_manifest", None)
         self.assertIsNotNone(loader, "coverage manifest loader is missing")
@@ -790,7 +903,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
     def test_duplicate_or_reordered_coverage_manifest_mapping_is_rejected(self) -> None:
         """Manifest family and requirement arrays are canonical ordered denominators."""
 
-        repository = Path(__file__).resolve().parents[1]
+        repository = self.unit_coverage_manifest_root()
         loader = getattr(verifier, "load_coverage_manifest", None)
         manifest_validator = getattr(verifier, "validate_coverage_manifest", None)
         self.assertIsNotNone(loader, "coverage manifest loader is missing")
@@ -1207,25 +1320,34 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         child_pid_file = self.root / "child.pid"
         hanging_script = (
             "import subprocess,time; "
-            "child=subprocess.Popen(['python3','-c','import time; time.sleep(10)']); "
+            f"child=subprocess.Popen([{sys.executable!r},'-c','import time; time.sleep(10)']); "
             f"open({str(child_pid_file)!r},'w').write(str(child.pid)); "
             "time.sleep(10)"
         )
         started = time.monotonic()
-        with self.assertRaisesRegex(VerificationError, "timed out"):
+        with self.assertRaisesRegex(VerificationError, "timed out") as timeout:
             runner(
-                ["python3", "-c", hanging_script],
+                [sys.executable, "-c", hanging_script],
                 cwd=self.root,
                 timeout_seconds=0.1,
                 output_limit=4096,
             )
         self.assertLess(time.monotonic() - started, 2.0)
-        child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+        if os.name == "nt":
+            self.assertIsNone(timeout.exception.ownership_capture_error)
+            descendants = timeout.exception.owned_descendants
+            self.assertEqual(len(descendants), 1, "timeout did not observe the required owned child")
+            descendant = descendants[0]
+            self.assertTrue(descendant["private_job_membership_verified"])
+            self.assertTrue(descendant["terminated"], "owned child survived Job cleanup")
+            child_pid = int(descendant["process_id"])
+            if child_pid_file.is_file():
+                self.assertEqual(child_pid, int(child_pid_file.read_text(encoding="utf-8")))
+        else:
+            child_pid = int(child_pid_file.read_text(encoding="utf-8"))
         child_alive = True
         for _ in range(20):
-            try:
-                os.kill(child_pid, 0)
-            except ProcessLookupError:
+            if not process_is_running(child_pid):
                 child_alive = False
                 break
             time.sleep(0.05)
@@ -1234,7 +1356,7 @@ class WrapperStandardVerifierTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(VerificationError, "output limit"):
             runner(
-                ["python3", "-c", "print('x' * 10000)"],
+                [sys.executable, "-c", "print('x' * 10000)"],
                 cwd=self.root,
                 timeout_seconds=2.0,
                 output_limit=1024,
@@ -1373,6 +1495,13 @@ class WrapperStandardVerifierTest(unittest.TestCase):
                     destination.read_text(encoding="utf-8").splitlines(), start=1
                 )
                 if f".{method}(" in line
+                and any(
+                    start <= index <= end
+                    for start, end in verifier.function_line_ranges(
+                        destination.read_text(encoding="utf-8"),
+                        verifier.TRACE_CALLSITE_FUNCTIONS[family][event["stage"]],
+                    )
+                )
             ]
             self.assertTrue(
                 call_lines, f"missing canonical callsite {relative}:{method}"

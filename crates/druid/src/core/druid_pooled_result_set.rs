@@ -441,8 +441,22 @@ impl DruidPooledResultSet {
         raw: Box<dyn ResultSet>,
         admission: &StandardResourceAdmission,
     ) -> Result<Self, RdbcError> {
+        Self::new_standard_auxiliary_with_handoff(statement, raw, admission, |_| {}).await
+    }
+
+    async fn new_standard_auxiliary_with_handoff<F>(
+        statement: Arc<DruidPooledStatementInner>,
+        raw: Box<dyn ResultSet>,
+        admission: &StandardResourceAdmission,
+        handoff: F,
+    ) -> Result<Self, RdbcError>
+    where
+        F: FnOnce(Arc<StandardResultSetResource>) + Send,
+    {
         let resources = Arc::clone(&statement.resources);
         let staged = StagedResultSet::new(statement, raw);
+        // 将已接管 raw 的 actor 同步交给资源 owner，再进入异步 registry 登记。
+        handoff(Arc::clone(&staged.resource));
         let handle = Arc::clone(&staged.resource) as Arc<dyn StandardResourceHandle>;
         let registrations = resources.register_batch(admission, vec![handle]).await?;
         match staged.into_opened() {
@@ -544,6 +558,39 @@ impl DruidPooledResultSet {
         admission: &StandardResourceAdmission,
         raw: Box<dyn ResultSet>,
     ) -> Result<Self, RdbcError> {
+        Self::new_standard_metadata_with_handoff(
+            connection_id,
+            result_set_id_seed,
+            lease_active,
+            filter_chain,
+            stats_collector,
+            resources,
+            policy,
+            admission,
+            raw,
+            |_| {},
+        )
+        .await
+    }
+
+    /// 同步交接无创建语句的资源游标，返回受原连接租约监管的完整标准代理。
+    /// 对应 Java: Array#getResultSet；handoff 在 registry 可能挂起前接管子 actor。
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn new_standard_metadata_with_handoff<F>(
+        connection_id: u64,
+        result_set_id_seed: Arc<AtomicU64>,
+        lease_active: Arc<AtomicBool>,
+        filter_chain: Option<Arc<FilterChain>>,
+        stats_collector: Option<Arc<crate::stats::StatsCollector>>,
+        resources: Arc<StandardResourceRegistry>,
+        policy: Arc<super::standard_logical_policy::StandardLogicalPolicy>,
+        admission: &StandardResourceAdmission,
+        raw: Box<dyn ResultSet>,
+        handoff: F,
+    ) -> Result<Self, RdbcError>
+    where
+        F: FnOnce(Arc<StandardResultSetResource>) + Send,
+    {
         let statement = DruidPooledStatement::new_standard(
             Box::new(MetadataStatement),
             druid_rdbc::statement::StatementOptions::default(),
@@ -557,7 +604,18 @@ impl DruidPooledResultSet {
             filter_chain,
             stats_collector,
         );
-        let mut result = Self::new_standard(statement.inner, raw, admission).await?;
+        let mut result = Self::new_standard_auxiliary_with_handoff(
+            Arc::clone(&statement.inner),
+            raw,
+            admission,
+            handoff,
+        )
+        .await?;
+        statement
+            .inner
+            .set_execution_results(vec![TrackedStatementResult::ResultSet(Arc::downgrade(
+                &result.resource,
+            ))]);
         result.has_creating_statement = false;
         Ok(result)
     }
@@ -1580,6 +1638,16 @@ impl ResultSet for DruidPooledResultSet {
 
     fn move_to_current_row(&mut self) -> Result<(), RdbcError> {
         self.filtered_row_operation(super::ResultSetRowOperation::MoveToCurrentRow)
+    }
+
+    /// Stream 唯一拥有型消费结束后交接原 registry；无参数、无返回值。
+    /// 对应 Java: DruidPooledResultSet#close 的 Rust 异步 Drop 适配。
+    fn release_owned(self: Box<Self>) {
+        if !self.shared.closed.load(Ordering::Acquire) {
+            if let Some(registration) = self.resource.registration.get() {
+                registration.request_cleanup();
+            }
+        }
     }
 
     async fn close(&mut self) -> Result<(), RdbcError> {

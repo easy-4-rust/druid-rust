@@ -294,6 +294,7 @@ impl PreparedInputParameter {
             RdbcObject::Timestamp(value) => Ok(Value::Timestamp(*value)),
             RdbcObject::Url(value) => Ok(Value::String(value.external_form().to_string())),
             RdbcObject::Ref(_)
+            | RdbcObject::Struct(_)
             | RdbcObject::Array(_)
             | RdbcObject::RowId(_)
             | RdbcObject::SqlXml(_)
