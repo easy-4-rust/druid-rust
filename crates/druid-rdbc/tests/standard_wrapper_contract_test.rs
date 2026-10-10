@@ -39,13 +39,36 @@ tokio = {{ version = "1", features = ["macros", "rt"] }}
         .expect("external fixture manifest must be written");
     fs::write(root.join("src/main.rs"), source).expect("external fixture source must be written");
 
+    // 外部 fixture 位于临时目录，rustup 可能选择与仓库不同的默认编译器；
+    // 按实际子进程的编译器版本隔离增量产物，避免跨工具链复用 rmeta。
+    let rustc_version = Command::new("rustc")
+        .arg("--version")
+        .current_dir(&root)
+        .output()
+        .expect("fixture rustc version must be available");
+    assert!(
+        rustc_version.status.success(),
+        "fixture rustc version failed"
+    );
+    let version = String::from_utf8_lossy(&rustc_version.stdout);
+    let version = version
+        .split_whitespace()
+        .nth(1)
+        .expect("rustc version must include a release number")
+        .replace('.', "_");
+
     let output = Command::new(env!("CARGO"))
         .args([cargo_command, "--offline", "--quiet"])
         .current_dir(&root)
         .env(
             "CARGO_TARGET_DIR",
             std::env::var_os("DRUID_RDBC_EXTERNAL_TARGET_ROOT").map_or_else(
-                || manifest_dir.join("target/external-wrapper-fixtures"),
+                || {
+                    std::env::var_os("CARGO_TARGET_DIR")
+                        .map(std::path::PathBuf::from)
+                        .unwrap_or_else(|| manifest_dir.join("target"))
+                        .join(format!("external-wrapper-fixtures-{version}"))
+                },
                 |root| std::path::PathBuf::from(root).join("external-wrapper-fixtures"),
             ),
         )

@@ -167,7 +167,7 @@ impl RowSetProperties {
         &mut self,
         level: TransactionIsolation,
     ) -> Result<(), RdbcError> {
-        if !matches!(level.jdbc_code(), 1 | 2 | 4 | 8) {
+        if ![1, 2, 4, 8].contains(&level.jdbc_code()) {
             return Err(Self::invalid_property(
                 "invalid RowSet transaction isolation",
             ));

@@ -2,7 +2,7 @@
 
 use crate::standard_adapter_database_meta_data::StandardAdapterDatabaseMetaData;
 use crate::standard_adapter_executor::{
-    owned_executor, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
+    owned_executor_with_cancel, AdapterExecutionCore, AdapterUpdateResult, StandardExecutor,
 };
 use crate::standard_adapter_prepared_statement::StandardAdapterPreparedStatement;
 use crate::standard_adapter_statement::StandardAdapterStatement;
@@ -87,7 +87,12 @@ impl DuckDbConnectionAdapter {
             runtime_trace: None,
         };
         let owned = std::mem::replace(self, shell);
-        let executor = owned_executor(owned, runtime_trace);
+        let interrupt_handle = Arc::clone(&owned.interrupt_handle);
+        let executor = owned_executor_with_cancel(
+            owned,
+            runtime_trace,
+            Arc::new(move || interrupt_handle.interrupt()),
+        );
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
     }
@@ -414,6 +419,47 @@ druid_rdbc::impl_standard_wrapper!(DuckDbConnectionAdapter => Connection);
 
 #[async_trait::async_trait]
 impl druid_rdbc::connection::Connection for DuckDbConnectionAdapter {
+    async fn exec(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+    ) -> Result<druid_rdbc::statement::ExecResult, RdbcError> {
+        let result = self
+            .standard_executor_core()?
+            .execute_update_result(sql, params)
+            .await?;
+        Ok(druid_rdbc::statement::ExecResult {
+            rows_affected: result.rows_affected,
+            last_insert_id: result.last_insert_id,
+            row_count: result.row_count,
+        })
+    }
+
+    async fn fetch(&mut self, sql: &str, params: Vec<Value>) -> Result<Vec<Row>, RdbcError> {
+        self.standard_executor_core()?
+            .execute_query(sql, params)
+            .await
+            .map(|result| result.rows)
+    }
+
+    async fn is_valid(&mut self, timeout_seconds: u32) -> Result<bool, RdbcError> {
+        let executor = self.standard_executor_core()?;
+        let query = executor.execute_query("SELECT 1", Vec::new());
+        if timeout_seconds == 0 {
+            query.await?;
+        } else {
+            tokio::time::timeout(
+                std::time::Duration::from_secs(u64::from(timeout_seconds)),
+                query,
+            )
+            .await
+            .map_err(|_| {
+                RdbcError::DriverError("DuckDB connection validation timed out".to_owned())
+            })??;
+        }
+        Ok(true)
+    }
+
     async fn create_statement(
         &mut self,
         options: druid_rdbc::statement::StatementOptions,

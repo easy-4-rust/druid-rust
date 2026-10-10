@@ -117,12 +117,16 @@ jobs:
       - name: Verify public API snapshots
         shell: bash
         run: |
-          for crate in druid druid-wrapper; do
+          status=0
+          for crate in druid druid-rdbc druid-wrapper; do
             expected="$(awk -v crate="$crate" '$2 == crate { print $1 }' api/public-api.aarch64-apple-darwin.sha256)"
             actual="$(cargo public-api -p "$crate" -sss --all-features --target aarch64-apple-darwin | shasum -a 256 | awk '{ print $1 }')"
-            test -n "$expected"
-            test "$actual" = "$expected"
+            if [[ -z "$expected" || "$actual" != "$expected" ]]; then
+              echo "::error::Public API snapshot mismatch for $crate: expected=${expected:-missing} actual=$actual"
+              status=1
+            fi
           done
+          exit "$status"
 
   msrv:
     runs-on: ubuntu-latest

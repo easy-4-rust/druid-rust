@@ -22,7 +22,10 @@ impl SqlAttribute {
     }
     /// 返回是否为SQL NULL，不消费属性。
     pub(crate) fn is_null(&self) -> bool {
-        matches!(self, Self::Object(value) if value.is_null())
+        match self {
+            Self::Object(value) => value.is_null(),
+            Self::AsciiStream(_) | Self::BinaryStream(_) => false,
+        }
     }
     /// 转为标准Object表示，流通过原有opaque平台合同保留引用而不引入第二资源树。
     pub(crate) fn into_object(self) -> RdbcObject {

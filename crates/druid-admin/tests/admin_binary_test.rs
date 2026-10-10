@@ -11,6 +11,8 @@ use axum::http::Request;
 use druid_metrics::aggregator::AggregatedBatch;
 use druid_metrics::grpc_client::{GrpcAuthorization, GrpcClientConfig, GrpcMetricsClient};
 use druid_metrics::protocol::{PoolSnapshotMsg, SnapshotEntry};
+#[cfg(unix)]
+use tokio::io::AsyncWriteExt as _;
 use tonic::transport::{Certificate, ClientTlsConfig, Endpoint};
 use tower::ServiceExt as _;
 

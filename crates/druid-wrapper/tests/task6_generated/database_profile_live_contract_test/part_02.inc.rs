@@ -179,11 +179,14 @@ async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPoo
             if exception.sql_state() == Some("HYT00")
                 && exception.class_name() == "java.sql.SQLTimeoutException"
     ));
+    eprintln!("contract-stage: duckdb-query-timeout-observed");
     statement.close().await.expect("超时后的池化语句必须可关闭");
+    eprintln!("contract-stage: duckdb-timeout-statement-closed");
     connection
         .ping()
         .await
         .expect("query timeout 后连接必须可复用");
+    eprintln!("contract-stage: duckdb-timeout-connection-reused");
 
     let mut physical = DuckDbConnectionAdapter::connect("duckdb::memory:")
         .await

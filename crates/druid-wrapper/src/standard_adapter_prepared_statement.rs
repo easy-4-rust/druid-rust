@@ -8,6 +8,7 @@ use crate::standard_statement_state::{
     delegate_standard_statement_state_methods, StandardStatementState,
 };
 use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::SqlException;
 use druid_rdbc::metadata::ParameterMetaData;
 use druid_rdbc::result_set::ResultSet;
 use druid_rdbc::statement::{
@@ -294,9 +295,32 @@ impl PreparedStatement for StandardAdapterPreparedStatement {
     async fn execute_prepared_query(&mut self) -> Result<Box<dyn ResultSet>, RdbcError> {
         self.reset_execution_results();
         let executor = Arc::clone(self.executor_core()?);
-        let result = executor
-            .execute_query(&self.sql, self.values_core().await?)
-            .await?;
+        let values = self.values_core().await?;
+        let execution = executor.execute_query(&self.sql, values);
+        let result = if self.state.query_timeout > 0 {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(self.state.query_timeout as u64),
+                execution,
+            )
+            .await
+            {
+                Ok(result) => result?,
+                Err(_) => {
+                    executor.cancel_running()?;
+                    return Err(RdbcError::SqlException(Box::new(
+                        SqlException::new(
+                            0,
+                            Some("HYT00".to_owned()),
+                            Some("statement query timed out".to_owned()),
+                        )
+                        .with_class_name("java.sql.SQLTimeoutException")
+                        .with_assignable_type("java.sql.SQLTransientException"),
+                    )));
+                }
+            }
+        } else {
+            execution.await?
+        };
         executor.task4_trace_prepared_query();
         self.generated_keys = result.generated_keys.clone();
         Ok(Box::new(StandardAdapterResultSet::new(result, executor)))

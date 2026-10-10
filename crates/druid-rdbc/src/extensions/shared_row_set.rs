@@ -648,7 +648,7 @@ impl ResultSet for SharedRowSet {
                 ));
             }
             if state.properties.result_set_type() == ResultSetType::ForwardOnly
-                && !matches!(navigation, ResultSetNavigation::Next)
+                && navigation != ResultSetNavigation::Next
             {
                 return Err(RowSetCursor::error("Forward-only RowSet cannot scroll"));
             }

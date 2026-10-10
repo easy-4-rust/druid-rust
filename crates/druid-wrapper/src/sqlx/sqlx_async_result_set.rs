@@ -262,5 +262,4 @@ impl ResultSet for SqlxAsyncResultSet {
 }
 
 #[cfg(test)]
-#[path = "sqlx_async_result_set_test.rs"]
 mod tests;

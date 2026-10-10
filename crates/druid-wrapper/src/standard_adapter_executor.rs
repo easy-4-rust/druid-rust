@@ -102,6 +102,11 @@ pub(crate) trait StandardExecutor: Send + Sync {
     async fn close(&self) -> Result<(), RdbcError>;
     fn is_closed(&self) -> bool;
 
+    /// 中断当前驱动执行；不支持中断的适配器保持原有的成功空操作语义。
+    fn cancel_running(&self) -> Result<(), RdbcError> {
+        Ok(())
+    }
+
     #[track_caller]
     fn task4_trace_statement_create(&self);
     #[track_caller]
@@ -132,14 +137,20 @@ struct OwnedAdapterExecutor<C> {
     connection: Mutex<Option<C>>,
     closed: AtomicBool,
     runtime_trace: Option<RuntimeTraceEmitter>,
+    cancel: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl<C> OwnedAdapterExecutor<C> {
-    fn new(connection: C, runtime_trace: Option<RuntimeTraceEmitter>) -> Self {
+    fn new(
+        connection: C,
+        runtime_trace: Option<RuntimeTraceEmitter>,
+        cancel: Option<Arc<dyn Fn() + Send + Sync>>,
+    ) -> Self {
         Self {
             connection: Mutex::new(Some(connection)),
             closed: AtomicBool::new(false),
             runtime_trace,
+            cancel,
         }
     }
 }
@@ -221,6 +232,14 @@ where
 
     fn is_closed(&self) -> bool {
         self.closed.load(Ordering::Acquire)
+    }
+
+    fn cancel_running(&self) -> Result<(), RdbcError> {
+        self.ensure_open()?;
+        if let Some(cancel) = &self.cancel {
+            cancel();
+        }
+        Ok(())
     }
 
     #[track_caller]
@@ -342,7 +361,24 @@ pub(crate) fn owned_executor<C>(
 where
     C: AdapterExecutionCore,
 {
-    Arc::new(OwnedAdapterExecutor::new(connection, runtime_trace))
+    Arc::new(OwnedAdapterExecutor::new(connection, runtime_trace, None))
+}
+
+/// 为提供独立线程安全中断句柄的驱动构造执行器。
+#[cfg(feature = "duckdb-native")]
+pub(crate) fn owned_executor_with_cancel<C>(
+    connection: C,
+    runtime_trace: Option<RuntimeTraceEmitter>,
+    cancel: Arc<dyn Fn() + Send + Sync>,
+) -> Arc<dyn StandardExecutor>
+where
+    C: AdapterExecutionCore,
+{
+    Arc::new(OwnedAdapterExecutor::new(
+        connection,
+        runtime_trace,
+        Some(cancel),
+    ))
 }
 
 #[cfg(test)]
