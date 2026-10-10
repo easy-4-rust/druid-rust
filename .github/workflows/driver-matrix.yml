@@ -118,15 +118,24 @@ jobs:
         shell: bash
         run: |
           status=0
+          mkdir -p api/observed
           for crate in druid druid-rdbc druid-wrapper; do
             expected="$(awk -v crate="$crate" '$2 == crate { print $1 }' api/public-api.aarch64-apple-darwin.sha256)"
-            actual="$(cargo public-api -p "$crate" -sss --all-features --target aarch64-apple-darwin | shasum -a 256 | awk '{ print $1 }')"
+            cargo public-api -p "$crate" -sss --all-features --target aarch64-apple-darwin > "api/observed/$crate.txt"
+            actual="$(shasum -a 256 "api/observed/$crate.txt" | awk '{ print $1 }')"
             if [[ -z "$expected" || "$actual" != "$expected" ]]; then
               echo "::error::Public API snapshot mismatch for $crate: expected=${expected:-missing} actual=$actual"
               status=1
             fi
           done
           exit "$status"
+      - name: Upload observed public APIs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-api-observed-${{ github.sha }}
+          path: api/observed/*.txt
+          if-no-files-found: warn
 
   msrv:
     runs-on: ubuntu-latest

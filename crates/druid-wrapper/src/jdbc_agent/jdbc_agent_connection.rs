@@ -690,14 +690,21 @@ impl druid_rdbc::connection::Connection for JdbcAgentConnection {
     }
 
     async fn is_valid(&mut self, timeout_seconds: u32) -> Result<bool, RdbcError> {
+        let java_timeout = i32::try_from(timeout_seconds).map_err(|_| {
+            RdbcError::InvalidArgument("JDBC validation timeout exceeds Java int range".to_owned())
+        })?;
         let executor = self.standard_executor_core()?;
-        let query = executor.execute_query("SELECT 1", Vec::new());
+        // 由 Agent 优先调用 JDBC Connection#isValid；驱动不支持时才执行配置的校验 SQL。
+        let validation = executor.connection_control(
+            "validate_connection",
+            json!({"timeoutSeconds": java_timeout}),
+        );
         if timeout_seconds == 0 {
-            query.await?;
+            validation.await?;
         } else {
             tokio::time::timeout(
                 std::time::Duration::from_secs(u64::from(timeout_seconds)),
-                query,
+                validation,
             )
             .await
             .map_err(|_| {

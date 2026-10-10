@@ -186,7 +186,7 @@ public final class AgentServer implements Closeable {
             AgentSession session,
             JsonNode params) throws SQLException, IOException {
         return switch (method) {
-            case "validate_connection" -> validateConnection(session);
+            case "validate_connection" -> validateConnection(session, params);
             case "execute_update" -> executeUpdate(requestId, session, params);
             case "execute_query" -> executeQuery(requestId, session, params);
             case "execute" -> execute(requestId, session, params);
@@ -604,9 +604,13 @@ public final class AgentServer implements Closeable {
         return JsonNodeFactory.instance.objectNode();
     }
 
-    private JsonNode validateConnection(AgentSession session) throws SQLException {
+    private JsonNode validateConnection(AgentSession session, JsonNode params) throws SQLException {
+        int timeoutSeconds = params.path("timeoutSeconds").asInt(5);
+        if (timeoutSeconds < 0) {
+            throw new SQLException("JDBC validation timeout must be non-negative");
+        }
         try {
-            if (session.connection().isValid(5)) {
+            if (session.connection().isValid(timeoutSeconds)) {
                 return JsonNodeFactory.instance.objectNode();
             }
         } catch (SQLFeatureNotSupportedException ignored) {
