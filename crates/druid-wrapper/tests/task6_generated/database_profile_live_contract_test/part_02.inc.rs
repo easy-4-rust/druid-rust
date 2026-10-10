@@ -202,9 +202,11 @@ async fn verify_duckdb_timeout_and_cancel(connection: &mut druid::core::DruidPoo
         .expect("取消契约必须创建共享 executor 的控制语句");
     let task = tokio::spawn(async move { executing.execute_prepared_query().await });
     tokio::time::sleep(Duration::from_millis(100)).await;
+    eprintln!("contract-stage: duckdb-explicit-cancel-start");
     cancel
         .cancel()
         .expect("显式 cancel 必须调用 DuckDB 原生 interrupt");
+    eprintln!("contract-stage: duckdb-explicit-cancel-returned");
     let cancelled = match tokio::time::timeout(Duration::from_secs(10), task)
         .await
         .expect("显式 cancel 必须在测试截止时间内完成")
@@ -245,9 +247,9 @@ async fn verify_embedded_database_restart(
     let mut connection = pool.get().await.expect("重启后必须能建立物理连接");
     assert_eq!(
         connection
-            .fetch(select_sql, vec![Value::Int(3)])
+            .fetch(select_sql, vec![Value::Int(4)])
             .await
-            .expect("数据库重启后必须能读取已提交数据")
+            .expect("数据库重启后必须能读取已持久化的 batch 数据")
             .len(),
         1
     );

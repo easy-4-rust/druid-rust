@@ -270,11 +270,21 @@ async fn task6_database_profile_live_contract_test_database_profile_live_contrac
         eprintln!("contract-stage: duckdb-timeout-cancel");
         verify_duckdb_timeout_and_cancel(&mut connection).await;
     }
-    connection.close().await.expect("最终连接归还必须成功");
+    eprintln!("contract-stage: final-lease-close");
+    tokio::time::timeout(Duration::from_secs(30), connection.close())
+        .await
+        .expect("最终连接归还必须在截止时间内完成")
+        .expect("最终连接归还必须成功");
 
     let mut leases = Vec::new();
-    for _ in 0..4 {
-        leases.push(pool.get().await.expect("max-open 内借用必须成功"));
+    for index in 0..4 {
+        eprintln!("contract-stage: pool-lease-{index}");
+        leases.push(
+            tokio::time::timeout(Duration::from_secs(30), pool.get())
+                .await
+                .expect("max-open 内借用必须在截止时间内完成")
+                .expect("max-open 内借用必须成功"),
+        );
     }
     assert_eq!(pool.state().active_count, 4);
     for lease in &mut leases {

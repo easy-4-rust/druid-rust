@@ -5,14 +5,17 @@ use crate::task4_runtime_trace::{
     duckdb_trace_session, RuntimeTraceEmitter, TraceExpectation, TraceProbe,
 };
 use druid_rdbc::error::RdbcError;
+use parking_lot::Mutex;
+use std::sync::{Arc, Weak};
 
 /// `DuckDB` 原生未池化连接工厂。
 ///
-/// 每次 `create` 都通过 duckdb-rs 打开一个独立连接，DruidPool 是唯一池化边界。
+/// 同一工厂通过 duckdb-rs 共享数据库句柄并创建独立连接，DruidPool 是唯一池化边界。
 #[derive(Debug, Clone)]
 pub struct DuckDbConnectionFactory {
     url: String,
     runtime_trace: Option<RuntimeTraceEmitter>,
+    shared_connection: Arc<tokio::sync::Mutex<Weak<Mutex<duckdb::Connection>>>>,
 }
 
 impl DuckDbConnectionFactory {
@@ -24,6 +27,7 @@ impl DuckDbConnectionFactory {
         Self {
             url: url.into(),
             runtime_trace: None,
+            shared_connection: Arc::new(tokio::sync::Mutex::new(Weak::new())),
         }
     }
 
@@ -47,7 +51,13 @@ impl DuckDbConnectionFactory {
         if let Some(trace) = &self.runtime_trace {
             trace.task4_trace_factory_create();
         }
-        let mut connection = DuckDbConnectionAdapter::connect(&self.url).await?;
+        let mut shared = self.shared_connection.lock().await;
+        let mut connection = if let Some(existing) = shared.upgrade() {
+            DuckDbConnectionAdapter::connect_from_existing(existing, &self.url).await?
+        } else {
+            DuckDbConnectionAdapter::connect(&self.url).await?
+        };
+        *shared = Arc::downgrade(&connection.connection_ref()?);
         if let Some(trace) = &self.runtime_trace {
             connection.install_runtime_trace(trace.clone());
             trace.task4_trace_connection_create();

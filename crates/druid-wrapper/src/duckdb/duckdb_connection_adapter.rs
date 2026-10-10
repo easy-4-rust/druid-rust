@@ -19,7 +19,7 @@ use duckdb::types::{
 use duckdb::{Connection, InterruptHandle, Statement};
 use parking_lot::Mutex;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(1);
@@ -33,6 +33,9 @@ pub struct DuckDbConnectionAdapter {
     connection_id: u64,
     connection: Option<Arc<Mutex<Connection>>>,
     interrupt_handle: Arc<InterruptHandle>,
+    operation_active: Arc<AtomicBool>,
+    operation_epoch: Arc<AtomicU64>,
+    cancellation_requested: Arc<AtomicU64>,
     url: String,
     auto_commit: bool,
     discarded: bool,
@@ -53,17 +56,37 @@ impl DuckDbConnectionAdapter {
         .await
         .map_err(Self::worker_error)?
         .map_err(Self::driver_error)?;
+        Ok(Self::from_native_connection(connection, url))
+    }
+
+    /// 从同一数据库的现有连接创建独立物理连接；`existing` 为共享数据库句柄，
+    /// `url` 保留原连接地址，返回可交给池管理的新连接。
+    pub(crate) async fn connect_from_existing(
+        existing: Arc<Mutex<Connection>>,
+        url: &str,
+    ) -> Result<Self, RdbcError> {
+        let connection = tokio::task::spawn_blocking(move || existing.lock().try_clone())
+            .await
+            .map_err(Self::worker_error)?
+            .map_err(Self::driver_error)?;
+        Ok(Self::from_native_connection(connection, url))
+    }
+
+    fn from_native_connection(connection: Connection, url: &str) -> Self {
         let interrupt_handle = connection.interrupt_handle();
-        Ok(Self {
+        Self {
             connection_id: NEXT_CONNECTION_ID.fetch_add(1, Ordering::Relaxed),
             connection: Some(Arc::new(Mutex::new(connection))),
             interrupt_handle,
+            operation_active: Arc::new(AtomicBool::new(false)),
+            operation_epoch: Arc::new(AtomicU64::new(0)),
+            cancellation_requested: Arc::new(AtomicU64::new(0)),
             url: url.to_owned(),
             auto_commit: true,
             discarded: false,
             standard_executor: None,
             runtime_trace: None,
-        })
+        }
     }
 
     pub(crate) fn install_runtime_trace(&mut self, runtime_trace: RuntimeTraceEmitter) {
@@ -80,6 +103,9 @@ impl DuckDbConnectionAdapter {
             connection_id: self.connection_id,
             connection: None,
             interrupt_handle: Arc::clone(&self.interrupt_handle),
+            operation_active: Arc::clone(&self.operation_active),
+            operation_epoch: Arc::clone(&self.operation_epoch),
+            cancellation_requested: Arc::clone(&self.cancellation_requested),
             url: self.url.clone(),
             auto_commit: self.auto_commit,
             discarded: self.discarded,
@@ -88,10 +114,33 @@ impl DuckDbConnectionAdapter {
         };
         let owned = std::mem::replace(self, shell);
         let interrupt_handle = Arc::clone(&owned.interrupt_handle);
+        let operation_active = Arc::clone(&owned.operation_active);
+        let operation_epoch = Arc::clone(&owned.operation_epoch);
+        let cancellation_requested = Arc::clone(&owned.cancellation_requested);
         let executor = owned_executor_with_cancel(
             owned,
             runtime_trace,
-            Arc::new(move || interrupt_handle.interrupt()),
+            Arc::new(move || {
+                if operation_active.load(Ordering::Acquire) {
+                    let cancelled_epoch = operation_epoch.load(Ordering::Acquire);
+                    cancellation_requested.store(cancelled_epoch, Ordering::Release);
+                    let interrupt_handle = Arc::clone(&interrupt_handle);
+                    let operation_active = Arc::clone(&operation_active);
+                    let operation_epoch = Arc::clone(&operation_epoch);
+                    let _ = std::thread::spawn(move || {
+                        // 原生查询可能尚未越过 prepare 边界；在同一执行代内重复通知。
+                        for _ in 0..100 {
+                            if !operation_active.load(Ordering::Acquire)
+                                || operation_epoch.load(Ordering::Acquire) != cancelled_epoch
+                            {
+                                break;
+                            }
+                            interrupt_handle.interrupt();
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                    });
+                }
+            }),
         );
         self.standard_executor = Some(Arc::clone(&executor));
         Ok(executor)
@@ -161,7 +210,8 @@ impl DuckDbConnectionAdapter {
         }
     }
 
-    fn connection_ref(&self) -> Result<Arc<Mutex<Connection>>, RdbcError> {
+    /// 返回当前物理连接的共享引用；连接已丢弃时返回错误。
+    pub(crate) fn connection_ref(&self) -> Result<Arc<Mutex<Connection>>, RdbcError> {
         if self.discarded {
             return Err(RdbcError::ConnectionDiscarded);
         }
@@ -177,9 +227,50 @@ impl DuckDbConnectionAdapter {
         F: FnOnce(&Connection) -> Result<T, RdbcError> + Send + 'static,
     {
         let connection = self.connection_ref()?;
-        tokio::task::spawn_blocking(move || operation(&connection.lock()))
-            .await
-            .map_err(Self::worker_error)?
+        let epoch = self.operation_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+        self.operation_active.store(true, Ordering::Release);
+        let active = Arc::clone(&self.operation_active);
+        let current_epoch = Arc::clone(&self.operation_epoch);
+        let cancellation = Arc::clone(&self.cancellation_requested);
+        tokio::task::spawn_blocking(move || {
+            let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if cancellation
+                    .compare_exchange(epoch, 0, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    return Err(Self::cancellation_error());
+                }
+                let connection = connection.lock();
+                if cancellation
+                    .compare_exchange(epoch, 0, Ordering::AcqRel, Ordering::Acquire)
+                    .is_ok()
+                {
+                    return Err(Self::cancellation_error());
+                }
+                operation(&connection)
+            }));
+            if current_epoch.load(Ordering::Acquire) == epoch {
+                active.store(false, Ordering::Release);
+            }
+            let _ = cancellation.compare_exchange(epoch, 0, Ordering::AcqRel, Ordering::Acquire);
+            match outcome {
+                Ok(result) => result,
+                Err(payload) => std::panic::resume_unwind(payload),
+            }
+        })
+        .await
+        .map_err(Self::worker_error)?
+    }
+
+    fn cancellation_error() -> RdbcError {
+        RdbcError::SqlException(Box::new(
+            SqlException::new(
+                0,
+                Some("HY008".to_owned()),
+                Some("DuckDB operation interrupted".to_owned()),
+            )
+            .with_class_name("duckdb::Error::OperationInterrupted"),
+        ))
     }
 
     fn worker_error(error: tokio::task::JoinError) -> RdbcError {
