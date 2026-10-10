@@ -85,6 +85,11 @@ impl RegistryEntry {
         Arc::clone(&self.active)
     }
 
+    /// 返回本次注册独有的令牌地址，用于批量清理时区分相同 datasource ID。
+    pub(crate) fn registration_key(&self) -> usize {
+        Arc::as_ptr(&self.active) as usize
+    }
+
     /// 返回 registration 是否仍接受采样/命令。
     #[must_use]
     pub fn is_active(&self) -> bool {

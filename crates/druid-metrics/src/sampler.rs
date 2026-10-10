@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -45,15 +46,15 @@ async fn sample_all(
         guard.clone()
     };
 
-    let mut dead_ids: Vec<u64> = Vec::new();
+    let mut dead_registrations = HashSet::new();
 
     for entry in &entries {
         if !entry.is_active() {
-            dead_ids.push(entry.datasource_id);
+            dead_registrations.insert(entry.registration_key());
             continue;
         }
         let Some(source) = entry.weak_ref.upgrade() else {
-            dead_ids.push(entry.datasource_id);
+            dead_registrations.insert(entry.registration_key());
             continue;
         };
 
@@ -78,15 +79,15 @@ async fn sample_all(
                 self_metrics.increment_snapshot_busy_total();
             }
             Err(druid::stats::SnapshotUnavailable::Closed) => {
-                dead_ids.push(entry.datasource_id);
+                dead_registrations.insert(entry.registration_key());
             }
         }
     }
 
     // Remove dead entries (Weak upgraded to None)
-    if !dead_ids.is_empty() {
+    if !dead_registrations.is_empty() {
         let mut guard = registry.write();
-        guard.retain(|e| !dead_ids.contains(&e.datasource_id));
+        guard.retain(|entry| !dead_registrations.contains(&entry.registration_key()));
         self_metrics.set_registered_datasources(guard.len());
     }
 }

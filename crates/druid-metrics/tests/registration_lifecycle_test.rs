@@ -192,6 +192,60 @@ async fn dropping_one_registration_preserves_another_with_the_same_datasource_id
 }
 
 #[tokio::test]
+async fn dropping_runtime_with_live_guard_stops_owned_unregister_listener() {
+    let runtime = DruidMetricsRuntime::start(
+        DruidMetricsConfig::builder()
+            .sample_interval(Duration::from_secs(60))
+            .build()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let metrics = runtime.self_metrics().clone();
+    let source = Arc::new(MockDataSource::new(13, "live-guard"));
+    let guard = runtime.register(source);
+    assert!(metrics.unregister_listener_active());
+
+    drop(runtime);
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while metrics.unregister_listener_active() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("runtime drop must stop its listener even while a guard remains live");
+    drop(guard);
+}
+
+#[tokio::test]
+async fn sampler_removes_only_the_closed_registration_when_ids_match() {
+    let runtime = DruidMetricsRuntime::start(
+        DruidMetricsConfig::builder()
+            .sample_interval(Duration::from_millis(10))
+            .build()
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    let metrics = runtime.self_metrics().clone();
+    let first = Arc::new(MockDataSource::new(14, "first"));
+    let second = Arc::new(MockDataSource::new(14, "second"));
+    let _first_guard = runtime.register(first.clone());
+    let _second_guard = runtime.register(second.clone());
+    drop(first);
+
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while metrics.registered_datasources() == 2 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("sampler removes expired weak registration");
+    assert_eq!(metrics.registered_datasources(), 1);
+    runtime.shutdown(Duration::from_secs(1)).await.unwrap();
+}
+
+#[tokio::test]
 async fn shutdown_within_deadline_succeeds() {
     let config = DruidMetricsConfig::builder()
         .sample_interval(Duration::from_millis(50))

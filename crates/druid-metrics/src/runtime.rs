@@ -152,8 +152,9 @@ impl DruidMetricsRuntime {
         let unregister_cancel = unregister_cancel_token.clone();
         let unregister_metrics = Arc::clone(&self_metrics);
         unregister_metrics.set_unregister_listener_active(true);
+        let active_guard = UnregisterListenerActiveGuard(Arc::clone(&unregister_metrics));
         let unregister_handle = tokio::spawn(async move {
-            let _active_guard = UnregisterListenerActiveGuard(Arc::clone(&unregister_metrics));
+            let _active_guard = active_guard;
             loop {
                 tokio::select! {
                     biased;
@@ -319,6 +320,31 @@ impl DruidMetricsRuntime {
     /// Returns a reference to the runtime self-metrics.
     pub fn self_metrics(&self) -> &Arc<RuntimeSelfMetrics> {
         &self.self_metrics
+    }
+}
+
+impl Drop for DruidMetricsRuntime {
+    fn drop(&mut self) {
+        // 未显式调用 shutdown 时，JoinHandle 的普通 Drop 只会分离任务。
+        // 这里取消所有阶段并终止仍由 runtime 拥有的任务，避免存活的 guard
+        // 让注销监听器与 registry 在后台无限期存活。
+        self.sampler_cancel_token.cancel();
+        self.aggregator_cancel_token.cancel();
+        self.unregister_cancel_token.cancel();
+        if let Some(handle) = self.sampler_handle.as_ref() {
+            handle.abort();
+        }
+        if let Some(handle) = self.aggregator_handle.as_ref() {
+            handle.abort();
+        }
+        if let Some(handle) = self.exporter_handle.as_ref() {
+            handle.abort();
+        }
+        if let Some(handle) = self.unregister_handle.as_ref() {
+            handle.abort();
+        }
+        self.registry.write().clear();
+        self.self_metrics.set_registered_datasources(0);
     }
 }
 
