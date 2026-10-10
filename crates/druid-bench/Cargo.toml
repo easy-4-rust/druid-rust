@@ -40,3 +40,8 @@ harness = false
 name = "adapter"
 harness = false
 required-features = ["wrapper"]
+
+[[bench]]
+name = "runtime"
+harness = false
+required-features = ["wrapper"]

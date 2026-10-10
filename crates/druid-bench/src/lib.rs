@@ -10,7 +10,7 @@ use druid::pool::{DruidDataSource, DruidPool};
 pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
     let mut props = std::collections::HashMap::new();
     props.insert("name".to_owned(), name.to_owned());
-    let url = format!("sqlite::file:memdb1_{name}?mode=memory&cache=shared");
+    let url = "sqlite::memory:".to_owned();
     props.insert("url".to_owned(), url);
     props.insert("initialSize".to_owned(), "8".to_owned());
     props.insert("maxActive".to_owned(), "8".to_owned());
@@ -24,7 +24,7 @@ pub fn build_sqlite_pool(name: &'static str) -> DruidDataSource {
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(druid_wrapper::toasty::ToastyConnectionFactory::new(
-                "sqlite::file:memdb2_toasty?mode=memory&cache=shared",
+                "sqlite::memory:",
             ))
             .expect("ToastyConnectionFactory::new must succeed"),
     );
