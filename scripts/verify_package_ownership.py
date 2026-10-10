@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -76,6 +77,20 @@ def main() -> int:
         for number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), 1):
             if "--bin druid-driver" in line and DRIVER_PREFIX not in line:
                 errors.append(f"{workflow.relative_to(ROOT)}:{number}: druid-driver must use druid-wrapper")
+            for package_name, target_name in re.findall(
+                r"cargo\s+test\s+-p\s+([\w-]+).*?--test\s+([\w-]+)", line
+            ):
+                package = packages.get(package_name)
+                test_targets = {
+                    target["name"]
+                    for target in package["targets"]
+                    if "test" in target["kind"]
+                } if package else set()
+                if target_name not in test_targets:
+                    errors.append(
+                        f"{workflow.relative_to(ROOT)}:{number}: "
+                        f"{package_name} has no test target {target_name}"
+                    )
 
     if errors:
         print("\n".join(errors), file=sys.stderr)
