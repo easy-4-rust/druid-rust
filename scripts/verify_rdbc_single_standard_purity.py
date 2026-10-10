@@ -27,12 +27,16 @@ TRANSITIONAL_ROOT_MODULES = {"compat", "error", "resource", "spi", "types"}
 ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "alloc",
     "async_trait",
+    "bitflags",
+    "bigdecimal",
     "bool",
     "char",
+    "chrono",
     "clippy",
     "core",
     "f32",
     "f64",
+    "futures",
     "i8",
     "i16",
     "i32",
@@ -41,14 +45,17 @@ ALLOWED_EXTERNAL_IMPORT_ROOTS = {
     "isize",
     "str",
     "std",
+    "tokio",
     "u8",
     "u16",
     "u32",
     "u64",
     "u128",
+    "url",
     "usize",
+    "uuid",
 }
-ALLOWED_BARE_PRELUDE_MACROS = {"format"}
+ALLOWED_BARE_PRELUDE_MACROS = {"format", "format_args"}
 ALLOWED_QUALIFIED_MACRO_ROOTS = {"alloc", "core", "std"}
 CANONICAL_CRATE_MACRO_SCOPES = {
     "impl_standard_wrapper": ("wrapper", "wrapper"),
@@ -1126,9 +1133,50 @@ class ModuleScopeIndex:
             if macro is not None and token.text != "macro_rules":
                 path, bang = macro
                 scope.macro_edges.append(ModuleMacroEdge(path, scope.source, index))
+                if self.phase == "final" and path == ("bitflags", "bitflags"):
+                    self.register_bitflags_item(scope, unit, bang)
                 index = bang + 1
                 continue
             index += 1
+
+    def register_bitflags_item(
+        self, scope: ModuleScope, unit: SourceUnit, bang: int
+    ) -> None:
+        """Index one public struct emitted by a provenance-checked bitflags invocation."""
+
+        tokens = unit.tokens
+        opening = bang + 1
+        closing = unit.matching.get(opening)
+        if closing is None or tokens[opening].text != "{":
+            fail(f"unsupported bitflags invocation in {scope.source}")
+        names: list[str] = []
+        cursor = opening + 1
+        while cursor < closing:
+            if tokens[cursor].text == "#":
+                attribute_end = unit.matching.get(cursor + 1)
+                if attribute_end is None or attribute_end >= closing:
+                    fail(f"malformed bitflags attribute in {scope.source}")
+                cursor = attribute_end + 1
+                continue
+            if (
+                cursor + 2 < closing
+                and tokens[cursor].text == "pub"
+                and tokens[cursor + 1].text == "struct"
+                and tokens[cursor + 2].kind == "IDENT"
+            ):
+                names.append(canonical_identifier(tokens[cursor + 2]))
+                cursor += 3
+                continue
+            if tokens[cursor].text in DELIMITER_PAIRS:
+                nested_end = unit.matching.get(cursor)
+                if nested_end is None or nested_end >= closing:
+                    fail(f"malformed bitflags body in {scope.source}")
+                cursor = nested_end + 1
+                continue
+            cursor += 1
+        if len(names) != 1 or names[0] in scope.local_items:
+            fail(f"bitflags must emit one unique public struct in {scope.source}")
+        scope.local_items[names[0]] = LocalItem(True, "struct", "type")
 
     def index_lexical_generic_scopes(self) -> None:
         """Index generic bindings and exact declaration ranges in reachable canonical sources."""
@@ -1741,7 +1789,11 @@ class ModuleScopeIndex:
         if not site.absolute and site.path == ("crate", "impl_standard_wrapper"):
             self.prove_canonical_crate_macro(site, "impl_standard_wrapper")
             return
-        if len(site.path) >= 2 and site.path[0] in ALLOWED_QUALIFIED_MACRO_ROOTS:
+        trusted_qualified_macro = (
+            len(site.path) >= 2
+            and site.path[0] in ALLOWED_QUALIFIED_MACRO_ROOTS
+        ) or (self.phase == "final" and site.path == ("bitflags", "bitflags"))
+        if trusted_qualified_macro:
             try:
                 target = self.resolve_path(
                     self.scope_for(site.source, site.token_index),
@@ -1957,7 +2009,9 @@ class ModuleScopeIndex:
         if absolute:
             if first not in ALLOWED_EXTERNAL_IMPORT_ROOTS and canonical:
                 fail(f"unknown absolute/external root: {first}")
-            return ResolvedTarget("external", external_root=first)
+            target = ResolvedTarget("external", external_root=first)
+            self.validate_target(target, path, canonical=canonical)
+            return target
         if first == "crate":
             target = ResolvedTarget("module", ())
             cursor = 1
@@ -2002,18 +2056,24 @@ class ModuleScopeIndex:
                     first in ALLOWED_EXTERNAL_IMPORT_ROOTS
                     or first in RUST_PRELUDE_ROOTS
                 ):
-                    return ResolvedTarget("external", external_root=first)
+                    target = ResolvedTarget("external", external_root=first)
+                    self.validate_target(target, path, canonical=canonical)
+                    return target
                 if scope is None:
                     if canonical:
                         fail(
                             f"unknown path root without reachable module scope: {first}"
                         )
-                    return ResolvedTarget("external", external_root=first)
+                    target = ResolvedTarget("external", external_root=first)
+                    self.validate_target(target, path, canonical=canonical)
+                    return target
                 if canonical:
                     raise VerificationError(
                         f"unknown path root in {scope.source}: {first}"
                     ) from None
-                return ResolvedTarget("external", external_root=first)
+                target = ResolvedTarget("external", external_root=first)
+                self.validate_target(target, path, canonical=canonical)
+                return target
             if target.kind == "lexical_value" and len(path) != 1:
                 fail(
                     f"function binding cannot be a type/module namespace in {source}: "
@@ -2251,6 +2311,8 @@ def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
     module_index = ModuleScopeIndex(root, phase=phase)
     standard_files = discover_standard_files(module_index)
     for relative in standard_files:
+        if phase == "final" and relative not in module_index.sources:
+            fail(f"canonical source is unreachable from lib.rs: {relative}")
         path = root / relative
         try:
             source = path.read_text(encoding="utf-8")
@@ -2261,8 +2323,16 @@ def verify_tree(root: Path, *, phase: str) -> tuple[Path, ...]:
         polluted = sorted(
             {
                 token.text
-                for token in tokens
-                if token.kind == "IDENT" and forbidden_identity(token.text)
+                for index, token in enumerate(tokens)
+                if token.kind == "IDENT"
+                and forbidden_identity(token.text)
+                and not (
+                    token.text in {"filter", "filter_map"}
+                    and index > 0
+                    and tokens[index - 1].text == "."
+                    and index + 1 < len(tokens)
+                    and tokens[index + 1].text == "("
+                )
             }
         )
         if polluted:

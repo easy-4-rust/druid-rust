@@ -285,6 +285,66 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         with self.assertRaisesRegex(VerificationError, r"resource[/\\]blob.rs"):
             verify_tree(self.root, phase="final")
 
+    def test_final_phase_accepts_external_bitflags_macro_only(self) -> None:
+        """Resource capability flags may use the external bitflags macro, never a local alias."""
+
+        (self.root / "resource/mod.rs").write_text(
+            "mod flags;\npub use flags::Flags;\n", encoding="utf-8"
+        )
+        flags = self.root / "resource/flags.rs"
+        flags.write_text(
+            "bitflags::bitflags! { pub struct Flags: u8 { const READ = 1; } }\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="final")
+
+        flags.write_text(
+            "use crate::compat as bitflags;\n"
+            "bitflags::bitflags! { pub struct Flags: u8 { const READ = 1; } }\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "bitflags|provenance"):
+            verify_tree(self.root, phase="final")
+
+    def test_accepts_unshadowed_standard_format_args_macro(self) -> None:
+        """The standard formatting macro keeps the same provenance check as format!."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            'pub fn args() { let _ = format_args!("x"); }\n'
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+        source.write_text(
+            'macro_rules! format_args { ($value:literal) => { $value }; }\n'
+            'pub fn args() { let _ = format_args!("x"); }\n'
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "format_args|shadow"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_allows_tokio_dependency_without_local_alias_spoofing(self) -> None:
+        """Async standard contracts may use Tokio only through real external provenance."""
+
+        source = self.root / "data_source/contract.rs"
+        source.write_text(
+            "use tokio::sync::Mutex;\npub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+        source.write_text(
+            "use crate::compat as tokio;\n"
+            "use tokio::sync::Mutex;\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(VerificationError, "tokio|compat|sync"):
+            verify_tree(self.root, phase="transitional")
+
     def test_rejects_physical_and_product_runtime_identities(self) -> None:
         """Canonical files cannot name Physical, Druid, holder, lease, cache, or filter types."""
 
@@ -319,6 +379,21 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
             encoding="utf-8",
         )
         with self.assertRaisesRegex(VerificationError, "lease_handle|runtime"):
+            verify_tree(self.root, phase="transitional")
+
+    def test_allows_iterator_filter_method_but_rejects_filter_type(self) -> None:
+        """The standard iterator method is not a Druid filter contract."""
+
+        source = self.root / "connection/contract.rs"
+        source.write_text(
+            "pub fn values() -> Vec<i32> { [1, 2].into_iter().filter(|v| *v > 1).filter_map(Some).collect() }\n"
+            "pub trait Contract: Send {}\n",
+            encoding="utf-8",
+        )
+        verify_tree(self.root, phase="transitional")
+
+        source.write_text("pub struct Filter;\npub trait Contract: Send {}\n", encoding="utf-8")
+        with self.assertRaisesRegex(VerificationError, "Filter"):
             verify_tree(self.root, phase="transitional")
 
     def test_allows_exact_javax_sql_pool_names_only(self) -> None:
@@ -365,6 +440,20 @@ class RdbcSingleStandardPurityTest(unittest.TestCase):
         extra.write_text("use backend_driver::Executor;\npub struct HiddenBackend;\n", encoding="utf-8")
         with self.assertRaises(VerificationError):
             verify_tree(self.root, phase="transitional")
+
+    def test_rejects_unreachable_physical_standard_file(self) -> None:
+        """Dead source cannot masquerade as implemented canonical API."""
+
+        extra = self.root / "resource/dead_contract.rs"
+        extra.write_text("pub trait DeadContract: Send {}\n", encoding="utf-8")
+        (self.root / "resource/mod.rs").write_text(
+            "mod blob;\npub use blob::Blob;\n", encoding="utf-8"
+        )
+        (self.root / "resource/blob.rs").write_text(
+            "pub trait Blob: Send {}\n", encoding="utf-8"
+        )
+        with self.assertRaisesRegex(VerificationError, r"resource[/\\]dead_contract.rs"):
+            verify_tree(self.root, phase="final")
 
     def test_accepts_inline_module_bound_from_its_declaring_scope(self) -> None:
         """An inline module is reachable without a sibling source file."""
