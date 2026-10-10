@@ -3,11 +3,12 @@
 use super::sqlx_connection_actor::SqlxConnectionActor;
 use crate::prepared_parameter_meta_data_snapshot::PreparedParameterMetaDataSnapshot;
 use crate::prepared_parameter_state::PreparedParameterState;
-use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::{RdbcError, SqlException};
 use druid_rdbc::extensions::BufferedRowSet;
 use druid_rdbc::metadata::{ParameterMetaData, ResultSetMetaData, ResultSetMetaDataSnapshot};
 use druid_rdbc::statement::{
-    ExecutionResult, FetchDirection, GeneratedKeys, PreparedParameter, StatementOptions,
+    ExecutionResult, FetchDirection, GeneratedKeys, PreparedParameter, ResultSetType,
+    StatementOptions,
 };
 use druid_rdbc::types::Value;
 use std::future::Future;
@@ -18,6 +19,9 @@ pub struct SqlxPreparedStatement {
     sql: String,
     actor: Option<Arc<SqlxConnectionActor>>,
     closed: AtomicBool,
+    cursor_shutdown: tokio::sync::watch::Sender<bool>,
+    /// 没有活动游标时的取消请求只阻止下一次执行，不能永久关闭句柄。
+    cancel_pending: bool,
     options: StatementOptions,
     max_field_size: AtomicI32,
     max_rows: AtomicI64,
@@ -77,6 +81,8 @@ impl SqlxPreparedStatement {
             sql,
             actor: Some(actor),
             closed: AtomicBool::new(false),
+            cursor_shutdown: tokio::sync::watch::channel(false).0,
+            cancel_pending: false,
             options,
             max_field_size: AtomicI32::new(0),
             max_rows: AtomicI64::new(0),
@@ -122,17 +128,42 @@ impl SqlxPreparedStatement {
         }
         tokio::time::timeout(std::time::Duration::from_secs(seconds as u64), execution)
             .await
-            .map_err(|_| RdbcError::Other("statement query timed out".to_owned()))?
+            .map_err(|_| {
+                // 本地截止时间映射为标准超时异常，保留 SQLState 和可赋值父类型。
+                // 驱动自身返回的异常由内层 Result 原样传播。对应 Java: Statement#setQueryTimeout。
+                RdbcError::SqlException(Box::new(
+                    SqlException::new(
+                        0,
+                        Some("HYT00".to_owned()),
+                        Some("statement query timed out".to_owned()),
+                    )
+                    .with_class_name("java.sql.SQLTimeoutException")
+                    .with_assignable_type("java.sql.SQLTransientException"),
+                ))
+            })?
     }
 
     /// 在可能失败或挂起的执行步骤前使上一轮结果失效。
     /// 参数物化、驱动错误或调用取消均不得继续暴露旧生成键。
-    fn reset_execution_results(&self) {
+    fn reset_execution_results(&mut self) -> Result<(), RdbcError> {
+        self.actor()?;
         *self
             .generated_key
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Vec::new();
         self.last_update_count.store(-1, Ordering::Release);
+        // 每次执行拥有独立的取消代次；旧游标继续观察旧 Sender 的停止状态。
+        self.cursor_shutdown.send_replace(true);
+        self.cursor_shutdown = tokio::sync::watch::channel(false).0;
+        if std::mem::take(&mut self.cancel_pending) {
+            // 在读取参数流或调用驱动前拒绝，避免取消的更新产生数据库副作用。
+            return Err(RdbcError::SqlException(Box::new(SqlException::new(
+                0,
+                Some("HY008".to_owned()),
+                Some("statement execution cancelled".to_owned()),
+            ))));
+        }
+        Ok(())
     }
 
     async fn execute_update_values(
@@ -180,12 +211,41 @@ impl SqlxPreparedStatement {
         Ok((count, Vec::new()))
     }
 
+    /// 正 fetch hint 的前向查询使用按需游标；其他调用保留原缓冲行为。
+    async fn execute_query_values(
+        &self,
+        actor: &Arc<SqlxConnectionActor>,
+        sql: &str,
+        values: Vec<Value>,
+        allow_stream: bool,
+    ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        let fetch_size = self.fetch_size.load(Ordering::Acquire);
+        if allow_stream
+            && fetch_size > 0
+            && self.options.result_set_type() == ResultSetType::ForwardOnly
+        {
+            self.bounded(actor.execute_async_query(
+                sql,
+                values,
+                self.options,
+                fetch_size,
+                self.cursor_shutdown.subscribe(),
+            ))
+            .await
+        } else {
+            actor
+                .execute_query_with_timeout(sql, values, self.query_timeout.load(Ordering::Acquire))
+                .await
+        }
+    }
+
     /// 执行准备查询并更新本次生成键；无插入行时清除上次键。
     /// 对应 Java PreparedStatement#executeQuery 与 Statement#getGeneratedKeys。
     async fn execute_prepared_query_values(
         &self,
         actor: &Arc<SqlxConnectionActor>,
         values: Vec<Value>,
+        allow_stream: bool,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
         let (rows, key) = if matches!(
             self.prepared_generated_keys,
@@ -195,7 +255,8 @@ impl SqlxPreparedStatement {
                 .await?
         } else {
             (
-                self.bounded(actor.execute_query(&self.sql, values)).await?,
+                self.execute_query_values(actor, &self.sql, values, allow_stream)
+                    .await?,
                 Vec::new(),
             )
         };
@@ -335,8 +396,10 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         &mut self,
         sql: &str,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
-        self.bounded(actor.execute_query(sql, Vec::new())).await
+        self.execute_query_values(&actor, sql, Vec::new(), true)
+            .await
     }
 
     async fn execute_update(
@@ -344,6 +407,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         sql: &str,
         generated_keys: GeneratedKeys,
     ) -> Result<i64, RdbcError> {
+        self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         let rows_affected = self
             .execute_update_values(sql, Vec::new(), &generated_keys)
@@ -357,6 +421,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         sql: &str,
         generated_keys: GeneratedKeys,
     ) -> Result<Vec<ExecutionResult>, RdbcError> {
+        self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         if actor.statement_returns_rows(sql).await? {
             self.last_update_count.store(-1, Ordering::Release);
@@ -398,6 +463,7 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
     }
 
     async fn execute_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
+        self.reset_execution_results()?;
         self.actor()?;
         let batch = std::mem::take(
             &mut *self
@@ -481,7 +547,18 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         Ok(())
     }
 
+    /// 取消当前活动游标；没有游标时，在下一次执行准入处消费取消请求。
+    /// 对应 Java: Statement#cancel。语句属性和连接保持可复用。
+    fn cancel(&mut self) -> Result<(), RdbcError> {
+        self.actor()?;
+        self.cancel_pending |= self.cursor_shutdown.receiver_count() == 0;
+        self.cursor_shutdown.send_replace(true);
+        Ok(())
+    }
+
     async fn close(&mut self) -> Result<(), RdbcError> {
+        // 子游标持有同一物理连接；语句关闭或 Sender Drop 都会终止其任务。
+        self.cursor_shutdown.send_replace(true);
         self.closed.store(true, Ordering::Release);
         self.actor.take();
         Ok(())
@@ -496,8 +573,9 @@ impl druid_rdbc::statement::Statement for SqlxPreparedStatement {
         sql: &str,
         values: Vec<Value>,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
+        self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
-        self.bounded(actor.execute_query(sql, values)).await
+        self.execute_query_values(&actor, sql, values, true).await
     }
 }
 
@@ -617,16 +695,18 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     async fn execute_prepared_query(
         &mut self,
     ) -> Result<Box<dyn druid_rdbc::result_set::ResultSet>, RdbcError> {
-        self.reset_execution_results();
+        self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
-        let result = self.execute_prepared_query_values(&actor, values).await?;
+        let result = self
+            .execute_prepared_query_values(&actor, values, true)
+            .await?;
         actor.task4_trace_prepared_query();
         Ok(result)
     }
 
     async fn execute_prepared_update(&mut self) -> Result<i64, RdbcError> {
-        self.reset_execution_results();
+        self.reset_execution_results()?;
         self.actor()?;
         let values = self.parameter_state.values(self.parameter_count).await?;
         self.execute_update_values(&self.sql, values, &self.prepared_generated_keys)
@@ -634,12 +714,13 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     }
 
     async fn execute_prepared(&mut self) -> Result<Vec<ExecutionResult>, RdbcError> {
-        self.reset_execution_results();
+        self.reset_execution_results()?;
         let actor = Arc::clone(self.actor()?);
         let values = self.parameter_state.values(self.parameter_count).await?;
         if actor.statement_returns_rows(&self.sql).await? {
             Ok(vec![ExecutionResult::ResultSet(
-                self.execute_prepared_query_values(&actor, values).await?,
+                self.execute_prepared_query_values(&actor, values, false)
+                    .await?,
             )])
         } else {
             self.execute_update_values(&self.sql, values, &self.prepared_generated_keys)
@@ -649,7 +730,7 @@ impl druid_rdbc::statement::PreparedStatement for SqlxPreparedStatement {
     }
 
     async fn execute_prepared_batch(&mut self) -> Result<Vec<i64>, RdbcError> {
-        self.reset_execution_results();
+        self.reset_execution_results()?;
         self.actor()?;
         let parameter_sets = std::mem::take(
             &mut *self

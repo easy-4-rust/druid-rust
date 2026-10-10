@@ -18,6 +18,7 @@ use sqlx::{
     Row as SqlxRow, Sqlite, SqliteConnection, Statement, TransactionManager, TypeInfo, ValueRef,
 };
 use std::sync::Arc;
+use std::time::Instant;
 
 type SqlxExecResult = AdapterUpdateResult;
 
@@ -415,10 +416,9 @@ impl SqlxConnectionAdapter {
                     .map_err(Self::driver_error)?;
             }
             SqlxConnectionBackend::MySql(connection) => {
-                sqlx::query(sql)
-                    .execute(connection)
-                    .await
-                    .map_err(Self::driver_error)?;
+                // MySQL 的 SAVEPOINT 等控制命令不支持 prepared protocol。
+                // 此入口只接收已校验的无绑定控制 SQL，使用原连接的 text protocol。
+                connection.execute(sql).await.map_err(Self::driver_error)?;
             }
             SqlxConnectionBackend::PostgreSql(connection) => {
                 sqlx::query(sql)
@@ -495,6 +495,47 @@ impl SqlxConnectionAdapter {
         self.connection
             .as_mut()
             .ok_or(RdbcError::ConnectionDiscarded)
+    }
+
+    /// 让 SQLite worker 在截止时间到达后自行中断当前 VM 执行。
+    /// Tokio future 被取消时，底层 SQLite worker 仍可能继续运行；因此必须把截止时间
+    /// 安装到物理连接，而不能只在调用方等待 future 的地方计时。
+    pub(super) async fn install_sqlite_progress_deadline(
+        &mut self,
+        deadline: Instant,
+    ) -> Result<(), RdbcError> {
+        if let SqlxConnectionBackend::Sqlite(connection) = self.connection_mut()? {
+            let mut handle = connection.lock_handle().await.map_err(Self::driver_error)?;
+            let mut interrupted = false;
+            handle.set_progress_handler(1_000, move || {
+                if interrupted {
+                    return true;
+                }
+                if Instant::now() >= deadline {
+                    interrupted = true;
+                    return false;
+                }
+                true
+            });
+        }
+        Ok(())
+    }
+
+    /// 等待 SQLite worker 释放物理句柄，并清除本次执行的中断回调。
+    pub(super) async fn clear_sqlite_progress_deadline(&mut self) -> Result<(), RdbcError> {
+        if let SqlxConnectionBackend::Sqlite(connection) = self.connection_mut()? {
+            connection
+                .lock_handle()
+                .await
+                .map_err(Self::driver_error)?
+                .remove_progress_handler();
+        }
+        Ok(())
+    }
+
+    /// 无法确认 worker 已释放时，禁止将物理连接重新借给池。
+    pub(super) fn discard_after_unconfirmed_interrupt(&mut self) {
+        self.discarded = true;
     }
 
     pub(super) fn backend_key(&self) -> &'static str {
@@ -819,8 +860,15 @@ impl SqlxConnectionAdapter {
                 }
                 "DATE" => Value::Date(row.try_get(index).map_err(Self::driver_error)?),
                 "TIME" => Value::Time(row.try_get(index).map_err(Self::driver_error)?),
-                "DATETIME" | "TIMESTAMP" => {
-                    Value::Timestamp(row.try_get(index).map_err(Self::driver_error)?)
+                "DATETIME" => Value::Timestamp(row.try_get(index).map_err(Self::driver_error)?),
+                "TIMESTAMP" => {
+                    // 仅在 MySQL 列类型已确认为 TIMESTAMP 后使用其日期时间解码器。
+                    // SQLx 的 NaiveDateTime 类型检查只接受 DATETIME，但两者共享该解码器；
+                    // 保留会话返回的年月日时分秒，不额外转换时区或绕过其他列的类型检查。
+                    Value::Timestamp(
+                        row.try_get_unchecked::<NaiveDateTime, _>(index)
+                            .map_err(Self::driver_error)?,
+                    )
                 }
                 name if name.contains("BLOB") || name.contains("BINARY") => {
                     Value::Bytes(row.try_get(index).map_err(Self::driver_error)?)
@@ -1223,6 +1271,157 @@ impl SqlxConnectionAdapter {
                     .map(Self::decode_sqlite_row)
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok((rows, columns))
+            }
+        }
+    }
+
+    /// 在原物理连接上执行按需读取；驱动自有缓冲与 wrapper 请求容量分别受各自预算约束。
+    pub(super) async fn serve_cursor_core(
+        &mut self,
+        sql: &str,
+        params: Vec<Value>,
+        startup: &mut Option<
+            tokio::sync::oneshot::Sender<Result<Vec<ColumnDescriptor>, RdbcError>>,
+        >,
+        requests: &mut tokio::sync::mpsc::Receiver<super::sqlx_cursor_request::SqlxCursorRequest>,
+    ) -> Result<(), RdbcError> {
+        match self.connection_mut()? {
+            SqlxConnectionBackend::Any(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let columns = describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect();
+                let rows = Self::bind_any_prepared_values(&statement, params)?.fetch(connection);
+                let rows = futures::StreamExt::map(rows, |row| {
+                    row.map_err(Self::driver_error)
+                        .and_then(Self::decode_any_row)
+                });
+                super::sqlx_cursor_request::SqlxCursorRequest::serve(
+                    columns, startup, requests, rows,
+                )
+                .await
+            }
+            SqlxConnectionBackend::MySql(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let columns = describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect();
+                let rows = Self::bind_mysql_prepared_values(&statement, params).fetch(connection);
+                let rows = futures::StreamExt::map(rows, |row| {
+                    row.map_err(Self::driver_error)
+                        .and_then(Self::decode_mysql_row)
+                });
+                super::sqlx_cursor_request::SqlxCursorRequest::serve(
+                    columns, startup, requests, rows,
+                )
+                .await
+            }
+            SqlxConnectionBackend::PostgreSql(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let columns = describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect();
+                let rows =
+                    Self::bind_postgresql_prepared_values(&statement, params).fetch(connection);
+                let rows = futures::StreamExt::map(rows, |row| {
+                    row.map_err(Self::driver_error)
+                        .and_then(Self::decode_postgresql_row)
+                });
+                super::sqlx_cursor_request::SqlxCursorRequest::serve(
+                    columns, startup, requests, rows,
+                )
+                .await
+            }
+            SqlxConnectionBackend::Sqlite(connection) => {
+                let describe = (&mut *connection)
+                    .describe(sql)
+                    .await
+                    .map_err(Self::driver_error)?;
+                let statement = {
+                    let statement = (&mut *connection)
+                        .prepare(sql)
+                        .await
+                        .map_err(Self::driver_error)?;
+                    Statement::to_owned(&statement)
+                };
+                let columns = describe
+                    .columns()
+                    .iter()
+                    .enumerate()
+                    .map(|(index, column)| {
+                        Self::column_descriptor(
+                            column.name(),
+                            column.type_info().name(),
+                            describe.nullable(index),
+                        )
+                    })
+                    .collect();
+                let rows = Self::bind_sqlite_prepared_values(&statement, params).fetch(connection);
+                let rows = futures::StreamExt::map(rows, |row| {
+                    row.map_err(Self::driver_error)
+                        .and_then(Self::decode_sqlite_row)
+                });
+                super::sqlx_cursor_request::SqlxCursorRequest::serve(
+                    columns, startup, requests, rows,
+                )
+                .await
             }
         }
     }

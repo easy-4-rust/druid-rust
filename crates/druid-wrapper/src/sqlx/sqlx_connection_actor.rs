@@ -1,17 +1,22 @@
 //! Owned single-writer executor for canonical SQLx standard handles.
 
+use super::sqlx_async_result_set::SqlxAsyncResultSet;
+use super::sqlx_buffered_result_set::SqlxBufferedResultSet;
 use super::sqlx_connection_adapter::SqlxConnectionAdapter;
-use super::sqlx_streaming_result_set::SqlxStreamingResultSet;
+use super::sqlx_cursor_request::SqlxCursorRequest;
 use crate::standard_adapter_executor::AdapterUpdateResult;
 use crate::task4_runtime_trace::RuntimeTraceEmitter;
-use druid_rdbc::error::RdbcError;
+use druid_rdbc::error::{RdbcError, SqlException};
 use druid_rdbc::metadata::{ColumnDescriptor, ColumnNullability, TablesQuery};
 use druid_rdbc::result_set::ResultSet;
+use druid_rdbc::statement::StatementOptions;
 use druid_rdbc::types::Value;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot, watch};
 
 /// 串行拥有一个 SQLx raw connection 的 canonical executor/lease。
 ///
@@ -20,6 +25,7 @@ use tokio::sync::Mutex;
 pub(crate) struct SqlxConnectionActor {
     connection: Mutex<SqlxConnectionAdapter>,
     closed: AtomicBool,
+    cursor_shutdown: watch::Sender<bool>,
     auto_commit: AtomicBool,
     read_only: AtomicBool,
     savepoint_sequence: AtomicU64,
@@ -30,7 +36,7 @@ pub(crate) struct SqlxConnectionActor {
 
 impl SqlxConnectionActor {
     fn ensure_open_core(&self) -> Result<(), RdbcError> {
-        if self.closed.load(Ordering::Acquire) {
+        if self.is_closed() {
             Err(RdbcError::ConnectionDiscarded)
         } else {
             Ok(())
@@ -48,6 +54,7 @@ impl SqlxConnectionActor {
         Arc::new(Self {
             connection: Mutex::new(connection),
             closed: AtomicBool::new(false),
+            cursor_shutdown: watch::channel(false).0,
             auto_commit: AtomicBool::new(auto_commit),
             read_only: AtomicBool::new(read_only),
             savepoint_sequence: AtomicU64::new(savepoint_sequence),
@@ -125,12 +132,133 @@ impl SqlxConnectionActor {
         Ok(self.result_set_core(rows, columns))
     }
 
+    /// 带物理 SQLite VM 中断的准备查询执行；超时后等待 worker 停止再释放连接锁。
+    pub(crate) async fn execute_query_with_timeout(
+        self: &Arc<SqlxConnectionActor>,
+        sql: &str,
+        values: Vec<Value>,
+        seconds: i32,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        if seconds <= 0 {
+            return self.execute_query(sql, values).await;
+        }
+        self.ensure_open_core()?;
+        let duration = Duration::from_secs(seconds as u64);
+        let deadline = Instant::now() + duration;
+        let mut connection = self.connection.lock().await;
+        connection
+            .install_sqlite_progress_deadline(deadline)
+            .await?;
+        let outcome =
+            tokio::time::timeout(duration, connection.fetch_rows_with_labels(sql, values)).await;
+        let timed_out =
+            outcome.is_err() || (matches!(&outcome, Ok(Err(_))) && Instant::now() >= deadline);
+        // SQLite worker 可能在等待 future 超时后仍持有数据库锁。先等待 VM 中断，
+        // 再清除 handler；若三秒内无法确认释放，禁止复用此物理连接。
+        match tokio::time::timeout(
+            Duration::from_secs(3),
+            connection.clear_sqlite_progress_deadline(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                connection.discard_after_unconfirmed_interrupt();
+                return Err(error);
+            }
+            Err(_) => {
+                connection.discard_after_unconfirmed_interrupt();
+                return Err(RdbcError::ConnectionDiscarded);
+            }
+        }
+        if timed_out {
+            return Err(RdbcError::SqlException(Box::new(
+                SqlException::new(
+                    0,
+                    Some("HYT00".to_owned()),
+                    Some("statement query timed out".to_owned()),
+                )
+                .with_class_name("java.sql.SQLTimeoutException")
+                .with_assignable_type("java.sql.SQLTransientException"),
+            )));
+        }
+        let (rows, columns) = match outcome {
+            Ok(result) => result?,
+            Err(_) => unreachable!("timeout was returned before extracting query rows"),
+        };
+        Ok(self.result_set_core(rows, columns))
+    }
+
+    /// 通过同一 actor 的物理连接创建按需游标；返回元数据准备后的标准结果集。
+    pub(crate) async fn execute_async_query(
+        self: &Arc<Self>,
+        sql: &str,
+        values: Vec<Value>,
+        options: StatementOptions,
+        fetch_size: i32,
+        statement_stop: watch::Receiver<bool>,
+    ) -> Result<Box<dyn ResultSet>, RdbcError> {
+        self.ensure_open_core()?;
+        SqlxAsyncResultSet::open(
+            Arc::clone(self),
+            sql.to_owned(),
+            values,
+            options,
+            fetch_size,
+            statement_stop,
+        )
+        .await
+    }
+
+    /// 启动受父连接及游标关闭信号监管的唯一 raw cursor 任务。
+    pub(super) fn spawn_cursor(
+        self: &Arc<Self>,
+        sql: String,
+        values: Vec<Value>,
+        mut requests: mpsc::Receiver<SqlxCursorRequest>,
+        startup: oneshot::Sender<Result<Vec<ColumnDescriptor>, RdbcError>>,
+        mut stop: watch::Receiver<bool>,
+        mut statement_stop: watch::Receiver<bool>,
+    ) -> tokio::task::JoinHandle<()> {
+        let actor = Arc::clone(self);
+        let mut parent_stop = self.cursor_shutdown.subscribe();
+        tokio::spawn(async move {
+            let mut startup = Some(startup);
+            if *stop.borrow()
+                || *parent_stop.borrow()
+                || *statement_stop.borrow()
+                || statement_stop.has_changed().is_err()
+            {
+                return;
+            }
+            let outcome = {
+                let work = async {
+                    let mut connection = actor.connection.lock().await;
+                    actor.ensure_open_core()?;
+                    connection
+                        .serve_cursor_core(&sql, values, &mut startup, &mut requests)
+                        .await
+                };
+                tokio::select! {
+                    biased;
+                    _ = stop.changed() => Err(RdbcError::ConnectionDiscarded),
+                    _ = parent_stop.changed() => Err(RdbcError::ConnectionDiscarded),
+                    _ = statement_stop.changed() => Err(RdbcError::ConnectionDiscarded),
+                    result = work => result,
+                }
+            };
+            if let (Err(error), Some(sender)) = (outcome, startup) {
+                let _ = sender.send(Err(error));
+            }
+        })
+    }
+
     pub(crate) fn result_set_core(
         self: &Arc<SqlxConnectionActor>,
         rows: Vec<druid_rdbc::types::Row>,
         columns: Vec<ColumnDescriptor>,
     ) -> Box<dyn ResultSet> {
-        Box::new(SqlxStreamingResultSet::values(rows, columns).with_actor_lease(Arc::clone(self)))
+        Box::new(SqlxBufferedResultSet::values(rows, columns).with_actor_lease(Arc::clone(self)))
     }
 
     /// 为 SQLite INSERT RETURNING 在同一连接锁中保留结果行及真实生成键。
@@ -481,6 +609,8 @@ impl SqlxConnectionActor {
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
         }
+        // 先通知持有连接锁的游标退出，再等待锁；避免父关闭与空闲游标互等。
+        self.cursor_shutdown.send_replace(true);
         let mut connection = self.connection.lock().await;
         if self.closed.load(Ordering::Acquire) {
             return Ok(());
@@ -495,6 +625,6 @@ impl SqlxConnectionActor {
 
     /// 返回 actor 是否已经关闭。
     pub(crate) fn is_closed(&self) -> bool {
-        self.closed.load(Ordering::Acquire)
+        self.closed.load(Ordering::Acquire) || *self.cursor_shutdown.borrow()
     }
 }
