@@ -264,7 +264,7 @@ jobs:
           path: target/contract-evidence/sqlite-runs
           merge-multiple: true
       - name: Validate and aggregate SQLite evidence
-        run: cargo run -p druid-admin --features managed-driver-install --bin druid-driver -- aggregate-evidence sqlite sqlx target/contract-evidence/sqlite-runs target/contract-evidence/sqlite-evidence.json
+        run: cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- aggregate-evidence sqlite sqlx target/contract-evidence/sqlite-runs target/contract-evidence/sqlite-evidence.json
       - uses: actions/upload-artifact@v4
         with:
           name: sqlite-contract-evidence
@@ -286,7 +286,7 @@ jobs:
           path: target/contract-evidence/duckdb-runs
           merge-multiple: true
       - name: Validate and aggregate DuckDB evidence
-        run: cargo run -p druid-admin --features managed-driver-install --bin druid-driver -- aggregate-evidence duckdb native target/contract-evidence/duckdb-runs target/contract-evidence/duckdb-evidence.json
+        run: cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- aggregate-evidence duckdb native target/contract-evidence/duckdb-runs target/contract-evidence/duckdb-evidence.json
       - uses: actions/upload-artifact@v4
         with:
           name: duckdb-contract-evidence

@@ -97,7 +97,7 @@ jobs:
           path: target/contract-evidence/runs
           merge-multiple: true
       - name: Validate the ten-run evidence set
-        run: cargo run -p druid-admin --features managed-driver-install --bin druid-driver -- aggregate-evidence "${{ inputs.profile }}" "${{ inputs.runtime_mode }}" target/contract-evidence/runs target/contract-evidence/${{ inputs.profile }}-evidence.json
+        run: cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- aggregate-evidence "${{ inputs.profile }}" "${{ inputs.runtime_mode }}" target/contract-evidence/runs target/contract-evidence/${{ inputs.profile }}-evidence.json
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.profile }}-contract-evidence
