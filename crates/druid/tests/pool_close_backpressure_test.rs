@@ -691,3 +691,78 @@ async fn synchronous_stat_sink_does_not_block_the_async_runtime() {
     );
     pool.close().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn shutdown_uses_one_deadline_across_publisher_and_filter_cleanup() {
+    let (release_stat, receiver) = std_mpsc::channel();
+    let stat_entered = Arc::new(AtomicUsize::new(0));
+    let filter_gate = Arc::new(Semaphore::new(0));
+    let filter_entered = Arc::new(AtomicUsize::new(0));
+    let filter_completed = Arc::new(AtomicUsize::new(0));
+    let mut chain = FilterChain::new();
+    chain.add_before(Arc::new(HangingDestroyFilter {
+        gate: Arc::clone(&filter_gate),
+        entered: Arc::clone(&filter_entered),
+        completed: Arc::clone(&filter_completed),
+    }));
+    let pool = DruidPool::builder()
+        .name("one-shutdown-deadline")
+        .driver_name("test")
+        .factory(Arc::new(SelectiveSlowCloseFactory {
+            first_gate: Arc::new(Semaphore::new(1)),
+            block_overflow: false,
+            created: AtomicUsize::new(0),
+            entered: Arc::new(AtomicUsize::new(0)),
+            closed: Arc::new(AtomicUsize::new(0)),
+        }))
+        .filter_chain(Arc::new(chain))
+        .stat_publish_interval(Duration::from_secs(3600))
+        .stat_sink(Arc::new(BlockingStatSink {
+            entered: Arc::clone(&stat_entered),
+            release: Mutex::new(receiver),
+        }))
+        .shutdown_timeout(Duration::from_millis(60))
+        .build()
+        .await
+        .expect("build pool");
+    pool.init().await.expect("start publisher");
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while stat_entered.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("publisher enters sink");
+
+    let stat_release = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(45)).await;
+        release_stat.send(()).expect("release stat sink");
+    });
+    let filter_release = tokio::spawn({
+        let filter_gate = Arc::clone(&filter_gate);
+        let filter_entered = Arc::clone(&filter_entered);
+        async move {
+            while filter_entered.load(Ordering::Acquire) == 0 {
+                tokio::task::yield_now().await;
+            }
+            tokio::time::sleep(Duration::from_millis(70)).await;
+            filter_gate.add_permits(1);
+        }
+    });
+    let started = Instant::now();
+    pool.close().await;
+    let elapsed = started.elapsed();
+    let completed_at_return = filter_completed.load(Ordering::Acquire);
+    stat_release.await.expect("stat release joins");
+    filter_release.await.expect("filter release joins");
+    assert!(
+        elapsed < Duration::from_millis(100),
+        "shutdown multiplied its 60 ms budget: {elapsed:?}"
+    );
+    assert_eq!(completed_at_return, 0);
+    tokio::time::timeout(Duration::from_secs(1), pool.restart())
+        .await
+        .expect("restart after background cleanup completes")
+        .expect("restart succeeds after background cleanup");
+    pool.close().await;
+}

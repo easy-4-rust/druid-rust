@@ -47,9 +47,9 @@ pub struct DruidPool {
     stat_publish_shutdown: Arc<Notify>,
     stat_publish_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     create_worker: parking_lot::Mutex<Option<ConnectionCreateWorker>>,
-    create_worker_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    create_worker_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     close_worker: parking_lot::Mutex<Option<ConnectionCloseWorker>>,
-    close_worker_task: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
+    close_worker_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     filter_destroy_task: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     stats_collector: Arc<StatsCollector>,
     wall_provider: Arc<WallProvider>,
@@ -273,7 +273,7 @@ impl DruidPool {
                 Arc::clone(&inner),
                 create_receiver,
             ))),
-            create_worker_task: parking_lot::Mutex::new(None),
+            create_worker_task: AsyncMutex::new(None),
             close_worker: parking_lot::Mutex::new(Some(ConnectionCloseWorker::new(
                 close_factory,
                 filter_chain.clone(),
@@ -282,7 +282,7 @@ impl DruidPool {
                 Arc::clone(&inner.close_timeout_total),
                 Arc::clone(&inner.close_worker_terminated),
             ))),
-            close_worker_task: parking_lot::Mutex::new(None),
+            close_worker_task: AsyncMutex::new(None),
             filter_destroy_task: AsyncMutex::new(None),
             stats_collector,
             wall_provider,
@@ -419,8 +419,8 @@ impl DruidPool {
             }
         }
 
-        self.install_create_worker();
-        self.install_close_worker();
+        self.install_create_worker().await;
+        self.install_close_worker().await;
         let initial_result = self.inner.fill_initial().await;
         // Java 在同步初始建连失败且 initExceptionThrow=true 时，仍先启动
         // creator/destroy 线程并在 finally 中设置 inited=true，再把错误返回。
@@ -500,8 +500,8 @@ impl DruidPool {
     }
 
     /// 启动每池唯一的受监管物理关闭 worker。
-    fn start_close_worker(&self) {
-        let mut task = self.close_worker_task.lock();
+    async fn start_close_worker(&self) {
+        let mut task = self.close_worker_task.lock().await;
         if task.is_some() {
             return;
         }
@@ -511,8 +511,8 @@ impl DruidPool {
     }
 
     /// 启动每池唯一的受监管补池 worker。
-    fn start_create_worker(&self) {
-        let mut task = self.create_worker_task.lock();
+    async fn start_create_worker(&self) {
+        let mut task = self.create_worker_task.lock().await;
         if task.is_some() {
             return;
         }
@@ -522,8 +522,9 @@ impl DruidPool {
     }
 
     /// 为首次 init 或 restart 后的新代次安装补池 worker。
-    fn install_create_worker(&self) {
-        if self.create_worker.lock().is_none() && self.create_worker_task.lock().is_none() {
+    async fn install_create_worker(&self) {
+        let has_task = self.create_worker_task.lock().await.is_some();
+        if self.create_worker.lock().is_none() && !has_task {
             let (create_sender, create_receiver) = tokio::sync::watch::channel(Some(0));
             self.inner.install_create_sender(create_sender);
             *self.create_worker.lock() = Some(ConnectionCreateWorker::new(
@@ -531,12 +532,13 @@ impl DruidPool {
                 create_receiver,
             ));
         }
-        self.start_create_worker();
+        self.start_create_worker().await;
     }
 
     /// 为首次 init 或 restart 后的新代次安装唯一物理关闭 worker。
-    fn install_close_worker(&self) {
-        if self.close_worker.lock().is_none() && self.close_worker_task.lock().is_none() {
+    async fn install_close_worker(&self) {
+        let has_task = self.close_worker_task.lock().await.is_some();
+        if self.close_worker.lock().is_none() && !has_task {
             let (close_sender, close_receiver) =
                 tokio::sync::mpsc::channel(self.inner.config.close_queue_capacity.max(1));
             self.inner
@@ -552,7 +554,7 @@ impl DruidPool {
                 Arc::clone(&self.inner.close_worker_terminated),
             ));
         }
-        self.start_close_worker();
+        self.start_close_worker().await;
     }
 
     pub async fn get_timeout(
@@ -1254,23 +1256,24 @@ impl DruidPool {
 
     /// 关闭并回收旧代次资源；返回是否已等到全部建连任务退出并完成清理。
     async fn close_resources(&self) -> bool {
+        let deadline = tokio::time::Instant::now() + self.inner.config.shutdown_timeout;
         if !self.initialized.load(Ordering::Acquire) {
-            return self.destroy_initialized_filters().await;
+            return self.destroy_initialized_filters(deadline).await;
         }
         if !self.is_closed() {
             self.inner.set_enabled(false);
             self.inner.advance_lifecycle_generation();
         }
-        self.start_create_worker();
+        self.start_create_worker().await;
         self.inner.request_create_worker_shutdown();
-        self.start_close_worker();
+        self.start_close_worker().await;
         self.maintenance_shutdown.notify_one();
         self.stat_publish_shutdown.notify_one();
         // 先把池标记为 closed 并排空 idle，再等待维护任务退出。这样 close
         // future 在等待后台任务期间被取消时，新借用也已经被拒绝，且
         // PoolInner::close 的 DetachedHolder 会完成剩余资源计数清理。
         if !self.is_closed() {
-            if tokio::time::timeout(self.inner.config.shutdown_timeout, self.inner.close())
+            if tokio::time::timeout_at(deadline, self.inner.close())
                 .await
                 .is_err()
             {
@@ -1278,54 +1281,53 @@ impl DruidPool {
             }
         }
         if !self
-            .join_shutdown_task(&self.maintenance_task, "maintenance")
+            .join_shutdown_task(&self.maintenance_task, "maintenance", deadline)
             .await
         {
             return false;
         }
         if !self
-            .join_shutdown_task(&self.stat_publish_task, "stat publisher")
+            .join_shutdown_task(&self.stat_publish_task, "stat publisher", deadline)
             .await
         {
             return false;
         }
         // 必须先等待旧代次 factory 调用完成。否则 close worker 可能已经退出，
         // restart 又恢复 enable，旧创建任务会把连接混入新代次或绕过 async close。
-        if tokio::time::timeout(
-            self.inner.config.shutdown_timeout,
-            self.inner.wait_for_creators(),
-        )
-        .await
-        .is_err()
+        if tokio::time::timeout_at(deadline, self.inner.wait_for_creators())
+            .await
+            .is_err()
         {
             // 不提前关闭 worker/Filter；旧代次 factory 完成后仍需能移交并关闭结果。
             tracing::warn!("pool creators exceeded configured shutdown deadline");
             return false;
         }
-        let create_worker_task = self.create_worker_task.lock().take();
-        if let Some(create_worker_task) = create_worker_task {
-            let _ = create_worker_task.await;
+        if !self
+            .join_shutdown_task(&self.create_worker_task, "creator worker", deadline)
+            .await
+        {
+            return false;
         }
         self.inner.request_close_worker_shutdown_if_idle();
         if self.inner.close_worker_is_idle() {
-            let close_worker_task = self.close_worker_task.lock().take();
-            if let Some(close_worker_task) = close_worker_task {
-                self.join_close_worker(close_worker_task).await;
+            if !self.join_close_worker(deadline).await {
+                return false;
             }
         }
-        self.destroy_initialized_filters().await
+        self.destroy_initialized_filters(deadline).await
     }
 
     async fn join_shutdown_task(
         &self,
         task: &AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
         task_name: &str,
+        deadline: tokio::time::Instant,
     ) -> bool {
         let mut task = task.lock().await;
         let Some(handle) = task.as_mut() else {
             return true;
         };
-        match tokio::time::timeout(self.inner.config.shutdown_timeout, handle).await {
+        match tokio::time::timeout_at(deadline, handle).await {
             Ok(Ok(())) => {}
             Ok(Err(error)) => {
                 tracing::warn!(%error, task_name, "pool shutdown task failed");
@@ -1339,7 +1341,7 @@ impl DruidPool {
         true
     }
 
-    async fn destroy_initialized_filters(&self) -> bool {
+    async fn destroy_initialized_filters(&self, deadline: tokio::time::Instant) -> bool {
         let mut task = self.filter_destroy_task.lock().await;
         if self
             .filters_initialized
@@ -1356,10 +1358,7 @@ impl DruidPool {
         let Some(handle) = task.as_mut() else {
             return true;
         };
-        if tokio::time::timeout(self.inner.config.shutdown_timeout, handle)
-            .await
-            .is_err()
-        {
+        if tokio::time::timeout_at(deadline, handle).await.is_err() {
             tracing::warn!("pool filter destroy exceeded configured shutdown deadline");
             return false;
         }
@@ -1394,7 +1393,11 @@ impl DruidPool {
                 "cannot restart while prior-generation shutdown work is still running".to_owned(),
             ));
         }
-        self.drain_close_worker_if_idle().await;
+        if !self.drain_close_worker_if_idle().await {
+            return Err(DruidError::Other(
+                "cannot restart while prior-generation close worker is still running".to_owned(),
+            ));
+        }
         self.reset_stats();
         self.active_leases.clear();
         self.initialized.store(false, Ordering::Release);
@@ -1402,26 +1405,27 @@ impl DruidPool {
         Ok(())
     }
 
-    async fn drain_close_worker_if_idle(&self) {
+    async fn drain_close_worker_if_idle(&self) -> bool {
         if !self.inner.close_worker_is_idle() {
-            return;
+            return false;
         }
         self.inner.request_close_worker_shutdown_if_idle();
-        let close_worker_task = self.close_worker_task.lock().take();
-        if let Some(close_worker_task) = close_worker_task {
-            self.join_close_worker(close_worker_task).await;
-        }
+        let deadline = tokio::time::Instant::now() + self.inner.config.shutdown_timeout;
+        self.join_close_worker(deadline).await
     }
 
-    async fn join_close_worker(&self, mut task: tokio::task::JoinHandle<()>) {
-        if tokio::time::timeout(self.inner.config.shutdown_timeout, &mut task)
-            .await
-            .is_err()
-        {
+    async fn join_close_worker(&self, deadline: tokio::time::Instant) -> bool {
+        let mut slot = self.close_worker_task.lock().await;
+        let Some(task) = slot.as_mut() else {
+            return true;
+        };
+        if tokio::time::timeout_at(deadline, &mut *task).await.is_err() {
             task.abort();
-            let _ = task.await;
             tracing::warn!("pool close worker exceeded configured shutdown deadline");
+            return false;
         }
+        slot.take();
+        true
     }
     pub fn filter_chain(&self) -> Option<&Arc<FilterChain>> {
         self.filter_chain.as_ref()
