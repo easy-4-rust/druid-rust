@@ -33,6 +33,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub type DruidConnectionReturnCallback =
     Box<dyn FnOnce(DruidConnectionHolder, ConnectionRecycleDisposition) -> bool + Send>;
 
+type NativeExplicitReturnCallback = Box<
+    dyn FnOnce(DruidConnectionHolder, ConnectionRecycleDisposition) -> Option<DruidConnectionHolder>
+        + Send,
+>;
+
 #[cfg(test)]
 mod result_set_error_lease_tests;
 
@@ -66,6 +71,7 @@ pub struct DruidPooledConnection {
     exception_sorter: Option<Arc<dyn ExceptionSorter>>,
     fatal_error_handler: Option<Arc<dyn FatalErrorHandler>>,
     return_connection: Option<DruidConnectionReturnCallback>,
+    native_explicit_return: Option<NativeExplicitReturnCallback>,
     owner_disposition: Arc<OwnerDispositionControl>,
     lease_active: Arc<AtomicBool>,
     execution_running: Arc<AtomicBool>,
@@ -213,6 +219,7 @@ impl DruidPooledConnection {
             exception_sorter: None,
             fatal_error_handler: None,
             return_connection: Some(return_connection),
+            native_explicit_return: None,
             owner_disposition,
             lease_active,
             execution_running,
@@ -320,6 +327,14 @@ impl DruidPooledConnection {
     /// 参数为实际池状态；不改变 external lease 的驱动校验合同。
     pub(crate) fn set_native_return_validation(&mut self, pool: Arc<crate::pool::PoolInner>) {
         self.native_return_validation = Some(pool);
+    }
+
+    /// 安装原生池显式归还回调，保留关闭队列溢出的 holder 所有权。
+    pub(crate) fn set_native_explicit_return(
+        &mut self,
+        return_connection: NativeExplicitReturnCallback,
+    ) {
+        self.native_explicit_return = Some(return_connection);
     }
 
     /// 返回连接 ID。
@@ -776,26 +791,29 @@ impl DruidPooledConnection {
     }
 
     fn recycle_once(&mut self, disposition: ConnectionRecycleDisposition) -> bool {
-        if self.recycled {
-            return false;
-        }
-
-        // A non-reusable lease must notify its owner before the real holder is
-        // transferred. Direct connection methods reach this finalizer without
-        // traversing `StandardLogicalPolicy`; policy-owned statement/result-set
-        // failures may have signalled already, and the control is deliberately
-        // one-shot so pool accounting and external poison remain exact.
-        self.signal_owner_discard(&disposition);
-        self.lease_active.store(false, Ordering::Release);
-        self.recycled = true;
-        if let (Some(holder), Some(return_connection)) =
-            (self.holder.take(), self.return_connection.take())
-        {
-            holder.clear_connection_event_listeners();
-            holder.clear_statement_event_listeners();
+        let holder = self.take_recycled_holder(&disposition);
+        self.native_explicit_return.take();
+        if let (Some(holder), Some(return_connection)) = (holder, self.return_connection.take()) {
             return return_connection(holder, disposition);
         }
         false
+    }
+
+    fn take_recycled_holder(
+        &mut self,
+        disposition: &ConnectionRecycleDisposition,
+    ) -> Option<DruidConnectionHolder> {
+        if self.recycled {
+            return None;
+        }
+        // 致命处置须先通知 owner，再移交真实 holder；一次性控制避免重复记账。
+        self.signal_owner_discard(disposition);
+        self.lease_active.store(false, Ordering::Release);
+        self.recycled = true;
+        let holder = self.holder.take()?;
+        holder.clear_connection_event_listeners();
+        holder.clear_statement_event_listeners();
+        Some(holder)
     }
 
     /// Signals a non-reusable owner disposition without transferring the holder.
@@ -1000,10 +1018,24 @@ impl DruidPooledConnection {
             }
         }
         // 注册通知到转移 holder 之间没有 await，取消不会留下无主的连接。
-        self.recycle_once(disposition);
+        let close_result = if let Some(return_connection) = self.native_explicit_return.take() {
+            let holder = self.take_recycled_holder(&disposition);
+            self.return_connection.take();
+            let overflow = holder.and_then(|holder| return_connection(holder, disposition));
+            if let (Some(pool), Some(overflow)) = (self.native_return_validation.clone(), overflow)
+            {
+                pool.close_overflow_holder_now(overflow).await
+            } else {
+                Ok(())
+            }
+        } else {
+            self.recycle_once(disposition);
+            Ok(())
+        };
         self.close_count = self.close_count.saturating_add(1);
         self.end_transaction_info();
-        self.await_return_completion().await
+        self.await_return_completion().await?;
+        close_result
     }
 
     /// 等待原生 holder 归还或关闭完成；取消只结束等待，不接管驱动所有权。

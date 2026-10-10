@@ -62,6 +62,36 @@ struct SlowCloseFactory {
     closed: Arc<AtomicUsize>,
 }
 
+/// 首条物理关闭阻塞，后续连接关闭立即完成，以区分队列溢出与等待 worker。
+struct SelectiveSlowCloseFactory {
+    first_gate: Arc<Semaphore>,
+    block_overflow: bool,
+    created: AtomicUsize,
+    entered: Arc<AtomicUsize>,
+    closed: Arc<AtomicUsize>,
+}
+
+#[async_trait::async_trait]
+impl ConnectionFactory for SelectiveSlowCloseFactory {
+    async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
+        let index = self.created.fetch_add(1, Ordering::AcqRel);
+        let gate = if index == 0 || (index >= 2 && self.block_overflow) {
+            Arc::clone(&self.first_gate)
+        } else {
+            Arc::new(Semaphore::new(1))
+        };
+        Ok(Box::new(SlowCloseConnection {
+            gate,
+            entered: Arc::clone(&self.entered),
+            closed: Arc::clone(&self.closed),
+        }))
+    }
+
+    async fn validate(&self, connection: &mut Box<dyn Connection>) -> Result<(), RdbcError> {
+        connection.ping().await
+    }
+}
+
 #[async_trait::async_trait]
 impl ConnectionFactory for SlowCloseFactory {
     async fn create(&self) -> Result<Box<dyn Connection>, RdbcError> {
@@ -192,4 +222,110 @@ async fn shutdown_deadline_aborts_stalled_close_worker() {
         .expect("shutdown deadline bounds stalled worker");
     assert_eq!(pool.state().close_queue_depth, 0);
     assert!(!pool.state().close_worker_terminated);
+}
+
+#[tokio::test]
+async fn explicit_close_attempts_physical_close_when_close_queue_is_full() {
+    let gate = Arc::new(Semaphore::new(0));
+    let entered = Arc::new(AtomicUsize::new(0));
+    let closed = Arc::new(AtomicUsize::new(0));
+    let factory = Arc::new(SelectiveSlowCloseFactory {
+        first_gate: Arc::clone(&gate),
+        block_overflow: false,
+        created: AtomicUsize::new(0),
+        entered: Arc::clone(&entered),
+        closed: Arc::clone(&closed),
+    });
+    let pool = DruidPool::builder()
+        .name("explicit-close-overflow")
+        .driver_name("test")
+        .factory(factory)
+        .max_open(1)
+        .max_use_count(1)
+        .close_queue_capacity(1)
+        .close_timeout(Duration::from_secs(5))
+        .build()
+        .await
+        .expect("build pool");
+
+    let mut first = pool.get().await.expect("borrow first connection");
+    first.discard_connection();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while entered.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("close worker enters first physical close");
+
+    let mut second = pool.get().await.expect("borrow second connection");
+    second.discard_connection();
+    assert_eq!(pool.state().close_queue_depth, 1);
+
+    let mut third = pool.get().await.expect("borrow third connection");
+    tokio::time::timeout(Duration::from_secs(2), third.close())
+        .await
+        .expect("explicit close remains deadline bounded")
+        .expect("explicit close completes the overflow holder");
+    assert_eq!(entered.load(Ordering::Acquire), 2);
+    assert_eq!(closed.load(Ordering::Acquire), 1);
+    assert!(pool.state().close_queue_rejected_total > 0);
+    gate.add_permits(1);
+    tokio::time::timeout(Duration::from_secs(2), pool.close())
+        .await
+        .expect("pool closes after overflow");
+}
+
+#[tokio::test]
+async fn explicit_overflow_close_reports_physical_timeout() {
+    let gate = Arc::new(Semaphore::new(0));
+    let entered = Arc::new(AtomicUsize::new(0));
+    let factory = Arc::new(SelectiveSlowCloseFactory {
+        first_gate: Arc::clone(&gate),
+        block_overflow: true,
+        created: AtomicUsize::new(0),
+        entered: Arc::clone(&entered),
+        closed: Arc::new(AtomicUsize::new(0)),
+    });
+    let pool = DruidPool::builder()
+        .name("explicit-close-overflow-timeout")
+        .driver_name("test")
+        .factory(factory)
+        .max_open(1)
+        .max_use_count(1)
+        .close_queue_capacity(1)
+        .close_timeout(Duration::from_millis(250))
+        .build()
+        .await
+        .expect("build pool");
+
+    let mut first = pool.get().await.expect("borrow first connection");
+    first.discard_connection();
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while entered.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("first physical close begins");
+    let mut second = pool.get().await.expect("borrow second connection");
+    second.discard_connection();
+    assert_eq!(pool.state().close_queue_depth, 1);
+
+    let mut third = pool.get().await.expect("borrow third connection");
+    let error = tokio::time::timeout(Duration::from_secs(2), third.close())
+        .await
+        .expect("explicit close is bounded")
+        .expect_err("timed out physical close must be reported");
+    assert!(error
+        .to_string()
+        .contains("physical connection close timed out"));
+    assert_eq!(entered.load(Ordering::Acquire), 2);
+    assert!(pool.state().close_queue_rejected_total > 0);
+    assert!(pool.state().close_timeout_total > 0);
+
+    gate.add_permits(1);
+    tokio::time::timeout(Duration::from_secs(2), pool.close())
+        .await
+        .expect("shutdown remains bounded");
 }

@@ -1432,6 +1432,19 @@ impl DruidPool {
                 pool.return_connection(holder, disposition)
             }
         });
+        let pool_for_explicit_return = Arc::clone(&self.inner);
+        let active_for_explicit_return = Arc::clone(&self.active_leases);
+        let signaled_for_explicit_return = Arc::clone(&disposition_signaled);
+        let explicit_return = Box::new(move |holder, disposition| {
+            active_for_explicit_return.remove(&connection_id);
+            if signaled_for_explicit_return.load(Ordering::Acquire) {
+                pool_for_explicit_return.finish_signaled_discard_with_overflow(holder)
+            } else {
+                pool_for_explicit_return
+                    .return_connection_with_overflow(holder, disposition)
+                    .1
+            }
+        });
         let mut connection = DruidPooledConnection::with_standard_holder_and_disposition_observer(
             holder,
             self.name.clone(),
@@ -1444,6 +1457,7 @@ impl DruidPool {
             return_connection,
         );
         connection.set_native_return_validation(Arc::clone(&self.inner));
+        connection.set_native_explicit_return(explicit_return);
         if let Some(exception_sorter) = self.exception_sorter.clone() {
             connection.set_exception_sorter(exception_sorter);
         }

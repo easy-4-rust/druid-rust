@@ -8,7 +8,7 @@ use crate::core::Value as RdbcValue;
 use crate::core::{
     Connection, ConnectionFactory, ConnectionOpenResult, ConnectionRecycleDisposition,
     ConnectionState, DruidConnectionHolder, DruidError, FilterChain, PreparedStatementCacheStats,
-    RdbcString, ValidConnectionCheckerAdapter,
+    RdbcError, RdbcString, ValidConnectionCheckerAdapter,
 };
 use crate::sql::{DbType, RdbcUtils};
 use crate::stats::StatsCollector;
@@ -1126,9 +1126,18 @@ impl PoolInner {
     /// 归还连接到空闲队列。
     pub fn return_connection(
         &self,
-        mut holder: DruidConnectionHolder,
+        holder: DruidConnectionHolder,
         disposition: ConnectionRecycleDisposition,
     ) -> bool {
+        self.return_connection_with_overflow(holder, disposition).0
+    }
+
+    /// 显式归还时保留无法入队的 holder，供调用方在超时约束内直接关闭。
+    pub(crate) fn return_connection_with_overflow(
+        &self,
+        mut holder: DruidConnectionHolder,
+        disposition: ConnectionRecycleDisposition,
+    ) -> (bool, Option<DruidConnectionHolder>) {
         // 所有 return 分支结束后再决定是否关闭 worker，保证最后一条
         // connection command 一定排在 shutdown command 之前。
         let _termination = CloseWorkerTerminationGuard { inner: self };
@@ -1140,7 +1149,7 @@ impl PoolInner {
             .is_ok();
         if !was_active {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
-            return self.discard_recycled_holder(holder);
+            return self.discard_recycled_holder_with_overflow(holder);
         }
 
         // Java closeCount 统计逻辑池化连接关闭，而不是物理 socket 关闭。
@@ -1152,7 +1161,7 @@ impl PoolInner {
         }
         if !holder_was_active || !disposition.is_reusable() {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
-            return self.discard_recycled_holder(holder);
+            return self.discard_recycled_holder_with_overflow(holder);
         }
 
         let unusable = holder.raw_connection_is_unusable();
@@ -1161,7 +1170,7 @@ impl PoolInner {
             || unusable
             || holder.is_discard()
         {
-            return self.discard_recycled_holder(holder);
+            return self.discard_recycled_holder_with_overflow(holder);
         }
 
         let connection_age = holder.connection_age();
@@ -1176,7 +1185,7 @@ impl PoolInner {
         if lifetime_expired || driver_timeout_expired || max_use_count_reached || credentials_stale
         {
             self.discard_count.fetch_add(1, Ordering::Relaxed);
-            return self.discard_recycled_holder(holder);
+            return self.discard_recycled_holder_with_overflow(holder);
         }
 
         let mut return_completion = None;
@@ -1197,7 +1206,7 @@ impl PoolInner {
         // Java 在 putLast 尝试完成后递增 recycleCount，即使池满导致 putLast=false。
         self.recycle_count.fetch_add(1, Ordering::Relaxed);
         match returned {
-            Err(holder) => self.discard_recycled_holder(holder),
+            Err(holder) => self.discard_recycled_holder_with_overflow(holder),
             Ok(pooling_count) => {
                 self.record_pooling_count(pooling_count);
                 self.notify.notify_one();
@@ -1205,7 +1214,7 @@ impl PoolInner {
                     // 完成通知在所有归还统计之后发出，跨线程等待者看到完整结果。
                     let _ = completion.send(());
                 }
-                false
+                (false, None)
             }
         }
     }
@@ -1235,20 +1244,32 @@ impl PoolInner {
     }
 
     /// Transfers and closes a holder whose pool accounting was completed by `signal_owner_discard`.
-    pub(crate) fn finish_signaled_discard(&self, mut holder: DruidConnectionHolder) -> bool {
+    pub(crate) fn finish_signaled_discard(&self, holder: DruidConnectionHolder) -> bool {
+        drop(self.finish_signaled_discard_with_overflow(holder));
+        false
+    }
+
+    /// 已记录致命丢弃的 holder 入队失败时返还所有权，供显式关闭路径处理。
+    pub(crate) fn finish_signaled_discard_with_overflow(
+        &self,
+        mut holder: DruidConnectionHolder,
+    ) -> Option<DruidConnectionHolder> {
         let _termination = CloseWorkerTerminationGuard { inner: self };
         let connection_id = holder.connection_id();
         let connection_age = holder.connection_age();
         holder.mark_discarded();
-        self.enqueue_close_holder(holder, connection_id, connection_age);
+        let overflow = self.enqueue_close_holder(holder, connection_id, connection_age);
         // 真正的关闭命令已入队后，才允许最后一个租约触发 worker 退出。
         self.pending_owner_discards.fetch_sub(1, Ordering::AcqRel);
-        false
+        overflow
     }
 
-    fn discard_recycled_holder(&self, holder: DruidConnectionHolder) -> bool {
-        self.destroy_holder(holder);
-        self.request_refill(self.config.min_idle)
+    fn discard_recycled_holder_with_overflow(
+        &self,
+        holder: DruidConnectionHolder,
+    ) -> (bool, Option<DruidConnectionHolder>) {
+        let overflow = self.destroy_holder_with_overflow(holder);
+        (self.request_refill(self.config.min_idle), overflow)
     }
 
     /// 请求受监管 creator 把 active + pooling 补到目标值。
@@ -1279,12 +1300,19 @@ impl PoolInner {
     }
 
     /// 销毁 canonical holder 中的 driver connection。
-    pub fn destroy_holder(&self, mut holder: DruidConnectionHolder) {
+    pub fn destroy_holder(&self, holder: DruidConnectionHolder) {
+        drop(self.destroy_holder_with_overflow(holder));
+    }
+
+    fn destroy_holder_with_overflow(
+        &self,
+        mut holder: DruidConnectionHolder,
+    ) -> Option<DruidConnectionHolder> {
         let connection_id = holder.connection_id();
         let connection_age = holder.connection_age();
         holder.mark_discarded();
         self.record_destroy();
-        self.enqueue_close_holder(holder, connection_id, connection_age);
+        self.enqueue_close_holder(holder, connection_id, connection_age)
     }
 
     /// 同步路径仅尝试有界入队；满队列时释放 owned holder，不派生后台任务。
@@ -1293,16 +1321,16 @@ impl PoolInner {
         holder: DruidConnectionHolder,
         connection_id: u64,
         connection_age: Duration,
-    ) {
+    ) -> Option<DruidConnectionHolder> {
         let Some(sender) = self.close_sender.read().clone() else {
             self.close_queue_rejected_total
                 .fetch_add(1, Ordering::Relaxed);
-            return;
+            return Some(holder);
         };
         let Ok(queue_permit) = Arc::clone(&self.close_queue_permits).try_acquire_owned() else {
             self.close_queue_rejected_total
                 .fetch_add(1, Ordering::Relaxed);
-            return;
+            return Some(holder);
         };
         let command = ConnectionCloseCommand {
             connection_id,
@@ -1313,7 +1341,36 @@ impl PoolInner {
         if let Err(error) = sender.try_send(command) {
             self.close_queue_rejected_total
                 .fetch_add(1, Ordering::Relaxed);
-            drop(error.into_inner());
+            return Some(*error.into_inner().holder);
+        }
+        None
+    }
+
+    /// 队列溢出时，在显式异步关闭调用者内尝试有时限的物理关闭。
+    pub(crate) async fn close_overflow_holder_now(
+        &self,
+        mut holder: DruidConnectionHolder,
+    ) -> Result<(), RdbcError> {
+        let connection_id = holder.connection_id();
+        match tokio::time::timeout(
+            self.config.close_timeout,
+            holder.close_standard_connection(),
+        )
+        .await
+        {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(error)) => {
+                tracing::warn!(%error, connection_id, "overflow connection close failed");
+                Err(error.into())
+            }
+            Err(_) => {
+                self.close_timeout_total.fetch_add(1, Ordering::Relaxed);
+                tracing::warn!(connection_id, "overflow connection close timed out");
+                holder.complete_return();
+                Err(RdbcError::Other(
+                    "physical connection close timed out".to_owned(),
+                ))
+            }
         }
     }
 
