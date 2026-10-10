@@ -40,7 +40,8 @@ impl IngestService {
     #[must_use]
     pub fn new(repo: MetricsRepository) -> Self {
         let handler = IngestHandler::new()
-            .with_limits(repo.max_services(), repo.max_datasources_per_service());
+            .with_limits(repo.max_services(), repo.max_datasources_per_service())
+            .with_stream_ttl(repo.entry_ttl());
         Self {
             repo,
             handler: Arc::new(handler),

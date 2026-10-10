@@ -25,6 +25,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
+use tokio::time::Instant;
 
 use crate::protocol::{
     client_frame, server_frame, BatchAck, ClientFrame, Command, CommandAck, FrameHeader, HelloAck,
@@ -43,6 +45,7 @@ struct StreamKey {
 /// Per-stream tracking state.
 #[derive(Debug)]
 struct StreamState {
+    last_seen: Instant,
     /// Next expected sequence number.
     expected_seq: u64,
     /// Whether the stream has completed its initial full snapshot.
@@ -56,6 +59,7 @@ struct StreamState {
 impl StreamState {
     fn new() -> Self {
         Self {
+            last_seen: Instant::now(),
             expected_seq: 1,
             initialized: false,
             snapshots: HashMap::new(),
@@ -73,6 +77,7 @@ pub struct IngestHandler {
     command_counter: AtomicU64,
     max_streams: usize,
     max_snapshot_entries: usize,
+    stream_ttl: Duration,
 }
 
 struct IngestState {
@@ -93,6 +98,7 @@ impl IngestHandler {
             command_counter: AtomicU64::new(0),
             max_streams: 1_024,
             max_snapshot_entries: 256,
+            stream_ttl: Duration::from_secs(15 * 60),
         }
     }
 
@@ -101,6 +107,13 @@ impl IngestHandler {
     pub fn with_limits(mut self, max_streams: usize, max_snapshot_entries: usize) -> Self {
         self.max_streams = max_streams.max(1);
         self.max_snapshot_entries = max_snapshot_entries.max(1);
+        self
+    }
+
+    /// 设置无活动帧的协议 stream 保留期限；零值按一毫秒处理。
+    #[must_use]
+    pub fn with_stream_ttl(mut self, ttl: Duration) -> Self {
+        self.stream_ttl = ttl.max(Duration::from_millis(1));
         self
     }
 
@@ -167,6 +180,7 @@ impl IngestHandler {
                     }
                 };
                 let mut state = self.state.lock().expect("ingest lock poisoned");
+                self.prune_expired_streams(&mut state);
                 if !state.streams.contains_key(&key) && state.streams.len() >= self.max_streams {
                     return Some(self.make_snapshot_transaction_error(
                         hdr,
@@ -174,9 +188,19 @@ impl IngestHandler {
                     ));
                 }
                 let stream = state.streams.entry(key).or_insert_with(StreamState::new);
+                stream.last_seen = Instant::now();
                 Some(self.make_hello_ack(hdr, !stream.initialized))
             }
-            Some(client_frame::Payload::Heartbeat(_)) => None,
+            Some(client_frame::Payload::Heartbeat(heartbeat)) => {
+                let hdr = heartbeat.header.as_ref()?;
+                let key = self.stream_key(hdr, service_identity).ok()?;
+                let mut state = self.state.lock().expect("ingest lock poisoned");
+                self.prune_expired_streams(&mut state);
+                if let Some(stream) = state.streams.get_mut(&key) {
+                    stream.last_seen = Instant::now();
+                }
+                None
+            }
             Some(client_frame::Payload::CommandAck(ack)) => {
                 self.handle_command_ack(ack);
                 None
@@ -225,6 +249,7 @@ impl IngestHandler {
         };
 
         let mut state = self.state.lock().expect("ingest lock poisoned");
+        self.prune_expired_streams(&mut state);
         if !state.streams.contains_key(&key) && state.streams.len() >= self.max_streams {
             return Some(
                 self.make_snapshot_transaction_error(hdr, "ingest stream capacity is exhausted"),
@@ -234,6 +259,7 @@ impl IngestHandler {
             .streams
             .entry(key.clone())
             .or_insert_with(StreamState::new);
+        stream.last_seen = Instant::now();
 
         // ── Duplicate: already ingested this sequence ──
         if seq < stream.expected_seq {
@@ -325,6 +351,13 @@ impl IngestHandler {
         for entry in entries {
             stream.snapshots.insert(entry.datasource_id, entry.clone());
         }
+    }
+
+    fn prune_expired_streams(&self, state: &mut IngestState) {
+        let now = Instant::now();
+        state
+            .streams
+            .retain(|_, stream| now.saturating_duration_since(stream.last_seen) < self.stream_ttl);
     }
 
     fn stream_key(
@@ -495,7 +528,8 @@ impl IngestHandler {
         let Ok(service_identity) = ServiceIdentity::try_new(service, instance, boot) else {
             return Vec::new();
         };
-        let state = self.state.lock().expect("ingest lock poisoned");
+        let mut state = self.state.lock().expect("ingest lock poisoned");
+        self.prune_expired_streams(&mut state);
         state
             .streams
             .iter()

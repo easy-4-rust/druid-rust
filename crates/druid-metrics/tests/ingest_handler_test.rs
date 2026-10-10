@@ -5,6 +5,7 @@
 
 use druid_metrics::ingest_handler::IngestHandler;
 use druid_metrics::protocol::*;
+use std::time::Duration;
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,46 @@ async fn goodbye_releases_stream_capacity_for_next_session() {
     assert!(handler.handle_frame(&goodbye).await.is_none());
 
     init_stream(&handler, "svc", "instance-b", "boot-b", 1).await;
+}
+
+#[tokio::test]
+async fn expired_disconnected_stream_releases_capacity_for_new_session() {
+    let handler = IngestHandler::new()
+        .with_limits(1, 1)
+        .with_stream_ttl(Duration::from_millis(10));
+    init_stream(&handler, "svc", "lost-instance", "old-boot", 1).await;
+    tokio::time::sleep(Duration::from_millis(25)).await;
+
+    init_stream(&handler, "svc", "replacement", "new-boot", 1).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn heartbeat_extends_stream_ttl_without_allocating_new_state() {
+    let handler = IngestHandler::new()
+        .with_limits(1, 1)
+        .with_stream_ttl(Duration::from_secs(10));
+    init_stream(&handler, "svc", "active", "boot", 1).await;
+    tokio::time::advance(Duration::from_secs(9)).await;
+    let heartbeat = ClientFrame {
+        payload: Some(client_frame::Payload::Heartbeat(ClientHeartbeat {
+            header: Some(make_header(0, "svc", "active", "boot", 1)),
+            pending_ack_count: 0,
+        })),
+    };
+    assert!(handler.handle_frame(&heartbeat).await.is_none());
+    tokio::time::advance(Duration::from_secs(9)).await;
+
+    let rejected = handler
+        .handle_frame(&make_full_snapshot_frame(1, "svc", "new", "boot", 1))
+        .await;
+    assert!(matches!(
+        rejected,
+        Some(ServerFrame {
+            payload: Some(server_frame::Payload::Error(_)),
+        })
+    ));
+    tokio::time::advance(Duration::from_secs(2)).await;
+    init_stream(&handler, "svc", "new", "boot", 1).await;
 }
 
 #[tokio::test]

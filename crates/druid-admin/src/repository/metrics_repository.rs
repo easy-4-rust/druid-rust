@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use druid_metrics::ServiceIdentity;
 use parking_lot::RwLock;
@@ -229,6 +229,12 @@ impl MetricsRepository {
     #[must_use]
     pub const fn max_services(&self) -> usize {
         self.config.max_services()
+    }
+
+    /// 返回与协议 stream 状态对齐的无活动保留期限。
+    #[must_use]
+    pub const fn entry_ttl(&self) -> Duration {
+        self.config.entry_ttl()
     }
 
     /// 返回一个 authoritative transaction 的最大 datasource 数。
