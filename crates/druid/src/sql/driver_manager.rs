@@ -172,7 +172,7 @@ impl DriverManager {
     /// their error semantics. Corresponds to Java: `getConnection(String)`.
     pub async fn get_connection(url: &str) -> Result<Box<dyn Connection>, RdbcError> {
         let driver = Self::driver_for(url)?;
-        Self::with_login_timeout(driver.connect(url, &ConnectionProperties::new()), url).await
+        Self::with_login_timeout(driver.connect(url, &ConnectionProperties::new())).await
     }
 
     /// Opens a physical connection using RDBC property semantics.
@@ -188,7 +188,7 @@ impl DriverManager {
             .iter()
             .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
-        Self::with_login_timeout(driver.connect(url, &properties), url).await
+        Self::with_login_timeout(driver.connect(url, &properties)).await
     }
 
     /// Opens a physical connection with a URL, user name, and password.
@@ -205,7 +205,7 @@ impl DriverManager {
             ("user".to_owned(), username.to_owned()),
             ("password".to_owned(), password.to_owned()),
         ]);
-        Self::with_login_timeout(driver.connect(url, &properties), url).await
+        Self::with_login_timeout(driver.connect(url, &properties)).await
     }
 
     fn driver_for(url: &str) -> Result<Arc<dyn Driver>, RdbcError> {
@@ -214,10 +214,10 @@ impl DriverManager {
             .iter()
             .find(|entry| entry.driver.accepts_url(url))
             .map(|entry| Arc::clone(&entry.driver))
-            .ok_or_else(|| RdbcError::DriverError(format!("No suitable driver found for {url}")))
+            .ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
     }
 
-    async fn with_login_timeout<F>(future: F, url: &str) -> Result<Box<dyn Connection>, RdbcError>
+    async fn with_login_timeout<F>(future: F) -> Result<Box<dyn Connection>, RdbcError>
     where
         F: std::future::Future<Output = Result<Option<Box<dyn Connection>>, RdbcError>>,
     {
@@ -229,7 +229,6 @@ impl DriverManager {
                 .await
                 .map_err(|_| RdbcError::LoginTimeout)?
         }?;
-        connection
-            .ok_or_else(|| RdbcError::DriverError(format!("No suitable driver found for {url}")))
+        connection.ok_or_else(|| RdbcError::DriverError("No suitable driver found".to_owned()))
     }
 }

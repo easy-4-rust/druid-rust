@@ -7,6 +7,27 @@ use std::sync::Arc;
 
 struct RefusingDriver;
 
+struct AcceptingButRefusingDriver;
+
+#[async_trait::async_trait]
+impl Driver for AcceptingButRefusingDriver {
+    fn name(&self) -> &str {
+        "accepting_but_refusing_driver"
+    }
+
+    fn accepts_url(&self, url: &str) -> bool {
+        url.starts_with("rdbc:refusing-redaction-test://")
+    }
+
+    async fn connect(
+        &self,
+        _url: &str,
+        _properties: &ConnectionProperties,
+    ) -> Result<Option<Box<dyn Connection>>, RdbcError> {
+        Ok(None)
+    }
+}
+
 #[async_trait::async_trait]
 impl Driver for RefusingDriver {
     fn name(&self) -> &str {
@@ -54,4 +75,23 @@ fn canonical_action_preserves_manager_callback_identity_and_once_only_notificati
     assert!(!DriverManager::deregister_driver(&driver));
     assert_eq!(original_count.load(Ordering::SeqCst), 1);
     assert_eq!(replacement_count.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn missing_driver_diagnostics_do_not_disclose_connection_url_secrets() {
+    let missing_url = "rdbc:missing-redaction-test://localhost/db?password=canary-secret";
+    let lookup_error = DriverManager::get_driver(missing_url)
+        .err()
+        .expect("missing driver must fail");
+    assert!(!lookup_error.to_string().contains("canary-secret"));
+
+    let refused_url = "rdbc:refusing-redaction-test://localhost/db?password=canary-secret";
+    let driver: Arc<dyn Driver> = Arc::new(AcceptingButRefusingDriver);
+    DriverManager::register_driver(Arc::clone(&driver));
+    let connect_error = DriverManager::get_connection(refused_url)
+        .await
+        .err()
+        .expect("refusing driver must return no connection");
+    assert!(DriverManager::deregister_driver(&driver));
+    assert!(!connect_error.to_string().contains("canary-secret"));
 }
