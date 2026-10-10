@@ -291,7 +291,7 @@ impl DruidMetricsRuntime {
             first_error.map_or(Ok(()), Err)
         };
 
-        if let Ok(result) = tokio::time::timeout(deadline, join_all).await {
+        let result = if let Ok(result) = tokio::time::timeout(deadline, join_all).await {
             result
         } else {
             self.aggregator_cancel_token.cancel();
@@ -302,7 +302,12 @@ impl DruidMetricsRuntime {
             abort_if_running(unregister_handle.as_mut()).await;
             let unflushed = pipeline_unflushed(&self.self_metrics);
             Err(MetricsError::ShutdownTimeout { unflushed })
-        }
+        };
+        // 所有持有 registry 的任务均已 join 或 abort；guard 可以比 runtime 活得更久，
+        // 因此必须在消费 self 前撤销剩余注册并同步对外计数。
+        self.registry.write().clear();
+        self_metrics.set_registered_datasources(0);
+        result
     }
 
     /// Returns the runtime configuration.

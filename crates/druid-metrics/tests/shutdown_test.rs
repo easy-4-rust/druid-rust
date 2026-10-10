@@ -269,9 +269,11 @@ async fn shutdown_joins_unregister_listener_even_when_guard_outlives_runtime() {
     let source = Arc::new(MockDataSource::new(78, "guard-outlives-runtime"));
     let guard = runtime.register(source);
     assert!(metrics.unregister_listener_active());
+    assert_eq!(metrics.registered_datasources(), 1);
 
     runtime.shutdown(Duration::from_secs(1)).await.unwrap();
 
     assert!(!metrics.unregister_listener_active());
+    assert_eq!(metrics.registered_datasources(), 0);
     drop(guard);
 }
