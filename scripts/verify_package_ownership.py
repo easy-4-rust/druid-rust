@@ -17,6 +17,11 @@ WORKFLOWS = {
     ),
 }
 DRIVER_PREFIX = "cargo run -p druid-wrapper --features managed-driver-install --bin druid-driver -- "
+LIVE_TEST_TARGET = "task6_database_profile_live_contract_test_parity"
+LIVE_TEST_WORKFLOWS = {
+    ".github/workflows/driver-matrix.yml": 2,
+    ".github/workflows/database-profile-certification.yml": 1,
+}
 
 
 def main() -> int:
@@ -51,6 +56,22 @@ def main() -> int:
             if DRIVER_PREFIX + command not in source:
                 errors.append(f"{relative}: missing owned invocation: {command}")
 
+    wrapper_targets = {
+        target["name"]
+        for target in packages["druid-wrapper"]["targets"]
+        if "test" in target["kind"]
+    }
+    if LIVE_TEST_TARGET not in wrapper_targets:
+        errors.append(f"druid-wrapper: missing live contract test target {LIVE_TEST_TARGET}")
+    for relative, expected_count in LIVE_TEST_WORKFLOWS.items():
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        actual_count = source.count(f"--test {LIVE_TEST_TARGET}")
+        if actual_count != expected_count:
+            errors.append(
+                f"{relative}: expected {expected_count} live contract invocations "
+                f"for {LIVE_TEST_TARGET}, found {actual_count}"
+            )
+
     for workflow in sorted((ROOT / ".github/workflows").glob("*.y*ml")):
         for number, line in enumerate(workflow.read_text(encoding="utf-8").splitlines(), 1):
             if "--bin druid-driver" in line and DRIVER_PREFIX not in line:
@@ -59,7 +80,7 @@ def main() -> int:
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"package ownership verified: {len(packages)} workspace packages, 2 binaries, 3 CI invocations")
+    print(f"package ownership verified: {len(packages)} workspace packages, 2 binaries, 3 driver and 3 live contract CI invocations")
     return 0
 
 

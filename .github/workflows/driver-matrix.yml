@@ -192,7 +192,7 @@ jobs:
           DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p target/contract-evidence
-          cargo test -p druid-wrapper --all-features --test database_profile_live_contract_test -- --nocapture
+          cargo test -p druid-wrapper --all-features --test task6_database_profile_live_contract_test_parity -- --nocapture
       - name: Upload auditable contract record
         uses: actions/upload-artifact@v4
         with:
@@ -241,7 +241,7 @@ jobs:
           DRUID_CONTRACT_EVIDENCE_REF: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           mkdir -p target/contract-evidence
-          cargo test -p druid-wrapper --features duckdb-native --test database_profile_live_contract_test -- --nocapture
+          cargo test -p druid-wrapper --features duckdb-native --test task6_database_profile_live_contract_test_parity -- --nocapture
       - name: Upload auditable contract record
         uses: actions/upload-artifact@v4
         with:
