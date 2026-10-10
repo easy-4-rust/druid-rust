@@ -1,4 +1,6 @@
-use crate::{ManagedWrapperPool, ProxoolConfigKey, WrapperDataSourceFactory};
+use crate::ProxoolConfigKey;
+#[cfg(feature = "sqlx")]
+use crate::{ManagedWrapperPool, WrapperDataSourceFactory};
 use druid_rdbc::error::RdbcError;
 use std::collections::HashMap;
 
@@ -363,6 +365,7 @@ impl ProxoolDataSource {
     }
 
     /// 创建唯一 managed provider pool。
+    #[cfg(feature = "sqlx")]
     pub async fn build(&self) -> Result<ManagedWrapperPool, RdbcError> {
         WrapperDataSourceFactory::create(&self.properties).await
     }

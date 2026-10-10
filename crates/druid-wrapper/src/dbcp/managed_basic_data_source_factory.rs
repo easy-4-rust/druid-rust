@@ -15,6 +15,7 @@ pub struct ManagedBasicDataSourceFactory;
 
 impl ManagedBasicDataSourceFactory {
     /// 使用 Druid 内置 Toasty factory 创建 managed 数据源。
+    #[cfg(feature = "toasty")]
     pub async fn create_data_source(
         properties: &HashMap<String, String>,
     ) -> Result<DruidDataSource, RdbcError> {

@@ -1,3 +1,4 @@
+#[cfg(feature = "sqlx-deadpool")]
 use crate::sqlx::deadpool::SqlxDeadpoolPool;
 use crate::WrapperPoolState;
 use druid::core::{DruidPooledConnection, Pool, PoolState};
@@ -34,6 +35,7 @@ impl WrapperPoolShutdown for DruidDataSource {
 }
 
 #[async_trait::async_trait]
+#[cfg(feature = "sqlx-deadpool")]
 impl WrapperPoolShutdown for SqlxDeadpoolPool {
     async fn shutdown(&self) {
         self.close();

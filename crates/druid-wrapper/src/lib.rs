@@ -19,6 +19,7 @@ mod standard_statement_state;
 /// P04 Task 4 的 opaque runtime-trace evidence API；仅用于仓库内适配器验收。
 #[doc(hidden)]
 pub mod task4_runtime_trace;
+#[cfg(feature = "sqlx")]
 mod wrapper_data_source_factory;
 mod wrapper_pool_state;
 
@@ -49,13 +50,16 @@ pub mod libsql;
 /// Proxool 兼容对象。
 pub mod proxool;
 /// RBDC 直连驱动 Adapter。
+#[cfg(feature = "rbdc")]
 pub mod rbdc;
 /// 基于 DruidPool 的 RDBC 标准 DataSource 与动态数据源实现。
 #[cfg(feature = "driver-catalog")]
 pub mod rdbc;
 /// SQLx 直连驱动 Adapter，以及 bb8、deadpool 池适配器。
+#[cfg(feature = "sqlx")]
 pub mod sqlx;
 /// 内置 Toasty 标准数据源实现。
+#[cfg(feature = "toasty")]
 pub mod toasty;
 
 /// Ensure driver extension `inventory::submit!` registrations are linked.
@@ -70,5 +74,6 @@ pub fn init_driver_extensions() {
 
 pub use managed_wrapper_pool::ManagedWrapperPool;
 pub use proxool_config_key::ProxoolConfigKey;
+#[cfg(feature = "sqlx")]
 pub use wrapper_data_source_factory::WrapperDataSourceFactory;
 pub use wrapper_pool_state::WrapperPoolState;

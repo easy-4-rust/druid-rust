@@ -1,18 +1,27 @@
 //! SQLx 直连驱动适配层。
 
 /// SQLx 上的 bb8 外部池桥接。
+#[cfg(feature = "sqlx-bb8")]
 pub mod bb8;
 /// SQLx 上的 deadpool 外部池桥接。
+#[cfg(feature = "sqlx-deadpool")]
 pub mod deadpool;
+#[cfg(any(feature = "sqlx-bb8", feature = "sqlx-deadpool"))]
 mod external_pool_connection_control;
+pub(crate) mod sqlx_buffered_result_set;
 pub(crate) mod sqlx_connection_actor;
 pub mod sqlx_connection_adapter;
 pub mod sqlx_connection_factory;
 pub mod sqlx_database_meta_data;
 pub mod sqlx_prepared_statement;
-pub(crate) mod sqlx_streaming_result_set;
 
 pub use sqlx_connection_adapter::SqlxConnectionAdapter;
 pub use sqlx_connection_factory::SqlxConnectionFactory;
 pub use sqlx_database_meta_data::SqlxDatabaseMetaData;
 pub use sqlx_prepared_statement::SqlxPreparedStatement;
+
+mod sqlx_async_result_set;
+mod sqlx_cursor_request;
+
+#[cfg(test)]
+mod sqlx_cursor_request_test;

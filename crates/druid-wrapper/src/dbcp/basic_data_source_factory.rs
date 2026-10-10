@@ -1,5 +1,7 @@
+#[cfg(feature = "toasty")]
 use crate::toasty::ToastyConnectionFactory;
 use druid::pool::{DruidDataSource, DruidDataSourceFactory};
+#[cfg(feature = "toasty")]
 use druid::sql::RdbcUtils;
 use druid_rdbc::driver::ConnectionFactory;
 use druid_rdbc::error::RdbcError;
@@ -15,6 +17,7 @@ pub struct BasicDataSourceFactory;
 
 impl BasicDataSourceFactory {
     /// 使用 Druid 内置 Toasty factory 创建数据源。
+    #[cfg(feature = "toasty")]
     pub async fn create_data_source(
         properties: &HashMap<String, String>,
     ) -> Result<DruidDataSource, RdbcError> {

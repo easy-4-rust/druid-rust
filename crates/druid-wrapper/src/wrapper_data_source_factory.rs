@@ -1,4 +1,6 @@
+#[cfg(feature = "sqlx-bb8")]
 use crate::sqlx::bb8::SqlxBb8Pool;
+#[cfg(feature = "sqlx-deadpool")]
 use crate::sqlx::deadpool::SqlxDeadpoolPool;
 use crate::sqlx::SqlxConnectionFactory;
 use crate::{ManagedWrapperPool, ProxoolConfigKey};
@@ -300,12 +302,14 @@ impl WrapperDataSourceFactory {
                     Arc::new(builder.build_data_source().await?),
                 )
             }
+            #[cfg(feature = "sqlx-bb8")]
             "bb8" => ManagedWrapperPool::new(
                 provider.clone(),
                 Arc::new(
                     SqlxBb8Pool::connect(name, &sqlx_url, max_open, acquire_timeout, None).await?,
                 ),
             ),
+            #[cfg(feature = "sqlx-deadpool")]
             "deadpool" => ManagedWrapperPool::with_shutdown(
                 provider.clone(),
                 Arc::new(SqlxDeadpoolPool::connect(

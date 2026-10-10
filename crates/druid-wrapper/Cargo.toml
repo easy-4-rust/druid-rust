@@ -9,18 +9,24 @@ repository.workspace = true
 publish      = false
 
 [features]
-default = ["driver-catalog", "sqlite"]
-driver-catalog = []
-sqlite = ["toasty/sqlite", "dep:toasty-driver-sqlite"]
-postgresql = ["toasty/postgresql"]
-mysql = ["toasty/mysql"]
-turso = ["toasty/turso"]
+default = ["driver-catalog", "sqlite", "sqlx-bb8", "sqlx-deadpool", "rbdc"]
+driver-catalog = ["sqlx", "toasty"]
+sqlx = ["dep:sqlx"]
+sqlx-bb8 = ["sqlx", "dep:bb8"]
+sqlx-deadpool = ["sqlx", "dep:deadpool"]
+toasty = ["dep:toasty", "dep:toasty-core"]
+toasty-sqlite = ["toasty", "toasty/sqlite", "dep:toasty-driver-sqlite"]
+rbdc = ["dep:rbdc", "dep:rbs"]
+sqlite = ["toasty-sqlite"]
+postgresql = ["toasty", "toasty/postgresql"]
+mysql = ["toasty", "toasty/mysql"]
+turso = ["toasty", "toasty/turso"]
 duckdb-native = ["driver-catalog", "dep:duckdb"]
 http-sql = ["driver-catalog", "dep:reqwest"]
 libsql-native = ["driver-catalog", "dep:libsql"]
 jdbc-agent = ["driver-catalog"]
 managed-driver-install = ["jdbc-agent", "dep:fs2", "dep:reqwest", "dep:uuid"]
-all-databases = ["driver-catalog", "duckdb-native", "http-sql", "libsql-native", "jdbc-agent", "managed-driver-install"]
+all-databases = ["driver-catalog", "sqlite", "postgresql", "mysql", "turso", "duckdb-native", "http-sql", "libsql-native", "jdbc-agent", "managed-driver-install"]
 
 [[bin]]
 name = "druid-driver"
@@ -30,10 +36,10 @@ required-features = ["managed-driver-install"]
 [dependencies]
 async-trait.workspace = true
 base64.workspace = true
-bb8.workspace = true
+bb8 = { workspace = true, optional = true }
 bigdecimal.workspace = true
 chrono.workspace = true
-deadpool.workspace = true
+deadpool = { workspace = true, optional = true }
 druid = { version = "0.0.0-design", path = "../druid" }
 druid-rdbc = { version = "0.0.0-design", path = "../druid-rdbc" }
 duckdb = { workspace = true, optional = true }
@@ -43,17 +49,17 @@ inventory.workspace = true
 jiff.workspace = true
 libsql = { workspace = true, optional = true }
 parking_lot.workspace = true
-rbdc.workspace = true
-rbs.workspace = true
+rbdc = { workspace = true, optional = true }
+rbs = { workspace = true, optional = true }
 reqwest = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 sqlparser.workspace = true
-sqlx.workspace = true
+sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
-toasty.workspace = true
-toasty-core.workspace = true
+toasty = { workspace = true, optional = true }
+toasty-core = { workspace = true, optional = true }
 toasty-driver-sqlite = { version = "0.9.0", optional = true }
 tokio.workspace = true
 url.workspace = true
