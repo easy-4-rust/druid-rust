@@ -238,9 +238,10 @@ impl DruidPool {
             Arc::clone(&stats_collector),
         ));
         inner.install_filter_chain(filter_chain.clone());
-        let (close_sender, close_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (close_sender, close_receiver) =
+            tokio::sync::mpsc::channel(inner.config.close_queue_capacity.max(1));
         inner.install_close_sender(close_sender);
-        let (create_sender, create_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (create_sender, create_receiver) = tokio::sync::watch::channel(Some(0));
         inner.install_create_sender(create_sender);
         let stat_snapshot_context = Arc::new(DataSourceStatSnapshotContext {
             name: name.clone(),
@@ -276,6 +277,9 @@ impl DruidPool {
                 close_factory,
                 filter_chain.clone(),
                 close_receiver,
+                inner.config.close_timeout,
+                Arc::clone(&inner.close_timeout_total),
+                Arc::clone(&inner.close_worker_terminated),
             ))),
             close_worker_task: parking_lot::Mutex::new(None),
             stats_collector,
@@ -508,7 +512,7 @@ impl DruidPool {
     /// 为首次 init 或 restart 后的新代次安装补池 worker。
     fn install_create_worker(&self) {
         if self.create_worker.lock().is_none() && self.create_worker_task.lock().is_none() {
-            let (create_sender, create_receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (create_sender, create_receiver) = tokio::sync::watch::channel(Some(0));
             self.inner.install_create_sender(create_sender);
             *self.create_worker.lock() = Some(ConnectionCreateWorker::new(
                 Arc::clone(&self.inner),
@@ -521,12 +525,19 @@ impl DruidPool {
     /// 为首次 init 或 restart 后的新代次安装唯一物理关闭 worker。
     fn install_close_worker(&self) {
         if self.close_worker.lock().is_none() && self.close_worker_task.lock().is_none() {
-            let (close_sender, close_receiver) = tokio::sync::mpsc::unbounded_channel();
+            let (close_sender, close_receiver) =
+                tokio::sync::mpsc::channel(self.inner.config.close_queue_capacity.max(1));
+            self.inner
+                .close_worker_terminated
+                .store(false, Ordering::Release);
             self.inner.install_close_sender(close_sender);
             *self.close_worker.lock() = Some(ConnectionCloseWorker::new(
                 Arc::clone(&self.inner.factory),
                 self.filter_chain.clone(),
                 close_receiver,
+                self.inner.config.close_timeout,
+                Arc::clone(&self.inner.close_timeout_total),
+                Arc::clone(&self.inner.close_worker_terminated),
             ));
         }
         self.start_close_worker();
@@ -803,6 +814,15 @@ impl DruidPool {
             pooling_peak: self.inner.pooling_peak.load(Ordering::Relaxed),
             pooling_peak_time_millis: self.inner.pooling_peak_time_millis.load(Ordering::Relaxed),
             wait_count: self.inner.wait_count.load(Ordering::Relaxed),
+            close_queue_depth: self.inner.config.close_queue_capacity.max(1)
+                - self.inner.close_queue_permits.available_permits(),
+            close_queue_rejected_total: self
+                .inner
+                .close_queue_rejected_total
+                .load(Ordering::Relaxed),
+            close_timeout_total: self.inner.close_timeout_total.load(Ordering::Relaxed),
+            refill_target: self.inner.refill_target.load(Ordering::Relaxed),
+            close_worker_terminated: self.inner.close_worker_terminated.load(Ordering::Acquire),
             not_empty_wait_count: self.inner.not_empty_wait_count.load(Ordering::Relaxed),
             not_empty_wait_nanos: self.inner.not_empty_wait_nanos.load(Ordering::Relaxed),
             max_wait_thread_count: self.inner.config.max_wait_thread_count,
@@ -1238,7 +1258,12 @@ impl DruidPool {
         // 先把池标记为 closed 并排空 idle，再等待维护任务退出。这样 close
         // future 在等待后台任务期间被取消时，新借用也已经被拒绝，且
         // PoolInner::close 的 DetachedHolder 会完成剩余资源计数清理。
-        self.inner.close().await;
+        if tokio::time::timeout(self.inner.config.shutdown_timeout, self.inner.close())
+            .await
+            .is_err()
+        {
+            tracing::warn!("pool idle connection shutdown exceeded configured deadline");
+        }
         let maintenance_task = self.maintenance_task.lock().take();
         if let Some(maintenance_task) = maintenance_task {
             let _ = maintenance_task.await;
@@ -1258,7 +1283,7 @@ impl DruidPool {
         if self.inner.close_worker_is_idle() {
             let close_worker_task = self.close_worker_task.lock().take();
             if let Some(close_worker_task) = close_worker_task {
-                let _ = close_worker_task.await;
+                self.join_close_worker(close_worker_task).await;
             }
         }
         self.destroy_initialized_filters().await;
@@ -1314,7 +1339,18 @@ impl DruidPool {
         self.inner.request_close_worker_shutdown_if_idle();
         let close_worker_task = self.close_worker_task.lock().take();
         if let Some(close_worker_task) = close_worker_task {
-            let _ = close_worker_task.await;
+            self.join_close_worker(close_worker_task).await;
+        }
+    }
+
+    async fn join_close_worker(&self, mut task: tokio::task::JoinHandle<()>) {
+        if tokio::time::timeout(self.inner.config.shutdown_timeout, &mut task)
+            .await
+            .is_err()
+        {
+            task.abort();
+            let _ = task.await;
+            tracing::warn!("pool close worker exceeded configured shutdown deadline");
         }
     }
     pub fn filter_chain(&self) -> Option<&Arc<FilterChain>> {

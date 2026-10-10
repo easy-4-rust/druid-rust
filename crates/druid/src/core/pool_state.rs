@@ -17,6 +17,16 @@ pub struct PoolState {
     pub pooling_peak: usize,
     pub pooling_peak_time_millis: u64,
     pub wait_count: usize,
+    /// 当前排队等待物理关闭的连接数（不含 worker 正在处理的连接）。
+    pub close_queue_depth: usize,
+    /// 有界关闭队列拒绝的命令总数。
+    pub close_queue_rejected_total: u64,
+    /// 物理连接关闭超过截止时间的总数。
+    pub close_timeout_total: u64,
+    /// 最新请求的后台补池目标。
+    pub refill_target: usize,
+    /// 关闭 worker 是否已退出。
+    pub close_worker_terminated: bool,
     pub not_empty_wait_count: u64,
     pub not_empty_wait_nanos: u64,
     /// Java `maxWaitThreadCount`；`None` 对应 `-1`。

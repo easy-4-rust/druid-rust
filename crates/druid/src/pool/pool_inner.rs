@@ -17,8 +17,8 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::Notify;
+use tokio::sync::mpsc;
+use tokio::sync::{watch, Notify, Semaphore};
 
 use super::connection_close_worker::ConnectionCloseCommand;
 
@@ -106,8 +106,13 @@ pub struct PoolInner {
     pub(crate) keep_alive_check_error_count: AtomicU64,
     pub(crate) prepared_statement_stats: Arc<PreparedStatementCacheStats>,
     pub(crate) stats_collector: Arc<StatsCollector>,
-    create_sender: parking_lot::RwLock<Option<UnboundedSender<Option<usize>>>>,
-    close_sender: parking_lot::RwLock<Option<UnboundedSender<Option<ConnectionCloseCommand>>>>,
+    create_sender: parking_lot::RwLock<Option<watch::Sender<Option<usize>>>>,
+    close_sender: parking_lot::RwLock<Option<mpsc::Sender<ConnectionCloseCommand>>>,
+    pub(crate) close_queue_permits: Arc<Semaphore>,
+    pub(crate) close_queue_rejected_total: AtomicU64,
+    pub(crate) close_timeout_total: Arc<AtomicU64>,
+    pub(crate) close_worker_terminated: Arc<AtomicBool>,
+    pub(crate) refill_target: AtomicUsize,
 }
 
 impl PoolInner {
@@ -124,6 +129,7 @@ impl PoolInner {
         config: super::config::PoolInnerConfig,
         stats_collector: Arc<StatsCollector>,
     ) -> Self {
+        let close_queue_capacity = config.close_queue_capacity.max(1);
         Self {
             factory,
             filter_chain: parking_lot::RwLock::new(None),
@@ -167,19 +173,21 @@ impl PoolInner {
             stats_collector,
             create_sender: parking_lot::RwLock::new(None),
             close_sender: parking_lot::RwLock::new(None),
+            close_queue_permits: Arc::new(Semaphore::new(close_queue_capacity)),
+            close_queue_rejected_total: AtomicU64::new(0),
+            close_timeout_total: Arc::new(AtomicU64::new(0)),
+            close_worker_terminated: Arc::new(AtomicBool::new(false)),
+            refill_target: AtomicUsize::new(0),
         }
     }
 
     /// 安装由 canonical `DruidPool` 持有的物理关闭 worker sender。
-    pub(crate) fn install_close_sender(
-        &self,
-        sender: UnboundedSender<Option<ConnectionCloseCommand>>,
-    ) {
+    pub(crate) fn install_close_sender(&self, sender: mpsc::Sender<ConnectionCloseCommand>) {
         *self.close_sender.write() = Some(sender);
     }
 
     /// 安装由 canonical `DruidPool` 持有的补池 worker sender。
-    pub(crate) fn install_create_sender(&self, sender: UnboundedSender<Option<usize>>) {
+    pub(crate) fn install_create_sender(&self, sender: watch::Sender<Option<usize>>) {
         *self.create_sender.write() = Some(sender);
     }
 
@@ -1232,16 +1240,7 @@ impl PoolInner {
         let connection_id = holder.connection_id();
         let connection_age = holder.connection_age();
         holder.mark_discarded();
-        if let Some(sender) = self.close_sender.read().clone() {
-            let command = ConnectionCloseCommand {
-                connection_id,
-                connection_age,
-                holder: Box::new(holder),
-            };
-            if let Err(error) = sender.send(Some(command)) {
-                drop(error.0);
-            }
-        }
+        self.enqueue_close_holder(holder, connection_id, connection_age);
         // 真正的关闭命令已入队后，才允许最后一个租约触发 worker 退出。
         self.pending_owner_discards.fetch_sub(1, Ordering::AcqRel);
         false
@@ -1264,16 +1263,16 @@ impl PoolInner {
         if self.total_count.load(Ordering::Acquire) >= target {
             return false;
         }
-        let signalled = self
-            .create_sender
+        self.refill_target.store(target, Ordering::Release);
+        self.create_sender
             .read()
             .clone()
-            .is_some_and(|sender| sender.send(Some(target)).is_ok());
-        signalled
+            .is_some_and(|sender| sender.send(Some(target)).is_ok())
     }
 
     /// 请求 creator 在此前补池命令处理完成后退出。
     pub(crate) fn request_create_worker_shutdown(&self) {
+        self.refill_target.store(0, Ordering::Release);
         if let Some(sender) = self.create_sender.read().clone() {
             let _ = sender.send(None);
         }
@@ -1285,17 +1284,36 @@ impl PoolInner {
         let connection_age = holder.connection_age();
         holder.mark_discarded();
         self.record_destroy();
-        if let Some(sender) = self.close_sender.read().clone() {
-            let command = ConnectionCloseCommand {
-                connection_id,
-                connection_age,
-                holder: Box::new(holder),
-            };
-            if let Err(error) = sender.send(Some(command)) {
-                drop(error.0);
-            }
-        } else {
-            drop(holder);
+        self.enqueue_close_holder(holder, connection_id, connection_age);
+    }
+
+    /// 同步路径仅尝试有界入队；满队列时释放 owned holder，不派生后台任务。
+    fn enqueue_close_holder(
+        &self,
+        holder: DruidConnectionHolder,
+        connection_id: u64,
+        connection_age: Duration,
+    ) {
+        let Some(sender) = self.close_sender.read().clone() else {
+            self.close_queue_rejected_total
+                .fetch_add(1, Ordering::Relaxed);
+            return;
+        };
+        let Ok(queue_permit) = Arc::clone(&self.close_queue_permits).try_acquire_owned() else {
+            self.close_queue_rejected_total
+                .fetch_add(1, Ordering::Relaxed);
+            return;
+        };
+        let command = ConnectionCloseCommand {
+            connection_id,
+            connection_age,
+            holder: Box::new(holder),
+            queue_permit,
+        };
+        if let Err(error) = sender.try_send(command) {
+            self.close_queue_rejected_total
+                .fetch_add(1, Ordering::Relaxed);
+            drop(error.into_inner());
         }
     }
 
@@ -1304,9 +1322,8 @@ impl PoolInner {
         if !self.closed.load(Ordering::Acquire) || !self.close_worker_is_idle() {
             return;
         }
-        if let Some(sender) = self.close_sender.read().clone() {
-            let _ = sender.send(None);
-        }
+        // 关闭最后一个 sender 后，worker 会先排空已有命令再自然退出。
+        self.close_sender.write().take();
     }
 
     /// 返回关闭 worker 是否已无待归还租约；结果用于决定能否发送退出命令。
@@ -1329,12 +1346,23 @@ impl PoolInner {
         let connection_id = holder.connection_id();
         holder.mark_discarded();
         self.record_destroy();
-        if let Err(error) = holder.close_standard_connection().await {
-            tracing::warn!(
-                %error,
-                connection_id,
-                "close canonical connection immediately failed"
-            );
+        match tokio::time::timeout(
+            self.config.close_timeout,
+            holder.close_standard_connection(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(%error, connection_id, "close canonical connection immediately failed");
+            }
+            Err(_) => {
+                self.close_timeout_total.fetch_add(1, Ordering::Relaxed);
+                tracing::warn!(
+                    connection_id,
+                    "close canonical connection immediately timed out"
+                );
+            }
         }
     }
 

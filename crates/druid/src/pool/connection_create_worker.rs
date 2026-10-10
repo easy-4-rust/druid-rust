@@ -6,26 +6,27 @@
 
 use super::PoolInner;
 use std::sync::Arc;
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::watch;
 
 /// 顺序处理补池目标的每池唯一 worker。
 ///
 /// `Some(to_count)` 表示把 active + pooling 补到该目标；`None` 表示关闭。
 pub(crate) struct ConnectionCreateWorker {
     inner: Arc<PoolInner>,
-    receiver: UnboundedReceiver<Option<usize>>,
+    receiver: watch::Receiver<Option<usize>>,
 }
 
 impl ConnectionCreateWorker {
     /// 创建尚未启动的补池 worker。
-    pub(crate) fn new(inner: Arc<PoolInner>, receiver: UnboundedReceiver<Option<usize>>) -> Self {
+    pub(crate) fn new(inner: Arc<PoolInner>, receiver: watch::Receiver<Option<usize>>) -> Self {
         Self { inner, receiver }
     }
 
     /// 启动 worker 并返回由 `DruidPool` 持有的任务句柄。
     pub(crate) fn spawn(mut self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            'worker: while let Some(command) = self.receiver.recv().await {
+            'worker: while self.receiver.changed().await.is_ok() {
+                let command = *self.receiver.borrow_and_update();
                 let Some(mut to_count) = command else {
                     break;
                 };
@@ -49,12 +50,11 @@ impl ConnectionCreateWorker {
                                 // Java 只在正退避间隔下发布 failContinuous。
                                 tokio::select! {
                                     biased;
-                                    command = self.receiver.recv() => {
-                                        match command {
-                                            Some(Some(next_target)) => {
-                                                to_count = to_count.max(next_target);
-                                            }
-                                            Some(None) | None => break 'worker,
+                                    changed = self.receiver.changed() => {
+                                        if changed.is_err() { break 'worker; }
+                                        match *self.receiver.borrow_and_update() {
+                                            Some(next_target) => to_count = next_target,
+                                            None => break 'worker,
                                         }
                                     }
                                     () = tokio::task::yield_now() => {}
@@ -74,12 +74,11 @@ impl ConnectionCreateWorker {
                             tokio::pin!(sleep);
                             loop {
                                 tokio::select! {
-                                    command = self.receiver.recv() => {
-                                        match command {
-                                            Some(Some(next_target)) => {
-                                                to_count = to_count.max(next_target);
-                                            }
-                                            Some(None) | None => break 'worker,
+                                    changed = self.receiver.changed() => {
+                                        if changed.is_err() { break 'worker; }
+                                        match *self.receiver.borrow_and_update() {
+                                            Some(next_target) => to_count = next_target,
+                                            None => break 'worker,
                                         }
                                     }
                                     () = &mut sleep => break,

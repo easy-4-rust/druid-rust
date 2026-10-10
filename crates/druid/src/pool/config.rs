@@ -39,6 +39,12 @@ pub struct PoolInnerConfig {
     /// 对应 Java `ConnectionProxyImpl#getProperties()` 保存的 `Properties info`。
     pub connection_properties: Arc<std::collections::HashMap<String, String>>,
     pub max_open: usize,
+    /// 物理关闭命令的硬队列容量；不包括 worker 当前处理的连接。
+    pub close_queue_capacity: usize,
+    /// 单条物理连接允许的最大关闭时间。
+    pub close_timeout: Duration,
+    /// 池关闭时等待受监管后台任务的最大时间。
+    pub shutdown_timeout: Duration,
     pub initial_size: usize,
     /// Java `asyncInit`；使用受监管 creator 异步补足 initialSize。
     pub async_init: bool,
@@ -134,6 +140,9 @@ impl Default for PoolInnerConfig {
             raw_url: None,
             connection_properties: Arc::new(std::collections::HashMap::new()),
             max_open: 8,
+            close_queue_capacity: 64,
+            close_timeout: Duration::from_secs(5),
+            shutdown_timeout: Duration::from_secs(15),
             initial_size: 0,
             async_init: false,
             init_exception_throw: true,
@@ -196,6 +205,9 @@ pub struct DruidPoolBuilder {
     connection_properties: std::collections::HashMap<String, String>,
     factory: Option<Arc<dyn crate::core::ConnectionFactory>>,
     max_open: usize,
+    close_queue_capacity: usize,
+    close_timeout: Duration,
+    shutdown_timeout: Duration,
     initial_size: usize,
     async_init: bool,
     init_exception_throw: bool,
@@ -274,6 +286,9 @@ impl DruidPoolBuilder {
             connection_properties: std::collections::HashMap::new(),
             factory: None,
             max_open: 8,
+            close_queue_capacity: 64,
+            close_timeout: Duration::from_secs(5),
+            shutdown_timeout: Duration::from_secs(15),
             initial_size: 0,
             async_init: false,
             init_exception_throw: true,
@@ -437,6 +452,27 @@ impl DruidPoolBuilder {
     }
     pub fn max_open(mut self, v: usize) -> Self {
         self.max_open = v;
+        self
+    }
+
+    /// 设置物理关闭队列容量；零容量按最小容量一处理。
+    #[must_use]
+    pub fn close_queue_capacity(mut self, capacity: usize) -> Self {
+        self.close_queue_capacity = capacity.max(1);
+        self
+    }
+
+    /// 设置单条物理连接的关闭截止时间。
+    #[must_use]
+    pub fn close_timeout(mut self, timeout: Duration) -> Self {
+        self.close_timeout = timeout;
+        self
+    }
+
+    /// 设置池关闭时等待后台任务的截止时间。
+    #[must_use]
+    pub fn shutdown_timeout(mut self, timeout: Duration) -> Self {
+        self.shutdown_timeout = timeout;
         self
     }
     /// 设置 Java `initialSize`；初始化时预建但不借出这些连接。
@@ -1030,6 +1066,9 @@ impl DruidPoolBuilder {
             url: self.url,
             connection_properties: Arc::new(self.connection_properties),
             max_open: self.max_open,
+            close_queue_capacity: self.close_queue_capacity,
+            close_timeout: self.close_timeout,
+            shutdown_timeout: self.shutdown_timeout,
             initial_size: self.initial_size,
             async_init: self.async_init,
             init_exception_throw: self.init_exception_throw,
